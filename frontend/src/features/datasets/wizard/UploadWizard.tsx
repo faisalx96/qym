@@ -2,7 +2,9 @@
  * Import wizard (brief 07 §2.3): Source → Map columns (CSV only) → Review.
  * Modes: `new` (catalog), `new-version` (existing dataset), `add-to-draft`.
  * Files are parsed in a Web Worker; `:upload` streams byte progress;
- * add-to-draft upserts in chunks of 1000 with "batch n of m".
+ * add-to-draft upserts in chunks of 1000 with "batch n of m". Before its Review
+ * step, add-to-draft counts the records whose item_id is already in the draft
+ * (a dry run); matching items are skipped unless the user chooses Replace (C006).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,10 +12,12 @@ import {
   BULK_CHUNK,
   bulkItems,
   invalidateItems,
+  previewBulkItems,
   uploadDataset,
   type Dataset,
   type DatasetVersion,
   type ItemBody,
+  type OnExisting,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import {
@@ -21,6 +25,7 @@ import {
   Checkbox,
   ConfirmDialog,
   Dialog,
+  RadioGroup,
   Select,
   Tag,
   Text,
@@ -46,6 +51,15 @@ import type { CsvParseResult, JsonParseResult } from '../lib/parse.worker';
 import { nextVersionAfter, slugifyDatasetName } from '../lib/slugify';
 import { PRODUCTION_RULE } from '../lib/versions';
 import { pluralize } from '../lib/itemValue';
+import {
+  NO_COUNTS,
+  addCounts,
+  countMatches,
+  importResultText,
+  matchLine,
+  recordIds,
+  type ImportCounts,
+} from '../lib/reimport';
 import styles from './UploadWizard.module.css';
 
 export type WizardMode = 'new' | 'new-version' | 'add-to-draft';
@@ -69,6 +83,12 @@ export interface UploadWizardProps {
 
 const ACCEPT = '.csv,.tsv,.txt,.jsonl,.ndjson,.json';
 type Parsed = CsvParseResult | JsonParseResult;
+/** Add-to-draft records whose item_id is already in the draft; `error` when the dry run failed. */
+type MatchCheck = { matched: number; error: null } | { matched: null; error: string };
+
+function errorText(e: unknown, fallback: string): string {
+  return e instanceof ApiError ? e.detail || e.message : (e as Error).message || fallback;
+}
 
 export function UploadWizard(props: UploadWizardProps) {
   // Remount per open so state resets without effects.
@@ -104,6 +124,9 @@ function WizardInner({
   const [setAlias, setSetAlias] = useState(initialMode === 'new' && canSetProduction);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [matchCheck, setMatchCheck] = useState<MatchCheck | null>(null);
+  const [onExisting, setOnExisting] = useState<OnExisting>('skip');
   const [progress, setProgress] = useState<{ label: string; fraction: number | null } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -194,11 +217,53 @@ function WizardInner({
   function next() {
     if (step === 1) {
       if (!validateStep1()) return;
-      setStep(isCsv ? 2 : 3);
+      if (isCsv) setStep(2);
+      else void toReview();
     } else if (step === 2) {
       if (!validateStep2()) return;
-      setStep(3);
+      void toReview();
     } else void submit();
+  }
+
+  function draftUpserts(): ItemBody[] {
+    if (!parsed) return [];
+    return parsed.kind === 'csv'
+      ? csvUpserts(parsed.headers, parsed.rows, mapping)
+      : jsonUpserts(parsed.rows);
+  }
+
+  /** Add-to-draft counts the records that match draft items first, so Review opens with the count. */
+  async function toReview() {
+    const ids = mode === 'add-to-draft' && effectiveTarget && draft ? recordIds(draftUpserts()) : [];
+    if (!ids.length || !effectiveTarget || !draft) {
+      setMatchCheck(null);
+      setStep(3);
+      return;
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setChecking(true);
+    let check: MatchCheck;
+    try {
+      const matched = await countMatches(ids, (upserts) =>
+        previewBulkItems(
+          slug,
+          effectiveTarget.slug,
+          draft.version,
+          { upserts, on_existing: 'skip' },
+          controller.signal,
+        ),
+      );
+      check = { matched, error: null };
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      check = { matched: null, error: errorText(e, 'The check failed') };
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setChecking(false);
+    }
+    setMatchCheck(check.error || check.matched ? check : null);
+    setStep(3);
   }
 
   function back() {
@@ -226,10 +291,9 @@ function WizardInner({
     try {
       if (mode === 'add-to-draft') {
         if (!effectiveTarget || !draft) throw new Error('No draft selected.');
-        const upserts: ItemBody[] =
-          parsed.kind === 'csv' ? csvUpserts(parsed.headers, parsed.rows, mapping) : jsonUpserts(parsed.rows);
+        const upserts = draftUpserts();
         const batches = Math.max(1, Math.ceil(upserts.length / BULK_CHUNK));
-        let added = 0;
+        let counts: ImportCounts = NO_COUNTS;
         try {
           for (let i = 0; i < batches; i++) {
             if (controller.signal.aborted)
@@ -237,24 +301,25 @@ function WizardInner({
             setProgress({ label: `Importing batch ${i + 1} of ${batches}…`, fraction: i / batches });
             const resp = await bulkItems(slug, effectiveTarget.slug, draft.version, {
               upserts: upserts.slice(i * BULK_CHUNK, (i + 1) * BULK_CHUNK),
+              on_existing: onExisting,
             });
-            added += resp.summary.created + resp.summary.updated;
+            counts = addCounts(counts, resp.summary);
           }
         } catch (e) {
           // Earlier batches are already saved: say so and refresh the list.
-          if (added > 0) {
+          if (counts.created + counts.updated > 0) {
             invalidateItems(qc, slug, effectiveTarget.slug);
-            const why =
-              e instanceof ApiError ? e.detail || e.message : (e as Error).message || 'Import failed';
             if ((e as Error).name === 'AbortError') throw e;
-            throw new Error(`${why} ${pluralize(added, 'item')} were already added before the failure.`);
+            throw new Error(
+              `${errorText(e, 'Import failed')} Saved before the failure: ${importResultText(counts)}.`,
+            );
           }
           throw e;
         }
         invalidateItems(qc, slug, effectiveTarget.slug);
-        toast.show(`${pluralize(added, 'item')} added`, { tone: 'success' });
+        toast.show(importResultText(counts), { tone: 'success' });
         onOpenChange(false);
-        onDone({ mode, added, dataset: effectiveTarget, version: draft });
+        onDone({ mode, added: counts.created, dataset: effectiveTarget, version: draft });
         return;
       }
       setProgress({ label: 'Uploading…', fraction: 0 });
@@ -294,7 +359,7 @@ function WizardInner({
       onDone({ mode, dataset: created.dataset, version: created.version });
     } catch (e) {
       if ((e as Error).name === 'AbortError') return;
-      const message = e instanceof ApiError ? e.detail || e.message : (e as Error).message || 'Upload failed';
+      const message = errorText(e, 'Upload failed');
       setErrors({ submit: message });
       toast.show(message, { tone: 'error' });
     } finally {
@@ -323,6 +388,7 @@ function WizardInner({
   const submitLabel =
     mode === 'new' ? 'Create dataset' : mode === 'new-version' ? 'Create version' : 'Add items';
   const steps = isCsv || !parsed ? ['Source', 'Map columns', 'Review'] : ['Source', 'Review'];
+  const noun = isCsv ? 'row' : 'record';
   const visualStep = step === 3 && !isCsv ? 2 : step;
 
   return (
@@ -342,11 +408,16 @@ function WizardInner({
             </Button>
             <div className={styles.footerEnd}>
               {step > 1 ? (
-                <Button variant="neutral" onPress={back} isDisabled={submitting}>
+                <Button variant="neutral" onPress={back} isDisabled={submitting || checking}>
                   ← Back
                 </Button>
               ) : null}
-              <Button variant="primary" onPress={next} loading={submitting} data-testid="wizard-next">
+              <Button
+                variant="primary"
+                onPress={next}
+                loading={submitting || checking}
+                data-testid="wizard-next"
+              >
                 {step === 3 ? submitLabel : 'Continue →'}
               </Button>
             </div>
@@ -585,6 +656,35 @@ function WizardInner({
               {pluralize(parsed.rows.length, parsed.kind === 'csv' ? 'row' : 'record')} · preview shows first{' '}
               {Math.min(10, parsed.rows.length)}
             </Text>
+            {mode === 'add-to-draft' && matchCheck ? (
+              <div className={styles.matches} data-testid="wizard-matches">
+                <Text variant="base" tone="warning" role="status">
+                  {matchCheck.matched === null
+                    ? `Could not check which ${noun}s match items already in ${draft?.version ?? 'the draft'} (${matchCheck.error}). Matching items are skipped unless you choose Replace.`
+                    : matchLine(matchCheck.matched, parsed.rows.length, noun, draft?.version ?? 'the draft')}
+                </Text>
+                <RadioGroup<OnExisting>
+                  label="Matching items"
+                  value={onExisting}
+                  onChange={setOnExisting}
+                  isDisabled={submitting}
+                  options={[
+                    {
+                      value: 'skip',
+                      title: 'Skip matching items',
+                      help: `Items already in the draft keep their content. Only the new ${noun}s are added.`,
+                      testId: 'wizard-skip-matching',
+                    },
+                    {
+                      value: 'replace',
+                      title: 'Replace matching items',
+                      help: 'The file overwrites their input, expected output, metadata and labels. Each item keeps the old content in its History.',
+                      testId: 'wizard-replace-matching',
+                    },
+                  ]}
+                />
+              </div>
+            ) : null}
             <NotImported parsed={parsed} mapping={mapping} />
             <PreviewTable parsed={parsed} />
             {progress ? (

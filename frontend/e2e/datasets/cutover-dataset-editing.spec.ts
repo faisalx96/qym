@@ -5,9 +5,16 @@
  * word diff) live in lib/__tests__/cutover-dataset-editing.test.ts; this file
  * drives the real pages and checks the requests they send.
  */
-import { test, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+  type Request,
+} from '@playwright/test';
 import { createProject, gotoApp, uniqueSlug } from '../helpers';
-import { bulkItems, createDataset, createVersion, publishVersion, type SeedItem } from './support';
+import { bulkItems, createDataset, createVersion, patchItem, publishVersion, type SeedItem } from './support';
 import { pickSelect, tmpFile } from './ui';
 
 type Api = APIRequestContext;
@@ -78,6 +85,11 @@ async function openCatalogWizard(page: Page, slug: string) {
   return dialog;
 }
 const next = (dialog: Locator) => dialog.getByTestId('wizard-next');
+/** The import itself, not the dry run that counts matching items before Review (C006). */
+const isBulkApply = (r: Request) =>
+  r.method() === 'POST' &&
+  r.url().includes('/items:bulk') &&
+  !(r.postDataJSON() as { dry_run?: boolean } | null)?.dry_run;
 
 test.describe('items table and item page editing (C003, C017)', () => {
   test('a draft items table has no inline cell editor', async ({ page, request }) => {
@@ -202,7 +214,7 @@ test.describe('draft import (C016, C017)', () => {
         if (format !== 'jsonl') await next(dialog).click(); // column mapping
         await expect(dialog.locator('table').last().locator('tbody tr')).toHaveCount(Math.min(count, 10));
         await expect(dialog).toContainText(`preview shows first ${Math.min(count, 10)}`);
-        const bulk = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('/items:bulk'));
+        const bulk = page.waitForRequest(isBulkApply);
         await next(dialog).click();
         const req = await bulk;
         expect(new URL(req.url()).pathname).toBe(`/v1/datasets/${d.slug}/versions/v1/items:bulk`);
@@ -229,13 +241,14 @@ test.describe('draft import (C016, C017)', () => {
     await next(dialog).click();
     await expect(dialog).toContainText('2 records');
     await expect(dialog.getByText(/Not imported: extra/)).toBeVisible();
-    const bulk = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('/items:bulk'));
+    const bulk = page.waitForRequest(isBulkApply);
     await next(dialog).click();
     expect((await bulk).postDataJSON()).toEqual({
       upserts: [
         { item_id: '1', input: 'q1', expected_output: 'a1' },
         { item_id: 'b', input: { q: 2 } },
       ],
+      on_existing: 'skip',
     });
     await expect(page.getByText('2 items added')).toBeVisible();
   });
@@ -254,15 +267,49 @@ test.describe('draft import (C016, C017)', () => {
       .locator('#wizard-file')
       .setInputFiles({ name: 'rows.jsonl', mimeType: 'text/plain', buffer: Buffer.from(body) });
     await next(dialog).click();
-    const bulk = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('/items:bulk'));
+    const bulk = page.waitForRequest(isBulkApply);
     await next(dialog).click();
     expect((await bulk).postDataJSON()).toEqual({
       upserts: [
         { item_id: 'a', input: 'q1', labels: ['gold', 'hard'] },
         { input: 'q2', labels: ['x', '3'] },
       ],
+      on_existing: 'skip',
     });
     await expect(page.getByText('2 items added')).toBeVisible();
+  });
+
+  test('a re-import counts the matching items on Review and skips them by default (C006)', async ({
+    page,
+    request,
+  }) => {
+    const items: SeedItem[] = [1, 2, 3, 4].map((n) => ({
+      item_id: `faq-10${n}`,
+      input: `q${n}`,
+      expected_output: `a${n}`,
+    }));
+    const { p, d } = await seedDraft(request, 'reimport', items);
+    const reviewed = 'a1. Reviewed by support lead.';
+    await patchItem(request, p.slug, d.slug, 'v1', 'faq-101', { expected_output: reviewed });
+    await gotoApp(page, dsUrl(p, d));
+    await page.getByTestId('import-draft').click();
+    const dialog = page.getByRole('dialog', { name: /Import into v1/ });
+    const body = items.map((i) => JSON.stringify(i)).join('\n');
+    await dialog
+      .locator('#wizard-file')
+      .setInputFiles({ name: 'faq-import-fixed.jsonl', mimeType: 'text/plain', buffer: Buffer.from(body) });
+    await expect(dialog.getByText('Detected format:')).toContainText('4 records');
+    await next(dialog).click();
+    await expect(dialog.getByText('4 of 4 records match items already in v1.')).toBeVisible();
+    await expect(dialog.getByRole('radio', { name: /Skip matching items/ })).toBeChecked();
+    const bulk = page.waitForRequest(isBulkApply);
+    await next(dialog).click();
+    expect((await bulk).postDataJSON()).toMatchObject({ on_existing: 'skip' });
+    await expect(page.getByText('0 added, 4 skipped')).toBeVisible();
+    const item = await request.get(
+      `/v1/datasets/${d.slug}/versions/v1/items/faq-101?project_slug=${encodeURIComponent(p.slug)}`,
+    );
+    expect(((await item.json()) as { item: SeedItem }).item.expected_output).toBe(reviewed);
   });
 
   test('invalid JSONL lines block Continue and are named with their line numbers', async ({

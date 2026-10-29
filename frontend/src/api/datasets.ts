@@ -880,25 +880,56 @@ export function useDeleteItem(slug: string, ref: string, version: string) {
   });
 }
 
+/** What an upsert does when its item_id names an existing item (server default: replace). */
+export type OnExisting = 'replace' | 'skip';
+
 export interface BulkItemsBody {
   upserts?: (ItemBody & { op?: 'create' })[];
   deletes?: string[];
+  on_existing?: OnExisting;
+}
+
+export interface BulkSummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  deleted: number;
 }
 
 export interface BulkItemsResponse {
-  summary: { created: number; updated: number; deleted: number };
+  summary: BulkSummary;
   created: DatasetItem[];
   updated: DatasetItem[];
+  skipped: string[];
   deleted: string[];
+}
+
+/** `dry_run`: the counts an apply would give, and `matched` = upserts that name an item already in the version. */
+export interface BulkPreviewResponse {
+  dry_run: true;
+  matched: number;
+  summary: BulkSummary;
 }
 
 export const BULK_CHUNK = 1000;
 
+function bulkPath(slug: string, ref: string, version: string) {
+  return withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items:bulk`, slug);
+}
+
 export function bulkItems(slug: string, ref: string, version: string, body: BulkItemsBody) {
-  return api.post<BulkItemsResponse>(
-    withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items:bulk`, slug),
-    body,
-  );
+  return api.post<BulkItemsResponse>(bulkPath(slug, ref, version), body);
+}
+
+/** The same request as `bulkItems` with `dry_run`: the server writes nothing. */
+export function previewBulkItems(
+  slug: string,
+  ref: string,
+  version: string,
+  body: BulkItemsBody,
+  signal?: AbortSignal,
+) {
+  return api.post<BulkPreviewResponse>(bulkPath(slug, ref, version), { ...body, dry_run: true }, { signal });
 }
 
 export function useBulkItems(slug: string, ref: string, version: string) {
