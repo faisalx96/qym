@@ -207,7 +207,7 @@ test.describe('review, Raw JSON and launch', () => {
     await setRaw(page, JSON.stringify(doc));
     await page.getByRole('button', { name: 'Apply' }).click();
     const pane = review(page);
-    await expect(pane).toContainText('staging does not offer the task “answer-ticket”: its Evaluation Service has no task selection.');
+    await expect(pane).toContainText('staging does not offer the task “Answer a ticket”: its Evaluation Service has no task selection.');
     await expect(pane).toContainText('production does not offer the task “zzz-unknown”.');
     await expect(launchButton(page)).toBeDisabled();
     if (SHOTS) {
