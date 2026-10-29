@@ -545,17 +545,18 @@ def test_compare_builds_each_requested_run_once(data, monkeypatch):
     db, run, principal = data
     add_rows(db, run, count=2)
     built = []
-    original = runs_api.legacy_run_data
+    original = runs_api._build_runs_data
 
-    def counted(run_id, *args, **kwargs):
-        built.append(run_id)
-        return original(run_id, *args, **kwargs)
+    def counted(db, runs, *args, **kwargs):
+        # The compared runs are built together, in one call (C008).
+        built.append([item.id for item in runs])
+        return original(db, runs, *args, **kwargs)
 
-    monkeypatch.setattr(runs_api, "legacy_run_data", counted)
+    monkeypatch.setattr(runs_api, "_build_runs_data", counted)
     compared = runs_api.legacy_compare(
         files=[run.id, f"{run.id},{run.id}"], db=db, principal=principal, view="compact"
     )
-    assert built == [run.id]
+    assert built == [[run.id]]
     assert [item["run"]["run_id"] for item in compared["runs"]] == [run.id]
 
 
