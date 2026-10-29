@@ -64,7 +64,11 @@ async function composed(page: Page, shape: 'combined' | 'one_each' = 'combined')
   await expect(task).toHaveAttribute('data-status', 'ok');
   await task.getByRole('button', { name: /Task of production/ }).click();
   await page.getByRole('option', { name: /Answer a ticket/ }).click();
-  if (shape === 'one_each') await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
+  // One run each is the default; every scenario picks its shape explicitly.
+  await page
+    .getByTestId('run-shape')
+    .getByRole('radio', { name: shape === 'one_each' ? 'One run each' : 'Combine into one run' })
+    .click({ force: true });
   await nameBox(page).fill('multi dataset run');
   // The dry run of this exact state has settled (the next read of it is the form's current document).
   await expect(review(page).getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });

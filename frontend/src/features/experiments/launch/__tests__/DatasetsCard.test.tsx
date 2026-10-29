@@ -143,13 +143,14 @@ describe('DatasetsCard', () => {
     render(doc);
     const shape = screen.getByTestId('run-shape');
     const group = within(shape).getByRole('radiogroup', { name: 'Run shape' });
-    expect(within(group).getByRole('radio', { name: 'Combine into one run' })).toBeChecked();
+    // One run each is the default; Combine into one run is the opt-in.
+    expect(within(group).getByRole('radio', { name: 'One run each' })).toBeChecked();
+    expect(shape).toHaveTextContent('2 runs per environment, one per dataset version, grouped under this experiment.');
+    await userEvent.click(within(group).getByRole('radio', { name: 'Combine into one run' }));
     expect(shape).toHaveTextContent(
       'One run over the 2 dataset versions together. Every item records its dataset and version, and scores break down per dataset.',
     );
-    await userEvent.click(within(group).getByRole('radio', { name: 'One run each' }));
-    expect(shape).toHaveTextContent('2 runs per environment, one per dataset version, grouped under this experiment.');
-    expect(current().selection.runShape).toBe('one_each');
+    expect(current().selection.runShape).toBe('combined');
   });
 
   it('QD-15 chips and the token help line, per dataset box', () => {
