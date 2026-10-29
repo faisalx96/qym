@@ -25,13 +25,38 @@ from qym_platform.services.root_cause_categories import (
     normalize_root_cause_issues, project_root_cause_issues,
 )
 
-ISSUE_FIELDS = ("category", "subcategory", "finding", "solution", "solution_note")
+ISSUE_FIELDS = (
+    "category", "subcategory", "finding", "category_reason", "solution", "solution_note",
+)
+# The content fields without the category reason. Legacy grouped reviews and
+# review snapshots made before the reason was editable do not hold the
+# reason, so an issue is matched to them on these fields only.
+BASE_ISSUE_FIELDS = tuple(key for key in ISSUE_FIELDS if key != "category_reason")
 REVIEW_FIELDS = ("review_status", "reviewed_at", "reviewed_by_user_id")
 
 
 def issue_content(issue: dict[str, Any]) -> dict[str, str]:
     """Only user-editable content; never accept approval metadata from a form."""
     return {key: str(issue.get(key) or "").strip() for key in ISSUE_FIELDS}
+
+
+def same_base_content(issue: dict[str, Any], other: dict[str, Any]) -> bool:
+    first, second = issue_content(issue), issue_content(other)
+    return all(first[key] == second[key] for key in BASE_ISSUE_FIELDS)
+
+
+def fill_first_issue_reason(analysis: dict[str, Any], issues: list[dict[str, Any]]) -> None:
+    """Give the first issue the analysis's ``root_cause_reason`` before it has an ID.
+
+    Analyzer output keeps one category reason for the whole analysis. It
+    belongs to the first issue, so it is copied there once, when that issue
+    first gets an ID. After that the issue owns its reason: a reviewer can
+    clear it, and a sibling that moves up after a delete does not get it.
+    The run page reads issues by the same rule (``rootCauseIssues``).
+    """
+    reason = str(analysis.get("root_cause_reason") or "").strip()
+    if issues and reason and not issues[0].get("issue_id") and not issues[0].get("category_reason"):
+        issues[0]["category_reason"] = reason
 
 
 def issue_snapshot(issue: dict[str, Any]) -> dict[str, Any]:
@@ -305,7 +330,7 @@ def issue_review_statuses(
         content = issue_content(issue)
         if candidate is not None and issue_content(candidate[1][0]) == content:
             status = candidate[0].status
-        elif legacy is not None and index < len(legacy_issues) and issue_content(legacy_issues[index]) == content:
+        elif legacy is not None and index < len(legacy_issues) and same_base_content(legacy_issues[index], issue):
             status = legacy.status
         else:
             status = CorrectionStatus.PENDING
@@ -424,8 +449,7 @@ def sync_issue_candidates(
     if issues:
         if issues[0].get("confidence") is None and isinstance(analysis.get("confidence"), (int, float)):
             issues[0]["confidence"] = analysis["confidence"]
-        if not issues[0].get("category_reason") and analysis.get("root_cause_reason"):
-            issues[0]["category_reason"] = analysis["root_cause_reason"]
+        fill_first_issue_reason(analysis, issues)
     score_model = RunItemScore if pass_number is None else RunItemPassScore
     score_query = db.query(score_model).filter(
         score_model.run_id == run.id, score_model.item_id == item.item_id)
@@ -458,7 +482,7 @@ def sync_issue_candidates(
             baseline = candidate
             unchanged_legacy = bool(
                 legacy and index < len(legacy_issues)
-                and issue_content(legacy_issues[index]) == issue_content(issue)
+                and same_base_content(legacy_issues[index], issue)
             )
             projection = project_root_cause_issues([issue])
             is_ai = (issue.get("source") or actor_source) == "ai"
@@ -523,6 +547,8 @@ def change_metric_issue(
         raise HTTPException(400, "Invalid issue action")
     before = deepcopy(analysis)
     issues = analysis_root_cause_issues(analysis)
+    # As the run page shows it, and before the issues get IDs below.
+    fill_first_issue_reason(analysis, issues)
     new_issue_id = None
     if action == "add" and request.get("client_issue_id"):
         try:
@@ -546,7 +572,9 @@ def change_metric_issue(
         if index is None:
             raise HTTPException(409, "This issue changed or was removed. Reload before trying again.")
         expected = request.get("expected_issue")
-        if not isinstance(expected, dict) or issue_content(expected) != issue_content(issues[index]):
+        # Not the reason: a Reviews edit sends the review's snapshot, and an
+        # older snapshot can lack a reason that the issue holds.
+        if not isinstance(expected, dict) or not same_base_content(expected, issues[index]):
             raise HTTPException(409, "This issue was edited elsewhere. Reload before trying again.")
     for issue in issues:
         issue.setdefault("issue_id", str(uuid4()))

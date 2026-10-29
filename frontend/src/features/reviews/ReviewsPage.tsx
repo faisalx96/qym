@@ -262,13 +262,7 @@ export function ReviewsPage() {
     try {
       const updated = await editMut.mutateAsync({
         id: current.id,
-        body: {
-          human_root_cause_issues: issues,
-          human_root_causes: issues.map((i) => i.category),
-          human_root_cause: issues[0]?.category ?? '',
-          human_root_cause_detail: issues[0]?.finding ?? '',
-          human_root_cause_note: current.human_root_cause_note ?? '',
-        },
+        body: { human_root_cause_issues: issues },
       });
       applyUpdate(current, updated); // may carry a new id (new revision)
       setCurrentId(updated.id);
