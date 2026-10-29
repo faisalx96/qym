@@ -156,7 +156,7 @@ test.describe('experiment detail with several dataset versions', () => {
     const after: any = await getExperiment(request, f.project.id, x.id);
     const retry = after.jobs.find((j: any) => j.retry_of_job_id === target.id);
     expect(retry).toMatchObject({ combo_index: 0, dataset_index: 1, attempt: 1 });
-    expect(retry.dataset).toEqual({ dataset: 'support-tickets', version: 'v2', alias: null });
+    expect(retry.dataset).toEqual({ dataset: 'support-tickets', version: 'v2', alias: null, resolved_version: 'v2' });
     expect(after.jobs.filter((j: any) => j.superseded).map((j: any) => j.id)).toEqual([target.id]);
     // The other pairs are untouched and the strip counts current jobs only.
     await expect(page.getByLabel('Job totals')).toContainText('8');

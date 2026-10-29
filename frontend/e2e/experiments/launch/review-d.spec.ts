@@ -359,6 +359,8 @@ test.describe('review of WP-D', () => {
     // One run each is the default shape; the combined-run help text is read in the opt-in shape
     await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
     const help = await page.getByTestId('run-shape').locator('p').first().textContent();
+    await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
+    const helpEach = await page.getByTestId('run-shape').locator('p').first().textContent();
     const radios = await page
       .getByTestId('run-shape')
       .getByRole('radio')
