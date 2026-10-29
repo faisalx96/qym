@@ -49,6 +49,7 @@ Files: `frontend/src/features/experiments/launch/` (`entry/TaskCard.tsx`, `entry
 * **C-2-2** is measured on the card's content block (`data-part=task-section` is the inner stack, as in the mock: 73.8 px at 1440, 158.7 at 390); at 1024 the help line wraps and the block is 89 px.
 * **C-5-7** says two columns of 543 px; the spec's own 14 px gap and 1193 px column give 589.5 px each (the mock screenshot shows 585). Implemented 589.5 px, equal columns, 14 px gap.
 * **C-5-9** names a 1000 px frame (rows end at y 940), not 900: tested at 1440 x 1000.
+* **C-3-7** the 390 bar is 91 px with a one-line status and 110 px when a long first problem wraps the status row (two rows of buttons never appear).
 * **C-3-8** home bar at 390: 91 px with a one-line status, 110 with a wrapped one.
 * **C-6-8** a row the user changed to the value the experiment default later takes keeps its marker (it is an individual choice).
 * **C-8-6 / dataset in the editor**: a preset holds one dataset (the backend refuses `datasets`), so step 1 keeps the single `DatasetPicker` instead of `DatasetsCard`; steps 2-4 are identical (C-8-4 test: zero `data-part` differences).
