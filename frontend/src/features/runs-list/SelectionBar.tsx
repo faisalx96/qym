@@ -1,4 +1,8 @@
-/** One-line selection cluster: "N selected · Compare · Cohort · Submit · Delete · Clear" + live guidance. */
+/**
+ * One-line selection cluster: "N selected · Compare · Cohort · Submit · Delete · Clear · Done selecting" + live guidance.
+ * Round 10: every action is a visible button at rest (no ghost), each with its icon; the ready action is the green one
+ * (Compare, then Open Cohort once B balances A); Done selecting sits with the actions instead of across the toolbar.
+ */
 import { Button, Icon, Text } from '@/ui';
 import styles from './SelectionBar.module.css';
 
@@ -19,7 +23,12 @@ export interface SelectionBarProps {
   onCohort: () => void;
   onSubmit: () => void;
   onDelete: () => void;
+  /** Untick everything (select mode stays on). */
   onClear: () => void;
+  /** Drop Cohort A and the B picks (select mode stays on). */
+  onCancelCohort: () => void;
+  /** Leave select mode (the picks are cleared). */
+  onDone: () => void;
 }
 
 /** Guidance for the cohort picker: "Select k more", "Remove k", overlap, "Balanced: n vs n". */
@@ -44,11 +53,22 @@ export function SelectionBar(p: SelectionBarProps) {
         : 'Compare opens the runs side by side.';
   return (
     <div className={styles.actions} role="group" aria-label="Selection actions" data-testid="selection-bar">
-      <Text variant="sm" as="span" tone={n ? 'primary' : 'muted'} weight={600} className={styles.count}>
-        {cohortMode
-          ? `Cohort B ${n}/${p.cohortAUnits} ${p.cohortAUnits === 1 ? 'execution' : 'executions'}`
-          : `${n} ${n === 1 ? 'execution' : 'executions'} selected`}
-      </Text>
+      {cohortMode ? (
+        // the two sides at a glance: A is locked (lock glyph), B counts toward A and turns green when it balances
+        <span className={styles.cohorts}>
+          <span className={styles.side} data-side="a">
+            <Icon name="lock" size={12} />
+            Cohort A · {p.cohortAUnits} locked
+          </span>
+          <span className={styles.side} data-side="b" data-ready={cohort.valid ? '' : undefined}>
+            Cohort B · {n}/{p.cohortAUnits}
+          </span>
+        </span>
+      ) : (
+        <Text variant="sm" as="span" tone={n ? 'primary' : 'muted'} weight={600} className={styles.count}>
+          {`${n} ${n === 1 ? 'execution' : 'executions'} selected`}
+        </Text>
+      )}
       {cohortMode ? null : (
         <Button
           variant="accent"
@@ -59,26 +79,50 @@ export function SelectionBar(p: SelectionBarProps) {
           Compare
         </Button>
       )}
-      <Button variant="neutral" onPress={p.onCohort} isDisabled={cohortMode ? !cohort.valid : n < 1}>
+      <Button
+        variant={cohortMode ? 'accent' : 'neutral'}
+        onPress={p.onCohort}
+        isDisabled={cohortMode ? !cohort.valid : n < 1}
+        icon={<Icon name="split" size={12} />}
+      >
         {cohortMode ? 'Open Cohort' : 'Cohort'}
       </Button>
       {!p.readOnly && !cohortMode ? (
         <>
           {p.canSubmit ? (
-            <Button variant="neutral" isDisabled={n < 1} onPress={p.onSubmit}>
+            <Button
+              variant="neutral"
+              isDisabled={n < 1}
+              onPress={p.onSubmit}
+              icon={<Icon name="send" size={12} />}
+            >
               Submit
             </Button>
           ) : null}
-          <Button variant="danger" isDisabled={n < 1 || !p.canDelete} onPress={p.onDelete}>
+          <Button
+            variant="danger"
+            isDisabled={n < 1 || !p.canDelete}
+            onPress={p.onDelete}
+            icon={<Icon name="trash" size={12} />}
+          >
             Delete
           </Button>
         </>
       ) : null}
-      <Button variant="ghost" onPress={p.onClear}>
-        {cohortMode ? 'Cancel Cohort' : n ? 'Clear' : 'Done'}
+      {cohortMode ? (
+        <Button variant="neutral" onPress={p.onCancelCohort} icon={<Icon name="close" size={12} />}>
+          Cancel Cohort
+        </Button>
+      ) : n ? (
+        <Button variant="neutral" onPress={p.onClear} icon={<Icon name="close" size={12} />}>
+          Clear
+        </Button>
+      ) : null}
+      <span className={styles.divider} aria-hidden="true" />
+      <Button variant="neutral" onPress={p.onDone} aria-pressed>
+        Done selecting
       </Button>
       <Text variant="sm" tone="muted" as="span" aria-live="polite" className={styles.guidance}>
-        {cohortMode ? `Cohort A locked (${p.cohortA.length}). ` : ''}
         {guidance}
       </Text>
     </div>

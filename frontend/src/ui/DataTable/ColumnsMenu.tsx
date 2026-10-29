@@ -77,13 +77,13 @@ export function ColumnsMenu<R>({
         <div className={styles.colMenu}>
           <SearchField label="Search columns" value={q} onChange={setQ} placeholder="Search columns" />
           <div className={styles.colMenuBulk}>
-            <Button variant="ghost" onPress={() => model.setAllHidden(false)}>
+            <Button variant="neutral" onPress={() => model.setAllHidden(false)}>
               All
             </Button>
-            <Button variant="ghost" onPress={() => model.setAllHidden(true)}>
+            <Button variant="neutral" onPress={() => model.setAllHidden(true)}>
               None
             </Button>
-            <Button variant="ghost" onPress={model.resetColumns}>
+            <Button variant="neutral" onPress={model.resetColumns}>
               Reset
             </Button>
           </div>
@@ -320,13 +320,13 @@ function ReorderBody<R>({
     <div className={styles.colMenu} data-columns-reorder="">
       <SearchField label="Search columns" value={q} onChange={setQ} placeholder="Search columns" />
       <div className={styles.colMenuBulk}>
-        <Button variant="ghost" onPress={() => setListed(false)}>
+        <Button variant="neutral" onPress={() => setListed(false)}>
           All
         </Button>
-        <Button variant="ghost" onPress={() => setListed(true)}>
+        <Button variant="neutral" onPress={() => setListed(true)}>
           None
         </Button>
-        <Button variant="ghost" onPress={model.resetColumns} className={styles.colMenuReset}>
+        <Button variant="neutral" onPress={model.resetColumns} className={styles.colMenuReset}>
           Reset layout
         </Button>
       </div>

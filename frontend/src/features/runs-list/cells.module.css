@@ -8,6 +8,12 @@
   color: var(--text-muted);
 }
 
+.date {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .modelMark {
   display: inline-block;
   flex: none;
@@ -15,7 +21,6 @@
   height: 8px;
   border-radius: 50%;
   background: var(--chart-1);
-  box-shadow: 0 0 0 2px var(--bg-surface);
 }
 
 .modelMark[data-size='md'] {

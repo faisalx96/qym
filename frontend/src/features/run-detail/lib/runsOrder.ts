@@ -3,6 +3,8 @@
  * context a run link carries, the dashboard filters/sort it maps to, and the
  * browser collation of text sorts the pager needs.
  */
+import { parseLocalDate, untilOf } from '@/lib/runs-order';
+
 export const LIST_PARAM = 'list';
 export const DEFAULT_SORT = 'time-desc';
 
@@ -89,13 +91,6 @@ export function runHref(base: string, context: string | null | undefined): strin
   return base + '?' + new URLSearchParams([[LIST_PARAM, normalized]]).toString();
 }
 
-function parseLocalDate(value: unknown): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''));
-  if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 export function rangeBounds(range: string | null, from: string | null, to: string | null, now?: Date) {
   let since: Date | null = null;
   let until: Date | null = null;
@@ -110,8 +105,7 @@ export function rangeBounds(range: string | null, from: string | null, to: strin
     since.setDate(since.getDate() - (range === 'week' ? 7 : 30));
   } else if (range === 'custom') {
     since = parseLocalDate(from);
-    until = parseLocalDate(to);
-    if (until) until.setDate(until.getDate() + 1);
+    until = untilOf(to);
   }
   return { since, until };
 }

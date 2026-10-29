@@ -18,9 +18,20 @@
 .clear {
   flex: none;
 }
+/* The count sits on its own red disc (round 10, as in the first qym bar): it reads as "n filters", not as part of the word. */
 .clearCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--error) 32%, transparent);
+  color: var(--text-primary);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 .morePanel {
   display: flex;

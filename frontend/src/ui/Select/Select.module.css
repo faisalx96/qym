@@ -7,7 +7,7 @@
   width: 100%;
   height: var(--control-height);
   padding: 0 var(--space-sm);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
   color: var(--text-primary);
@@ -34,7 +34,7 @@
 }
 
 .trigger[data-hovered] {
-  border-color: var(--border-strong);
+  border-color: var(--control-edge-hover);
 }
 
 .trigger[data-focus-visible] {

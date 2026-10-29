@@ -156,6 +156,8 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     page,
     request,
   }) => {
+    // round 10: the date and time segments are typed key by key, which takes longer than a native date fill
+    test.setTimeout(60_000);
     const s = await sharedProject(request, 12);
     const cap = capture(page, 'runs');
     await openRuns(page, s.project.slug);
@@ -173,22 +175,28 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     const range = page.getByTestId('custom-range');
     await expect(range).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(range.getByLabel('From', { exact: true })).toBeFocused();
+    // round 10: a qym date and time field per side (typed segments: month, day, year, hour, minute)
+    const from = range.getByRole('group', { name: 'From', exact: true });
+    const to = range.getByRole('group', { name: 'To', exact: true });
+    await expect(from.getByRole('spinbutton').first()).toBeFocused();
     await range.getByRole('button', { name: 'Apply' }).click();
-    await expect(range.getByRole('alert')).toHaveText('Choose a start date, an end date or both.');
-    await range.getByLabel('From', { exact: true }).fill('2026-10-05');
-    await range.getByLabel('To', { exact: true }).fill('2026-10-01');
+    await expect(range.getByRole('alert')).toHaveText('Choose a start, an end or both.');
+    await from.getByRole('spinbutton').first().click();
+    await page.keyboard.type('100520260930');
+    await to.getByRole('spinbutton').first().click();
+    await page.keyboard.type('100120262359');
     await range.getByRole('button', { name: 'Apply' }).click();
-    await expect(range.getByRole('alert')).toHaveText('The start date must be on or before the end date.');
+    await expect(range.getByRole('alert')).toHaveText('The start must be on or before the end.');
     // open-ended is allowed; the applied range keeps its fields open so the dates can be changed
-    await range.getByLabel('To', { exact: true }).fill('');
+    await to.getByRole('spinbutton').last().click();
+    for (let i = 0; i < 12; i++) await page.keyboard.press('Backspace');
     await range.getByRole('button', { name: 'Apply' }).click();
     await expect.poll(() => urlParams(page).get('range')).toBe('custom');
-    expect(urlParams(page).get('from')).toBe('2026-10-05');
+    expect(urlParams(page).get('from')).toBe('2026-10-05T09:30');
     expect(urlParams(page).has('to')).toBe(false);
     await expect(range).toBeVisible();
-    await expect(range.getByLabel('From', { exact: true })).toHaveValue('2026-10-05');
-    await expect(filterSummary(page)).toContainText('from 2026-10-05');
+    await expect(from.getByRole('spinbutton', { name: /hour/i })).toHaveText('09');
+    await expect(filterSummary(page)).toContainText('from 2026-10-05 09:30');
     const f = listRequests(cap).at(-1)!.body.filters;
     expect(f.since).toBeTruthy();
     expect(f.until).toBeUndefined();

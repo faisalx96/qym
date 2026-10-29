@@ -21,7 +21,10 @@ export function useRunsData(
   const overviewQ = useOverview(slug, filters);
   const overview = overviewQ.data;
 
-  // Metrics/trace columns come from the overview; a hidden sort column falls back to time-desc.
+  // Metrics/trace columns come from the overview; a hidden sort column falls back to time-desc. The score columns are the
+  // metrics of the filtered runs (`metrics`), not of the whole project (`all_metrics`): a filter that leaves one dataset
+  // drops the scores none of its runs has (round 10).
+  const metrics = overview?.metrics ?? overview?.all_metrics;
   const traceWithData = useMemo(
     () =>
       new Set<string>(
@@ -32,15 +35,15 @@ export function useRunsData(
     [overview?.has_trace_stats],
   );
   const columnSet = useMemo(
-    () => buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys, hidden),
-    [overview?.all_metrics, traceWithData, visibleKeys, hidden],
+    () => buildColumns(metrics ?? [], traceWithData, visibleKeys, hidden),
+    [metrics, traceWithData, visibleKeys, hidden],
   );
   // What the table hides until the user chooses: the legacy session set, else trace stats without data.
   const defaultHidden = useMemo(() => {
-    const set = buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys);
+    const set = buildColumns(metrics ?? [], traceWithData, visibleKeys);
     const shown = new Set(set.visible.map((c) => c.id));
     return new Set(set.all.filter((c) => !shown.has(c.id)).map((c) => c.id));
-  }, [overview?.all_metrics, traceWithData, visibleKeys]);
+  }, [metrics, traceWithData, visibleKeys]);
   // A metric/trace sort waits for the overview (the column set is empty until it lands): no flash of time-desc.
   const needsColumns = /^(metric-|trace-)/.test(view.sort);
   const columnsKnown = !needsColumns || Boolean(overview);

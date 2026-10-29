@@ -102,11 +102,23 @@ export function runHref(base: string, context: string | null | undefined): strin
   return `${base}?${new URLSearchParams([[LIST_PARAM, normalized]]).toString()}`;
 }
 
+/** A range bound: a local day `YYYY-MM-DD`, or a local minute `YYYY-MM-DDTHH:mm` (round 10: the Range takes a time). */
 export function parseLocalDate(value: unknown): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''));
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(String(value ?? ''));
   if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const [h, m] = [Number(match[4] ?? 0), Number(match[5] ?? 0)];
+  if (h > 23 || m > 59) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), h, m);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** The exclusive end of a To bound: the next day for a day, the next minute for a minute (the bound is inclusive). */
+export function untilOf(to: unknown): Date | null {
+  const until = parseLocalDate(to);
+  if (!until) return null;
+  if (String(to).includes('T')) until.setMinutes(until.getMinutes() + 1);
+  else until.setDate(until.getDate() + 1);
+  return until;
 }
 
 export type QuickRange = 'all' | 'today' | 'week' | 'month' | 'custom';
@@ -130,8 +142,7 @@ export function rangeBounds(
     since.setDate(since.getDate() - (range === 'week' ? 7 : 30));
   } else if (range === 'custom') {
     since = parseLocalDate(from);
-    until = parseLocalDate(to);
-    if (until) until.setDate(until.getDate() + 1);
+    until = untilOf(to);
   }
   return { since, until };
 }

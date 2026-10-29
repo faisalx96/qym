@@ -88,13 +88,15 @@ export function Toolbar({
   );
   return (
     <div className={styles.toolbar} data-dt-toolbar="">
+      {rows && cluster ? (
+        // With facet rows the selection is a line of its own above them (round 10): its actions never push the search,
+        // the filters or the end controls aside, and never wrap the end controls under the filters.
+        <div className={styles.selectionLine}>{cluster}</div>
+      ) : null}
       {rows ? (
         // Facet rows under the main line: the end controls centre on the whole block, not on its first line.
         <div className={styles.toolbarStart}>
-          <div className={styles.toolbarLine}>
-            {cluster}
-            {main}
-          </div>
+          <div className={styles.toolbarLine}>{main}</div>
           <div className={styles.toolbarRows}>{rows}</div>
         </div>
       ) : (

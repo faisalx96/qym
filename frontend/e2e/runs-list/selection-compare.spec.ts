@@ -173,8 +173,8 @@ test.describe('runs list: selection and compare (J4)', () => {
       page.getByRole('status').filter({ hasText: 'Cohort A locked. Pick 2 executions for cohort B.' }),
     ).toBeVisible();
     // cohort mode: B counter, no Compare / Submit / Delete, Clear reads Cancel Cohort
-    await expect(bar).toContainText('Cohort B 0/2 executions');
-    await expect(bar).toContainText('Cohort A locked (2)');
+    await expect(bar).toContainText('Cohort A · 2 locked');
+    await expect(bar).toContainText('Cohort B · 0/2');
     await expect(bar.getByRole('button', { name: 'Compare' })).toHaveCount(0);
     await expect(bar.getByRole('button', { name: 'Submit' })).toHaveCount(0);
     await expect(bar.getByRole('button', { name: 'Delete' })).toHaveCount(0);
@@ -187,7 +187,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await expect(cohortBtn).toBeDisabled();
     // balanced but overlapping: add a run that is already in A
     await tick(page, 'text2sql-gpt-4o-000');
-    await expect(bar).toContainText('Cohort B 2/2 executions');
+    await expect(bar).toContainText('Cohort B · 2/2');
     await expect(bar).toContainText('cannot include runs already in Cohort A');
     await expect(cohortBtn).toBeDisabled();
     // too many on side B

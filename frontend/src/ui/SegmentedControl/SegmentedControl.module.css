@@ -5,7 +5,7 @@
   align-items: stretch;
   height: var(--control-height);
   padding: 2px;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
   isolation: isolate;

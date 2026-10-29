@@ -546,7 +546,7 @@
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
   color: var(--text-secondary);
@@ -566,9 +566,24 @@
   outline-offset: 1px;
 }
 
+/* Round 10: the handle shows on the row under the pointer, the focused row and an open cell only, so at rest no handle
+   covers the scores scrolling under the column (a touch screen, with no hover, keeps every handle). */
 .bodyHost[data-scroll-end] .foldHandle {
   display: inline-flex;
   pointer-events: auto;
+  opacity: 0;
+}
+.bodyHost[data-scroll-end] .tr:hover .foldHandle,
+.bodyHost[data-scroll-end] .tr[data-focused] .foldHandle,
+.bodyHost[data-scroll-end] .fold[data-open] .foldHandle,
+.bodyHost[data-scroll-end] .foldHandle:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .bodyHost[data-scroll-end] .foldHandle {
+    opacity: 1;
+  }
 }
 
 .bodyHost[data-scroll-end] .fold:not([data-open]) .foldBody {
@@ -689,6 +704,19 @@
   gap: var(--space-sm);
   padding-inline-end: var(--space-sm);
   border-inline-end: 1px solid var(--border-default);
+}
+
+/* The selection line of a toolbar with facet rows: the full width, a hairline under it. */
+.selectionLine {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding-block-end: var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.selectionLine > .selectionCluster {
+  padding-inline-end: 0;
+  border-inline-end: 0;
 }
 
 .rowActions {
@@ -892,6 +920,12 @@
 
 .toolbar[data-selection-bar] {
   background: var(--bg-elevated);
+}
+
+/* A toolbar with facet rows (the runs filter bar) is two control lines: 8px above and below them instead of 4, so the
+   filter row does not sit on the column headers (round 10). */
+.toolbar:has(> .toolbarStart) {
+  padding-block: var(--space-sm);
 }
 
 .footer {

@@ -38,15 +38,18 @@ test.describe('1440', () => {
     expect((await cell.boundingBox())!.height).toBeLessThan(34);
   });
 
-  test('Overview: recent runs carry task, dataset and model tags', async ({ page }) => {
+  test('Overview: a recent run reads on one line, with its task and model in their own columns', async ({
+    page,
+  }) => {
     await gotoApp(page, `/projects/${tour.slug}/overview`);
     const card = page.getByRole('region', { name: 'Recent runs' });
-    const tags = card.getByTestId('run-tags').first();
-    await expect(tags).toBeVisible();
-    await expect(card.getByTestId('run-task').first()).toBeVisible();
-    const kinds = tags.locator('> *');
-    expect(await kinds.count()).toBe(2);
-    for (let i = 0; i < 2; i += 1) await expect(kinds.nth(i)).toBeVisible();
+    await expect(card.getByRole('columnheader', { name: 'Task' })).toBeVisible();
+    await expect(card.getByRole('columnheader', { name: 'Model' })).toBeVisible();
+    const row = card.locator('tbody tr').first();
+    await expect(row.locator('td[data-col="task"] [data-kind="task"]')).toBeVisible();
+    await expect(row.locator('td[data-col="model"] [data-kind="model"]')).toBeVisible();
+    // round 10: no tag line under the name, so a row keeps the compact height
+    expect((await row.boundingBox())!.height).toBeLessThan(40);
   });
 
   test('compare error cards are compact: the name, count and bar sit together', async ({ page }) => {
@@ -167,15 +170,11 @@ test.describe('1440', () => {
 test.describe('390', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('Overview: task and dataset stay, the model tag goes', async ({ page }) => {
+  test('Overview: the task stays on the card, the model goes', async ({ page }) => {
     await gotoApp(page, `/projects/${tour.slug}/overview`);
-    const tags = page.getByRole('region', { name: 'Recent runs' }).getByTestId('run-tags').first();
-    await expect(tags).toBeVisible();
-    await expect(
-      page.getByRole('region', { name: 'Recent runs' }).getByTestId('run-task').first(),
-    ).toBeVisible();
-    await expect(tags.locator('> *').nth(0)).toBeVisible();
-    await expect(tags.locator('> *').nth(1)).toBeHidden();
+    const card = page.getByRole('region', { name: 'Recent runs' }).getByRole('listitem').first();
+    await expect(card.locator('[data-kind="task"]')).toBeVisible();
+    await expect(card.locator('[data-kind="model"]')).toBeHidden();
   });
 
   test('wizard: one --bar-action-h bar, the problems link lives in its overflow menu', async ({ page }) => {

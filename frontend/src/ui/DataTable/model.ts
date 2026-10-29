@@ -339,8 +339,9 @@ export function headerMinWidth<R>(col: Column<R>, sortable: boolean): number {
  * Content fit: each column gets its wanted (content) width plus a share of the spare width in proportion to it, the
  * way an auto table layout spreads it. When the wanted widths are a little too wide, the flexible columns (`min` set)
  * give width back down to their `min`, in proportion to what each can give. Widths are whole pixels and add up to
- * `available` exactly (the rounding rest goes to the widest column). Null when even that does not fit: the table then
- * keeps its declared widths.
+ * `available` exactly (the rounding rest goes to the widest column). When even that does not fit, every column keeps
+ * its content width and the table scrolls sideways: a declared width narrower than the content would cut it with an
+ * ellipsis (owner review round 10). Null only when there is nothing to fit.
  */
 export function fitColumnWidths(
   want: { id: string; w: number; min?: number }[],
@@ -352,7 +353,7 @@ export function fitColumnWidths(
   if (sum > available) {
     const deficit = sum - available;
     const give = want.reduce((n, x) => n + (x.min !== undefined ? Math.max(0, x.w - x.min) : 0), 0);
-    if (give < deficit) return null;
+    if (give < deficit) return Object.fromEntries(want.map((x) => [x.id, Math.ceil(x.w)]));
     cols = want.map((x) =>
       x.min !== undefined && x.w > x.min ? { ...x, w: x.w - (deficit * (x.w - x.min)) / give } : x,
     );
