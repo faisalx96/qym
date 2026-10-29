@@ -1,0 +1,118 @@
+/* The one bottom bar (round 9, point 3). Same chrome on the home view and on every step: sticky at the bottom of the
+   scroller (compositor-positioned), --bar-action-h, elevated, --border-default, --shadow-popover, buttons 24 px. */
+.bar {
+  position: sticky;
+  inset-block-end: 0;
+  /* Pinned to the bottom of the page box (the page padding is cancelled), which is the viewport bottom whatever the
+     content height: auto above, the page's own bottom padding below. */
+  margin-block: auto calc(-1 * var(--space-xl));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-block-size: var(--bar-action-h);
+  box-sizing: border-box;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+}
+
+.nav,
+.end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.status {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-md);
+  min-inline-size: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.launch {
+  min-inline-size: 7.5rem;
+}
+
+.runs {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.problem {
+  max-inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  /* --error alone is 4.15:1 on the elevated bar; lift it to clear AA at this size */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+  font: inherit;
+  font-size: var(--font-sm);
+  text-align: start;
+  text-decoration: underline;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.problem:hover {
+  color: var(--text-primary);
+}
+
+.problem:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ok {
+  font-size: var(--font-sm);
+  color: var(--success);
+}
+
+.muted {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.name {
+  flex: 0 1 320px;
+  min-inline-size: 12rem;
+}
+
+/* A phone gets two rows: the status on top, the five buttons under it (no overflow menu). */
+@media (max-width: 480px) {
+  .bar {
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    min-block-size: calc(var(--bar-action-h) + var(--space-lg) + var(--space-xs));
+    padding: var(--space-sm);
+  }
+
+  .status {
+    flex: 1 1 100%;
+    order: -1;
+  }
+
+  .nav {
+    flex: 1 1 auto;
+  }
+
+  .end {
+    margin-inline-start: auto;
+  }
+
+  .long {
+    display: none;
+  }
+
+  .name {
+    flex: 1 1 100%;
+  }
+}

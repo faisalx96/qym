@@ -176,7 +176,7 @@ Do this before `pip wheel packages/sdk` so the wheel contains it. For developmen
 `npm run dev:sdk` serves it on port 5808 and proxies `/api` to a local viewer on 8818
 (start one with `qym ui FILE --port 8818` or `qym run create ... --local-ui --ui-port 8818`).
 
-## Experiments: several datasets and a task per environment
+## Experiments: several datasets, one task and a priority per run
 
 ### Datasets and versions
 
@@ -208,14 +208,36 @@ The run count follows (`1 combination × (2 environments × 4 dataset versions) 
 `QYM_EVAL_SWEEP_MAX_JOBS` applies to it. A one-dataset experiment is stored and sent exactly as before. Sweeps cannot cover the
 dataset list or the shape (use **One run each** to run each one); starting points (presets) hold no dataset list.
 
-### Task per environment
+### One task per experiment
 
-When an environment's service declares `task` and lists tasks (`GET /evals/tasks`), its box gets a **Task** row under
-Versions: **Worker default** first, then the service's tasks with their descriptions. The list is read live when the
-environment is ticked and again on its **Refresh**. A service that cannot list its tasks shows the reason; one that answers
-404, 405 or 422 shows no row. The task is stored on the experiment per environment and shown on the experiment page, where the
-**Datasets and task** card, one matrix row per dataset version and a job history grouped by dataset version replace the plain
-matrix. A preset may hold the task of its own environment.
+When a ticked environment's service declares `task` and lists tasks (`GET /evals/tasks`), a **Task** card appears above
+Environments and Datasets (on the launch home view and on the first Customize step). It holds one select: **Worker default**
+first, then the union of the ticked environments' tasks, each with the environments that offer it. The row under it shows, per
+ticked environment, whether it offers the chosen task. If one does not (or its service has no task selection at all), its box turns red,
+the review lists the problem and Launch stays disabled until you change the task or untick the environment; the platform never
+quietly runs the Worker default there. The task is stored once on the experiment (`evaluator.task`, a task id) and shown on the
+experiment page, where the **Datasets and task** card, one matrix row per dataset version and a job history grouped by dataset
+version replace the plain matrix. Experiments launched before this change keep their per-environment tasks and display unchanged;
+**Duplicate** shows the common task or "Different per environment" (read-only). A preset may hold the task of its own environment.
+
+### Priority per run
+
+The experiment has one priority (**Name and priority**, default from the environments) and, on the **Review** step, every run of
+a sweep has its own **Low / Normal / High** select that starts at the experiment's value. **Set every run to** changes all rows
+at once. The rules are the experiment's, applied per run: **High** needs a project manager, is capped by the run's own
+environment (`max_priority`), and any High run needs the preemption acknowledgement (one checkbox above the table, naming only the environments of High runs). The
+platform stores the priority on each job (it is sent to the Evaluation Service per job, as before), **Retry** keeps the job's priority,
+and within one experiment High runs are submitted first. The API takes `job_priorities` (`environment_id`, `combo_index`,
+`dataset_index`, `priority`) next to `priority`; the experiment and each job carry `priority`, and the experiment a
+`priorities` count (`{"LOW": 0, "NORMAL": 5, "HIGH": 1}`).
+
+### Environment pages
+
+Experiments -> Environments and Project settings -> Environments show the same table, and the whole row opens the environment (click
+any cell, press Enter on a focused row, Ctrl/Cmd-click for a new tab); the name is also a normal link and a chevron closes every
+row. Both entries open one page, `/projects/<project>/environments/<id>`, with Status, Schema, Tasks (what the service offers; read-only),
+LLM model groups, Default preset, Saved presets, Ranking, Policies and Connection, and a bar with Delete environment and Save changes.
+Opened from Project settings, its back link reads "Project settings"; otherwise "All environments".
 
 ## Experiments: latency-sensitive runs and credentials
 

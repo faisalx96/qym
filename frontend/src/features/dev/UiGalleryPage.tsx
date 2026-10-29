@@ -14,6 +14,7 @@ import { EvalFlagsMocks } from './EvalFlagsMocks';
 import { QaExperimentsMocks } from './QaExperimentsMocks';
 import { MultiLaunchMocks } from './MultiLaunchMocks';
 import { AiFeedbackMocks } from './AiFeedbackMocks';
+import { Round9Mocks } from './Round9Mocks';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -957,6 +958,7 @@ export default function UiGalleryPage() {
       <QaExperimentsMocks Section={Section} Case={Case} />
       <MultiLaunchMocks Section={Section} Case={Case} />
       <AiFeedbackMocks Section={Section} Case={Case} />
+      <Round9Mocks Section={Section} Case={Case} />
     </div>
   );
 }

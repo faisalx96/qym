@@ -1,0 +1,715 @@
+/* Round 9 mocks (design stage): visual contract for docs/internal/ui-migration/redesign9/experiments.md.
+   Tokens only. Frames use the real column widths: 1193 px (1440 viewport), 777 (1024), 279 (390).
+   The CSS marked "recipe" is what moves into the components (entry.module.css, wizard.module.css, review.module.css). */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.help {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.where {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+@media (width <= 960px) {
+  .where {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* recipe (point 1): a selectable box. Never darker than the card that holds it: --bg-elevated on --bg-surface (1.10:1),
+   --border-default (1.59:1 against the card), hover --bg-hover, selected = accent border + 3px rail + 12% accent tint. */
+.box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.box:hover {
+  background: var(--bg-hover);
+}
+
+.box[data-state='selected'] {
+  border-color: var(--accent-primary);
+  border-inline-start: var(--rail-width) solid var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-elevated));
+}
+
+.box[data-state='flagged'] {
+  border-color: var(--error);
+  border-inline-start: var(--rail-width) solid var(--error);
+  background: var(--bg-elevated);
+}
+
+.box[data-state='disabled'] {
+  opacity: 0.6;
+}
+
+.boxHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+
+.boxTags {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.boxLine {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding-block-start: var(--space-xs);
+  border-block-start: 1px solid var(--border-subtle);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.boxLine b {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.boxNote {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+
+.boxNote[data-tone='danger'] {
+  color: var(--error);
+}
+
+.link {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.latency {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* recipe (point 2): the Task section, one control, one line of help, one availability row. */
+.taskRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-lg);
+}
+
+.taskSelect {
+  inline-size: 360px;
+  max-inline-size: 100%;
+}
+
+.avail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.availLabel {
+  color: var(--text-muted);
+}
+
+/* start-from cards (unchanged recipe, shown so the page is composed) */
+.startGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+@media (width <= 960px) {
+  .startGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  padding: var(--card-padding);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  min-width: 0;
+}
+
+.start[data-selected] {
+  border-color: var(--accent-primary);
+  border-inline-start: var(--rail-width) solid var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-surface));
+}
+
+.eyebrow {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.startTitle {
+  font-size: var(--font-lg);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.startBody {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: var(--space-md);
+}
+
+@media (width <= 760px) {
+  .fieldRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.nameInput {
+  display: flex;
+  align-items: center;
+  block-size: var(--control-height);
+  padding-inline: var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* recipe (point 3): ONE bottom bar on every step and on the home view. Sticky, --bar-action-h, elevated, --border-default,
+   the same six slots in the same order; a slot that does not apply is disabled, never removed. */
+.bar {
+  /* real recipe: position sticky, inset-block-end 0 (compositor-positioned, round 6 rule); the mock draws it in flow so the
+     element screenshot shows it under the content instead of on top of it */
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: var(--bar-action-h);
+  box-sizing: border-box;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+}
+
+.barNav,
+.barEnd {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.barStatus {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.barRuns {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.barProblem {
+  font-size: var(--font-sm);
+  color: var(--error);
+  text-decoration: underline;
+}
+
+.barOk {
+  font-size: var(--font-sm);
+  color: var(--success);
+}
+
+.barName {
+  flex: 0 1 320px;
+}
+
+.btnLong {
+  display: inline;
+}
+
+.barPhoneOnly {
+  display: none;
+}
+
+@media (width <= 480px) {
+  .bar {
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    min-height: calc(var(--bar-action-h) + var(--space-lg) + var(--space-xs));
+    padding: var(--space-sm);
+  }
+
+  .barStatus {
+    flex: 1 1 100%;
+    order: -1;
+  }
+
+  .barNav {
+    flex: 1 1 auto;
+  }
+
+  .barEnd {
+    margin-inline-start: auto;
+  }
+
+  .barDesktopOnly {
+    display: none;
+  }
+
+  .barPhoneOnly {
+    display: inline-flex;
+  }
+
+  .barName {
+    flex: 1 1 100%;
+  }
+}
+
+/* step content: the where / models / settings frames */
+.cardTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--row-regular);
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.search {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 240px;
+  max-inline-size: 320px;
+  block-size: var(--control-height);
+  padding-inline: var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.endpoint {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.segment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* recipe (points 4, 5, 6): the Review step. Three cards: Summary (label | value rows), Runs (one row per run), Checks. */
+.kv {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.kvRow {
+  display: grid;
+  grid-template-columns: 160px minmax(0, var(--field-measure));
+  gap: var(--space-xs) var(--space-lg);
+  align-items: center;
+  min-height: var(--row-compact);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.kvRow:last-child {
+  border-block-end: 0;
+}
+
+.kvRow dt {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.kvRow dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  margin: 0;
+  padding-block: var(--space-xs);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.kvRow dd[data-mono] {
+  font-family: var(--font-mono);
+}
+
+@media (width <= 760px) {
+  .kvRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-block: var(--space-xs);
+  }
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.big {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+}
+
+.muted {
+  font-size: var(--font-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.runsTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.cellStack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.prio {
+  inline-size: 120px;
+  flex: none;
+}
+
+.prioCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
+}
+
+.changed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.dot {
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--accent-primary);
+}
+
+/* runs as cards under 760 px: one card per run, label | value rows (recipe for the 390 frame) */
+.runCards {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0 var(--space-md) var(--space-md);
+  list-style: none;
+}
+
+.runCard {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  font-size: var(--font-base);
+}
+
+.runCard dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.runCard dd {
+  margin: 0;
+  min-width: 0;
+}
+
+@media (width <= 760px) {
+  .runTable {
+    display: none;
+  }
+
+  .runCards {
+    display: flex;
+  }
+}
+
+.changeList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.changeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: var(--row-compact);
+  border-block-end: 1px solid var(--border-subtle);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.changeRow:last-child {
+  border-block-end: 0;
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+@media (width <= 960px) {
+  .twoCol {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+}
+
+/* recipe (point 6): the High acknowledgement, one callout above the runs */
+.callout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--warning);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--warning) var(--tint-soft), transparent);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.callout[data-tone='danger'] {
+  border-color: var(--error);
+  background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
+}
+
+/* recipe (point 7, 9): environment page and table */
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.envFoot {
+  position: sticky;
+  inset-block-end: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: var(--bar-action-h);
+  box-sizing: border-box;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+}
+
+.nameLink {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+tr:hover .nameLink,
+tr:focus-visible .nameLink {
+  text-decoration: underline;
+}
+
+.chev {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--text-muted);
+  line-height: 0;
+}
+
+tr:hover .chev,
+tr:focus-visible .chev {
+  color: var(--text-primary);
+}
+
+/* appendix sheets */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  inline-size: min(100%, 1193px);
+}
+
+.sheetLabel {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sheetRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.frame {
+  inline-size: min(100%, 520px);
+}

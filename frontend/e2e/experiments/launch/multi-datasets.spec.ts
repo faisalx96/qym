@@ -102,7 +102,7 @@ test.describe('the Datasets card', () => {
       const fieldset = datasetsCard(page);
       m['singleFieldset'] = await sized(fieldset);
       m['singleBox'] = await sized(dsBox(page, 'support-tickets'));
-      near((await sized(dsBox(page, 'support-tickets'))).height, 67, 1.6, 'QD-3 box height');
+      near((await sized(dsBox(page, 'support-tickets'))).height, 75, 1.6, 'QD-3 box height (75: the option box padding of round 9, was 67)');
       const trigger = dsBox(page, 'support-tickets').getByRole('button', { name: /^Versions.* of support-tickets$/ });
       const tsize = await sized(trigger);
       m['trigger'] = tsize;
@@ -238,7 +238,7 @@ test.describe('the Datasets card', () => {
     expect(hits.length).toBe(before);
     save('measure-d-step1-1440', {
       fieldset: await sized(datasetsCard(page)),
-      review: await sized(page.getByRole('complementary', { name: 'Review' })),
+      bar: await sized(page.locator('[data-part=launch-bar]')),
     });
     await shot(page, 'after-d-step1-composed-1440');
     // Review rail below the step at 1024 and 390.

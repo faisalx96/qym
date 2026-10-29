@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EntryBlock } from '../entry/EntryBlock';
 import { StartFrom } from '../entry/StartFrom';
 import { LaunchSection } from '../components/LaunchSection';
-import { ReviewPane } from '../review/ReviewPane';
+import { ReviewStep } from '../review/ReviewStep';
 import { LaunchTestProvider, useLaunch } from '../LaunchContext';
 import { createDocument, pointerToFieldName, type ValidationItem } from '../model';
 import { envRecord, installFakePlatform, newClient, Providers } from './helpers';
@@ -98,7 +98,7 @@ describe('review: problems', () => {
     renderWith(
       <>
         <EntryBlock />
-        <ReviewPane onCancel={() => {}} />
+        <ReviewStep />
         <Probe />
       </>,
     );
@@ -141,7 +141,7 @@ describe('review: problems', () => {
   });
 
   it('pluralises the run count', () => {
-    renderWith(<ReviewPane onCancel={() => {}} />);
+    renderWith(<ReviewStep />);
     expect(screen.getByText('runs to launch')).toBeInTheDocument();
     act(() => {});
   });

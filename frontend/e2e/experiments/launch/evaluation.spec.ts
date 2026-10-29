@@ -13,7 +13,9 @@ import {
   openLaunch,
   rail,
   openSection,
+  launchBar,
   review,
+  toReview,
   seedLaunch,
   type LaunchFixture,
 } from './launchSupport';
@@ -51,8 +53,9 @@ test.describe('evaluation inputs and run metadata', () => {
     await expect(rail(page).getByRole('button', { name: /\d\s*Evaluation configurations/ })).toContainText(
       '1',
     );
-    await expect(review(page)).toContainText('Evaluation configurations: 1 change');
     await expectReady(page);
+    await toReview(page);
+    await expect(review(page)).toContainText('Evaluation configurations: 1 change');
     const raw = await openSection(page, 'Raw JSON');
     await expect(raw.locator('.cm-content')).toContainText('"samples": 5');
   });
@@ -69,12 +72,12 @@ test.describe('evaluation inputs and run metadata', () => {
     await expectReady(page);
     await ev.getByRole('textbox', { name: 'Metadata key 1' }).fill('qym_secret');
     await expect(ev.getByText('Keys starting with qym_ are reserved for the platform').last()).toBeVisible();
-    const problem = review(page).getByRole('button', { name: /Run metadata › qym_secret/ });
-    await expect(problem).toBeVisible();
     await expect(launchButton(page)).toBeDisabled();
 
-    // Leave the step, click the problem: it brings the step back and focuses the key field.
+    // Leave the step, click the problem (listed on the Review step): it brings the step back and focuses the key field.
     await goStep(page, 'review');
+    const problem = review(page).getByRole('button', { name: /Run metadata › qym_secret/ });
+    await expect(problem).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Metadata key 1' })).toBeHidden();
     await problem.click();
     await expect(page.getByRole('textbox', { name: 'Metadata key 1' })).toBeFocused();
@@ -101,7 +104,7 @@ test.describe('Raw JSON', () => {
     await expect(raw.getByRole('list', { name: 'Raw JSON errors' })).toBeVisible();
     await expect(raw.getByRole('list', { name: 'Raw JSON errors' })).toContainText('bogus_key');
     await expect(launchButton(page)).toBeDisabled();
-    await expect(review(page)).toContainText(/problem/);
+    await expect(launchBar(page)).toContainText(/problem/);
 
     // Fix: drop the unknown key, change samples, Apply.
     doc.evaluator.config.samples = 7;

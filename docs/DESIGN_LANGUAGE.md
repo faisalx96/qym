@@ -289,6 +289,11 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   the extra height to its plot, never to empty space under it). An interactive card holds no other interactive element. Never restyle a card per page: pass layout via
   `className`, meaning via props.
 
+- **Option box** (round 9, point 1): a selectable box inside a card (an environment, a dataset entry) is `--bg-elevated` with
+  `--border-default` (1.10:1 and 1.59:1 on `--bg-surface`), padding `--space-sm` `--space-md`, hover `--bg-hover`, selected =
+  accent border + `--rail-width` rail + `--tint-soft` accent tint over `--bg-elevated` (the Start-from card recipe), flagged =
+  `--error` border + rail with a `--error` line of text. Never `--bg-base` inside a card: a box darker than its card reads as a hole.
+
 - **Calm surface** (run detail, applies everywhere): a container (card, drawer, expanded item) is the only filled layer; inside
   it at most one more fill level, reserved for code and JSON viewers, inputs and the selected or open state. Parts are
   separated by a `--border-subtle` hairline and `--space-md` rhythm, never by nested tiles (a `ReportSection` panel holding inset cards is one level of containment, not nesting: the cards read `--bg-surface`/`--card-edge`, which the body redefines, owner decision H6); colour carries status, band,
@@ -300,6 +305,10 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   `--bar-link-h` 36px (round 8, owner decision H5: it carries links only, no selects or buttons); an action bar (the experiment home launch bar,
   the analysis action rail, the run items toolbar) is `--bar-action-h`. Pages set `min-height` from the token, never a
   number. Enforced by `design-language.test.ts`.
+  The action-bar family is one recipe (`LaunchBar`, round 9, point 3): `--bg-elevated`, `--border-default`, `--shadow-popover`,
+  `--bar-action-h`, every button 24px; the 42px surface-coloured step nav is retired. A wizard bar keeps **the same slots on
+  every step** (Back, Skip to review, Continue, status, Cancel, Launch): a slot that does not apply is disabled, never removed,
+  and the labels do not change (the destination is the accessible name).
 
 - **Page hero** (`PageHeader`): `Text` roles: title `--font-title` / 650 /
   primary; description `--font-base` / muted, one line with ellipsis; meta line
@@ -773,6 +782,15 @@ rules for any future surface, not for the pages that taught them.
   question once. When a defect cannot be reproduced in the test environment (a trackpad fling on a compositor thread in
   headless Chromium), the spec says so, fixes the structural cause anyway, and the reviewer verifies on the owner's
   device rather than closing the point on a measurement that could not fail.
+
+- **A control the user needs on every step appears on every step.** Optional controls are disabled in place; a bar that gains
+  buttons on some pages is read as a different page (owner QA 2026-10-28, point 3). Criterion: the part count of the bar is
+  identical on every step.
+- **A step shows its own content only.** The summary and the launch decision live in the bar (run count, first problem) and on
+  the Review step; a review card under an unrelated step is a layout workaround, not a design (owner QA 2026-10-28, point 4).
+  Criterion: the review exists on the Review step only; the other steps use the full column width.
+- **Facts in cells, not sentences.** A list of runs is a table with one fact per cell (`#`, environment, dataset, swept setting,
+  task, priority), and a column that carries one value for every run is not drawn. Criterion: one row per run, 0 disclosures.
 
 ---
 

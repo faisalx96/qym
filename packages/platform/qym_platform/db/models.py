@@ -962,6 +962,9 @@ class EvalExperimentJob(Base):
     attempt: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    # LOW / NORMAL / HIGH this job is submitted with (0093). Always set at launch;
+    # NULL only on rows older than the migration (read as the experiment's priority).
+    priority: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     # The attempt this row retries (kept for history, left out of the aggregate).
     retry_of_job_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey(

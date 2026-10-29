@@ -90,5 +90,6 @@ test('a matrix cell hands its job to the default preset editor, which opens on t
       `/projects/${project.slug}/environments/${env.id}/default-preset/edit\\?.*promote=job.*id=${job.id}`,
     ),
   );
-  await expect(page.getByRole('complementary', { name: 'Review and publish' })).toBeVisible();
+  await expect(page.locator('[data-part=customize][data-mode=editor]')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Compared with' })).toBeVisible();
 });

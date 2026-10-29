@@ -4,7 +4,7 @@
  */
 import { expect, type Page } from '@playwright/test';
 import { expectNoPageOverflow, FAKE_A, resetFakes, setFakeArrayLeaves, test } from '../support';
-import { openGroup, openLaunch, review, seedLaunch, type LaunchFixture } from './launchSupport';
+import { openGroup, openLaunch, launchBar, seedLaunch, type LaunchFixture } from './launchSupport';
 
 test.setTimeout(90_000);
 test.use({ actionTimeout: 10_000 });
@@ -67,9 +67,9 @@ test('the global row sweeps several values: chips, "sweeps N runs", and one run 
   await expect(chips).toContainText('sweeps 3 runs');
   await expect(chips).toContainText('256 · 512 · 1024');
   // linked: three runs (one per value), not one per combination of the roles
-  await expect(review(page)).toContainText(/3\s*runs to launch/, { timeout: 15_000 });
+  await expect(launchBar(page)).toContainText(/3\s*runs to launch/, { timeout: 15_000 });
   await editor.getByRole('button', { name: /Single value/ }).click();
-  await expect(review(page)).toContainText(/1\s*run to launch/, { timeout: 15_000 });
+  await expect(launchBar(page)).toContainText(/1\s*run to launch/, { timeout: 15_000 });
 });
 
 test('the settings step uses the full width: the review rail gives way to the launch bar, tables read in full', async ({
@@ -154,7 +154,7 @@ test.describe('list settings (the fake service serves STOP_WORDS, ALLOWED_REGION
     for (let i = 0; i < 3; i++) await stop.getByRole('button', { name: '+ Add item' }).click();
     const table = stop.getByRole('table');
     await expect(table.getByRole('textbox')).toHaveCount(4); // the All row plus three items
-    await expect(review(page)).not.toContainText(/None is not of type|Every item must be/);
+    await expect(launchBar(page)).not.toContainText(/None is not of type|Every item must be/);
     await table.getByRole('textbox', { name: /\(all items\)/ }).fill('x');
     await table.getByRole('textbox', { name: /\(all items\)/ }).press('Enter');
     await expect(table.getByRole('textbox').nth(1)).toHaveValue('x');

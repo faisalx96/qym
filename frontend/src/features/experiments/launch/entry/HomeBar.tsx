@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { Button, TextField } from '@/ui';
+import { TextField } from '@/ui';
 import { plural } from '../../lib/format';
 import { NAME_MAX, PSEUDO, pointerToFieldName } from '../model';
 import { useLaunch } from '../LaunchContext';
 import { heldOnHome, stepOfItem, type WizardStepId } from '../wizard/steps';
-import styles from './entry.module.css';
+import { BarButton, LaunchBar } from '../review/LaunchBar';
+import styles from '../review/launchBar.module.css';
 
 /** What the home bar's status line says; pure so it can be tested for every state. */
 export function homeStatus(args: {
@@ -53,6 +54,9 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
     baseLabel: baseState.label,
     envNames,
   });
+  // At 390 the status is one line ("Ready · 2 runs to launch", "1 problem to fix  Show"): the destination, the problem text
+  // and the run count of a blocked form are on the page above and in the field, so the bar keeps one height (round 9, C-3-8).
+  const readyRest = status.startsWith('Ready: ') ? status.slice('Ready'.length) : null;
   const first = review.items[0];
   const showProblems =
     envCount > 0 && !preview.loading && !baseState.loading && !preview.error && review.items.length > 0;
@@ -66,47 +70,61 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
   // "Show" / Customize land on the first step that holds a problem the home view does not.
   const away = review.items.find((item) => !heldOnHome(item));
   return (
-    <div className={styles.homeBar} role="region" aria-label="Launch">
-      <TextField
-        ref={(el) => registerField(pointerToFieldName(PSEUDO.name), el)}
-        className={styles.homeName}
-        label="Experiment name"
-        hideLabel
-        placeholder={suggestion}
-        value={doc.name}
-        maxLength={NAME_MAX}
-        isDisabled={readOnly}
-        onChange={(name) => setDoc((d) => ({ ...d, name }))}
-      />
-      <div className={styles.homeStatus}>
-        <span role="status" className={styles.homeStatusText} data-tone={showProblems ? 'problem' : 'ok'}>
-          {status}
+    <LaunchBar mode="home">
+      <div className={styles.name} data-part="bar-name">
+        <TextField
+          ref={(el) => registerField(pointerToFieldName(PSEUDO.name), el)}
+          label="Experiment name"
+          hideLabel
+          placeholder={suggestion}
+          value={doc.name}
+          maxLength={NAME_MAX}
+          isDisabled={readOnly}
+          onChange={(name) => setDoc((d) => ({ ...d, name }))}
+        />
+      </div>
+      <div className={styles.status} data-part="bar-status">
+        <span role="status" className={styles.runs} data-tone={showProblems ? 'problem' : 'ok'}>
+          {readyRest === null ? (
+            status
+          ) : (
+            <>
+              Ready<span className={styles.long}>{readyRest}</span>
+            </>
+          )}
         </span>
-        {showProblems && first ? <span className={styles.homeIssue}>{first.message}</span> : null}
         {showProblems && first ? (
-          <button type="button" className={styles.homeShow} onClick={() => focusIssue(first)}>
+          <span className={`${styles.muted} ${styles.long}`}>{first.message}</span>
+        ) : null}
+        {showProblems && first ? (
+          <button type="button" className={styles.problem} onClick={() => focusIssue(first)}>
             Show
           </button>
         ) : null}
         {envCount && !review.count.over && !preview.error ? (
-          <span className={styles.homeRuns} aria-live="polite">
+          <span className={showProblems ? `${styles.muted} ${styles.long}` : styles.muted} aria-live="polite">
             {plural(review.count.runs, 'run')} to launch
           </span>
         ) : null}
       </div>
-      <div className={styles.homeActions}>
-        <Button
-          variant="accent"
+      <div className={styles.end}>
+        <BarButton
+          part="bar-customize"
+          variant="neutral"
+          onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}
+        >
+          Customize →
+        </BarButton>
+        <BarButton
+          part="bar-launch"
+          variant="primary"
           loading={isLaunching}
           isDisabled={readOnly || !review.canLaunch || review.items.length > 0 || isLaunching}
           onPress={() => void launch()}
         >
           Launch as is
-        </Button>
-        <Button variant="neutral" onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}>
-          Customize →
-        </Button>
+        </BarButton>
       </div>
-    </div>
+    </LaunchBar>
   );
 }

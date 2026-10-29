@@ -21,9 +21,11 @@ import {
   waitForSubmitted,
 } from '../support';
 import { captureExperimentPosts, goStep, nameBox, openHome, openLaunch, review } from './launchSupport';
+import { part as r9part } from './r9Support';
 import {
   addDataset,
   chooseDataset,
+  chooseTask,
   composeFour,
   datasetSelect,
   dsBox,
@@ -143,8 +145,9 @@ test.describe('review of WP-D', () => {
         await route.continue();
       });
       await openHome(page, f.project.slug, both());
-      const row = envBox(page, 'production').locator('[data-env-task]');
-      await expect(row).toHaveAttribute('data-status', 'loading');
+      // The Task section (round 9) reads the list; its frame keeps the loaded height like the boxes.
+      const row = r9part(page, 'task-section');
+      await expect(r9part(page, 'task-availability')).toContainText('Reading tasks');
       // The pre-existing transient `Checking schema…` tag (3dd430ab) wraps the tags line for about 80 ms at 1024 and 390: not the task row.
       await expect(page.getByText('Checking schema…')).toHaveCount(0);
       const loadingTask = {
@@ -152,7 +155,7 @@ test.describe('review of WP-D', () => {
         stag: await h(envBox(page, 'staging')),
         row: await h(row),
       };
-      await expect(row).toHaveAttribute('data-status', 'ok', { timeout: 10_000 });
+      await expect(r9part(page, 'task-select').getByRole('button')).toBeEnabled({ timeout: 10_000 });
       const loadedTask = {
         prod: await h(envBox(page, 'production')),
         stag: await h(envBox(page, 'staging')),
@@ -262,28 +265,9 @@ test.describe('review of WP-D', () => {
       // Review rows (rail at 1440, below the step otherwise): Customize step 1 with the task chosen.
       await openLaunch(page, f.project.slug, both());
       await composeFour(page);
-      // The measured rows are the combined-run ones; One run each is the default since 2.1.0 (fix/multi-dataset-default-one-each).
-      await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
-      const task = envBox(page, 'production').locator('[data-env-task]');
-      await expect(task).toHaveAttribute('data-status', 'ok');
-      await task.getByRole('button', { name: /Task of production/ }).click();
-      await page.getByRole('option', { name: /Answer a ticket/ }).click();
+      await chooseTask(page, /Answer a ticket/);
       await nameBox(page).fill('numbers');
-      const pane = review(page);
-      await expect(pane.getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });
-      const rowOf = (inner: Locator) =>
-        inner.evaluate((el) => {
-          let n: HTMLElement | null = el as HTMLElement;
-          while (n && n.parentElement && n.parentElement.tagName !== 'DL') n = n.parentElement;
-          return Math.round((n ?? (el as HTMLElement)).getBoundingClientRect().height * 10) / 10;
-        });
-      out.rowEnvironments = await rowOf(pane.getByTestId('review-env-lines'));
-      out.rowDatasets = await rowOf(pane.getByTestId('review-datasets'));
-      out.datasetLineHeights = await pane
-        .getByTestId('review-datasets')
-        .getByRole('listitem')
-        .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height * 10) / 10));
-      out.rowRunShape = await rowOf(pane.getByText('Run shape', { exact: true }));
+      // The review rows moved to the Review step (round 9): measured in r9-create.spec.ts.
       // Detail with three environments: production (list + task) and two v1.3 services (4 + 4 pairs) = 9 jobs.
       const staging2 = await createEnvironment(request, f.project.id, 'staging-eu', { port: FAKE_B });
       const x = await launchExperiment(request, f.project.id, {
@@ -343,9 +327,6 @@ test.describe('review of WP-D', () => {
       save(`review-d-numbers-${width}`, out);
       // The spec's numbers (QD-40, QD-41, QD-53, QD-55, QD-57) measured on three environments and nine jobs.
       expect(out.jobs).toBe(9);
-      expect(out.rowDatasets).toBe(57);
-      expect(out.rowRunShape).toBe(36.2);
-      if (width === 1440) expect(out.rowEnvironments).toBe(107.2);
       expect(out.card).toBe({ 1440: 213.3, 1024: 268.1, 390: 318.3 }[width]);
       expect(out.strip).toBe(width === 390 ? 242.1 : 81.4);
       if (width !== 390) expect(out.historyTable).toBe(559);
@@ -375,10 +356,11 @@ test.describe('review of WP-D', () => {
     await page.keyboard.press('Escape');
     await addDataset(page, 'billing-faq');
     await expect(page.getByTestId('pair-count')).toHaveText('2 dataset versions from 2 datasets');
-    // One run each is the default: its help first, then the combined help after picking it.
-    const helpEach = await page.getByTestId('run-shape').locator('p').first().textContent();
+    // One run each is the default shape; the combined-run help text is read in the opt-in shape
     await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
     const help = await page.getByTestId('run-shape').locator('p').first().textContent();
+    await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
+    const helpEach = await page.getByTestId('run-shape').locator('p').first().textContent();
     const radios = await page
       .getByTestId('run-shape')
       .getByRole('radio')
