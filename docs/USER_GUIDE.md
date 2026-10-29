@@ -57,6 +57,16 @@ some items and a plain value on others is marked `· list or value`. For these k
 `path` equals it or whose list at `path` contains it; the same shape works in the batch body, where a list filter is
 `{"meta": {"tags": {"values": ["billing", "refund"], "mode": "any"}}}`. Lists of objects and empty lists are not offered as keys.
 
+### Import a file into a draft again
+
+**Import** on a draft adds the records of a file as items. A record whose `item_id` is already in the draft matches that item. Before
+the Review step, the wizard counts these records, and Review shows the count, for example "4 of 4 records match items already in v1".
+Then choose **Skip matching items** (the default: the items keep their content, edits included) or **Replace matching items** (the file
+overwrites their input, expected output, metadata and labels; each item keeps the old content in its History). The toast gives each
+count, for example "1 added, 3 skipped". In the API, `POST …/items:bulk` takes `"on_existing": "skip"` or `"replace"` (the default, as
+before) and `"dry_run": true`, which writes nothing and returns the counts plus `matched`. The response lists skipped ids under
+`skipped` and counts them in `summary.skipped`.
+
 ## Evaluating several datasets
 
 One evaluation can run over several datasets, or several versions of one dataset, as a single run

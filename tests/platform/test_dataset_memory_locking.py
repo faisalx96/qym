@@ -834,7 +834,7 @@ def test_bulk_edits_are_set_based_and_number_revisions_in_order(env):
     )
     assert resp.status_code == 200, resp.text
     out = resp.json()
-    assert out["summary"] == {"created": 2, "updated": 2, "deleted": 1}
+    assert out["summary"] == {"created": 2, "updated": 2, "skipped": 0, "deleted": 1}
     assert out["deleted"] == ["a"]
     assert [row["item_id"] for row in out["created"]] == ["new", "item-5"]
     assert [row["item_id"] for row in out["updated"]] == ["b", "new"]

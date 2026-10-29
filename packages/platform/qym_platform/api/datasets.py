@@ -11,7 +11,7 @@ import sys
 import unicodedata
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, Iterable, Iterator, Optional
+from typing import Any, Dict, Iterable, Iterator, Literal, Optional
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -1925,6 +1925,11 @@ class BulkUpsertEntry(BaseModel):
 class BulkItemsRequest(BaseModel):
     upserts: list[BulkUpsertEntry] = Field(default_factory=list)
     deletes: list[str] = Field(default_factory=list)
+    # An upsert whose item_id names an existing item: "replace" (the default and
+    # the only behaviour before this field) overwrites it, "skip" keeps it as it is.
+    on_existing: Literal["replace", "skip"] = "replace"
+    # Count what the request would do. Write nothing.
+    dry_run: bool = False
 
 
 @router.get("/v1/datasets")
@@ -3465,6 +3470,78 @@ def _apply_batch(
 MAX_BULK_ENTRIES = 1000
 
 
+def _bulk_delete_ids(req: BulkItemsRequest) -> list[str]:
+    """The request's delete targets: stripped, without blanks or repeats, in order."""
+    return list(dict.fromkeys(target for target in ((raw or "").strip() for raw in req.deletes or []) if target))
+
+
+def _preview_bulk(db: Session, version: DatasetVersion, req: BulkItemsRequest, skip_existing: bool) -> Dict[str, Any]:
+    """Count what ``bulk_items`` would do with ``req``, and write nothing.
+
+    The decisions follow ``bulk_items`` step by step (deletes first, then the
+    upserts in order), so the counts and any 409 are the ones an apply gives.
+    Read-only: it runs ID lookups only and loads or locks no row.
+    """
+    in_version = DatasetItem.dataset_version_id == version.id
+
+    def ids_in_version(candidates: Iterable[str]) -> set[str]:
+        values = list(candidates)
+        if not values:
+            return set()
+        return {
+            item_id for (item_id,) in db.query(DatasetItem.item_id).filter(in_version, DatasetItem.item_id.in_(values))
+        }
+
+    deleted = ids_in_version(_bulk_delete_ids(req))
+    index_query = db.query(func.max(DatasetItem.index)).filter(in_version)
+    if deleted:
+        index_query = index_query.filter(DatasetItem.item_id.not_in(deleted))
+    max_index = index_query.scalar()
+    next_index = int(max_index) + 1 if max_index is not None else 0
+
+    upserts = req.upserts or []
+    named = {(entry.item_id or "").strip() for entry in upserts if entry.item_id} - {""}
+    present = ids_in_version(named) - deleted
+    known = set(present)  # the item IDs that exist when an entry is reached
+    created_here: set[str] = set()
+    unchecked: list[str] = []  # generated IDs not yet checked against the version
+    counts = {"created": 0, "updated": 0, "skipped": 0}
+    matched = 0
+
+    def check_generated() -> None:
+        # bulk_items checks generated IDs when it flushes new items.
+        taken = ids_in_version(unchecked) - deleted
+        for item_id in unchecked:
+            if item_id in taken:
+                raise HTTPException(status_code=409, detail=f"Dataset item ID already exists: {item_id}")
+        unchecked.clear()
+
+    for entry in upserts:
+        key = (entry.item_id or "").strip()
+        hit = bool(entry.item_id) and key in known
+        if entry.item_id and key in present:
+            matched += 1
+        if hit and (entry.op or "").lower() != "create":
+            if skip_existing:
+                counts["skipped"] += 1
+                continue
+            if key in created_here:
+                check_generated()
+            counts["updated"] += 1
+            continue
+        item_id = key or f"item-{next_index + 1}"
+        if hit or item_id in known:
+            raise HTTPException(status_code=409, detail=f"Dataset item ID already exists: {item_id}")
+        if item_id not in named:
+            unchecked.append(item_id)
+        known.add(item_id)
+        created_here.add(item_id)
+        counts["created"] += 1
+        next_index += 1
+    check_generated()
+    return {"dry_run": True, "matched": matched, "summary": {**counts, "deleted": len(deleted)}}
+
+
 @router.post("/v1/datasets/{dataset_ref}/versions/{version_ref}/items:bulk")
 def bulk_items(
     dataset_ref: str,
@@ -3480,6 +3557,12 @@ def bulk_items(
     send larger imports in several requests). Lookups, detaches and the
     version's item count are set-based, and the version row is written once,
     at the end, so its row lock is held only for the commit.
+
+    An upsert whose ``item_id`` names an existing item (in the version, or
+    created earlier in the same request) replaces it by default.
+    ``on_existing="skip"`` keeps that item as it is and lists the id under
+    ``skipped``. ``dry_run`` returns the same counts plus ``matched`` (the
+    upserts that name an item already in the version) and writes nothing.
     """
     _require_scope(principal, "datasets:write")
     entries = len(req.upserts or []) + len(req.deletes or [])
@@ -3496,6 +3579,9 @@ def bulk_items(
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
+    skip_existing = req.on_existing == "skip"
+    if req.dry_run:
+        return _preview_bulk(db, version, req, skip_existing)
     actor_user_id = principal.user.id
     revision_number = _revision_count(db, version)
 
@@ -3506,9 +3592,10 @@ def bulk_items(
 
     created: list[Dict[str, Any]] = []
     updated: list[Dict[str, Any]] = []
+    skipped: list[str] = []
     deleted: list[str] = []
 
-    delete_ids = list(dict.fromkeys(target for target in ((raw or "").strip() for raw in req.deletes or []) if target))
+    delete_ids = _bulk_delete_ids(req)
     doomed = (
         {
             item.item_id: item
@@ -3620,6 +3707,9 @@ def bulk_items(
         existing = existing_by_id.get(key) if entry.item_id else None
         op = (entry.op or "").lower()
         if existing and op != "create":
+            if skip_existing:
+                skipped.append(key)
+                continue
             if existing.id is None:
                 # Updating an item created earlier in this request.
                 flush_pending()
@@ -3670,9 +3760,15 @@ def bulk_items(
     )
     db.commit()
     return {
-        "summary": {"created": len(created), "updated": len(updated), "deleted": len(deleted)},
+        "summary": {
+            "created": len(created),
+            "updated": len(updated),
+            "skipped": len(skipped),
+            "deleted": len(deleted),
+        },
         "created": created,
         "updated": updated,
+        "skipped": skipped,
         "deleted": deleted,
     }
 

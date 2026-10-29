@@ -272,3 +272,9 @@
     width: 100%;
   }
 }
+
+.matches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
