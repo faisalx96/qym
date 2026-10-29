@@ -38,7 +38,7 @@ export function RequireAuth() {
           title="No user identity"
           body={
             authMode === 'proxy_headers'
-              ? 'The identity headers (X-User-Email) did not reach the platform. Check the proxy in front of qym.'
+              ? 'The identity headers (X-User-Email) did not reach the platform, or came without the proxy secret (X-Qym-Proxy-Secret). Check the proxy in front of qym.'
               : 'The platform rejected this session and no sign-in method is configured.'
           }
           action={

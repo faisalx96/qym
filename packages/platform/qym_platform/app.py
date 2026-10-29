@@ -9,7 +9,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from qym_platform.auth_oidc import SESSION_MAX_AGE_SECONDS, origin_matches_base, session_auth_enabled
 from qym_platform.middleware.cache_control import NoStoreMiddleware
 from qym_platform.api.auth import router as auth_router
-from qym_platform.settings import PlatformSettings
+from qym_platform.settings import (
+    PlatformSettings,
+    auth_config_error,
+    auth_config_warning,
+)
 from qym_platform.validation_errors import validation_exception_handler
 from qym_platform.api.web import router as web_router
 from qym_platform.api.projects import router as projects_router
@@ -76,6 +80,13 @@ def process_layout_warning(settings: PlatformSettings) -> str | None:
 def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     configure_logging()
     settings = settings or PlatformSettings()
+    # The UI app refuses an open auth configuration outside dev/test/local:
+    # mode none (everyone is admin), an empty or unknown mode, or proxy
+    # headers without the proxy's shared secret.
+    auth_error = auth_config_error(settings)
+    if auth_error:
+        logger.error(auth_error)
+        raise RuntimeError(auth_error)
     analysis_job_manager.configure(max_workers=settings.analysis_job_max_workers)
     rule_inference_job_manager.configure(max_workers=settings.analysis_job_max_workers)
 
@@ -158,6 +169,12 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     @app.on_event("startup")
     def warn_single_process_layout() -> None:
         warning = process_layout_warning(settings)
+        if warning:
+            logger.warning(warning)
+
+    @app.on_event("startup")
+    def warn_dev_only_auth() -> None:
+        warning = auth_config_warning(settings)
         if warning:
             logger.warning(warning)
 

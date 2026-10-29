@@ -6,6 +6,8 @@ import threading
 
 import hashlib
 
+import hmac
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -19,7 +21,11 @@ from qym_platform.auth_oidc import get_session_user_and_provider, session_auth_e
 from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, verify_api_key
 from qym_platform.log import get_logger
-from qym_platform.settings import PlatformSettings
+from qym_platform.settings import (
+    PROXY_SECRET_HEADER,
+    PlatformSettings,
+    is_dev_environment,
+)
 
 logger = get_logger(__name__)
 
@@ -223,6 +229,27 @@ def require_api_key_scope(principal: Principal, required_scope: str) -> None:
     return
 
 
+def secret_matches(sent: Optional[str], expected: str) -> bool:
+    """Constant-time check of a shared secret or token; an unset ``expected`` never matches."""
+    if not expected:
+        return False
+    return hmac.compare_digest((sent or "").encode("utf-8"), expected.encode("utf-8"))
+
+
+def proxy_headers_trusted(request: Request, settings: PlatformSettings) -> bool:
+    """True when this request's identity headers come from the authentication proxy.
+
+    With ``QYM_PROXY_SHARED_SECRET`` set, the request must carry the same value in
+    ``X-Qym-Proxy-Secret``. Without it, only dev, test and local trust the headers
+    (elsewhere the platform does not start: ``auth_config_error``).
+    """
+    if not settings.proxy_shared_secret:
+        return is_dev_environment(settings)
+    return secret_matches(
+        request.headers.get(PROXY_SECRET_HEADER), settings.proxy_shared_secret
+    )
+
+
 def require_ui_principal(
     request: Request,
     db: Session = Depends(get_db),
@@ -232,11 +259,14 @@ def require_ui_principal(
 ) -> Principal:
     """UI auth for internal deployments.
 
-    - Prefer reverse-proxy headers (X-User-Email / X-Email)
+    - Prefer a session (OIDC or password sign-in) when session auth is on.
+    - In ``proxy_headers`` mode only: reverse-proxy headers (X-User-Email / X-Email),
+      read only when the request proves it came through the proxy
+      (``proxy_headers_trusted``).
     - Support first-admin bootstrap via X-Admin-Bootstrap == QYM_ADMIN_BOOTSTRAP_TOKEN
     """
     settings = PlatformSettings()
-    auth_mode = str(settings.auth_mode).lower()
+    auth_mode = settings.auth_mode
 
     # Local dev mode: no auth headers required. Create or reuse a stable dev user.
     if auth_mode == "none":
@@ -263,7 +293,14 @@ def require_ui_principal(
         if auth_mode == "oidc":
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-    email = (x_user_email or x_email or "").strip().lower()
+    email = ""
+    if auth_mode == "proxy_headers":
+        if proxy_headers_trusted(request, settings):
+            email = (x_user_email or x_email or "").strip().lower()
+        elif x_user_email or x_email:
+            logger.info(
+                "identity headers ignored: %s is missing or wrong", PROXY_SECRET_HEADER
+            )
 
     if email:
         user = db.query(User).filter(User.email == email).first()
@@ -275,7 +312,9 @@ def require_ui_principal(
 
     # Bootstrap if allowed and no users exist
     has_any = db.query(User.id).limit(1).first() is not None
-    if not has_any and settings.admin_bootstrap_token and x_admin_bootstrap == settings.admin_bootstrap_token:
+    if not has_any and secret_matches(
+        x_admin_bootstrap, settings.admin_bootstrap_token
+    ):
         if not email:
             raise HTTPException(status_code=400, detail="Bootstrap requires X-User-Email")
         user = User(email=email, display_name=email, role=UserRole.ADMIN)

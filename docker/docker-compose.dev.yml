@@ -5,7 +5,8 @@ services:
     build:
       target: dev
     environment:
-      QYM_ENVIRONMENT: ${QYM_ENVIRONMENT}
+      # Development only: unset means dev, so QYM_AUTH_MODE=none still starts.
+      QYM_ENVIRONMENT: ${QYM_ENVIRONMENT:-dev}
       QYM_BASE_URL: ${QYM_BASE_URL}
       QYM_ROOT_PATH: ${QYM_ROOT_PATH:-}
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
