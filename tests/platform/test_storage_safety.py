@@ -109,9 +109,12 @@ def _legacy_exists(engine):
         ).scalar()
 
 
-@pytest.mark.parametrize("force", [False, True])
-def test_drop_rejects_unrelated_spans_and_wrong_partition_key(legacy_postgres, force):
+def test_drop_rejects_unrelated_spans_and_wrong_partition_key(legacy_postgres):
     engine, now = legacy_postgres
+    # 'force' is not a declared param (C001): nothing can skip the verification.
+    with sessionmaker(bind=engine)() as db:
+        with pytest.raises(maintenance.InvalidJobParams, match="does not take force"):
+            maintenance.enqueue(db, "drop_legacy_spans", {"force": True})
     with engine.begin() as conn:
         # Exceed the legacy row count, including the right run/span identifiers
         # under the wrong run_created_at. Neither proves the copy is complete.
@@ -125,7 +128,7 @@ def test_drop_rejects_unrelated_spans_and_wrong_partition_key(legacy_postgres, f
             SELECT created_at, id, 'new', 'unrelated-' || n, 'new span'
             FROM runs CROSS JOIN generate_series(1, 4) AS n WHERE id = 'live'
         """))
-    status, progress, error = _job(engine, "drop_legacy_spans", {"force": force})
+    status, progress, error = _job(engine, "drop_legacy_spans")
     assert status == "failed"
     assert "uncopied span" in error
     assert progress["missing_span"]["run_id"] in {"live", "deleted"}

@@ -12,20 +12,26 @@ Statements that cannot run inside a transaction (``VACUUM``,
 
 from __future__ import annotations
 
+import math
+import re
 import socket
 import threading
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from uuid import uuid4
 
-from sqlalchemy import Integer, Text, bindparam, column, delete, func, select, text, update
+from sqlalchemy import Integer, Text, bindparam, column, delete, func
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import select, text, update
 from sqlalchemy import values as sa_values
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from qym_platform.db.maintenance_models import MaintenanceJob
+from qym_platform.db.migration_helpers import COLUMN_TYPE_CONVERSIONS
 from qym_platform.log import get_logger
 
 logger = get_logger(__name__)
@@ -100,14 +106,80 @@ class JobContext:
 Handler = Callable[[JobContext], bool]
 _REGISTRY: Dict[str, Dict[str, Any]] = {}
 
+# --------------------------------------------------------------------------------------
+# Declared job params
+# --------------------------------------------------------------------------------------
 
-def register(kind: str, *, irreversible: bool = False, description: str = "") -> Callable[[Handler], Handler]:
+IDENTIFIER_PATTERN = r"^[a-z_][a-z0-9_]*$"
+_IDENTIFIER = re.compile(IDENTIFIER_PATTERN)
+_MAX_IDENTIFIER_LENGTH = 63  # PostgreSQL cuts longer names (NAMEDATALEN - 1)
+
+
+class InvalidJobParams(ValueError):
+    """Params that do not match the job's declared keys. The admin API answers 400."""
+
+
+@dataclass(frozen=True)
+class Param:
+    """One declared job param.
+
+    ``type`` is one of:
+
+    - ``integer`` / ``number``: bounded by ``minimum`` and ``maximum``.
+    - ``tables``: a list of names of existing tables.
+    - ``indexes``: a list of index names.
+    - ``constraints``: a list of ``{"table": ..., "constraint": ...}`` objects that
+      name existing constraints.
+
+    Every name must match ``IDENTIFIER_PATTERN``. ``choices`` limits the names to
+    a fixed list in code. ``normalize`` maps one list item to a name before the
+    checks. ``default`` is what the handler uses when the key is absent; a callable
+    default (a setting) is read when the schema is listed.
+    """
+
+    type: str
+    default: Any
+    description: str
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    choices: Optional[Tuple[str, ...]] = None
+    normalize: Optional[Callable[[str, Any], Any]] = None
+
+    def default_value(self) -> Any:
+        return self.default() if callable(self.default) else self.default
+
+    def schema(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {
+            "type": self.type,
+            "default": self.default_value(),
+            "description": self.description,
+        }
+        if self.minimum is not None:
+            out["minimum"] = self.minimum
+        if self.maximum is not None:
+            out["maximum"] = self.maximum
+        if self.choices is not None:
+            out["choices"] = list(self.choices)
+        return out
+
+
+def register(
+    kind: str,
+    *,
+    irreversible: bool = False,
+    description: str = "",
+    params: Optional[Dict[str, Param]] = None,
+) -> Callable[[Handler], Handler]:
+    """Register a job handler. ``params`` declares every key the job reads: a key
+    that is not declared is refused (400), so a job without ``params`` takes none."""
+
     def deco(fn: Handler) -> Handler:
         doc = (fn.__doc__ or "").strip().splitlines()
         _REGISTRY[kind] = {
             "handler": fn,
             "irreversible": irreversible,
             "description": description or (doc[0] if doc else ""),
+            "params": dict(params or {}),
         }
         return fn
 
@@ -115,7 +187,147 @@ def register(kind: str, *, irreversible: bool = False, description: str = "") ->
 
 
 def registry() -> Dict[str, Dict[str, Any]]:
-    return {k: {"irreversible": v["irreversible"], "description": v["description"]} for k, v in _REGISTRY.items()}
+    return {
+        k: {
+            "irreversible": v["irreversible"],
+            "description": v["description"],
+            "params": {key: spec.schema() for key, spec in v["params"].items()},
+        }
+        for k, v in _REGISTRY.items()
+    }
+
+
+def checked_identifier(where: str, value: Any) -> str:
+    """``value`` when it is a plain lower-case SQL name, else ``InvalidJobParams``."""
+    if (
+        not isinstance(value, str)
+        or not _IDENTIFIER.match(value)
+        or len(value) > _MAX_IDENTIFIER_LENGTH
+    ):
+        raise InvalidJobParams(
+            f"{where} must be a name that matches {IDENTIFIER_PATTERN} "
+            f"(at most {_MAX_IDENTIFIER_LENGTH} characters), got {value!r}"
+        )
+    return value
+
+
+def _table_exists(db: Session, name: str) -> bool:
+    conn = db.connection()
+    if conn.dialect.name == "postgresql":
+        return bool(
+            conn.execute(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_class WHERE oid = to_regclass(:n) AND relkind IN ('r', 'p', 'm'))"
+                ),
+                {"n": name},
+            ).scalar()
+        )
+    return bool(sa_inspect(conn).has_table(name))
+
+
+def _constraint_exists(db: Session, table: str, constraint: str) -> bool:
+    conn = db.connection()
+    if conn.dialect.name != "postgresql":
+        return True  # validate_foreign_keys does nothing outside PostgreSQL
+    return bool(
+        conn.execute(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = to_regclass(:t) AND conname = :c)"
+            ),
+            {"t": table, "c": constraint},
+        ).scalar()
+    )
+
+
+def _check_param(key: str, spec: Param, value: Any, db: Optional[Session]) -> Any:
+    where = f"params.{key}"
+    if spec.type in ("integer", "number"):
+        allowed = int if spec.type == "integer" else (int, float)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, allowed)
+            or (isinstance(value, float) and not math.isfinite(value))
+        ):
+            raise InvalidJobParams(
+                f"{where} must be {'an integer' if spec.type == 'integer' else 'a number'}, got {value!r}"
+            )
+        if spec.minimum is not None and value < spec.minimum:
+            raise InvalidJobParams(
+                f"{where} must be at least {spec.minimum:g}, got {value!r}"
+            )
+        if spec.maximum is not None and value > spec.maximum:
+            raise InvalidJobParams(
+                f"{where} must be at most {spec.maximum:g}, got {value!r}"
+            )
+        return value
+    if not isinstance(value, list):
+        raise InvalidJobParams(f"{where} must be a list, got {value!r}")
+    if spec.type == "constraints":
+        pairs = []
+        for i, item in enumerate(value):
+            if not isinstance(item, dict) or set(item) != {"table", "constraint"}:
+                raise InvalidJobParams(
+                    f'{where}[{i}] must be an object {{"table": ..., "constraint": ...}}, got {item!r}'
+                )
+            table = checked_identifier(f"{where}[{i}].table", item["table"])
+            constraint = checked_identifier(
+                f"{where}[{i}].constraint", item["constraint"]
+            )
+            if db is not None and not _constraint_exists(db, table, constraint):
+                raise InvalidJobParams(
+                    f"{where}[{i}]: constraint {constraint!r} on table {table!r} does not exist"
+                )
+            pairs.append({"table": table, "constraint": constraint})
+        return pairs
+    names = []
+    for i, item in enumerate(value):
+        if spec.normalize is not None:
+            item = spec.normalize(f"{where}[{i}]", item)
+        name = checked_identifier(f"{where}[{i}]", item)
+        if spec.choices is not None and name not in spec.choices:
+            raise InvalidJobParams(
+                f"{where}[{i}] must be one of {', '.join(spec.choices) or '(none)'}, got {name!r}"
+            )
+        if spec.type == "tables" and db is not None and not _table_exists(db, name):
+            raise InvalidJobParams(f"{where}[{i}]: table {name!r} does not exist")
+        names.append(name)
+    return names
+
+
+def validate_params(
+    kind: str, params: Any, db: Optional[Session] = None
+) -> Dict[str, Any]:
+    """Check ``params`` against the declared keys of ``kind`` and return them checked.
+
+    Unknown keys, wrong types, out-of-range numbers and names that fail
+    ``IDENTIFIER_PATTERN`` raise ``InvalidJobParams``. With ``db``, table and
+    constraint names must also exist. Keys left out stay out (the handler
+    applies its default).
+    """
+    if kind not in _REGISTRY:
+        raise InvalidJobParams(f"unknown maintenance job kind: {kind}")
+    if params is None:
+        params = {}
+    if not isinstance(params, dict):
+        raise InvalidJobParams("params must be an object")
+    declared: Dict[str, Param] = _REGISTRY[kind]["params"]
+    unknown = sorted(str(k) for k in params if k not in declared)
+    if unknown:
+        keys = ", ".join(sorted(declared)) or "none"
+        raise InvalidJobParams(
+            f"{kind} does not take {', '.join(unknown)} (its params: {keys})"
+        )
+    return {
+        key: _check_param(key, declared[key], value, db)
+        for key, value in params.items()
+    }
+
+
+def _quoted(ctx: "JobContext", name: str) -> str:
+    """A checked name, quoted for the job's dialect: params never reach SQL text raw."""
+    return ctx.engine.dialect.identifier_preparer.quote_identifier(
+        checked_identifier("identifier", name)
+    )
 
 
 def is_irreversible(kind: str) -> bool:
@@ -130,12 +342,15 @@ def is_irreversible(kind: str) -> bool:
 def enqueue(db: Session, kind: str, params: Optional[Dict[str, Any]] = None, *, requested_by: Optional[str] = None) -> MaintenanceJob:
     if kind not in _REGISTRY:
         raise ValueError(f"unknown maintenance job kind: {kind}")
+    params = validate_params(kind, params, db)
     active = db.execute(
         select(MaintenanceJob).where(MaintenanceJob.kind == kind, MaintenanceJob.status.in_(("queued", "running", "cancel_requested")))
     ).scalars().first()
     if active:
         raise ValueError(f"a {kind} job is already {active.status} ({active.id})")
-    job = MaintenanceJob(kind=kind, params=params or {}, progress={}, log="", requested_by_user_id=requested_by)
+    job = MaintenanceJob(
+        kind=kind, params=params, progress={}, log="", requested_by_user_id=requested_by
+    )
     db.add(job)
     db.flush()
     return job
@@ -210,6 +425,7 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
         ctx = JobContext(job, session_factory, engine)
         db.expunge(job)
 
+    params_checked = False
     while True:
         if should_stop and should_stop():
             return "running"  # lease expires; another worker (or this one after restart) resumes
@@ -218,6 +434,11 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
         error: Optional[str] = None
         done = False
         try:
+            if not params_checked:
+                # Rows a migration wrote, or rows queued before params were
+                # declared, are checked too: no job runs with params the API refuses.
+                ctx.params = validate_params(ctx.kind, ctx.params)
+                params_checked = True
             # Run steps for up to step_budget_seconds before persisting progress.
             while True:
                 done = bool(handler(ctx))
@@ -344,7 +565,19 @@ class MaintenanceWorker:
 # --------------------------------------------------------------------------------------
 
 
-@register("db_stats", description="Collect table, index and payload sizes (read-only).")
+@register(
+    "db_stats",
+    description="Collect table, index and payload sizes (read-only).",
+    params={
+        "sample_pct": Param(
+            "number",
+            2.0,
+            "Percent of span rows sampled for payload sizes.",
+            minimum=0,
+            maximum=100,
+        )
+    },
+)
 def _db_stats(ctx: JobContext) -> bool:
     from qym_platform.tools.perf.db_stats import collect
 
@@ -355,9 +588,26 @@ def _db_stats(ctx: JobContext) -> bool:
     return True
 
 
-@register("drop_redundant_indexes", description="Drop indexes fully covered by unique constraints (frees disk instantly).")
+_REDUNDANT_INDEXES = [
+    "ix_run_events_run_id",
+    "ix_run_events_event_id",
+    "ix_spans_run_id",
+]
+
+
+@register(
+    "drop_redundant_indexes",
+    description="Drop indexes fully covered by unique constraints (frees disk instantly).",
+    params={
+        "indexes": Param(
+            "indexes",
+            list(_REDUNDANT_INDEXES),
+            "Index names to drop. A missing index is skipped.",
+        )
+    },
+)
 def _drop_redundant_indexes(ctx: JobContext) -> bool:
-    names = ctx.params.get("indexes") or ["ix_run_events_run_id", "ix_run_events_event_id", "ix_spans_run_id"]
+    names = ctx.params.get("indexes") or list(_REDUNDANT_INDEXES)
     freed = 0
     with ctx.autocommit() as conn:
         for name in names:
@@ -365,7 +615,11 @@ def _drop_redundant_indexes(ctx: JobContext) -> bool:
             if size is None:
                 ctx.log(f"{name}: not present")
                 continue
-            conn.execute(text(f"DROP INDEX {'CONCURRENTLY' if ctx.is_postgres() else ''} IF EXISTS {name}"))
+            conn.execute(
+                text(
+                    f"DROP INDEX {'CONCURRENTLY' if ctx.is_postgres() else ''} IF EXISTS {_quoted(ctx, name)}"
+                )
+            )
             freed += int(size or 0)
             ctx.log(f"dropped {name} ({int(size or 0):,} bytes)")
     ctx.progress["bytes_freed"] = freed
@@ -373,24 +627,90 @@ def _drop_redundant_indexes(ctx: JobContext) -> bool:
     return True
 
 
-@register("create_deferred_indexes", description="Build indexes CONCURRENTLY that were too large for a startup migration.")
+# The indexes migrations 0051 and 0055 defer to ``create_deferred_indexes`` when a
+# table is too large to index during startup. The job builds only these: the
+# table, columns and WHERE predicate come from here, never from job params.
+DEFERRED_INDEXES: Dict[str, Dict[str, Any]] = {
+    spec["name"]: spec
+    for spec in (
+        {
+            "name": "ix_run_events_run_type_seq",
+            "table": "run_events",
+            "columns": ["run_id", "type", "sequence"],
+        },
+        {
+            "name": "ix_dashboard_record_item_latency",
+            "table": "dashboard_record_state",
+            "columns": ["project_key", "bucket_key", "latency_ms"],
+            "where": "present AND record_kind = 'item'",
+        },
+        {
+            "name": "ix_dashboard_record_score_value",
+            "table": "dashboard_record_state",
+            "columns": ["project_key", "bucket_key", "score"],
+            "where": "present AND record_kind = 'score'",
+        },
+    )
+}
+
+
+def _deferred_index_name(where: str, entry: Any) -> Any:
+    """A deferred index entry as its name. Migrations store the full spec; it
+    must equal the spec in ``DEFERRED_INDEXES`` (a free 'where' is refused)."""
+    if not isinstance(entry, dict):
+        return entry
+    name = entry.get("name")
+    if DEFERRED_INDEXES.get(name) != entry:
+        raise InvalidJobParams(
+            f"{where} must be the name of a deferred index ({', '.join(DEFERRED_INDEXES)}); "
+            "its table, columns and 'where' come from code"
+        )
+    return name
+
+
+@register(
+    "create_deferred_indexes",
+    description="Build indexes CONCURRENTLY that were too large for a startup migration.",
+    params={
+        "indexes": Param(
+            "indexes",
+            [],
+            "Deferred indexes to build, by name, one per step.",
+            choices=tuple(DEFERRED_INDEXES),
+            normalize=_deferred_index_name,
+        )
+    },
+)
 def _create_deferred_indexes(ctx: JobContext) -> bool:
-    specs = list(ctx.params.get("indexes") or [])
+    names = [
+        _deferred_index_name("indexes", entry)
+        for entry in ctx.params.get("indexes") or []
+    ]
+    specs = [DEFERRED_INDEXES[name] for name in names]
     done = set(ctx.progress.get("done") or [])
     for spec in specs:
         if spec["name"] in done:
             continue
-        cols = ", ".join(spec["columns"])
+        name, table = _quoted(ctx, spec["name"]), _quoted(ctx, spec["table"])
+        cols = ", ".join(_quoted(ctx, c) for c in spec["columns"])
         where = f" WHERE {spec['where']}" if spec.get("where") else ""
         with ctx.autocommit() as conn:
             if ctx.is_postgres():
                 # An earlier interrupted build leaves an INVALID index behind; rebuild it.
-                conn.execute(text(f"DROP INDEX IF EXISTS {spec['name']}"))
+                conn.execute(text(f"DROP INDEX IF EXISTS {name}"))
                 started = time.perf_counter()
-                conn.execute(text(f"CREATE INDEX CONCURRENTLY {spec['name']} ON {spec['table']} ({cols}){where}"))
-                ctx.log(f"created {spec['name']} on {spec['table']}({cols}){where} in {time.perf_counter() - started:.0f}s")
+                conn.execute(
+                    text(f"CREATE INDEX CONCURRENTLY {name} ON {table} ({cols}){where}")
+                )
+                ctx.log(
+                    f"created {spec['name']} on {spec['table']}({', '.join(spec['columns'])}){where} in {time.perf_counter() - started:.0f}s"
+                )
             else:
-                conn.execute(text(f"CREATE INDEX IF NOT EXISTS {spec['name']} ON {spec['table']} ({cols}){where}"))
+                conn.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({cols}){where}"
+                    )
+                )
                 ctx.log(f"created {spec['name']}")
         done.add(spec["name"])
         ctx.progress["done"] = sorted(done)
@@ -399,7 +719,16 @@ def _create_deferred_indexes(ctx: JobContext) -> bool:
     return True
 
 
-@register("reclaim_run_events", description="Delete legacy span_completed rows from run_events in batches, vacuuming as it goes.")
+@register(
+    "reclaim_run_events",
+    description="Delete legacy span_completed rows from run_events in batches, vacuuming as it goes.",
+    params={
+        "batch_runs": Param("integer", 10, "Runs per batch.", minimum=1),
+        "vacuum_every": Param(
+            "integer", 20, "VACUUM run_events after this many batches.", minimum=1
+        ),
+    },
+)
 def _reclaim_run_events(ctx: JobContext) -> bool:
     """Delete legacy ``span_completed`` rows per run, VACUUM periodically.
 
@@ -441,9 +770,22 @@ def _reclaim_run_events(ctx: JobContext) -> bool:
     return False
 
 
-@register("vacuum_analyze", description="VACUUM (ANALYZE) the given tables.")
+_VACUUM_TABLES = ["run_events", "spans", "run_items"]
+
+
+@register(
+    "vacuum_analyze",
+    description="VACUUM (ANALYZE) the given tables.",
+    params={
+        "tables": Param(
+            "tables",
+            list(_VACUUM_TABLES),
+            "Tables to vacuum and analyze, one per step.",
+        )
+    },
+)
 def _vacuum_analyze(ctx: JobContext) -> bool:
-    tables = list(ctx.params.get("tables") or ["run_events", "spans", "run_items"])
+    tables = list(ctx.params.get("tables") or _VACUUM_TABLES)
     if not ctx.is_postgres():
         ctx.log("skipped: not PostgreSQL")
         return True
@@ -453,7 +795,7 @@ def _vacuum_analyze(ctx: JobContext) -> bool:
             continue
         with ctx.autocommit() as conn:
             started = time.perf_counter()
-            conn.execute(text(f"VACUUM (ANALYZE) {table}"))
+            conn.execute(text(f"VACUUM (ANALYZE) {_quoted(ctx, table)}"))
         ctx.log(f"vacuumed {table} in {time.perf_counter() - started:.0f}s")
         done.append(table)
         ctx.progress["done"] = done
@@ -464,6 +806,12 @@ def _vacuum_analyze(ctx: JobContext) -> bool:
 @register(
     "prune_dashboard_events",
     description="Delete already-published dashboard outbox rows older than N days.",
+    params={
+        "days": Param(
+            "integer", 7, "Keep published rows newer than this many days.", minimum=0
+        ),
+        "batch": Param("integer", 20000, "Rows deleted per step.", minimum=1),
+    },
 )
 def _prune_dashboard_events(ctx: JobContext) -> bool:
     from qym_platform.db.dashboard_models import (
@@ -508,6 +856,14 @@ def _prune_dashboard_events(ctx: JobContext) -> bool:
 @register(
     "alter_column_types",
     description="Rewrite large tables to bigint ids / jsonb (migration 0052, deferred). Run in maintenance mode.",
+    params={
+        "tables": Param(
+            "tables",
+            [],
+            "Tables to rewrite, one per step.",
+            choices=tuple(COLUMN_TYPE_CONVERSIONS),
+        )
+    },
 )
 def _alter_column_types(ctx: JobContext) -> bool:
     """One table per step; each ALTER rewrites the table under an exclusive lock."""
@@ -534,7 +890,15 @@ def _alter_column_types(ctx: JobContext) -> bool:
     return True
 
 
-@register("validate_foreign_keys", description="VALIDATE the NOT VALID cascading foreign keys added by migration 0054.")
+@register(
+    "validate_foreign_keys",
+    description="VALIDATE the NOT VALID cascading foreign keys added by migration 0054.",
+    params={
+        "constraints": Param(
+            "constraints", [], "Foreign keys to validate, one per step."
+        )
+    },
+)
 def _validate_foreign_keys(ctx: JobContext) -> bool:
     specs = list(ctx.params.get("constraints") or [])
     done = list(ctx.progress.get("done") or [])
@@ -546,7 +910,11 @@ def _validate_foreign_keys(ctx: JobContext) -> bool:
             continue
         with ctx.autocommit() as conn:
             started = time.perf_counter()
-            conn.execute(text(f"ALTER TABLE {spec['table']} VALIDATE CONSTRAINT {spec['constraint']}"))
+            conn.execute(
+                text(
+                    f"ALTER TABLE {_quoted(ctx, spec['table'])} VALIDATE CONSTRAINT {_quoted(ctx, spec['constraint'])}"
+                )
+            )
         ctx.log(f"validated {key} in {time.perf_counter() - started:.0f}s")
         done.append(key)
         ctx.progress["done"] = done
@@ -591,7 +959,23 @@ def _span_copy_cutoff(ctx: JobContext) -> datetime:
     return cutoff
 
 
-@register("migrate_spans", description="Copy spans_legacy into the partitioned spans table (retention-aware, per-run batches).")
+def _retention_days_param() -> Param:
+    return Param(
+        "integer",
+        lambda: ingest_settings_for_maintenance().span_retention_days,
+        "Copy spans of runs created in this many days (0 = all). Default: QYM_SPAN_RETENTION_DAYS.",
+        minimum=0,
+    )
+
+
+@register(
+    "migrate_spans",
+    description="Copy spans_legacy into the partitioned spans table (retention-aware, per-run batches).",
+    params={
+        "retention_days": _retention_days_param(),
+        "batch_runs": Param("integer", 10, "Runs per batch.", minimum=1),
+    },
+)
 def _migrate_spans(ctx: JobContext) -> bool:
     if not ctx.is_postgres():
         ctx.log("skipped: not PostgreSQL")
@@ -649,6 +1033,7 @@ def _migrate_spans(ctx: JobContext) -> bool:
     "drop_legacy_spans",
     irreversible=True,
     description="DROP spans_legacy after migrate_spans has been verified. Returns the disk immediately.",
+    params={"retention_days": _retention_days_param()},
 )
 def _drop_legacy_spans(ctx: JobContext) -> bool:
     if not ctx.is_postgres():
@@ -846,6 +1231,7 @@ def _mark_task_error_passes(ctx: JobContext, cursor: int, window: int) -> int:
         "Rebuild dashboard numbers for runs whose metric verdict reasons were counted as "
         "scorer errors (C010), and mark repeat passes whose task failed after a metric was scored."
     ),
+    params={"window": Param("integer", 20000, "Rows read per step.", minimum=1)},
 )
 def _reclassify_metric_errors(ctx: JobContext) -> bool:
     """Scan score rows in id windows; repair each affected run once.
@@ -927,6 +1313,7 @@ def _reclassify_metric_errors(ctx: JobContext) -> bool:
 @register(
     "project_item_failure_events",
     description="Rebuild dashboard numbers for repeat runs with a pass that failed only through an item_failed event (C011).",
+    params={"window": Param("integer", 200, "Rows read per step.", minimum=1)},
 )
 def _project_item_failure_events(ctx: JobContext) -> bool:
     """Walk repeat runs in id windows; repair each affected run once.
@@ -1035,6 +1422,7 @@ def _project_item_failure_events(ctx: JobContext) -> bool:
 @register(
     "publish_ingest_flags",
     description="Show the incomplete-data flag of runs finished before C024 in the runs list.",
+    params={"window": Param("integer", 2000, "Rows read per step.", minimum=1)},
 )
 def _publish_ingest_flags(ctx: JobContext) -> bool:
     """Queue a runs-list refresh for runs whose metadata carries ``ingest_incomplete``.
@@ -1098,7 +1486,30 @@ def ingest_settings_for_maintenance():
     return PlatformSettings()
 
 
-@register("run_retention", description="Create upcoming span partitions, drop expired ones, purge soft-deleted runs past their grace period.")
+@register(
+    "run_retention",
+    description="Create upcoming span partitions, drop expired ones, purge soft-deleted runs past their grace period.",
+    params={
+        "span_retention_days": Param(
+            "integer",
+            lambda: ingest_settings_for_maintenance().span_retention_days,
+            "Drop span partitions older than this many days (0 = keep). Default: QYM_SPAN_RETENTION_DAYS.",
+            minimum=0,
+        ),
+        "deleted_run_grace_days": Param(
+            "integer",
+            lambda: ingest_settings_for_maintenance().deleted_run_grace_days,
+            "Purge runs deleted more than this many days ago (0 = never). Default: QYM_DELETED_RUN_GRACE_DAYS.",
+            minimum=0,
+        ),
+        "partition_days_ahead": Param(
+            "integer",
+            lambda: ingest_settings_for_maintenance().span_partition_days_ahead,
+            "Create span partitions this many days ahead. Default: QYM_SPAN_PARTITION_DAYS_AHEAD.",
+            minimum=0,
+        ),
+    },
+)
 def _run_retention(ctx: JobContext) -> bool:
     from qym_platform.services.retention import run_retention
 
@@ -1118,6 +1529,7 @@ def _run_retention(ctx: JobContext) -> bool:
 @register(
     "backfill_dataset_search_text",
     description="Fill dataset item search text and published lineage counts (migration 0068), then build the trigram search index.",
+    params={"window": Param("integer", 500, "Rows read per step.", minimum=1)},
 )
 def _backfill_dataset_search_text(ctx: JobContext) -> bool:
     """Three phases, each resumable from ``ctx.progress``.
@@ -1264,6 +1676,7 @@ def _ensure_pg_trgm(ctx: JobContext, index: str) -> bool:
 @register(
     "build_runs_search_index",
     description="Fill each run's search text and build the trigram index that serves the Runs search box (migrations 0070, 0071).",
+    params={"window": Param("integer", 500, "Rows read per step.", minimum=1)},
 )
 def _build_runs_search_index(ctx: JobContext) -> bool:
     """Three phases, each resumable from ``ctx.progress``.
@@ -1362,6 +1775,7 @@ def _build_runs_search_index(ctx: JobContext) -> bool:
 @register(
     "backfill_dashboard_overview",
     description="Store each run's overview inputs (migration 0069), so the Runs, Charts and Models overview stops reading every run's JSON.",
+    params={"window": Param("integer", 500, "Rows read per step.", minimum=1)},
 )
 def _backfill_dashboard_overview(ctx: JobContext) -> bool:
     """Walk the summaries in run-key windows and store the overview inputs of

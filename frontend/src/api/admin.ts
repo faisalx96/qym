@@ -98,6 +98,25 @@ export interface DbStatsResponse {
   db_stats_age_seconds: number;
 }
 
+/** One declared param of a maintenance job kind (services/maintenance.py `Param`). */
+export interface MaintenanceJobParam {
+  type: 'integer' | 'number' | 'tables' | 'indexes' | 'constraints';
+  /** What the job uses when the key is left out. */
+  default: unknown;
+  description: string;
+  minimum?: number;
+  maximum?: number;
+  /** The only names the server accepts, when the list is fixed in code. */
+  choices?: string[];
+}
+
+export interface MaintenanceJobKind {
+  irreversible: boolean;
+  description: string;
+  /** Every key the job takes. The server answers 400 for any other key. */
+  params: Record<string, MaintenanceJobParam>;
+}
+
 export interface MaintenanceOverview {
   settings: {
     role: string;
@@ -119,7 +138,7 @@ export interface MaintenanceOverview {
   /** Null when the overview is read with `stats=false` (the UI reads them from `useDbStats`). */
   db_stats: DbStats | null;
   db_stats_age_seconds: number | null;
-  job_kinds: Record<string, { irreversible: boolean; description: string }>;
+  job_kinds: Record<string, MaintenanceJobKind>;
   jobs: MaintenanceJob[];
 }
 

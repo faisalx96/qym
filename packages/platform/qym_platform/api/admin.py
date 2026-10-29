@@ -149,7 +149,11 @@ def maintenance_enqueue(
     if maintenance.is_irreversible(kind) and request.get("confirm") != kind:
         raise HTTPException(status_code=400, detail=f"Irreversible job: repeat the kind name in 'confirm' ({kind})")
     try:
+        # enqueue checks params against the job's declared keys before it stores anything.
         job = maintenance.enqueue(db, kind, params, requested_by=principal.user.id)
+    except maintenance.InvalidJobParams as exc:
+        logger.info("Maintenance job %s refused: %s", kind, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         logger.info("Maintenance job %s not queued: %s", kind, exc)
         raise HTTPException(status_code=409, detail=str(exc)) from exc

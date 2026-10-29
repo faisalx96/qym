@@ -15,7 +15,7 @@ The Evaluation Service runbook (dispatcher, environments, queue triage) is in
 | Worker pod (optional) | Runs the background loops in a separate process | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker`; set `QYM_ROLE=api` on the API |
 | Web processes (optional) | Several uvicorn processes serve HTTP in one API pod; with `QYM_ROLE=all` one extra process in the same pod runs the background loops | `QYM_WEB_WORKERS=N` (default `1`) |
 | Service split (optional) | main (UI + API), ingestion (SDK write path) and workers (loops + queued jobs) as three services behind ingress rules | `QYM_SERVICE=main\|ingestion\|workers`; see [Service split deployment](#service-split-deployment) |
-| Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
+| Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction. Each job declares its params (key, type, default; `job_kinds` in `GET /api/admin/maintenance`, listed under the form). The API answers 400 for an undeclared key, a wrong type or range, or a table, index or constraint name that does not match `^[a-z_][a-z0-9_]*$` or does not exist. `create_deferred_indexes` takes only the index names that migrations defer: their columns and `WHERE` come from code | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
 The default deployment is unchanged: `QYM_ROLE=all` runs the API and both loops in
@@ -326,8 +326,8 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
    and use the same retention policy for the drop.
 6. After copy succeeds, queue `drop_legacy_spans` with its typed confirmation.
    It requires maintenance mode and verifies every eligible legacy key against
-   `(run_id, span_id, run_created_at)` in the destination. Unrelated row counts and
-   `force=true` cannot bypass missing data. Verification and DROP hold database
+   `(run_id, span_id, run_created_at)` in the destination. Unrelated row counts
+   cannot bypass missing data, and the job has no `force` param (the API answers 400). Verification and DROP hold database
    locks in one transaction, so concurrent writes and retention cannot invalidate
    the check. Run mutations can wait during this step. An uncopied key or failed
    DROP leaves the legacy table intact. Resolve the failure and rerun the copy.
