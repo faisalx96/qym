@@ -98,6 +98,28 @@ def is_project_manager(db: Session, principal: Principal, project_id: str) -> bo
     return bool(membership and membership.role == ProjectRole.MANAGER)
 
 
+def project_access(
+    db: Session, principal: Principal, project_ids: Iterable[str]
+) -> dict[str, bool]:
+    """``{project_id: is_manager}`` for the ones of ``project_ids`` that
+    ``principal`` can access, in one query: :func:`has_project_access` and
+    :func:`is_project_manager` for many projects (a compare of several runs)."""
+    ids = {project_id for project_id in project_ids if project_id}
+    if not ids:
+        return {}
+    if principal.auth_type == "none" or principal.user.role == UserRole.ADMIN:
+        return {project_id: True for project_id in ids}
+    return {
+        project_id: role == ProjectRole.MANAGER
+        for project_id, role in db.query(
+            ProjectMembership.project_id, ProjectMembership.role
+        ).filter(
+            ProjectMembership.user_id == principal.user.id,
+            ProjectMembership.project_id.in_(ids),
+        )
+    }
+
+
 def can_manage_project_members(db: Session, principal: Principal, project_id: str) -> bool:
     return is_project_manager(db, principal, project_id)
 
