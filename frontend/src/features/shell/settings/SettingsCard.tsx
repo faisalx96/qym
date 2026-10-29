@@ -3,6 +3,8 @@ import { Card, Text, type CardTone } from '@/ui';
 import styles from './settings.module.css';
 
 export interface SettingsCardProps {
+  /** Anchor for links that jump to this block. */
+  id?: string;
   title: ReactNode;
   /** One line under the title: what the block is for. */
   description?: ReactNode;
@@ -20,6 +22,7 @@ export interface SettingsCardProps {
  * page did): title, subtitle, then the controls.
  */
 export function SettingsCard({
+  id: anchor,
   title,
   description,
   action,
@@ -32,6 +35,7 @@ export function SettingsCard({
   return (
     <Card
       as="section"
+      id={anchor}
       aria-labelledby={id}
       tone={tone}
       footer={footer}

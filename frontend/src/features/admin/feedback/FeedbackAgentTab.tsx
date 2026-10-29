@@ -62,12 +62,13 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
       footer={
         <div className={feedbackStyles.footActions}>
           {data.configured ? (
-            <Button variant="ghost" onPress={() => setRemoving(true)}>
+            <Button variant="danger" onPress={() => setRemoving(true)}>
               Remove connection
             </Button>
           ) : null}
+          {/* the button rule (round 11): Test runs something without saving (accent), Save commits (primary) */}
           <Button
-            variant="neutral"
+            variant="accent"
             icon={<Icon name="play" size={14} />}
             isDisabled={!canTest}
             loading={test.isPending}
@@ -84,7 +85,7 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
             Test connection
           </Button>
           <Button
-            variant="accent"
+            variant="primary"
             isDisabled={blocked || !complete}
             loading={save.isPending}
             onPress={async () => {
@@ -189,7 +190,7 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
       footer={
         <div className={feedbackStyles.footActions}>
           <Button
-            variant="neutral"
+            variant="primary"
             loading={save.isPending}
             onPress={async () => {
               try {

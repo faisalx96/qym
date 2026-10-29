@@ -11,17 +11,8 @@ import { ApiKeysTab } from './ApiKeysTab';
 import { LlmConnectionsTab } from './LlmConnectionsTab';
 import { EnvironmentsTab } from './EnvironmentsTab';
 import { PromptsTab } from './PromptsTab';
-import { DangerZoneTab } from './DangerZoneTab';
 
-export const SETTINGS_TABS = [
-  'general',
-  'members',
-  'apikeys',
-  'llm',
-  'environments',
-  'prompts',
-  'danger',
-] as const;
+export const SETTINGS_TABS = ['general', 'members', 'apikeys', 'llm', 'environments', 'prompts'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 /** /projects/:slug/settings?tab=… — the tab is persistent URL state (brief 01 §9.6). */
@@ -39,14 +30,17 @@ export function ProjectSettingsPage() {
         { id: 'llm', label: 'LLM connections' },
         { id: 'environments', label: 'Environments' },
         ...(canManage ? [{ id: 'prompts', label: 'AI prompts' }] : []),
-        ...(isAdmin ? [{ id: 'danger', label: 'Danger zone', tone: 'danger' as const }] : []),
-      ] as { id: SettingsTab; label: string; count?: number; tone?: 'danger' }[],
-    [project.member_count, canManage, isAdmin],
+      ] as { id: SettingsTab; label: string; count?: number }[],
+    [project.member_count, canManage],
   );
   const requested = params.get('tab') as SettingsTab | null;
   const selected: SettingsTab = requested && items.some((i) => i.id === requested) ? requested : 'general';
   useEffect(() => {
-    if (requested && requested !== selected) replaceUrlQuery({ tab: null });
+    if (!requested || requested === selected) return;
+    replaceUrlQuery({ tab: null });
+    // The Danger zone is a section of General now (round 11): an old ?tab=danger link lands on it.
+    if ((requested as string) === 'danger')
+      requestAnimationFrame(() => document.getElementById('danger-zone')?.scrollIntoView({ block: 'start' }));
   }, [requested, selected, replaceUrlQuery]);
 
   return (
@@ -112,11 +106,6 @@ export function ProjectSettingsPage() {
         {canManage ? (
           <TabPanel id="prompts">
             <PromptsTab />
-          </TabPanel>
-        ) : null}
-        {isAdmin ? (
-          <TabPanel id="danger">
-            <DangerZoneTab />
           </TabPanel>
         ) : null}
       </Tabs>

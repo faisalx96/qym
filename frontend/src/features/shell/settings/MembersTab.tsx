@@ -16,6 +16,8 @@ import {
   ConfirmDialog,
   DataTable,
   ErrorState,
+  FormDialog,
+  SearchField,
   Select,
   Skeleton,
   Stack,
@@ -23,6 +25,7 @@ import {
   Text,
   useToast,
   RelativeTime,
+  UserName,
   type Column,
   type RowAction,
 } from '@/ui';
@@ -47,7 +50,7 @@ export function MembersTab() {
   const toast = useToast();
   const updateRole = useUpdateMemberRole(project.id);
   const removeMember = useRemoveMember(project.id);
-  const [pendingRoles, setPendingRoles] = useState<Record<string, Role>>({});
+  const [editing, setEditing] = useState<Member | null>(null);
   const [removing, setRemoving] = useState<{ member: Member; preview: RemovalPreview | null } | null>(null);
   const [transferTo, setTransferTo] = useState<string | null>(null);
 
@@ -60,7 +63,7 @@ export function MembersTab() {
       pin: 'start',
       hideable: false,
       priority: 1,
-      cell: (m) => m.display_name || m.email,
+      cell: (m) => <UserName id={m.user_id} name={m.display_name} email={m.email} />,
     },
     { id: 'email', header: 'Email', type: 'id', width: 220, priority: 2, cell: (m) => m.email },
     {
@@ -74,52 +77,26 @@ export function MembersTab() {
     {
       id: 'role',
       header: 'Role',
-      width: 200,
+      width: 110,
       priority: 1,
-      cell: (m) =>
-        canManage && !readOnly ? (
-          <span className={styles.inlineActions}>
-            <Select
-              label={`Role for ${m.email}`}
-              hideLabel
-              items={ROLE_ITEMS}
-              value={pendingRoles[m.user_id] ?? m.role}
-              onChange={(k) => setPendingRoles((p) => ({ ...p, [m.user_id]: k as Role }))}
-              width={120}
-            />
-            {pendingRoles[m.user_id] && pendingRoles[m.user_id] !== m.role ? (
-              <Button
-                variant="accent"
-                loading={updateRole.isPending && updateRole.variables?.userId === m.user_id}
-                onPress={async () => {
-                  try {
-                    await updateRole.mutateAsync({ userId: m.user_id, role: pendingRoles[m.user_id]! });
-                    setPendingRoles((p) => {
-                      const next = { ...p };
-                      delete next[m.user_id];
-                      return next;
-                    });
-                    toast.show('Role saved', { tone: 'success' });
-                  } catch (e) {
-                    toast.show(
-                      e instanceof ApiError ? e.detail || 'Could not save role' : 'Could not save role',
-                      { tone: 'error' },
-                    );
-                  }
-                }}
-              >
-                Save
-              </Button>
-            ) : null}
-          </span>
-        ) : (
-          <Tag kind="role">{m.role}</Tag>
-        ),
+      // the role is a tag, as in admin users; Edit changes it (round 11)
+      cell: (m) => <Tag kind="role">{m.role.toLowerCase()}</Tag>,
     },
   ];
 
-  const rowActions = (m: Member): RowAction<Member>[] =>
-    canManage && m.user_id !== me.id
+  const rowActions = (m: Member): RowAction<Member>[] => [
+    ...(canManage && !readOnly
+      ? [
+          {
+            id: 'edit',
+            label: `Change the role of ${m.display_name || m.email}`,
+            icon: 'edit',
+            primary: true,
+            onPress: () => setEditing(m),
+          },
+        ]
+      : []),
+    ...(canManage && m.user_id !== me.id
       ? [
           {
             id: 'remove',
@@ -146,7 +123,8 @@ export function MembersTab() {
             },
           },
         ]
-      : [];
+      : []),
+  ];
 
   const others = transferCandidates(members.data ?? [], removing?.member.user_id);
   const keys = useApiKeys(project.id);
@@ -194,6 +172,36 @@ export function MembersTab() {
           empty="No members yet."
         />
       )}
+      {editing ? (
+        <FormDialog
+          open
+          onOpenChange={(o) => !o && setEditing(null)}
+          title={`Change the role of ${editing.display_name || editing.email}`}
+          description="Managers add and remove members, change roles and edit the project settings."
+          fields={[
+            {
+              name: 'role',
+              label: 'Role',
+              type: 'select',
+              value: editing.role,
+              options: ROLE_ITEMS.map((r) => ({ value: r.key, label: r.label })),
+            },
+          ]}
+          confirmLabel="Save role"
+          onSubmit={async (values) => {
+            const role = values.role as Role;
+            if (role === editing.role) return;
+            try {
+              await updateRole.mutateAsync({ userId: editing.user_id, role });
+              toast.show('Role saved', { tone: 'success' });
+            } catch (e) {
+              return e instanceof ApiError
+                ? e.detail || 'Could not save the role'
+                : 'Could not save the role';
+            }
+          }}
+        />
+      ) : null}
       {removing ? (
         <ConfirmDialog
           open
@@ -314,43 +322,44 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
       }}
     >
       <div className={styles.combo}>
-        <Text variant="sm" as="label" htmlFor={`${listId}-input`}>
-          Add member
-        </Text>
-        <input
-          id={`${listId}-input`}
+        {/* the same search field as every other user search (round 11), carrying the combobox semantics */}
+        <SearchField
           ref={inputRef}
-          role="combobox"
-          aria-expanded={open && options.length > 0}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={open && options[active] ? `${listId}-${options[active].id}` : undefined}
-          className={styles.comboInput}
+          label="Add member"
+          hideLabel={false}
           placeholder="Search by name or email"
-          autoComplete="off"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
+          onChange={(v) => {
+            setQuery(v);
             setPicked(null);
             setActive(0);
             setOpen(true);
           }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 120)}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') {
-              e.preventDefault();
-              setOpen(true);
-              setActive((a) => Math.min(a + 1, Math.max(0, options.length - 1)));
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault();
-              setActive((a) => Math.max(0, a - 1));
-            } else if (e.key === 'Enter' && open && options[active]) {
-              e.preventDefault();
-              choose(options[active]);
-            } else if (e.key === 'Escape') {
-              setOpen(false);
-            }
+          onClear={() => setPicked(null)}
+          inputProps={{
+            role: 'combobox',
+            'aria-expanded': open && options.length > 0,
+            'aria-controls': listId,
+            'aria-autocomplete': 'list',
+            'aria-activedescendant': open && options[active] ? `${listId}-${options[active].id}` : undefined,
+            autoComplete: 'off',
+            onFocus: () => setOpen(true),
+            onBlur: () => setTimeout(() => setOpen(false), 120),
+            onKeyDown: (e) => {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setOpen(true);
+                setActive((a) => Math.min(a + 1, Math.max(0, options.length - 1)));
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setActive((a) => Math.max(0, a - 1));
+              } else if (e.key === 'Enter' && open && options[active]) {
+                e.preventDefault();
+                choose(options[active]);
+              } else if (e.key === 'Escape') {
+                setOpen(false);
+              }
+            },
           }}
         />
         {open && options.length === 0 && !candidates.isFetching ? (
@@ -375,8 +384,7 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => choose(c)}
               >
-                <span>{c.display_name || c.email}</span>
-                <small>{c.email}</small>
+                <UserName id={c.id} name={c.display_name} email={c.email} showEmail />
               </li>
             ))}
             {candidates.data?.has_more ? (

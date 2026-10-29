@@ -206,9 +206,15 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   reverse: a resting fill brighter than its hover reads as already pressed (round 8). Field-like controls (text field,
   select, filter trigger, segmented control, date and time field) share that `--bg-elevated` fill with a soft
   `--control-edge` (round 10: the `--border-default` outlines read as too bold next to the borderless buttons). A
-  disabled button keeps the flat shape at half its fill with muted text and no outline (round 10: an outline made a
-  locked button look like another, louder style); a disabled primary keeps its green as the soft accent tint with
-  accent text and no ring, so Create and Add read as the main action before the form is filled in (round 10). Brand colour
+  disabled neutral or ghost button keeps the flat shape at half its fill with muted text and no outline (round 10: an
+  outline made a locked button look like another, louder style).
+  **Which button** (round 11, owner: "one unified rule set"): `primary` (solid green) is the one action that commits a
+  card or form: Save, Create, Add, New project. `accent` (green tint) runs something useful without saving: Test
+  connection, Run preset, Unarchive. `neutral` cancels, discards, compares or navigates: Cancel, Discard, View diff.
+  `danger` (red tint) deletes or replaces: Delete, Archive, Revoke, Restore default. A disabled primary, accent or
+  danger button keeps its own colour at 45% opacity, so a locked Save is still the green Save and a locked Restore
+  default is still red. A creating action carries the plus glyph (New project, Add connection, Add environment).
+  Brand colour
   belongs to an integration action only (e.g. Langfuse), never to generic
   controls. The 42px authentication fields (`TextField`),
   textareas, sliders and composite controls are separate recipes and do not
@@ -353,7 +359,15 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 - **Settings card** (`SettingsCard`, project settings; round 10, as the old settings page): every settings tab opens
   the same way, a card with a title, one description line and the block's main action (Add, Create) on the title
   row's end side, then the controls. A tab has one Add button, in its card header; its empty state does not repeat it.
-  Facts about the project (slug, role, members, runs, created) live once, in the page header meta.
+  Facts about the project (slug, role, members, runs, created) live once, in the page header meta. The Danger zone is
+  the last section of General, a card like the others with no red rail; only its Archive and Delete buttons are red
+  (round 11). Members show the person, a role tag and an Edit action that changes the role in a dialog, as admin users
+  do (round 11). The AI prompt editor is a `Textarea` with `quietFocus` (a click in brightens the border to
+  `--border-strong` instead of the green ring; keyboard focus keeps the ring) and spell check off (round 11).
+- **Person** (`UserName`; round 11): a user is an initials disc in the person's series colour (the same person is the
+  same colour everywhere), then the name; lists that must tell two people apart add the email after the name, muted
+  and mono. The runs Owner cell, admin users, project members and the add-member search all use it, and every user
+  search is the shared `SearchField`.
 - **Report section** (`ReportSection`; the run page and the compare page, `CompareSection` is retired; round 8b, owner
   decision H6): every top-level section is a framed panel: `--bg-surface`, 1px `--border-subtle`, `--radius-md`, 14px
   padding, 20px under the previous panel, the first panel with no lead-in. It opens with a `section-head` inside the
@@ -409,7 +423,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   may grow vertically when its content wraps. `kind` says what the label is: `task`, `version` and `config` are
   definition metadata and take the `meta` (purple) tone; `dataset` is neutral; `model` (+ `series`) renders the series
   dot; `origin` is neutral (official is `tone="info"`). A `role` tag takes its tone from the role, so an admin never
-  reads as a member: admin `info` (blue), manager `accent` (green), member neutral (round 10). Passive: no hover. Task,
+  reads as a member: admin `info` (blue), manager `accent` (green), member neutral (round 10). A changed AI prompt shows
+  `custom` in the `meta` tone (purple: it is configuration) and a shipped prompt shows no tag, by the on/off rule; the
+  green `default` on an LLM connection marks the connection in use, a selection (round 11). Passive: no hover. Task,
   dataset and model names are 500 (round 10); a model tag's name is `--text-secondary` and its dot is flush (no ring),
   6px before the name.
 

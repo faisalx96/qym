@@ -5,6 +5,7 @@ import { useSubmitLock } from '@/lib/pending';
 import { Button, Checkbox, Select, Stack, Text, TextField, useToast, Card } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
+import { DangerZoneSection } from './DangerZoneSection';
 
 export function GeneralTab() {
   const { project, readOnly, canManage, isAdmin } = useProjectContext();
@@ -143,6 +144,7 @@ export function GeneralTab() {
           </div>
         </Card>
       }
+      {isAdmin ? <DangerZoneSection /> : null}
     </Stack>
   );
 }

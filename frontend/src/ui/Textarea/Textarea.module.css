@@ -29,6 +29,11 @@
   box-shadow: var(--focus-ring);
 }
 
+.textarea[data-quiet-focus][data-focused]:not([data-focus-visible]) {
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
 .textarea[data-invalid] {
   border-color: var(--error);
 }

@@ -27,7 +27,12 @@ export function EnvironmentsPage() {
         }
         actions={
           canAdd ? (
-            <Button variant="primary" size="md" icon={<Icon name="plus" />} onPress={() => setAdding(true)}>
+            <Button
+              variant="primary"
+              size="md"
+              icon={<Icon name="plus" size={12} />}
+              onPress={() => setAdding(true)}
+            >
               Add environment
             </Button>
           ) : null

@@ -5,7 +5,7 @@ import { adminKeys } from '@/api/admin';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
 import { ArchiveProjectDialog, UnarchiveProjectDialog } from '@/features/shell/dialogs';
-import { DataTable, Identicon, SearchField, StatusMark, Text, type Column } from '@/ui';
+import { DataTable, Identicon, RelativeTime, SearchField, StatusMark, Text, type Column } from '@/ui';
 import styles from './projects.module.css';
 
 export interface ProjectsTableProps {
@@ -69,6 +69,25 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         width: 80,
         priority: 2,
         cell: (p) => p.run_count,
+      },
+      // round 11: the gap between slug and counts holds when the project started and when it last changed
+      {
+        id: 'created',
+        header: 'Created',
+        type: 'date',
+        sort: { key: 'created', compare: (a, b) => a.created_at.localeCompare(b.created_at) },
+        width: 120,
+        priority: 3,
+        cell: (p) => <RelativeTime iso={p.created_at} />,
+      },
+      {
+        id: 'updated',
+        header: 'Last change',
+        type: 'date',
+        sort: { key: 'updated', compare: (a, b) => a.updated_at.localeCompare(b.updated_at) },
+        width: 120,
+        priority: 3,
+        cell: (p) => <RelativeTime iso={p.updated_at} />,
       },
     ],
     [],

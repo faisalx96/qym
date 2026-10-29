@@ -10,7 +10,10 @@ import {
 import { fieldStyles } from '../Field';
 import styles from './Textarea.module.css';
 
-export interface TextareaProps extends Omit<AriaTextFieldProps, 'className' | 'style' | 'children'> {
+export interface TextareaProps extends Omit<
+  AriaTextFieldProps,
+  'className' | 'style' | 'children' | 'spellCheck'
+> {
   label: string;
   hideLabel?: boolean;
   rows?: number;
@@ -21,11 +24,31 @@ export interface TextareaProps extends Omit<AriaTextFieldProps, 'className' | 's
   className?: string;
   /** Direction for user text; defaults to auto. */
   dir?: 'auto' | 'rtl' | 'ltr';
+  /** Browser spell check (red underlines); off for prompts, code and identifiers. */
+  spellCheck?: boolean;
+  /**
+   * A long-form editor (a prompt): clicking in to type brightens the border instead of drawing the green focus ring;
+   * keyboard focus keeps the ring.
+   */
+  quietFocus?: boolean;
 }
 
 /** Roomy multi-line field (never inherits --control-height). */
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
-  { label, hideLabel, rows = 4, mono, placeholder, help, errorMessage, className, dir = 'auto', ...rest },
+  {
+    label,
+    hideLabel,
+    rows = 4,
+    mono,
+    placeholder,
+    help,
+    errorMessage,
+    className,
+    dir = 'auto',
+    spellCheck,
+    quietFocus,
+    ...rest
+  },
   ref,
 ) {
   return (
@@ -43,6 +66,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         placeholder={placeholder}
         className={styles.textarea}
         data-mono={mono ? '' : undefined}
+        data-quiet-focus={quietFocus ? '' : undefined}
+        spellCheck={spellCheck}
         dir={dir}
       />
       {help ? (

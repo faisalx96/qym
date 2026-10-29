@@ -48,6 +48,7 @@ export type IconName =
   | 'play'
   | 'stop'
   | 'ban'
+  | 'diff'
   | 'star'
   | 'clock'
   | 'calendar'
@@ -121,6 +122,8 @@ const PATHS: Record<IconName, string> = {
   stop: 'M6 6h12v12H6z',
   /* Revoke a key or token, disable a user: a circle with a slash ("no access"), not a bare square or a cross. */
   ban: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM5.6 5.6l12.8 12.8',
+  /* A page with a plus over a minus: compare a draft with its default (round 11). */
+  diff: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 10v5M9.5 12.5h5M9.5 17.5h5',
   star: 'M12 3l2.8 5.6 6.2.9-4.5 4.4 1.1 6.1L12 17.1 6.4 20l1.1-6.1L3 9.5l6.2-.9z',
   clock: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7v5l3 2',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
