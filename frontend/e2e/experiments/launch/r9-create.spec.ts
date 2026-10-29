@@ -99,9 +99,9 @@ test.describe('point 1: option boxes', () => {
     expect(fill).not.toBe(await tokenColor(page, '--bg-elevated'));
     expect(contrast(accent, fill)).toBeGreaterThanOrEqual(6);
     const start = page.locator('[role=radio][aria-checked=true]').first();
-    const t = await computed(start, ['border-inline-start-width', 'border-inline-start-style', 'border-inline-start-color']);
-    const u = await computed(selected, ['border-inline-start-width', 'border-inline-start-style', 'border-inline-start-color']);
-    expect(t).toEqual(u);
+    // a colour transition may still be running on the Start-from card: poll until it has settled
+    const sides = ['border-inline-start-width', 'border-inline-start-style', 'border-inline-start-color'];
+    await expect.poll(async () => computed(start, sides)).toEqual(await computed(selected, sides));
   });
 
   test('C-1-4 hover is --bg-hover and the cursor stays auto', async ({ page }) => {
@@ -240,6 +240,31 @@ test.describe('point 3: one launch bar', () => {
     });
   }
 
+  for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]] as const) {
+    test(`C-3-1 the bar's top edge is the same on the home view and on all six steps, at the viewport bottom (${width}px)`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      const tops: Array<{ where: string; top: number; bottom: number }> = [];
+      const q = `?env=${f.production.id},${f.staging.id}`;
+      await openHome(page, f.project.slug, q);
+      await expect(bar(page)).toBeVisible();
+      await settled(page);
+      let b = await box(bar(page));
+      tops.push({ where: 'home', top: b.y, bottom: b.y + b.height });
+      for (const step of STEPS) {
+        await openLaunch(page, f.project.slug, q, step);
+        await expect(bar(page)).toBeVisible();
+        await settled(page);
+        b = await box(bar(page));
+        tops.push({ where: step, top: b.y, bottom: b.y + b.height });
+      }
+      for (const t of tops) {
+        near(t.bottom, height, 0.5, `${t.where} bar bottom is the viewport bottom`);
+        // one height at every step (home and steps share the status line count), so one top edge
+        near(t.top, tops[1]!.top, 0.5, `${t.where} bar top edge`);
+      }
+    });
+  }
+
   test('C-3-4 Skip and Continue are disabled and leave the tab order on the review step, enabled elsewhere', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'models');
@@ -269,7 +294,7 @@ test.describe('point 3: one launch bar', () => {
     for (const step of ['where', 'models', 'review'] as StepId[]) {
       await openLaunch(page, f.project.slug, `?env=${f.production.id},${f.staging.id}`, step);
       const b = await box(bar(page));
-      expect(b.height).toBeLessThanOrEqual(112); // 91 with a one-line status, 110 when a long problem wraps the status row
+      expect(b.height).toBeLessThanOrEqual(91); // amended C-3-7: two rows, the problem text is hidden at 390 so the status is one line
       const overflow = await bar(page).evaluate((n) => n.scrollWidth <= n.clientWidth + 0.5);
       expect(overflow).toBe(true);
       await expect(bar(page).locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(5);
@@ -293,10 +318,27 @@ test.describe('point 3: one launch bar', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: /← Start/ }).click();
     await expect(page.getByTestId('launch-home')).toBeVisible();
-    // 91 with a one-line status, 110 when the status wraps to two (the name row, the status, the buttons)
-    const home390 = (await box(bar(page))).height;
-    expect(home390).toBeGreaterThanOrEqual(90);
-    expect(home390).toBeLessThanOrEqual(112);
+    // amended C-3-8: at 390 the home bar is three rows (status, name, buttons) of one height, 90.8 px, in every state
+    near((await box(bar(page))).height, 90.8, 1, 'home bar at 390');
+  });
+
+  test('C-3-8 at 390 the home bar keeps one height (90.8 px): ready, a missing name, a flagged task', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openHome(page, f.project.slug, `?env=${f.production.id},${f.staging.id}`);
+    await expect(part(page, 'bar-status')).toContainText('runs to launch');
+    for (const state of ['name missing (problem text)', 'ready', 'task not offered by staging']) {
+      if (state === 'ready') await page.getByRole('textbox', { name: 'Experiment name' }).fill('r9 home bar');
+      if (state.startsWith('task')) {
+        await part(page, 'task-select').getByRole('button').click();
+        await page.getByRole('option', { name: /Route a ticket/ }).click();
+        await expect(envBox(page, 'staging')).toHaveAttribute('data-state', 'flagged');
+      }
+      await expect.poll(async () => Math.round((await box(bar(page))).height * 10) / 10, { message: state }).toBeGreaterThanOrEqual(90);
+      near((await box(bar(page))).height, 90.8, 1, `home bar, ${state}`);
+      const vh = 844;
+      near((await box(bar(page))).y + (await box(bar(page))).height, vh, 0.5, `${state}: at the viewport bottom`);
+      await expectNoPageOverflow(page);
+    }
   });
 
   test('C-3-9 Back from step 1 returns to the Start view', async ({ page }) => {
@@ -327,13 +369,15 @@ test.describe('point 4: the review is on its own step', () => {
   test('C-4-3 / C-4-4 the bar carries the run count and the first problem; the link opens its step; ?step=review still works', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'models');
-    await expect(part(page, 'bar-status')).toContainText(/1 run to launch/);
+    // 25 s: the first load of a worker compiles the lazy step chunks in Vite (the race behind the one flaky run in the full folder)
+    await expect(part(page, 'bar-status')).toContainText(/1 run to launch/, { timeout: 25_000 });
+    await settled(page);
     // the seeded default preset holds no dataset: two problems (the dataset first, then the name)
     await expect(part(page, 'bar-status')).toContainText(/Fix 2 problems first/);
     await part(page, 'bar-status').getByRole('button', { name: /Fix 2 problems first/ }).click();
-    await expect(page.getByRole('heading', { name: STEP_LABELS.where, level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: STEP_LABELS.where, level: 2 })).toBeVisible({ timeout: 25_000 });
     await page.goto(page.url().replace('step=where', 'step=review'));
-    await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible({ timeout: 25_000 });
   });
 });
 
@@ -383,6 +427,8 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     near(changes.y, checks.y, 1, 'Changes and Checks share a row');
     near(checks.x - (changes.x + changes.width), 14, 1, 'gap');
     near(changes.width, checks.width, 1, 'equal columns');
+    near(changes.width, 589.5, 0.5, 'Changes column (amended C-5-7: two equal columns of 589.5 px at 1440)');
+    near(checks.width, 589.5, 0.5, 'Checks column');
     // C-5-8: nothing under 11 px except tags, no --text-dim
     const dim = await tokenColor(page, '--text-dim');
     const small = await page.evaluate((dimColor) => {
@@ -423,6 +469,12 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     expect(dd.y).toBeGreaterThan(dt.y); // label above value
     const card = page.locator('[data-part=runs-cards] [data-run="1"]');
     expect((await box(card)).height).toBeLessThanOrEqual(110);
+    // C-5-7 at 390: Changes and Checks are stacked, one column each
+    const changes = await box(part(page, 'review-changes'));
+    const checks = await box(part(page, 'review-checks'));
+    expect(checks.y, 'Checks under Changes').toBeGreaterThan(changes.y + changes.height - 1);
+    near(checks.x, changes.x, 1, 'one column');
+    near(checks.y - (changes.y + changes.height), 14, 1, 'gap');
     const labelWidth = await card.locator('dt').first().evaluate((e) => e.getBoundingClientRect().width);
     near(labelWidth, 96, 1, 'card label column');
     near((await box(card.getByRole('button', { name: /Priority of run 1/ }))).height, 24, 0, 'select height in the card');

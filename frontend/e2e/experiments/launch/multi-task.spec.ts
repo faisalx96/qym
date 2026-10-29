@@ -128,7 +128,7 @@ test.describe('the Task section', () => {
     // the review names the environment and the task, and focus goes to the select
     await page.getByRole('button', { name: 'Customize →' }).click();
     await page.getByRole('button', { name: /Review and launch/ }).first().click();
-    const problem = page.getByRole('list', { name: 'Problems to fix' }).getByRole('button', { name: /staging does not offer the task “route-ticket”/ });
+    const problem = page.getByRole('list', { name: 'Problems to fix' }).getByRole('button', { name: /staging does not offer the task “Route a ticket”/ });
     await expect(problem).toBeVisible();
     await problem.click();
     await expect(page.getByRole('heading', { name: 'Where it runs', level: 2 })).toBeVisible();

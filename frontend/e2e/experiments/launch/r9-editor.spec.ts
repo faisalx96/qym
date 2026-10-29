@@ -84,6 +84,47 @@ test.describe('the preset editor is the Customize wizard', () => {
     }
   });
 
+  test('C-8-4 (amended) the controls differ only by the named set a preset cannot hold: settings and evaluation have none, models omit the temporary-model and LLM-group controls', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Every control of the step (the bar and the stepper are the same by C-8-1 and C-8-2): its role and accessible name.
+    const controlsOf = (): Promise<string[]> =>
+      page.locator('[data-part=customize]').evaluate((root) => {
+        const out = new Set<string>();
+        for (const el of Array.from(root.querySelectorAll('button, input, textarea, select, [role=radio], [role=checkbox], [role=switch], [role=combobox], a[href]'))) {
+          if (el.closest('[data-part=launch-bar], nav[aria-label=Steps]')) continue;
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height) continue;
+          const label =
+            el.getAttribute('aria-label') ||
+            (el.getAttribute('aria-labelledby') ? document.getElementById(el.getAttribute('aria-labelledby')!.split(' ')[0]!)?.textContent : '') ||
+            el.getAttribute('placeholder') ||
+            (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+          out.add(`${el.getAttribute('role') ?? el.tagName.toLowerCase()}: ${label}`);
+        }
+        return Array.from(out).sort();
+      });
+    const both: Record<string, { editor: string[]; launch: string[] }> = {};
+    for (const step of ['models', 'settings', 'evaluation'] as const) {
+      await open(page, step);
+      await page.waitForTimeout(600);
+      const editor = await controlsOf();
+      await openLaunch(page, f.project.slug, `?env=${f.env.id}`, step);
+      await page.waitForTimeout(600);
+      both[step] = { editor, launch: await controlsOf() };
+    }
+    for (const step of ['settings', 'evaluation'] as const) expect(both[step]!.editor, `${step} controls`).toEqual(both[step]!.launch);
+    // Models: the editor's controls are Customize's minus exactly the per-launch ones (a preset holds no secrets and no temporary models)
+    const absent = both['models']!.launch.filter((c) => !both['models']!.editor.includes(c));
+    expect(both['models']!.editor.filter((c) => !both['models']!.launch.includes(c)), 'the editor adds no control').toEqual([]);
+    expect(absent, 'the per-launch controls a preset cannot hold').toEqual([
+      'button: + Add LLM endpoint',
+      'button: + Temporary model',
+      'button: + models',
+      'button: Edit LLM groups',
+      'input: New LLM endpoint name',
+    ]);
+  });
+
   test('C-8-5 Review and publish: Summary rows, required release notes, Changes and Checks, no aside, at most 1050 px high', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await open(page, 'review');
@@ -112,6 +153,9 @@ test.describe('the preset editor is the Customize wizard', () => {
       await page.setViewportSize({ width, height: 900 });
       await open(page);
       await expect(part(page, 'compared-with')).toBeVisible();
+      // amended C-8-6: a preset holds one dataset, so step 1 keeps the single dataset picker (no Datasets card, no Add dataset)
+      await expect(page.getByTestId('datasets-fieldset')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^Add (another )?dataset/i })).toHaveCount(0);
       const h = await page.locator('[data-part=customize]').evaluate((el) => {
         const r = el.getBoundingClientRect();
         const top = (el.parentElement?.previousElementSibling as HTMLElement | null)?.getBoundingClientRect().top ?? r.top;
