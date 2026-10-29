@@ -166,8 +166,8 @@ function tableColumns(
     {
       id: 'priority',
       header: 'Priority',
-      width: 280,
-      minWidth: 280,
+      width: 240,
+      minWidth: 240,
       resizable: false,
       cell: (r) => <PriorityCell row={r} fallback={fallback} />,
     },

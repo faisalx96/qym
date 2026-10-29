@@ -3,6 +3,9 @@
 .bar {
   position: sticky;
   inset-block-end: 0;
+  /* Pinned to the bottom of the page box (the page padding is cancelled), which is the viewport bottom whatever the
+     content height: auto above, the page's own bottom padding below. */
+  margin-block: auto calc(-1 * var(--space-xl));
   z-index: 5;
   display: flex;
   align-items: center;

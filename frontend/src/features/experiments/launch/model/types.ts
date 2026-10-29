@@ -175,8 +175,8 @@ export interface EnvData {
   extra?: Record<string, ModelSlot | null>;
   /** What the service accepts beyond guide v1.3 (from its stored evaluator schema). */
   capabilities?: { datasets: boolean; task: boolean };
-  /** The service's tasks as last read (`ids` only; the names live in the launch page's query). */
-  taskList?: { status: 'ok' | 'unsupported' | 'error'; ids: string[] };
+  /** The service's tasks as last read: the ids and, for messages, each id's listed name. */
+  taskList?: { status: 'ok' | 'unsupported' | 'error'; ids: string[]; names?: Record<string, string> };
 }
 
 // ── Presets, best runs, clone ────────────────────────────────────────────

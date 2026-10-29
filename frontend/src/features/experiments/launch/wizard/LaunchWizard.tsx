@@ -67,7 +67,8 @@ function LaunchStatus({ onGo, needsAck }: { onGo: (step: WizardStepId) => void; 
       </span>
       {first ? (
         <button type="button" className={barStyles.problem} onClick={() => focusIssue(first)}>
-          {`Fix ${plural(review.items.length, 'problem')} first: ${first.label}`}
+          {`Fix ${plural(review.items.length, 'problem')} first`}
+          <span className={barStyles.long}>{`: ${first.label}`}</span>
         </button>
       ) : needsAck ? (
         <button

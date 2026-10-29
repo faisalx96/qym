@@ -220,7 +220,8 @@ function EditorBody({
       </span>
       {first ? (
         <button type="button" className={barStyles.problem} onClick={() => focusIssue(first)}>
-          {`Fix ${plural(review.items.length, 'problem')} first: ${first.label}`}
+          {`Fix ${plural(review.items.length, 'problem')} first`}
+          <span className={barStyles.long}>{`: ${first.label}`}</span>
         </button>
       ) : blockedBy ? (
         <span className={barStyles.muted}>{blockedBy}</span>

@@ -54,6 +54,9 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
     baseLabel: baseState.label,
     envNames,
   });
+  // At 390 the status is one line ("Ready · 2 runs to launch", "1 problem to fix  Show"): the destination, the problem text
+  // and the run count of a blocked form are on the page above and in the field, so the bar keeps one height (round 9, C-3-8).
+  const readyRest = status.startsWith('Ready: ') ? status.slice('Ready'.length) : null;
   const first = review.items[0];
   const showProblems =
     envCount > 0 && !preview.loading && !baseState.loading && !preview.error && review.items.length > 0;
@@ -82,22 +85,34 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
       </div>
       <div className={styles.status} data-part="bar-status">
         <span role="status" className={styles.runs} data-tone={showProblems ? 'problem' : 'ok'}>
-          {status}
+          {readyRest === null ? (
+            status
+          ) : (
+            <>
+              Ready<span className={styles.long}>{readyRest}</span>
+            </>
+          )}
         </span>
-        {showProblems && first ? <span className={styles.muted}>{first.message}</span> : null}
+        {showProblems && first ? (
+          <span className={`${styles.muted} ${styles.long}`}>{first.message}</span>
+        ) : null}
         {showProblems && first ? (
           <button type="button" className={styles.problem} onClick={() => focusIssue(first)}>
             Show
           </button>
         ) : null}
         {envCount && !review.count.over && !preview.error ? (
-          <span className={styles.muted} aria-live="polite">
+          <span className={showProblems ? `${styles.muted} ${styles.long}` : styles.muted} aria-live="polite">
             {plural(review.count.runs, 'run')} to launch
           </span>
         ) : null}
       </div>
       <div className={styles.end}>
-        <BarButton part="bar-customize" variant="neutral" onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}>
+        <BarButton
+          part="bar-customize"
+          variant="neutral"
+          onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}
+        >
           Customize →
         </BarButton>
         <BarButton

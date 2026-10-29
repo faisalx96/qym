@@ -27,7 +27,12 @@ import type { LaunchDocument } from './types';
 const both = { datasets: true, task: true };
 const old = { datasets: false, task: false };
 
-function ctxWith(envs = [makeEnv(PRODUCTION, 'production', { capabilities: both }), makeEnv(STAGING, 'staging', { capabilities: old })]) {
+function ctxWith(
+  envs = [
+    makeEnv(PRODUCTION, 'production', { capabilities: both }),
+    makeEnv(STAGING, 'staging', { capabilities: old }),
+  ],
+) {
   return makeCtx({ envs, datasetNames: ['support-tickets', 'billing-faq', 'refund-cases'] });
 }
 
@@ -121,7 +126,9 @@ describe('spec', () => {
       selection: { ...four().selection, mixedTasks: { [PRODUCTION]: 'a', [STAGING]: 'b' } },
     };
     expect(buildSpec(mixed, null).evaluator).toMatchObject({ task: { [PRODUCTION]: 'a', [STAGING]: 'b' } });
-    expect(buildSpec({ ...mixed, environmentIds: [STAGING] }, null).evaluator).toMatchObject({ task: { [STAGING]: 'b' } });
+    expect(buildSpec({ ...mixed, environmentIds: [STAGING] }, null).evaluator).toMatchObject({
+      task: { [STAGING]: 'b' },
+    });
     expect(setTask(mixed, 'c').selection.mixedTasks).toBeNull();
   });
 
@@ -157,7 +164,9 @@ describe('units per environment', () => {
     expect(info.total).toBe(5);
     expect(info.text).toBe('(production: 1 combined run + staging: 4 runs)');
     const spec = buildSpec(combined, null);
-    expect(runEstimate(spec, 2, 64, info).math).toContain('× (production: 1 combined run + staging: 4 runs) = 5 runs');
+    expect(runEstimate(spec, 2, 64, info).math).toContain(
+      '× (production: 1 combined run + staging: 4 runs) = 5 runs',
+    );
     const each = unitsInfo(four(), ctx.envs); // One run each is the default
     expect(each.total).toBe(8);
     expect(runEstimate(spec, 2, 64, each).math).toContain('× (2 environments × 4 dataset versions) = 8 runs');
@@ -176,13 +185,22 @@ describe('units per environment', () => {
 describe('validation', () => {
   it('QD-49 task problems carry their pointer and read as the spec says', () => {
     const ctx = ctxWith([
-      makeEnv(PRODUCTION, 'production', { capabilities: both, taskList: { status: 'ok', ids: ['answer-ticket'] } }),
+      makeEnv(PRODUCTION, 'production', {
+        capabilities: both,
+        taskList: { status: 'ok', ids: ['answer-ticket'] },
+      }),
       makeEnv(STAGING, 'staging', { capabilities: old }),
     ]);
     const doc = setTask(four(), 'route-ticket');
     const items = localErrors(doc, ctx).filter((i) => i.pointer.startsWith('/evaluator/task'));
     expect(items.map((i) => [i.pointer, i.message, i.stepId, i.environmentId, i.rule])).toEqual([
-      ['/evaluator/task', 'production does not offer the task “route-ticket”.', 'where', PRODUCTION, 'task_unknown'],
+      [
+        '/evaluator/task',
+        'production does not offer the task “route-ticket”.',
+        'where',
+        PRODUCTION,
+        'task_unknown',
+      ],
       [
         '/evaluator/task',
         'staging does not offer the task “route-ticket”: its Evaluation Service has no task selection.',
@@ -194,10 +212,34 @@ describe('validation', () => {
     expect(locate('/evaluator/task', ctx).label).toBe('Task');
   });
 
+  it('QR9-C-2-6 the problem names the task by its listed name, by its id when no environment lists it', () => {
+    const named = ctxWith([
+      makeEnv(PRODUCTION, 'production', {
+        capabilities: both,
+        taskList: { status: 'ok', ids: ['summarize'], names: { summarize: 'Summarize thread' } },
+      }),
+      makeEnv(STAGING, 'staging', {
+        capabilities: both,
+        taskList: { status: 'ok', ids: ['answer-ticket'], names: { 'answer-ticket': 'Answer ticket' } },
+      }),
+    ]);
+    const messages = (ctx: typeof named, task: string) =>
+      localErrors(setTask(four(), task), ctx)
+        .filter((i) => i.pointer.startsWith('/evaluator/task'))
+        .map((i) => i.message);
+    expect(messages(named, 'summarize')).toEqual(['staging does not offer the task “Summarize thread”.']);
+    expect(messages(named, 'zzz')).toHaveLength(2);
+    expect(messages(named, 'zzz')[0]).toContain('“zzz”');
+  });
+
   it('QD-49 the limit of 20', () => {
     let doc = createDocument({ environmentIds: [PRODUCTION] });
     doc = addDataset(doc, 'support-tickets');
-    doc = setEntryRefs(doc, 'support-tickets', Array.from({ length: 21 }, (_, i) => `v:${i}`));
+    doc = setEntryRefs(
+      doc,
+      'support-tickets',
+      Array.from({ length: 21 }, (_, i) => `v:${i}`),
+    );
     const items = localErrors(doc, ctxWith());
     expect(items.map((i) => i.message)).toContain('At most 20 dataset versions per experiment.');
   });
@@ -209,7 +251,9 @@ describe('Raw JSON', () => {
     let doc = setTask(four(), 'answer-ticket'); // One run each is the default
     const state = initRawJson(doc, ctx.evaluatorPanel);
     const parsed = JSON.parse(state.text) as { evaluator: Record<string, unknown> };
-    expect(Object.keys(parsed.evaluator)).toEqual(expect.arrayContaining(['dataset', 'datasets', 'run_shape', 'task']));
+    expect(Object.keys(parsed.evaluator)).toEqual(
+      expect.arrayContaining(['dataset', 'datasets', 'run_shape', 'task']),
+    );
     // edit: drop billing-faq v2, run shape to combined, no task
     const edited = {
       ...parsed,
@@ -220,7 +264,12 @@ describe('Raw JSON', () => {
         task: undefined,
       },
     };
-    const result = applyRawJson({ ...state, text: JSON.stringify(edited, null, 2), dirty: true }, doc, ctx, new SecretStore());
+    const result = applyRawJson(
+      { ...state, text: JSON.stringify(edited, null, 2), dirty: true },
+      doc,
+      ctx,
+      new SecretStore(),
+    );
     expect(result.applied).toBe(true);
     doc = result.doc;
     expect(datasetPairs(doc)).toHaveLength(3);
@@ -235,7 +284,12 @@ describe('Raw JSON', () => {
     const state = initRawJson(doc, ctx.evaluatorPanel);
     const parsed = JSON.parse(state.text) as { evaluator: { datasets: Array<Record<string, string>> } };
     parsed.evaluator.datasets[1] = { dataset: 'support-tickets', version: 'v4', alias: 'prod' };
-    const result = applyRawJson({ ...state, text: JSON.stringify(parsed), dirty: true }, doc, ctx, new SecretStore());
+    const result = applyRawJson(
+      { ...state, text: JSON.stringify(parsed), dirty: true },
+      doc,
+      ctx,
+      new SecretStore(),
+    );
     expect(result.applied).toBe(false);
     expect(result.doc).toBe(doc);
     expect(result.state.errors[0]).toMatchObject({
@@ -250,7 +304,12 @@ describe('Raw JSON', () => {
     const state = initRawJson(doc, ctx.evaluatorPanel);
     const parsed = JSON.parse(state.text) as { evaluator: Record<string, unknown> };
     parsed.evaluator['run_shape'] = { sweep: ['combined', 'one_each'] };
-    const result = applyRawJson({ ...state, text: JSON.stringify(parsed), dirty: true }, doc, ctx, new SecretStore());
+    const result = applyRawJson(
+      { ...state, text: JSON.stringify(parsed), dirty: true },
+      doc,
+      ctx,
+      new SecretStore(),
+    );
     expect(result.state.errors[0]?.message).toBe(
       'Dataset versions cannot be swept; choose “One run each” to run each one.',
     );
@@ -286,7 +345,10 @@ describe('starting points', () => {
 
   it('QD-66 a preset task seeds only its own environment', () => {
     const ctx = ctxWith([
-      makeEnv(PRODUCTION, 'production', { capabilities: both, taskList: { status: 'ok', ids: ['answer-ticket'] } }),
+      makeEnv(PRODUCTION, 'production', {
+        capabilities: both,
+        taskList: { status: 'ok', ids: ['answer-ticket'] },
+      }),
       makeEnv(STAGING, 'staging', { capabilities: both, taskList: { status: 'ok', ids: ['answer-ticket'] } }),
     ]);
     const own = baselineFrom({ evaluator: { task: 'answer-ticket' } }, ctx, { taskEnvId: PRODUCTION });
@@ -310,6 +372,12 @@ describe('starting points', () => {
     expect(replayed.selection.runShape).toBe('combined');
     const undone = resetAll(doc, ctx);
     expect(pairCount(undone)).toBeLessThanOrEqual(1);
-    expect(undone.selection).toEqual({ extraRefs: [], more: [], runShape: 'one_each', task: null, mixedTasks: null });
+    expect(undone.selection).toEqual({
+      extraRefs: [],
+      more: [],
+      runShape: 'one_each',
+      task: null,
+      mixedTasks: null,
+    });
   });
 });

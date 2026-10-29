@@ -200,17 +200,19 @@ function taskErrors(doc: LaunchDocument, ctx: FormContext): LocalIssue[] {
     const env = ctx.envs.find((e) => e.id === id);
     if (!env) continue;
     const pointer = doc.selection.mixedTasks ? `/evaluator/task/${id}` : '/evaluator/task';
+    // The task by its listed name (any ticked environment that lists it knows it), else by its id.
+    const shown = ctx.envs.map((e) => e.taskList?.names?.[task]).find(Boolean) ?? task;
     if (!acceptsTask(env))
       out.push({
         pointer,
-        message: `${env.name} does not offer the task “${task}”: its Evaluation Service has no task selection.`,
+        message: `${env.name} does not offer the task “${shown}”: its Evaluation Service has no task selection.`,
         rule: 'task_unsupported',
         environmentId: id,
       });
     else if (env.taskList?.status === 'ok' && !env.taskList.ids.includes(task))
       out.push({
         pointer,
-        message: `${env.name} does not offer the task “${task}”.`,
+        message: `${env.name} does not offer the task “${shown}”.`,
         rule: 'task_unknown',
         environmentId: id,
       });

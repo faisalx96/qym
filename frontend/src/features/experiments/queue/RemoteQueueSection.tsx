@@ -140,7 +140,17 @@ function RemoteEnv({
       header: 'Priority',
       width: 90,
       priority: 3,
-      cell: (i) => (i.priority ? titleCase(i.priority) : '—'),
+      cell: (i) =>
+        i.priority ? (
+          <Tag
+            tone={i.priority.toUpperCase() === 'HIGH' ? 'danger' : undefined}
+            data-job-priority={i.priority.toUpperCase()}
+          >
+            {titleCase(i.priority)}
+          </Tag>
+        ) : (
+          '—'
+        ),
     },
     {
       id: 'match',

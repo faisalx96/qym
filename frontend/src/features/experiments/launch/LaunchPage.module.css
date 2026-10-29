@@ -3,18 +3,22 @@
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
+  /* The page fills the scroller, so the bottom bar (margin-block-start: auto) sits at the viewport bottom on a short
+     step too: it never rides up under the content (DESIGN_LANGUAGE section 7). */
+  min-block-size: 100%;
 }
 
 /* Customize and the preset editor: one column, full width; the bottom bar is the only thing beside the step. */
 .layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-lg);
-  align-items: start;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .main {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
