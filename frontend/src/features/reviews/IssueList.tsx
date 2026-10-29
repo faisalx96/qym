@@ -17,6 +17,7 @@ export function editableIssue(i: RootCauseIssue): RootCauseIssue {
     category: i.category.trim(),
     subcategory: (i.subcategory ?? '').trim(),
     finding: (i.finding ?? '').trim(),
+    category_reason: (i.category_reason ?? '').trim(),
     solution: (i.solution ?? '').trim(),
     solution_note: (i.solution_note ?? '').trim(),
   };
@@ -192,6 +193,12 @@ export function IssueEditForm({
             onChange={(v) => patch(n, { finding: v })}
             rows={2}
             autoFocus={n === 0}
+          />
+          <Textarea
+            label="Why this category"
+            value={i.category_reason ?? ''}
+            onChange={(v) => patch(n, { category_reason: v })}
+            rows={2}
           />
           <TextField label="Solution" value={i.solution ?? ''} onChange={(v) => patch(n, { solution: v })} />
           <Textarea

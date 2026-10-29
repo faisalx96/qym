@@ -110,3 +110,23 @@ describe('pass diagnosis scoping', () => {
     ).toBe('Parent');
   });
 });
+
+/** C007: the analysis-level reason belongs to the first issue only until the server gives it an ID. */
+describe('the analysis-level category reason', () => {
+  const top = 'Both issues come from the agent.';
+  const reasons = (issues: Record<string, unknown>[]) =>
+    rootCauseIssues({ root_cause_reason: top, root_cause_issues: issues }).map((i) => i.category_reason);
+
+  it('shows on a first issue that has no ID yet, as the server copies it', () => {
+    expect(reasons([{ category: 'A' }, { category: 'B' }])).toEqual([top, '']);
+  });
+
+  it('never replaces the reason of an issue that has an ID', () => {
+    // a sibling that moved up after a delete, a reason a reviewer cleared, and a saved reason
+    expect(reasons([{ issue_id: 'b', category: 'B' }])).toEqual(['']);
+    expect(reasons([{ issue_id: 'a', category: 'A', category_reason: '' }])).toEqual(['']);
+    expect(reasons([{ issue_id: 'a', category: 'A', category_reason: 'Own reason' }])).toEqual([
+      'Own reason',
+    ]);
+  });
+});

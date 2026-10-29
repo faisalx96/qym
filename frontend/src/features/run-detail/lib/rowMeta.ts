@@ -130,8 +130,11 @@ export function rootCauseIssues(value: unknown, legacyFallback = true): RootCaus
       })
       .filter((x): x is RootCauseIssue => !!x);
     if (issues.length) {
+      // The analysis-level reason belongs to the first issue until that issue has an ID: the
+      // server copies it then (fill_first_issue_reason), and after that the issue owns its reason.
       const topReason = String(v.root_cause_reason ?? '').trim();
-      if (!issues[0]!.category_reason && topReason) issues[0]!.category_reason = topReason;
+      if (!issues[0]!.category_reason && !issues[0]!.issue_id && topReason)
+        issues[0]!.category_reason = topReason;
       const rawTop = v.confidence ?? v.root_cause_confidence;
       const topConfidence = rawTop == null || rawTop === '' ? NaN : Number(rawTop);
       if (issues[0]!.confidence == null && Number.isFinite(topConfidence))

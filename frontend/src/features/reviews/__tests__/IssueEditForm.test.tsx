@@ -1,7 +1,7 @@
 /**
- * C005: the Reviews edit form edits the one issue a correction holds, starts from the AI issue
- * on an AI candidate, offers the project catalog for Category, and saves every field of the issue
- * under its own name.
+ * C005 and C007: the Reviews edit form edits the one issue a correction holds, starts from the
+ * AI issue on an AI candidate, offers the project catalog for Category, and saves every field
+ * of the issue (the run page dialog's fields) under its own name.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps } from 'react';
@@ -69,6 +69,7 @@ describe('Reviews edit form', () => {
     expect(screen.getByRole('button', { name: /Category/ })).toHaveTextContent('Knowledge Gap');
     expect(screen.getByLabelText('Subcategory')).toHaveValue('Outdated policy');
     expect(screen.getByLabelText('Finding')).toHaveValue(ai.finding);
+    expect(screen.getByLabelText('Why this category')).toHaveValue(ai.category_reason);
     expect(screen.getByLabelText('Solution')).toHaveValue('Refresh the policy index');
     expect(screen.getByLabelText('Solution notes')).toHaveValue('Weekly');
   });
@@ -85,6 +86,7 @@ describe('Reviews edit form', () => {
     const finding = screen.getByLabelText('Finding');
     await user.clear(finding);
     await user.type(finding, 'EDITED FINDING: the bot gives the legacy reset flow.');
+    await user.type(screen.getByLabelText('Why this category'), ' Checked.');
     await user.click(screen.getByTestId('edit-save'));
     expect(onSave).toHaveBeenCalledWith([
       {
@@ -92,6 +94,7 @@ describe('Reviews edit form', () => {
         category: 'Knowledge Gap',
         subcategory: 'Outdated policy',
         finding: 'EDITED FINDING: the bot gives the legacy reset flow.',
+        category_reason: 'The policy changed after the knowledge snapshot. Checked.',
         solution: 'Refresh the policy index',
         solution_note: 'Weekly',
       },
