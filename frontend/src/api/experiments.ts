@@ -117,6 +117,8 @@ export interface DatasetRef {
   dataset: string;
   version?: string | null;
   alias?: string | null;
+  /** The version a "latest" or alias entry resolved to when the experiment was launched (jobs only). */
+  resolved_version?: string | null;
 }
 
 /** The task a job ran: its id and the name the service listed. */

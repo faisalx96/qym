@@ -474,22 +474,38 @@ def unit_document(
     environment_id: str,
     task: Optional[str],
     supports_task: bool,
+    pins: Optional[Mapping[Any, Any]] = None,
 ) -> Dict[str, Any]:
     """The document one job is validated and stored from.
 
     Never carries ``run_shape``. ``task`` is the environment's resolved id; it is left
-    out when the environment does not declare ``task`` (reported separately).
+    out when the environment does not declare ``task`` (reported separately). ``pins``
+    (``eval_dataset_pins.pin_entries``) replace "latest" and alias entries by the version
+    they resolved to at launch, so the service never falls back to its own default version.
     """
+    from qym_platform.services.eval_dataset_pins import pinned_entry, scalar_entry
+
     doc = copy.deepcopy(dict(document))
     evaluator = doc.get("evaluator")
     if not isinstance(evaluator, dict):
         return doc
     evaluator.pop("run_shape", None)
+    pins = pins or {}
     if unit.mode == MODE_FAN_OUT and unit.pair is not None:
         evaluator.pop("datasets", None)
-        mirror(evaluator, unit.pair)
+        mirror(evaluator, pinned_entry(unit.pair, pins))
+    elif unit.mode == MODE_COMBINED and unit.datasets:
+        pinned = [pinned_entry(pair, pins) for pair in unit.datasets]
+        evaluator["datasets"] = pinned
+        mirror(evaluator, pinned[0])
     elif unit.mode == MODE_SINGLE:
         evaluator.pop("datasets", None)
+        entry = scalar_entry(evaluator)
+        if entry is not None and entry["version"] is None:
+            pinned_scalar = pinned_entry(entry, pins)
+            if pinned_scalar.get("version"):
+                # The alias stays for the record; the top-level version wins on the service.
+                evaluator["dataset_version"] = pinned_scalar["version"]
     evaluator.pop("task", None)
     if task is not None and supports_task:
         evaluator["task"] = task
