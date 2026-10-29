@@ -11,7 +11,7 @@ import {
 } from '../chunks';
 import { useReviewHistoryQuery } from '@/api/runs';
 import { metricDirectionLabel } from '@/lib/metrics';
-import { ReportSection, StatStrip } from '@/ui';
+import { Icon, ReportSection, SectionBoundary, StatStrip } from '@/ui';
 import { runCounts } from '../lib/overviewModel';
 import { errorBucketCount } from '../lib/panelCounts';
 import { getRowRootCauseAnalyses } from '../lib/rowMeta';
@@ -30,17 +30,26 @@ const CategoriesTab = panel(loadCategoriesTab, 'CategoriesTab');
 const ErrorsTab = panel(loadErrorsTab, 'ErrorsTab');
 const RootCauseTab = panel(loadRootCauseTab, 'RootCauseTab');
 
-/** A panel's body: its skeleton while the rows (or the panel's chunk) are on the way. */
+/** A panel's body: its skeleton while the rows (or the panel's chunk) are on the way; a render error stays inside it. */
 function Staged({
   pending,
   skeleton,
+  name,
   children,
 }: {
   pending: boolean;
   skeleton: React.ReactNode;
+  /** The section's title, for its error message. */
+  name: string;
   children: React.ReactNode;
 }) {
-  return pending ? skeleton : <Suspense fallback={skeleton}>{children}</Suspense>;
+  return pending ? (
+    skeleton
+  ) : (
+    <SectionBoundary name={name}>
+      <Suspense fallback={skeleton}>{children}</Suspense>
+    </SectionBoundary>
+  );
 }
 
 export type SectionKey =
@@ -116,8 +125,8 @@ export function useSectionEntries(): SectionEntry[] {
       ? [{ id: 'datasets' as const, label: 'Datasets', count: payload.run.dataset_count }]
       : []),
     ...(model.isRepeat && !model.viewPass ? [{ id: 'repeat' as const, label: 'Repeat' }] : []),
-    { id: 'latency', label: 'Latency' },
-    { id: 'deep', label: 'Deep' },
+    { id: 'latency', label: 'Latency and traces' },
+    { id: 'deep', label: 'Deep analysis' },
     { id: 'categories', label: 'Categories' },
     { id: 'errors', label: 'Errors', ...(rowsPending ? {} : { count: errorCount, danger: errorCount > 0 }) },
     ...(hasRootCause ? [{ id: 'root-cause' as const, label: 'Root cause' }] : []),
@@ -163,12 +172,21 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
               {
                 key: 'items',
                 label: 'Items',
+                icon: <Icon name="list" size={12} />,
+                tone: 'info',
                 value: rowsPending ? (payload.snapshot.rows_total ?? '—') : counts.total,
               },
-              { key: 'completed', label: 'Completed', value: rowsPending ? '—' : counts.completed },
+              {
+                key: 'completed',
+                label: 'Completed',
+                icon: <Icon name="check" size={12} />,
+                tone: 'success',
+                value: rowsPending ? '—' : counts.completed,
+              },
               {
                 key: 'errors',
                 label: 'Errors',
+                icon: <Icon name="close" size={12} />,
                 value: rowsPending ? '—' : counts.errors,
                 tone: !rowsPending && counts.errors ? 'danger' : undefined,
               },
@@ -179,7 +197,7 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
           />
         }
       >
-        <Staged pending={rowsPending} skeleton={<OverviewSkeleton />}>
+        <Staged pending={rowsPending} skeleton={<OverviewSkeleton />} name="Overview">
           <OverviewTab />
         </Staged>
       </ReportSection>
@@ -195,6 +213,7 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         <Staged
           pending={rowsPending}
           skeleton={<BlockSkeleton height={320} label="Loading repeat analysis" />}
+          name="Repeat run analysis"
         >
           <RepeatTab />
         </Staged>
@@ -207,7 +226,11 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         lazy
         minHeight={360}
       >
-        <Staged pending={rowsPending} skeleton={<BlockSkeleton height={360} label="Loading latency" />}>
+        <Staged
+          pending={rowsPending}
+          skeleton={<BlockSkeleton height={360} label="Loading latency" />}
+          name="Latency and traces"
+        >
           <LatencyTab />
         </Staged>
       </ReportSection>
@@ -219,7 +242,11 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         lazy
         minHeight={280}
       >
-        <Staged pending={rowsPending} skeleton={<BlockSkeleton height={280} label="Loading deep analysis" />}>
+        <Staged
+          pending={rowsPending}
+          skeleton={<BlockSkeleton height={280} label="Loading deep analysis" />}
+          name="Deep analysis"
+        >
           <DeepTab />
         </Staged>
       </ReportSection>
@@ -229,17 +256,21 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         description="Performance by item metadata. Click a value to filter the items."
         scopeNote={scopeNote}
       >
-        <Staged pending={rowsPending} skeleton={<BlockSkeleton height={274} label="Loading categories" />}>
+        <Staged
+          pending={rowsPending}
+          skeleton={<BlockSkeleton height={274} label="Loading categories" />}
+          name="Categories"
+        >
           <CategoriesTab />
         </Staged>
       </ReportSection>
       <ReportSection
         id={sectionDomId('errors')}
         title="Errors"
-        description="Task, metric, trace and analysis errors grouped by message. Click a row to filter."
+        description="Task, metric, trace and analysis errors grouped by message. Click a card to filter the items."
         scopeNote={scopeNote}
       >
-        <Staged pending={rowsPending} skeleton={<ErrorsSkeleton />}>
+        <Staged pending={rowsPending} skeleton={<ErrorsSkeleton />} name="Errors">
           <ErrorsTab />
         </Staged>
       </ReportSection>
@@ -252,7 +283,11 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         lazy
         minHeight={200}
       >
-        <Staged pending={rowsPending} skeleton={<BlockSkeleton height={200} label="Loading root cause" />}>
+        <Staged
+          pending={rowsPending}
+          skeleton={<BlockSkeleton height={200} label="Loading root cause" />}
+          name="Root cause analysis"
+        >
           <RootCauseTab />
         </Staged>
       </ReportSection>

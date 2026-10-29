@@ -1,6 +1,11 @@
-/** Errors grouped by message; a card toggles the per-kind error filter (brief 04 §3g). */
+/**
+ * Errors grouped by message (brief 04 §3g). Round 10: each kind is a group with a tinted icon, its colour and its
+ * total, then one card per message: the message and its detail, the error count large in the kind's colour, the items
+ * it touched, and a bar of its share of the kind. Cards wrap in a grid (no table, no sideways scroll). A card toggles
+ * the page's filter for that error.
+ */
 import { useMemo } from 'react';
-import { DataTable, Tag, type Column } from '@/ui';
+import { Icon, type IconName } from '@/ui';
 import {
   collectErrors,
   slotOfKind,
@@ -19,67 +24,20 @@ const CLASS: Record<ErrorKind, string> = {
   'Analysis error': 'analysis',
 };
 
-const GLYPH: Record<ErrorKind, string> = {
-  'Task error': '⚠',
-  'Metric error': '✕',
-  'Trace error': '◔',
-  'Analysis error': '✦',
+const ICON: Record<ErrorKind, IconName> = {
+  'Task error': 'warning',
+  'Metric error': 'target',
+  'Trace error': 'chain',
+  'Analysis error': 'sparkles',
 };
 
-function columnsFor(): Column<ErrorBucket>[] {
-  return [
-    {
-      id: 'kind',
-      header: 'Kind',
-      label: 'Kind',
-      hideLabel: true,
-      width: 36,
-      cell: (b) => (
-        <span className={styles.sev} data-kind={CLASS[b.kind]} role="img" aria-label={b.kind}>
-          {GLYPH[b.kind]}
-        </span>
-      ),
-    },
-    {
-      id: 'message',
-      header: 'Message',
-      label: 'Message',
-      flex: true,
-      minWidth: 220,
-      priority: 1,
-      cardTitle: true,
-      wrap: 2,
-      accessor: (b) => splitErrorLabel(b.label).title,
-      cell: (b) => {
-        const { title, detail } = splitErrorLabel(b.label);
-        return (
-          <span className={styles.errMsg} title={detail || undefined}>
-            <span className={styles.errTitle}>{title}</span>
-            {detail ? <span className={styles.errDetail}>{detail}</span> : null}
-          </span>
-        );
-      },
-    },
-    {
-      id: 'items',
-      header: 'Items',
-      label: 'Items',
-      type: 'number',
-      width: 80,
-      priority: 2,
-      accessor: (b) => b.itemIds.size,
-    },
-    {
-      id: 'count',
-      header: 'Errors',
-      label: 'Errors',
-      type: 'number',
-      width: 80,
-      priority: 2,
-      accessor: (b) => b.count,
-    },
-  ];
-}
+/** What an error of the kind means for the numbers above. */
+const MEANING: Record<ErrorKind, string> = {
+  'Task error': 'The task failed before it could be scored. These items count as 0 in score means.',
+  'Metric error': 'The scorer failed on an item. The item counts as 0 for that metric.',
+  'Trace error': 'A step inside the trace failed (a tool or a model call). The item may still have a score.',
+  'Analysis error': 'The automatic analysis could not explain the item.',
+};
 
 export function ErrorsTab() {
   const { items, model, api } = useRunPage();
@@ -91,14 +49,13 @@ export function ErrorsTab() {
         repeatAggregate,
       ).values(),
     );
-    return ORDER.map((kind) => ({
-      kind,
-      buckets: buckets.filter((b) => b.kind === kind).sort((a, b) => b.count - a.count),
-    })).filter((g) => g.buckets.length);
+    return ORDER.map((kind) => {
+      const list = buckets.filter((b) => b.kind === kind).sort((a, b) => b.count - a.count);
+      return { kind, buckets: list, total: list.reduce((a, b) => a + b.count, 0) };
+    }).filter((g) => g.buckets.length);
   }, [items, repeatAggregate]);
   if (!groups.length) return <p className={styles.note}>No errors in the current view.</p>;
   const active = api.view.filters.errors;
-  const columns = columnsFor();
   const toggle = (b: ErrorBucket) => {
     const slot = slotOfKind(b.kind);
     const on = active[slot]?.label === b.label;
@@ -108,34 +65,54 @@ export function ErrorsTab() {
     api.setFilters({ errors });
   };
   return (
-    <div className={styles.stack}>
+    <div className={styles.errGroups}>
       {groups.map((g) => (
-        <section key={g.kind} aria-label={g.kind + 's'} className={styles.stack}>
-          <h3 className={styles.groupTitle}>
-            {g.kind}s <Tag kind="count">{g.buckets.reduce((a, b) => a + b.count, 0)}</Tag>
-          </h3>
-          <DataTable<ErrorBucket>
-            aria-label={`${g.kind}s`}
-            columns={columns}
-            rows={g.buckets}
-            rowKey={(b) => b.kind + b.label}
-            density="compact"
-            densityLocked
-            columnMenu={false}
-            zebra={false}
-            variant="embedded"
-            stickyHeader={false}
-            onRowOpen={(b) => toggle(b)}
-            rowProps={(b) => {
+        <section key={g.kind} aria-label={g.kind + 's'} className={styles.errGroup} data-kind={CLASS[g.kind]}>
+          <header className={styles.errHead}>
+            <span className={styles.errIcon} aria-hidden="true">
+              <Icon name={ICON[g.kind]} size={14} />
+            </span>
+            <h3 className={styles.errKind}>{g.kind}s</h3>
+            <span className={styles.errTotal}>{g.total}</span>
+            <p className={styles.errMeaning}>{MEANING[g.kind]}</p>
+          </header>
+          <div className={styles.errGrid} role="group" aria-label={`${g.kind}s by message`}>
+            {g.buckets.map((b) => {
+              const { title, detail } = splitErrorLabel(b.label);
               const on = active[slotOfKind(b.kind)]?.label === b.label;
-              return {
-                'data-testid': 'error-card',
-                'data-kind': CLASS[b.kind],
-                'aria-current': on ? 'true' : undefined,
-                'data-selected': on ? '' : undefined,
-              };
-            }}
-          />
+              const share = g.total ? b.count / g.total : 0;
+              return (
+                <button
+                  key={b.kind + b.label}
+                  type="button"
+                  className={styles.errCard}
+                  data-testid="error-card"
+                  data-kind={CLASS[b.kind]}
+                  aria-pressed={on}
+                  data-selected={on ? '' : undefined}
+                  onClick={() => toggle(b)}
+                  title={
+                    on ? 'Showing only these items. Click to clear.' : 'Show only the items with this error'
+                  }
+                >
+                  <span className={styles.errText}>
+                    <span className={styles.errTitle}>{title}</span>
+                    {detail ? <span className={styles.errDetail}>{detail}</span> : null}
+                  </span>
+                  <span className={styles.errNums}>
+                    <span className={styles.errCount}>{b.count}</span>
+                    <span className={styles.errUnit}>
+                      {b.count === 1 ? 'error' : 'errors'} · {b.itemIds.size}{' '}
+                      {b.itemIds.size === 1 ? 'item' : 'items'}
+                    </span>
+                  </span>
+                  <span className={styles.errShare} aria-hidden="true">
+                    <span style={{ width: `${Math.max(3, share * 100)}%` }} />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </section>
       ))}
     </div>

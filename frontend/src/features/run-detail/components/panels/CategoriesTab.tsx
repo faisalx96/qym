@@ -1,15 +1,19 @@
-/** Categories (round 3 P3): one key at a time, one card of ranked value rows with a bar and a tick at the overall average. */
+/**
+ * Categories. Round 10 (the first qym's two views): Cards (the default) shows up to three metadata keys at once, each
+ * value a small card (average, items, latency, a bar with the overall average tick); checkboxes turn keys on and off.
+ * Compare ranks the values of one key in rows. One Sort button orders both (worst or best first). Clicking a value
+ * filters the page.
+ */
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatLatency, formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
 import { applyQueryUpdates } from '@/lib/url-state';
-import { Button, Card, SegmentedControl, Select, Text } from '@/ui';
+import { Button, Card, Checkbox, Icon, SegmentedControl, Select, Text } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   barFraction,
   DEFAULT_VISIBLE_VALUES,
   defaultKey as pickDefaultKey,
-  insightLine,
   orderValues,
   spreadOf,
   switcherKind,
@@ -51,6 +55,14 @@ export function CategoriesTab() {
   const asked = params.get('category');
   const selectedKey = asked && keys.some((k) => k.key === asked) ? asked : fallbackKey;
   const [order, setOrder] = useState<CategoryOrder>('worst');
+  // Cards show up to three keys at first (the widest spread first); the checkboxes add or remove keys.
+  const [shownKeysState, setShownKeys] = useState<string[] | null>(null);
+  const shownKeys = useMemo(() => {
+    if (shownKeysState) return shownKeysState;
+    const pool = keys.map((k) => k.key);
+    const first = fallbackKey ? [fallbackKey, ...pool.filter((k) => k !== fallbackKey)] : pool;
+    return first.slice(0, 3);
+  }, [shownKeysState, keys, fallbackKey]);
   const filters = api.view.filters;
   const breakdown = useMemo(
     () =>
@@ -71,10 +83,37 @@ export function CategoriesTab() {
     });
   const items2 = keys.map((k) => ({ key: k.key, label: `${k.key} · ${k.count}` }));
   const overall = breakdown?.overallAverage ?? null;
+  const view = params.get('category_view') === 'compare' ? 'compare' : 'cards';
+  const setViewParam = (v: 'cards' | 'compare') =>
+    setParams((prev) => applyQueryUpdates(prev, { category_view: v === 'cards' ? null : v }), {
+      replace: true,
+      preventScrollReset: true,
+    });
+  const sortButton = (
+    <Button
+      size="sm"
+      variant="neutral"
+      icon={<Icon name={order === 'worst' ? 'chevron-up' : 'chevron-down'} size={12} />}
+      onPress={() => setOrder(order === 'worst' ? 'best' : 'worst')}
+      aria-label={`Sort: ${order === 'worst' ? 'worst first' : 'best first'}. Press to reverse.`}
+      data-testid="category-sort"
+    >
+      {order === 'worst' ? 'Worst first' : 'Best first'}
+    </Button>
+  );
   return (
     <div className={styles.root} ref={rootRef}>
       <div className={styles.control}>
-        {keys.length > 1 ? (
+        <SegmentedControl<'cards' | 'compare'>
+          label="Categories view"
+          value={view}
+          onChange={setViewParam}
+          options={[
+            { value: 'cards', label: 'Cards' },
+            { value: 'compare', label: 'Compare' },
+          ]}
+        />
+        {view === 'compare' && keys.length > 1 ? (
           switcherKind(keys, width) === 'segmented' ? (
             <SegmentedControl
               label="Category"
@@ -85,6 +124,7 @@ export function CategoriesTab() {
           ) : (
             <Select
               label="Category"
+              hideLabel
               items={items2}
               value={selectedKey}
               onChange={(k) => k && choose(String(k))}
@@ -93,15 +133,50 @@ export function CategoriesTab() {
             />
           )
         ) : null}
-        <Text variant="sm" tone="muted" className={styles.metricNote}>
-          Metric: {metric} · overall {fmt(overall)}
-        </Text>
+        {view === 'cards' && keys.length > 1 ? (
+          <span className={styles.keyToggles} role="group" aria-label="Categories shown">
+            {keys.map((k) => (
+              <Checkbox
+                key={k.key}
+                isSelected={shownKeys.includes(k.key)}
+                onChange={(on) =>
+                  setShownKeys(on ? [...shownKeys, k.key] : shownKeys.filter((x) => x !== k.key))
+                }
+              >
+                {k.key} <span className={styles.keyCount}>{k.count}</span>
+              </Checkbox>
+            ))}
+          </span>
+        ) : null}
+        <span className={styles.controlEnd}>
+          <Text variant="sm" tone="muted" className={styles.metricNote}>
+            {metric} · overall <b className={styles.overall}>{fmt(overall)}</b>
+          </Text>
+          {sortButton}
+        </span>
       </div>
-      {breakdown ? (
+      {view === 'cards' ? (
+        <div className={styles.cardsView}>
+          {keys
+            .filter((k) => shownKeys.includes(k.key))
+            .map((k) => (
+              <KeyCards
+                key={k.key}
+                categoryKey={k.key}
+                metric={metric}
+                order={order}
+                numeric={numeric}
+                direction={direction}
+                metricType={model.metricTypes[metric]}
+                fmt={fmt}
+              />
+            ))}
+          {!shownKeys.length ? <p className={panel.note}>Tick a category to show its values.</p> : null}
+        </div>
+      ) : breakdown ? (
         <KeyCard
           b={breakdown}
           order={order}
-          onOrder={setOrder}
           numeric={numeric}
           direction={direction}
           metricType={model.metricTypes[metric]}
@@ -114,10 +189,120 @@ export function CategoriesTab() {
   );
 }
 
+/** The page filter for one value of a key: on when it is the only value filtered. */
+function useValueFilter(key: string) {
+  const { api } = useRunPage();
+  const filters = api.view.filters;
+  const isOn = (value: string) => {
+    const current =
+      key === 'complexity'
+        ? filters.complexity
+        : key === 'domain'
+          ? filters.domain
+          : (filters.categories[key] ?? null);
+    return current?.length === 1 && current[0]!.toLowerCase() === value.toLowerCase();
+  };
+  const toggle = (value: string) => {
+    const on = isOn(value);
+    if (key === 'complexity') api.setFilters({ complexity: on ? null : [value] });
+    else if (key === 'domain')
+      api.setFilters({ domain: on ? null : [value], domainMode: 'include', domainOnly: [] });
+    else {
+      const categories = { ...filters.categories };
+      if (on) delete categories[key];
+      else categories[key] = [value];
+      api.setFilters({ categories });
+    }
+  };
+  return { isOn, toggle };
+}
+
+/** Cards view: one key, its values as small cards (the first qym's category cards). */
+function KeyCards({
+  categoryKey,
+  metric,
+  order,
+  numeric,
+  direction,
+  metricType,
+  fmt,
+}: {
+  categoryKey: string;
+  metric: string;
+  order: CategoryOrder;
+  numeric: boolean;
+  direction: 'maximize' | 'minimize' | null;
+  metricType: string | undefined;
+  fmt: (v: number | null) => string;
+}) {
+  const { items, api } = useRunPage();
+  const filters = api.view.filters;
+  const rows = useMemo(() => items.map((i) => i.row), [items]);
+  const b = useMemo(
+    () => categoryBreakdown(api.ctx, rows, categoryKey, metric, filters.domain),
+    [api.ctx, rows, categoryKey, metric, filters.domain],
+  );
+  const { isOn, toggle } = useValueFilter(categoryKey);
+  const ordered = useMemo(() => (b ? orderValues(b.groups, order, direction) : []), [b, order, direction]);
+  if (!b || !ordered.length) return null;
+  const max = numeric ? Math.max(...b.groups.map((g) => g.avgScore ?? 0), b.overallAverage ?? 0, 1e-9) : null;
+  const tick = barFraction(b.overallAverage, max);
+  return (
+    <section className={styles.keyBlock} aria-label={categoryKey}>
+      <h4 className={styles.keyTitle}>
+        {categoryKey} <span className={styles.sub}>{b.groups.length} values</span>
+      </h4>
+      <div className={styles.valueGrid} role="group" aria-label={`Values of ${categoryKey}`}>
+        {ordered.map((g) => {
+          const on = isOn(g.value);
+          const band =
+            g.avgScore !== null && !numeric && direction
+              ? metricBand(g.avgScore, metricType, direction)
+              : null;
+          return (
+            <button
+              key={g.value}
+              type="button"
+              className={styles.valueCard}
+              aria-pressed={on}
+              data-selected={on ? '' : undefined}
+              data-testid="category-card"
+              data-value={g.value}
+              onClick={() => toggle(g.value)}
+              title={`Filter the items to ${categoryKey} = ${g.value}`}
+            >
+              <span className={styles.valueName} data-band={band ?? undefined} dir="auto">
+                {g.value}
+              </span>
+              <span className={styles.valueStats}>
+                <span>
+                  <small>Average</small>
+                  <b data-band={band ?? undefined}>{fmt(g.avgScore)}</b>
+                </span>
+                <span>
+                  <small>Items</small>
+                  <b>{g.itemCount}</b>
+                </span>
+                <span>
+                  <small>Latency</small>
+                  <b>{g.avgLatency ? formatLatency(g.avgLatency) : '—'}</b>
+                </span>
+              </span>
+              <span className={styles.track} data-band={band ?? undefined} aria-hidden="true">
+                <span className={styles.fill} style={{ width: `${barFraction(g.avgScore, max) * 100}%` }} />
+                <span className={styles.tick} style={{ left: `${tick * 100}%` }} />
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function KeyCard({
   b,
   order,
-  onOrder,
   numeric,
   direction,
   metricType,
@@ -125,41 +310,19 @@ function KeyCard({
 }: {
   b: CategoryBreakdown;
   order: CategoryOrder;
-  onOrder: (o: CategoryOrder) => void;
   numeric: boolean;
   direction: 'maximize' | 'minimize' | null;
   metricType: string | undefined;
   fmt: (v: number | null) => string;
 }) {
-  const { api } = useRunPage();
-  const filters = api.view.filters;
   const [all, setAll] = useState(false);
   const ordered = useMemo(() => orderValues(b.groups, order, direction), [b.groups, order, direction]);
   const shown = visibleValues(ordered, DEFAULT_VISIBLE_VALUES, all);
-  const insight = insightLine(b, direction, fmt, numeric);
   const max = numeric ? Math.max(...b.groups.map((g) => g.avgScore ?? 0), b.overallAverage ?? 0, 1e-9) : null;
   const tick = barFraction(b.overallAverage, max);
-  const isOn = (g: CategoryGroupStat) => {
-    const current =
-      b.key === 'complexity'
-        ? filters.complexity
-        : b.key === 'domain'
-          ? filters.domain
-          : (filters.categories[b.key] ?? null);
-    return current?.length === 1 && current[0]!.toLowerCase() === g.value.toLowerCase();
-  };
-  const toggle = (g: CategoryGroupStat) => {
-    const on = isOn(g);
-    if (b.key === 'complexity') api.setFilters({ complexity: on ? null : [g.value] });
-    else if (b.key === 'domain')
-      api.setFilters({ domain: on ? null : [g.value], domainMode: 'include', domainOnly: [] });
-    else {
-      const categories = { ...filters.categories };
-      if (on) delete categories[b.key];
-      else categories[b.key] = [g.value];
-      api.setFilters({ categories });
-    }
-  };
+  const filter = useValueFilter(b.key);
+  const isOn = (g: CategoryGroupStat) => filter.isOn(g.value);
+  const toggle = (g: CategoryGroupStat) => filter.toggle(g.value);
   return (
     <Card
       as="section"
@@ -175,24 +338,10 @@ function KeyCard({
               <span className={styles.tickKey} aria-hidden="true" />
               Overall average
             </span>
-            <SegmentedControl
-              label="Order"
-              value={order}
-              onChange={onOrder}
-              options={[
-                { value: 'worst', label: 'Worst first' },
-                { value: 'best', label: 'Best first' },
-              ]}
-            />
           </span>
         </div>
       }
     >
-      {insight ? (
-        <p className={styles.insight} data-testid="category-insight">
-          {insight}
-        </p>
-      ) : null}
       <div className={styles.cols} aria-hidden="true">
         <span>Value</span>
         <span>Average</span>

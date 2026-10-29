@@ -1,0 +1,415 @@
+/* Step timings (round 10, legacy latency_traces.css .lt-steps): a tree of steps with one shared time axis. */
+.box {
+  min-width: 0;
+  scroll-margin-top: calc(var(--report-nav-h, 0px) + var(--space-md));
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+  padding-block: var(--space-xs);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title,
+.desc {
+  margin: 0;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.scroller {
+  overflow-x: auto;
+}
+
+.table {
+  --cols: minmax(220px, 280px) minmax(0, 1fr) 80px 92px 96px 64px;
+
+  display: flex;
+  flex-direction: column;
+  min-width: 760px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: var(--cols);
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background-color var(--transition-fast);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row:not(.axisRow):hover {
+  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+}
+
+.row[data-phase] {
+  min-height: 40px;
+  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
+}
+
+.row[data-flash] {
+  animation: row-flash 1.4s ease-out;
+}
+
+.axisRow {
+  min-height: 28px;
+  border-bottom-color: var(--border-default);
+}
+
+.cell,
+.num,
+.stepHead {
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.row > :first-child {
+  padding-left: 0;
+}
+
+.row > :last-child {
+  padding-right: 0;
+}
+
+.stepHead {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.num {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.key {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.headButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.headButton:hover,
+.headButton:not([data-sort='none']) {
+  color: var(--text-primary);
+}
+
+.headButton:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.headButton[data-sort='descending']::after {
+  color: var(--accent-primary);
+  content: '↓';
+}
+
+.headButton[data-sort='ascending']::after {
+  color: var(--accent-primary);
+  content: '↑';
+}
+
+.ticks {
+  position: relative;
+  min-height: 28px;
+}
+
+.ticks span {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--x) * 1%);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+.ticks span:first-child {
+  transform: translate(0, -50%);
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: 6px 0 6px calc(var(--depth, 0) * 20px);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+button.label {
+  cursor: pointer;
+}
+
+button.label:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.labelText {
+  min-width: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  overflow-wrap: anywhere;
+}
+
+.row[data-words] .labelText {
+  font-family: var(--font-sans);
+}
+
+.row[data-group] .labelText {
+  font-weight: 650;
+}
+
+/* The model moves to the next line as a whole when it does not fit beside the name. */
+.labelText small {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 400;
+}
+
+.labelText mark {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent-primary) 25%, transparent);
+  color: inherit;
+}
+
+.count {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.chev {
+  flex: 0 0 14px;
+  color: var(--text-muted);
+  transition:
+    rotate var(--transition-fast),
+    color var(--transition-fast);
+}
+
+button.label[aria-expanded='true'] .chev {
+  color: var(--accent-primary);
+  rotate: 90deg;
+}
+
+.chevSpace {
+  flex: 0 0 14px;
+  width: 14px;
+}
+
+.track {
+  position: relative;
+  height: 36px;
+}
+
+.row[data-phase] .track {
+  height: 40px;
+}
+
+.gridLines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gridLines i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--x) * 1%);
+  width: 0;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.iv {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 0;
+}
+
+.whisker {
+  position: absolute;
+  top: -0.75px;
+  left: calc(var(--a) * 1%);
+  width: calc((var(--b) - var(--a)) * 1%);
+  height: 1.5px;
+  background: var(--tone);
+  opacity: 0.6;
+}
+
+.ivBox {
+  position: absolute;
+  top: -6px;
+  left: calc(var(--a) * 1%);
+  width: max(2px, calc((var(--b) - var(--a)) * 1%));
+  height: 12px;
+  border-radius: 3px;
+  background: var(--tone);
+  opacity: 0.8;
+}
+
+.ivMed {
+  position: absolute;
+  top: -9px;
+  left: calc(var(--a) * 1%);
+  width: 2px;
+  height: 18px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text-primary);
+}
+
+.ivMean {
+  position: absolute;
+  top: -4px;
+  left: calc(var(--a) * 1%);
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border: 1.5px solid var(--tone);
+  background: var(--bg-elevated);
+  transform: rotate(45deg);
+}
+
+/* A red count pill; no errors is a quiet dash. */
+.errPill {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error-text);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.none {
+  color: var(--text-muted);
+}
+
+.empty {
+  padding: var(--space-lg) 0;
+  color: var(--text-muted);
+  font-size: var(--font-base);
+  text-align: center;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.legendKey {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kWhisker {
+  width: 16px;
+  border-top: 1.5px solid var(--text-muted);
+}
+
+.kBox {
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0.7;
+}
+
+.kMed {
+  width: 2px;
+  height: 12px;
+  background: var(--text-primary);
+}
+
+.kMean {
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--text-muted);
+  transform: rotate(45deg);
+}
+
+.note {
+  margin-left: auto;
+}
+
+@keyframes row-flash {
+  0%,
+  30% {
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  }
+
+  100% {
+    background: transparent;
+  }
+}

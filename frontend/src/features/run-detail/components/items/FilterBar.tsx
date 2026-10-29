@@ -75,7 +75,6 @@ export function FilterBar({ display }: { display: DisplayState }) {
     ? SHOW_OPTIONS
     : [...SHOW_OPTIONS, { value: view.show, label: view.show.replace(/_/g, ' ') }];
 
-  const metricItems = model.metricNames.map((n) => ({ key: n, label: n }));
   // A union run: the Dataset select lists each source dataset with its item count (QC-U22).
   const union = isUnionRun(payload.run);
   const datasetItems = union
@@ -126,17 +125,12 @@ export function FilterBar({ display }: { display: DisplayState }) {
             />
           </span>
         ) : null}
-        {metricItems.length > 1 ? (
-          <Select
-            label="Analysis metric"
-            items={metricItems}
-            value={metric}
-            onChange={(k) =>
-              k &&
-              api.setView({ metric: String(k) === model.defaultMetric ? null : String(k), threshold: null })
-            }
-            width="clamp(14ch, 11vw, 16ch)"
-          />
+        {/* the page metric is picked in the sticky nav (round 10); the Items bar names it */}
+        {metric ? (
+          <span className={styles.metricNow} data-testid="items-metric">
+            <span className={styles.metricNowLabel}>Metric</span>
+            <span className={styles.metricNowValue}>{metric}</span>
+          </span>
         ) : null}
         {hasThreshold ? (
           <Slider

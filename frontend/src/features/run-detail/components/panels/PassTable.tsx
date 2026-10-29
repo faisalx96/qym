@@ -1,21 +1,19 @@
-/** "By pass" (round 3 P2): one DataTable in a flush Card; the selected metric by default, a Metrics picker for more columns. */
+/**
+ * "By pass" (round 10, the first qym's table): the main table of the repeat analysis, right under the tiles. One row
+ * per pass, every metric as a column (no picker), then Avg latency and Median latency (with the ⚡ glyph), Errors and
+ * Items. Values are centred; the best and the worst pass of each metric carry a tag on the same line. A row
+ * lights its edge on hover (`hoverEdge`); nothing resizes or reorders.
+ */
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { formatPercent, type MetricDirection } from '@/lib/metrics';
-import { Card, DataTable, MultiSelect, ScoreValue, Tag, Text, type Column, type Key } from '@/ui';
+import { DataTable, ScoreValue, Tag, type Column } from '@/ui';
 import type { RunModel } from '../../lib/runModel';
 import { latencyLabel } from '../../lib/rowDisplay';
 import type { PassSummary } from '../../types';
 import styles from './Repeat.module.css';
 
-/** Columns that are not metrics but can be picked when the table is compact. */
-export const STAT_COLUMNS = [
-  { key: 'col:latency', label: 'Avg latency' },
-  { key: 'col:median', label: 'Median latency' },
-  { key: 'col:items', label: 'Items' },
-] as const;
-
-/** Best and worst pass on the selected metric (null when fewer than two differ, or the metric has no direction). */
+/** Best and worst pass on one metric (null when fewer than two differ, or the metric has no direction). */
 export function passExtremes(
   passes: Array<{ pass_number: number; metric_means?: Record<string, number | null> | null }>,
   metric: string,
@@ -31,205 +29,140 @@ export function passExtremes(
   return { best: sorted[0]!.n, worst: sorted[sorted.length - 1]!.n };
 }
 
-/** The metric columns shown, selected one first, then the extra picks in run order. */
-export function shownMetrics(metricNames: string[], selected: string, extra: Set<string>): string[] {
-  return [selected, ...metricNames.filter((m) => m !== selected && extra.has(m))];
-}
-
 export interface PassTableProps {
   passes: PassSummary[];
   model: RunModel;
+  /** The page metric: its column comes first. */
   metric: string;
   basePath: string;
-  /** Metric columns picked beyond the selected one. */
-  extraMetrics: Set<string>;
-  onExtraMetrics: (next: Set<string>) => void;
-  /** Stat columns picked while compact. */
-  extraStats: Set<string>;
-  onExtraStats: (next: Set<string>) => void;
-  /** Under 640px of column the table keeps Pass, the metric and Errors; the others are picked in the menu. */
-  compact: boolean;
   medianHint: string;
   queued: string | null;
 }
 
-function metricText(model: RunModel, m: string, v: number | null | undefined): string {
-  if (v == null) return '—';
+function metricText(model: RunModel, m: string, v: number): string {
   return model.metricTypes[m] === 'numeric' ? String(Math.round(v * 10) / 10) : formatPercent(v, 1);
 }
 
-export function PassTable({
-  passes,
-  model,
-  metric,
-  basePath,
-  extraMetrics,
-  onExtraMetrics,
-  extraStats,
-  onExtraStats,
-  compact,
-  medianHint,
-  queued,
-}: PassTableProps) {
-  const direction: MetricDirection = model.metricDirections[metric] ?? null;
-  const extremes = useMemo(() => passExtremes(passes, metric, direction), [passes, metric, direction]);
-  const shown = shownMetrics(model.metricNames, metric, extraMetrics);
-  const showStat = (key: string) => !compact || extraStats.has(`col:${key}`);
-
-  const metricColumn = (m: string, selected: boolean): Column<PassSummary> => ({
-    id: `metric:${m}`,
-    header: m,
-    label: m,
-    type: 'text',
-    align: 'end',
-    mono: true,
-    width: compact ? 102 : undefined,
-    minWidth: compact ? 80 : 128,
-    cell: (p) => {
-      const v = p.metric_means?.[m];
-      const dir = model.metricDirections[m] ?? null;
-      return (
-        <span
-          className={styles.metricCell}
-          data-selected={selected ? '' : undefined}
-          data-compact={compact ? '' : undefined}
-        >
-          {v == null ? (
-            '—'
-          ) : (
-            <ScoreValue
-              value={v}
-              type={model.metricTypes[m]}
-              direction={dir}
-              digits={1}
-              text={metricText(model, m, v)}
-            />
-          )}
-          {selected && extremes.best === p.pass_number ? <Tag tone="success">best</Tag> : null}
-          {selected && extremes.worst === p.pass_number ? <Tag tone="danger">worst</Tag> : null}
-        </span>
-      );
-    },
-  });
-
+export function PassTable({ passes, model, metric, basePath, medianHint, queued }: PassTableProps) {
+  const metrics = useMemo(
+    () => [metric, ...model.metricNames.filter((m) => m !== metric)],
+    [metric, model.metricNames],
+  );
+  const extremes = useMemo(
+    () =>
+      new Map(metrics.map((m) => [m, passExtremes(passes, m, model.metricDirections[m] ?? null)] as const)),
+    [metrics, passes, model.metricDirections],
+  );
   const columns: Column<PassSummary>[] = [
     {
       id: 'pass',
       header: 'Pass',
       label: 'Pass',
-      pin: 'start',
-      lockOrder: true,
-      width: compact ? 76 : undefined,
-      minWidth: compact ? 72 : 104,
+      resizable: false,
       cell: (p) => (
         <Link
           to={`${basePath}?pass=${p.pass_number}`}
           aria-label={`Open pass ${p.pass_number}`}
           className={styles.passLink}
         >
-          <Tag kind="count">Pass {p.pass_number}</Tag>
+          <span className={styles.passDot} aria-hidden="true" />
+          Pass {p.pass_number}
         </Link>
       ),
     },
-    metricColumn(metric, true),
-    ...shown.slice(1).map((m) => metricColumn(m, false)),
-    ...(showStat('latency')
-      ? [
-          {
-            id: 'latency',
-            header: 'Avg latency',
-            label: 'Avg latency',
-            align: 'end' as const,
-            mono: true,
-            cell: (p: PassSummary) => (p.avg_latency_ms != null ? latencyLabel(p.avg_latency_ms) : '—'),
-          },
-        ]
-      : []),
-    ...(showStat('median')
-      ? [
-          {
-            id: 'median',
-            header: 'Median',
-            label: 'Median latency',
-            hint: medianHint,
-            align: 'end' as const,
-            mono: true,
-            cell: (p: PassSummary) => (p.median_latency_ms != null ? latencyLabel(p.median_latency_ms) : '—'),
-          },
-        ]
-      : []),
+    ...metrics.map((m): Column<PassSummary> => ({
+      id: `metric:${m}`,
+      header: m,
+      label: m,
+      align: 'center',
+      resizable: false,
+      cell: (p) => {
+        const v = p.metric_means?.[m];
+        const ext = extremes.get(m);
+        const dir: MetricDirection = model.metricDirections[m] ?? null;
+        return (
+          <span className={styles.metricCell} data-selected={m === metric ? '' : undefined}>
+            {v == null ? (
+              <span className={styles.none}>—</span>
+            ) : (
+              <ScoreValue
+                value={v}
+                type={model.metricTypes[m]}
+                direction={dir}
+                digits={1}
+                variant="plain"
+                text={metricText(model, m, v)}
+              />
+            )}
+            <span className={styles.extreme}>
+              {ext?.best === p.pass_number ? <Tag tone="success">best</Tag> : null}
+              {ext?.worst === p.pass_number ? <Tag tone="danger">worst</Tag> : null}
+            </span>
+          </span>
+        );
+      },
+    })),
+    {
+      id: 'latency',
+      header: (
+        <>
+          <span className={styles.bolt} aria-hidden="true">
+            ⚡
+          </span>
+          Avg latency
+        </>
+      ),
+      label: 'Avg latency',
+      align: 'center',
+      mono: true,
+      resizable: false,
+      cell: (p) => (p.avg_latency_ms != null ? latencyLabel(p.avg_latency_ms) : '—'),
+    },
+    {
+      id: 'median',
+      header: (
+        <>
+          <span className={styles.bolt} aria-hidden="true">
+            ⚡
+          </span>
+          Median latency
+        </>
+      ),
+      label: 'Median latency',
+      hint: medianHint,
+      align: 'center',
+      mono: true,
+      resizable: false,
+      cell: (p) => (p.median_latency_ms != null ? latencyLabel(p.median_latency_ms) : '—'),
+    },
     {
       id: 'errors',
       header: 'Errors',
       label: 'Errors',
-      width: compact ? 56 : undefined,
-      minWidth: compact ? 44 : 56,
-      align: 'end',
+      align: 'center',
       mono: true,
-      cell: (p) => (
-        <span data-tone={(p.error_count ?? 0) > 0 ? 'danger' : undefined} className={styles.errors}>
-          {p.error_count ?? 0}
-        </span>
-      ),
-    },
-    ...(showStat('items')
-      ? [
-          {
-            id: 'items',
-            header: 'Items',
-            label: 'Items',
-            align: 'end' as const,
-            mono: true,
-            cell: (p: PassSummary) => p.items_total ?? '',
-          },
-        ]
-      : []),
-  ];
-
-  const pickable = [
-    ...model.metricNames.map((m) => ({ key: m as Key, label: m })),
-    ...(compact ? STAT_COLUMNS.map((c) => ({ key: c.key as Key, label: c.label })) : []),
-  ];
-  const value = new Set<Key>([metric, ...extraMetrics, ...extraStats]);
-  const onChange = (next: Set<Key>) => {
-    const metrics = new Set<string>();
-    const stats = new Set<string>();
-    next.forEach((k) => {
-      const key = String(k);
-      if (key === metric) return;
-      if (key.startsWith('col:')) stats.add(key);
-      else metrics.add(key);
-    });
-    onExtraMetrics(metrics);
-    onExtraStats(stats);
-  };
-
-  return (
-    <Card
-      as="section"
-      aria-label="Passes"
-      flush
-      className={styles.passCard}
-      header={
-        <div className={styles.passHead}>
-          <span className={styles.title}>By pass</span>
-          <span className={styles.passHeadRight}>
-            <Text variant="sm" tone="muted" data-testid="metrics-shown">
-              Metrics shown: {metric} ({shown.length} of {model.metricNames.length})
-            </Text>
-            {model.metricNames.length > 1 ? (
-              <MultiSelect
-                label="Metrics"
-                items={pickable}
-                value={value}
-                onChange={onChange}
-                onlyAction={false}
-              />
-            ) : null}
+      resizable: false,
+      cell: (p) => {
+        const n = p.error_count ?? 0;
+        return (
+          <span className={styles.errors} data-tone={n > 0 ? 'danger' : undefined}>
+            {n}
           </span>
-        </div>
-      }
-    >
+        );
+      },
+    },
+    {
+      id: 'items',
+      header: 'Items',
+      label: 'Items',
+      align: 'center',
+      mono: true,
+      resizable: false,
+      cell: (p) => p.items_total ?? '',
+    },
+  ];
+  return (
+    <section className={styles.passCard} aria-label="By pass">
       <DataTable<PassSummary>
         aria-label="Passes"
         columns={columns}
@@ -239,6 +172,7 @@ export function PassTable({
         densityLocked
         columnMenu={false}
         zebra={false}
+        hoverEdge
         variant="embedded"
         stickyHeader={false}
         responsive="scroll"
@@ -248,6 +182,6 @@ export function PassTable({
           {queued}
         </p>
       ) : null}
-    </Card>
+    </section>
   );
 }

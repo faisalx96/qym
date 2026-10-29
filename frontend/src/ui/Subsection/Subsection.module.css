@@ -1,0 +1,39 @@
+/* Subsection (round 10): accent bar, title and description on one line, body below. */
+.sub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.sub + .sub {
+  margin-block-start: var(--space-lg);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+  padding-inline-start: var(--space-sm);
+  border-inline-start: 3px solid var(--accent-primary);
+}
+
+.title,
+.desc {
+  margin: 0;
+}
+
+.desc {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.aside {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-inline-start: auto;
+}

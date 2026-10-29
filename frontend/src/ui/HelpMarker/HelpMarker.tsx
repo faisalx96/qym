@@ -14,7 +14,8 @@ export interface HelpMarkerProps {
 }
 
 /**
- * 12px "i" marker. Hover/focus opens; click/Enter/Space pins; Escape, outside
+ * 12px "i" marker: a filled accent disc with the letter cut out, the same at rest and on hover (round 10: the
+ * outline marker read as weak and its italic "i" sat off centre; the tooltip is the only hover change). Hover/focus opens; click/Enter/Space pins; Escape, outside
  * click, scroll and resize close. The tooltip body is also rendered inline
  * (visually hidden) and referenced by aria-describedby.
  */
@@ -76,7 +77,12 @@ export function HelpMarker({ label, children }: HelpMarkerProps) {
           setPinned((p) => !p);
         }}
       >
-        i
+        {/* a drawn glyph, not the letter: an italic "i" sat off centre in the 12px circle (round 10) */}
+        <svg className={styles.glyph} viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+          <circle cx="6" cy="6" r="6" className={styles.disc} />
+          <circle cx="6" cy="3.4" r="1.05" className={styles.letter} />
+          <rect x="5.1" y="5.1" width="1.8" height="4.4" rx="0.6" className={styles.letter} />
+        </svg>
       </AriaButton>
       <span id={id} className={styles.srOnly}>
         {children}

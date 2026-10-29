@@ -1,12 +1,14 @@
-/* Hero pager capsule: arrows around "N of M" (brief 04 J9). */
+/* Hero pager: arrows around "N of M" (brief 04 J9). Round 10: the neutral button's 24px box and fill, so it lines up
+   with Export HTML beside it (the pill was a different height). */
 .pager {
   display: inline-flex;
   align-items: center;
+  box-sizing: border-box;
+  min-block-size: 24px;
   gap: var(--space-xs);
-  padding-block: var(--space-xs);
-  padding: 0 var(--space-xs);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-pill);
+  padding: 0 2px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
   font-size: var(--font-sm);
   color: var(--text-muted);
 }

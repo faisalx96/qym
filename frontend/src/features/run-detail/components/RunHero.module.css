@@ -1,7 +1,43 @@
-/* Run hero (round 3 P6): three bands, nothing behind a chevron. */
+/* Run hero (round 3 P6): three bands, nothing behind a chevron. Round 10: the first qym's look, a 2px accent gradient
+   along the top edge and a faint accent wash from the top-left corner, instead of a status-coloured side rail. */
 .hero {
   container-type: inline-size;
   min-width: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse at 10% 0%,
+      color-mix(in srgb, var(--accent-primary) 7%, transparent) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 90% 100%,
+      color-mix(in srgb, var(--accent-tertiary) 5%, transparent) 0%,
+      transparent 50%
+    ),
+    var(--card-bg);
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--accent-primary) 0%,
+    var(--accent-secondary) 45%,
+    var(--accent-tertiary) 75%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* the status follows the name and the passes tag */
+.status {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: var(--space-xs);
 }
 
 .heroBody {
@@ -64,7 +100,7 @@
 .fact {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-xs);
   min-inline-size: 0;
 }
 
@@ -76,11 +112,16 @@
   color: var(--text-muted);
 }
 
+/* every value takes a tag's height, so plain values (owner, project, started) sit level with the tagged ones (round 10) */
 .factValue {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--badge-height);
   min-inline-size: 0;
   margin: 0;
   overflow: hidden;
   font-size: var(--font-base);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);

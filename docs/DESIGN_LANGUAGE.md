@@ -86,6 +86,9 @@ entry is a deliberate exemption, named in the commit message.
 
 ### Font families
 
+- Body text is weight 450 (Plex Sans is variable, 400 to 700) with font hinting on (no
+  `text-rendering: geometricPrecision`): at 400, and with hinting off, 11 to 13px text drew thin and blurred under
+  Windows ClearType next to the first qym's Segoe UI (round 10). Explicit weights (500, 600, 650, 700) are unchanged.
 - `--font-sans` — everything humans read: names, descriptions, prose, buttons,
   headers, labels.
 - `--font-mono` — **data only**: IDs, row numbers, JSON, code, metric/latency
@@ -237,9 +240,12 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   switching uses `SegmentedControl`: 24px high, only the selected option has the
   Qym-green fill, one sliding indicator, no motion under
   `prefers-reduced-motion`. Pages never add their own selection animation. The
-  run detail page's sticky section nav (jump links, `aria-current` on the section
-  in view, sliding green underline, page-wide Filters + Clear, back-to-top) is
-  the one jump-link variant; no percentages or progress bars in it.
+  run detail page's sticky section nav (jump links at `--font-md` / 600 with the section in view in the accent and a 2px
+  accent underline on the bar's edge, the page metric, page-wide Filters + Clear, back-to-top) is
+  the one jump-link variant; no percentages or progress bars in it. The page metric (round 10) is one control in the
+  nav: chips while the metrics are five or fewer and the window is at least 1680px wide, else one `Select`. Every
+  section follows it (Repeat tiles and curves, Quality vs latency, Categories, the Items analysis); no section carries
+  its own metric picker, and each names the metric it shows.
 
 - **Disclosure** (`Disclosure`): a closed-by-default group inside a section,
   one trigger row (chevron, `--font-md` title, muted `--font-sm` summary such as
@@ -288,7 +294,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 - **Explanations** (`HelpMarker`, `Tooltip`): the focusable 12px
   `--info-marker-size` marker with a tooltip (`role="tooltip"`). Hover/focus
-  opens it, click/touch pins it, outside click and Escape close it.
+  opens it, click/touch pins it, outside click and Escape close it. The marker is a filled accent disc with the "i" cut
+  out (a drawn glyph, centred), the same at rest and on hover: the tooltip is the only hover change (round 10).
 
 - **Dialog and Drawer** (`Dialog`, `ConfirmDialog`, `FormDialog`, `Drawer`,
   `Popover`, `Toast`): title `--font-xl`, body `--font-sm`-`--font-base`
@@ -450,11 +457,21 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   compact model-card metric matrices are not stat strips. With a section
   heading, use the compact one-row variant.
 
-- **Stat tiles** (`ui/StatTiles`, round 3 P2): seven or fewer equal, separate, centred tiles (the repeat analysis). Each is a
-  passive `Card compact rail="bottom"` (rail in the value's band; none for latency and errors): a `--font-sm` 600 uppercase
-  label with its `HelpMarker`, the value in `--font-stat` mono, one plain sentence in `--font-sm` muted (at most 22ch wide).
-  No groups, no hover. The grid answers to the report column: one row of N from 900px, a 12-column 4 + 3 split below that,
-  two per row and a full-width last tile under 480px. `StatStrip` stays for connected summary bands.
+- **Stat tiles** (`ui/StatTiles`, round 10: the first qym's strip): seven or fewer equal cells in one framed strip
+  (1px `--border-subtle`, `--radius-md`), parted by hairlines (the repeat analysis). Each cell: a `--font-md` 600
+  `--text-secondary` label with its `HelpMarker`, the value in `--font-xl` mono 700 in its band colour. The help marker
+  explains the figure, so no sentence is drawn under the value (it is the cell's tooltip and accessible description); no
+  rails, no groups, no hover. The grid answers to the report column: one row of N from 900px, a 12-column 4 + 3 split
+  below that, two per row and a full-width last cell under 480px. `StatStrip` stays for connected summary bands; its
+  `compact-header` variant (a section head's counts) draws the number at `--font-md` with a 20px icon tile.
+
+- **Subsection** (`ui/Subsection`, round 10): a named part inside a report section (Repeat performance, Between
+  metrics, Across passes, Response time, Inside the traces): a 3px `--accent-primary` bar at the inline start, the
+  `--font-md` / 650 title and one muted `--font-sm` line on the same line, controls at the end, then the body; 20px
+  between two subsections. It is the one sub-grouping recipe of the report pages; a card title is never a subsection.
+
+- **Section boundary** (`ui/SectionBoundary`, round 10): every report section's body renders inside one, so a render
+  error shows a compact `ErrorState` with Retry in that section and never blanks the page.
 
 - **Scores** (`ScoreValue`): score-bearing values use the five-band
   `--score-1..5` ramp, direction-aware via `src/lib/metrics.ts`. Lower-is-better
@@ -618,9 +635,14 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   overlay in tab order. Rows (`BoxTrack`) draw the same glyph per pass and per step. Box plot cards flow in their own grid rows under the
   histograms (`slot="box"`: 80px plot, no 146px minimum).
 
-- **Categories** (run detail, round 3 P3): one key at a time. A `SegmentedControl` "Category" (up to 5 keys that fit the column,
-  else a searchable `Select`; stored in `?category=`) over one `Card`: header with the key, the value count, the "Overall average"
-  tick legend and an Order control (worst first by default); rows `[value][bar + %][items][pass][latency]` as buttons that toggle the
+- **Categories** (run detail, round 10): a control row (a `SegmentedControl` Cards | Compare, stored in
+  `?category_view=`, Cards by default; the metric and its overall average; one Sort button, worst first by default,
+  that orders both views). **Cards** shows up to three keys at first (the widest spread first), turned on and off with
+  checkboxes (never pills); each key is a title and a grid of value cards: the value name in its band colour, Average,
+  Items and Latency, and a 6px bar with the overall-average tick; a card toggles the item filter (accent outline when
+  on). **Compare** ranks one key, chosen with a `SegmentedControl` "Category" (up to 5 keys that fit the column,
+  else a searchable `Select`; stored in `?category=`), in one `Card`: header with the key, the value count and the
+  "Overall average" tick legend; no insight sentence; rows `[value][bar + %][items][pass][latency]` as buttons that toggle the
   item filter (`aria-pressed`, `--bg-selected` and an accent bar, never a band fill). The bar follows the value name (value column at
   most 220px), is a 12px track in the average's band (neutral without a direction) with a 2 x 18px `--text-primary` tick at the
   overall average. Six rows show first, then "Show all N values". Under 640px a row is two lines (name, items, pass / full-width bar).
@@ -629,10 +651,41 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 Recipes that exist only on the run report. They compose the primitives above and follow the same rules.
 
-- **Run header** (round 3 P6): three bands, nothing behind a chevron. Band 1 identity and actions (name, passes tag, Copy run id,
-  status, Export, pager; a stop reason is one muted line under it). Band 2 seven labelled facts (`dl`, 7 / 4 / 2 columns by
-  column width). Band 3 `KeyValueTag` chips (24px passive key / value, key at most 20 characters, value at most 30) in the groups
-  Versioning, Config, Metadata, clamped to two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`).
+- **Run header** (round 3 P6, round 10): three bands, nothing behind a chevron. Band 1 identity (name, passes tag, Copy run
+  id, the status mark beside them) and actions (Export, pager, both 24px; a stop reason is one muted line under it). Band 2
+  seven labelled facts (`dl`, 7 / 4 / 2 columns by column width), every value at the tag height and 600 so plain values sit
+  level with tagged ones; the model tag carries the model recipe (series dot and tint). Band 3 `KeyValueTag` chips (24px
+  passive key / value, key at most 20 characters, value at most 30) in the groups Versioning, Config, Metadata, clamped to
+  two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`). The card is the first qym's: a 2px
+  accent gradient along the top edge (accent, secondary, tertiary, fading out) and a faint accent wash from the top-left
+  corner; no status rail.
+
+- **Overview cards** (round 10, the first qym's card): a 40px score ring in the band colour and the mean, the metric name
+  and the error note under them (a warning glyph, the counts, and the key of the hatch the bars draw for errored items),
+  the scored count at the top end, then the plot. No header band, no side rail. Three cards to a row at 1440. A plain
+  number (a numeric metric, tokens per item when the traces carry tokens) is the same frame with the mean, "mean per
+  item", a Total · Min · Median · Max line and the box plot. Cost per item is not shown (a default every attempt reports).
+
+- **Repeat run analysis** (round 10, the first qym's order): the page metric and the Pass if threshold (an inline
+  `Slider`: dark thumb with an accent ring that glows on hover, the value in the accent), the stat tiles, the By pass
+  table, then the "Repeat performance" subsection: Performance across attempts (Compare / Pass@k / Pass^k / Average,
+  Chart | Table; a line-sample legend with "95% CI" under the head; every point labelled when the plot is at least 640px;
+  y in fifths; "Attempts allowed") beside Pass distribution (one description line, no caption). **By pass** is a
+  `DataTable` with `hoverEdge` (the row under the pointer draws an accent edge), nothing resizable: Pass (a dot and the
+  pass, a link), every metric (the page metric first) centred with a fixed 44px slot for its best / worst tag, ⚡ Avg
+  latency, ⚡ Median latency, Errors (red above 0), Items. The per-pass score spread lives in Deep analysis, "Across
+  passes".
+
+- **Deep analysis** (round 10): "Between metrics", the correlation matrix (positive towards `--accent-primary`, negative
+  towards `--accent-tertiary`) beside the relationship scatter from 1000px of column; the scatter's X and Y pickers and r
+  sit in its head, its legend on its own row under the head. For a repeat run, "Across passes": the page metric's box
+  per pass.
+
+- **Errors** (round 10): one group per kind (Task, Metric, Trace, Analysis): a 24px icon tile and the title in the kind's
+  colour (`--error`, `--metric-error`, `--warning`, `--accent-tertiary`), its total, and one muted line on what the kind
+  means for the numbers; then message cards in a grid (no table, no sideways scroll): the message and its detail, the
+  count in `--font-xl` mono in the kind's colour with "errors · N items", and a 4px bar of its share of the kind. A card
+  toggles the item filter (`aria-pressed`, an outline in the kind's colour).
 
 - **Items table header and ItemBar** (round 3 P4): the column header sticks at the sticky line only over collapsed rows. For an
   expanded item it is held above the detail (it stops when its bottom touches the detail's top, scrolls away, and returns to the line

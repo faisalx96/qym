@@ -1,0 +1,602 @@
+/* Response time (round 10, legacy latency_traces.css): latency distribution (hero, spectrum, histogram) beside quality vs latency. */
+.sub {
+  gap: var(--space-md);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: var(--space-md);
+}
+
+.pair[data-single] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* The section body is a size container: stack the two cards on a narrow column. */
+@container (max-width: 860px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.box {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+  padding-block: var(--space-xs);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: var(--chip-height);
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title,
+.desc {
+  margin: 0;
+}
+
+/* The page metric, named quietly: it is set in the sticky section nav. */
+.metricName {
+  flex: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+/* ── Latency distribution: the mean, the spectrum, then the shape ── */
+.lathead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-lg);
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-bottom: 2px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.heroValue {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-stat);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+}
+
+.heroValue small {
+  margin-left: var(--space-xs);
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.heroSub {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.diamond {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--text-primary);
+  border-radius: 1.5px;
+  background: var(--bg-elevated);
+  transform: rotate(45deg);
+}
+
+/* A narrow card puts the spectrum under the mean, so the pins keep a row of their own. */
+@container (max-width: 480px) {
+  .lathead {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+}
+
+/* On a phone the pins tighten so a shared chip of three still fits the track. */
+@container (max-width: 360px) {
+  .pin {
+    gap: var(--space-xs);
+    padding-inline: 6px;
+  }
+}
+
+/* Spectrum: one track, fastest to slowest, on the bars' colour ramp. */
+.spectrum {
+  position: relative;
+  min-width: 0;
+  padding-top: 42px;
+}
+
+.track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--score-5) 38%, var(--bg-surface)) 0%,
+    color-mix(in srgb, var(--score-4) 42%, var(--bg-surface)) var(--p50),
+    color-mix(in srgb, var(--score-3) 62%, var(--bg-surface)) var(--p90),
+    color-mix(in srgb, var(--score-2) 75%, var(--bg-surface)) var(--p95),
+    color-mix(in srgb, var(--score-1) 85%, var(--bg-surface)) 100%
+  );
+}
+
+/* The pins' group adds no box of its own. */
+.pins {
+  display: contents;
+}
+
+/* Pin chips: one row above the track. Close pins share a chip and a bracket. */
+.pinset {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 42px;
+  pointer-events: none;
+}
+
+.pinchip {
+  position: absolute;
+  top: 0;
+  left: calc(var(--c) * 1%);
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-popover);
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+
+/* Once the spectrum is measured, the chip sits where pinChips placed it. */
+.pinchip[data-placed] {
+  left: var(--left);
+  transform: none;
+}
+
+.pin {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: var(--space-xs) 9px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-fast);
+}
+
+.pin + .pin {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.pin:hover,
+.pin:focus-visible {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+}
+
+.pin:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.pin em {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.pin b {
+  color: var(--tone);
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stem {
+  position: absolute;
+  top: 28px;
+  bottom: -4px;
+  left: calc(var(--x) * 1%);
+  width: 1.5px;
+  margin-left: -0.75px;
+  background: var(--tone);
+  opacity: 0.9;
+}
+
+.pinset[data-multi] .stem {
+  top: 34px;
+}
+
+.pinUp {
+  position: absolute;
+  top: 28px;
+  left: calc(var(--c) * 1%);
+  width: 1.5px;
+  height: 6px;
+  margin-left: -0.75px;
+  background: var(--border-strong);
+}
+
+.pinBracket {
+  position: absolute;
+  top: 34px;
+  left: calc(var(--a) * 1%);
+  width: calc((var(--b) - var(--a)) * 1%);
+  border-top: 1.5px solid var(--border-strong);
+}
+
+.ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 9px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.ends span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ends b {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* Histogram: bars stand on the plot floor; the axis sits under them with the mean diamond on its line. */
+.hist {
+  height: 196px;
+  touch-action: none;
+  user-select: none;
+}
+
+.plot {
+  position: absolute;
+  inset: 18px 0 24px;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  cursor: crosshair;
+}
+
+.bar {
+  --top: color-mix(in srgb, var(--text-secondary) 52%, transparent);
+  --base: color-mix(in srgb, var(--text-muted) 30%, transparent);
+
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: calc(var(--h) * 1%);
+  min-height: 1px;
+  border-radius: 4px 4px 1px 1px;
+  outline: none;
+  transform-origin: bottom;
+  animation: bar-rise var(--motion-fill) var(--ease-out) backwards;
+  transition:
+    opacity var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+/* One colour per bar: the band of its slowest item (p95 and up orange, p90 to p95 yellow, else neutral). */
+.bar[data-tone='p90'] {
+  --top: color-mix(in srgb, var(--score-3) 92%, transparent);
+  --base: color-mix(in srgb, var(--score-3) 50%, transparent);
+}
+
+.bar[data-tone='p95'] {
+  --top: color-mix(in srgb, var(--score-2) 95%, transparent);
+  --base: color-mix(in srgb, var(--score-2) 55%, transparent);
+}
+
+.bar:not([data-empty]) {
+  background: linear-gradient(to bottom, var(--top), var(--base));
+}
+
+.bar[data-empty] {
+  height: 1px;
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+/* The task-error share of a bar, hatched at its top. */
+.bar::after {
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--e);
+  border-radius: 4px 4px 0 0;
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--error) 85%, transparent) 0 2px,
+    transparent 2px 5px
+  );
+  content: '';
+}
+
+.bar:hover {
+  filter: brightness(var(--hover-brightness));
+}
+
+.bar:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.count {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* A pin hover lights the bars holding its items, labelled with how many; the rest fade. */
+.hist[data-focus] .bar:not([data-lit]) {
+  opacity: 0.16;
+}
+
+.hist[data-focus] .bar[data-lit] .count {
+  color: var(--text-primary);
+}
+
+.hist[data-selection] .bar[data-out] {
+  opacity: 0.22;
+}
+
+.histGrid {
+  position: absolute;
+  inset: 18px 0 24px;
+  pointer-events: none;
+}
+
+.histGrid i {
+  position: absolute;
+  right: 0;
+  bottom: calc(var(--y) * 1%);
+  left: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--border-default) 70%, transparent);
+}
+
+.brush {
+  position: absolute;
+  top: -2px;
+  bottom: 0;
+  left: calc(var(--a) * 1%);
+  width: calc(var(--w) * 1%);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  pointer-events: none;
+}
+
+.axis {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.axis span {
+  position: absolute;
+  top: 4px;
+  left: calc(var(--x) * 1%);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.meanMark {
+  position: absolute;
+  top: -5px;
+  left: calc(var(--x) * 1%);
+  margin-left: -4px;
+}
+
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+/* ── Quality vs latency ── */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  list-style: none;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swZone {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.swZone[data-zone='good'] {
+  background: color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.swZone[data-zone='bad'] {
+  background: color-mix(in srgb, var(--error) 30%, transparent);
+}
+
+.swPass {
+  width: 14px;
+  border-top: 1.5px solid var(--success);
+}
+
+.swLine {
+  width: 14px;
+  border-top: 1px dashed var(--text-muted);
+}
+
+.swRing {
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--error);
+  border-radius: 50%;
+}
+
+.scatter {
+  position: relative;
+  height: 250px;
+  min-width: 0;
+}
+
+.scatter svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.tick {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.zoneLabel {
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.zoneLabel[data-zone='good'] {
+  fill: var(--success);
+}
+
+.zoneLabel[data-zone='bad'] {
+  fill: var(--error);
+}
+
+.zoneGood {
+  fill: var(--success);
+  fill-opacity: 0.07;
+}
+
+.zoneBad {
+  fill: var(--error);
+  fill-opacity: 0.07;
+}
+
+.hatch {
+  stroke: var(--error);
+  stroke-opacity: 0.22;
+  stroke-width: 2;
+}
+
+.gridLine {
+  stroke: var(--border-subtle);
+}
+
+.passLine {
+  stroke: var(--success);
+  stroke-width: 1.25;
+}
+
+.medianLine {
+  stroke: var(--text-muted);
+  stroke-dasharray: 3 4;
+}
+
+.dot {
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+/* the page's outcome colours (DESIGN_LANGUAGE §3.5, as the Deep analysis scatter): pass band 5, fail band 1; the
+   legacy sky blue would read as the LLM kind colour in the same section */
+.dot[data-outcome='pass'] {
+  fill: var(--score-5);
+  fill-opacity: 0.85;
+}
+
+.dot[data-outcome='fail'] {
+  fill: var(--score-1);
+  fill-opacity: 0.85;
+}
+
+.dot[data-outcome='error'] {
+  fill: var(--bg-elevated);
+  stroke: var(--error);
+  stroke-width: 1.75;
+}
+
+.dot:hover {
+  stroke: var(--text-primary);
+  stroke-width: 1.5;
+}
+
+.dot[data-out] {
+  opacity: 0.12;
+}
+
+.tipBad {
+  color: var(--error-text);
+}

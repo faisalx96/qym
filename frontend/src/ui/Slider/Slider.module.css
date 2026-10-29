@@ -13,7 +13,8 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-sm);
-  color: var(--text-primary);
+  font-weight: 600;
+  color: var(--accent-primary);
 }
 
 .track {
@@ -43,18 +44,31 @@
   background: var(--accent-primary);
 }
 
+/* The first qym's thumb (round 10): dark inside, an accent ring, and a soft accent glow on hover and while dragged. */
 .thumb {
   top: 50%;
   width: 14px;
   height: 14px;
   border-radius: var(--radius-pill);
-  background: var(--text-primary);
+  background: var(--bg-void);
   border: 2px solid var(--accent-primary);
   cursor: grab;
+  transition: box-shadow var(--transition-fast);
+}
+
+.thumb[data-hovered],
+.thumb[data-dragging] {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary) 25%, transparent);
 }
 
 .thumb[data-dragging] {
   cursor: grabbing;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb {
+    transition: none;
+  }
 }
 
 .thumb[data-focus-visible] {
