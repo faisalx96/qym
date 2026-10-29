@@ -225,6 +225,14 @@ and within one experiment High runs are submitted first. The API takes `job_prio
 `dataset_index`, `priority`) next to `priority`; the experiment and each job carry `priority`, and the experiment a
 `priorities` count (`{"LOW": 0, "NORMAL": 5, "HIGH": 1}`).
 
+### Environment pages
+
+Experiments -> Environments and Project settings -> Environments show the same table, and the whole row opens the environment (click
+any cell, press Enter on a focused row, Ctrl/Cmd-click for a new tab); the name is also a normal link and a chevron closes every
+row. Both entries open one page, `/projects/<project>/environments/<id>`, with Status, Schema, Tasks (what the service offers; read-only),
+LLM model groups, Default preset, Saved presets, Ranking, Policies and Connection, and a bar with Delete environment and Save changes.
+Opened from Project settings, its back link reads "Project settings"; otherwise "All environments".
+
 ## Experiments: latency-sensitive runs and credentials
 
 ### Latency-sensitive runs

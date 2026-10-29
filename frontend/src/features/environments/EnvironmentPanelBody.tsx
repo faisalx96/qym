@@ -1,7 +1,7 @@
 /**
- * Everything about one environment: Status, Schema, LLM model groups, Presets, Ranking, Policies,
- * Connection and the Delete / Save footer. Rendered as the environment page and inside the
- * project-settings drawer.
+ * Everything about one environment: Status, Schema, Tasks, LLM model groups, Presets, Ranking, Policies,
+ * Connection and the Delete / Save footer. The only host is the environment page (one route for the
+ * Experiments and the Project settings entries).
  */
 import { useState } from 'react';
 import { useEvalEnvironment } from '@/api/evalEnvironments';
@@ -9,18 +9,16 @@ import { useDelayedPending } from '@/lib/pending';
 import { useProjectContext } from '@/features/shell';
 import { ErrorState, Skeleton } from '@/ui';
 import styles from './EnvironmentPage.module.css';
-import { SchemaSection, SlotsSection, StatusSection } from './EnvironmentSections';
+import { SchemaSection, SlotsSection, StatusSection, TasksSection } from './EnvironmentSections';
 import { PresetsSection } from './PresetsSection';
 import { SettingsForm } from './SettingsForm';
 
 export interface EnvironmentPanelBodyProps {
   environmentId: string;
-  /** Present in a drawer: adds a Close button to the footer and is called after a delete. */
-  onClose?: () => void;
   onDeleted?: () => void;
 }
 
-export function EnvironmentPanelBody({ environmentId, onClose, onDeleted }: EnvironmentPanelBodyProps) {
+export function EnvironmentPanelBody({ environmentId, onDeleted }: EnvironmentPanelBodyProps) {
   const { project, slug, canManage, readOnly } = useProjectContext();
   const query = useEvalEnvironment(project.id, environmentId);
   const showSkeleton = useDelayedPending(query.isPending);
@@ -42,7 +40,7 @@ export function EnvironmentPanelBody({ environmentId, onClose, onDeleted }: Envi
 
   const env = query.data;
   return (
-    <div className={styles.body} data-env-body={env.id}>
+    <div className={styles.body} data-env-body={env.id} data-part="env-page">
       <StatusSection projectId={project.id} env={env} canEdit={canEdit} />
       <SchemaSection
         projectId={project.id}
@@ -50,6 +48,7 @@ export function EnvironmentPanelBody({ environmentId, onClose, onDeleted }: Envi
         canEdit={canEdit}
         onNeedsGrouping={() => setSlotsOpen(true)}
       />
+      <TasksSection projectId={project.id} env={env} />
       <SlotsSection
         projectId={project.id}
         env={env}
@@ -63,8 +62,7 @@ export function EnvironmentPanelBody({ environmentId, onClose, onDeleted }: Envi
         projectId={project.id}
         env={env}
         canEdit={canEdit}
-        onClose={onClose}
-        onDeleted={() => (onDeleted ?? onClose)?.()}
+        onDeleted={() => onDeleted?.()}
       />
     </div>
   );
