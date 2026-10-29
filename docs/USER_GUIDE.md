@@ -182,7 +182,13 @@ Do this before `pip wheel packages/sdk` so the wheel contains it. For developmen
 
 On the launch home view, the **Datasets** card starts as one list: pick a dataset (it runs on its Latest version, as before).
 From then on each dataset is a box with a **Versions** menu: tick Latest version, any version (newest first, drafts are
-tagged) and aliases; the chosen ones show as tags next to it. **Add another dataset** lists the project's other datasets. The
+tagged) and aliases; the chosen ones show as tags next to it. **Latest version** and an alias are resolved when you
+launch: the platform looks up the newest published version (or the version the alias points at) and writes it into every
+job as `dataset_version`, so an Evaluation Service cannot replace it with its own default version
+(`EVAL_DATASET_VERSION`). The experiment keeps your choice, a clone resolves it again, a retry keeps the pinned version,
+and the job history shows both (`latest (v7)`, `production (v2)`). A project dataset the platform cannot resolve (an
+unknown alias, no published version) is sent as chosen, with a review warning; a name that is not a project dataset is
+sent as chosen, silently. **Add another dataset** lists the project's other datasets. The
 card counts what you chose (`4 dataset versions from 2 datasets`). An experiment may name up to 20 dataset versions
 (`QYM_EVAL_MAX_DATASETS`).
 

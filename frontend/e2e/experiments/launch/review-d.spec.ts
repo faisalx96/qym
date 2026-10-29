@@ -365,8 +365,6 @@ test.describe('review of WP-D', () => {
       .evaluateAll((els) =>
         els.map((e) => e.getAttribute('aria-label') ?? e.parentElement?.textContent ?? ''),
       );
-    await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
-    const helpEach = await page.getByTestId('run-shape').locator('p').first().textContent();
     const style = (l: Locator) =>
       l.evaluate((el) => {
         const cs = getComputedStyle(el);

@@ -126,7 +126,7 @@ from qym_platform.api.eval_environments import (
     EvalClientFactory,
     get_eval_client_factory,
 )
-from qym_platform.services import eval_datasets, eval_queue, eval_sweeps
+from qym_platform.services import eval_dataset_pins, eval_datasets, eval_queue, eval_sweeps
 from qym_platform.services.eval_best_run import BestRunError
 from qym_platform.services.eval_best_run_base import official_run_job
 from qym_platform.services.eval_bindings import resolve_slot_bindings
@@ -1590,9 +1590,23 @@ def create_experiment(
     planned: List[_PlannedJob] = []
     warnings_extra: List[Dict[str, Any]] = []
     unverified: set = set()
+    # "Latest version" and alias entries are pinned to the version they resolve to now
+    # (eval_dataset_pins): one lookup per distinct entry across every combination.
+    pins: Dict[Any, eval_dataset_pins.Pin] = {}
     for combo in sweep.combos:
         combo_evaluator = combo.document.get("evaluator")
         combo_evaluator = combo_evaluator if isinstance(combo_evaluator, dict) else {}
+        combo_entries = eval_datasets.entries(combo_evaluator)
+        if not combo_entries:
+            scalar = eval_dataset_pins.scalar_entry(combo_evaluator)
+            combo_entries = [scalar] if scalar else []
+        pins.update(
+            eval_dataset_pins.pin_entries(
+                db,
+                project_id,
+                [e for e in combo_entries if eval_dataset_pins.pin_key(e) not in pins],
+            )
+        )
         for env in envs:
             caps = capabilities[env.id]
             _mode, _reason, units = eval_datasets.plan_units(
@@ -1646,6 +1660,7 @@ def create_experiment(
                     environment_id=env.id,
                     task=task_id,
                     supports_task=caps["task"],
+                    pins=pins,
                 )
                 schema, plan = _environment_plan(db, env, document, contexts[env.id])
                 plan["errors"] = [
@@ -1665,9 +1680,15 @@ def create_experiment(
                 if sweep.swept:
                     params["sweep"] = combo.params
                 if unit.mode == eval_datasets.MODE_FAN_OUT and unit.pair is not None:
-                    params["dataset"] = dict(unit.pair)
+                    params["dataset"] = {
+                        **dict(unit.pair),
+                        "resolved_version": eval_dataset_pins.resolved_version_of(unit.pair, pins),
+                    }
                 elif unit.mode == eval_datasets.MODE_COMBINED:
-                    params["datasets"] = [dict(p) for p in unit.datasets or []]
+                    params["datasets"] = [
+                        {**dict(p), "resolved_version": eval_dataset_pins.resolved_version_of(p, pins)}
+                        for p in unit.datasets or []
+                    ]
                 if task_id is not None and caps["task"]:
                     params["task"] = {"id": task_id, "name": task_name or task_id}
                 run_name = eval_sweeps.run_name(
@@ -1681,6 +1702,7 @@ def create_experiment(
                     _PlannedJob(combo, env, schema, plan, params, run_name, unit, document)
                 )
 
+    warnings_extra += eval_dataset_pins.unresolved_warnings(pins)
     job_priority = _resolve_job_priorities(
         db, principal, project_id, envs, planned, priority, req.job_priorities
     )
