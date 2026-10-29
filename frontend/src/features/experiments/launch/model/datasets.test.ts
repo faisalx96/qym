@@ -92,7 +92,7 @@ describe('dataset selection', () => {
 
 describe('spec', () => {
   it('QD-81 builds datasets, the mirrored first pair, the shape and the task', () => {
-    let doc = setTask(four(), PRODUCTION, 'answer-ticket');
+    let doc = setTask(setRunShape(four(), 'combined'), PRODUCTION, 'answer-ticket');
     const spec = buildSpec(doc, null);
     expect(spec.evaluator).toMatchObject({
       dataset: 'support-tickets',
@@ -127,12 +127,12 @@ describe('spec', () => {
 describe('units per environment', () => {
   it('QD-21 a service with datasets gets one combined job, an older one a job per pair', () => {
     const ctx = ctxWith();
-    const doc = four();
+    const doc = setRunShape(four(), 'combined');
     expect(envUnits(doc, ctx.envs).map((u) => [u.mode, u.units, u.reason])).toEqual([
       ['combined', 1, null],
       ['fan_out', 4, 'service_without_datasets'],
     ]);
-    const each = setRunShape(doc, 'one_each');
+    const each = four(); // One run each is the default
     expect(envUnits(each, ctx.envs).map((u) => [u.mode, u.units, u.reason])).toEqual([
       ['fan_out', 4, 'run_shape'],
       ['fan_out', 4, 'run_shape'],
@@ -142,12 +142,13 @@ describe('units per environment', () => {
 
   it('QD-43 the maths line', () => {
     const ctx = ctxWith();
-    const info = unitsInfo(four(), ctx.envs);
+    const combined = setRunShape(four(), 'combined');
+    const info = unitsInfo(combined, ctx.envs);
     expect(info.total).toBe(5);
     expect(info.text).toBe('(production: 1 combined run + staging: 4 runs)');
-    const spec = buildSpec(four(), null);
+    const spec = buildSpec(combined, null);
     expect(runEstimate(spec, 2, 64, info).math).toContain('× (production: 1 combined run + staging: 4 runs) = 5 runs');
-    const each = unitsInfo(setRunShape(four(), 'one_each'), ctx.envs);
+    const each = unitsInfo(four(), ctx.envs); // One run each is the default
     expect(each.total).toBe(8);
     expect(runEstimate(spec, 2, 64, each).math).toContain('× (2 environments × 4 dataset versions) = 8 runs');
     expect(unitsMath(envUnits(createDocument({ environmentIds: [PRODUCTION] }), ctx.envs), {}, 1)).toBeNull();
@@ -156,9 +157,9 @@ describe('units per environment', () => {
 
   it('QD-44 the run count follows the units and the cap', () => {
     const ctx = makeCtx({ envs: ctxWith().envs, maxJobs: 6 });
-    const count = runCount(setRunShape(four(), 'one_each'), ctx, null);
+    const count = runCount(four(), ctx, null); // One run each is the default
     expect(count).toMatchObject({ runs: 8, cap: 6, over: true });
-    expect(runCount(four(), ctx, null)).toMatchObject({ runs: 5, over: false });
+    expect(runCount(setRunShape(four(), 'combined'), ctx, null)).toMatchObject({ runs: 5, over: false });
   });
 });
 
@@ -190,11 +191,11 @@ describe('validation', () => {
 describe('Raw JSON', () => {
   it('QD-47/48 shows the list and round-trips', () => {
     const ctx = ctxWith();
-    let doc = setTask(setRunShape(four(), 'one_each'), PRODUCTION, 'answer-ticket');
+    let doc = setTask(four(), PRODUCTION, 'answer-ticket'); // One run each is the default
     const state = initRawJson(doc, ctx.evaluatorPanel);
     const parsed = JSON.parse(state.text) as { evaluator: Record<string, unknown> };
     expect(Object.keys(parsed.evaluator)).toEqual(expect.arrayContaining(['dataset', 'datasets', 'run_shape', 'task']));
-    // edit: drop billing-faq v2, run shape back to combined, no task
+    // edit: drop billing-faq v2, run shape to combined, no task
     const edited = {
       ...parsed,
       evaluator: {
@@ -283,15 +284,15 @@ describe('starting points', () => {
     let doc: LaunchDocument;
     doc = four();
     expect(datasetChanged(doc)).toBe(true);
-    doc = setTask(setRunShape(doc, 'one_each'), PRODUCTION, 'answer-ticket');
+    doc = setTask(setRunShape(doc, 'combined'), PRODUCTION, 'answer-ticket');
     expect(diffCount(doc)).toMatchObject({ dataset: 1, shape: 1, tasks: 1 });
     const kept = captureEdits(doc);
     expect(kept.tasks).toEqual({ [PRODUCTION]: 'answer-ticket' });
     const replayed = replayEdits(createDocument({ environmentIds: [PRODUCTION] }), kept, ctx).doc;
     expect(replayed.selection.tasks).toEqual({ [PRODUCTION]: 'answer-ticket' });
-    expect(replayed.selection.runShape).toBe('one_each');
+    expect(replayed.selection.runShape).toBe('combined');
     const undone = resetAll(doc, ctx);
     expect(pairCount(undone)).toBeLessThanOrEqual(1);
-    expect(undone.selection).toEqual({ extraRefs: [], more: [], runShape: 'combined', tasks: {} });
+    expect(undone.selection).toEqual({ extraRefs: [], more: [], runShape: 'one_each', tasks: {} });
   });
 });

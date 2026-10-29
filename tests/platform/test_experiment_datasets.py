@@ -185,7 +185,7 @@ def test_malformed_entries_are_invalid(entry):  # QD-71
 
 
 def test_one_entry_collapses_to_the_scalar_form():  # QD-72, QD-D6
-    stored, errors = norm({"datasets": [{"dataset": "a", "alias": "prod"}], "run_shape": "combined"})
+    stored, errors = norm({"datasets": [{"dataset": "a", "alias": "prod"}], "run_shape": "one_each"})
     assert errors == []
     assert stored["evaluator"] == {"dataset": "a", "config": {"dataset_alias": "prod"}}
     stored, _ = norm({"datasets": [{"dataset": "a", "version": "v2"}]})
@@ -224,13 +224,16 @@ def test_scalar_must_equal_entry_zero():  # QD-74
 def test_run_shape_rules():  # QD-75
     _, errors = norm({"datasets": PAIRS[:2], "run_shape": "all"})
     assert [e["rule"] for e in errors] == ["run_shape_invalid"]
-    _, errors = norm({"datasets": PAIRS[:1], "run_shape": "one_each"})
+    # The default ("one_each") is dropped on a single dataset; the other shape is an error there.
+    _, errors = norm({"datasets": PAIRS[:1], "run_shape": "combined"})
     assert [e["rule"] for e in errors] == ["run_shape_without_datasets"]
-    _, errors = norm({"dataset": "a", "run_shape": "one_each"})
+    _, errors = norm({"dataset": "a", "run_shape": "combined"})
     assert [e["rule"] for e in errors] == ["run_shape_without_datasets"]
-    stored, errors = norm({"dataset": "a", "run_shape": "combined"})
+    stored, errors = norm({"dataset": "a", "run_shape": "one_each"})
     assert errors == [] and "run_shape" not in stored["evaluator"]
     stored, _ = norm({"datasets": PAIRS[:2]})
+    assert stored["evaluator"]["run_shape"] == "one_each"  # the default: one run per dataset version
+    stored, _ = norm({"datasets": PAIRS[:2], "run_shape": "combined"})
     assert stored["evaluator"]["run_shape"] == "combined"
 
 
@@ -267,9 +270,13 @@ def test_sweep_rules():  # QD-80
 def test_plan_units_cases():  # section 3.3
     two = {"datasets": PAIRS[:2]}
     assert eval_datasets.plan_units({"dataset": "a"}, accepts_datasets=False)[0] == "single"
+    # Without a run_shape the default is one run each: a fan-out even on a service that takes a list.
     mode, reason, units = eval_datasets.plan_units(two, accepts_datasets=True)
+    assert (mode, reason, len(units)) == ("fan_out", "run_shape", 2)
+    combined = {**two, "run_shape": "combined"}
+    mode, reason, units = eval_datasets.plan_units(combined, accepts_datasets=True)
     assert (mode, reason, len(units)) == ("combined", None, 1)
-    mode, reason, units = eval_datasets.plan_units(two, accepts_datasets=False)
+    mode, reason, units = eval_datasets.plan_units(combined, accepts_datasets=False)
     assert (mode, reason, [u.index for u in units]) == ("fan_out", "service_without_datasets", [0, 1])
     mode, reason, units = eval_datasets.plan_units({**two, "run_shape": "one_each"}, accepts_datasets=True)
     assert (mode, reason, len(units)) == ("fan_out", "run_shape", 2)
@@ -303,7 +310,7 @@ def test_one_pair_list_is_stored_like_scalars(client, env):  # QD-72
 
 def test_fan_out_counts_and_bodies(client, session_factory, two_envs):  # QD-79, QD-81, QD-82, QD-86
     production, staging = two_envs
-    res = _dry(client, [production.id, staging.id], multi_spec(PAIRS))
+    res = _dry(client, [production.id, staging.id], multi_spec(PAIRS, run_shape="combined"))
     body = res.json()
     assert body["ok"], body["errors"]
     assert body["job_count"] == 5
@@ -314,7 +321,7 @@ def test_fan_out_counts_and_bodies(client, session_factory, two_envs):  # QD-79,
     assert len(body["jobs"]) == 5
     assert [j["dataset_index"] for j in body["jobs"] if j["environment_id"] == staging.id] == [0, 1, 2, 3]
 
-    created = _create(client, [production.id, staging.id], spec=multi_spec(PAIRS))
+    created = _create(client, [production.id, staging.id], spec=multi_spec(PAIRS, run_shape="combined"))
     assert created.status_code == 200, created.text
     detail = created.json()
     assert detail["job_count"] == 5
@@ -368,7 +375,7 @@ def test_one_each_fans_out_everywhere(client, two_envs):  # QD-79
 
 def test_sweep_multiplies_units_and_cap(client, session_factory, two_envs, monkeypatch):  # QD-79
     production, staging = two_envs
-    spec = multi_spec(PAIRS)
+    spec = multi_spec(PAIRS, run_shape="combined")
     spec["env_overrides"]["MILVUS_SEARCH_THRESHOLD"] = {"sweep": [0.5, 0.7]}
     assert _dry(client, [production.id, staging.id], spec).json()["job_count"] == 10
     spec["evaluator"]["run_shape"] = "one_each"

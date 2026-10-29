@@ -53,7 +53,7 @@ describe('ReviewPane with several dataset versions', () => {
   });
 
   it('QD-40/QD-41 per-environment lines, dataset lines and the run shape', () => {
-    mount(setTask(four(), 'p', 'answer-ticket'));
+    mount(setTask(setRunShape(four(), 'combined'), 'p', 'answer-ticket'));
     const lines = within(screen.getByTestId('review-env-lines')).getAllByRole('listitem');
     expect(lines.map((l) => l.textContent)).toEqual([
       'production1 combined run of 4 dataset versions · task answer-ticket',
@@ -67,17 +67,17 @@ describe('ReviewPane with several dataset versions', () => {
   });
 
   it('QD-43 the runs count and the maths follow the real job count', () => {
-    const { unmount } = mount(four());
+    const { unmount } = mount(setRunShape(four(), 'combined'));
     expect(screen.getByText('5')).toBeInTheDocument();
     expect(document.body).toHaveTextContent('1 combination × (production: 1 combined run + staging: 4 runs) = 5 runs');
     unmount();
-    mount(setRunShape(four(), 'one_each'));
+    mount(four()); // One run each is the default
     expect(screen.getByText('8')).toBeInTheDocument();
     expect(document.body).toHaveTextContent('1 combination × (2 environments × 4 dataset versions) = 8 runs');
   });
 
   it('QD-44 over the cap the callout points at Combine into one run', () => {
-    mount(setRunShape(four(), 'one_each'), 6);
+    mount(four(), 6);
     expect(screen.getAllByText('Over the run limit').length).toBeGreaterThan(0);
     expect(document.body).toHaveTextContent('choose “Combine into one run”');
   });
