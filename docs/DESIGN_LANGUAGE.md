@@ -330,7 +330,7 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 - **Section and section divider** (`Section`, `SectionHeader`; owner round, October 2026: "a reusable component for
   sections and section dividers"): every titled block of a page outside the run and compare reports (admin tabs,
-  profile, environments, dataset lineage) is a `Section`: a `SectionHeader` (`--font-xl` / 650 primary title, a 2px
+  profile, dataset lineage) is a `Section`: a `SectionHeader` (`--font-xl` / 650 primary title, a 2px
   gap, one muted `--font-base` description line, the controls on the end side and centred on the title block,
   `--space-md` above the body) over its body. Sections that follow each other are divided by one `--border-subtle`
   hairline with `--section-gap` (32px) on both sides of it, so the line belongs to neither block; the first section of
