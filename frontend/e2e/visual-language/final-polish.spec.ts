@@ -92,10 +92,8 @@ test.describe('1440', () => {
       expect(f.bg, `${name} surface (want ${want})`).toBe(want);
     };
     await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}`);
-    await check(
-      'home start card',
-      page.locator('[data-testid="launch-home"] > div').first().locator('> *').first(),
-    );
+    // round 9: the home is a grid of sections; the environment section's Card is the first card
+    await check('home start card', page.locator('[data-testid="launch-home"] [data-part="env-section"] > *').first());
     await gotoApp(page, `/projects/${areas.slug}/experiments/${areas.experimentId}`);
     await check('experiment matrix', page.locator('[data-exp-matrix]'));
     await gotoApp(page, `${runUrl(tour.slug, tour.runId)}?panel=latency`);
@@ -108,7 +106,7 @@ test.describe('1440', () => {
     await check('chart card', page.locator('[data-testid^="chart-card-"]').first());
   });
 
-  test('wizard settings step: one bottom bar of --bar-action-h with the step navigation inside', async ({
+  test('wizard settings step: one bottom bar of --bar-action-h with the six round 9 slots', async ({
     page,
   }) => {
     await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}&step=settings`);
@@ -119,10 +117,12 @@ test.describe('1440', () => {
     const h = (await bar.boundingBox())!.height;
     expect(h).toBeGreaterThanOrEqual(want);
     expect(h).toBeLessThanOrEqual(want + 1);
-    await expect(page.getByRole('navigation', { name: 'Step navigation' })).toHaveCount(1);
-    await expect(bar.getByRole('navigation', { name: 'Step navigation' })).toBeVisible();
+    // round 9 (C-3-2, C-3-9): the step navigation is gone; the bar holds Back, Skip, Continue, the status, Cancel and Launch
+    await expect(page.locator('[aria-label="Step navigation"]')).toHaveCount(0);
+    for (const part of ['bar-back', 'bar-skip', 'bar-continue', 'bar-cancel', 'bar-launch'])
+      await expect(bar.locator(`[data-part="${part}"]`)).toHaveCount(1);
+    await expect(bar.locator('[data-part="bar-status"]')).toBeVisible();
     await expect(bar.getByRole('button', { name: /^Launch/ })).toBeVisible();
-    await expect(bar.getByText(/runs? to launch/)).toBeVisible();
     // nothing else is stuck to the bottom edge above the bar: the only region at the foot is the bar
     const stuck = await page.evaluate(() => {
       const out: string[] = [];
@@ -178,17 +178,19 @@ test.describe('390', () => {
     await expect(tags.locator('> *').nth(1)).toBeHidden();
   });
 
-  test('wizard: one --bar-action-h bar, the problems link lives in its overflow menu', async ({ page }) => {
+  test('wizard: one two-row bar at 390, the same five buttons, no overflow menu (round 9 C-3-7)', async ({ page }) => {
     await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}&step=models`);
     await expect(page.getByRole('heading', { name: 'Models', level: 2 })).toBeVisible();
     const bar = page.getByRole('region', { name: 'Launch', exact: true });
     await expect(bar).toBeVisible();
-    const want = await px(page, '--bar-action-h');
+    // round 9: at 390 the bar is two rows (status, then buttons): 56 + --space-lg + --space-xs = 91 px (mock 90.8)
     const h = (await bar.boundingBox())!.height;
-    expect(h).toBeGreaterThanOrEqual(want);
-    expect(h).toBeLessThanOrEqual(want + 1);
-    await expect(page.getByRole('navigation', { name: 'Step navigation' })).toHaveCount(1);
-    await expect(bar.getByRole('button', { name: /^Fix \d+ problems? first/ })).toHaveCount(0);
-    await expect(bar.getByRole('button', { name: 'More launch options' })).toBeVisible();
+    expect(h).toBeGreaterThanOrEqual(89);
+    expect(h).toBeLessThanOrEqual(92);
+    await expect(page.locator('[aria-label="Step navigation"]')).toHaveCount(0);
+    for (const part of ['bar-back', 'bar-skip', 'bar-continue', 'bar-cancel', 'bar-launch'])
+      await expect(bar.locator(`[data-part="${part}"]`)).toHaveCount(1);
+    await expect(bar.getByRole('button', { name: 'More launch options' })).toHaveCount(0);
+    await expect(bar.locator('[data-part="bar-status"]')).toHaveText(/Fix \d+ problems? first|Ready|runs? to launch/);
   });
 });
