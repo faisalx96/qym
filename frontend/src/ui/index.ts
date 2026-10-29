@@ -7,6 +7,7 @@ export * from './PageHeader';
 export * from './SectionHeader';
 export * from './Section';
 export * from './Subsection';
+export * from './SectionBoundary';
 export * from './ReportSection';
 export * from './ReportLayout';
 export * from './ScopeBar';

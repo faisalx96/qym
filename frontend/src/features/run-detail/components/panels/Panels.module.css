@@ -218,6 +218,154 @@
   gap: var(--space-md);
 }
 
+/* Overview metric card (round 10, the first qym's card): ring and mean, then the name and the error note, the
+   scored count at the top end, the plot below. No header band, no side rail. */
+.metricCard {
+  min-width: 0;
+}
+
+.metricHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.ring {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin-block-start: 2px;
+}
+
+.ringTrack {
+  fill: none;
+  stroke: var(--bg-active);
+  stroke-width: 4;
+}
+
+.ringFill {
+  fill: none;
+  stroke: var(--tone, var(--text-muted));
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.metricTitle {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.metricName {
+  overflow: hidden;
+  font-size: var(--font-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.metricSub {
+  font-weight: 450;
+  color: var(--text-muted);
+}
+
+.metricEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* The error note: a warning glyph, the counts, and the key of the hatch the bars draw for those items. */
+.cardNote {
+  display: block;
+  margin-block-start: 2px;
+  font-size: var(--font-sm);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.cardNote > svg {
+  margin-inline-end: var(--space-xs);
+  vertical-align: -1px;
+  color: var(--warning);
+}
+
+.hatchKey {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: var(--space-sm);
+  white-space: nowrap;
+}
+
+.hatchSwatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(45deg, var(--bg-void) 0 2px, transparent 2px 4px), var(--text-muted);
+}
+
+.metricPlot {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  min-height: 146px;
+  margin-block-start: var(--space-md);
+}
+
+/* A plain-number card: Total, Min, Median and Max on one line over the box plot. */
+.numberFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+  margin: var(--space-md) 0 0;
+}
+
+.numberFact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.numberFact dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.numberFact dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.metricBox {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  margin-block-start: var(--space-sm);
+}
+
+/* Overview metric cards: three in a row at 1440 (the first qym's width), so the note fits in two lines. */
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
 .chartGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
@@ -244,6 +392,58 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
+}
+
+/* Deep analysis (round 10): subsections; the correlation matrix beside the relationship scatter from 1000px. */
+.deepRoot {
+  min-width: 0;
+}
+
+.deepPair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+@container (min-width: 1000px) {
+  .deepPair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.deepCell {
+  display: flex;
+  min-width: 0;
+}
+
+.deepCell > * {
+  flex: 1;
+}
+
+.axisPick {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.rValue {
+  margin-inline-start: var(--space-xs);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.rValue b {
+  color: var(--text-primary);
+}
+
+.relationIntro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
 }
 
 /* A pair whose columns share one height (latency histogram beside the scatter). */
@@ -335,4 +535,153 @@
   font-size: var(--font-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Errors (round 10): one group per kind, the kind's colour on its icon tile and total, message cards in a grid. */
+.errGroups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.errGroup {
+  --err: var(--error);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.errGroup[data-kind='metric'] {
+  --err: var(--metric-error);
+}
+
+.errGroup[data-kind='trace'] {
+  --err: var(--warning);
+}
+
+.errGroup[data-kind='analysis'] {
+  --err: var(--accent-tertiary);
+}
+
+.errHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.errIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--err) var(--tint-soft), transparent);
+  color: var(--err);
+}
+
+.errKind {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 650;
+  color: var(--err);
+}
+
+.errTotal {
+  padding: 0 var(--space-xs);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--err) var(--tint-soft), transparent);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--err);
+}
+
+.errMeaning {
+  flex: 1 1 24rem;
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.errGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: var(--space-sm);
+}
+
+.errCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.errCard:hover {
+  background: var(--bg-hover);
+}
+
+.errCard[data-selected] {
+  box-shadow: inset 0 0 0 1px var(--err);
+}
+
+.errCard:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.errText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.errNums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.errCount {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--err);
+}
+
+.errUnit {
+  font-size: var(--font-sm);
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+/* its share of the kind's errors */
+.errShare {
+  grid-column: 1 / -1;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-active);
+}
+
+.errShare > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--err);
 }

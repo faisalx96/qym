@@ -636,6 +636,20 @@
   --row-base: var(--bg-hover);
 }
 
+/* hoverEdge: the row under the pointer draws an accent hairline above and below it and a 2px accent edge at its start */
+.card[data-hover-edge] .tr:hover > .td {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent);
+}
+
+.card[data-hover-edge] .tr:hover > .td:first-child {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent);
+}
+
 .tr[data-focused] {
   --row-base: var(--bg-hover);
 }

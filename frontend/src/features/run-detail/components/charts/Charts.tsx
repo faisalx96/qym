@@ -443,7 +443,7 @@ export function Scatter({
 }) {
   const [boxRef, W] = useMeasuredWidth<HTMLDivElement>(300);
   const H = scatterHeight(W);
-  const pad = { l: 46, r: 8, t: 8, b: 28 };
+  const pad = { l: 46, r: 20, t: 8, b: 28 }; // r: room for the last x tick ("100%") centred on the edge
   const enter = useEntrance();
   const shown = useMemo(
     () =>
@@ -579,22 +579,41 @@ export interface CurveSeries {
   points: CurvePoint[];
 }
 
-/** Legend of a curve card: one swatch per series. Lives in the header of the card that holds the plot. */
-export function CurveLegend({ series }: { series: CurveSeries[] }) {
+/**
+ * Legend of a curve card: a line sample per series (dashed for a dashed series) and, when the curve draws its
+ * uncertainty band, "95% CI" (round 10: the band had no key).
+ */
+export function CurveLegend({ series, ci }: { series: CurveSeries[]; ci?: boolean }) {
   return (
     <ul className={styles.legend} aria-label="Series">
       {series.map((s) => (
         <li key={s.name} className={styles.legendItem}>
-          <span className={styles.swatch} style={{ background: s.tone }} aria-hidden="true" />
+          <span
+            className={styles.lineKey}
+            data-dash={s.dash ? '' : undefined}
+            style={{ color: s.tone }}
+            aria-hidden="true"
+          />
           {s.name}
         </li>
       ))}
+      {ci ? (
+        <li className={styles.legendItem}>
+          <span className={styles.ciKey} aria-hidden="true" />
+          95% CI
+        </li>
+      ) : null}
     </ul>
   );
 }
 
-/** Positions (0-based, within the sorted ks) that carry a value label: first, 3rd, 5th and last; the first and the last when narrow. */
-export function labelledPositions(count: number, narrow: boolean): Set<number> {
+/**
+ * Positions (0-based, within the sorted ks) that carry a value label: every one when the plot has room for them
+ * (`all`, round 10: the first qym labelled every point), else first, 3rd, 5th and last; the first and the last when
+ * narrow.
+ */
+export function labelledPositions(count: number, narrow: boolean, all = false): Set<number> {
+  if (all && !narrow) return new Set(Array.from({ length: count }, (_, i) => i));
   const out = new Set<number>([0, count - 1]);
   if (!narrow) [2, 4].forEach((i) => i < count && out.add(i));
   return out;
@@ -625,7 +644,7 @@ export function Curve({
   const [boxRef, W] = useMeasuredWidth<HTMLElement>(480);
   const narrow = W < 500;
   const H = narrow ? 220 : 240;
-  const pad = { l: 40, r: narrow ? 16 : 24, t: 20, b: 30 };
+  const pad = { l: 40, r: narrow ? 16 : 24, t: 20, b: 46 };
   const ks = Array.from(new Set(series.flatMap((s) => s.points.map((p) => p.k)))).sort((a, b) => a - b);
   const sx = (k: number) =>
     pad.l +
@@ -634,13 +653,16 @@ export function Curve({
       : (W - pad.l - pad.r) / 2);
   const span = domain[1] - domain[0] || 1;
   const sy = (v: number) => H - pad.b - ((v - domain[0]) / span) * (H - pad.t - pad.b);
-  const labelled = labelledPositions(ks.length, narrow);
+  const labelled = labelledPositions(ks.length, narrow, W >= 640);
   const ticks = tickPositions(ks.length, narrow);
+  const unit = domain[1] === 1 && domain[0] === 0;
+  // a score reads in fifths (0, 20 … 100%) like the first qym; a raw average keeps quarters
+  const steps = unit ? [0, 0.2, 0.4, 0.6, 0.8, 1] : [0, 0.25, 0.5, 0.75, 1];
   return (
     <ChartTooltipHost>
       <figure ref={boxRef} className={styles.curve}>
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
-          {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+          {steps.map((f) => {
             const t = domain[0] + f * span;
             return (
               <g key={f}>
@@ -652,18 +674,26 @@ export function Curve({
                   textAnchor="end"
                   dominantBaseline="middle"
                 >
-                  {domain[1] === 1 && domain[0] === 0 ? `${Math.round(t * 100)}%` : format(t)}
+                  {unit ? `${Math.round(t * 100)}%` : format(t)}
                 </text>
               </g>
             );
           })}
           {ks.map((k, i) =>
             ticks.has(i) ? (
-              <text key={k} className={styles.tick} x={sx(k)} y={H - 8} textAnchor="middle">
+              <text key={k} className={styles.tick} x={sx(k)} y={H - 26} textAnchor="middle">
                 {xLabel}={k}
               </text>
             ) : null,
           )}
+          <text
+            className={styles.axisTitle}
+            x={pad.l + (W - pad.l - pad.r) / 2}
+            y={H - 6}
+            textAnchor="middle"
+          >
+            {xLabel === 'k' ? 'Attempts allowed' : 'Passes observed'}
+          </text>
           {series.map((s, si) => {
             const pts = s.points.filter((p) => p.value !== null);
             const band = pts.filter((p) => p.low !== undefined && p.high !== undefined);
@@ -713,6 +743,7 @@ export function Curve({
                     <text
                       key={`l${p.k}`}
                       className={styles.pointLabel}
+                      style={{ fill: s.tone }}
                       data-point-label={s.name}
                       x={sx(p.k)}
                       y={below ? sy(p.value!) + 17 : sy(p.value!) - 9}

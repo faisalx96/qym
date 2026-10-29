@@ -1,7 +1,8 @@
 /**
  * Run hero (round 3 P6): three compact bands, everything about what was run visible without a click. Band 1: identity
- * and actions. Band 2: seven labelled facts. Band 3: versioning, config and metadata as chips, clamped to two lines
- * (three on a phone) with "+ N more". Nothing hides behind a chevron.
+ * (name, passes, status) and actions. Band 2: seven labelled facts. Band 3: versioning, config and metadata as chips,
+ * clamped to two lines (three on a phone) with "+ N more". Nothing hides behind a chevron. Round 10: the first qym's
+ * gradient top line and wash instead of a status rail; the status sits beside the name; the facts share one height.
  */
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -22,8 +23,6 @@ import {
   RunStatusBadge,
   Tag,
   TaskTag,
-  runStatusTone,
-  type CardTone,
 } from '@/ui';
 import { readJson, writeJson } from '@/lib/storage';
 import type { LiveRunState } from '../hooks/useLiveRun';
@@ -45,6 +44,13 @@ import { DatasetChip, DatasetCountTag, datasetChipStyles } from './DatasetChip';
 import type { PassSummary, Run } from '../types';
 import { RunPager } from './RunPager';
 import styles from './RunHero.module.css';
+
+/** A model's series colour (1..8) from its name, so the hero's model tag carries the model recipe (dot and tint). */
+function modelSeries(name: string): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return ((h % 8) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+}
 
 export interface RunHeroProps {
   run: Run;
@@ -251,17 +257,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
   const projectName = run.project?.name ?? '';
 
   return (
-    <Card
-      as="section"
-      aria-label="Run summary"
-      className={styles.hero}
-      tone={
-        (runStatusTone(statusKey) as CardTone) === 'neutral'
-          ? undefined
-          : (runStatusTone(statusKey) as CardTone)
-      }
-      data-testid="run-hero"
-    >
+    <Card as="section" aria-label="Run summary" className={styles.hero} data-testid="run-hero">
       <div className={styles.heroBody}>
         <div className={styles.top}>
           <div className={styles.headline}>
@@ -294,11 +290,14 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
               </Tag>
             ) : null}
             <CopyButton text={run.run_id} label="Copy run id" />
-          </div>
-          <div className={styles.right}>
-            <span title={!viewPass && run.status_reason_label ? run.status_reason_label : undefined}>
+            <span
+              className={styles.status}
+              title={!viewPass && run.status_reason_label ? run.status_reason_label : undefined}
+            >
               <RunStatusBadge status={statusKey} label={statusText + runningPass} />
             </span>
+          </div>
+          <div className={styles.right}>
             <LiveIndicator live={live} run={run} />
             {liveNow && runtimeMs != null ? (
               <span className={styles.live} data-testid="hero-runtime-live">
@@ -430,6 +429,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
                 <ModelTag
                   name={modelName}
                   title={modelName}
+                  series={modelSeries(modelName)}
                   reasoning={!!(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning}
                 />
               </MetaLink>

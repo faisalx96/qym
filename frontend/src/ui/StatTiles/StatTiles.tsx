@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Card, type CardBand } from '../Card';
+import type { CardBand } from '../Card';
 import { HelpMarker } from '../HelpMarker';
 import styles from './StatTiles.module.css';
 
@@ -10,9 +10,9 @@ export interface StatTile {
   /** Long explanation behind the info marker after the label. */
   help?: string;
   value: ReactNode;
-  /** One plain sentence under the value. */
+  /** One plain sentence: the cell's tooltip and accessible description (not drawn). */
   meaning: string;
-  /** Score band of the value (direction-aware): colours the value and the bottom rail. */
+  /** Score band of the value (direction-aware): colours the value. */
   band?: CardBand;
   /** A danger value (errors above 0). */
   danger?: boolean;
@@ -24,24 +24,17 @@ export interface StatTilesProps {
 }
 
 /**
- * Stat tiles (DESIGN_LANGUAGE "Stat tiles"): seven or fewer equal, separate, centred tiles. Each tile is a passive
- * `Card compact` with a bottom rail in the value's band; no hover, no groups. The grid answers to the report column
- * (container queries): one row of N from 900px, 4 + 3 in a 12-column grid from 480px, 2 per row below that and a
- * wide last tile. Three tiles always share one row from 480px.
+ * Stat tiles (DESIGN_LANGUAGE "Stat tiles", round 10: the first qym's strip): one framed row of seven or fewer equal
+ * cells parted by hairlines, each a centred label with its help marker over the value in its band colour. The help
+ * marker explains the figure, so no sentence sits under the value (`meaning` is the cell's tooltip and accessible
+ * description). No rails, no hover. The strip answers to the report column (container queries): one row of N from
+ * 900px, 4 + 3 from 480px, 2 per row below that.
  */
 export function StatTiles({ items, 'aria-label': label }: StatTilesProps) {
   return (
     <div className={styles.tiles} role="list" aria-label={label} data-count={items.length}>
       {items.map((t) => (
-        <Card
-          key={t.key}
-          compact
-          band={t.band}
-          rail="bottom"
-          className={styles.tile}
-          role="listitem"
-          data-tile={t.key}
-        >
+        <div key={t.key} className={styles.tile} role="listitem" data-tile={t.key} title={t.meaning}>
           <span className={styles.label} data-part="label">
             <span>{t.label}</span>
             {t.help ? <HelpMarker label={t.label}>{t.help}</HelpMarker> : null}
@@ -54,10 +47,10 @@ export function StatTiles({ items, 'aria-label': label }: StatTilesProps) {
           >
             {t.value}
           </span>
-          <span className={styles.meaning} data-part="meaning">
+          <span className={styles.srOnly} data-part="meaning">
             {t.meaning}
           </span>
-        </Card>
+        </div>
       ))}
     </div>
   );

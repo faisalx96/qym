@@ -24,6 +24,27 @@
   align-items: center;
 }
 
+/* A curve's key: a 16px line sample in the series colour, dashed for a dashed series; the CI key is the band's fill. */
+.lineKey {
+  display: inline-block;
+  width: 16px;
+  margin-inline-end: var(--space-xs);
+  border-block-start: 2px solid currentcolor;
+}
+
+.lineKey[data-dash] {
+  border-block-start-style: dashed;
+}
+
+.ciKey {
+  display: inline-block;
+  width: 14px;
+  height: 8px;
+  margin-inline-end: var(--space-xs);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-muted) 30%, transparent);
+}
+
 /* ───────── Bar plot (round 3 P1): every bar chart uses one column recipe ───────── */
 .plotBox {
   display: flex;
@@ -417,6 +438,7 @@
   stroke-linejoin: round;
   font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-weight: 600;
   fill: var(--text-secondary);
 }
 

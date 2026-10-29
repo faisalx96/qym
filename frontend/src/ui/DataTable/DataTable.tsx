@@ -99,6 +99,8 @@ export interface DataTableProps<R> {
   /** The page fixes the density; hides the density menu. */
   densityLocked?: boolean;
   zebra?: boolean | 'auto';
+  /** The row under the pointer lights its edge in the accent (round 10: the first qym's By pass table). */
+  hoverEdge?: boolean;
   variant?: 'card' | 'embedded';
   stickyHeader?: boolean;
   /**
@@ -377,6 +379,7 @@ function DataTableInner<R>({
   density: densityProp,
   densityLocked,
   zebra = 'auto',
+  hoverEdge = false,
   variant = 'card',
   stickyHeader = true,
   stickyParent,
@@ -1851,6 +1854,7 @@ function DataTableInner<R>({
         data-variant={variant}
         data-density={model.density}
         data-zebra={zebraOn ? '' : undefined}
+        data-hover-edge={hoverEdge ? '' : undefined}
         data-testid="data-table"
       >
         <span className={styles.srOnly} aria-live="polite" data-dt-announce="">

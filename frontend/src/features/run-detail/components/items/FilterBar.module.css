@@ -91,3 +91,25 @@
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
+
+/* The page metric this table analyses (picked in the sticky nav). */
+.metricNow {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metricNowLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.metricNowValue {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
