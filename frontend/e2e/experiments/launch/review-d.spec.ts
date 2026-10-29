@@ -262,6 +262,8 @@ test.describe('review of WP-D', () => {
       // Review rows (rail at 1440, below the step otherwise): Customize step 1 with the task chosen.
       await openLaunch(page, f.project.slug, both());
       await composeFour(page);
+      // The measured rows are the combined-run ones; One run each is the default since 2.1.0 (fix/multi-dataset-default-one-each).
+      await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
       const task = envBox(page, 'production').locator('[data-env-task]');
       await expect(task).toHaveAttribute('data-status', 'ok');
       await task.getByRole('button', { name: /Task of production/ }).click();
@@ -373,6 +375,9 @@ test.describe('review of WP-D', () => {
     await page.keyboard.press('Escape');
     await addDataset(page, 'billing-faq');
     await expect(page.getByTestId('pair-count')).toHaveText('2 dataset versions from 2 datasets');
+    // One run each is the default: its help first, then the combined help after picking it.
+    const helpEach = await page.getByTestId('run-shape').locator('p').first().textContent();
+    await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
     const help = await page.getByTestId('run-shape').locator('p').first().textContent();
     const radios = await page
       .getByTestId('run-shape')
@@ -380,8 +385,6 @@ test.describe('review of WP-D', () => {
       .evaluateAll((els) =>
         els.map((e) => e.getAttribute('aria-label') ?? e.parentElement?.textContent ?? ''),
       );
-    await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
-    const helpEach = await page.getByTestId('run-shape').locator('p').first().textContent();
     const style = (l: Locator) =>
       l.evaluate((el) => {
         const cs = getComputedStyle(el);

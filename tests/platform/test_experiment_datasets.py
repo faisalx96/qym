@@ -640,8 +640,9 @@ def test_unresolved_entries_are_sent_as_chosen_with_a_warning(client, session_fa
     dry = _dry(client, [env.id], spec).json()
     assert dry["ok"], dry["errors"]
     codes = sorted((w["dataset"], w["message"]) for w in dry["warnings"] if w["code"] == "dataset_version_unresolved")
-    assert [c[0] for c in codes] == ["billing-faq", "elsewhere", "support-tickets"]
-    assert "no published version" in codes[0][1] and "not a dataset of this project" in codes[1][1] and "no alias" in codes[2][1]
+    # "elsewhere" is not a project dataset: sent as chosen, no warning (a custom name the service may know).
+    assert [c[0] for c in codes] == ["billing-faq", "support-tickets"]
+    assert "no published version" in codes[0][1] and "no alias" in codes[1][1]
     detail = _create(client, [env.id], spec=spec).json()
     jobs = sorted(_jobs(session_factory, detail["id"]), key=lambda j: j.dataset_index)
     assert "dataset_version" not in _evaluator_of(jobs[0])

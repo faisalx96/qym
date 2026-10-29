@@ -17,9 +17,9 @@ user who picked that version explicitly would have:
 
 The experiment's stored spec keeps the entry as chosen (a clone resolves again), the job's
 ``params`` carry the chosen entry plus ``resolved_version``, and a retry reuses the pinned
-body. An entry the platform cannot resolve (a dataset outside the project, an unknown alias,
-no published version) is sent untouched, as before, with a ``dataset_version_unresolved``
-launch warning.
+body. An entry of a project dataset the platform cannot resolve (an unknown alias, no published
+version) is sent untouched, as before, with a ``dataset_version_unresolved`` launch warning; a
+name that is not a project dataset (a custom name the service knows) is sent untouched silently.
 """
 
 from __future__ import annotations
@@ -93,13 +93,9 @@ def _resolve(db: Session, project_id: str, entry: Mapping[str, Any]) -> Pin:
         return Pin(name, version, alias, version)
     dataset = _dataset_row(db, project_id, name)
     if dataset is None:
-        return Pin(
-            name,
-            version,
-            alias,
-            None,
-            f"“{name}” is not a dataset of this project; the Evaluation Service resolves its version.",
-        )
+        # Not a project dataset (a custom name the service knows, a path): nothing to pin
+        # and nothing to warn about; the entry goes as chosen, as it always did.
+        return Pin(name, version, alias, None)
     if alias:
         row = (
             db.query(DatasetAlias)
