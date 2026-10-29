@@ -87,7 +87,7 @@ function Probe() {
 
 describe('ReviewStep (round 9, points 4-6)', () => {
   it('C-5-1 Summary rows: label column then value, the task by name', () => {
-    mount(setTask(four(), 'answer-ticket'));
+    mount(setTask(setRunShape(four(), 'combined'), 'answer-ticket'));
     const summary = screen.getByRole('region', { name: 'Summary' });
     const rows = Array.from(summary.querySelectorAll('[data-row]')).map((r) => r.getAttribute('data-row'));
     expect(rows).toEqual(expect.arrayContaining(['name', 'base', 'task', 'env', 'ds', 'shape', 'prio']));
