@@ -259,7 +259,7 @@ Members may read environments; managers may write them.
 |---|---|---|
 | GET | `/v1/projects/{pid}/eval-environments` | list (key as `••••last4`, health, schema hash, slot status) |
 | POST | `/v1/projects/{pid}/eval-environments` | create → validate URL → `/test` → fetch schema → propose slots; returns env + proposed slots |
-| PUT | `…/{eid}` | update; blank `api_key` keeps the stored one (same rule as LLM connections) |
+| PUT | `…/{eid}` | update; blank `api_key` keeps the stored one on the same host; a new scheme, host or port needs the key again (same rule as LLM connections) |
 | DELETE | `…/{eid}` | hard delete if unused, otherwise soft-disable |
 | POST | `…/{eid}/test` | `GET /evals?limit=1` (auth probe) + schema fetch; stores health |
 | POST | `…/{eid}/schema/refresh` | refetch; returns `{changed, added[], removed[], changed_types[]}` diff |

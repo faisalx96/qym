@@ -10,6 +10,7 @@ import {
 } from '@/api/feedback';
 import feedbackStyles from '@/features/feedback/feedback.module.css';
 import { ApiError } from '@/lib/http';
+import { KEY_FOR_NEW_HOST_PLACEHOLDER, keyHostChanged } from '@/lib/keyHost';
 import {
   Button,
   Card,
@@ -36,8 +37,13 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
   const [result, setResult] = useState<AgentTestResult | null>(null);
   const [error, setError] = useState('');
   const [removing, setRemoving] = useState(false);
-  const complete = Boolean(url.trim() && model.trim() && (key || data.connection.llm_api_key_set));
-  const canTest = data.configured || Boolean(url.trim() && model.trim() && key);
+  const stored = data.connection;
+  // The stored key stays with its host: another host needs the key again (C004).
+  // A blank URL tests the saved one, as the server does.
+  const needsKey =
+    stored.llm_api_key_set && keyHostChanged(stored.llm_base_url, url.trim() || stored.llm_base_url);
+  const complete = Boolean(url.trim() && model.trim() && (key || (stored.llm_api_key_set && !needsKey)));
+  const canTest = (data.configured && !needsKey) || Boolean(url.trim() && model.trim() && key);
   const blocked = !data.encryption_ready;
   const values = () => ({
     llm_base_url: url.trim(),
@@ -136,8 +142,13 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
             mono
             value={key}
             onChange={setKey}
+            isRequired={needsKey}
             placeholder={
-              data.connection.llm_api_key_set ? `Keep current (${data.connection.llm_api_key_hint})` : 'sk-…'
+              needsKey
+                ? KEY_FOR_NEW_HOST_PLACEHOLDER
+                : stored.llm_api_key_set
+                  ? `Keep current (${stored.llm_api_key_hint})`
+                  : 'sk-…'
             }
             autoComplete="new-password"
           />

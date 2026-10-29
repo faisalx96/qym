@@ -57,6 +57,7 @@ from qym_platform.api.analysis import (
     merge_project_analysis_rule_versions,
     permanently_delete_project_analysis_rule_version,
     publish_project_analysis_rule_version,
+    restore_project_analysis_rule_version,
     update_analysis_context,
     upload_analysis_document,
 )
@@ -4552,9 +4553,10 @@ def test_publishing_without_promotion_keeps_existing_production(
     assert second["version"]["id"] != history["production_version_id"]
 
 
-def test_run_owner_can_delete_analysis_rule_version(
+def test_run_owner_who_is_a_member_cannot_delete_analysis_rule_version(
     db_session: Session,
 ) -> None:
+    """C002: deleting a rule version needs a manager, not run ownership."""
     actor, _manager, run, _ = _seed_run(db_session)
     version = _create_analysis_rule_version(
         db_session,
@@ -4574,24 +4576,83 @@ def test_run_owner_can_delete_analysis_rule_version(
         parent=version,
     )
     db_session.commit()
+    member = Principal(user=actor, auth_type="session")
 
-    history = list_project_analysis_rule_versions(
-        run.id,
-        False,
+    history = list_project_analysis_rule_versions(run.id, False, db_session, member)
+    assert history["can_delete"] is False
+
+    with pytest.raises(HTTPException) as exc_info:
+        delete_project_analysis_rule_version(run.id, version.id, db_session, member)
+
+    assert exc_info.value.status_code == 403
+    stored = db_session.get(ProjectAnalysisRuleVersion, version.id)
+    assert stored is not None
+    assert stored.deleted_at is None
+
+
+def test_manager_soft_deletes_analysis_rule_version_and_admin_restores_it(
+    db_session: Session,
+) -> None:
+    actor, manager, run, _ = _seed_run(db_session)
+    version = _create_analysis_rule_version(
         db_session,
-        Principal(user=actor, auth_type="session"),
+        project_id=run.project_id,
+        rules=[{"title": "Evidence", "instruction": "Use supplied evidence."}],
+        source="manual",
+        actor_user_id=actor.id,
+        force_new=True,
     )
-    assert history["can_delete"] is True
+    child = _create_analysis_rule_version(
+        db_session,
+        project_id=run.project_id,
+        rules=[{"title": "Keep", "instruction": "Keep one version alive."}],
+        source="manual",
+        actor_user_id=actor.id,
+        force_new=True,
+        parent=version,
+    )
+    db_session.commit()
+    manager_principal = Principal(user=manager, auth_type="session")
+    assert (
+        list_project_analysis_rule_versions(
+            run.id, False, db_session, manager_principal
+        )["can_delete"]
+        is True
+    )
 
     deleted = delete_project_analysis_rule_version(
-        run.id,
-        version.id,
-        db_session,
-        Principal(user=actor, auth_type="session"),
+        run.id, version.id, db_session, manager_principal
     )
 
     assert deleted["deleted_version_id"] == version.id
-    assert db_session.get(ProjectAnalysisRuleVersion, version.id) is None
+    stored = db_session.get(ProjectAnalysisRuleVersion, version.id)
+    assert stored is not None
+    assert stored.deleted_at is not None
+    assert stored.deleted_by_user_id == manager.id
+    # The lineage stays, so a restore puts the version back in place.
+    assert (
+        db_session.get(ProjectAnalysisRuleVersion, child.id).parent_version_id
+        == version.id
+    )
+    listed = list_project_analysis_rule_versions(
+        run.id, False, db_session, manager_principal
+    )
+    assert version.id not in {v["id"] for v in listed["versions"]}
+
+    with pytest.raises(HTTPException) as again:
+        delete_project_analysis_rule_version(
+            run.id, version.id, db_session, manager_principal
+        )
+    assert again.value.status_code == 409
+
+    admin = User(id="admin-1", email="admin@example.com", role=UserRole.ADMIN)
+    db_session.add(admin)
+    db_session.commit()
+    restored = restore_project_analysis_rule_version(
+        run.id, version.id, db_session, Principal(user=admin, auth_type="session")
+    )
+    assert restored["restored_version"]["id"] == version.id
+    assert db_session.get(ProjectAnalysisRuleVersion, version.id).deleted_at is None
 
 
 def test_rule_version_merge_previews_conflicts_and_merges_into_draft(
@@ -4786,9 +4847,10 @@ def test_merging_into_published_rule_version_creates_child_draft(
     assert db_session.get(ProjectAnalysisRuleVersion, base_id).status.value == "published"
 
 
-def test_deleting_production_rule_uses_another_non_deleted_published_version(
+def test_live_rule_version_cannot_be_deleted(
     db_session: Session,
 ) -> None:
+    """C002: the server refuses to delete the production version, as the menu does."""
     _, manager, run, _ = _seed_run(db_session)
     principal = Principal(user=manager, auth_type="session")
     first = update_analysis_context(
@@ -4822,39 +4884,25 @@ def test_deleting_production_rule_uses_another_non_deleted_published_version(
         db_session,
         principal,
     )
+    first_id = first["rule_version"]["id"]
 
-    deleted = delete_project_analysis_rule_version(
-        run.id, first["rule_version"]["id"], db_session, principal
-    )
+    with pytest.raises(HTTPException) as exc_info:
+        delete_project_analysis_rule_version(run.id, first_id, db_session, principal)
 
-    assert deleted["active_version"]["id"] == second["version"]["id"]
-    assert (
-        db_session.get(
-            ProjectAnalysisRuleVersion,
-            first["rule_version"]["id"],
-        )
-        is None
-    )
-    remaining = db_session.get(ProjectAnalysisRuleVersion, second["version"]["id"])
-    assert remaining is not None
-    assert remaining.parent_version_id is None
-    assert remaining.base_version_id is None
-    assert (
-        db_session.query(ProjectAnalysisRuleAlias)
-        .filter(
-            ProjectAnalysisRuleAlias.project_id == run.project_id,
-            ProjectAnalysisRuleAlias.alias == "production",
-        )
-        .first()
-        is None
-    )
+    assert exc_info.value.status_code == 409
+    assert db_session.get(ProjectAnalysisRuleVersion, first_id).deleted_at is None
     assert (
         _resolve_analysis_rule_version(db_session, run.project_id, "production").id
-        == second["version"]["id"]
+        == first_id
     )
 
+    deleted = delete_project_analysis_rule_version(
+        run.id, second["version"]["id"], db_session, principal
+    )
+    assert deleted["active_version"]["id"] == first_id
 
-def test_deleted_draft_is_removed_and_cannot_be_resolved_or_edited(
+
+def test_deleted_draft_is_hidden_and_cannot_be_resolved_or_edited(
     db_session: Session,
 ) -> None:
     _, manager, run, _ = _seed_run(db_session)
@@ -4882,7 +4930,7 @@ def test_deleted_draft_is_removed_and_cannot_be_resolved_or_edited(
     )
     db_session.commit()
     delete_project_analysis_rule_version(run.id, version_id, db_session, principal)
-    assert db_session.get(ProjectAnalysisRuleVersion, version_id) is None
+    assert db_session.get(ProjectAnalysisRuleVersion, version_id).deleted_at is not None
 
     with pytest.raises(HTTPException) as resolve_error:
         _resolve_analysis_rule_version(db_session, run.project_id, version_id)
@@ -4901,7 +4949,7 @@ def test_deleted_draft_is_removed_and_cannot_be_resolved_or_edited(
             db_session,
             principal,
         )
-    assert update_error.value.status_code == 404
+    assert update_error.value.status_code == 409
 
 
 def test_last_live_rule_version_cannot_be_deleted(db_session: Session) -> None:

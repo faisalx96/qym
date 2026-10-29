@@ -160,7 +160,7 @@ curl -s -X POST "https://qym.example.com/v1/datasets:upload" \
   <tbody>
     <tr><td><code>GET /v1/projects/{project_id}/llm-connections</code></td><td>List connections (key never returned; only a <code>••••last4</code> hint).</td></tr>
     <tr><td><code>POST /v1/projects/{project_id}/llm-connections</code></td><td>Create one. Body: <code>name</code>, <code>llm_base_url</code> (default <code>https://api.openai.com/v1</code>), <code>llm_model</code> (default <code>gpt-4o-mini</code>), <code>llm_api_key</code>. First connection becomes the default. Requires encryption configured, else <code>400 LLM config encryption is not configured</code>.</td></tr>
-    <tr><td><code>PUT /v1/projects/{project_id}/llm-connections/{connection_id}</code></td><td>Update. Send <code>llm_api_key="__KEEP__"</code> to preserve the stored key, or <code>""</code> to clear it.</td></tr>
+    <tr><td><code>PUT /v1/projects/{project_id}/llm-connections/{connection_id}</code></td><td>Update. Send <code>llm_api_key="__KEEP__"</code> to preserve the stored key, or <code>""</code> to clear it. A stored key stays bound to its host: a <code>llm_base_url</code> with another scheme, host or port needs a new key, else <code>400 Enter the API key again for the new host</code>.</td></tr>
     <tr><td><code>DELETE /v1/projects/{project_id}/llm-connections/{connection_id}</code></td><td>Delete (promotes the oldest remaining connection to default).</td></tr>
     <tr><td><code>POST /v1/projects/{project_id}/llm-connections/{connection_id}/set-default</code></td><td>Make this connection the project default.</td></tr>
     <tr><td><code>POST /v1/projects/{project_id}/llm-connections/{connection_id}/test</code></td><td>Send a short <code>Reply with: ok</code> probe to verify the connection.</td></tr>
@@ -251,7 +251,7 @@ curl -s -X POST "https://qym.example.com/v1/datasets:upload" \
     <tr><td><code>GET /api/runs/{run_id}/analysis-rule-versions/{version}:compare</code></td><td>Compare against the required <code>base</code> version, returning added, removed, changed, and unchanged rules.</td></tr>
     <tr><td><code>GET /api/runs/{run_id}/analysis-rule-lineage</code></td><td>Return the parent-linked rule-version history and production pointer.</td></tr>
     <tr><td><code>POST /api/runs/{run_id}/analysis-rule-versions/{version_id}/activate</code></td><td>Set an available rule version as the project's production version.</td></tr>
-    <tr><td><code>DELETE /api/runs/{run_id}/analysis-rule-versions/{version_id}</code></td><td>Delete a rule version while leaving at least one live version; requires run-owner or project-manager rights.</td></tr>
+    <tr><td><code>DELETE /api/runs/{run_id}/analysis-rule-versions/{version_id}</code></td><td>Soft-delete a rule version while leaving at least one live version. Project manager only. The production version answers <code>409</code>. Promote another version first.</td></tr>
     <tr><td><code>POST /api/runs/{run_id}/analysis-rule-versions/{version_id}/restore</code></td><td>Restore a deleted rule version. Platform admin only.</td></tr>
     <tr><td><code>DELETE /api/runs/{run_id}/analysis-rule-versions/{version_id}/permanent</code></td><td>Permanently remove a soft-deleted rule version. Platform admin only.</td></tr>
     <tr><td><code>/api/projects/{project_slug}/analysis-config</code></td><td>Project-scoped analysis configuration; this is the no-run equivalent of the run-scoped config endpoint.</td></tr>
