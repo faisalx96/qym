@@ -188,13 +188,17 @@ card counts what you chose (`4 dataset versions from 2 datasets`). An experiment
 
 From two dataset versions the card shows the **Run shape**:
 
-- **Combine into one run** (default): one run over all dataset versions together. Every item records its dataset and version
+- **One run each** (default): one run per dataset version and environment, grouped under the experiment.
+- **Combine into one run**: one run over all dataset versions together. Every item records its dataset and version
   and scores break down per dataset. It needs an Evaluation Service on integration guide v1.4 (its schema declares
   `datasets`). An older service receives one job per dataset version instead; its environment box says
   `N runs, one per dataset version (older service)`.
-- **One run each**: one run per dataset version and environment, grouped under the experiment.
 
-The run count follows (`1 combination × (production: 1 combined run + staging: 4 runs) = 5 runs`) and the limit of
+An API request that names several dataset versions without `run_shape` gets `one_each`; a stored experiment always
+carries the shape it was launched with.
+
+The run count follows (`1 combination × (2 environments × 4 dataset versions) = 8 runs`, or with **Combine into one run**
+`1 combination × (production: 1 combined run + staging: 4 runs) = 5 runs`) and the limit of
 `QYM_EVAL_SWEEP_MAX_JOBS` applies to it. A one-dataset experiment is stored and sent exactly as before. Sweeps cannot cover the
 dataset list or the shape (use **One run each** to run each one); starting points (presets) hold no dataset list.
 

@@ -62,7 +62,11 @@ async function composed(page: Page, shape: 'combined' | 'one_each' = 'combined',
   await page.getByTestId('env-shape-tag').first().waitFor();
   // One task per experiment (round 9): a named task would flag staging (a v1.3 service), so the default scenario runs Worker default.
   if (task) await chooseTask(page, task);
-  if (shape === 'one_each') await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
+  // One run each is the default; every scenario picks its shape explicitly.
+  await page
+    .getByTestId('run-shape')
+    .getByRole('radio', { name: shape === 'one_each' ? 'One run each' : 'Combine into one run' })
+    .click({ force: true });
   await nameBox(page).fill('multi dataset run');
   // The dry run of this exact state has settled (the next read of it is the form's current document).
   // With a named task staging is flagged (J2), so the bar says why instead of Ready.

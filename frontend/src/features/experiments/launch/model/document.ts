@@ -31,7 +31,7 @@ export function emptyDataset(): DatasetChoice {
 }
 
 export function emptySelection(): LaunchSelection {
-  return { extraRefs: [], more: [], runShape: 'combined', task: null, mixedTasks: null };
+  return { extraRefs: [], more: [], runShape: 'one_each', task: null, mixedTasks: null };
 }
 
 export function emptyEvaluator(): EvaluatorEdits {
