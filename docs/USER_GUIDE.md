@@ -254,8 +254,15 @@ schema declares it, so an Evaluation Service shared by several qym instances ret
 it. Both keys are set by the platform; a configuration or preset that sets them itself fails validation until edited.
 
 The experiment page shows a **Credentials** row (API key and dataset read token: *active*, *revoked*, *not issued*,
-*not sent*); no secret is ever shown. In Project settings, API keys, **Dataset read tokens** also lists experiment tokens
-with an *experiment* tag and a link to the experiment; admins can revoke one by hand (a retry issues a new one).
+*not sent*); no secret is ever shown. Project settings, API keys keeps the keys the platform mints for experiments out of
+the way: your own keys are the table, and the keys issued at launch sit in a closed **Evaluation Service keys** group under
+it (the same for **Experiment tokens** under Dataset read tokens, admins only). Each row there names its experiment and links
+to it; you can revoke one by hand (a retry issues a new one).
+
+The API key minted for an experiment is scoped: it can upload runs (`POST /v1/runs`, `/v1/runs/{id}/events`,
+`/v1/runs:upload`) and read dataset items, and nothing else. Creating, changing or deleting datasets, reading runs back and
+the other routes answer 403 (`X-Qym-Key-State: scope_denied`), so a leaked key is worth little. Keys you create yourself are
+not scoped and keep acting with your project access.
 
 
 ## Feedback
