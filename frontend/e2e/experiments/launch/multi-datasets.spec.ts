@@ -261,7 +261,8 @@ test.describe('the Datasets card', () => {
     expect(base).toBeGreaterThan(0);
     await addDataset(page, 'billing-faq');
     await expect.poll(count).toBe(base); // the list is "Datasets changed" once
-    await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
+    // One run each is the default: the shape counts once it leaves it.
+    await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
     await expect.poll(count).toBe(base + 1);
   });
 });
