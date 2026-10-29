@@ -570,13 +570,15 @@
   transition: opacity var(--transition-fast);
 }
 
+/* the page's outcome colours (DESIGN_LANGUAGE §3.5, as the Deep analysis scatter): pass band 5, fail band 1; the
+   legacy sky blue would read as the LLM kind colour in the same section */
 .dot[data-outcome='pass'] {
-  fill: var(--accent-secondary);
+  fill: var(--score-5);
   fill-opacity: 0.85;
 }
 
 .dot[data-outcome='fail'] {
-  fill: var(--score-2);
+  fill: var(--score-1);
   fill-opacity: 0.85;
 }
 
