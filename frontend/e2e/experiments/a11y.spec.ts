@@ -201,7 +201,7 @@ test.describe('axe', () => {
   test('environments: add dialog steps, slot editor, delete confirm', async ({ page }) => {
     const { project } = world.seeded;
     await gotoApp(page, `/projects/${project.slug}/environments`);
-    await page.getByRole('button', { name: '+ Add environment' }).first().click();
+    await page.getByRole('button', { name: 'Add environment' }).first().click();
     await expect(page.getByRole('dialog', { name: 'Add environment' })).toBeVisible();
     await expectNoSeriousViolations(page, 'add environment: connect');
     await page.keyboard.press('Escape');
@@ -296,7 +296,7 @@ test.describe('keyboard', () => {
 
   test('environments: add dialog is fully operable by keyboard and traps focus', async ({ page }) => {
     await open(page, pages(world)[4]!);
-    const add = page.getByRole('button', { name: '+ Add environment' }).first();
+    const add = page.getByRole('button', { name: 'Add environment' }).first();
     await add.focus();
     await page.keyboard.press('Enter');
     const dialog = page.getByRole('dialog', { name: 'Add environment' });

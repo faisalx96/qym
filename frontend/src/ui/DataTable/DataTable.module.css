@@ -1,6 +1,9 @@
 /* .qdt-table reference table recipe, v2 (DESIGN_LANGUAGE §3 "Data table"): density rows, zebra, bands, pins, cues. */
 .card {
   --row-h: var(--row-regular);
+  /* Row separators are a faint hairline, and none where zebra stripes already separate the rows: a full-strength line
+     on every row read as a grid of boxes (round 10). */
+  --row-line: color-mix(in srgb, var(--border-subtle) 55%, transparent);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -16,6 +19,10 @@
 }
 .card[data-density='comfortable'] {
   --row-h: var(--row-comfortable);
+}
+
+.card[data-zebra] {
+  --row-line: transparent;
 }
 
 .card[data-variant='embedded'] {
@@ -374,7 +381,7 @@
   font-family: var(--font-sans);
   padding: 0 var(--space-sm);
   height: var(--row-h);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--row-line);
   background:
     linear-gradient(var(--row-tint, transparent), var(--row-tint, transparent)),
     var(--row-base, var(--bg-base));
@@ -383,6 +390,11 @@
   outline: none;
   text-align: start;
   vertical-align: middle;
+}
+
+/* The frame closes the last row: its own line would double the frame's bottom edge at the rounded corners. */
+.tbody > tr:last-child > td {
+  border-bottom-color: transparent;
 }
 
 .table[data-tall] .tbody td {

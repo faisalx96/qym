@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { projectPath } from '@/app/routes';
-import { Button, PageHeader } from '@/ui';
+import { Button, Icon, PageHeader } from '@/ui';
 import { ExperimentsTabs } from '@/features/experiments/ExperimentsTabs';
 import { environmentPath } from '@/features/experiments/paths';
 import { AddEnvironmentDialog } from './AddEnvironmentDialog';
@@ -27,8 +27,8 @@ export function EnvironmentsPage() {
         }
         actions={
           canAdd ? (
-            <Button variant="primary" size="md" onPress={() => setAdding(true)}>
-              + Add environment
+            <Button variant="primary" size="md" icon={<Icon name="plus" />} onPress={() => setAdding(true)}>
+              Add environment
             </Button>
           ) : null
         }
@@ -41,7 +41,6 @@ export function EnvironmentsPage() {
         readOnly={readOnly}
         storageKey="environments.list.v1"
         onOpen={(env) => navigate(environmentPath(slug, env.id))}
-        onAdd={() => setAdding(true)}
       />
       {canAdd ? (
         <AddEnvironmentDialog

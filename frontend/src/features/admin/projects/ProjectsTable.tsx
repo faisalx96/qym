@@ -82,7 +82,8 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         rows={shown}
         rowKey={(p) => p.id}
         storageKey="admin-projects"
-        density="regular"
+        density="comfortable"
+        densityLocked
         empty="No projects yet."
         isFiltered={q !== ''}
         filteredEmpty={<Text variant="sm">No projects match “{query.trim()}”.</Text>}

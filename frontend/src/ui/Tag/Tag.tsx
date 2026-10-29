@@ -15,16 +15,24 @@ export interface TagProps extends HTMLAttributes<HTMLSpanElement> {
 
 /** Tone implied by a kind: task, version and config describe what was run, so they share the meta (purple) tone. */
 const KIND_TONE: Partial<Record<TagKind, TagTone>> = {
-  role: 'accent',
   accent: 'accent',
   version: 'meta',
   task: 'meta',
   config: 'meta',
 };
 
+/**
+ * A role tag's tone follows the role, so an admin never reads as a member (round 10): admin blue, manager green, member
+ * and other labels neutral. Purple stays reserved for definition metadata.
+ */
+function roleTone(children: ReactNode): TagTone | undefined {
+  const role = typeof children === 'string' ? children.trim().toLowerCase() : '';
+  return role === 'admin' ? 'info' : role === 'manager' ? 'accent' : undefined;
+}
+
 /** Role/metadata tag: borderless, --control-radius, tinted fill; mono for role/count/data/version/task/config. */
 export function Tag({ kind, tone, series, className, children, ...rest }: TagProps) {
-  const resolved = tone ?? (kind ? KIND_TONE[kind] : undefined);
+  const resolved = tone ?? (kind === 'role' ? roleTone(children) : kind ? KIND_TONE[kind] : undefined);
   return (
     <span
       className={[styles.tag, className].filter(Boolean).join(' ')}

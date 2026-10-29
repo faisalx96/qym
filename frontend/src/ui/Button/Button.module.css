@@ -109,6 +109,14 @@ a.button[data-variant='ghost']:hover:not([data-disabled]) {
   cursor: not-allowed;
 }
 
+/* A disabled primary keeps its green, quieter: the soft accent tint with accent text (7:1), no ring. A grey Create
+   or Add read as a different, secondary button until the form was filled in (round 10). */
+.button[data-variant='primary'][data-disabled] {
+  color: color-mix(in srgb, var(--accent-primary) 75%, var(--text-muted));
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  box-shadow: none;
+}
+
 .button[data-focus-visible],
 a.button:focus-visible {
   outline: 2px solid var(--accent-primary);

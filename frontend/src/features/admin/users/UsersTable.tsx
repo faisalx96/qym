@@ -110,11 +110,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         header: 'Role',
         width: 110,
         priority: 2,
-        cell: (u) => (
-          <Tag kind="role" tone={u.role === 'ADMIN' ? 'success' : undefined}>
-            {u.role === 'ADMIN' ? 'admin' : 'member'}
-          </Tag>
-        ),
+        cell: (u) => <Tag kind="role">{u.role === 'ADMIN' ? 'admin' : 'member'}</Tag>,
       },
     ],
     [meId, highlightId],
@@ -128,7 +124,8 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         rows={shown}
         rowKey={(u) => u.id}
         storageKey="admin-users"
-        density="regular"
+        density="comfortable"
+        densityLocked
         empty="No users yet."
         isFiltered={q !== ''}
         filteredEmpty={<Text variant="sm">No users match “{query.trim()}”.</Text>}
@@ -141,7 +138,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
               ? {
                   id: 'disable',
                   label: 'You cannot disable your own account',
-                  icon: 'stop',
+                  icon: 'ban',
                   primary: true,
                   danger: true,
                   disabled: true,
@@ -151,7 +148,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
                 ? {
                     id: 'disable',
                     label: `Disable ${label(u)}`,
-                    icon: 'stop',
+                    icon: 'ban',
                     primary: true,
                     danger: true,
                     disabled: busy,

@@ -4,7 +4,6 @@ import { useTestEnvironment } from '@/api/evalEnvironments';
 import { errorMessage, useEvalEnvironments, type EvalEnvironment } from '@/api/evalCommon';
 import { useDelayedPending } from '@/lib/pending';
 import {
-  Button,
   DataTable,
   EmptyState,
   ErrorState,
@@ -25,7 +24,6 @@ export interface EnvironmentsListProps {
   canManage: boolean;
   readOnly: boolean;
   onOpen: (env: EvalEnvironment) => void;
-  onAdd?: () => void;
   storageKey?: string;
 }
 
@@ -35,7 +33,6 @@ export function EnvironmentsList({
   canManage,
   readOnly,
   onOpen,
-  onAdd,
   storageKey,
 }: EnvironmentsListProps) {
   const list = useEvalEnvironments(projectId);
@@ -80,13 +77,6 @@ export function EnvironmentsList({
           canEdit
             ? 'Add one to launch experiments against an Evaluation Service deployment.'
             : 'A project manager can add one.'
-        }
-        action={
-          canEdit && onAdd ? (
-            <Button variant="primary" size="md" onPress={onAdd}>
-              + Add environment
-            </Button>
-          ) : undefined
         }
       />
     );

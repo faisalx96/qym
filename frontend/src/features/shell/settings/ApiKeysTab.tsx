@@ -170,7 +170,7 @@ function KeysCard({
                     {
                       id: 'revoke',
                       label: `Revoke ${k.name || 'key'}`,
-                      icon: 'close',
+                      icon: 'ban',
                       primary: true,
                       danger: true,
                       onPress: setRevoking,
@@ -360,7 +360,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
                     {
                       id: 'revoke',
                       label: `Revoke ${t.name || 'token'}`,
-                      icon: 'close',
+                      icon: 'ban',
                       primary: true,
                       danger: true,
                       onPress: setRevoking,

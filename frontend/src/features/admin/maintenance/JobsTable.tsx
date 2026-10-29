@@ -111,7 +111,8 @@ export function JobsTable({ jobs }: JobsTableProps) {
         rows={jobs}
         rowKey={(j) => j.id}
         storageKey="admin-jobs"
-        density="regular"
+        density="comfortable"
+        densityLocked
         empty="No jobs yet."
         refreshing={jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status))}
         rowState={(j) => (j.status === 'failed' ? 'error' : j.status === 'running' ? 'live' : undefined)}

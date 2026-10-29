@@ -31,6 +31,7 @@ import { useProjectContext } from '../ProjectContext';
 import { plural } from '../plural';
 import styles from './settings.module.css';
 import { transferCandidates } from './transferCandidates';
+import { SettingsCard } from './SettingsCard';
 
 type Role = 'MEMBER' | 'MANAGER';
 const ROLE_ITEMS = [
@@ -160,7 +161,15 @@ export function MembersTab() {
   const canTransfer = ownedTotal > 0 && !readOnly && others.length > 0;
 
   return (
-    <Stack gap="lg">
+    <SettingsCard
+      title="Members"
+      description={
+        canManage
+          ? 'People who can open this project. Managers add and remove members and change their roles.'
+          : 'People who can open this project. Only project managers can change members.'
+      }
+      data-members
+    >
       {canManage && !readOnly ? <AddMemberBar projectId={project.id} existing={members.data ?? []} /> : null}
       {members.isError ? (
         <ErrorState
@@ -251,7 +260,7 @@ export function MembersTab() {
           }}
         />
       ) : null}
-    </Stack>
+    </SettingsCard>
   );
 }
 

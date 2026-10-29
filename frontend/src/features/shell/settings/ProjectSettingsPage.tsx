@@ -63,6 +63,8 @@ export function ProjectSettingsPage() {
             {isAdmin ? 'admin' : project.role || 'member'}
           </Tag>,
           plural(project.member_count, 'member'),
+          plural(project.run_count, 'run'),
+          `Created ${new Date(project.created_at).toLocaleDateString()}`,
           // on/off state: only the exception shows
           ...(readOnly
             ? [
