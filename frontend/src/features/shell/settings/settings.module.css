@@ -39,10 +39,11 @@
   gap: var(--space-md);
 }
 
+/* A name and its tags (an LLM connection and its default tag): room between them (round 11). */
 .inlineActions {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
 }
 
 .dangerRow {
@@ -75,9 +76,9 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas:
     'icon label state'
-    'icon desc desc';
+    'icon desc .';
   align-items: center;
-  column-gap: var(--space-sm);
+  column-gap: var(--space-md);
   row-gap: 2px;
   min-height: var(--tab-height);
   padding: var(--space-sm) var(--space-md);
@@ -194,23 +195,6 @@
   min-width: 240px;
 }
 
-.comboInput {
-  width: 100%;
-  height: 24px;
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: var(--font-sm);
-  outline: none;
-}
-
-.comboInput:focus-visible {
-  border-color: var(--accent-primary);
-  box-shadow: var(--focus-ring);
-}
-
 .comboList {
   position: absolute;
   top: calc(100% + 4px);
@@ -228,27 +212,21 @@
   z-index: var(--z-dropdown);
 }
 
+/* A candidate: the person (disc and name) with the email after it, one per roomy row (round 11). */
 .comboOption {
   display: flex;
-  flex-direction: column;
-  min-height: var(--dropdown-option-height);
-  justify-content: center;
+  align-items: center;
+  min-height: var(--row-regular);
   padding: 0 var(--space-sm);
   border-radius: var(--control-radius);
   color: var(--text-primary);
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
   cursor: pointer;
 }
 
 .comboOption[aria-selected='true'],
 .comboOption:hover {
   background: var(--bg-hover);
-}
-
-.comboOption small {
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  font-family: var(--font-mono);
 }
 
 @media (max-width: 800px) {

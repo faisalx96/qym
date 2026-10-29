@@ -309,11 +309,16 @@ describe('primitive module contracts', () => {
     expect(selected).toContain('border-color: var(--accent-primary);');
   });
 
-  it('Button: a disabled primary keeps a green tint instead of the grey disabled fill (round 10)', () => {
+  it('Button: a disabled coloured button keeps its own colour, faded (round 11)', () => {
     const css = ui('Button');
-    const rule = css.split(".button[data-variant='primary'][data-disabled] {")[1]?.split('}')[0] ?? '';
-    expect(rule).toContain('color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent)');
-    expect(rule).toContain('box-shadow: none;');
+    const sel =
+      ".button:is([data-variant='primary'], [data-variant='accent'], [data-variant='danger'])[data-disabled] {";
+    const fade = css.split(sel)[1]?.split('}')[0] ?? '';
+    expect(fade).toContain('opacity: 0.45;');
+    const primary = css.split(".button[data-variant='primary'][data-disabled] {")[1]?.split('}')[0] ?? '';
+    expect(primary).toContain('background: var(--accent-primary);');
+    const danger = css.split(".button[data-variant='danger'][data-disabled] {")[1]?.split('}')[0] ?? '';
+    expect(danger).toContain('var(--error)');
   });
 
   it('DataTable: rows part on a faint hairline, none under zebra stripes or on the last row (round 10)', () => {

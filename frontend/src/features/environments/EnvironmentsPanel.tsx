@@ -66,7 +66,7 @@ export function EnvironmentsPanel() {
         }
         action={
           canAdd ? (
-            <Button variant="primary" icon={<Icon name="plus" />} onPress={() => setAdding(true)}>
+            <Button variant="primary" icon={<Icon name="plus" size={12} />} onPress={() => setAdding(true)}>
               Add environment
             </Button>
           ) : undefined

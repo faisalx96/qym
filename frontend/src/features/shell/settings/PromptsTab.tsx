@@ -16,6 +16,7 @@ import {
   useToast,
   type IconName,
 } from '@/ui';
+import { wordDiff as boundedWordDiff, type DiffOp } from '@/features/datasets/lib/wordDiff';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
 import { SettingsCard } from './SettingsCard';
@@ -40,6 +41,12 @@ const PROMPT_TYPES: Record<string, { label: string; description: string; icon: I
 };
 const labelOf = (k: string) => PROMPT_TYPES[k]?.label ?? k;
 
+/** The editor grows with the prompt, so most prompts show in full with no inner scroll (round 11: "expand"). */
+function editorRows(text: string): number {
+  const lines = text.split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 110)), 0);
+  return Math.min(48, Math.max(16, lines + 1));
+}
+
 function relative(iso: string | null | undefined, now: number): string {
   if (!iso) return 'never';
   const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
@@ -51,37 +58,18 @@ function relative(iso: string | null | undefined, now: number): string {
   return `${Math.round(h / 24)} d ago`;
 }
 
-/** Word-level LCS diff, capped so huge prompts stay cheap (project_settings.html 24 000 cells). */
-export function wordDiff(
-  a: string,
-  b: string,
-  cap = 24_000,
-): { kind: 'same' | 'add' | 'del'; text: string }[] {
-  const x = a.split(/(\s+)/);
-  const y = b.split(/(\s+)/);
-  if (x.length * y.length > cap)
-    return [
+/**
+ * Word diff of a prompt against its shipped default: the shared bounded diff, which trims the common leading and
+ * trailing words first, so one changed word in a 5,000-character prompt marks one word. The old LCS gave up past
+ * 24 000 cells and marked the whole prompt deleted and re-added (round 11). Past the shared budgets, both whole texts.
+ */
+export function wordDiff(a: string, b: string): DiffOp[] {
+  return (
+    boundedWordDiff(a, b) ?? [
       { kind: 'del', text: a },
       { kind: 'add', text: b },
-    ];
-  const dp: number[][] = Array.from({ length: x.length + 1 }, () => new Array<number>(y.length + 1).fill(0));
-  for (let i = x.length - 1; i >= 0; i--)
-    for (let j = y.length - 1; j >= 0; j--)
-      dp[i]![j] = x[i] === y[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
-  const out: { kind: 'same' | 'add' | 'del'; text: string }[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < x.length && j < y.length) {
-    if (x[i] === y[j]) {
-      out.push({ kind: 'same', text: x[i]! });
-      i++;
-      j++;
-    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) out.push({ kind: 'del', text: x[i++]! });
-    else out.push({ kind: 'add', text: y[j++]! });
-  }
-  while (i < x.length) out.push({ kind: 'del', text: x[i++]! });
-  while (j < y.length) out.push({ kind: 'add', text: y[j++]! });
-  return out;
+    ]
+  );
 }
 
 export function PromptsTab() {
@@ -182,13 +170,12 @@ export function PromptsTab() {
                 <Icon name={PROMPT_TYPES[k]?.icon ?? 'file'} />
               </span>
               <span className={styles.promptLabel}>{labelOf(k)}</span>
-              {/* default or custom shows here only, one marker per prompt */}
+              {/* on/off: only the exception shows. A customised prompt is configuration, so the tag is purple
+                  (meta); the shipped default has no tag (round 11) */}
               <span className={styles.promptState}>
                 {(prompts.data.prompts[k] ?? '') !== (prompts.data.defaults[k] ?? '') ? (
-                  <Tag kind="accent">custom</Tag>
-                ) : (
-                  <Tag>default</Tag>
-                )}
+                  <Tag tone="meta">custom</Tag>
+                ) : null}
               </span>
               {PROMPT_TYPES[k] ? (
                 <small className={styles.promptDesc}>{PROMPT_TYPES[k].description}</small>
@@ -209,10 +196,20 @@ export function PromptsTab() {
             </div>
             {!readOnly ? (
               <div className={styles.cardAction}>
-                <Button variant="neutral" isDisabled={!isCustom && !dirty} onPress={() => setShowDiff(true)}>
+                <Button
+                  variant="neutral"
+                  icon={<Icon name="diff" size={12} />}
+                  isDisabled={!isCustom && !dirty}
+                  onPress={() => setShowDiff(true)}
+                >
                   View diff
                 </Button>
-                <Button variant="danger" isDisabled={!isCustom} onPress={() => setConfirmRestore(true)}>
+                <Button
+                  variant="danger"
+                  icon={<Icon name="retry" size={12} />}
+                  isDisabled={!isCustom}
+                  onPress={() => setConfirmRestore(true)}
+                >
                   Restore default
                 </Button>
               </div>
@@ -223,8 +220,10 @@ export function PromptsTab() {
             hideLabel
             value={draft}
             onChange={(v) => setDrafts((d) => ({ ...d, [key]: v }))}
-            rows={16}
+            rows={editorRows(draft)}
             mono
+            spellCheck={false}
+            quietFocus
             className={styles.promptEditor}
             isReadOnly={readOnly}
           />
@@ -263,7 +262,14 @@ export function PromptsTab() {
         size="data"
       >
         <Text variant="sm">Deleted words are red, added words are green.</Text>
-        <div className={styles.diff}>
+        <div
+          className={styles.diff}
+          ref={(el) => {
+            // open on the first change, not on the top of a long prompt
+            if (el)
+              requestAnimationFrame(() => el.querySelector('ins, del')?.scrollIntoView({ block: 'center' }));
+          }}
+        >
           {wordDiff(shipped, draft).map((part, i) =>
             part.kind === 'same' ? (
               <span key={i}>{part.text}</span>

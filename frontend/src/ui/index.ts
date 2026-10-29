@@ -28,6 +28,7 @@ export * from './EntityTag';
 export * from './Chip';
 export * from './ScoreValue';
 export * from './Identicon';
+export * from './UserName';
 export * from './Skeleton';
 export * from './EmptyState';
 export * from './ErrorState';

@@ -162,7 +162,7 @@ export function LlmConnectionsTab() {
             <div ref={addRef}>
               <Button
                 variant="primary"
-                icon={<Icon name="plus" />}
+                icon={<Icon name="plus" size={12} />}
                 onPress={() => {
                   setEditing(null);
                   setShowForm(true);

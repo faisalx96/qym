@@ -51,4 +51,10 @@ describe('helpers', () => {
     expect(d.filter((p) => p.kind === 'del').map((p) => p.text)).toEqual(['b']);
     expect(d.filter((p) => p.kind === 'add').map((p) => p.text)).toEqual(['x']);
   });
+  it('word diff marks one changed word in a long prompt, not the whole prompt (round 11)', () => {
+    const base = Array.from({ length: 1800 }, (_, i) => `word${i}`).join(' ');
+    const d = wordDiff(base, base.replace('word900', 'changed'));
+    expect(d.filter((p) => p.kind === 'del').map((p) => p.text)).toEqual(['word900']);
+    expect(d.filter((p) => p.kind === 'add').map((p) => p.text)).toEqual(['changed']);
+  });
 });

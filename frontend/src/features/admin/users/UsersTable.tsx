@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUpdateUser, type AdminUser } from '@/api/admin';
 import { ApiError } from '@/lib/http';
-import { ConfirmDialog, DataTable, SearchField, StatusMark, Tag, Text, useToast, type Column } from '@/ui';
+import {
+  ConfirmDialog,
+  DataTable,
+  SearchField,
+  StatusMark,
+  Tag,
+  Text,
+  UserName,
+  useToast,
+  type Column,
+} from '@/ui';
 import styles from './users.module.css';
 
 export interface UsersTableProps {
@@ -76,8 +86,12 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         priority: 1,
         sort: { key: 'user', compare: (a, b) => label(a).localeCompare(label(b)) },
         cell: (u) => (
-          <span data-user-row={u.id} data-highlight={highlightId === u.id || undefined}>
-            {label(u)}
+          <span
+            className={styles.userCell}
+            data-user-row={u.id}
+            data-highlight={highlightId === u.id || undefined}
+          >
+            <UserName id={u.id} name={u.display_name} email={u.email} />
             {u.id === meId ? (
               <Tag kind="data" className={styles.youTag}>
                 you

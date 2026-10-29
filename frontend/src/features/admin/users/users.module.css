@@ -83,6 +83,14 @@
   gap: var(--space-xs);
 }
 
+/* The user cell: the shared person (disc and name), then the you tag and the Disabled mark on one line. */
+.userCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
 .youTag {
   margin-inline-start: var(--space-xs);
 }

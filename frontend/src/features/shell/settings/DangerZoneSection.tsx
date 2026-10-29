@@ -5,7 +5,8 @@ import { ArchiveProjectDialog, DeleteProjectDialog, UnarchiveProjectDialog } fro
 import styles from './settings.module.css';
 import { SettingsCard } from './SettingsCard';
 
-export function DangerZoneTab() {
+/** Archive or delete the project: its own section at the end of General, a card like every other (round 11). */
+export function DangerZoneSection() {
   const { project } = useProjectContext();
   const [archive, setArchive] = useState(false);
   const [unarchive, setUnarchive] = useState(false);
@@ -13,9 +14,9 @@ export function DangerZoneTab() {
   return (
     <Stack gap="lg">
       <SettingsCard
+        id="danger-zone"
         title="Danger zone"
-        description="Archive or delete this project. Only admins see this tab."
-        tone="danger"
+        description="Archive or delete this project. Only admins see this section."
         data-danger-zone
       >
         {project.is_active ? (

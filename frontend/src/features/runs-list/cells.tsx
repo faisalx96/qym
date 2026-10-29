@@ -15,6 +15,7 @@ import {
   RunName,
   Tag,
   Tooltip,
+  UserName,
 } from '@/ui';
 import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
 import { errorsLeftOut, formatPercent, metricDirection } from '@/lib/metrics';
@@ -62,30 +63,9 @@ export function ModelCell({ row }: { row: RunRow }) {
   );
 }
 
-/** Series hue 1..8 from the owner id: the same person is the same colour on every row. */
-export function ownerSeries(id: string | undefined): number | undefined {
-  if (!id) return undefined;
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return (h % 8) + 1;
-}
-
+/** The run owner: the shared person recipe (initials disc in the person's colour, then the name). */
 export function OwnerCell({ row }: { row: RunRow }) {
-  const name = row.owner?.display_name || row.owner?.email || '—';
-  const initials = name
-    .split(/\s+/)
-    .map((p) => p[0] ?? '')
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-  return (
-    <span className={styles.owner} title={row.owner?.email}>
-      <span className={styles.avatar} data-series={ownerSeries(row.owner?.id)} aria-hidden="true">
-        {initials}
-      </span>
-      <span className={styles.ownerName}>{name}</span>
-    </span>
-  );
+  return <UserName id={row.owner?.id} name={row.owner?.display_name} email={row.owner?.email} />;
 }
 
 export function DatasetCell({ row }: { row: RunRow }) {
