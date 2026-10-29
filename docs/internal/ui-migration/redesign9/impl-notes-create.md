@@ -62,3 +62,11 @@ review-d. Versions Refresh moved to the box head (qa-b-versions, versions: width
 Dataset box height 67 -> 75 (multi-datasets), token callout 73.6 -> 90.4 px at 1024 (latency-sensitive, now in the half-width Checks card).
 HIGH launch needs the checkbox on the Review step instead of the dialog (launch.spec); the server `preemption_acknowledgement_required` resend path keeps the dialog.
 Launch as is is `primary` (wizard). The preset editor specs read the release notes on the Review step and Publish from the bar.
+
+## After-shots
+
+`shots/after-page-{create-home, create-home-flagged, customize-where, customize-models, customize-settings, review, preset-edit, preset-publish}-{1440,390}.png`
+(16 files). States: create-home = production and staging ticked, two datasets, task "Answer ticket"; create-home-flagged = "Summarize thread"
+(only the first service offers it, the second box is flagged); review = the 6-run timeout sweep with run 1 High and run 4 Low (acknowledgement open);
+preset-edit = step 1 of the editor; preset-publish = the editor's Review and publish with one change and release notes. Taken against the seeded dev stack
+(`frontend/scripts/seed_experiments.py` data plus a sweep experiment) at 1440x900 and 390x844, dark theme.
