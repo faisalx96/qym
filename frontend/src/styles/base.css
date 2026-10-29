@@ -16,11 +16,12 @@ body {
   background: var(--bg-void);
   color: var(--text-primary);
   line-height: 1.4;
+  /* Text clarity (round 10, owner review of the run page): Plex Sans at 400 drew thinner than the old Segoe UI under
+     Windows ClearType, so body text is 450 (the face is variable, 400 to 700); explicit weights are unchanged. Font
+     hinting stays on: geometricPrecision turned it off in Chromium, which blurred 11-13px text on Windows. */
+  font-weight: 450;
   -webkit-font-smoothing: antialiased;
   font-kerning: normal;
-  /* Subpixel glyph positioning for tracked uppercase labels (letter-spacing 0.05em). Mitigation only: with
-     Plex some bold pairs ("DAT E") stay uneven in headless Chromium on Linux; harmless elsewhere. */
-  text-rendering: geometricPrecision;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-color) var(--scrollbar-track);
   overflow: hidden; /* the shell content area is the only page scroller */

@@ -116,8 +116,8 @@ export function useSectionEntries(): SectionEntry[] {
       ? [{ id: 'datasets' as const, label: 'Datasets', count: payload.run.dataset_count }]
       : []),
     ...(model.isRepeat && !model.viewPass ? [{ id: 'repeat' as const, label: 'Repeat' }] : []),
-    { id: 'latency', label: 'Latency' },
-    { id: 'deep', label: 'Deep' },
+    { id: 'latency', label: 'Latency and traces' },
+    { id: 'deep', label: 'Deep analysis' },
     { id: 'categories', label: 'Categories' },
     { id: 'errors', label: 'Errors', ...(rowsPending ? {} : { count: errorCount, danger: errorCount > 0 }) },
     ...(hasRootCause ? [{ id: 'root-cause' as const, label: 'Root cause' }] : []),

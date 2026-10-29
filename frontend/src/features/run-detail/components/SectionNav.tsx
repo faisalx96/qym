@@ -1,9 +1,11 @@
 /**
  * Sticky section nav: run name and status once the hero has scrolled away, jump links to every section of the
- * report (scroll-spy marks the one in view), and the page-wide Filters rule builder and Clear.
+ * report (scroll-spy marks the one in view; the first qym's underline tabs, round 10), the page-wide metric that
+ * every section follows, the page-wide Filters rule builder and Clear, and back to top.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon, Popover, RunStatusBadge } from '@/ui';
+import { Button, Icon, IconButton, Popover, RunStatusBadge, SegmentedControl, Select } from '@/ui';
+import { useMediaQuery } from '@/features/shell';
 import { useShellScroller } from '../hooks/useScrollMargin';
 import { countActiveFilters, type FilterGroup } from '../lib/filterRules';
 import { useRunPage } from '../RunContext';
@@ -112,6 +114,45 @@ function NavFilters() {
   );
 }
 
+/** Chips fit while the metrics are few and the bar is wide; otherwise one select. */
+const METRIC_CHIPS_MAX = 5;
+
+/**
+ * The page's one metric (round 10): the Repeat tiles and curves, Quality vs latency, Categories and the Items
+ * analysis all follow it, so no section carries its own metric picker.
+ */
+function NavMetric() {
+  const { model, api } = useRunPage();
+  const wide = useMediaQuery('(min-width: 1680px)');
+  const names = model.metricNames;
+  const metric = api.selectedMetric;
+  if (names.length < 2 || !metric) return null;
+  const pick = (m: string) => api.setView({ metric: m === model.defaultMetric ? null : m, threshold: null });
+  return (
+    <span className={styles.metric} data-testid="nav-metric">
+      <span className={styles.metricLabel}>Metric</span>
+      {wide && names.length <= METRIC_CHIPS_MAX ? (
+        <SegmentedControl<string>
+          label="Metric"
+          value={metric}
+          onChange={pick}
+          options={names.map((m) => ({ value: m, label: m }))}
+        />
+      ) : (
+        <Select
+          label="Metric"
+          hideLabel
+          items={names.map((m) => ({ key: m, label: m }))}
+          value={metric}
+          onChange={(k) => k && pick(String(k))}
+          searchable={names.length > 8}
+          width={180}
+        />
+      )}
+    </span>
+  );
+}
+
 export function SectionNav({ onSection }: SectionNavProps) {
   const { payload } = useRunPage();
   const entries = useSectionEntries();
@@ -167,12 +208,17 @@ export function SectionNav({ onSection }: SectionNavProps) {
         <RunStatusBadge status={status} label={String(run.status || '').toLowerCase()} />
       </span>
       <span className={styles.links}>
-        {link('summary', 'Summary', {})}
-        <span className={styles.sep} aria-hidden="true" />
         {entries.map((e) => link(e.id, e.label, { count: e.count, danger: e.danger }))}
       </span>
       <span className={styles.actions}>
+        <NavMetric />
         <NavFilters />
+        <IconButton
+          label="Back to top"
+          icon={<Icon name="chevron-up" size={14} />}
+          onPress={() => onSection('summary')}
+          data-testid="nav-top"
+        />
       </span>
     </nav>
   );
