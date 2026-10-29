@@ -363,7 +363,8 @@ def test_put_base_url_to_taken_url_refused(client):
     res = client.put(
         _url(P2, f"/{other['id']}"),
         headers=_headers(OUTSIDER),
-        json={"base_url": URL + "/"},
+        # A new host needs the key again (C004); the URL rule is what this tests.
+        json={"base_url": URL + "/", "api_key": "rotated-key-5555"},
     )
     assert res.status_code == 409
     assert "Project One" in res.json()["detail"]
@@ -870,7 +871,7 @@ def test_url_change_resets_connection_key_opt_in(client):
     res = client.put(
         _url(suffix=f"/{env_id}"),
         headers=_headers(MANAGER),
-        json={"base_url": "https://moved.example.com"},
+        json={"base_url": "https://moved.example.com", "api_key": "rotated-key-5555"},
     )
     body = res.json()
     assert body["base_url"] == "https://moved.example.com"
@@ -880,9 +881,104 @@ def test_url_change_resets_connection_key_opt_in(client):
     res = client.put(
         _url(suffix=f"/{env_id}"),
         headers=_headers(MANAGER),
-        json={"base_url": "https://moved2.example.com", "allow_connection_keys": True},
+        json={
+            "base_url": "https://moved2.example.com",
+            "api_key": "rotated-key-5555",
+            "allow_connection_keys": True,
+        },
     )
     assert res.json()["allow_connection_keys"] is True
+
+
+# --------------------------------------------------------------------------- key bound to host (C004)
+
+
+def _stored(session_factory, env_id: str) -> tuple[str, str]:
+    with session_factory() as s:
+        row = s.get(EvalEnvironment, env_id)
+        return row.base_url, row.api_key_encrypted
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{}, {"api_key": ""}, {"api_key": "__KEEP__"}],
+    ids=["omitted", "blank", "keep"],
+)
+def test_new_host_without_a_new_key_is_refused_and_row_unchanged(
+    client, session_factory, service, extra
+):
+    env_id = _created(client)["environment"]["id"]
+    before = _stored(session_factory, env_id)
+    service.requests.clear()
+
+    res = client.put(
+        _url(suffix=f"/{env_id}"),
+        headers=_headers(MANAGER),
+        json={"name": "renamed", "base_url": "https://attacker.example.com", **extra},
+    )
+
+    assert res.status_code == 400
+    assert res.json()["detail"] == "Enter the API key again for the new host"
+    assert _stored(session_factory, env_id) == before
+    body = client.get(_url(suffix=f"/{env_id}"), headers=_headers(MANAGER)).json()
+    env = body.get("environment", body)
+    assert env["base_url"] == URL and env["name"] == "staging"
+    assert service.requests == []  # the stored key went nowhere
+
+
+@pytest.mark.parametrize(
+    "moved",
+    ["http://eval.example.com/prefix", "https://eval.example.com:8443/prefix"],
+    ids=["scheme", "port"],
+)
+def test_new_scheme_or_port_needs_the_key_again(
+    client, session_factory, monkeypatch, moved
+):
+    monkeypatch.setenv("QYM_ALLOW_PRIVATE_LLM_BASE_URLS", "true")  # allows http://
+    env_id = _created(client)["environment"]["id"]
+    before = _stored(session_factory, env_id)
+
+    res = client.put(
+        _url(suffix=f"/{env_id}"), headers=_headers(MANAGER), json={"base_url": moved}
+    )
+
+    assert res.status_code == 400
+    assert res.json()["detail"] == "Enter the API key again for the new host"
+    assert _stored(session_factory, env_id) == before
+
+
+def test_new_path_on_the_same_host_keeps_the_key(client, session_factory):
+    env_id = _created(client)["environment"]["id"]
+    _, key_before = _stored(session_factory, env_id)
+
+    res = client.put(
+        _url(suffix=f"/{env_id}"),
+        headers=_headers(MANAGER),
+        json={"base_url": "https://EVAL.example.com:443/v2", "api_key": "__KEEP__"},
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["base_url"] == "https://eval.example.com/v2"
+    assert res.json()["api_key_hint"] == "••••9876"
+    assert _stored(session_factory, env_id) == (
+        "https://eval.example.com/v2",
+        key_before,
+    )
+
+
+def test_new_host_with_a_new_key_is_saved(client, session_factory):
+    env_id = _created(client)["environment"]["id"]
+    _, key_before = _stored(session_factory, env_id)
+
+    res = client.put(
+        _url(suffix=f"/{env_id}"),
+        headers=_headers(MANAGER),
+        json={"base_url": "https://other.example.com", "api_key": "rotated-key-5555"},
+    )
+
+    assert res.status_code == 200, res.text
+    url, key_after = _stored(session_factory, env_id)
+    assert url == "https://other.example.com" and key_after != key_before
 
 
 # --------------------------------------------------------------------------- evaluator schema

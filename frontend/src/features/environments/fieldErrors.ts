@@ -4,7 +4,14 @@ import { errorMessage } from '@/api/evalCommon';
 import { LATENCY_ROLE_ERROR } from './copy';
 
 export type EnvironmentField =
-  'name' | 'base_url' | 'api_key' | 'ranking_metric' | 'ranking_k' | 'max_priority' | 'default_priority' | 'latency_sensitive_min_role';
+  | 'name'
+  | 'base_url'
+  | 'api_key'
+  | 'ranking_metric'
+  | 'ranking_k'
+  | 'max_priority'
+  | 'default_priority'
+  | 'latency_sensitive_min_role';
 export type FieldErrors = Partial<Record<EnvironmentField, string>>;
 
 const FIELDS: EnvironmentField[] = [
@@ -20,9 +27,10 @@ const FIELDS: EnvironmentField[] = [
 
 function fieldFromText(message: string): EnvironmentField | null {
   const text = message.toLowerCase();
+  // Key problems first: "Enter the API key again for the new host" is about the key.
+  if (/api key|key encryption|whitespace or control/.test(text)) return 'api_key';
   if (/\b(base )?url\b|https:\/\/|query string|registered in another project|host/.test(text))
     return 'base_url';
-  if (/api key|key encryption|whitespace or control/.test(text)) return 'api_key';
   if (/default priority/.test(text)) return 'default_priority';
   if (/max(imum)? priority|priority/.test(text)) return 'max_priority';
   if (/ranking_k|\bk must|ranking k/.test(text)) return 'ranking_k';

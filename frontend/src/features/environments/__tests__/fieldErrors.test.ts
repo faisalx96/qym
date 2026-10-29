@@ -23,6 +23,10 @@ describe('mapEnvironmentError', () => {
     expect(
       mapEnvironmentError(err(400, 'Evaluation service rejected the environment API key')).fields.api_key,
     ).toBeTruthy();
+    // C004: a new host needs the key again; the message names the host but is about the key.
+    const moved = mapEnvironmentError(err(400, 'Enter the API key again for the new host'));
+    expect(moved.fields.api_key).toBeTruthy();
+    expect(moved.fields.base_url).toBeUndefined();
   });
   it('places a duplicate name on the Name field', () => {
     expect(
@@ -46,7 +50,9 @@ describe('mapEnvironmentError', () => {
 
 describe('latency role errors', () => {
   it('maps a 422 on the role onto its field with the fixed sentence', () => {
-    const error = err(422, [{ loc: ['body', 'latency_sensitive_min_role'], msg: 'Input should be member or manager' }]);
+    const error = err(422, [
+      { loc: ['body', 'latency_sensitive_min_role'], msg: 'Input should be member or manager' },
+    ]);
     expect(mapEnvironmentError(error).fields.latency_sensitive_min_role).toBe(
       'Choose who can launch latency-sensitive runs.',
     );

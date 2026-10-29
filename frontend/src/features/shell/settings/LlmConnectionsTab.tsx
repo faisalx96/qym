@@ -7,6 +7,7 @@ import {
 } from '@/api/projectSettings';
 import type { LlmConnection } from '@/api/types';
 import { ApiError } from '@/lib/http';
+import { KEY_FOR_NEW_HOST_PLACEHOLDER, keyHostChanged } from '@/lib/keyHost';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
@@ -30,6 +31,8 @@ import styles from './settings.module.css';
 import { SettingsCard } from './SettingsCard';
 
 const KEEP = '__KEEP__';
+/** What the server uses when a connection has no base URL. */
+const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 
 export function LlmConnectionsTab() {
   const { project, readOnly, canManage } = useProjectContext();
@@ -242,7 +245,7 @@ export function LlmConnectionsTab() {
   );
 }
 
-function ConnectionForm({
+export function ConnectionForm({
   initial,
   busy,
   onCancel,
@@ -258,11 +261,15 @@ function ConnectionForm({
   const [model, setModel] = useState(initial?.llm_model ?? '');
   const [key, setKey] = useState('');
   const [forExperiments, setForExperiments] = useState(initial?.available_for_experiments ?? true);
+  // The stored key stays with its host: another host needs the key again (C004).
+  const needsKey =
+    Boolean(initial?.llm_api_key_set) && keyHostChanged(initial?.llm_base_url || DEFAULT_BASE_URL, baseUrl);
   return (
     <form
       data-llm-form
       onSubmit={(e) => {
         e.preventDefault();
+        if (needsKey && !key) return;
         onSubmit({
           name: name.trim(),
           llm_base_url: baseUrl.trim(),
@@ -287,7 +294,7 @@ function ConnectionForm({
               type="submit"
               variant="primary"
               loading={busy}
-              isDisabled={!name.trim() || !baseUrl.trim() || !model.trim()}
+              isDisabled={!name.trim() || !baseUrl.trim() || !model.trim() || (needsKey && !key)}
             >
               {initial ? 'Save changes' : 'Add connection'}
             </Button>
@@ -327,7 +334,14 @@ function ConnectionForm({
               value={key}
               onChange={setKey}
               mono
-              placeholder={initial?.llm_api_key_set ? `Keep current (${initial.llm_api_key_hint})` : 'sk-…'}
+              isRequired={needsKey}
+              placeholder={
+                needsKey
+                  ? KEY_FOR_NEW_HOST_PLACEHOLDER
+                  : initial?.llm_api_key_set
+                    ? `Keep current (${initial.llm_api_key_hint})`
+                    : 'sk-…'
+              }
               autoComplete="new-password"
             />
           </div>

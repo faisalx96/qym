@@ -39,9 +39,12 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.llm_endpoint_security import (
+    DEFAULT_LLM_BASE_URL,
+    KEY_FOR_NEW_HOST_MESSAGE,
     LlmEndpointValidationError,
     create_llm_http_client,
     experiment_base_url_needs_https,
+    key_host_changed,
     validate_llm_base_url,
 )
 from qym_platform.openai_compat import create_chat_completion_compat
@@ -435,6 +438,7 @@ class LlmConnectionRequest(BaseModel):
     llm_base_url: str = Field(default="https://api.openai.com/v1")
     llm_model: str = Field(default="gpt-4o-mini")
     # New key, or the sentinel "__KEEP__" on edit to preserve the stored key, or "" to clear.
+    # A new scheme, host or port refuses "__KEEP__" and "": the key must be sent again.
     llm_api_key: str = Field(default="")
     # Offered in the experiments model picker. Omitted on create means true; omitted on
     # edit keeps the stored value.
@@ -510,9 +514,22 @@ def _apply_connection_key(
     is_new: bool,
     settings: PlatformSettings,
 ) -> None:
-    """Set name/base_url/model/availability and resolve the key (new / keep / clear)."""
+    """Set name/base_url/model/availability and resolve the key (new / keep / clear).
+
+    A stored key stays bound to the host it was entered for: an edit that moves the
+    base URL to another scheme, host or port must send the key again (C004).
+    """
+    base_url = _validate_llm_base_url(req.llm_base_url, settings)
+    api_key = req.llm_api_key.strip()
+    if (
+        not is_new
+        and conn.llm_api_key_encrypted
+        and (api_key == "__KEEP__" or not api_key)
+        and key_host_changed(conn.llm_base_url or DEFAULT_LLM_BASE_URL, base_url)
+    ):
+        raise HTTPException(status_code=400, detail=KEY_FOR_NEW_HOST_MESSAGE)
     conn.name = req.name.strip()
-    conn.llm_base_url = _validate_llm_base_url(req.llm_base_url, settings)
+    conn.llm_base_url = base_url
     conn.llm_model = req.llm_model.strip()
     # Experiments need HTTPS (analyzer use keeps accepting public http://).
     plain_http = experiment_base_url_needs_https(
@@ -532,7 +549,6 @@ def _apply_connection_key(
         # Omitted on create: an http:// connection is analysis-only.
         conn.available_for_experiments = not plain_http
 
-    api_key = req.llm_api_key.strip()
     if api_key == "__KEEP__":
         return  # leave the stored encrypted key untouched
     if not api_key:
