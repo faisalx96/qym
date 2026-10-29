@@ -64,9 +64,18 @@ export function durParts(ms: number): [string, string] {
   return [String(Math.round(ms)), 'ms'];
 }
 export const durText = (ms: number): string => durParts(ms).join(' ');
+/** Compact duration for table cells and tooltips: `627ms`, `1.94s`, `18.5s`, `1.2m`. */
+export function fmtMs(ms: number): string {
+  if (!Number.isFinite(ms)) return '—';
+  if (ms >= 60_000) return (ms / 60_000).toFixed(1) + 'm';
+  if (ms >= 10_000) return (ms / 1000).toFixed(1) + 's';
+  if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
+  return Math.round(ms) + 'ms';
+}
 export const fmtK = (n: number): string =>
   n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
 export const pct = (a: number, b: number): number => (b ? (100 * a) / b : 0);
+const finite0 = (v: number) => (Number.isFinite(v) ? v : 0);
 
 /* ── response time ── */
 
@@ -74,8 +83,8 @@ export interface LatencyItem {
   itemId: string;
   latency: number;
   error: boolean;
+  /** The page metric's score (0..1), or null when the item has none. */
   score: number | null;
-  passed: boolean | null;
 }
 
 export interface LatencySummary {
@@ -147,6 +156,97 @@ export function latencyHistogram(items: LatencyItem[], L: LatencySummary): Laten
   const ticks: number[] = [];
   for (let t = Math.ceil(lo / tickStep) * tickStep; t <= hi + 1e-9; t += tickStep) ticks.push(t);
   return { bins, lo, hi, width: W, max, ticks, xPct: (ms) => (100 * (ms - lo)) / (hi - lo) };
+}
+
+export interface LatencyPin {
+  key: 'p50' | 'p90' | 'p95';
+  ms: number;
+  /** Text colour token of the pin's number and stem. */
+  tone: string;
+  /** Who the pin's filter keeps, for the tooltip title. */
+  word: string;
+  /** Histogram band index the pin starts (bins count items per band). */
+  level: 1 | 2 | 3;
+  /** Position on the spectrum, 0 to 100 (fastest to slowest). */
+  x: number;
+}
+
+/** About how wide a pin chip draws, in px: per pin the padding, the sans key, the gap and the mono value. */
+const pinChipWidth = (set: LatencyPin[]) =>
+  set.reduce((t, p) => t + 46 + 8 * durParts(p.ms)[0].length, 2 + (set.length - 1));
+
+/** The p50, p90 and p95 pins of the latency spectrum, at their positions from fastest (0) to slowest (100). */
+export function latencyPins(L: LatencySummary): LatencyPin[] {
+  const span = L.max - L.min;
+  const pos = (ms: number) => (span > 0 ? (100 * (ms - L.min)) / span : 50);
+  return [
+    { key: 'p50', ms: L.p50, tone: 'var(--text-primary)', word: 'Slower half', level: 1, x: pos(L.p50) },
+    { key: 'p90', ms: L.p90, tone: 'var(--score-3)', word: 'Slowest 10%', level: 2, x: pos(L.p90) },
+    { key: 'p95', ms: L.p95, tone: 'var(--score-2)', word: 'Slowest 5%', level: 3, x: pos(L.p95) },
+  ];
+}
+
+export interface PinChip {
+  pins: LatencyPin[];
+  /** The chip's left edge in px from the spectrum's start, or null before the spectrum is measured. */
+  left: number | null;
+  /** Where the bracket of a shared chip meets the chip, 0 to 100. */
+  join: number;
+}
+
+/**
+ * The pin chips over the latency spectrum, one row of them (legacy: pins less than 14% apart share one chip,
+ * joined to the track by a bracket). Given the spectrum's width in px, each chip is centred on its pins, kept
+ * inside the spectrum and pushed clear of its neighbour; pins whose own chips cannot stay over them share one.
+ */
+export function pinChips(pins: LatencyPin[], width = 0): PinChip[] {
+  const sets: LatencyPin[][] = [];
+  pins.forEach((pin) => {
+    const last = sets[sets.length - 1];
+    if (last && pin.x - last[last.length - 1]!.x < 14) last.push(pin);
+    else sets.push([pin]);
+  });
+  const mid = (set: LatencyPin[]) => (set[0]!.x + set[set.length - 1]!.x) / 2;
+  if (width <= 0) return sets.map((set) => ({ pins: set, left: null, join: mid(set) }));
+  const GAP = 6;
+  const place = (list: LatencyPin[][]) => {
+    const boxes = list.map((set) => {
+      const w = pinChipWidth(set);
+      const left = Math.max(0, Math.min(width - w, (width * mid(set)) / 100 - w / 2));
+      return { set, w, left };
+    });
+    // Push overlapping chips apart: each chip after the first moves right, then back from the end, leftwards.
+    for (let i = 1; i < boxes.length; i++)
+      boxes[i]!.left = Math.max(boxes[i]!.left, boxes[i - 1]!.left + boxes[i - 1]!.w + GAP);
+    for (let i = boxes.length - 1; i >= 0; i--) {
+      const limit = i === boxes.length - 1 ? width : boxes[i + 1]!.left - GAP;
+      boxes[i]!.left = Math.max(0, Math.min(boxes[i]!.left, limit - boxes[i]!.w));
+    }
+    return boxes;
+  };
+  // A chip must stay over its pins (a stem drops from it to each pin); when it cannot, it joins its neighbour.
+  const over = (b: { set: LatencyPin[]; w: number; left: number }) =>
+    b.set.every((p) => {
+      const x = (width * p.x) / 100;
+      return x >= b.left - 1 && x <= b.left + b.w + 1;
+    });
+  let list = sets;
+  let boxes = place(list);
+  for (
+    let i = boxes.findIndex((b) => !over(b));
+    i >= 0 && list.length > 1;
+    i = boxes.findIndex((b) => !over(b))
+  ) {
+    const j = i === list.length - 1 ? i - 1 : i;
+    list = [...list.slice(0, j), [...list[j]!, ...list[j + 1]!], ...list.slice(j + 2)];
+    boxes = place(list);
+  }
+  return boxes.map((b) => {
+    const a = b.set[0]!.x;
+    const z = b.set[b.set.length - 1]!.x;
+    const centre = (100 * (b.left + b.w / 2)) / width;
+    return { pins: b.set, left: b.left, join: Math.max(a, Math.min(z, centre)) };
+  });
 }
 
 export function latencyFilterLabel(f: { min: number; max: number }): string {
@@ -293,12 +393,73 @@ export function budgetSegments(D: LatencyData): BudgetSegment[] {
   return segs.filter((s) => s.ms > 0);
 }
 
+export type BudgetMode = 'phase' | 'agent';
+
+export interface BudgetBracket {
+  key: string;
+  label: string;
+  /** Start and width on the bar, in percent. */
+  x: number;
+  w: number;
+  /** The span's own time per trace (the number its row in Step timings shows). */
+  ms: number;
+  phase: 'task' | 'eval' | null;
+}
+
+/** The brackets over the time budget bar: the phases, or the sub-agents and the eval judges. */
+export function budgetBrackets(D: LatencyData, segs: BudgetSegment[], mode: BudgetMode): BudgetBracket[] {
+  const total = segs.reduce((t, s) => t + s.ms, 0);
+  const spans: BudgetBracket[] = [];
+  let acc = 0;
+  segs.forEach((s) => {
+    const w = pct(s.ms, total);
+    const key =
+      mode === 'agent'
+        ? s.phase === 'eval'
+          ? 'eval'
+          : (s.agent ?? (s.phase === 'task' ? 'orchestration' : null))
+        : s.phase;
+    if (key) {
+      const last = spans[spans.length - 1];
+      if (last && last.key === key) {
+        last.w += w;
+        last.ms += s.ms;
+      } else spans.push({ key, label: key, x: acc, w, ms: s.ms, phase: s.phase });
+    }
+    acc += w;
+  });
+  return spans.map((sp) => {
+    const label =
+      mode === 'agent'
+        ? sp.key === 'eval'
+          ? 'Eval judges'
+          : sp.key
+        : PHASE_LABEL[sp.key as 'task' | 'eval'];
+    const agent = D.agents.find((a) => a.name === sp.key);
+    const ph = mode === 'phase' ? D.phases[sp.key as 'task' | 'eval'] : undefined;
+    const ms =
+      mode === 'phase'
+        ? ph && Number.isFinite(ph.mean)
+          ? ph.mean
+          : sp.ms
+        : agent && D.traces
+          ? (agent.mean * agent.n) / D.traces
+          : sp.ms;
+    return { ...sp, label, ms };
+  });
+}
+
 export interface KindStat {
   key: string;
   label: string;
   value: string;
   unit?: string;
   bad?: boolean;
+  /** The stat per call site, tool or evaluator, for its breakdown. */
+  by: (g: Step) => number;
+  byFmt: (v: number) => string;
+  /** Breakdown title when "<Label> by <unit>" does not read well. */
+  byTitle?: string;
 }
 
 export interface KindPanel {
@@ -323,15 +484,19 @@ export function kindPanels(D: LatencyData): KindPanel[] {
     key: 'calls',
     label: 'calls / trace',
     value: (calls(rows) / D.traces).toFixed(1),
+    by: (g) => (g.n + g.err) / D.traces,
+    byFmt: (v) => v.toFixed(2),
   });
   const avgStat = (rows: Step[]): KindStat => {
     const [v, u] = durParts(avgCall(rows));
-    return { key: 'avg', label: 'avg call', value: v, unit: u };
+    return { key: 'avg', label: 'avg call', value: v, unit: u, by: (g) => finite0(g.mean), byFmt: fmtMs };
   };
   const tokStat = (rows: Step[]): KindStat => ({
     key: 'tokens',
     label: 'tokens / trace',
     value: fmtK(tokens(rows) / D.traces),
+    by: (g) => (g.tok || 0) / D.traces,
+    byFmt: fmtK,
   });
   const panels: KindPanel[] = [];
   const llm = of('LLM');
@@ -357,6 +522,10 @@ export function kindPanels(D: LatencyData): KindPanel[] {
           label: 'succeeded',
           value: (all ? 100 * (1 - tools.reduce((t, g) => t + g.err, 0) / all) : 100).toFixed(1),
           unit: '%',
+          by: (g) => (g.n + g.err ? g.err / (g.n + g.err) : 0),
+          byFmt: (v) => (100 * v).toFixed(1) + '% failed',
+          byTitle: 'Failure rate by tool',
+          bad: true,
         },
       ],
     });
@@ -489,7 +658,6 @@ export function buildStepsTree(D: LatencyData, opts: StepsOptions): StepNode[] {
 }
 
 export type StepSortKey = 'time' | 'med' | 'calls' | 'err';
-const finite0 = (v: number) => (Number.isFinite(v) ? v : 0);
 const SORTS: Record<StepSortKey, (n: StepNode, D: LatencyData) => number> = {
   time: (n, D) =>
     n.type === 'phase'
@@ -512,7 +680,7 @@ export interface StepRow {
 export function flattenSteps(
   D: LatencyData,
   tree: StepNode[],
-  open: Set<string>,
+  open: ReadonlySet<string>,
   sort: { key: StepSortKey; dir: 1 | -1 },
 ): StepRow[] {
   const rows: StepRow[] = [];
@@ -569,4 +737,80 @@ export function stepTone(node: StepNode): string {
   if (node.type === 'phase') return PHASE_TONE[node.phase];
   if (node.type === 'agent') return 'var(--k-agent)';
   return FAMILY_TONE[node.family ?? familyOf(node.kind)];
+}
+
+/** How many steps a group row holds (its leaves, at any depth). */
+export function countLeaves(node: StepNode): number {
+  return node.children ? node.children.reduce((t, k) => t + countLeaves(k), 0) : 1;
+}
+
+/** Calls per trace of a row: a phase runs once per trace. */
+export function callsPerTrace(node: StepNode, traces: number): number {
+  if (node.type === 'phase') return 1;
+  return traces ? (node.stats.n + node.stats.err) / traces : 0;
+}
+
+/** Time per trace of a row: a phase's is its span; a step's is its mean times its calls, spread over the traces. */
+export function timePerTrace(node: StepNode, traces: number): number {
+  if (node.type === 'phase') return node.stats.mean;
+  return traces ? (finite0(node.stats.mean) * node.stats.n) / traces : NaN;
+}
+
+/**
+ * Show one kind's steps in Step timings (a kind card's "Open in Step timings"): the groups to open and the step
+ * ids to point at, in the By step view.
+ */
+export function stepsOfFamily(D: LatencyData, family: Family): { open: string[]; ids: string[] } {
+  const phase = family === 'EVAL' ? 'eval' : 'task';
+  const wanted = D.steps.filter(
+    (g) => g.phase === phase && (family === 'EVAL' || familyOf(g.kind) === family),
+  );
+  const open = new Set<string>(['p:' + phase]);
+  wanted.forEach((g) => {
+    if (g.agent) open.add('a:' + g.agent);
+  });
+  return { open: Array.from(open), ids: wanted.map(stepId) };
+}
+
+const xmlEsc = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+/**
+ * The visible Step timings rows as a standalone SVG file (the Export menu). `color` resolves a token expression
+ * such as `var(--k-llm)` to a colour the file can carry without the app's stylesheet.
+ */
+export function stepsSvg(rows: StepRow[], axis: StepsAxis, color: (token: string) => string): string {
+  const W = 960;
+  const LABEL = 280;
+  const NUM = 90;
+  const rowH = 30;
+  const top = 34;
+  const trackW = W - LABEL - NUM - 24;
+  const X = (v: number) => LABEL + (trackW * axis.x(v)) / 100;
+  const H = top + rows.length * rowH + 12;
+  const c = (name: string) => color(`var(${name})`);
+  let s =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" ` +
+    `font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">` +
+    `<rect width="100%" height="100%" fill="${c('--bg-surface')}"/>`;
+  axis.ticks.forEach((t) => {
+    s +=
+      `<line x1="${X(t)}" x2="${X(t)}" y1="${top - 6}" y2="${H - 8}" stroke="${c('--border-subtle')}"/>` +
+      `<text x="${X(t)}" y="${top - 12}" text-anchor="middle" fill="${c('--text-muted')}">${tickLabel(t)}</text>`;
+  });
+  rows.forEach(({ node, depth }, i) => {
+    const y = top + i * rowH + rowH / 2;
+    const st = node.stats;
+    const tone = color(stepTone(node));
+    const name = node.label + (node.model && node.model !== node.label ? ' · ' + node.model : '');
+    s += `<text x="${8 + depth * 16}" y="${y + 4}" fill="${c('--text-primary')}">${xmlEsc(name)}</text>`;
+    if (Number.isFinite(st.med)) {
+      s +=
+        `<line x1="${X(st.p5)}" x2="${X(st.p95)}" y1="${y}" y2="${y}" stroke="${tone}" stroke-opacity=".6" stroke-width="1.5"/>` +
+        `<rect x="${X(st.p25)}" y="${y - 6}" width="${Math.max(2, X(st.p75) - X(st.p25))}" height="12" rx="3" fill="${tone}" fill-opacity=".8"/>` +
+        `<rect x="${X(st.med) - 1}" y="${y - 9}" width="2" height="18" fill="${c('--text-primary')}"/>`;
+    }
+    s += `<text x="${W - 12}" y="${y + 4}" text-anchor="end" fill="${c('--text-secondary')}">${fmtMs(st.med)}</text>`;
+  });
+  return s + '</svg>';
 }
