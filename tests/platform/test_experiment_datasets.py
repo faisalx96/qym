@@ -337,7 +337,7 @@ def test_fan_out_counts_and_bodies(client, session_factory, two_envs):  # QD-79,
         {"dataset": "billing-faq", "version": "v2"},
         {"dataset": "refund-cases"},
     ]
-    assert combined.params["datasets"][3] == {"dataset": "refund-cases", "version": None, "alias": None}
+    assert combined.params["datasets"][3] == {"dataset": "refund-cases", "version": None, "alias": None, "resolved_version": None}
     fanned = [j for j in jobs if j.environment_id == staging.id]
     assert [j.dataset_index for j in fanned] == [0, 1, 2, 3]
     assert [j.request_body["evaluator"]["dataset"] for j in fanned] == [
@@ -345,7 +345,7 @@ def test_fan_out_counts_and_bodies(client, session_factory, two_envs):  # QD-79,
     ]
     assert [j.request_body["evaluator"].get("dataset_version") for j in fanned] == ["v3", "v4", "v2", None]
     assert all("datasets" not in j.request_body["evaluator"] for j in fanned)
-    assert fanned[1].params["dataset"] == {"dataset": "support-tickets", "version": "v4", "alias": None}
+    assert fanned[1].params["dataset"] == {"dataset": "support-tickets", "version": "v4", "alias": None, "resolved_version": "v4"}
     assert fanned[1].request_body["evaluator"]["config"]["run_name"].endswith(" · support-tickets v4")
     assert fanned[3].request_body["evaluator"]["config"]["run_name"].endswith(" · refund-cases latest")
     for job in jobs:
@@ -551,3 +551,99 @@ def test_queue_rows_carry_the_pair_index(client, session_factory, two_envs):  # 
     _create(client, [staging.id], spec=multi_spec(PAIRS[:3]))
     rows = client.get(f"/v1/projects/{P1}/eval-queue", headers=_headers(MEMBER)).json()["jobs"]
     assert sorted(r["dataset_index"] for r in rows) == [0, 1, 2]
+
+
+# --------------------------------------------------------------------------- version pinning
+
+
+def _seed_versions(session_factory) -> None:
+    """support-tickets: v1 (published first), v2 (published, alias production), v3 (published last), v4 draft;
+    billing-faq: one draft only."""
+    from datetime import datetime, timedelta
+
+    from qym_platform.db.models import Dataset, DatasetAlias, DatasetVersion, DatasetVersionStatus
+
+    t0 = datetime(2026, 10, 1)
+    with session_factory() as db:
+        db.add(Dataset(id="ds-st", project_id=P1, name="support-tickets", slug="support-tickets", created_by_user_id="admin-1"))
+        db.add(Dataset(id="ds-bf", project_id=P1, name="billing-faq", slug="billing-faq", created_by_user_id="admin-1"))
+        db.flush()
+        for n, (version, status, published) in enumerate(
+            [("v1", DatasetVersionStatus.PUBLISHED, 1), ("v2", DatasetVersionStatus.PUBLISHED, 2), ("v3", DatasetVersionStatus.PUBLISHED, 3), ("v4", DatasetVersionStatus.DRAFT, None)]
+        ):
+            db.add(
+                DatasetVersion(
+                    id=f"st-{version}", dataset_id="ds-st", version=version, status=status, created_by_user_id="admin-1",
+                    created_at=t0 + timedelta(days=n), published_at=(t0 + timedelta(days=published)) if published else None,
+                )
+            )
+        db.add(DatasetVersion(id="bf-v1", dataset_id="ds-bf", version="v1", status=DatasetVersionStatus.DRAFT, created_by_user_id="admin-1", created_at=t0))
+        db.flush()
+        db.add(DatasetAlias(dataset_id="ds-st", alias="production", dataset_version_id="st-v2", updated_by_user_id="admin-1"))
+        db.commit()
+
+
+def _evaluator_of(job: EvalExperimentJob) -> dict:
+    return job.request_body["evaluator"]
+
+
+def test_latest_and_alias_are_pinned_to_a_version_at_launch(client, session_factory, env):  # bug 2026-10-29
+    """A worker's EVAL_DATASET_VERSION must not replace "Latest version" or an alias: the body names the version."""
+    _seed_versions(session_factory)
+    latest = _create(client, [env.id], spec=multi_spec(None, dataset="support-tickets")).json()
+    (job,) = _jobs(session_factory, latest["id"])
+    assert _evaluator_of(job)["dataset_version"] == "v3"  # newest published, not the draft v4
+    assert "dataset" not in job.params  # the single-dataset job's params are unchanged (QD-72)
+    assert latest["spec"]["evaluator"].get("dataset_version") is None  # the stored intent stays "latest"
+    dry = _dry(client, [env.id], multi_spec(None, dataset="support-tickets")).json()
+    assert [w for w in dry["warnings"] if w["code"] == "dataset_version_unresolved"] == []
+
+    alias = _create(client, [env.id], spec=multi_spec(None, dataset="support-tickets", config={"dataset_alias": "production"})).json()
+    (job,) = _jobs(session_factory, alias["id"])
+    assert _evaluator_of(job)["dataset_version"] == "v2"
+    assert _evaluator_of(job)["config"]["dataset_alias"] == "production"  # kept for the record; the version wins
+
+    explicit = _create(client, [env.id], spec=multi_spec(None, dataset="support-tickets", dataset_version="v1")).json()
+    (job,) = _jobs(session_factory, explicit["id"])
+    assert _evaluator_of(job)["dataset_version"] == "v1"
+
+
+def test_pinning_fans_out_and_combines_with_resolved_versions(client, session_factory, two_envs):
+    production, staging = two_envs
+    _seed_versions(session_factory)
+    pairs = [{"dataset": "support-tickets"}, {"dataset": "support-tickets", "alias": "production"}, {"dataset": "support-tickets", "version": "v1"}]
+    detail = _create(client, [production.id, staging.id], spec=multi_spec(pairs, run_shape="combined")).json()
+    jobs = _jobs(session_factory, detail["id"])
+    combined = next(j for j in jobs if j.environment_id == production.id)
+    assert _evaluator_of(combined)["datasets"] == [
+        {"dataset": "support-tickets", "version": "v3"},
+        {"dataset": "support-tickets", "version": "v2"},
+        {"dataset": "support-tickets", "version": "v1"},
+    ]
+    assert _evaluator_of(combined)["dataset_version"] == "v3"
+    assert [d["resolved_version"] for d in combined.params["datasets"]] == ["v3", "v2", "v1"]
+    assert combined.params["datasets"][1] == {"dataset": "support-tickets", "version": None, "alias": "production", "resolved_version": "v2"}
+    fanned = sorted((j for j in jobs if j.environment_id == staging.id), key=lambda j: j.dataset_index)
+    assert [_evaluator_of(j)["dataset_version"] for j in fanned] == ["v3", "v2", "v1"]
+    assert fanned[1].params["dataset"] == {"dataset": "support-tickets", "version": None, "alias": "production", "resolved_version": "v2"}
+    assert "dataset_alias" not in _evaluator_of(fanned[1]).get("config", {})  # version and alias are exclusive in a pair
+    # The stored spec keeps the intent; the API's job view carries the resolved version.
+    assert detail["spec"]["evaluator"]["datasets"][0] == {"dataset": "support-tickets", "version": None, "alias": None}
+    views = detail["jobs"]
+    assert [j["datasets"][0]["resolved_version"] for j in views if j["datasets"]] == ["v3"]
+    assert sorted(j["dataset"]["resolved_version"] for j in views if j["dataset"]) == ["v1", "v2", "v3"]
+
+
+def test_unresolved_entries_are_sent_as_chosen_with_a_warning(client, session_factory, env):
+    _seed_versions(session_factory)
+    spec = multi_spec([{"dataset": "billing-faq"}, {"dataset": "support-tickets", "alias": "staging"}, {"dataset": "elsewhere"}])
+    dry = _dry(client, [env.id], spec).json()
+    assert dry["ok"], dry["errors"]
+    codes = sorted((w["dataset"], w["message"]) for w in dry["warnings"] if w["code"] == "dataset_version_unresolved")
+    assert [c[0] for c in codes] == ["billing-faq", "elsewhere", "support-tickets"]
+    assert "no published version" in codes[0][1] and "not a dataset of this project" in codes[1][1] and "no alias" in codes[2][1]
+    detail = _create(client, [env.id], spec=spec).json()
+    jobs = sorted(_jobs(session_factory, detail["id"]), key=lambda j: j.dataset_index)
+    assert "dataset_version" not in _evaluator_of(jobs[0])
+    assert _evaluator_of(jobs[1])["config"]["dataset_alias"] == "staging" and "dataset_version" not in _evaluator_of(jobs[1])
+    assert [j.params["dataset"]["resolved_version"] for j in jobs] == [None, None, None]

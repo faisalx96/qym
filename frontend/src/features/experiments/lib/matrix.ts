@@ -52,8 +52,10 @@ export const rowKey = (comboIndex: number, kind: MatrixRow['kind'], pairIndex = 
 export const cellKey = (row: number | string, envId: string) => `${row}|${envId}`;
 
 /** `v3`, the alias, or `latest`. */
-export function refText(ref: Pick<DatasetRef, 'version' | 'alias'>): string {
-  return ref.version || ref.alias || 'latest';
+export function refText(ref: Pick<DatasetRef, 'version' | 'alias' | 'resolved_version'>): string {
+  const chosen = ref.version || ref.alias || 'latest';
+  // A job pins "latest" and aliases to the version resolved at launch: `latest (v7)`, `production (v2)`.
+  return ref.resolved_version && ref.resolved_version !== chosen ? `${chosen} (${ref.resolved_version})` : chosen;
 }
 
 /** `support-tickets · v3`. */
