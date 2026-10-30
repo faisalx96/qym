@@ -15,7 +15,7 @@ The Evaluation Service runbook (dispatcher, environments, queue triage) is in
 | Worker pod (optional) | Runs the background loops in a separate process | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker`; set `QYM_ROLE=api` on the API |
 | Web processes (optional) | Several uvicorn processes serve HTTP in one API pod; with `QYM_ROLE=all` one extra process in the same pod runs the background loops | `QYM_WEB_WORKERS=N` (default `1`) |
 | Service split (optional) | main (UI + API), ingestion (SDK write path) and workers (loops + queued jobs) as three services behind ingress rules | `QYM_SERVICE=main\|ingestion\|workers`; see [Service split deployment](#service-split-deployment) |
-| Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
+| Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction. Each job declares its params (key, type, default; `job_kinds` in `GET /api/admin/maintenance`, listed under the form). The API answers 400 for an undeclared key, a wrong type or range, or a table, index or constraint name that does not match `^[a-z_][a-z0-9_]*$` or does not exist. `create_deferred_indexes` takes only the index names that migrations defer: their columns and `WHERE` come from code | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
 The default deployment is unchanged: `QYM_ROLE=all` runs the API and both loops in
@@ -36,6 +36,7 @@ sure one process runs a given job.
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
 | `QYM_SPAN_PARTITION_DAYS_AHEAD` | `14` | Daily `spans` partitions kept created this many days ahead (hourly retention pass) |
 | `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this; time their project spends archived does not count |
+| `QYM_PROXY_SHARED_SECRET` | empty | `proxy_headers` only: the value the authentication proxy sends in `X-Qym-Proxy-Secret`. Required outside dev/test/local. See "UI authentication at startup" |
 | `QYM_AUTH_LOCAL_SIGNUP` | `false` | Email/password self sign-up; off means admins add people (open only while no active admin exists) |
 | `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`. `..._PER_EMAIL` counts one email from one client address and refuses only that client, so the right password from another client still works; `..._PER_CLIENT` counts one address over all emails. "Account already exists" answers at sign-up count only against the client. An attempt counts as a failure from the moment it passes the check until its password proves right, so concurrent attempts cannot get past a limit. All limits are counted per API process (with `QYM_WEB_WORKERS=N` each process counts on its own, so a pod allows up to N times the limit). uvicorn trusts `X-Forwarded-For` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`): set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips=...` in `QYM_UVICORN_ARGS`) to the ingress/pod CIDR, otherwise every client shares the ingress address and the per-client limit applies to all of them together. The API logs a warning at startup when password sign-in is on outside dev/test and neither is set |
 | `QYM_AUTH_LOGIN_EMAIL_CEILING` / `QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS` | `50` / `900` | Failed password sign-ins for one email from all clients together; past it, password sign-in for that email answers `429` from every client, even with the right password, until failures age out. Counted per API process |
@@ -58,6 +59,41 @@ sure one process runs a given job.
 | `QYM_PLATFORM_FLUSH_INTERVAL` | `1.0` | SDK cadence (s) for flushing a partly filled batch. It stretches up to 5 s while POSTs take over 1 s; full batches (200 events / 2 MB) still go at once |
 | `QYM_PLATFORM_MAX_FIELD_BYTES` | `262144` (256 KB) | Largest string (task output, input, span attribute) the SDK uploads in a run event; longer ones are cut and marked `…[truncated by qym: N bytes omitted]`, and the event payload carries `_qym_truncated`. `0` disables the cap. Local results keep full values |
 | `INSIGHTOR_TIMINGS_FILE` | unset | Opt-in JSONL file for `insightor_eval.py` timings. Unset, timings are DEBUG log lines; point it at a mounted volume if you need the file |
+
+## UI authentication at startup
+
+The UI app (`QYM_SERVICE` `all` or `main`) does not start when `QYM_ENVIRONMENT`
+is not `dev`, `development`, `local`, `test` or `testing` and one of these is true:
+
+- `QYM_AUTH_MODE` is `none` (every visitor is an admin), empty, or not one of
+  `none`, `proxy_headers`, `oidc`.
+- `QYM_AUTH_MODE` is `proxy_headers` and `QYM_PROXY_SHARED_SECRET` is empty.
+
+The startup error names the variable. Ingestion and workers do not check it:
+they serve no UI identity.
+
+In `proxy_headers` mode the platform reads `X-User-Email` / `X-Email` only from a
+request that carries `QYM_PROXY_SHARED_SECRET` in the `X-Qym-Proxy-Secret` header
+(compared in constant time). A request without it gets 401, and no user is
+created for it. Configure the authentication proxy to set the header on every
+request it forwards, so it replaces any value a client sends (nginx:
+`proxy_set_header X-Qym-Proxy-Secret "<secret>";`). Keep the secret in a
+Kubernetes Secret, not in the values file. Identity headers count only in
+`proxy_headers` mode. With `oidc` and with an unknown mode they are ignored.
+
+Before you deploy this release, check the values of every UI Deployment:
+
+1. Set `QYM_ENVIRONMENT` to a deployment value such as `production`. The default
+   `dev` turns these checks off.
+2. Set `QYM_AUTH_MODE` to `oidc` or `proxy_headers`. For password sign-in only,
+   use `oidc` with `QYM_AUTH_LOCAL_ENABLED=true` and no provider.
+3. With `proxy_headers`, add `QYM_PROXY_SHARED_SECRET` and configure the proxy to
+   send it.
+
+The base `docker/docker-compose.yml` now defaults `QYM_AUTH_MODE` to
+`proxy_headers` and passes `QYM_PROXY_SHARED_SECRET`. The dev override
+(`docker-compose.dev.yml`) defaults `QYM_ENVIRONMENT` to `dev`, so a local
+`QYM_AUTH_MODE=none` setup still starts.
 
 ## Feedback assistant
 
@@ -326,8 +362,8 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
    and use the same retention policy for the drop.
 6. After copy succeeds, queue `drop_legacy_spans` with its typed confirmation.
    It requires maintenance mode and verifies every eligible legacy key against
-   `(run_id, span_id, run_created_at)` in the destination. Unrelated row counts and
-   `force=true` cannot bypass missing data. Verification and DROP hold database
+   `(run_id, span_id, run_created_at)` in the destination. Unrelated row counts
+   cannot bypass missing data, and the job has no `force` param (the API answers 400). Verification and DROP hold database
    locks in one transaction, so concurrent writes and retention cannot invalidate
    the check. Run mutations can wait during this step. An uncopied key or failed
    DROP leaves the legacy table intact. Resolve the failure and rerun the copy.
@@ -700,7 +736,7 @@ Shared (all three, same values):
 | `QYM_ENVIRONMENT` | yes | `dev` | |
 | `QYM_SKIP_MIGRATIONS` | yes | `0` | `1` on every service; one migration job per release |
 | `QYM_LLM_CONFIG_ENCRYPTION_KEY` | yes (split) | — | Same key everywhere: main encrypts queued product-eval secrets and LLM connections, workers decrypt them. `..._KEYS_PREVIOUS` as for rotation |
-| `QYM_AUTH_MODE` | yes | `none` | Ingestion only authenticates Bearer API keys, but `none` vs others changes key handling |
+| `QYM_AUTH_MODE` | yes | `none` | Ingestion only authenticates Bearer API keys, but `none` vs others changes key handling. Main does not start with `none`, an empty or unknown mode outside dev/test/local |
 | `QYM_MAINTENANCE_MODE` | no | `false` | Ingestion answers 503 + `Retry-After`; set on all services for one window |
 | `QYM_BASE_URL` | yes | `http://localhost:8000` | Public URL of the ingress (OIDC redirect URIs, same-origin guard, link fallback); sent to Evaluation Services as `env_overrides.QYM_BASE_URL` when their settings schema declares it, so their runs report back here |
 | `QYM_ROOT_PATH`, `QYM_MAIN_PREFIX`, `QYM_INGESTION_PREFIX`, `QYM_WORKERS_PREFIX` | no | `""`, `""`, `/ingestion`, `/workers` | Keep identical on all services and in the ingress |
@@ -711,6 +747,7 @@ main:
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `QYM_AUTH_SESSION_SECRET`, `QYM_AUTH_LOCAL_*`, `QYM_AUTH_GOOGLE_*`, `QYM_AUTH_GITHUB_*`, `QYM_AUTH_GITLAB_*`, `QYM_ADMIN_BOOTSTRAP_TOKEN` | per auth mode | — | Only main serves sign-in |
+| `QYM_PROXY_SHARED_SECRET` | with `proxy_headers` | — | The value the proxy sends in `X-Qym-Proxy-Secret`; main does not start without it outside dev/test/local |
 | `QYM_WEB_WORKERS` | no | `1` | 2 recommended; no loop process is started for `main` |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` / `QYM_HTTP_THREADPOOL_SIZE` | no | `10` / `10` / `0` | Per web process |
 | `QYM_MAX_UPLOAD_BYTES` | no | 100 MB | Dataset uploads |
