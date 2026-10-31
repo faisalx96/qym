@@ -1,8 +1,7 @@
 /**
  * Cutover of test_run_page_structure_browser.py (C065 / C068) and the reasons half of
- * test_item_reasons.py: a failing row says why it failed and where that came from, a Fail bar
- * lands on the filtered list with a banner explaining the order, and structured item metadata
- * never renders as "[object Object]".
+ * test_item_reasons.py: a Fail bar lands on the filtered list with a banner explaining the order, and structured
+ * item metadata never renders as "[object Object]". The Items table has no Reason column (C017).
  */
 import { test, expect, type Page } from '@playwright/test';
 import { compareUrl, waitLoaded } from '../compare/support';
@@ -55,61 +54,14 @@ test.beforeAll(async () => {
 
 const row = (page: Page, n: number) => page.getByRole('row', { name: new RegExp(`^Open item #${n} `) });
 
-test('every failing row shows its reason and where it came from; passing rows leave the column empty', async ({
-  page,
-}) => {
-  // the Reason column needs a table wider than 760px
+// C017 (review group R2): the owner removed the Reason column completely; the reason stays in the item's details.
+test('the Items table has no Reason column, even when it is wide', async ({ page }) => {
   await page.setViewportSize({ width: 1900, height: 1000 });
   await openRun(page, s.slug, runId);
   await showItems(page);
-  const expected: Array<[number, string, string]> = [
-    [0, 'Expected 12 rows, got 9', 'reason'],
-    [2, 'Empty output', 'reason'],
-    [4, 'judge 429', 'scorer error'],
-    [6, EXPLANATION, 'explanation'],
-    [8, 'mismatch', 'label'],
-    [10, 'Scored 0.0%, pass needs ≥80%', 'no reason recorded'],
-    [12, LONG_REASON, 'reason'],
-    [14, 'Provider timeout after final retry', 'task error'],
-  ];
-  // the reasons the index cannot hold (long text, explanations) are fetched by the page
-  for (const [n, text, source] of expected) {
-    const cell = row(page, n + 1)
-      .locator('td[data-col="reason"] [title]')
-      .filter({ hasText: source });
-    await expect(cell, `item-${n}`).toBeVisible();
-    await expect(cell).toHaveAttribute('title', text);
-    await expect(cell).toContainText(text.slice(0, 20));
-  }
-  for (const n of [1, 3, 5, 7]) {
-    const hit = row(page, n + 1)
-      .locator('td[data-col="reason"] [title]')
-      .filter({ hasText: /reason|scorer error|explanation|label|task error|no reason recorded/ });
-    await expect(hit, `item-${n}`).toHaveCount(0);
-  }
-});
-
-// 8 items score 0; the scorer error and the task error are errors, the other 6 are failures
-test('only rows whose reason the index cannot hold are fetched, once, for the displayed metric', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1900, height: 1000 });
-  const asked: Array<{ item_ids: string[]; metric: string }> = [];
-  page.on('request', (r) => {
-    if (r.method() === 'POST' && r.url().endsWith(`/api/runs/${runId}/items/reasons`))
-      asked.push(r.postDataJSON() as { item_ids: string[]; metric: string });
-  });
-  await openRun(page, s.slug, runId);
-  await expect(
-    row(page, 7).locator('td[data-col="reason"] [title]').filter({ hasText: 'explanation' }),
-  ).toBeVisible();
-  const ids = new Set(asked.flatMap((a) => a.item_ids));
-  // the long reason and the explanation live on the server only; a task error, a scorer error and
-  // short reasons come with the index, and passing rows have none
-  expect(ids.has('item-6')).toBe(true);
-  expect(ids.has('item-12')).toBe(true);
-  for (const id of ['item-0', 'item-4', 'item-14', 'item-1', 'item-3']) expect(ids.has(id), id).toBe(false);
-  expect(new Set(asked.map((a) => a.metric))).toEqual(new Set(['accuracy']));
+  await expect(row(page, 1)).toBeVisible();
+  await expect(page.locator('td[data-col="reason"]')).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: /^Reason/ })).toHaveCount(0);
 });
 
 // 8 items score 0; the scorer error and the task error are errors, the other 6 are failures

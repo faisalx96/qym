@@ -228,6 +228,20 @@ describe('tone primitives', () => {
     expect(el).toHaveAttribute('data-band', '5');
   });
 
+  it('ScoreValue verdict (C220): plain green or red against the pass threshold, no band, a title cue', () => {
+    const { rerender } = render(
+      <ScoreValue value={0.95} direction="higher" variant="plain" verdict="pass" />,
+    );
+    let el = screen.getByTitle('Passes the pass threshold');
+    expect(el).toHaveAttribute('data-tone', 'success');
+    expect(el).not.toHaveAttribute('data-band');
+    rerender(<ScoreValue value={0.95} direction="higher" variant="plain" verdict="fail" />);
+    el = screen.getByTitle('Fails the pass threshold');
+    expect(el).toHaveAttribute('data-tone', 'danger');
+    rerender(<ScoreValue value={null} error="task" verdict="fail" />);
+    expect(screen.queryByTitle('Fails the pass threshold')).toBeNull();
+  });
+
   it('DeltaCell pill only outside the noise band and only with a verdict', () => {
     const { container, rerender } = render(<DeltaCell value={0.1} direction="higher" emphasis />);
     expect(container.querySelector('[data-pill]')).not.toBeNull();

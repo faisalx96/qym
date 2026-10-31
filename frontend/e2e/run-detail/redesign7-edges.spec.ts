@@ -55,7 +55,8 @@ for (const width of [1440, 1024] as const) {
         expect(await coveredText(page, TABLE), `${state}: covered text (D3-1)`).toEqual([]);
         // D3-2: the only gap in the line is the open item's detail row
         const detail = rep.detailRows.filter((d) => !d.strip);
-        for (const side of ['start', 'end'] as const) {
+        // C230: the trace column is no longer pinned, so the Items table has a start edge only
+        for (const side of ['start'] as const) {
           // round 8b: below 8 px is the virtualizer's end spacer (5.1 px at 1024 once the section panel adds its bottom padding), not a row without the line
           const gaps = rep.gaps[side].filter((g) => g > 8);
           if (open) {

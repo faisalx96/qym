@@ -293,16 +293,26 @@ export function BandValue({
   value,
   type,
   direction,
+  verdict,
   children,
 }: {
   value: number | null;
   type: string;
   direction: MetricDirection;
+  /** Where a pass threshold applies (C220): plain green (pass) or red (fail) in place of the band. */
+  verdict?: 'pass' | 'fail' | null;
   children: React.ReactNode;
 }) {
-  const band = value === null ? null : metricBand(value, type, direction);
+  const band = value === null || verdict ? null : metricBand(value, type, direction);
   return (
-    <span className={styles.bandValue} data-band={band ?? undefined}>
+    <span
+      className={styles.bandValue}
+      data-band={band ?? undefined}
+      data-tone={verdict ? (verdict === 'pass' ? 'success' : 'danger') : undefined}
+      title={
+        verdict ? (verdict === 'pass' ? 'Passes the pass threshold' : 'Fails the pass threshold') : undefined
+      }
+    >
       {children}
     </span>
   );

@@ -10,7 +10,8 @@
   border-inline-start: 2px solid transparent;
 }
 
-.score[data-band] {
+.score[data-band],
+.score[data-verdict] {
   color: var(--tone-text);
   border-color: var(--tone);
 }
@@ -31,7 +32,8 @@
   font-weight: 650;
 }
 
-.score[data-variant='pill'][data-band] {
+.score[data-variant='pill'][data-band],
+.score[data-variant='pill'][data-verdict] {
   background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
 }
 
