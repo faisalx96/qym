@@ -523,20 +523,20 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     ).toBe(runBoxLeft);
     await clickBox(box(1));
     await clickBox(box(3));
-    await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('2 runs selected');
     // the native checkbox is `indeterminate`, which assistive technology reads as mixed
     await expect.poll(() => parent.evaluate((el) => (el as HTMLInputElement).indeterminate)).toBe(true);
     await clickBox(box(2));
-    await expect(page.getByTestId('selection-bar')).toContainText('3 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('3 runs selected');
     await expect(parent).toBeChecked();
     await clickBox(parent);
-    await expect(page.getByTestId('selection-bar')).toContainText('0 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('0 runs selected');
     // shift range from pass 1 to pass 3
     await clickBox(box(1));
     await page.keyboard.down('Shift');
     await clickBox(box(3));
     await page.keyboard.up('Shift');
-    await expect(page.getByTestId('selection-bar')).toContainText('3 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('3 runs selected');
     for (const n of [1, 2, 3]) await expect(box(n)).toBeChecked();
   });
 
@@ -903,7 +903,7 @@ test.describe('runs table: card mode (390)', () => {
           .evaluate((el) => (el as HTMLInputElement).indeterminate),
       )
       .toBe(true);
-    await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('2 runs selected');
   });
 
   test('Q32 no embedded panel at 390', async ({ page, request }) => {

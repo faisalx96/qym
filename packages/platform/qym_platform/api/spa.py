@@ -66,6 +66,8 @@ def spa_bootstrap(settings: PlatformSettings, root: str) -> dict[str, Any]:
         "authMode": str(settings.auth_mode),
         "sessionAuth": session_auth_enabled(settings),
         "environment": str(settings.environment),
+        # The runs list's delete dialog names the Retention of Deleted runs (C251); 0 = Off.
+        "deletedRunGraceDays": int(settings.deleted_run_grace_days),
     }
 
 

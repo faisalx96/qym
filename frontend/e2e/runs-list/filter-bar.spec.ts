@@ -19,14 +19,15 @@ for (const width of [1440, 1280]) {
   test.describe(`filter bar at ${width}`, () => {
     test.use({ viewport: { width, height: 800 } });
 
-    test('Time, Origin and all six facet triggers are on screen without opening anything', async ({
+    test('Time and all six facet triggers are on screen without opening anything (no Origin with no official run)', async ({
       page,
       request,
     }) => {
       const s = await sharedProject(request, 12);
       await openRuns(page, s.project.slug);
       await expect(page.getByRole('radiogroup', { name: 'Time range' })).toBeVisible();
-      await expect(page.getByRole('radiogroup', { name: 'Origin' })).toBeVisible();
+      // C208: the seeded project has no official run, so the Origin control is not drawn
+      await expect(page.getByRole('radiogroup', { name: 'Origin' })).toHaveCount(0);
       for (const name of ['Task', 'Dataset', 'Model', 'Version', 'Status', 'User'])
         await expect(facet(page, name)).toBeVisible();
       await expect(bar(page)).toHaveAttribute('role', 'toolbar');
@@ -139,7 +140,7 @@ test.describe('filter bar at 390', () => {
   test('search plus one Filters button opens the full list in a drawer', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
-    await expect(page.getByLabel('Search runs')).toBeVisible();
+    await expect(page.getByLabel('Search run or dataset names')).toBeVisible();
     await expect(facet(page, 'Model')).toHaveCount(0);
     const trigger = page.getByTestId('filters-trigger');
     await expect(trigger).toHaveText('Filters');

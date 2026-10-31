@@ -308,15 +308,22 @@ def _descriptor_search_text(table=Dimension):
 
 def search_semijoin(text):
     """The Runs search as a semi-join: the stored text's index serves one arm, a union run is
-    found by the name of any of its datasets (QC-66) in the other. A plain OR with the
-    dataset subquery would keep the planner from using the trigram index."""
+    found by the name of any of its datasets (QC-66) in another, and a single-dataset run by
+    its dataset name in the third (C069: 'Search run or dataset names'). A plain OR with the
+    dataset subqueries would keep the planner from using the trigram index."""
     searched = aliased(Dimension)
+    by_dataset = aliased(Dimension)
     needle = text.lower()
     return Dimension.run_key.in_(
         union(
             select(searched.run_key).where(_search_condition(text, searched)),
             select(RunDataset.run_id).where(
                 func.lower(RunDataset.dataset).contains(needle, autoescape=True)
+            ),
+            # `dataset` is the name, then U+241F and the version for a versioned run; a search
+            # holds no U+241F, so a match is always inside the name or the version label.
+            select(by_dataset.run_key).where(
+                func.lower(by_dataset.dataset).contains(needle, autoescape=True)
             ),
         )
     )

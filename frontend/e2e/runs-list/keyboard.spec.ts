@@ -122,10 +122,10 @@ test.describe('runs list: keyboard', () => {
     // Esc still works: select a row by checkbox, then Esc clears it
     await page.getByRole('button', { name: 'Select', exact: true }).click();
     await dataRows(page).nth(1).locator('label').first().click();
-    await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
     await blurToBody(page);
     await page.keyboard.press('Escape');
-    await expect(page.getByTestId('selection-bar')).toContainText('0 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('0 runs selected');
     // Enter still opens the focused run
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
@@ -143,7 +143,7 @@ test.describe('runs list: keyboard', () => {
     await openRuns(page, s.project.slug);
     await blurToBody(page);
     await page.keyboard.press('/');
-    const search = page.getByLabel('Search runs');
+    const search = page.getByLabel('Search run or dataset names');
     await expect(search).toBeFocused();
     await page.keyboard.type('jkxcg?1234G');
     await expect(search).toHaveValue('jkxcg?1234G');
@@ -174,7 +174,7 @@ test.describe('runs list: keyboard', () => {
     await openRuns(page, s.project.slug);
     await blurToBody(page);
     await page.keyboard.press('/');
-    await expect(page.getByLabel('Search runs')).toBeFocused();
+    await expect(page.getByLabel('Search run or dataset names')).toBeFocused();
     const seen: string[] = [];
     let stops = 0;
     for (; stops < 18; stops++) {

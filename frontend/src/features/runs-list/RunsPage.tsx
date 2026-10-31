@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button, EmptyState, StaleBanner, Text, useToast } from '@/ui';
 import { useAnalyzingRuns } from '@/api/analysis';
 import { readPersisted } from '@/ui/DataTable/model';
-import { useAuth, useDocumentTitle, useProjectContext } from '@/features/shell';
+import { useAuth, useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { ROUTES, runPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { KEYS, readLocal, writeLocal } from '@/lib/storage';
@@ -43,7 +43,7 @@ import {
   PAGE_SIZE_OPTIONS,
   parseSort,
 } from './urlState';
-import { defaultDirection, sortString } from './urlState';
+import { defaultDirection, modelOptionLabel, sortString } from './urlState';
 import { datasetLabel } from './FiltersPopover';
 import styles from './RunsPage.module.css';
 
@@ -195,7 +195,7 @@ export function RunsPage() {
     if (!selection.cohortA.length) {
       if (!refs.length) return;
       selection.lockCohortA();
-      toast.show(`Cohort A locked. Pick ${cohortUnitCount(refs, samplesOf)} executions for cohort B.`, {
+      toast.show(`Cohort A locked. Pick ${cohortUnitCount(refs, samplesOf)} runs for cohort B.`, {
         tone: 'info',
       });
       return;
@@ -205,7 +205,7 @@ export function RunsPage() {
     const ub = cohortUnitCount(refs, samplesOf);
     if (ua !== ub)
       return toast.show(
-        `Cohort A holds ${ua} execution${ua === 1 ? '' : 's'}; B holds ${ub}. Balance the two sides first.`,
+        `Cohort A holds ${ua} run${ua === 1 ? '' : 's'}; B holds ${ub}. Balance the two sides first.`,
         { tone: 'error' },
       );
     if (refs.some((r) => a.some((l) => cohortRefsConflict(l, r))))
@@ -329,6 +329,12 @@ export function RunsPage() {
     );
   const cohortOverlap = refs.some((r) => selection.cohortA.some((l) => cohortRefsConflict(l, r)));
 
+  // C069: a search that finds nothing offers the model filter it may have meant ('gpt-4.1' is a model, not a run name)
+  const q = view.q.trim().toLowerCase();
+  const modelHint =
+    q && !view.models.length
+      ? (d.overview?.all_models ?? []).find((m) => modelOptionLabel(m).toLowerCase().includes(q))
+      : undefined;
   const empty = () =>
     d.projectTotal === 0 && !filtered ? (
       <EmptyState
@@ -350,20 +356,29 @@ export function RunsPage() {
     ) : (
       <EmptyState
         compact
-        title="No runs match current filters"
+        title={view.q ? `No run or dataset name contains "${view.q}"` : 'No runs match current filters'}
         body={
           d.data?.freshness.unpublished_runs
             ? 'Run history is preparing. Available runs will appear automatically.'
-            : 'Clear a filter or widen the time range.'
+            : view.q
+              ? undefined
+              : 'Clear a filter or widen the time range.'
         }
         action={
           filtered ? (
-            <Button
-              variant="neutral"
-              onPress={() => setView({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort })}
-            >
-              Clear filters
-            </Button>
+            <span className={styles.emptyActions}>
+              <Button
+                variant="neutral"
+                onPress={() => setView({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort })}
+              >
+                Clear filters
+              </Button>
+              {modelHint ? (
+                <Button variant="primary" onPress={() => setView({ q: '', models: [modelHint] })}>
+                  Filter by model {modelOptionLabel(modelHint)}
+                </Button>
+              ) : null}
+            </span>
           ) : undefined
         }
       />
@@ -377,6 +392,8 @@ export function RunsPage() {
     searchRef,
   });
   const loadPending = d.runsQ.isPending || (!d.data && !d.runsQ.isError);
+  // C224: card mode (< 640 px) has no rows to space or keys to press, so no Density menu and no Shortcuts button
+  const cards = useMediaQuery('(max-width: 639px)');
   const loadError = d.runsQ.isError && !d.data ? d.runsQ.error : undefined;
   const table = (
     <RunsTable
@@ -419,6 +436,7 @@ export function RunsPage() {
         search: toolbarParts.search,
         filters: toolbarParts.filters,
         rows: toolbarParts.rows,
+        densityMenu: cards ? false : undefined,
         // in select mode Done selecting sits with the selection actions (round 10), so the toggle shows only to enter it
         trailing: selectMode ? null : (
           <Button variant="neutral" onPress={() => setSelectMode(true)} aria-pressed={false}>
@@ -427,12 +445,14 @@ export function RunsPage() {
         ),
       }}
       footer={{
-        summary: (
-          <span aria-live="polite">
-            {d.data ? sentence : 'Loading runs…'}
-            {stale ? ' · showing runs from an earlier refresh' : ''}
-          </span>
-        ),
+        // C224: the pager already says '1–50 of 271 runs', so the summary shows only for a filter or a search
+        summary:
+          !d.data || filtered || stale ? (
+            <span aria-live="polite">
+              {d.data ? (filtered ? sentence : '') : 'Loading runs…'}
+              {stale ? `${filtered ? ' · ' : ''}showing runs from an earlier refresh` : ''}
+            </span>
+          ) : null,
         pagination: {
           total: d.total,
           page,
@@ -447,7 +467,7 @@ export function RunsPage() {
             updatedAt={d.updatedAt}
             freshness={d.data?.freshness}
             failed={stale}
-            onHelp={() => setHelpOpen(true)}
+            onHelp={cards ? undefined : () => setHelpOpen(true)}
           />
         ),
       }}

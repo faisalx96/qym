@@ -49,6 +49,14 @@ export const datasetLabel = (v: string) => {
   return version ? `${name} (${version})` : (name ?? v);
 };
 
+function withSubmitted(statuses: string[] | undefined): string[] | undefined {
+  if (!statuses || statuses.includes('SUBMITTED')) return statuses;
+  const at = statuses.indexOf('COMPLETED');
+  return at < 0
+    ? [...statuses, 'SUBMITTED']
+    : [...statuses.slice(0, at + 1), 'SUBMITTED', ...statuses.slice(at + 1)];
+}
+
 export function buildFacetDefs(
   view: RunsView,
   facets: Facets | undefined,
@@ -79,7 +87,8 @@ export function buildFacetDefs(
     list('datasets', 'Datasets', f?.datasets, datasetLabel),
     list('models', 'Models', f?.models, modelOptionLabel),
     list('versions', 'Versions', f?.versions, (v) => v),
-    list('statuses', 'Status', f?.statuses, statusLabel),
+    // C034: 'Submitted' is always a Status value, so reviewers can find the runs that wait for them
+    list('statuses', 'Status', withSubmitted(f?.statuses), statusLabel),
     list('owners', 'Users', f?.users, (v) => owners[v] ?? v),
   ];
   const keys = new Set([...Object.keys(f?.versioning ?? {}), ...Object.keys(view.versioning)]);
@@ -119,10 +128,13 @@ export function TimeOriginControls({
   view,
   onChange,
   labels = true,
+  showOrigin = true,
 }: {
   view: RunsView;
   onChange: (patch: ViewPatch) => void;
   labels?: boolean;
+  /** C208: false hides Origin in a project with no official run. */
+  showOrigin?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const open = editing || view.range === 'custom';
@@ -165,23 +177,25 @@ export function TimeOriginControls({
           />
         ) : null}
       </div>
-      <div className={styles.row}>
-        {labels ? (
-          <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
-            Origin
-          </Text>
-        ) : null}
-        <SegmentedControl<OriginFilter>
-          label="Origin"
-          value={view.origin}
-          onChange={(origin) => onChange({ origin })}
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'official', label: 'Official' },
-            { value: 'local', label: 'Local' },
-          ]}
-        />
-      </div>
+      {showOrigin ? (
+        <div className={styles.row}>
+          {labels ? (
+            <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
+              Origin
+            </Text>
+          ) : null}
+          <SegmentedControl<OriginFilter>
+            label="Origin"
+            value={view.origin}
+            onChange={(origin) => onChange({ origin })}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'official', label: 'Official' },
+              { value: 'local', label: 'Local' },
+            ]}
+          />
+        </div>
+      ) : null}
     </>
   );
 }
@@ -210,7 +224,11 @@ export function FiltersPanel({
   const footRef = useRef<HTMLDivElement>(null);
   return (
     <div className={[styles.panel, className].filter(Boolean).join(' ')} data-testid="filters-panel">
-      <TimeOriginControls view={view} onChange={onChange} />
+      <TimeOriginControls
+        view={view}
+        onChange={onChange}
+        showOrigin={view.origin !== 'all' || (facets?.origins ?? []).includes('official')}
+      />
       <div className={styles.facets}>
         {defs.map((def) => (
           <FacetSection

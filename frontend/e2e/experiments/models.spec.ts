@@ -200,9 +200,13 @@ test.describe('models page', () => {
     await seedRuns(request, project, [{ model: 'model-a', scores: [1, 1], n: 2 }]);
     await gotoApp(page, modelsPath(project.slug));
     await expect(page.locator('[data-model^="model-a|"]')).toBeVisible();
+    // C208: with no official run the Origin control shows only while an Origin filter is set (the URL keeps working)
     await page.getByTestId('filters-trigger').click();
-    const panel = page.getByTestId('filters-panel');
-    await panel.getByRole('radiogroup', { name: 'Origin' }).getByText('Official', { exact: true }).click();
+    await expect(page.getByTestId('filters-panel').getByRole('radiogroup', { name: 'Origin' })).toHaveCount(
+      0,
+    );
+    await page.keyboard.press('Escape');
+    await gotoApp(page, `${modelsPath(project.slug)}?origin=official`);
     await expect.poll(() => query(page).get('origin')).toBe('official');
     // runs created by the SDK are local, so nothing is official
     await page.keyboard.press('Escape');

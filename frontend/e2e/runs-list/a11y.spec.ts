@@ -63,7 +63,7 @@ test.describe('axe on the runs-list surfaces', () => {
     await openRuns(page, await ensureProject(request));
     await page.getByRole('button', { name: 'Select', exact: true }).click();
     await clickBox(dataRows(page).first().getByRole('checkbox'));
-    await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
     await expectClean(page, 'select mode');
   });
 

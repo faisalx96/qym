@@ -11,6 +11,7 @@ import type { RunRow } from '@/api/dashboardTypes';
 import { useAuth } from '@/features/shell';
 import { announceRunStatus } from '@/lib/run-status';
 import { ApiError } from '@/lib/http';
+import { bootstrap } from '@/lib/runtime';
 import { errorsLeftOut, metricDirection } from '@/lib/metrics';
 import { ConfirmDialog, Dialog, FormDialog, KeyValueGrid, Text, Button, useToast } from '@/ui';
 import { passNumber, passRefBase } from './selection';
@@ -53,6 +54,16 @@ const WORKFLOW_COPY = {
     help: 'The run returns to its execution result (Completed or Failed).',
   },
 };
+
+/** C251 (with C178's words): the place is Deleted runs, and the dialog names its Retention. */
+export function retentionLabel(days: number): string {
+  return days === 0 ? 'Off (kept until restored)' : `${days} day${days === 1 ? '' : 's'}`;
+}
+
+export function deleteDescription(graceDays: number | null): string {
+  const retention = graceDays === null ? '' : ` Retention: ${retentionLabel(graceDays)}.`;
+  return `Whole runs move to Deleted runs, where an admin can restore them.${retention} Deleting a single pass is permanent.`;
+}
 
 function message(e: unknown): string {
   if (e instanceof ApiError) return e.detail || e.message;
@@ -179,7 +190,7 @@ export function RunDialogs({
         title={
           rm && rm.refs.length === 1 ? `Delete ${rm.names[0]}?` : `Delete ${rm?.refs.length ?? 0} selections?`
         }
-        description="Whole runs move to Deleted Runs and can be restored by an admin within the retention window. Deleting a single pass is permanent."
+        description={deleteDescription(bootstrap().deletedRunGraceDays)}
         warning={
           rm
             ? {

@@ -14,6 +14,8 @@ export interface AppBootstrap {
   sessionAuth: boolean;
   /** QYM_ENVIRONMENT (dev, test, production, …). */
   environment: string;
+  /** Days a deleted run stays restorable (0 = Off: kept until restored); null when not injected (vite dev). */
+  deletedRunGraceDays: number | null;
 }
 
 declare global {
@@ -23,7 +25,13 @@ declare global {
   }
 }
 
-const DEFAULTS: AppBootstrap = { rootPath: '', authMode: 'none', sessionAuth: false, environment: 'dev' };
+const DEFAULTS: AppBootstrap = {
+  rootPath: '',
+  authMode: 'none',
+  sessionAuth: false,
+  environment: 'dev',
+  deletedRunGraceDays: null,
+};
 
 let cached: AppBootstrap | null = null;
 
@@ -39,6 +47,10 @@ export function bootstrap(): AppBootstrap {
     authMode: injected.authMode ?? DEFAULTS.authMode,
     sessionAuth: Boolean(injected.sessionAuth ?? DEFAULTS.sessionAuth),
     environment: injected.environment ?? DEFAULTS.environment,
+    deletedRunGraceDays:
+      typeof injected.deletedRunGraceDays === 'number' && injected.deletedRunGraceDays >= 0
+        ? injected.deletedRunGraceDays
+        : DEFAULTS.deletedRunGraceDays,
   };
   return cached;
 }

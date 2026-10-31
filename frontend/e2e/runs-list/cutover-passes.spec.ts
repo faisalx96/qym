@@ -105,7 +105,7 @@ test("deleting a pass clears the picks of that run's passes", async ({ page, req
   const { panel } = await seedRepeat(page, request);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   await clickBox(panel.getByRole('checkbox', { name: new RegExp(`^Select pass 3 of 3 of run ${NAME}$`) }));
-  await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+  await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
   await deletePassFromMenu(panel, page, 2);
   await page
     .getByRole('alertdialog')
@@ -114,7 +114,7 @@ test("deleting a pass clears the picks of that run's passes", async ({ page, req
     .click();
   await expect(passRows(panel)).toHaveCount(2, { timeout: 15_000 });
   await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(0);
-  await expect(page.getByTestId('selection-bar')).toContainText('0 executions selected');
+  await expect(page.getByTestId('selection-bar')).toContainText('0 runs selected');
 });
 
 test('the delete dialogs say a run can be restored and a pass cannot', async ({ page, request }) => {

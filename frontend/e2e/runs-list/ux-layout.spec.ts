@@ -27,7 +27,7 @@ test.describe('runs list: UX layout regressions', () => {
       await page.getByRole('button', { name: 'Select', exact: true }).click();
       await clickBox(page.getByRole('checkbox', { name: /^Select / }).nth(1));
       await clickBox(page.getByRole('checkbox', { name: /^Select / }).nth(2));
-      await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
+      await expect(page.getByTestId('selection-bar')).toContainText('2 runs selected');
       const bar = await page.getByTestId('status-bar').boundingBox();
       for (const name of ['Compare', 'Cohort', 'Delete', 'Clear']) {
         const box = await page

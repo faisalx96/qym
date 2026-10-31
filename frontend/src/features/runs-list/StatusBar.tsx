@@ -23,7 +23,8 @@ export function FooterTrailing({
   updatedAt: Date | null;
   freshness: Freshness | undefined;
   failed?: boolean;
-  onHelp: () => void;
+  /** Absent in card mode (C224): no Shortcuts button. */
+  onHelp?: () => void;
 }) {
   const note = freshnessCopy(freshness);
   return (
@@ -42,9 +43,11 @@ export function FooterTrailing({
           </>
         )}
       </Text>
-      <Button variant="ghost" onPress={onHelp} aria-label="Keyboard shortcuts">
-        <Kbd>?</Kbd> Shortcuts
-      </Button>
+      {onHelp ? (
+        <Button variant="ghost" onPress={onHelp} aria-label="Keyboard shortcuts">
+          <Kbd>?</Kbd> Shortcuts
+        </Button>
+      ) : null}
     </>
   );
 }
