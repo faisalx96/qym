@@ -602,6 +602,62 @@
   display: none;
 }
 
+/* Row menu (`RowMenu` in a `Column.menuColumn` cell, the runs Actions column, owner decision Nov 1): the cell is a
+   fold column with no body (see-through while columns remain past the end, through `data-fold`), and its one handle
+   shows on the hovered or focused row and while its menu is open (every row on a touch screen), so at rest no handle
+   covers the scores under the column. */
+.rowMenu {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rowMenuHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--badge-height);
+  height: var(--badge-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: auto;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.rowMenuHandle[data-hovered],
+.rowMenuHandle[data-pressed],
+.rowMenuHandle[aria-expanded='true'] {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.rowMenuHandle[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.tr:hover .rowMenuHandle,
+.tr[data-focused] .rowMenuHandle,
+.card2:hover .rowMenuHandle,
+.card2:focus-within .rowMenuHandle,
+.rowMenuHandle[aria-expanded='true'],
+.rowMenuHandle[data-focus-visible] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .rowMenuHandle {
+    opacity: 1;
+  }
+}
+
 /* folded: the title is clipped out of sight but keeps the column's accessible name; the header menu is hidden */
 .bodyHost[data-scroll-end] .th[data-fold] .thInner > * {
   visibility: hidden;

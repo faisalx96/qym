@@ -10,6 +10,8 @@ import {
   describeViolations,
   freshProject,
   openRuns,
+  openRowMenu,
+  pickRowAction,
   revealActions,
   rowOf,
   table,
@@ -296,28 +298,34 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
           (await leftOf(rowOf(page, NAME), 'td[data-col="run"] a')),
       ),
     ).toBeLessThanOrEqual(1); // "Pass n" starts where the run name starts
-    await expect(rows.nth(1).getByRole('img', { name: '1 task error in this pass' })).toBeVisible();
-    await expect(rows.nth(1).locator('td[data-col="signals"]')).toContainText('!1');
-    await expect(rows.first().locator('td[data-col="signals"]')).toHaveText('–');
+    // the pass's signals sit in its Status cell, drawn as the run's, linking to the pass's Errors section
+    const signal = rows.nth(1).getByRole('link', { name: '1 task error in this pass' });
+    await expect(signal).toBeVisible();
+    await expect(signal).toHaveAttribute('href', /pass=2#errors$/);
+    await expect(rows.first().locator('td[data-col="status"]').getByRole('link')).toHaveCount(0);
     // inherited facts stay empty, own values are shown
     for (let n = 0; n < 3; n++)
       for (const id of ['task', 'model', 'dataset', 'owner', 'experiment', 'version']) {
         const c = rows.nth(n).locator(`td[data-col="${id}"]`);
         if (await c.count()) expect((await c.textContent())?.trim()).toBe('');
       }
-    await expect(rows.first().getByRole('link', { name: /^Analyze pass 1/ })).toBeVisible();
+    // no idle Analyze button in the row: auto-analysis is the first item of the pass's row menu
+    await expect(rows.first().getByRole('link', { name: /^Analyze pass 1/ })).toHaveCount(0);
     for (const id of ['latency', 'duration', 'metric-quality', 'metric-accuracy']) {
       const c = rows.first().locator(`td[data-col="${id}"]`);
       if (await c.count()) expect((await c.textContent())?.trim()).not.toBe('');
     }
-    // actions: delete per pass, no submit, no run-level delete
+    // actions: one row menu per pass: auto-analysis, open, delete; no submit, no run-level delete
     for (let n = 1; n <= 3; n++) {
-      await revealActions(rows.nth(n - 1));
-      await expect(rows.nth(n - 1).getByRole('button', { name: `Delete pass ${n}` })).toBeVisible();
+      const menu = await openRowMenu(page, rows.nth(n - 1));
+      await expect(menu.getByRole('menuitem')).toHaveText([
+        'Open auto-analysis',
+        `Open pass ${n}`,
+        `Delete pass ${n}`,
+      ]);
+      await page.keyboard.press('Escape');
     }
-    await expect(rows.first().getByRole('button', { name: /^Submit / })).toHaveCount(0);
-    await revealActions(rows.nth(1));
-    await rows.nth(1).getByRole('button', { name: 'Delete pass 2' }).click();
+    await pickRowAction(page, rows.nth(1), 'Delete pass 2');
     await expect(
       page.getByRole('alertdialog').or(page.getByRole('dialog', { name: 'Delete pass 2?' })),
     ).toBeVisible();
@@ -848,7 +856,7 @@ test.describe('runs table: card mode (390)', () => {
       expect(b.height).toBeLessThanOrEqual(56);
       await expect(lines.nth(n)).toContainText(`Pass ${n + 1}`);
       await expect(
-        lines.nth(n).getByRole('button', { name: new RegExp(`More actions for pass ${n + 1}`) }),
+        lines.nth(n).getByRole('button', { name: new RegExp(`Actions for pass ${n + 1}`) }),
       ).toBeVisible();
     }
     expect(await card(page).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);

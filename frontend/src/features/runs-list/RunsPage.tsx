@@ -221,7 +221,8 @@ export function RunsPage() {
       .map((id) => known.get(id))
       .filter((r): r is NonNullable<typeof r> => Boolean(r));
   const onAction = (id: string, row: (typeof rows)[number]) => {
-    if (id === 'delete')
+    if (id === 'analyze') navigate(`${runPath(slug, row.run_id)}/analyzer`);
+    else if (id === 'delete')
       setDialog({
         kind: 'delete',
         refs: [row.run_id],

@@ -26,8 +26,8 @@ const base = (id: string, label: string, width: number, sortKey?: string): Colum
 
 export const BASE_COLUMNS: ColumnDef[] = [
   { ...base('run', 'Run', 260, 'run') },
-  base('status', 'Status', 144, 'status'),
-  { ...base('signals', 'Signals', 60), visKey: null },
+  // the signals (errors, retries, incomplete data) sit in the Status cell, after the status (C028)
+  base('status', 'Status', 176, 'status'),
   // 86 (was 90): the Dataset column grew to 120 for the union count tag (QC-U33) and Date, the default sort, must stay
   // fully on screen before the Actions column at 1280, where Owner is hidden (Date overhung by 4 px).
   base('task', 'Task', 86, 'task'),
@@ -137,8 +137,8 @@ export const ACTIONS_COLUMN: ColumnDef = {
   id: 'actions',
   label: 'Actions',
   group: 'run',
-  // three 20px tiles (review menu, Submit, Delete) with 4px gaps and the cell padding, and room for its title
-  width: 96,
+  // one 20px row menu handle and the cell padding (owner decision, Nov 1: every row action sits in that menu)
+  width: 44,
   align: 'end',
   visKey: null,
 };
@@ -163,13 +163,21 @@ export interface ColumnSet {
   visible: ColumnDef[];
 }
 
-/** `visible === null` = nothing saved yet: every column except trace stats without data. */
+export interface ColumnOptions {
+  /** The metric the SDK declares as primary (`metric_specs[m].primary`), if any. */
+  mainMetric?: string | null;
+  /** Context columns that have a value in the filtered scope; an empty one is hidden by default (C223). */
+  withData?: { experiment: boolean; version: boolean };
+}
+
+/** `visible === null` = nothing saved yet: every column except trace stats, Experiment and Version without data. */
 export function buildColumns(
   metrics: string[],
   traceWithData: Set<string>,
   visible: Set<string> | null,
   /** Column ids the user hid (the table's own layout); wins over `visible`. */
   hidden?: Set<string> | null,
+  options: ColumnOptions = {},
 ): ColumnSet {
   const all: ColumnDef[] = [
     ...BASE_COLUMNS,
@@ -179,29 +187,45 @@ export function buildColumns(
     DURATION_COLUMN,
     ACTIONS_COLUMN,
   ];
-  // The first two metric columns follow Status so a score is visible on first paint.
-  const metricCols = metrics.map(metricColumn);
   const byId = (id: string) => BASE_COLUMNS.find((c) => c.id === id)!;
-  // Legacy order for what a run is (task, model, dataset) and the Analyze action, then the first score and the date,
-  // so all of them are on screen at 1440 next to the frozen Run and Status; the other context columns follow.
-  const front = ['run', 'status', 'signals', 'task', 'model', 'dataset', 'time', 'analysis'];
-  const ordered = [
-    ...front.map(byId),
-    ...metricCols.slice(0, 1),
-    ...BASE_COLUMNS.filter((c) => ![...front, 'duration'].includes(c.id)),
-    ...metricCols.slice(1),
-    ...SYSTEM_COLUMNS,
-    ...TRACE_COLUMNS,
-    DURATION_COLUMN,
-    ACTIONS_COLUMN,
-  ];
   const show = (c: ColumnDef) => {
     if (c.visKey === null) return true;
     if (hidden) return !hidden.has(c.id);
     if (visible) return visible.has(c.visKey);
     if (c.group === 'trace') return traceWithData.has(c.visKey);
+    if (c.id === 'experiment' && options.withData) return options.withData.experiment;
+    if (c.id === 'version' && options.withData) return options.withData.version;
     return true;
   };
+  const main = options.mainMetric && metrics.includes(options.mainMetric) ? options.mainMetric : null;
+  const metricCols = (main ? [main, ...metrics.filter((m) => m !== main)] : metrics).map(metricColumn);
+  // C028: the scores come right after Run and Status when the SDK declares a main metric, or when 3 or fewer scores
+  // are shown; then the date and what a run is (model, dataset, owner, task).
+  const scoresFirst = Boolean(main) || metricCols.filter(show).length <= 3;
+  const tail = [...SYSTEM_COLUMNS, ...TRACE_COLUMNS, DURATION_COLUMN, ACTIONS_COLUMN];
+  let ordered: ColumnDef[];
+  if (scoresFirst) {
+    const lead = ['run', 'status'];
+    const context = ['time', 'model', 'dataset', 'owner', 'task'];
+    ordered = [
+      ...lead.map(byId),
+      ...metricCols,
+      ...context.map(byId),
+      ...BASE_COLUMNS.filter((c) => ![...lead, ...context].includes(c.id)),
+      ...tail,
+    ];
+  } else {
+    // Legacy order for what a run is (task, model, dataset) and the Analyze action, then the first score and the
+    // date, so all of them are on screen at 1440 next to the frozen Run and Status; the other context columns follow.
+    const front = ['run', 'status', 'task', 'model', 'dataset', 'time', 'analysis'];
+    ordered = [
+      ...front.map(byId),
+      ...metricCols.slice(0, 1),
+      ...BASE_COLUMNS.filter((c) => !front.includes(c.id)),
+      ...metricCols.slice(1),
+      ...tail,
+    ];
+  }
   return { all, ordered, visible: ordered.filter(show) };
 }
 

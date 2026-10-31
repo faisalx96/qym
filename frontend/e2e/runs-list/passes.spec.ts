@@ -226,6 +226,6 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(3);
     await openPassMenu(panel, page, 1);
     await expect(page.getByRole('menuitem', { name: /Open pass 1/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Delete pass/ })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: /Delete pass/ })).toHaveCount(0);
   });
 });

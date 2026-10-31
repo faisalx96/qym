@@ -10,7 +10,7 @@ export interface IconButtonProps extends Omit<
   /** Required accessible name; also the title. */
   label: string;
   icon: IconName | ReactNode;
-  tone?: 'default' | 'danger' | 'approve' | 'reject';
+  tone?: 'default' | 'danger' | 'approve' | 'reject' | 'meta';
   /** Shows the "copied" green glyph state. */
   active?: boolean;
   /** Row action tile: a 20px square (`--badge-height`, 12px glyph), the tone's soft tint at rest and a stronger tint on
@@ -38,3 +38,21 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     </AriaButton>
   );
 });
+
+/**
+ * The look of a row action tile with no action of its own: the glyph of an item in a row menu (`RowMenu`), so the menu
+ * keeps the row's iconography (owner decision, Nov 1). `meta` is the purple of auto-analysis.
+ */
+export function ActionTile({
+  icon,
+  tone = 'default',
+}: {
+  icon: IconName | ReactNode;
+  tone?: 'default' | 'danger' | 'meta';
+}) {
+  return (
+    <span className={styles.iconAction} data-tile="" data-tone={tone} data-static="" aria-hidden="true">
+      {typeof icon === 'string' ? <Icon name={icon as IconName} size={12} /> : icon}
+    </span>
+  );
+}

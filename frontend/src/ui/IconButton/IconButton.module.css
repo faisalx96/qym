@@ -60,6 +60,15 @@
 .iconAction[data-tile][data-tone='reject'] {
   --tile-tone: var(--error);
 }
+/* auto-analysis keeps its purple (owner decision, Nov 1) */
+.iconAction[data-tile][data-tone='meta'] {
+  --tile-tone: var(--accent-tertiary);
+}
+/* ActionTile: the glyph of a row menu item, not a control */
+.iconAction[data-static] {
+  flex: none;
+  cursor: inherit;
+}
 .iconAction[data-tile][data-hovered],
 .iconAction[data-tile][data-pressed],
 .iconAction[data-tile][data-focus-visible] {

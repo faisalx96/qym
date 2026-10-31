@@ -6,7 +6,9 @@ import {
   dataRows,
   failOnNativeDialogs,
   freshProject,
+  openRowMenu,
   openRuns,
+  pickRowAction,
   revealActions,
   rowOf,
   statusText,
@@ -20,9 +22,10 @@ const kpis = async (request: APIRequestContext, slug: string) =>
     ).json()) as { kpis: Record<string, number> }
   ).kpis;
 
+/** Every row action sits in one menu behind the row's '>' handle (owner decision, Nov 1). */
 async function openMore(page: Page, name: string, how: 'mouse' | 'keyboard' = 'mouse') {
   await revealActions(rowOf(page, name));
-  const trigger = rowOf(page, name).getByRole('button', { name: `More actions for ${name}` });
+  const trigger = rowOf(page, name).getByRole('button', { name: `Actions for ${name}` });
   if (how === 'mouse') await trigger.click();
   else {
     await trigger.focus();
@@ -33,12 +36,9 @@ async function openMore(page: Page, name: string, how: 'mouse' | 'keyboard' = 'm
   return menu;
 }
 
-/** Submit for review is its own paper-plane tile (round 9: the old qym row actions; no check icon). */
+/** Submit is an item of the row menu, on its paper-plane tile (no check icon). */
 async function submitRow(page: Page, name: string) {
-  await revealActions(rowOf(page, name));
-  await rowOf(page, name)
-    .getByRole('button', { name: `Submit ${name} for review` })
-    .click();
+  await pickRowAction(page, rowOf(page, name), 'Submit');
   const dlg = page.getByRole('dialog', { name: `Submit ${name} for review` });
   await dlg.getByRole('button', { name: 'Submit', exact: true }).click();
   await expect(dlg).toHaveCount(0);
@@ -56,8 +56,9 @@ test.describe('runs list: row actions (J5)', () => {
     await post;
     await expect(page.getByRole('status').filter({ hasText: 'Submitted for review' })).toBeVisible();
     await expect.poll(async () => statusText(rowOf(page, NAME)), { timeout: 5000 }).toMatch(/submitted/i);
-    // a SUBMITTED row has no Submit tile any more
-    await expect(rowOf(page, NAME).getByRole('button', { name: /^Submit / })).toHaveCount(0);
+    // a SUBMITTED row has no Submit item any more
+    const after = await openRowMenu(page, rowOf(page, NAME));
+    await expect(after.getByRole('menuitem', { name: 'Submit', exact: true })).toHaveCount(0);
   });
 
   test('Approve, Unapprove, Reject (comment required), Unreject through the More menu; Overview Approved gains the run; error KPI is stable', async ({
@@ -72,14 +73,20 @@ test.describe('runs list: row actions (J5)', () => {
 
     // keyboard: open the menu with Enter, ArrowDown to move, Enter to pick
     let menu = await openMore(page, NAME, 'keyboard');
-    await expect(menu.getByRole('menuitem')).toHaveText(['Approve', 'Reject', 'Transfer ownership…']);
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      'Open auto-analysis',
+      'Approve',
+      'Reject',
+      'Transfer ownership',
+      'Delete',
+    ]);
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.getByRole('menuitem', { name: 'Approve' })).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(menu.getByRole('menuitem', { name: 'Reject' })).toBeFocused();
-    await page.keyboard.press('ArrowUp');
-    await expect(menu.getByRole('menuitem', { name: 'Approve' })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
-    await expect(rowOf(page, NAME).getByRole('button', { name: `More actions for ${NAME}` })).toBeFocused();
+    await expect(rowOf(page, NAME).getByRole('button', { name: `Actions for ${NAME}` })).toBeFocused();
 
     // Approve
     menu = await openMore(page, NAME);
@@ -100,7 +107,7 @@ test.describe('runs list: row actions (J5)', () => {
 
     // Unapprove -> SUBMITTED
     menu = await openMore(page, NAME);
-    await expect(menu.getByRole('menuitem').first()).toHaveText('Unapprove');
+    await expect(menu.getByRole('menuitem').nth(1)).toHaveText('Unapprove');
     await menu.getByRole('menuitem', { name: 'Unapprove' }).click();
     await page
       .getByRole('dialog', { name: `Withdraw approval: ${NAME}` })
@@ -154,7 +161,7 @@ test.describe('runs list: row actions (J5)', () => {
     await addMember(request, s.project.id, user.id, 'MEMBER');
     await openRuns(page, s.project.slug);
     const menu = await openMore(page, NAME);
-    await menu.getByRole('menuitem', { name: 'Transfer ownership…' }).click();
+    await menu.getByRole('menuitem', { name: 'Transfer ownership' }).click();
     const dlg = page.getByRole('dialog', { name: `Transfer ${NAME}` });
     await expect(dlg).toBeVisible();
     await dlg.getByRole('button', { name: /New owner/ }).click();
@@ -173,10 +180,7 @@ test.describe('runs list: row actions (J5)', () => {
     const dialogs = failOnNativeDialogs(page);
     await openRuns(page, s.project.slug);
     const before = await dataRows(page).count();
-    await revealActions(rowOf(page, NAME));
-    await rowOf(page, NAME)
-      .getByRole('button', { name: `Delete ${NAME}` })
-      .click();
+    await pickRowAction(page, rowOf(page, NAME), 'Delete');
     const dlg = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: `Delete ${NAME}?` }));
     await expect(dlg).toBeVisible();
     await expect(dlg.getByRole('button', { name: 'Cancel' })).toBeFocused();
@@ -196,8 +200,7 @@ test.describe('runs list: row actions (J5)', () => {
     const s = await freshProject(request, 2);
     await openRuns(page, s.project.slug);
     const live = rowOf(page, 'live');
-    await revealActions(live);
-    await expect(live.getByRole('button', { name: /^Delete / })).toHaveCount(1);
-    await expect(live.getByRole('button', { name: /^Submit / })).toHaveCount(0);
+    const menu = await openRowMenu(page, live);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Delete']);
   });
 });

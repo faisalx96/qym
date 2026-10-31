@@ -15,7 +15,8 @@ export interface MenuItemSpec {
   id: string;
   label: ReactNode;
   icon?: ReactNode;
-  tone?: 'danger';
+  /** danger: red (delete, reject); meta: purple (auto-analysis, owner decision Nov 1). */
+  tone?: 'danger' | 'meta';
   disabled?: boolean;
   /** Renders as a link (full navigation). */
   href?: string;

@@ -295,12 +295,13 @@ const DataCell = memo(function DataCell<R>({
   const cellContent = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
   const fold = pin === 'end' && col.foldLabel ? col.foldLabel(row) : null;
   const content = fold !== null ? <FoldCell label={fold}>{cellContent}</FoldCell> : cellContent;
+  const menuFold = pin === 'end' && col.menuColumn === true;
   const sec = col.secondary?.(row);
   return (
     <td
       className={styles.td}
       data-col={col.id}
-      data-fold={fold !== null ? '' : undefined}
+      data-fold={fold !== null || menuFold ? '' : undefined}
       data-pin={pin ?? undefined}
       data-pin-edge={edge}
       style={{
@@ -1409,7 +1410,7 @@ function DataTableInner<R>({
         data-col={col.id}
         data-align={align}
         data-pin={pin ?? undefined}
-        data-fold={pin === 'end' && col.foldLabel ? '' : undefined}
+        data-fold={pin === 'end' && (col.foldLabel || col.menuColumn) ? '' : undefined}
         data-pin-edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}
         data-sorted={active ? sort!.direction : undefined}
         data-sortable={canSort ? '' : undefined}

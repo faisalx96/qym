@@ -93,12 +93,22 @@
   background: var(--info);
 }
 
+/* Status, then the signals (C028): the signals sit in a second column, so they line up from row to row. */
+.statusRow {
+  display: inline-grid;
+  grid-template-columns: minmax(92px, max-content) auto;
+  align-items: center;
+  column-gap: var(--space-sm);
+  min-width: 0;
+}
+
 .signals {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
 }
 
+/* each signal links to the Errors section of its run or pass (C115) */
 .signal {
   display: inline-flex;
   align-items: center;
@@ -112,7 +122,8 @@
   font-size: var(--font-sm);
   font-weight: 650;
   line-height: 1;
-  cursor: default;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .signal:focus-visible {
@@ -235,10 +246,4 @@
 .runLink:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
-}
-
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
 }

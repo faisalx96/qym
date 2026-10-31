@@ -23,10 +23,12 @@ test.describe('runs list: load (J1)', () => {
       'aria-sort',
       'descending',
     );
-    // Status and Signals are separate columns, Actions is last
-    const heads = await page.locator('[data-testid="runs-table"] thead th').allInnerTexts();
-    expect(heads.join('|')).toMatch(/status[\s\S]*signals/i);
-    expect(heads[heads.length - 1]).toMatch(/actions/i);
+    // the signals sit in the Status cell (no Signals column), and the row menu column is last
+    const heads = await page
+      .locator('[data-testid="runs-table"] thead th')
+      .evaluateAll((ths) => ths.map((th) => th.getAttribute('data-col')));
+    expect(heads).not.toContain('signals');
+    expect(heads[heads.length - 1]).toBe('actions');
   });
 
   test('topbar KPIs equal the Overview KPI cards and /api/dashboard/kpis', async ({ page, request }) => {

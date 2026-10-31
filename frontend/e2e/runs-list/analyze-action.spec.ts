@@ -1,21 +1,22 @@
-/** The Analyze action of the runs list: an explicit button whose state is written on it. */
+/**
+ * Auto-analysis on the runs list (C133): starting one is the first item of the row menu ('Open auto-analysis'); the
+ * Analysis column shows only 'N causes' and 'Analyzing', and is not drawn when no row on the page has one.
+ */
 import { test, expect } from '@playwright/test';
-import { openRuns, rowOf, sharedProject } from './support';
+import { openRowMenu, openRuns, rowOf, sharedProject } from './support';
 
-test('finished runs show an Analyze button; live runs a dash; the button opens the analyzer', async ({
+test('a finished run starts its auto-analysis from the row menu; no idle Analyze button in the row', async ({
   page,
   request,
 }) => {
   const s = await sharedProject(request, 12);
   await openRuns(page, s.project.slug);
   const row = rowOf(page, 'text2sql-gpt-4o-000');
-  const action = row.getByTestId('analyze-action');
-  await expect(action).toHaveText('Analyze');
-  await expect(action).toHaveAttribute('data-state', 'idle');
-  await action.hover();
-  const hovered = await action.evaluate((el) => getComputedStyle(el).color);
-  expect(hovered).toBeTruthy();
-  await action.click();
+  await expect(row.locator('[data-testid="analyze-action"][data-state="idle"]')).toHaveCount(0);
+  const menu = await openRowMenu(page, row);
+  const item = menu.getByRole('menuitem').first();
+  await expect(item).toHaveText('Open auto-analysis');
+  await item.click();
   await expect(page).toHaveURL(/\/analy/);
 });
 

@@ -2,12 +2,13 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button as AriaButton } from 'react-aria-components';
-import type { RunRow } from '@/api/dashboardTypes';
+import type { RunPass, RunRow } from '@/api/dashboardTypes';
 import {
-  DropdownMenu,
+  ActionTile,
   HelpMarker,
   Icon,
   IconButton,
+  RowMenu,
   RunStatusBadge,
   ScoreValue,
   DatasetTag,
@@ -16,6 +17,7 @@ import {
   Tag,
   Tooltip,
   UserName,
+  type MenuItemSpec,
 } from '@/ui';
 import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
 import { errorsLeftOut, formatPercent, metricDirection } from '@/lib/metrics';
@@ -24,7 +26,7 @@ import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
 import { DatasetCountTag } from '@/features/run-detail/components/DatasetChip';
-import { AnalyzeAction } from './AnalyzeAction';
+import { AnalysisSpark, AnalyzeAction, analyzeState } from './AnalyzeAction';
 import { useRunsCtx } from './context';
 import { modelKeyOf, modelShape, modelSlot, plainModelName, smartDigits, STATUS_LABEL } from './model';
 import { isActiveRun, isStoppingRun } from './polling';
@@ -111,8 +113,21 @@ function statusTitle(row: RunRow, stopping: boolean): string {
   return row.status;
 }
 
-/** Status badge with live suffixes (pass j/k, percent, done/total). */
+/** Status badge with live suffixes (pass j/k, percent, done/total), then the run's signals (C028). */
 export function StatusCell({ row }: { row: RunRow }) {
+  const items = signalItems(row);
+  const { slug, listContext } = useRunsCtx();
+  return (
+    <span className={styles.statusRow}>
+      <StatusBadge row={row} />
+      {items.length ? (
+        <SignalMarkers items={items} href={`${runHref(runPath(slug, row.run_id), listContext)}#errors`} />
+      ) : null}
+    </span>
+  );
+}
+
+function StatusBadge({ row }: { row: RunRow }) {
   const stopping = isStoppingRun(row);
   const status = stopping ? 'STOPPING' : row.status;
   const live = isActiveRun(row);
@@ -200,23 +215,55 @@ export function signalItems(row: RunRow): SignalItem[] {
   return items;
 }
 
-/** ⚠ task errors, ⚠ metric errors, ↻ retries, ingest marker; each is a focusable button with a tooltip and opens the details dialog. */
-export function Signals({ row, onDetails }: { row: RunRow; onDetails?: (row: RunRow) => void }) {
-  const items = signalItems(row);
-  if (!items.length) return <span className={styles.empty}>—</span>;
+/** The signals of a pass, drawn by the same markers as a run's (one Signals component for run and pass rows, C115). */
+export function passSignalItems(
+  p: Pick<RunPass, 'task_error_count' | 'metric_error_count' | 'retry_count' | 'error_count'>,
+): SignalItem[] {
+  const metric = p.metric_error_count ?? 0;
+  const task = p.task_error_count || (p.error_count && !metric ? p.error_count : 0);
+  const retries = p.retry_count ?? 0;
+  const items: SignalItem[] = [];
+  if (task)
+    items.push({
+      key: 'task',
+      glyph: '⚠',
+      tone: 'error',
+      count: task,
+      text: `${task} task error${task > 1 ? 's' : ''} in this pass`,
+    });
+  if (metric)
+    items.push({
+      key: 'metric',
+      glyph: '⚠',
+      tone: 'metric',
+      count: metric,
+      text: `${metric} metric error${metric > 1 ? 's' : ''} in this pass`,
+    });
+  if (retries)
+    items.push({
+      key: 'retry',
+      glyph: '↻',
+      tone: 'info',
+      count: retries,
+      text: `${retries} retr${retries === 1 ? 'y' : 'ies'} in this pass`,
+    });
+  return items;
+}
+
+/**
+ * ⚠ task errors (red), ⚠ metric errors (yellow), ↻ retries (blue), ◌ incomplete data (amber), each with its count and
+ * today's colour, no threshold (owner, Nov 1). Each marker links to the run's (or pass's) Errors section, with no
+ * dialog (C115).
+ */
+export function SignalMarkers({ items, href }: { items: SignalItem[]; href: string }) {
   return (
     <span className={styles.signals}>
       {items.map((it) => (
         <Tooltip key={it.key} content={it.text}>
-          <AriaButton
-            className={styles.signal}
-            data-tone={it.tone}
-            aria-label={it.text}
-            onPress={() => onDetails?.(row)}
-          >
+          <Link className={styles.signal} data-tone={it.tone} aria-label={it.text} to={href}>
             {it.count ? <span className={styles.mono}>{it.count}</span> : null}
             <span aria-hidden="true">{it.glyph}</span>
-          </AriaButton>
+          </Link>
         </Tooltip>
       ))}
     </span>
@@ -397,9 +444,11 @@ export function RunNameCell({
   );
 }
 
+/** 'N causes' or 'Analyzing' only (C133): starting an analysis is the first item of the row menu. */
 export function AnalysisCell({ row }: { row: RunRow }) {
   const { slug, analyzing } = useRunsCtx();
-  if (isActiveRun(row)) return <span className={styles.empty}>—</span>;
+  const state = analyzeState(row.analysis_cause_count ?? 0, analyzing?.has(row.run_id) ?? false);
+  if (isActiveRun(row) || state === 'idle') return <span className={styles.empty}>—</span>;
   return (
     <AnalyzeAction
       to={`${runPath(slug, row.run_id)}/analyzer`}
@@ -431,37 +480,52 @@ export interface RowPermissions {
   meId: string;
 }
 
-interface RowActionModel {
-  canDelete: boolean;
-  /** Submit for review: COMPLETED, FAILED or REJECTED runs, for the owner or a manager. */
-  submitLabel: string | null;
-  items: { id: string; label: string; tone?: 'danger'; separatorBefore?: boolean }[];
-}
-
-/** What a viewer may do to a run row: the review menu, Submit and Delete, as tiles (the old qym row actions). */
-export function rowActionModel(row: RunRow, perm: RowPermissions): RowActionModel {
-  if (perm.readOnly) return { canDelete: false, submitLabel: null, items: [] };
+/**
+ * Every action of a run row, in one menu behind the row's handle (owner decision, Nov 1). Each item carries its tile, so
+ * the menu keeps the row's iconography: Open auto-analysis (purple sparkle) first, Submit (send), the review items
+ * (Approve, Reject, Unapprove, Unreject, Transfer ownership on the review menu's file tile), then Delete (red trash).
+ */
+export function rowMenuItems(row: RunRow, perm: RowPermissions): MenuItemSpec[] {
+  const items: MenuItemSpec[] = [];
+  // a live run has nothing to analyse yet
+  if (!isActiveRun(row))
+    items.push({
+      id: 'analyze',
+      label: 'Open auto-analysis',
+      icon: <ActionTile tone="meta" icon={<AnalysisSpark filled={false} />} />,
+      tone: 'meta',
+    });
+  if (perm.readOnly) return items;
   const isOwner = row.owner?.id === perm.meId;
-  const canSubmit = (isOwner || perm.canManage) && ['COMPLETED', 'FAILED', 'REJECTED'].includes(row.status);
-  const canDelete = perm.isAdmin || perm.canManage || isOwner;
-  const name = row.external_run_id || row.run_name;
-  const submitLabel = canSubmit
-    ? `Submit ${name} for review${!isOwner && row.owner ? ` on behalf of ${row.owner.display_name || row.owner.email}` : ''}`
-    : null;
-  const items: RowActionModel['items'] = [];
+  if ((isOwner || perm.canManage) && ['COMPLETED', 'FAILED', 'REJECTED'].includes(row.status))
+    items.push({
+      id: 'submit',
+      label: 'Submit',
+      icon: <ActionTile icon="send" />,
+      description:
+        !isOwner && row.owner ? `On behalf of ${row.owner.display_name || row.owner.email}` : undefined,
+    });
   if (perm.canManage) {
     if (row.status === 'SUBMITTED')
-      items.push({ id: 'approve', label: 'Approve' }, { id: 'reject', label: 'Reject', tone: 'danger' });
-    if (row.status === 'APPROVED') items.push({ id: 'unapprove', label: 'Unapprove' });
-    if (row.status === 'REJECTED') items.push({ id: 'unreject', label: 'Unreject' });
-    items.push({ id: 'transfer', label: 'Transfer ownership…', separatorBefore: items.length > 0 });
+      items.push(
+        { id: 'approve', label: 'Approve', icon: <ActionTile icon="check" /> },
+        { id: 'reject', label: 'Reject', icon: <ActionTile tone="danger" icon="close" />, tone: 'danger' },
+      );
+    if (row.status === 'APPROVED')
+      items.push({ id: 'unapprove', label: 'Unapprove', icon: <ActionTile icon="retry" /> });
+    if (row.status === 'REJECTED')
+      items.push({ id: 'unreject', label: 'Unreject', icon: <ActionTile icon="retry" /> });
+    items.push({ id: 'transfer', label: 'Transfer ownership', icon: <ActionTile icon="file" /> });
   }
-  return { canDelete, submitLabel, items };
-}
-
-/** True when the row has at least one action (the Actions fold column shows its handle only then). */
-export function hasRowActions(m: RowActionModel): boolean {
-  return m.canDelete || m.submitLabel !== null || m.items.length > 0;
+  if (perm.isAdmin || perm.canManage || isOwner)
+    items.push({
+      id: 'delete',
+      label: 'Delete',
+      icon: <ActionTile tone="danger" icon="trash" />,
+      tone: 'danger',
+      separatorBefore: items.length > 0,
+    });
+  return items;
 }
 
 export function RowActions({
@@ -473,33 +537,13 @@ export function RowActions({
   perm: RowPermissions;
   onAction: (id: string, row: RunRow) => void;
 }) {
-  if (perm.readOnly) return <span className={styles.empty}>—</span>;
-  const { canDelete, submitLabel, items } = rowActionModel(row, perm);
-  const name = row.external_run_id || row.run_name;
-  // Order of the old qym row: review menu (document), Submit (paper plane), Delete (trash) at the edge.
+  const name = row.external_run_id || row.run_name || row.run_id.slice(0, 8);
   return (
-    <span className={styles.actions}>
-      {items.length ? (
-        <DropdownMenu
-          label={`More actions for ${name}`}
-          trigger={<IconButton label={`More actions for ${name}`} icon="file" tile />}
-          items={items}
-          onAction={(id) => onAction(id, row)}
-        />
-      ) : null}
-      {submitLabel ? (
-        <IconButton label={submitLabel} icon="send" tile onPress={() => onAction('submit', row)} />
-      ) : null}
-      {canDelete ? (
-        <IconButton
-          label={`Delete ${name}`}
-          icon="trash"
-          tone="danger"
-          tile
-          onPress={() => onAction('delete', row)}
-        />
-      ) : null}
-    </span>
+    <RowMenu
+      label={`Actions for ${name}`}
+      items={rowMenuItems(row, perm)}
+      onAction={(id) => onAction(id, row)}
+    />
   );
 }
 
