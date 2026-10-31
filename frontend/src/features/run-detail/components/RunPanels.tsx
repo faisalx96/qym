@@ -1,32 +1,52 @@
-/** Review history, experiment panel, versioning details and lock notices (brief 04 §3a). */
+/** Review log entries, experiment panel, versioning details and lock notices (brief 04 §3a). */
 import { useState } from 'react';
 import { projectPath } from '@/app/routes';
-import { useReviewHistoryQuery } from '@/api/runs';
 import { JobStatusBadge } from '@/features/experiments/components/StatusBadges';
-import { LinkButton, Tag, Card } from '@/ui';
+import { Card, Flag, LinkButton, StatusMark, Tag, type StatusShape, type StatusTone } from '@/ui';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
 
-const ACTIONS: Record<string, { label: string; tone?: 'success' | 'danger' | 'warning' }> = {
-  submit: { label: 'Submitted' },
-  approve: { label: 'Approved', tone: 'success' },
-  reject: { label: 'Rejected', tone: 'danger' },
-  unapprove: { label: 'Approval withdrawn', tone: 'warning' },
-  unreject: { label: 'Rejection withdrawn', tone: 'warning' },
+/** Each review event as a StatusMark (C174): the figure is the non-colour cue. */
+const ACTIONS: Record<string, { label: string; tone: StatusTone; shape: StatusShape }> = {
+  submit: { label: 'Submitted', tone: 'neutral', shape: 'hourglass' },
+  approve: { label: 'Approved', tone: 'success', shape: 'check' },
+  reject: { label: 'Rejected', tone: 'danger', shape: 'cross' },
+  unapprove: { label: 'Approval withdrawn', tone: 'warning', shape: 'ring' },
+  unreject: { label: 'Rejection withdrawn', tone: 'warning', shape: 'ring' },
 };
 
-function who(u: { display_name?: string; email?: string; id?: string } | null | undefined): string {
+export function who(u: { display_name?: string; email?: string; id?: string } | null | undefined): string {
   return u ? u.display_name || u.email || u.id || 'Unknown user' : 'Unknown user';
 }
 
-function HistoryEntry({ event }: { event: ReviewHistoryEvent }) {
-  const action = ACTIONS[event.action] ?? { label: String(event.action || 'Changed') };
+/** Approvals by the person who submitted the run (C055): the index of each such approve event. */
+export function selfApprovals(events: ReviewHistoryEvent[]): Set<number> {
+  const out = new Set<number>();
+  let submitter: string | null = null;
+  events.forEach((e, i) => {
+    if (e.action === 'submit') submitter = e.actor?.id ?? null;
+    else if (e.action === 'approve' && submitter && e.actor?.id === submitter) out.add(i);
+  });
+  return out;
+}
+
+function HistoryEntry({ event, selfApproved }: { event: ReviewHistoryEvent; selfApproved: boolean }) {
+  const action = ACTIONS[event.action] ?? {
+    label: String(event.action || 'Changed'),
+    tone: 'neutral' as const,
+    shape: 'ring' as const,
+  };
   return (
     <li className={styles.entry} data-action={event.action}>
       <div className={styles.entryHead}>
-        <Tag tone={action.tone}>{action.label}</Tag>
+        <StatusMark tone={action.tone} shape={action.shape} label={action.label} />
         <span className={styles.actor}>{who(event.actor)}</span>
+        {selfApproved ? (
+          <Flag tone="warning" icon="user" title="The same person submitted and approved this run">
+            Self-approved
+          </Flag>
+        ) : null}
         {event.on_behalf_of ? <span>on behalf of {who(event.on_behalf_of)}</span> : null}
         {event.to_status && (event.action === 'unapprove' || event.action === 'unreject') ? (
           <span>returned the run to {String(event.to_status).toLowerCase()}</span>
@@ -47,31 +67,18 @@ function HistoryEntry({ event }: { event: ReviewHistoryEvent }) {
   );
 }
 
-/** Hidden when the run was never submitted (no events) or the request failed. */
-export function ReviewHistory({
-  runId,
-  status,
-  enabled = true,
-}: {
-  runId: string;
-  status: string;
-  /** False when the run summary says there are no review events: no request. */
-  enabled?: boolean;
-}) {
-  const { data } = useReviewHistoryQuery(runId, enabled);
-  const events = data?.events ?? [];
-  void status;
-  if (!events.length) return null;
+/**
+ * The run's review log, oldest first (C027: it opens from the hero's History button; there is no Review history
+ * card). Comments render as text, never HTML.
+ */
+export function ReviewLogList({ events }: { events: ReviewHistoryEvent[] }) {
+  const self = selfApprovals(events);
   return (
-    <Card as="section" aria-label="Review history" data-testid="review-history">
-      <div className={styles.title}>Review history</div>
-      <div className={styles.copy}>Every submission and review decision on this run, oldest first.</div>
-      <ol className={styles.list}>
-        {events.map((event, i) => (
-          <HistoryEntry key={i} event={event} />
-        ))}
-      </ol>
-    </Card>
+    <ol className={styles.list} data-testid="review-log">
+      {events.map((event, i) => (
+        <HistoryEntry key={i} event={event} selfApproved={self.has(i)} />
+      ))}
+    </ol>
   );
 }
 

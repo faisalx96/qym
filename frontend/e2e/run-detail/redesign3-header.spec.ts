@@ -69,7 +69,8 @@ for (const width of [1440, 390]) {
       const h = hero(page);
       await expect(h.getByRole('heading', { level: 1 })).toBeVisible();
       await expect(h.getByText(/^completed$/i)).toBeVisible();
-      await expect(h.getByRole('link', { name: 'Export HTML' })).toBeVisible();
+      // R4: the hero's actions are one Actions menu (Export HTML is inside it)
+      await expect(h.getByTestId('run-actions')).toBeVisible();
       await expect(h.getByRole('navigation', { name: 'Previous and next run' })).toBeVisible();
       await expect(h.getByRole('button', { name: 'Copy run id' })).toBeVisible();
       const facts = h.getByRole('list', { name: 'Run facts' }).or(h.locator('dl[aria-label="Run facts"]'));

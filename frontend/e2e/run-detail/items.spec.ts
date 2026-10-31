@@ -249,18 +249,19 @@ test.describe('score edits (scenario 7, J8)', () => {
     const lockedPanel = await openMetric(c, 'quality');
     await expect(lockedPanel).toBeVisible();
     await expect(c.getByRole('button', { name: /^Edit score$/ })).toHaveCount(0);
-    // the submit event shows in the review history under the hero, with a Reviews link in the nav
+    // C027: the submit event shows in the review log behind the hero's History button; the nav has no Reviews link
+    await page.getByTestId('review-history-button').click();
     await expect(page.getByTestId('review-history')).toContainText(/Submitted/i);
     await expect(
       page.getByRole('navigation', { name: 'Run sections' }).getByRole('link', { name: /Reviews/ }),
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 
   test('an unsubmitted run shows no lock notice', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await expect(page.getByTestId('scores-locked-notice')).toHaveCount(0);
     await expect(page.getByTestId('read-only-notice')).toHaveCount(0);
-    await expect(page.getByTestId('review-history')).toHaveCount(0);
+    await expect(page.getByTestId('review-history-button')).toHaveCount(0);
     await expect(
       page.getByRole('navigation', { name: 'Run sections' }).getByRole('link', { name: /Reviews/ }),
     ).toHaveCount(0);

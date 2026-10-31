@@ -81,12 +81,14 @@ test.describe('open a run (J1, scenario 1)', () => {
     expect(overview.y).toBeLessThan(1100);
   });
 
-  test('J10: Export HTML points at the legacy export endpoint', async ({ page }) => {
+  test('J10, R4: Export HTML sits in the Actions menu and downloads from the legacy export endpoint', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic);
-    await expect(page.getByRole('link', { name: 'Export HTML' })).toHaveAttribute(
-      'href',
-      `/api/runs/${classic}/export-html`,
-    );
+    await page.getByTestId('run-actions').click();
+    const download = page.waitForRequest((r) => r.url().endsWith(`/api/runs/${classic}/export-html`));
+    await page.getByRole('menuitem', { name: 'Export HTML' }).click();
+    await download;
   });
 
   test('metric cards: boolean split, score histogram, numeric range, error notes', async ({ page }) => {

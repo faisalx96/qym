@@ -655,8 +655,12 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 Recipes that exist only on the run report. They compose the primitives above and follow the same rules.
 
-- **Run header** (round 3 P6, round 10): three bands, nothing behind a chevron. Band 1 identity (name, passes tag, Copy run
-  id, the status mark beside them) and actions (Export, pager, both 24px; a stop reason is one muted line under it). Band 2
+- **Run header** (round 3 P6, round 10, review group R4): three bands, nothing behind a chevron. Band 1 identity (name,
+  passes tag, Copy run id, the status mark beside them, then a neutral "History N" button that opens the review log in
+  a popover, C027; there is no Review history card and no Reviews nav link) and actions ("Compare with reference" in
+  accent when the run has a reference, C034; one neutral "Actions" menu that holds the review action for the viewer's
+  role first, Export HTML, Transfer ownership and Delete in red, each item with its `ActionTile`; the pager; all 24px).
+  A stop reason, or a rejected run's reject comment (C047), is one muted line under it. Band 2
   seven labelled facts (`dl`, 7 / 4 / 2 columns by column width), every value at the tag height and 600 so plain values sit
   level with tagged ones; the model tag carries the model recipe (series dot and tint). Band 3 `KeyValueTag` chips (24px
   passive key / value, key at most 20 characters, value at most 30) in the groups Versioning, Config, Metadata, clamped to

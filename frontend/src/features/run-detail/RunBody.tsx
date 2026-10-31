@@ -18,7 +18,7 @@ import {
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { ReportLayout, ScopeBar, Stack } from '@/ui';
-import { ExperimentPanel, ReviewHistory, RunNotices } from './components/RunPanels';
+import { ExperimentPanel, RunNotices } from './components/RunPanels';
 import { RunHero } from './components/RunHero';
 import { QuickFilters } from './components/QuickFilters';
 import { ReportSections, isSectionKey, sectionDomId } from './components/ReportSections';
@@ -276,14 +276,8 @@ export function RunBody({
             basePath={basePath}
           />
           <ExperimentPanel run={run} slug={slug} />
+          {/* C027: no Review history card; the hero's History button opens the review log */}
           <RunNotices run={run} readOnly={readOnly} />
-          <div id={sectionDomId('reviews')} className={styles.reviews}>
-            <ReviewHistory
-              runId={runId}
-              status={run.status}
-              enabled={summary ? summary.review_event_count !== 0 : !summaryPending}
-            />
-          </div>
         </Stack>
         <RunReport pageRef={pageRef} />
       </div>
