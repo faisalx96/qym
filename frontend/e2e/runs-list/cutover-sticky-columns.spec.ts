@@ -52,7 +52,9 @@ test.describe('runs list: pinned columns', () => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
     await scroller(page).evaluate((el) => (el.scrollLeft = el.scrollWidth));
-    await dataRows(page).first().locator('td[data-col="run"] a').first().focus();
+    // C089: the rows are one Tab stop; F2 moves focus into the focused row's controls, and Tab walks them
+    await dataRows(page).first().focus();
+    await page.keyboard.press('F2');
     const seen: string[] = [];
     for (let i = 0; i < 6; i++) {
       const inTable = await page.evaluate(

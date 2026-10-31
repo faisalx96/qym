@@ -549,7 +549,11 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   Submit (`send`, accent; never a check, which reads as a status), the review items (Approve `check`, Reject `close`
   danger, Unapprove and Unreject `retry`, Transfer ownership on the review menu's `file` tile), then Delete (`trash`,
   danger) after a separator. No tile sits in the row itself. Pass rows carry the same handle and menu (Open
-  auto-analysis, Open pass, Delete pass). Wide
+  auto-analysis, Open pass, Delete pass).
+  **Keyboard** (`singleTabStop`, the runs table, C089): the rows are one Tab stop (the grid pattern): arrows and j/k
+  move between rows, Enter opens, F2 moves focus into the focused row's links and buttons (Tab walks them) and Escape
+  returns to the row. The first Tab into the table shows a `Skip to pagination` button at its top start (hidden until
+  focused). A cell keeps `--space-xs` of block room inside its clip, so a control's full 2px focus ring shows (C090). Wide
   tables expose only the persistent mirrored horizontal scrollbar rail (never both native and mirror), which is the
   overflow cue. Below 640px tables that declare
   column `priority` become stacked cards. Chrome parts (`DataTable.Toolbar`, `DataTable.Footer`, selection bar, Columns

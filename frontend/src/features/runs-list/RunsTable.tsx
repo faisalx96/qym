@@ -433,6 +433,8 @@ export function RunsTable(p: RunsTableProps) {
         onHiddenChange={p.onHiddenChange}
         density="regular"
         groupBand={false}
+        // C089: one Tab stop for the rows (arrows and j/k move, Enter opens, F2 reaches a row's controls)
+        singleTabStop
         columns={columns}
         rows={runRows}
         rowKey={(r) => r.key}
