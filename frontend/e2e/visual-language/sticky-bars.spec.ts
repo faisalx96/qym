@@ -52,7 +52,7 @@ test('the items toolbar stays one row with active filters and keeps Clear reacha
   const toolbar = page.locator('[data-run-filters]');
   await expect(toolbar).toBeVisible();
   await page.locator('button[data-bucket]').nth(5).click();
-  const clear = page.getByTestId('clear-filters');
+  const clear = page.getByTestId('nav-clear-filters');
   await expect(clear).toBeVisible();
   expect((await toolbar.boundingBox())!.height).toBeLessThanOrEqual(
     (await token(page, '--bar-action-h')) + 1,

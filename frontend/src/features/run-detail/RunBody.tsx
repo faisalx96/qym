@@ -76,7 +76,11 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
   const scope = useScope();
   const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // A search alone does not open the sidebar (C154): only its scope-bar button does, until the scope changes.
+  const [searchSidebar, setSearchSidebar] = useState(false);
   if (!scope.active && drawerOpen) setDrawerOpen(false);
+  if (!scope.searchOnly && searchSidebar) setSearchSidebar(false);
+  const sidebarShown = scope.active && (scope.searchOnly ? searchSidebar : !sidebarHidden);
   const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current), [pageRef]);
 
   // Links from before the report layout: `#overview`, `#run-section-errors`, `?panel=latency`.
@@ -101,7 +105,7 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
       <SectionNav onSection={onSection} />
       <ReportLayout
         wide={wide}
-        sidebarOpen={scope.active && !sidebarHidden}
+        sidebarOpen={sidebarShown}
         drawerOpen={drawerOpen && scope.active}
         onDrawerOpenChange={setDrawerOpen}
         sidebar={
@@ -121,9 +125,12 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
             }}
             onJumpToItems={jumpToItems}
             narrow={!wide}
-            hideChips={wide && !sidebarHidden}
-            sidebarOpen={wide ? !sidebarHidden : drawerOpen}
-            onToggleSidebar={() => (wide ? setSidebarHidden(!sidebarHidden) : setDrawerOpen(true))}
+            sidebarOpen={wide ? sidebarShown : drawerOpen}
+            onToggleSidebar={() => {
+              if (!wide) setDrawerOpen(true);
+              else if (scope.searchOnly) setSearchSidebar(!searchSidebar);
+              else setSidebarHidden(!sidebarHidden);
+            }}
           />
         ) : null}
         <ReportSections scopeNote={scopeNote} />

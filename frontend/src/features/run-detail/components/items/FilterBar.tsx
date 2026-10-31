@@ -1,32 +1,16 @@
-/** The one filter surface: search · analysis metric · threshold · show · rules · sort · Display, with chips (UX_DECISION). */
+/**
+ * The Items bar: search · show · sort · Display, with the count and the active chips (UX_DECISION). The page metric,
+ * its Pass if threshold, the Filters rules and Clear live in the sticky nav only (C039, C154).
+ */
 import { useMemo, useState } from 'react';
 import { useSyncedInput } from '../../hooks/useSynced';
-import {
-  Button,
-  Chip,
-  Icon,
-  MultiSelect,
-  SearchField,
-  SegmentedControl,
-  Select,
-  Slider,
-  Popover,
-  Text,
-} from '@/ui';
+import { Button, Chip, Icon, MultiSelect, SearchField, SegmentedControl, Select, Popover, Text } from '@/ui';
 import { setTextMode, type TextMode } from '@/lib/text';
-import { metricHasPassThreshold } from '../../lib/runModel';
 import { activeChips } from '../../lib/activeChips';
-import {
-  countActiveFilters,
-  SORT_VALUES,
-  type FilterGroup,
-  type ItemShow,
-  type SortBy,
-} from '../../lib/filterRules';
+import { SORT_VALUES, type ItemShow, type SortBy } from '../../lib/filterRules';
 import { useRunPage } from '../../RunContext';
 import { datasetKey, datasetKeyLabel } from '../../lib/datasetFilter';
 import { isUnionRun } from '../../lib/heroModel';
-import { RuleBuilder } from './RuleBuilder';
 import styles from './FilterBar.module.css';
 
 const SORT_LABELS: Record<SortBy, string> = {
@@ -53,24 +37,10 @@ export interface DisplayState {
 
 export function FilterBar({ display }: { display: DisplayState }) {
   const { api, model, items, payload } = useRunPage();
-  const { view, defs, selectedMetric } = api;
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const [draft, setDraft] = useState<FilterGroup | null>(null);
+  const { view, defs, selectedMetric: metric } = api;
   const [displayOpen, setDisplayOpen] = useState(false);
   const [query, setQuery] = useSyncedInput(view.q, (q) => api.setView({ q }), 250);
-  const metric = selectedMetric;
-  const hasThreshold = metricHasPassThreshold(model, metric);
-  const threshold = metric
-    ? Math.round((view.threshold ?? model.defaultThresholds[metric] ?? 0.8) * 100)
-    : 80;
-  const [thr, setThr] = useState(threshold);
-  const [seenThr, setSeenThr] = useState(threshold);
-  if (seenThr !== threshold) {
-    setSeenThr(threshold);
-    setThr(threshold);
-  }
   const chips = useMemo(() => activeChips(view, defs, metric), [view, defs, metric]);
-  const filterCount = countActiveFilters(view, defs);
   const showOptions = SHOW_OPTIONS.some((o) => o.value === view.show)
     ? SHOW_OPTIONS
     : [...SHOW_OPTIONS, { value: view.show, label: view.show.replace(/_/g, ' ') }];
@@ -125,26 +95,6 @@ export function FilterBar({ display }: { display: DisplayState }) {
             />
           </span>
         ) : null}
-        {/* the page metric is picked in the sticky nav (round 10); the Items bar names it */}
-        {metric ? (
-          <span className={styles.metricNow} data-testid="items-metric">
-            <span className={styles.metricNowLabel}>Metric</span>
-            <span className={styles.metricNowValue}>{metric}</span>
-          </span>
-        ) : null}
-        {hasThreshold ? (
-          <Slider
-            label="Pass if score"
-            unit="%"
-            minValue={0}
-            maxValue={100}
-            step={5}
-            value={thr}
-            onChange={(v) => setThr(v as number)}
-            onChangeEnd={(v) => api.setView({ threshold: (v as number) / 100 })}
-            width="clamp(120px, 10vw, 140px)"
-          />
-        ) : null}
         <span className={styles.showSegmented}>
           <SegmentedControl
             label="Show items"
@@ -163,34 +113,6 @@ export function FilterBar({ display }: { display: DisplayState }) {
             width="9ch"
           />
         </span>
-        <Popover
-          label="Filter rules"
-          placement="bottom start"
-          isOpen={rulesOpen}
-          onOpenChange={(o) => {
-            setRulesOpen(o);
-            if (!o) setDraft(null);
-          }}
-          trigger={
-            <Button
-              size="sm"
-              variant="neutral"
-              icon={<Icon name="list" size={12} />}
-              data-testid="open-filters"
-            >
-              Filters{filterCount ? ` (${filterCount})` : ''}
-            </Button>
-          }
-        >
-          <RuleBuilder
-            rules={draft ?? view.filters.rules}
-            defs={defs}
-            onChange={(rules: FilterGroup) => {
-              setDraft(rules);
-              api.setFilters({ rules });
-            }}
-          />
-        </Popover>
         <Select
           label="Sort"
           items={SORT_VALUES.reduce(
@@ -284,11 +206,6 @@ export function FilterBar({ display }: { display: DisplayState }) {
               </Chip>
             ))}
           </span>
-        ) : null}
-        {filterCount > 0 ? (
-          <Button size="sm" variant="ghost" onPress={() => api.clearFilters()} data-testid="clear-filters">
-            Clear ({filterCount})
-          </Button>
         ) : null}
       </div>
     </div>

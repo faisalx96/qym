@@ -97,7 +97,7 @@ test.describe('errors section', () => {
     await openRun(page, s.slug, classic, 'panel=errors');
     await page.getByTestId('error-card').filter({ hasText: 'JudgeError' }).click();
     await expect.poll(async () => (await itemsCount(page))[0]).toBe(8);
-    await page.getByTestId('clear-filters').click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);
   });
 });
@@ -114,7 +114,7 @@ test.describe('categories section', () => {
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(240);
     await expect(page.getByRole('button', { name: /Remove filter Complexity: easy/ })).toBeVisible();
     await expect.poll(() => params(page).get('filters') ?? '').toContain('complexity');
-    await page.getByTestId('clear-filters').click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);
   });
 

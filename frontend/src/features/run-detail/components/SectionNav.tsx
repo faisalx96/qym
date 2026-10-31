@@ -1,13 +1,15 @@
 /**
  * Sticky section nav: run name and status once the hero has scrolled away, jump links to every section of the
- * report (scroll-spy marks the one in view; the first qym's underline tabs, round 10), the page-wide metric that
- * every section follows, the page-wide Filters rule builder and Clear, and back to top.
+ * report (scroll-spy marks the one in view; the first qym's underline tabs, round 10), the page-wide metric and its
+ * Pass if threshold that every section follows (C039, C154: the only metric and threshold controls on the page), the
+ * page-wide Filters rule builder and Clear, and back to top.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon, IconButton, Popover, RunStatusBadge, SegmentedControl, Select } from '@/ui';
+import { Button, Icon, IconButton, Popover, RunStatusBadge, SegmentedControl, Select, Slider } from '@/ui';
 import { useMediaQuery } from '@/features/shell';
 import { useShellScroller } from '../hooks/useScrollMargin';
 import { countActiveFilters, type FilterGroup } from '../lib/filterRules';
+import { metricHasPassThreshold } from '../lib/runModel';
 import { useRunPage } from '../RunContext';
 import { RuleBuilder } from './items/RuleBuilder';
 import { sectionDomId, useSectionEntries, type SectionKey } from './ReportSections';
@@ -146,10 +148,48 @@ function NavMetric() {
           value={metric}
           onChange={(k) => k && pick(String(k))}
           searchable={names.length > 8}
-          width={180}
+          width={150}
         />
       )}
     </span>
+  );
+}
+
+/**
+ * The page's one Pass if threshold (C039): Overview, Items, Quality vs latency and the Repeat tiles all read
+ * ?threshold=, so this slider is the only place it is set. A repeat run keeps it for a metric with no pass rule,
+ * as its Repeat section did.
+ */
+function NavThreshold() {
+  const { model, api } = useRunPage();
+  const metric = api.selectedMetric;
+  const show =
+    !!metric && (metricHasPassThreshold(model, metric) || (model.isRepeat && !model.metricIsBoolean[metric]));
+  const value = metric
+    ? Math.round((api.view.threshold ?? model.defaultThresholds[metric] ?? 0.8) * 100)
+    : 80;
+  const [draft, setDraft] = useState(value);
+  const [seen, setSeen] = useState(value);
+  if (seen !== value) {
+    setSeen(value);
+    setDraft(value);
+  }
+  if (!show) return null;
+  return (
+    <Slider
+      label="Pass if ≥"
+      unit="%"
+      layout="inline"
+      minValue={0}
+      maxValue={100}
+      step={5}
+      value={draft}
+      onChange={(v) => setDraft(v as number)}
+      onChangeEnd={(v) => api.setView({ threshold: (v as number) / 100 })}
+      width="200px"
+      className={styles.threshold}
+      data-testid="nav-threshold"
+    />
   );
 }
 
@@ -212,6 +252,7 @@ export function SectionNav({ onSection }: SectionNavProps) {
       </span>
       <span className={styles.actions}>
         <NavMetric />
+        <NavThreshold />
         <NavFilters />
         <IconButton
           label="Back to top"
