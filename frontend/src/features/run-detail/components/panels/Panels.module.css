@@ -281,17 +281,19 @@
 }
 
 /* The error note: a warning glyph, the counts, and the key of the hatch the bars draw for those items. */
+/* C012: the error note and the hatch key on one line under the card head, the width of the card. */
 .cardNote {
-  display: block;
-  margin-block-start: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-xs);
   font-size: var(--font-sm);
   line-height: 1.45;
   color: var(--text-muted);
 }
 
 .cardNote > svg {
-  margin-inline-end: var(--space-xs);
-  vertical-align: -1px;
+  flex: none;
   color: var(--warning);
 }
 
@@ -299,7 +301,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  margin-inline-start: var(--space-sm);
+  margin-inline-start: var(--space-md);
   white-space: nowrap;
 }
 

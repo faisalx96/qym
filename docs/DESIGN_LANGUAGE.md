@@ -664,9 +664,11 @@ Recipes that exist only on the run report. They compose the primitives above and
   accent gradient along the top edge (accent, secondary, tertiary, fading out) and a faint accent wash from the top-left
   corner; no status rail.
 
-- **Overview cards** (round 10, the first qym's card): a 40px score ring in the band colour and the mean, the metric name
-  and the error note under them (a warning glyph, the counts, and the key of the hatch the bars draw for errored items),
-  the scored count at the top end, then the plot. No header band, no side rail. Three cards to a row at 1440. A plain
+- **Overview cards** (round 10, the first qym's card; C012): a 40px score ring in the band colour (or plain pass/fail
+  where a threshold applies, C220) and the mean, the metric name under them, the scored count ("N scored", no error
+  count) at the top end, then one full-width line with the error note (a warning glyph and "3 task errors counted as
+  0%") and the key of the hatch the bars draw for errored items, then the plot. Task-errored items count as 0, as
+  declared: an empty `pass_scores` is a plain item row, not a repeat aggregate. No header band, no side rail. Three cards to a row at 1440. A plain
   number (a numeric metric, tokens per item when the traces carry tokens) is the same frame with the mean, "mean per
   item", a Total · Min · Median · Max line and the box plot. Cost per item is not shown (a default every attempt reports).
 

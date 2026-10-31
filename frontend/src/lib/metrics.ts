@@ -99,8 +99,14 @@ export function hasMetricError(row: MetricRow | null | undefined, metricName: st
   });
 }
 
+/**
+ * A repeat aggregate row carries per-pass scores. An empty `pass_scores: {}` is a plain item row (C012): its task
+ * error counts as 0, as declared, so the run page and Compare read the same mean.
+ */
 export function isRepeatAggregateRow(row: MetricRow | null | undefined): boolean {
-  return !!row && row.__pass_scope !== true && !!asObject(row.pass_scores);
+  if (!row || row.__pass_scope === true) return false;
+  const passes = asObject(row.pass_scores);
+  return !!passes && Object.keys(passes).length > 0;
 }
 
 export function isItemTaskError(row: MetricRow | null | undefined): boolean {
