@@ -1,9 +1,16 @@
 /** CSV export: loads every filtered row's bodies, then lets the user pick columns (compare.html J7). */
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Dialog, Text } from '@/ui';
+import { Button, Checkbox, Dialog, SegmentedControl, Text } from '@/ui';
 import { useCompare } from '../../CompareContext';
 import { resolveRow, useDetailsStore, useDetailsVersion, useEnsureBodies } from '../../hooks/useDetails';
-import { buildCompareCsv, discoverExportColumns, type ExportColumn, type ExportItem } from '../../lib/csv';
+import {
+  buildCompareCsv,
+  discoverExportColumns,
+  presetKeys,
+  type ExportColumn,
+  type ExportItem,
+  type ExportPreset,
+} from '../../lib/csv';
 import styles from './CsvDialog.module.css';
 
 function download(name: string, text: string) {
@@ -17,7 +24,10 @@ function download(name: string, text: string) {
 }
 
 export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { model, items } = useCompare();
+  const { model, items, baseline, metric } = useCompare();
+  const baseIdx = baseline.runIdxs[0] ?? 0;
+  // K8 (C210): a preset picks the columns; 'Scores and change' is the default
+  const [preset, setPreset] = useState<ExportPreset>('scores');
   const store = useDetailsStore();
   const version = useDetailsVersion();
   const ensure = useEnsureBodies(model.runs);
@@ -47,10 +57,11 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     [ready, items, model.runs, store, version],
   );
   const groups = useMemo(
-    () => (ready ? discoverExportColumns(model, exportItems) : []),
-    [ready, model, exportItems],
+    () => (ready ? discoverExportColumns(model, exportItems, baseIdx) : []),
+    [ready, model, exportItems, baseIdx],
   );
-  const isOn = (c: ExportColumn) => checked[c.key] ?? c.checked;
+  const picked = useMemo(() => presetKeys(groups, preset, metric), [groups, preset, metric]);
+  const isOn = (c: ExportColumn) => checked[c.key] ?? picked.has(c.key);
   const selected = groups.flatMap((g) => g.columns).filter(isOn);
   const setGroup = (cols: ExportColumn[], on: boolean) =>
     setChecked((s) => ({ ...s, ...Object.fromEntries(cols.map((c) => [c.key, on])) }));
@@ -74,7 +85,7 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               onOpenChange(false);
             }}
           >
-            Export {selected.length ? `${selected.length} columns` : ''}
+            Export {selected.length ? `${selected.length} column${selected.length === 1 ? '' : 's'}` : ''}
           </Button>
         </>
       }
@@ -85,6 +96,19 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         </Text>
       ) : (
         <div className={styles.groups}>
+          <SegmentedControl<ExportPreset>
+            label="Columns"
+            value={preset}
+            onChange={(p) => {
+              setPreset(p);
+              setChecked({});
+            }}
+            options={[
+              { value: 'scores', label: 'Scores and change' },
+              { value: 'outputs', label: 'Scores and outputs' },
+              { value: 'everything', label: 'Everything' },
+            ]}
+          />
           <div className={styles.top}>
             <Button
               size="sm"
@@ -137,7 +161,7 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                       })
                     }
                   >
-                    {closed ? 'Show' : 'Hide'} {g.columns.length} columns
+                    {closed ? 'Show' : 'Hide'} {g.columns.length} column{g.columns.length === 1 ? '' : 's'}
                   </button>
                 </legend>
                 {closed ? null : (
