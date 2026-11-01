@@ -10,7 +10,14 @@ import type { Facets } from '@/api/dashboardTypes';
 import { Button, Drawer, Icon, MultiSelect, Popover, SearchField } from '@/ui';
 import { FACET_SINGULAR, inlineFacets } from './filterBarModel';
 import { buildFacetDefs, FiltersPanel, TimeOriginControls, type FacetDef } from './FiltersPopover';
-import { countActiveFilters, DEFAULT_VIEW, NONE, type RunsView } from './urlState';
+import {
+  countActiveFilters,
+  DEFAULT_VIEW,
+  modelOptionLabel,
+  modelUrlValues,
+  NONE,
+  type RunsView,
+} from './urlState';
 import { useDebouncedSearch, type ViewPatch } from './useRunsView';
 import styles from './FilterBar.module.css';
 
@@ -46,6 +53,25 @@ function useWidth<T extends HTMLElement>(): [Ref<T>, number] {
   return [ref, width];
 }
 
+/**
+ * The values a facet's selection names. A model picked by name selects its plain and reasoning keys, which are one
+ * model to the reader (C225: '?model=gpt-4.1' read 'Model · 2').
+ */
+function shownValues(def: FacetDef, selected: string[]): string[] {
+  return def.id === 'models' ? modelUrlValues(selected) : selected;
+}
+
+/** The facet trigger's value: 'None', the one value's label, or the count. */
+export function facetSummary(def: FacetDef, selected: string[]): string {
+  if (selected.includes(NONE)) return 'None';
+  const shown = shownValues(def, selected);
+  if (shown.length !== 1) return String(shown.length);
+  const only = shown[0]!;
+  return (
+    def.options.find((o) => o.value === only)?.label ?? (def.id === 'models' ? modelOptionLabel(only) : '1')
+  );
+}
+
 function FacetTrigger({ def, onChange }: { def: FacetDef; onChange: (patch: ViewPatch) => void }) {
   const items = useMemo(() => def.options.map((o) => ({ key: o.value, label: o.label })), [def.options]);
   const value = useMemo(() => new Set<Key>(def.selected), [def.selected]);
@@ -58,13 +84,7 @@ function FacetTrigger({ def, onChange }: { def: FacetDef; onChange: (patch: View
       value={value}
       emptyMeansAll
       noneKey={NONE}
-      summary={(sel) =>
-        sel.has(NONE)
-          ? 'None'
-          : sel.size === 1
-            ? (items.find((i) => sel.has(i.key))?.label ?? '1')
-            : String(sel.size)
-      }
+      summary={(sel) => facetSummary(def, [...sel].map(String))}
       onChange={(next) => onChange(def.set([...next].map(String)))}
     />
   );
@@ -92,12 +112,7 @@ function FacetRow({
       const d = defs.find((x) => x.id === id);
       const label = FACET_SINGULAR[id] ?? d?.label ?? id;
       if (!d?.selected.length) return label;
-      const value = d.selected.includes(NONE)
-        ? 'None'
-        : d.selected.length === 1
-          ? (d.options.find((o) => o.value === d.selected[0])?.label ?? '1')
-          : String(d.selected.length);
-      return `${label} · ${value}`;
+      return `${label} · ${facetSummary(d, d.selected)}`;
     };
     return new Set(
       inlineFacets(
@@ -110,7 +125,7 @@ function FacetRow({
   }, [width, defs, count]);
   const inline = defs.filter((d) => inlineIds.has(d.id));
   const more = defs.filter((d) => !inlineIds.has(d.id));
-  const moreActive = more.reduce((n, d) => n + d.selected.length, 0);
+  const moreActive = more.reduce((n, d) => n + shownValues(d, d.selected).length, 0);
   return (
     <div
       ref={rowRef}

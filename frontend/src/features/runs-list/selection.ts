@@ -236,3 +236,36 @@ export function writeVisibleColumns(visible: Set<string> | null): void {
   if (visible === null) writeSession(VISIBLE_COLUMNS_KEY, null);
   else writeSession(VISIBLE_COLUMNS_KEY, { version: VISIBLE_COLUMNS_VERSION, visible: [...visible] });
 }
+
+const chartColumnsKey = (userId: string) => `qym:charts:columns:${userId}`;
+
+/**
+ * Charts' column choice, saved per user as the runs table saves its layout (C225: it was kept per browser tab). The
+ * tab's earlier choice is read once, when the user has none saved yet.
+ */
+export function readChartColumns(userId: string): Set<string> | null {
+  try {
+    const raw = localStorage.getItem(chartColumnsKey(userId));
+    if (raw) {
+      const s = JSON.parse(raw) as Partial<VisibleColumns>;
+      if (s.version === VISIBLE_COLUMNS_VERSION && Array.isArray(s.visible))
+        return new Set(s.visible.map(String));
+    }
+  } catch {
+    /* storage unavailable: fall back to the tab's choice */
+  }
+  return readVisibleColumns();
+}
+
+export function writeChartColumns(userId: string, visible: Set<string> | null): void {
+  try {
+    if (visible === null) localStorage.removeItem(chartColumnsKey(userId));
+    else
+      localStorage.setItem(
+        chartColumnsKey(userId),
+        JSON.stringify({ version: VISIBLE_COLUMNS_VERSION, visible: [...visible] }),
+      );
+  } catch {
+    /* storage unavailable: the choice is not remembered */
+  }
+}

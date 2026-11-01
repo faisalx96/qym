@@ -401,9 +401,12 @@ function RunLink({ slug, row }: { slug: string; row: RunRow }) {
   );
 }
 
-/** Items done out of total (a repeat run prefixes the pass); this is progress, not successes. */
+/**
+ * Items done out of total, with the pass of a repeat run first; this is progress, not successes. The column is named
+ * Progress, so the pass is not read as a count of items (C225).
+ */
 function itemProgress(r: RunRow): string {
-  const done = `${r.progress_completed}/${r.progress_total ?? r.total_items}`;
+  const done = `${r.progress_completed}/${r.progress_total ?? r.total_items} items`;
   if (r.samples <= 1) return done;
   const pass = Math.min((r.last_completed_pass ?? 0) + (isActiveRun(r) ? 1 : 0), r.samples);
   return `pass ${pass}/${r.samples} · ${done}`;
@@ -470,7 +473,7 @@ function RunsList({
           },
           {
             id: 'items',
-            header: 'Items',
+            header: 'Progress',
             type: 'number' as const,
             priority: 3 as const,
             cell: (r: RunRow) => <Mono>{itemProgress(r)}</Mono>,

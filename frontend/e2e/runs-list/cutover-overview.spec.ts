@@ -75,7 +75,7 @@ test('Recent and Approved lists carry the owner and item progress; Live shows th
   await page.goto(overviewUrl(s.project.slug));
   const recent = page.getByRole('region', { name: 'Recent runs' });
   await expect(recent.getByRole('columnheader', { name: 'User' })).toBeVisible();
-  await expect(recent.getByRole('columnheader', { name: 'Items' })).toBeVisible();
+  await expect(recent.getByRole('columnheader', { name: 'Progress' })).toBeVisible();
   const approved = page.getByRole('region', { name: 'Approved runs' });
   await expect(approved.getByRole('columnheader', { name: 'User' })).toBeVisible();
   await expect(approved.getByRole('columnheader', { name: 'Status' })).toHaveCount(0);
