@@ -3,7 +3,7 @@ import type { RunPasses, RunSummary } from '@/api/analysis';
 import { DatasetTag, isBareRunId, LinkButton, ModelTag, Select, Tag, TaskTag, Text } from '@/ui';
 import s from './blocks.module.css';
 
-/** Run name, task / model / dataset, sample select for repeat runs, View run. */
+/** Run name, task / model / dataset, pass select for repeat runs, View run. */
 export function RunHeader({
   slug,
   runId,
@@ -37,16 +37,16 @@ export function RunHeader({
       <div className={s.runActions}>
         {passes.length > 1 && pass != null ? (
           <Select
-            label="Sample"
+            label="Pass"
             items={passes.map((p) => ({
               key: String(p.pass_number),
-              label: `Sample ${p.pass_number} (${p.items_scored}/${p.items_total})`,
+              label: `Pass ${p.pass_number} (${p.items_scored}/${p.items_total})`,
             }))}
             value={String(pass)}
             onChange={(k) => k != null && onPass(Number(k))}
             isDisabled={busy}
             width={190}
-            help={busy ? 'Wait for the running job, or cancel it, to switch samples.' : undefined}
+            help={busy ? 'Wait for the running job, or cancel it, to switch passes.' : undefined}
             searchable={false}
           />
         ) : null}

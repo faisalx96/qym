@@ -293,7 +293,7 @@ export const rail = (page: Page) => page.getByRole('region', { name: 'Analysis a
 /** The job card in the Results section (progress, then the completion summary). */
 export const jobCard = (page: Page) => page.getByRole('region', { name: 'Analysis job' });
 
-/** The single tab row (Analyze run, Diagnosis categories, Production rules, Documents). */
+/** The single tab row (Analyze run, Diagnosis categories, Rules, Documents). */
 export const viewTabs = (page: Page) => page.getByRole('tablist', { name: 'Auto-analysis views' });
 
 export const analyzeButton = (page: Page) => rail(page).getByRole('button', { name: /^Analyze \d+ items?$/ });

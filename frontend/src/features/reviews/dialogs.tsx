@@ -1,6 +1,7 @@
 /** Reviews dialogs: comment (approve/reject, Ctrl/⌘+Enter confirms), shortcuts help, bulk conflict alertdialog. */
 import { useState } from 'react';
-import { Button, Dialog, Kbd, Textarea } from '@/ui';
+import { useSingleKeyShortcuts } from '@/features/runs-list/useRunsKeyboard';
+import { Button, Dialog, Kbd, Switch, Text, Textarea } from '@/ui';
 import { SHORTCUTS } from './lib/useQueueKeys';
 import styles from './dialogs.module.css';
 
@@ -11,6 +12,8 @@ export interface CommentDialogProps {
   description: string;
   confirmLabel: string;
   tone?: 'primary' | 'danger';
+  /** A reject needs a comment (C250): the confirm button waits for one. */
+  requireComment?: boolean;
   onConfirm: (comment: string) => Promise<void> | void;
 }
 
@@ -26,12 +29,14 @@ function CommentInner({
   description,
   confirmLabel,
   tone = 'primary',
+  requireComment = false,
   onConfirm,
 }: CommentDialogProps) {
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const missing = requireComment && !comment.trim();
   async function submit() {
-    if (busy) return;
+    if (busy || missing) return;
     setBusy(true);
     try {
       await onConfirm(comment.trim());
@@ -55,6 +60,7 @@ function CommentInner({
             variant={tone === 'danger' ? 'danger' : 'primary'}
             onPress={() => void submit()}
             loading={busy}
+            isDisabled={missing}
             data-testid="comment-confirm"
           >
             {confirmLabel}
@@ -63,7 +69,8 @@ function CommentInner({
       }
     >
       <Textarea
-        label="Comment (optional)"
+        label={requireComment ? 'Comment' : 'Comment (optional)'}
+        isRequired={requireComment}
         value={comment}
         onChange={setComment}
         rows={4}
@@ -90,6 +97,7 @@ export function ShortcutsDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const [single, setSingle] = useSingleKeyShortcuts();
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Keyboard shortcuts" size="sm">
       <dl className={styles.keys}>
@@ -107,6 +115,15 @@ export function ShortcutsDialog({
           </div>
         ))}
       </dl>
+      {/* the same opt-out as on Runs (C088, WCAG 2.1.4): it covers every page's letter keys */}
+      <div className={styles.optout}>
+        <Switch isSelected={single} onChange={setSingle}>
+          Single-key shortcuts (j, k, a, r, e, o, x, /, ?)
+        </Switch>
+        <Text variant="sm" tone="muted" as="p">
+          Turn off if they collide with assistive technology. Arrow keys, Enter and Esc keep working.
+        </Text>
+      </div>
     </Dialog>
   );
 }
@@ -129,7 +146,7 @@ export function ConflictDialog({ detail, onReload }: { detail: string | null; on
       }
     >
       <p className={styles.conflictNote}>
-        Another reviewer decided some of these corrections after you selected them. Nothing was changed.
+        Another reviewer decided some of these diagnoses after you selected them. Nothing was changed.
       </p>
     </Dialog>
   );

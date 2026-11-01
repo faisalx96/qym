@@ -5,6 +5,7 @@
  * ignored while typing in a field or when a dialog is open.
  */
 import { useEffect, useRef } from 'react';
+import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
 
 export interface QueueKeyHandlers {
   next: () => void;
@@ -58,6 +59,8 @@ export function useQueueKeys(handlers: QueueKeyHandlers, enabled = true): void {
         return;
       }
       if (inEditable(e.target) || dialogOpen()) return;
+      // C088: the letter keys (and / ?) obey the single-key opt-out; arrows, Enter and Esc keep working
+      if (e.key.length === 1 && !singleKeyShortcutsEnabled()) return;
       const onCard = (e.target as HTMLElement | null)?.closest?.('[data-review-card]');
       switch (e.key) {
         case 'j':
@@ -129,10 +132,10 @@ export function useQueueKeys(handlers: QueueKeyHandlers, enabled = true): void {
 }
 
 export const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ['j', 'k'], label: 'Next / previous correction' },
+  { keys: ['j', 'k'], label: 'Next / previous diagnosis' },
   { keys: ['↓', '↑'], label: 'Same, when a card is focused' },
-  { keys: ['a'], label: 'Approve the current correction' },
-  { keys: ['r'], label: 'Reject (with an optional comment)' },
+  { keys: ['a'], label: 'Approve the current diagnosis' },
+  { keys: ['r'], label: 'Reject (with a comment)' },
   { keys: ['e'], label: 'Edit the human diagnosis' },
   { keys: ['o', 'Enter'], label: 'Expand / collapse details' },
   { keys: ['x'], label: 'Select / unselect for bulk actions' },

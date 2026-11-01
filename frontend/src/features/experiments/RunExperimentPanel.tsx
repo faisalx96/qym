@@ -54,7 +54,7 @@ const BASE_LABELS: Record<string, string> = {
   saved: 'Saved preset',
   best_run: 'Best run',
   blank: 'Blank',
-  clone: 'Clone',
+  clone: 'Run again',
 };
 const PROMOTABLE = ['COMPLETED', 'SUBMITTED', 'APPROVED'];
 
@@ -230,11 +230,11 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
                 variant="accent"
                 title="Open the launch form prefilled with this run’s configuration"
               >
-                Rerun with this config
+                Run again
               </LinkButton>
             ) : (
               <span className={styles.disabled} title="The experiment no longer exists" aria-disabled="true">
-                Rerun with this config
+                Run again
               </span>
             )}
             {showPromote ? (

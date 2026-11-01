@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ExperimentDetail, ExperimentJob } from '@/api/experiments';
-import { Credentials, revokedLabel, tokenFacts } from './Credentials';
+import { Credentials, credentialsNeedAttention, revokedLabel, tokenFacts } from './Credentials';
 import { TOKEN_UNAVAILABLE_REASON } from './copy';
 
 const job = (over: Partial<ExperimentJob>): ExperimentJob =>
@@ -27,15 +27,12 @@ const detail = (over: Partial<ExperimentDetail> = {}): ExperimentDetail =>
   }) as ExperimentDetail;
 
 describe('Credentials', () => {
-  it('names the two credentials and their states', () => {
+  it('shows no row when every credential is in order (C137)', () => {
     render(<Credentials detail={detail()} />);
-    const section = screen.getByRole('region', { name: 'Credentials' });
-    expect(within(section).getByText('API key')).toBeTruthy();
-    expect(within(section).getByText('Dataset read token')).toBeTruthy();
-    expect(within(section).getAllByText('Active')).toHaveLength(2);
+    expect(screen.queryByRole('region', { name: 'Credentials' })).toBeNull();
     expect(screen.queryByTestId('token-notice')).toBeNull();
   });
-  it('shows not issued for an experiment launched before the feature', () => {
+  it('shows no row for a token that was never issued', () => {
     render(
       <Credentials
         detail={detail({
@@ -47,8 +44,34 @@ describe('Credentials', () => {
         })}
       />,
     );
-    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('Not issued');
-    expect(screen.queryByTestId('token-notice')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Credentials' })).toBeNull();
+  });
+  it('shows no row for the keys a settled experiment revoked', () => {
+    const settled = detail({
+      credentials: {
+        api_key: { state: 'revoked', revoked_at: '2026-10-20T10:00:00Z' },
+        dataset_read_token: { state: 'revoked', revoked_at: '2026-10-20T10:00:00Z' },
+      },
+      jobs: [job({ status: 'SUCCEEDED' })],
+    });
+    expect(credentialsNeedAttention(settled)).toBe(false);
+  });
+  it('names the two credentials while a revoked key holds a job back', () => {
+    render(
+      <Credentials
+        detail={detail({
+          credentials: {
+            api_key: { state: 'revoked', revoked_at: '2026-10-20T10:00:00Z' },
+            dataset_read_token: { state: 'active', revoked_at: null },
+          },
+          jobs: [job({ status: 'BLOCKED' })],
+        })}
+      />,
+    );
+    const section = screen.getByRole('region', { name: 'Credentials' });
+    expect(within(section).getByText('API key')).toBeTruthy();
+    expect(within(section).getByText('Dataset read token')).toBeTruthy();
+    expect(within(section).getByText('Active')).toBeTruthy();
   });
   it('says when the token was not sent, once, naming the environments', () => {
     render(

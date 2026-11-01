@@ -48,13 +48,13 @@ describe('TemporaryKeysDialog', () => {
     expect(screen.getByLabelText(/Answer model/)).toHaveValue('');
   });
 
-  it('offers "Clone instead"', async () => {
+  it('offers "Run again instead"', async () => {
     const user = userEvent.setup();
     const onClone = vi.fn();
     render(
       <TemporaryKeysDialog open slots={slots} onSubmit={() => {}} onCancel={() => {}} onClone={onClone} />,
     );
-    await user.click(screen.getByRole('button', { name: 'Clone instead' }));
+    await user.click(screen.getByRole('button', { name: 'Run again instead' }));
     expect(onClone).toHaveBeenCalled();
   });
 });

@@ -23,7 +23,7 @@ const SAVE_TEXT: Record<SaveState, string> = {
   saving: 'Saving draft…',
   saved: 'Draft saved',
   error: 'Save failed',
-  invalid: 'Every rule needs a title and an instruction before it saves',
+  invalid: 'Saves when every rule has a title and an instruction',
 };
 
 export function RuleEditor({
@@ -40,6 +40,9 @@ export function RuleEditor({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   /** Rule keys waiting for delete confirmation. */
   const [deleting, setDeleting] = useState<string[] | null>(null);
+  /** C229: a field shows its error only after the user leaves it ("<key>:title", "<key>:instruction"). */
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (id: string) => setTouched((cur) => (cur.has(id) ? cur : new Set(cur).add(id)));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase();
@@ -109,7 +112,10 @@ export function RuleEditor({
         <ul className={s.ruleList} aria-label="Rules">
           {shown.map((r) => {
             const isOpen = open === r.key;
-            const invalid = editable && (!r.title.trim() || !r.instruction.trim());
+            const titleError = editable && touched.has(`${r.key}:title`) && !r.title.trim();
+            const instructionError = editable && touched.has(`${r.key}:instruction`) && !r.instruction.trim();
+            const incomplete = editable && (!r.title.trim() || !r.instruction.trim());
+            const invalid = titleError || instructionError;
             return (
               <li key={r.key} className={s.rule} data-open={isOpen ? '' : undefined}>
                 <div className={s.ruleHead}>
@@ -154,15 +160,28 @@ export function RuleEditor({
                     </Button>
                   ) : null}
                 </div>
-                {isOpen ? (
+                {isOpen && !editable ? (
+                  // C213: a read-only rule reads as text, not as inputs that refuse typing
+                  <div className={s.ruleBody} data-testid="rule-readonly">
+                    <Text variant="base" as="p" dir="auto" className={s.ruleText}>
+                      {r.instruction || '—'}
+                    </Text>
+                    {r.explanation ? (
+                      <Text variant="sm" tone="muted" as="p">
+                        {`Why this rule helps: ${r.explanation}`}
+                      </Text>
+                    ) : null}
+                  </div>
+                ) : isOpen ? (
                   <div className={s.ruleBody}>
                     <TextField
                       label="Title"
                       value={r.title}
                       isReadOnly={!editable}
                       onChange={(v) => update(r.key, { title: v })}
-                      errorMessage={editable && !r.title.trim() ? 'Title is required.' : undefined}
-                      isInvalid={editable && !r.title.trim()}
+                      onBlur={() => touch(`${r.key}:title`)}
+                      errorMessage={titleError ? 'Title is required.' : undefined}
+                      isInvalid={titleError}
                       autoFocus={editable && !r.title}
                     />
                     <Textarea
@@ -171,11 +190,15 @@ export function RuleEditor({
                       value={r.instruction}
                       isReadOnly={!editable}
                       onChange={(v) => update(r.key, { instruction: v })}
-                      errorMessage={
-                        editable && !r.instruction.trim() ? 'Instruction is required.' : undefined
-                      }
-                      isInvalid={editable && !r.instruction.trim()}
+                      onBlur={() => touch(`${r.key}:instruction`)}
+                      errorMessage={instructionError ? 'Instruction is required.' : undefined}
+                      isInvalid={instructionError}
                     />
+                    {incomplete && !invalid ? (
+                      <Text variant="sm" tone="muted" as="p" data-testid="rule-save-hint">
+                        Saves when it has a title and an instruction.
+                      </Text>
+                    ) : null}
                     {r.explanation ? (
                       <Text variant="sm" tone="muted" as="p">
                         {`Why this rule helps: ${r.explanation}`}

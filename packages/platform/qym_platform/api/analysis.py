@@ -6789,6 +6789,25 @@ def publish_project_analysis_rule_version(
     version.published_at = now
     version.published_by_user_id = principal.user.id
     version.updated_at = now
+    # C016: a project's first publish becomes its production version; later
+    # publishes move production only when asked ("Set as production" on).
+    has_production = (
+        db.query(ProjectAnalysisRuleAlias.id)
+        .filter(
+            ProjectAnalysisRuleAlias.project_id == run.project_id,
+            ProjectAnalysisRuleAlias.alias == "production",
+        )
+        .first()
+        is not None
+    )
+    if not has_production and request.set_alias != "production":
+        _set_analysis_rule_alias(
+            db,
+            project_id=run.project_id,
+            alias_name="production",
+            version=version,
+            actor_user_id=principal.user.id,
+        )
     if request.set_alias:
         _set_analysis_rule_alias(
             db,
@@ -9676,14 +9695,45 @@ def get_correction(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Get a single correction by ID."""
+    """Get a single correction by ID.
+
+    Every edit stores a new revision with a new id, so an old link (a dashboard
+    ``?id=``) names a historical row; it opens the current revision of the same
+    diagnosis instead (C213).
+    """
     c = db.query(ReviewCorrection).filter(ReviewCorrection.id == correction_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Correction not found")
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    if not c.is_active:
+        c = _current_revision(db, c) or c
     return _serialize_corrections_with_history(db, [c], principal)[0]
+
+
+def _current_revision(db: Session, old: ReviewCorrection) -> Optional[ReviewCorrection]:
+    """The active correction of the same diagnosis (run, item, metric, pass and issue)."""
+    rows = (
+        db.query(ReviewCorrection)
+        .filter(
+            ReviewCorrection.run_id == old.run_id,
+            ReviewCorrection.item_id == old.item_id,
+            ReviewCorrection.metric_name == old.metric_name
+            if old.metric_name is not None
+            else ReviewCorrection.metric_name.is_(None),
+            ReviewCorrection.pass_number == old.pass_number
+            if old.pass_number is not None
+            else ReviewCorrection.pass_number.is_(None),
+            ReviewCorrection.is_active.is_(True),
+        )
+        .order_by(ReviewCorrection.id.desc())
+        .all()
+    )
+    issue = correction_issue_id(old)
+    if issue:
+        rows = [row for row in rows if correction_issue_id(row) == issue]
+    return rows[0] if rows else None
 
 
 @router.put("/api/corrections/{correction_id}")
@@ -9705,6 +9755,10 @@ def update_correction(
     if not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     require_project_writable(db, run.project_id)
+    # C054: an edit sends a decided diagnosis back to review, so it needs the
+    # decision right (the project's role rule), like approving or rejecting it.
+    if c.status != CorrectionStatus.PENDING:
+        require_correction_decision(db, principal, run.project_id)
     item = (
         db.query(RunItem)
         .filter(RunItem.run_id == c.run_id, RunItem.item_id == c.item_id)

@@ -27,6 +27,12 @@ import {
 } from './support';
 import { expectToast, query } from './ui';
 
+/** A matrix cell's actions sit behind its '>' handle, as on a runs-list row (E2). */
+async function cellAction(cell: Locator, name: string) {
+  await cell.locator('[data-row-menu]').click();
+  await cell.page().getByRole('menuitem', { name, exact: true }).click();
+}
+
 test.setTimeout(120_000);
 test.use({ actionTimeout: 10_000 });
 test.beforeEach(async ({ request }) => {
@@ -145,7 +151,8 @@ test.describe('experiment detail', () => {
     );
 
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
-    await page.getByRole('button', { name: 'Cancel experiment' }).click();
+    await page.getByTestId('exp-actions').click();
+    await page.getByRole('menuitem', { name: 'Cancel experiment' }).click();
     const dialog = page.getByRole('alertdialog');
     await expect(
       dialog.getByRole('heading', { name: /Cancel queued jobs of “staging vs prod”\?/ }),
@@ -161,14 +168,16 @@ test.describe('experiment detail', () => {
       (await getExperiment(request, project.id, x.id)).jobs.filter((j) => j.status === 'CANCELLED'),
     ).toHaveLength(0);
 
-    await page.getByRole('button', { name: 'Cancel experiment' }).click();
+    await page.getByTestId('exp-actions').click();
+    await page.getByRole('menuitem', { name: 'Cancel experiment' }).click();
     await dialog.getByRole('button', { name: 'Cancel queued jobs' }).click();
     await expectToast(page, '1 cancelled');
     const mid = await getExperiment(request, project.id, x.id);
     expect(mid.jobs.filter((j) => j.status === 'CANCELLED')).toHaveLength(1);
 
     // nothing pending any more: the copy switches to stopping the running job
-    await page.getByRole('button', { name: 'Cancel experiment' }).click();
+    await page.getByTestId('exp-actions').click();
+    await page.getByRole('menuitem', { name: 'Cancel experiment' }).click();
     await expect(
       dialog.getByRole('heading', { name: /Stop 1 running job of “staging vs prod”\?/ }),
     ).toBeVisible();
@@ -182,7 +191,10 @@ test.describe('experiment detail', () => {
       (e) => e.jobs.every((j) => j.status === 'CANCELLED'),
       'both cancelled',
     );
-    await expect(page.getByRole('button', { name: 'Cancel experiment' })).toBeDisabled();
+    // nothing left to cancel: the Actions menu keeps Retry failed only (C137)
+    await page.getByTestId('exp-actions').click();
+    await expect(page.getByRole('menuitem', { name: 'Cancel experiment' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await expect(stat(page.getByLabel('Job totals'), 'Cancelled')).toContainText('2');
   });
 
@@ -198,12 +210,12 @@ test.describe('experiment detail', () => {
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
     const cell = page.locator(`[data-exp-cell="${x.jobs[0]!.id}"]`);
     await expect(cell).toContainText('Queued');
-    await cell.getByRole('button', { name: /^Cancel/ }).click();
+    await cellAction(cell, 'Cancel');
     const dialog = page.getByRole('alertdialog');
     await expect(dialog.getByRole('heading', { name: /Cancel job #0 on staging\?/ })).toBeVisible();
     await dialog.getByRole('button', { name: 'Keep running' }).click();
     await expect(dialog).toBeHidden();
-    await cell.getByRole('button', { name: /^Cancel/ }).click();
+    await cellAction(cell, 'Cancel');
     await dialog.getByRole('button', { name: 'Cancel job' }).click();
     await expectToast(page, '1 cancelled');
     await expect(cell).toContainText('Cancelled');
@@ -231,11 +243,16 @@ test.describe('experiment detail', () => {
     const cell = page.locator(`[data-exp-cell="${failed.jobs[0]!.id}"]`);
     await expect(cell).toContainText('Failed');
     await expect(cell).toContainText('worker crashed');
-    await expect(page.getByRole('button', { name: 'Retry failed (1)' })).toBeEnabled();
+    await page.getByTestId('exp-actions').click();
+    await expect(page.getByRole('menuitem', { name: 'Retry failed (1)' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await page.keyboard.press('Escape');
     // job history shows no earlier-attempts toggle before a retry
     await expect(page.getByText(/Show earlier attempts/)).toHaveCount(0);
 
-    await cell.getByRole('button', { name: /^Retry/ }).click();
+    await cellAction(cell, 'Retry');
     const ack = page.getByRole('alertdialog');
     await expect(ack.getByRole('heading', { name: 'Retry job #0 at HIGH priority?' })).toBeVisible();
     await ack.getByRole('button', { name: 'Retry at HIGH' }).click();
@@ -252,7 +269,12 @@ test.describe('experiment detail', () => {
     await expect(page.getByRole('button', { name: '↻ 1 earlier' })).toBeVisible();
     await expect(stat(page.getByLabel('Job totals'), 'Failed')).toContainText('0');
 
+    // Job history starts closed (C206): one line with the counts
     const history = page.locator('[data-exp-jobs]');
+    await expect(history.getByRole('button', { name: /Job history/ })).toContainText(
+      '1 job, 1 earlier attempt',
+    );
+    await history.getByRole('button', { name: /Job history/ }).click();
     await expect(history.getByRole('row')).toHaveCount(2); // header + current attempt
     await history.getByText('Show earlier attempts (1)').click();
     await expect(history.getByRole('row')).toHaveCount(3);
@@ -309,10 +331,7 @@ test.describe('experiment detail', () => {
 
     const posts = recordPosts(page, '/retry');
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
-    await page
-      .locator('[data-exp-cell]')
-      .getByRole('button', { name: /^Retry/ })
-      .click();
+    await cellAction(page.locator('[data-exp-cell]').first(), 'Retry');
     const dialog = page.getByTestId('temporary-keys-dialog');
     await expect(dialog.getByRole('heading', { name: 'Enter API keys to retry' })).toBeVisible();
     const field = dialog.getByLabel('Scratch model');
@@ -377,22 +396,22 @@ test.describe('experiment detail', () => {
       )
       .toBe(false);
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
-    const retry = page.locator('[data-exp-cell]').getByRole('button', { name: /^Retry/ });
-    await retry.click();
+    const cell = page.locator('[data-exp-cell]').first();
+    await cellAction(cell, 'Retry');
     const dialog = page.getByTestId('temporary-keys-dialog');
     await dialog.getByLabel('Scratch').fill('sk-typed-then-abandoned');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     expect(await page.content()).not.toContain('sk-typed-then-abandoned');
     // reopening starts empty
-    await retry.click();
+    await cellAction(cell, 'Retry');
     await expect(dialog.getByLabel('Scratch')).toHaveValue('');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
     expect((await getExperiment(request, project.id, x.id)).jobs).toHaveLength(1);
-    // "Clone instead" leaves for the launch form with the experiment and job as the clone source
-    await retry.click();
-    await dialog.getByRole('button', { name: 'Clone instead' }).click();
+    // "Run again instead" leaves for the launch form with the experiment and job as the clone source
+    await cellAction(cell, 'Retry');
+    await dialog.getByRole('button', { name: 'Run again instead' }).click();
     await expect(page).toHaveURL(new RegExp(`/experiments/new\\?clone=${x.id}&job=${x.jobs[0]!.id}`));
   });
 
@@ -405,7 +424,7 @@ test.describe('experiment detail', () => {
       spec: experimentSpec(connectionId, 45),
     });
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
-    await page.locator(`[data-exp-save-preset="${x.jobs[0]!.id}"]`).click();
+    await cellAction(page.locator(`[data-exp-cell="${x.jobs[0]!.id}"]`), 'Save as preset');
     const dialog = page.getByRole('dialog', { name: 'Save as preset' });
     const name = dialog.getByRole('textbox', { name: /Preset name/ });
     await expect(name).toBeFocused();
@@ -437,12 +456,23 @@ test.describe('experiment detail', () => {
       }),
     );
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
-    await page.getByRole('button', { name: 'Cancel experiment' }).click();
+    await page.getByTestId('exp-actions').click();
+    await page.getByRole('menuitem', { name: 'Cancel experiment' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel queued jobs' }).click();
     await expectToast(page, /Only the creator or a manager can cancel/);
     await expect(page.getByText('You are not allowed to change this experiment.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Cancel experiment' })).toBeDisabled();
-    await expect(page.locator('[data-exp-cell]').getByRole('button', { name: /^Cancel/ })).toBeDisabled();
+    await page.getByTestId('exp-actions').click();
+    await expect(page.getByRole('menuitem', { name: 'Cancel experiment' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await page.keyboard.press('Escape');
+    await page.locator('[data-exp-cell]').first().locator('[data-row-menu]').click();
+    await expect(page.getByRole('menuitem', { name: 'Cancel', exact: true })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await page.keyboard.press('Escape');
   });
 
   test('unknown experiment id shows a not-found state with a way back', async ({ page, request }) => {

@@ -521,10 +521,12 @@ function invalidateRules(qc: QueryClient, scope: AnalysisScope): Promise<unknown
 export function useCreateDraft(scope: AnalysisScope) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (fromVersion: string) =>
-      api.post<{ version: RuleVersion }>(`${scopeBase(scope)}/analysis-rule-versions`, {
-        from_version: fromVersion,
-      }),
+    /** Without `fromVersion` the draft starts empty (the first version of a project, C126). */
+    mutationFn: (fromVersion?: string) =>
+      api.post<{ version: RuleVersion }>(
+        `${scopeBase(scope)}/analysis-rule-versions`,
+        fromVersion ? { from_version: fromVersion } : {},
+      ),
     onSuccess: () => invalidateRules(qc, scope),
   });
 }

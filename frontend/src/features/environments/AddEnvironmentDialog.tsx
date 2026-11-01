@@ -1,18 +1,20 @@
 /**
- * Add environment (brief 06 §2.9): Connect -> Review settings -> Group LLM settings.
+ * Add environment (brief 06 §2.9): Connect -> Generated form -> Group LLM settings. After step 1 saves the
+ * environment, the dialog is titled "Set up <name>". "Create a project API key" opens Settings > API keys in a new
+ * tab, so the typed name and URL stay (C122).
  * "Test & connect" POSTs the environment (the server tests the connection and stores the first
  * schema); the generated form is previewed; the LLM groups are confirmed or skipped.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useCreateEnvironment, useEnvironmentForm, type EvalSlot } from '@/api/evalEnvironments';
 import type { EvalEnvironment } from '@/api/evalCommon';
-import { Button, Dialog, ErrorState, Skeleton, TextField, useToast } from '@/ui';
+import { Button, Dialog, ErrorState, Icon, LinkButton, Skeleton, TextField, useToast } from '@/ui';
 import { mapEnvironmentError, type EnvironmentField, type FieldErrors } from './fieldErrors';
 import styles from './AddEnvironmentDialog.module.css';
 import { FormPreview } from './FormPreview';
 import { SlotEditor, useSlotEditor } from './SlotEditor';
 
-const STEPS = ['Connect', 'Review settings', 'Group LLM settings'] as const;
+const STEPS = ['Connect', 'Generated form', 'Group LLM settings'] as const;
 
 export interface AddEnvironmentDialogProps {
   projectId: string;
@@ -20,7 +22,8 @@ export interface AddEnvironmentDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Called once the environment exists (after Skip, Confirm or closing at step 2/3). */
   onCreated?: (env: EvalEnvironment) => void;
-  onGotoApiKeys?: () => void;
+  /** Settings > API keys of this project: "Create a project API key" opens it in a new tab. */
+  apiKeysTo?: string;
 }
 
 export function AddEnvironmentDialog(props: AddEnvironmentDialogProps) {
@@ -33,7 +36,7 @@ function AddEnvironmentDialogInner({
   open,
   onOpenChange,
   onCreated,
-  onGotoApiKeys,
+  apiKeysTo,
 }: AddEnvironmentDialogProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [env, setEnv] = useState<EvalEnvironment | null>(null);
@@ -153,7 +156,7 @@ function AddEnvironmentDialogInner({
     <Dialog
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-      title="Add environment"
+      title={env ? `Set up ${env.name}` : 'Add environment'}
       size="data"
       footer={footer}
       dismissOnBackdrop={false}
@@ -177,10 +180,17 @@ function AddEnvironmentDialogInner({
             <strong>Ingest with this project&apos;s key.</strong> The deployment must send its runs to qym
             with an API key of <em>this</em> project (<code>QYM_API_KEY</code>), otherwise its results land in
             another project.{' '}
-            {onGotoApiKeys ? (
-              <Button variant="ghost" onPress={onGotoApiKeys}>
+            {apiKeysTo ? (
+              <LinkButton
+                to={apiKeysTo}
+                target="_blank"
+                rel="noopener"
+                variant="ghost"
+                icon={<Icon name="external" size={12} />}
+                title="Opens in a new tab, so this dialog keeps what you typed"
+              >
                 Create a project API key
-              </Button>
+              </LinkButton>
             ) : null}
           </div>
           <TextField

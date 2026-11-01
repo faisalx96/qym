@@ -255,3 +255,10 @@
 .diffItem summary:hover {
   color: var(--accent-primary);
 }
+
+/* a read-only rule's instruction, as text (C213) */
+.ruleText {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

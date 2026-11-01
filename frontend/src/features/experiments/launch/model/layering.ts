@@ -902,11 +902,11 @@ export const BASE_LABELS: Record<BaseKind, string> = {
   best_run: 'Best past run',
   saved: 'Saved preset',
   scratch: 'From scratch',
-  clone: 'Copy of experiment',
+  clone: 'Run again',
   'official-edit': 'Blank',
 };
 
-/** "Default preset v3 · production", "Saved preset “x” v2", "Clone of …", best-run header. */
+/** "Default preset v3 · production", "Saved preset “x” v2", "Run again of …", best-run header. */
 export function baseLabel(
   doc: Pick<LaunchDocument, 'base' | 'clone' | 'environmentIds'>,
   envName?: (id: string) => string,
@@ -924,7 +924,7 @@ export function baseLabel(
       return 'Saved preset' + (info.presetName ? ` “${info.presetName}”` : '') + version;
     case 'clone': {
       const c = doc.clone;
-      return 'Clone' + (c?.sourceName ? ` of ${c.sourceName}` : '') + (c?.jobId ? ' (one job)' : '');
+      return 'Run again' + (c?.sourceName ? ` of ${c.sourceName}` : '') + (c?.jobId ? ' (one job)' : '');
     }
     case 'best_run':
       return (info.loaded && info.label) || 'Best run';

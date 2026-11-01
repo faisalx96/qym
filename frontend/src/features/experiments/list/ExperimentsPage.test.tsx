@@ -101,8 +101,8 @@ describe('ExperimentsPage versioning facets', () => {
     const user = userEvent.setup();
     mount('/projects/demo/experiments');
     await waitFor(() => expect(names()).toHaveLength(2));
-    expect(screen.getByRole('button', { name: /Agent version/ })).toHaveTextContent('All agent versions');
-    expect(screen.getByRole('button', { name: /KB version/ })).toHaveTextContent('All KB versions');
+    expect(screen.getByRole('button', { name: /Agent version/ })).toHaveTextContent('All values');
+    expect(screen.getByRole('button', { name: /KB version/ })).toHaveTextContent('All values');
 
     await user.click(screen.getByRole('button', { name: /KB version/ }));
     await user.click(await screen.findByRole('option', { name: '381' }));
@@ -112,7 +112,7 @@ describe('ExperimentsPage versioning facets', () => {
     expect(screen.getByTestId('where').textContent).toContain('versioning=kb_version%3D381');
 
     await user.click(screen.getByRole('button', { name: /KB version/ }));
-    await user.click(await screen.findByRole('option', { name: 'All KB versions' }));
+    await user.click(await screen.findByRole('option', { name: 'All values' }));
     await waitFor(() => expect(names()).toHaveLength(2));
     expect(requests.at(-1)!.searchParams.has('versioning')).toBe(false);
     expect(screen.getByTestId('where').textContent).not.toContain('versioning');

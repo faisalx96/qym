@@ -13,8 +13,9 @@ import { useBlocker, useLocation, useNavigate, useSearchParams } from 'react-rou
 import { useEvalEnvironments } from '@/api/evalCommon';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Button, ConfirmDialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, Tag } from '@/ui';
-import { environmentsPath, experimentPath, experimentsPath } from '../paths';
+import { Button, ConfirmDialog, ErrorState, LinkButton, PageHeader, Skeleton, Tag } from '@/ui';
+import { experimentPath, experimentsPath, launchPath } from '../paths';
+import { ConnectFirst } from '../components/ConnectFirst';
 import { LaunchHome } from './home/LaunchHome';
 import { useLaunch } from './LaunchContext';
 import { LaunchProvider } from './LaunchProvider';
@@ -175,20 +176,13 @@ export function LaunchPage() {
       />
     );
   else if (!envs.data.length)
+    // C121: Add environment opens in place; once it exists, the form opens on it
     body = (
-      <EmptyState
-        title="No active environments"
-        body="An experiment runs on an Evaluation Service environment. Connect one first."
-        action={
-          <LinkButton to={environmentsPath(slug)} variant="accent">
-            {canManage ? 'Add an environment' : 'See environments'}
-          </LinkButton>
-        }
-      />
+      <ConnectFirst onCreated={(env) => navigate(launchPath(slug, { env: env.id }), { replace: true })} />
     );
   else
     body = (
-      // A new form-defining search string (e.g. "Copy an experiment") is a new form; `?step=` is not.
+      // A new form-defining search string (e.g. "Run again") is a new form; `?step=` is not.
       <LaunchProvider
         key={formKey}
         slug={slug}

@@ -165,8 +165,10 @@ test.describe('entry', () => {
     });
     await waitForSubmitted(request, f.project.id, x.id);
     await openLaunch(page, f.project.slug, `?clone=${x.id}&job=${x.jobs[0]!.id}`, 'start');
-    await expect(page.getByRole('radio', { name: /Copy an experiment/ })).toBeChecked();
-    await expect(page.getByRole('status').filter({ hasText: 'Based on' })).toContainText('Clone of src exp');
+    await expect(page.getByRole('radio', { name: /Run again/ })).toBeChecked();
+    await expect(page.getByRole('status').filter({ hasText: 'Based on' })).toContainText(
+      'Run again of src exp',
+    );
     await goStep(page, 'where');
     await expect(nameBox(page)).toHaveValue('src exp (rerun)');
     await expect(page.getByRole('checkbox', { name: 'Alpha' })).toBeChecked();

@@ -7,11 +7,10 @@ import s from './analyzer.module.css';
 
 /**
  * Page chrome shared by the run workspace and the project landing: title, one-line description
- * and ONE tab row (Analyze run, Diagnosis categories, Production rules, Documents). A live
+ * and ONE tab row (Analyze run, Diagnosis categories, Rules, Documents). A live
  * analysis puts a dot on "Analyze run" so it stays visible from every tab.
  */
 export function AnalyzerFrame({
-  slug,
   scope,
   tab,
   onTab,
@@ -20,7 +19,6 @@ export function AnalyzerFrame({
   live,
   children,
 }: {
-  slug: string;
   scope: AnalysisScope;
   tab: AnalyzerScope;
   onTab: (tab: AnalyzerScope) => void;
@@ -36,7 +34,8 @@ export function AnalyzerFrame({
       <PageHeader
         title="Auto-analysis"
         description={description}
-        meta={[`Project ${slug}`, ...(meta ?? [])]}
+        // C212: the project is in the breadcrumb's switcher; the header does not repeat its slug
+        meta={meta}
         tabs={
           <Tabs
             label="Auto-analysis views"
@@ -57,7 +56,7 @@ export function AnalyzerFrame({
                 label: 'Diagnosis categories',
                 count: c ? (c.category_catalog?.categories ?? c.default_categories).length : undefined,
               },
-              { id: 'rules', label: 'Production rules' },
+              { id: 'rules', label: 'Rules' },
               { id: 'documents', label: 'Documents', count: c?.enabled_document_count },
             ]}
           >

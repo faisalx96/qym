@@ -30,14 +30,14 @@ const WORKFLOW_COPY = {
     confirm: 'Approve',
     tone: 'primary' as const,
     done: 'approved',
-    help: 'Approved runs are locked and count as reference results.',
+    help: 'Its scores lock and it counts as a reference result. Root causes stay editable.',
   },
   reject: {
     title: 'Reject run',
     confirm: 'Reject',
     tone: 'danger' as const,
     done: 'rejected',
-    help: 'The owner is told why; the run can be unrejected later.',
+    help: 'The run can be unrejected later.',
   },
   unapprove: {
     title: 'Withdraw approval',
@@ -119,7 +119,8 @@ export function RunDialogs({
             label: 'Comment',
             type: 'textarea',
             rows: 3,
-            placeholder: 'Optional note for the history',
+            placeholder:
+              wf?.action === 'reject' ? 'Why the run is rejected' : 'Optional note for the history',
             required: wf?.action === 'reject',
           },
         ]}

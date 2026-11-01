@@ -24,7 +24,9 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
     if (route.page === 'run-detail' && route.runId) {
       crumbs.push({ label: 'Runs', to: projectPath(project.slug) }, { label: route.runId, mono: true });
     } else if (route.page === 'analyzer' && route.runId) {
+      // C212: the way back to Runs and to the run; the run reads by its id, as on the run page (C124)
       crumbs.push(
+        { label: 'Runs', to: projectPath(project.slug) },
         { label: route.runId, to: projectPath(project.slug, `runs/${route.runId}`), mono: true },
         { label: 'Auto-analysis' },
       );

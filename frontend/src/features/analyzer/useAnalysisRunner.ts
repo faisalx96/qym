@@ -90,7 +90,7 @@ export function useAnalysisRunner(
         const message =
           e instanceof ApiError
             ? e.status === 409
-              ? 'This sample changed since the page loaded. Reload it, then analyze again.'
+              ? 'This pass changed since the page loaded. Reload it, then analyze again.'
               : e.detail || e.message
             : 'The analysis could not be started.';
         setError({ key, value: message });

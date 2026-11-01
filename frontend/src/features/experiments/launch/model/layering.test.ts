@@ -522,7 +522,7 @@ describe('clone prefill', () => {
     expect(loaded.base.values['/MILVUS_SEARCH_THRESHOLD']).toEqual({ sweep: [0.1, 0.2] });
     const doc = applyBase(createDocument({ ...p.patch }), c, loaded).doc;
     expect(doc.links).toEqual(res.spec.links);
-    expect(baseLabel(doc)).toBe('Clone of Threshold sweep');
+    expect(baseLabel(doc)).toBe('Run again of Threshold sweep');
     expect(diffCount(doc).total).toBe(0);
   });
 
@@ -547,7 +547,7 @@ describe('clone prefill', () => {
     expect(p.patch.clone?.spec.env_overrides).toEqual({ BRIEF_ENABLED: true });
     expect(p.patch.environmentIds).toEqual([PRODUCTION]);
     expect(baseLabel({ base: p.patch.base, clone: p.patch.clone, environmentIds: [] })).toBe(
-      'Clone of Threshold sweep (one job)',
+      'Run again of Threshold sweep (one job)',
     );
   });
 

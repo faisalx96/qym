@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '@/lib/http';
 import { buildChart, chartTableRows, metricNames, seriesSlot } from './chart';
 import { classifyActionError, outcomeSummary, planCancelExperiment, stoppedRunIds } from './cancel';
-import { baseSourceLabel, formatMetric, formatParam, relTime, tallyJobCounts } from './format';
+import { baseSourceLabel, formatMetric, formatParam, jobsText, relTime, tallyJobCounts } from './format';
 import {
   buildMatrix,
   buildQueueStrip,
@@ -345,7 +345,13 @@ describe('format helpers', () => {
     expect(baseSourceLabel({ kind: 'weird_kind' })).toBe('Weird kind');
     expect(
       tallyJobCounts({ SUCCEEDED: 2, FAILED: 1, TIMED_OUT: 1, RUNNING: 3, QUEUED: 1, CANCELLED: 2 }),
-    ).toEqual({ ok: 2, failed: 2, live: 4, cancelled: 2 });
+    ).toEqual({ ok: 2, failed: 2, live: 4, cancelled: 2, running: 3 });
+  });
+  it('writes the Jobs text: succeeded of all, failed and cancelled only when not zero (C139)', () => {
+    expect(jobsText(tallyJobCounts({ SUCCEEDED: 5, FAILED: 1 }))).toBe('5/6 · 1 failed');
+    expect(jobsText(tallyJobCounts({ FAILED: 3 }))).toBe('0/3 · 3 failed');
+    expect(jobsText(tallyJobCounts({ SUCCEEDED: 2, RUNNING: 1 }))).toBe('2/3');
+    expect(jobsText(tallyJobCounts({ SUCCEEDED: 1, CANCELLED: 1, FAILED: 1 }))).toBe('1/3 · 1 failed · 1 cancelled');
   });
   it('writes relative times', () => {
     const now = Date.parse('2026-01-02T00:00:00Z');

@@ -94,7 +94,7 @@ test('390 wide: no horizontal scroll, the rail keeps the primary action and an o
   await expect(rail(page).getByRole('button', { name: 'More analysis actions' })).toBeVisible();
   await expect(rail(page).getByRole('button', { name: /^Prompt preview/ })).toBeHidden();
   await rail(page).getByRole('button', { name: 'More analysis actions' }).click();
-  await expect(page.getByRole('menuitem', { name: /^Test selected/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^Test (selected|the first target)/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Prompt preview' })).toBeVisible();
   await page.keyboard.press('Escape');
   const v = await axeSeriousViolations(page);

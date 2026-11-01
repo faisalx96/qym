@@ -87,10 +87,7 @@ export function EnvironmentsPanel() {
           projectId={project.id}
           open={adding}
           onOpenChange={setAdding}
-          onGotoApiKeys={() => {
-            setAdding(false);
-            navigate(`${projectPath(slug, 'settings')}?tab=apikeys`);
-          }}
+          apiKeysTo={`${projectPath(slug, 'settings')}?tab=apikeys`}
         />
       ) : null}
     </div>

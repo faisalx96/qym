@@ -400,7 +400,7 @@ export function useBestRunBase(
 
 // ── Experiments: clone, dry run / launch, latest ─────────────────────────
 
-/** POST …/experiments/{xid}/clone[?job_id=]: the prefill of "Copy an experiment" / "Rerun with this config". */
+/** POST …/experiments/{xid}/clone[?job_id=]: the prefill of "Run again" (C183). */
 export const cloneExperiment = (pid: string, experimentId: string, jobId?: string | null) =>
   api.post<CloneResponse>(
     `${project(pid)}/experiments/${enc(experimentId)}/clone${jobId ? `?job_id=${enc(jobId)}` : ''}`,

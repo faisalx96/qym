@@ -64,7 +64,7 @@ test.describe('experiments list', () => {
     await expect(table.getByText('staging').first()).toBeVisible();
 
     // status filter
-    await pickSelect(page, /Status$/, 'failed');
+    await pickSelect(page, /Status$/, 'Failed');
     await expect.poll(() => query(page).get('status')).toBe('FAILED');
     await expect(table.getByText('still going')).toHaveCount(0);
     await expect(table.getByText('finished one')).toBeVisible();
@@ -77,7 +77,7 @@ test.describe('experiments list', () => {
 
     await page.reload();
     await expect(page.getByRole('checkbox', { name: 'Created by me' })).toBeChecked();
-    await expect(page.getByRole('button', { name: /Status$/ })).toContainText('failed');
+    await expect(page.getByRole('button', { name: /Status$/ })).toContainText('Failed');
     await expect(table.getByText('finished one')).toBeVisible();
     await expect(table.getByText('still going')).toHaveCount(0);
 
@@ -85,7 +85,7 @@ test.describe('experiments list', () => {
     expect(await page.evaluate(() => history.length)).toBeLessThanOrEqual(3);
 
     // a status without rows: no-match state with Clear filters
-    await pickSelect(page, /Status$/, 'cancelled');
+    await pickSelect(page, /Status$/, 'Cancelled');
     await expect(page.getByText('No matching experiments')).toBeVisible();
     await page.getByRole('button', { name: 'Clear filters' }).click();
     await expect.poll(() => page.url().includes('?')).toBe(false);

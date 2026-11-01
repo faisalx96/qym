@@ -12,10 +12,53 @@
   white-space: nowrap;
 }
 
-.tags {
+/* Jobs column (C139): one track split by outcome, then "5/6 · 1 failed" */
+.jobs {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.jobsTrack {
+  display: inline-flex;
+  flex: 0 0 64px;
+  inline-size: 64px;
+  block-size: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.jobsPart {
+  display: block;
+  block-size: 100%;
+}
+
+.jobsPart[data-part='ok'] {
+  background: var(--success);
+}
+
+.jobsPart[data-part='failed'] {
+  background: var(--error);
+}
+
+.jobsPart[data-part='cancelled'] {
+  background: var(--warning);
+}
+
+.jobsPart[data-part='running'] {
+  background: var(--info);
+}
+
+.jobsText {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .linkButton {

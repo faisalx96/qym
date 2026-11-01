@@ -6522,6 +6522,17 @@ def update_root_cause_issue(
             db, principal, run, item_id, metric_name, pass_number, request.get("issue_id"),
             issue_index=request.get("issue_index"), analysis=analysis,
         )
+    elif request.get("action") == "edit":
+        # C054: an edit sends a decided issue back to review, so it needs the
+        # decision right (the project's role rule), as on the Reviews page.
+        issues = analysis_root_cause_issues(analysis)
+        target_id, index = request.get("issue_id"), request.get("issue_index")
+        if target_id:
+            target = next((issue for issue in issues if issue.get("issue_id") == target_id), None)
+        else:
+            target = issues[index] if type(index) is int and 0 <= index < len(issues) else None
+        if target is not None and str(target.get("review_status") or "pending").lower() in {"approved", "rejected"}:
+            require_correction_decision(db, principal, run.project_id)
     elif request.get("action") == "delete":
         # Resolve the target as change_metric_issue does; a stale one is its 409.
         issues = analysis_root_cause_issues(analysis)
