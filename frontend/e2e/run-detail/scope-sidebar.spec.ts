@@ -7,6 +7,7 @@ import {
   openRun,
   seedClassic,
   seedProject,
+  goToSection,
   type Seeded,
 } from './support';
 
@@ -148,10 +149,7 @@ test.describe('scope stays visible', () => {
     await expect(page.getByRole('button', { name: /from scope/ })).toHaveCount(1);
     await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(1);
     // still visible after reading far down the report: the sidebar is sticky
-    await page
-      .getByRole('navigation', { name: 'Run sections' })
-      .getByRole('link', { name: /^Errors/ })
-      .click();
+    await goToSection(page, /^Errors/);
     await expect(sidebar(page).getByText('Quick filters', { exact: true })).toBeInViewport();
   });
 
@@ -160,10 +158,7 @@ test.describe('scope stays visible', () => {
   }) => {
     await page.setViewportSize({ width: 1000, height: 800 });
     await openRun(page, s.slug, classic, 'show=failed');
-    await page
-      .getByRole('navigation', { name: 'Run sections' })
-      .getByRole('link', { name: /^Errors/ })
-      .click();
+    await goToSection(page, /^Errors/);
     await expect(scopeBar(page)).toBeInViewport();
     const nav = (await page.getByRole('navigation', { name: 'Run sections' }).boundingBox())!;
     await expect

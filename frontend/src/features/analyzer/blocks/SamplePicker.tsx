@@ -1,4 +1,5 @@
 import type { RunPasses } from '@/api/analysis';
+import { AnalysisSpark } from '@/features/runs-list/AnalyzeAction';
 import { Button, EmptyState, Tag, Text } from '@/ui';
 import s from './blocks.module.css';
 
@@ -31,7 +32,12 @@ export function SamplePicker({
                 >{`${p.items_scored}/${p.items_total} items scored`}</Text>
               </div>
             </div>
-            <Button size="sm" variant="accent" onPress={() => onPick(p.pass_number)}>
+            <Button
+              size="sm"
+              variant="meta"
+              icon={<AnalysisSpark filled={false} />}
+              onPress={() => onPick(p.pass_number)}
+            >
               {`Analyze sample ${p.pass_number}`}
             </Button>
           </li>

@@ -768,6 +768,14 @@ Recipes that exist only on the run report. They compose the primitives above and
   keeps the rows dimmed under a `StaleBanner` that says how old they are and
   whether the latest filter change is applied.
 
+- **Inline notice** (`InlineNotice`, owner note on RF2, Nov 1): one subtle line
+  under a page title that says what happened to the object on the page, such as
+  a failed or stopped run. A 3px rail and a glyph in the tone (`danger` failed,
+  `warning` stopped), a `--tint-faint` wash, the lead words (`Failed.`,
+  `Stopped:`) in `--tone-text` / 600, the rest in `--text-secondary` at
+  `--font-sm`. A link to the details (See Errors) ends the line in the tone's
+  text colour. No border box, no title, never a banner or a toast.
+
 ### 3.8 Colour as information
 
 One colour, one meaning per page. A hue appears as data only in its own encoding; teal (`--accent-primary`) is
@@ -795,7 +803,7 @@ Hairlines are `--border-subtle/default/strong` at 1.25 / 1.59 / 2.3 : 1 on `--bg
 and `data-series` (1 to 8) to `--tone` and `--tone-text` (the AA-safe text variant: `--error-text` for danger and band 1,
 `--accent-tertiary-soft` for meta). A primitive then writes one rule:
 `background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent); color: var(--tone-text);`. The tint steps are
-`--tint-faint` 6% (row or card wash for danger and live only), `--tint-soft` 12% (Badge, Tag, Chip selected, pill, icon
+`--tint-faint` 6% (row or card wash for danger and live only, and the inline notice), `--tint-soft` 12% (Badge, Tag, Chip selected, pill, icon
 tile), `--tint-strong` 20% (hover or pressed on a tinted fill, selected pill). No raw `rgba()` outside `tokens.css`
 (scrims and scrollbars are tokens). At most one tint fill per row-height region (row action tiles excepted: each action is its own tile); never zebra-tint; a card inside a card
 is not allowed.

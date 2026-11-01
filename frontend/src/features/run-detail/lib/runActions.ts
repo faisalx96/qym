@@ -91,6 +91,15 @@ export function pickReferenceRun(
   return pick(previous, 'previous');
 }
 
+/** The run's auto-analysis (RF3, C113): the analyzer opens on the page's pass and metric. */
+export function analyzerHref(basePath: string, pass?: number | null, metric?: string | null): string {
+  const qs = new URLSearchParams();
+  if (pass) qs.set('pass', String(pass));
+  if (metric) qs.set('metric', metric);
+  const query = qs.toString();
+  return `${basePath}/analyzer${query ? `?${query}` : ''}`;
+}
+
 export function compareWithReferenceUrl(compareRoute: string, ref: ReferenceRun, runId: string): string {
   const qs = new URLSearchParams([
     ['runs', ref.runId],

@@ -14,6 +14,7 @@ import {
   type Seeded,
   metricRow,
   openMetric,
+  goToSection,
 } from './support';
 
 let s: Seeded;
@@ -325,10 +326,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await page.reload();
     await expect(card(page, 'item-0003').locator('[data-testid=issue]')).toContainText('Approved');
     // the Root cause section now appears with a category card
-    await page
-      .getByRole('navigation', { name: 'Run sections' })
-      .getByRole('link', { name: 'Root cause' })
-      .click();
+    await goToSection(page, 'Root cause');
     await expect(page.getByTestId('root-cause-card').first()).toBeVisible();
   });
 

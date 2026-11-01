@@ -8,6 +8,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { PERCENT, seedCustomRun, type CustomItem } from './cutover-support';
 import {
   itemButton,
+  goToSection,
   openRootCause,
   openRun,
   scrollTop,
@@ -92,7 +93,7 @@ test.describe('sticky section nav and filter bar', () => {
     const nav = page.getByRole('navigation', { name: 'Run sections' });
     const filters = page.getByRole('search', { name: 'Filter items' });
     await expect(nav.getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'location');
-    await nav.getByRole('link', { name: /^Items/ }).click();
+    await goToSection(page, /^Items/);
     // the jump lands the Items head under the nav (re-aligning while lazy sections settle) ...
     const navBottom = (await nav.boundingBox())!.y + (await nav.boundingBox())!.height;
     await expect
@@ -129,10 +130,7 @@ test.describe('sticky section nav and filter bar', () => {
 
   test('nav links scroll to the analysis sections', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await page
-      .getByRole('navigation', { name: 'Run sections' })
-      .getByRole('link', { name: /Latency/ })
-      .click();
+    await goToSection(page, /Latency/);
     await expect(page.locator('#run-section-latency')).toBeInViewport();
   });
 });

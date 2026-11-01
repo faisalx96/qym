@@ -4,7 +4,7 @@
  * clamped to two lines (three on a phone) with "+ N more". Nothing hides behind a chevron. Round 10: the first qym's
  * gradient top line and wash instead of a status rail; the status sits beside the name; the facts share one height.
  */
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Button,
@@ -13,6 +13,7 @@ import {
   CopyButton,
   DatasetTag,
   Icon,
+  InlineNotice,
   isBareRunId,
   JsonPreview,
   KeyValueTag,
@@ -34,8 +35,9 @@ import {
   isLiveStatus,
   isUnionRun,
   runEntityLinks,
-  stopReasonLine,
+  runNotice,
 } from '../lib/heroModel';
+import { runErrorTally } from '../lib/overviewModel';
 import type { RunModel } from '../lib/runModel';
 import { DatasetChip, DatasetCountTag, datasetChipStyles } from './DatasetChip';
 import type { PassSummary, Run } from '../types';
@@ -247,14 +249,24 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
   const links = runEntityLinks(run, slug);
   const warning = ingestWarning(run);
   const groups = headerChips(run);
-  const stop = viewPass ? null : stopReasonLine(run);
   const runningPass =
     !viewPass && samples > 1 && liveNow
       ? ` • pass ${Math.min((run.last_completed_pass ?? 0) + 1, samples)}/${samples}`
       : '';
   const ownerLabel = run.owner?.display_name || run.owner?.email || run.owner?.id || '';
   const projectName = run.project?.name ?? '';
-  const { reviewEventCount, summaryPending } = useRunPage();
+  const { reviewEventCount, summaryPending, rowsPending, payload } = useRunPage();
+  // RF2 (C097): why a failed or stopped run ended, how many items had a task error, how much of the dataset it covers
+  const errors = useMemo(
+    () => (rowsPending || viewPass ? null : runErrorTally(model.rows, model.isRepeat)),
+    [rowsPending, viewPass, model.rows, model.isRepeat],
+  );
+  const notice = viewPass
+    ? null
+    : runNotice(run, {
+        received: payload.snapshot.rows_total ?? (rowsPending ? null : model.rows.length),
+        errors,
+      });
   // the summary says whether the run has review events; until it answers, ask only once it is known
   const reviewsKnown = reviewEventCount !== undefined ? reviewEventCount !== 0 : !summaryPending;
 
@@ -312,14 +324,18 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
           </div>
         </div>
         {viewPass ? null : <RejectNote runId={run.run_id} status={run.status} enabled={reviewsKnown} />}
-        {stop ? (
-          <p
-            className={styles.stop}
-            data-danger={stop.danger ? '' : undefined}
-            data-testid="hero-stop-reason"
-          >
-            {stop.text}
-          </p>
+        {notice ? (
+          <InlineNotice tone={notice.tone} lead={notice.lead} data-testid="hero-stop-reason">
+            {notice.text}
+            {notice.errorsLink ? (
+              <>
+                {' '}
+                <Link to={{ search: location.search, hash: '#errors' }} data-testid="hero-see-errors">
+                  See Errors
+                </Link>
+              </>
+            ) : null}
+          </InlineNotice>
         ) : null}
 
         {warning ? (

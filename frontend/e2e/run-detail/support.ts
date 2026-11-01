@@ -95,6 +95,21 @@ export async function seedLocked(s: Seeded): Promise<string> {
   return id;
 }
 
+/**
+ * Go to a run section through the sticky nav (RF1, C132): the section's link when it is in the row, else the item in
+ * the nav's More menu (at 1280 px the links that do not fit move there).
+ */
+export async function goToSection(page: Page, name: string | RegExp): Promise<void> {
+  const nav = page.getByRole('navigation', { name: 'Run sections' });
+  const link = nav.getByRole('link', { name });
+  if (await link.count()) {
+    await link.first().click();
+    return;
+  }
+  await nav.getByTestId('nav-more').click();
+  await page.getByRole('menuitem', { name }).click();
+}
+
 export function runUrl(slug: string, runId: string, query = ''): string {
   return `/projects/${slug}/runs/${runId}${query ? (query.startsWith('?') ? query : `?${query}`) : ''}`;
 }

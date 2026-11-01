@@ -7,6 +7,7 @@
 import {
   formatNumericValue,
   formatPercent,
+  hasTaskError,
   isErrorRow,
   isItemEdit,
   isItemTaskError,
@@ -51,6 +52,24 @@ export function runCounts(rows: Row[], repeatAggregate: boolean): RunCounts {
   }, 0);
   const notReceived = rows.filter((r) => isNotReceivedRow(r)).length;
   return { total, completed, errors, notReceived };
+}
+
+/** Task errors of a run (RF2, C097): items with an error in at least one pass, of all items, and errored passes. */
+export interface RunErrorTally {
+  items: number;
+  total: number;
+  passes: number;
+  repeat: boolean;
+}
+
+export function runErrorTally(rows: Row[], repeatAggregate: boolean): RunErrorTally {
+  const items = rows.filter((r) => hasTaskError(r) || Number(r.execution_error_count) > 0).length;
+  return {
+    items,
+    total: rows.length,
+    passes: runCounts(rows, repeatAggregate).errors,
+    repeat: repeatAggregate,
+  };
 }
 
 /* ── metric cards ── */

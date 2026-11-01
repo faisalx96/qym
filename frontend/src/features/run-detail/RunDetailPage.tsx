@@ -84,6 +84,8 @@ function RunLoader({ runId }: { runId: string }) {
       runId={runId}
       payload={payload}
       rowsPending={!rows.data}
+      rowsError={!rows.data && rows.isError ? rows.error : undefined}
+      onRetryRows={() => void rows.refetch()}
       summary={summaryData}
       summaryPending={summary.isPlaceholderData || summary.isPending}
     />

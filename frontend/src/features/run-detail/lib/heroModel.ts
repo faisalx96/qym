@@ -1,5 +1,6 @@
 /** Hero derivations (run.html renderSummary / runEntityLinks / buildExecutionContextSectionHtml). */
 import { projectPath } from '@/app/routes';
+import type { RunErrorTally } from './overviewModel';
 import { stringify } from './rowErrors';
 import type { IngestIncomplete, PassSummary, Run, RunDatasetEntry } from '../types';
 
@@ -372,9 +373,72 @@ export function headerChips(run: Run): HeaderChipGroup[] {
 }
 
 /** "Stopped: reason" / "Failed: reason" for a run that ended without completing and has a reason; null otherwise. */
-export function stopReasonLine(run: Run): { text: string; danger: boolean } | null {
-  const reason = run.status_reason_label;
+/** The items the run planned (the SDK's `total_items`), or null when it did not say. */
+export function plannedItems(run: Run): number | null {
+  const n = Number(run.metadata?.total_items);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** The notice under a failed or stopped run's name (RF2, C097). */
+export interface RunNotice {
+  tone: 'danger' | 'warning';
+  /** "Failed." / "Failed:" / "Stopped." / "Stopped:" */
+  lead: string;
+  text: string;
+  /** The line ends with a link to the Errors section. */
+  errorsLink: boolean;
+}
+
+const asSentence = (s: string) => (/[.!?]$/.test(s) ? s : `${s}.`);
+
+/**
+ * A failed run says what the client reported and how many items had a task error; a stopped run says why it stopped
+ * and how much of the dataset it covers. `received` is the number of items that reached the platform; `errors` is
+ * known once the rows are in.
+ */
+export function runNotice(
+  run: Run,
+  { received = null, errors = null }: { received?: number | null; errors?: RunErrorTally | null } = {},
+): RunNotice | null {
   const status = String(run.status ?? '').toUpperCase();
-  if (!reason || !(status === 'STOPPED' || status === 'FAILED')) return null;
-  return { text: `${status === 'FAILED' ? 'Failed' : 'Stopped'}: ${reason}`, danger: status === 'FAILED' };
+  const reason = String(run.status_reason_label ?? '').trim();
+  if (status === 'FAILED') {
+    const tally =
+      errors && errors.items > 0
+        ? `${errors.items} of ${errors.total} items had a task error${
+            errors.repeat
+              ? ` in at least one pass (${errors.passes} errored ${errors.passes === 1 ? 'pass' : 'passes'})`
+              : ''
+          }.`
+        : '';
+    if (reason)
+      return {
+        tone: 'danger',
+        lead: 'Failed:',
+        text: tally ? `${asSentence(reason)} ${tally}` : reason,
+        errorsLink: !!tally,
+      };
+    return {
+      tone: 'danger',
+      lead: 'Failed.',
+      text: `The client reported the run as failed.${tally ? ` ${tally}` : ''}`,
+      errorsLink: !!tally,
+    };
+  }
+  if (status === 'STOPPED') {
+    const planned = plannedItems(run);
+    const cover =
+      planned && received != null && received < planned
+        ? `Covers ${Math.round((received / planned) * 100)}% of the dataset (${received} of ${planned} items).`
+        : '';
+    if (reason)
+      return {
+        tone: 'warning',
+        lead: 'Stopped:',
+        text: cover ? `${asSentence(reason)} ${cover}` : reason,
+        errorsLink: false,
+      };
+    return cover ? { tone: 'warning', lead: 'Stopped.', text: cover, errorsLink: false } : null;
+  }
+  return null;
 }
