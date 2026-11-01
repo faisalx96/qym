@@ -211,6 +211,7 @@ from qym_platform.services.root_cause_categories import (
 )
 from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.span_scope import span_run_clause
 
 logger = get_logger(__name__)
 
@@ -7587,7 +7588,7 @@ def get_run_spans(
         # Hidden runs answer like missing ones (C057).
         raise HTTPException(status_code=404, detail="Run not found")
 
-    query = db.query(Span).filter(Span.run_id == run_id)
+    query = db.query(Span).filter(span_run_clause(db, run_id, run.created_at))
     if trace_id:
         query = query.filter(Span.trace_id == trace_id)
     # One extra row tells whether another page follows.
@@ -7634,7 +7635,7 @@ def get_item_spans(
         return {"spans": []}
     spans = (
         db.query(Span)
-        .filter(Span.run_id == run_id, Span.trace_id == item.trace_id)
+        .filter(span_run_clause(db, run_id, run.created_at), Span.trace_id == item.trace_id)
         .order_by(Span.start_time_ns.asc().nullslast())
         .all()
     )
@@ -7685,7 +7686,7 @@ def get_item_trace(
         if trace_ids:
             span_rows = (
                 db.query(Span)
-                .filter(Span.run_id == run_id, Span.trace_id.in_(trace_ids))
+                .filter(span_run_clause(db, run_id, run.created_at), Span.trace_id.in_(trace_ids))
                 .order_by(Span.start_time_ns.asc().nullslast(), Span.id.asc())
                 .all()
             )
@@ -7719,7 +7720,7 @@ def get_item_trace(
             trace_id = str(event_attempt["trace_id"])
             spans = (
                 db.query(Span)
-                .filter(Span.run_id == run_id, Span.trace_id == trace_id)
+                .filter(span_run_clause(db, run_id, run.created_at), Span.trace_id == trace_id)
                 .order_by(Span.start_time_ns.asc().nullslast(), Span.id.asc())
                 .all()
             )
@@ -7738,7 +7739,7 @@ def get_item_trace(
     elif item.trace_id:
         spans = (
             db.query(Span)
-            .filter(Span.run_id == run_id, Span.trace_id == item.trace_id)
+            .filter(span_run_clause(db, run_id, run.created_at), Span.trace_id == item.trace_id)
             .order_by(Span.start_time_ns.asc().nullslast(), Span.id.asc())
             .all()
         )
