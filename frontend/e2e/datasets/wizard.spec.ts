@@ -158,7 +158,7 @@ test.describe('upload wizard', () => {
     await expect(dialog.locator('td').filter({ hasText: 'مرحبا بكم' }).first()).toBeVisible();
   });
 
-  test('JSONL with an invalid line shows "Line 3 is not valid JSON" and blocks Continue', async ({
+  test('JSONL with an invalid line names its place once and blocks Continue until skipped (C120)', async ({
     page,
     request,
   }) => {
@@ -168,15 +168,20 @@ test.describe('upload wizard', () => {
     const dialog = await openNewWizard(page, p.slug);
     await dialog.getByRole('textbox', { name: /^Name/ }).fill('Bad Lines');
     await dialog.locator('#wizard-file').setInputFiles(file);
-    await expect(dialog.getByRole('alert').filter({ hasText: 'Line 3 is not valid JSON' })).toBeVisible();
+    const error = dialog.getByTestId('wizard-parse-error');
+    await expect(error).toContainText('Not valid JSON at line 3, character 2');
+    await expect(error).toContainText('{not json}');
     await dialog.getByTestId('wizard-next').click();
     // still on step 1: the file step, no mapping/review
-    await expect(dialog.getByText('Line 3 is not valid JSON').first()).toBeVisible();
     await expect(dialog.getByText('Column mapping')).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: /Back/ })).toHaveCount(0);
+    // the off-by-default skip lets the two valid records through
+    await dialog.getByText('Skip 1 invalid line and import 2 records').click();
+    await dialog.getByTestId('wizard-next').click();
+    await expect(dialog.getByText('Column mapping')).toBeVisible();
   });
 
-  test('valid JSONL skips the mapping step and imports', async ({ page, request }) => {
+  test('valid JSONL goes through the mapping step and imports (C013)', async ({ page, request }) => {
     const p = await createProject(request, 'Wizard Jsonl Ok', uniqueSlug('wzjlok'));
     await createDataset(request, p.slug, 'Seed Five');
     const file = tmpFile('ok.jsonl', '{"input":"a","expected_output":"b","extra":1}\n{"input":"c"}\n');
@@ -185,7 +190,10 @@ test.describe('upload wizard', () => {
     await dialog.locator('#wizard-file').setInputFiles(file);
     await expect(dialog.getByText('Detected format:')).toContainText('JSONL');
     await dialog.getByTestId('wizard-next').click();
-    await expect(dialog.getByText('Not imported: extra')).toBeVisible();
+    // an unknown key is kept as Metadata by default
+    await expect(dialog.getByText('Column mapping')).toBeVisible();
+    await dialog.getByTestId('wizard-next').click();
+    await expect(dialog.getByText('Not imported:')).toHaveCount(0);
     await dialog.getByTestId('wizard-next').click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
     await expect(page).toHaveURL(/\/datasets\/good-lines/);
@@ -212,6 +220,7 @@ test.describe('upload wizard', () => {
     await expect(versionDialog).toBeVisible();
     await expect(versionDialog.getByText('New version of')).toBeVisible();
     await versionDialog.getByTestId('wizard-next').click();
+    await versionDialog.getByTestId('wizard-next').click(); // column mapping (C013)
     await expect(versionDialog.getByText(/Creates version \S+ of "Clash Target"/)).toBeVisible();
     await versionDialog.getByTestId('wizard-next').click();
     await expect(versionDialog).toBeHidden({ timeout: 15_000 });

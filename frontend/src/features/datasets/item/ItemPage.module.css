@@ -50,3 +50,10 @@
   gap: var(--space-sm);
   margin-block-end: var(--space-md);
 }
+
+/* The version in the header meta with its status mark (C168) */
+.versionMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}

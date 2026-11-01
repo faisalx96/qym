@@ -86,3 +86,8 @@
   color: var(--text-muted);
   font-style: italic;
 }
+
+/* A string diff in the sans face (design-language rule 4); JSON stays mono (C153). */
+.panes[data-kind='text'] .pre {
+  font-family: var(--font-sans);
+}

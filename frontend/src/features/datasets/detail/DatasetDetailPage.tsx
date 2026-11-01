@@ -15,6 +15,7 @@ import {
   useSetProduction,
   type Dataset,
   type DatasetVersion,
+  useCreateVersion,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
@@ -42,10 +43,7 @@ import {
   Flag,
 } from '@/ui';
 import { AddItemDialog, CreateDraftDialog, NameVersionDialog, PublishDialog } from '../components/dialogs';
-import { UserPill } from '../components/UserPill';
 import { VersionSwitcher } from '../components/VersionSwitcher';
-import { pluralize, relativeTime } from '../lib/itemValue';
-import { versionItemsText } from '../lib/itemState';
 import { catalogPath, comparePath, datasetPath, parseDatasetRoute, type DetailTab } from '../lib/route';
 import { PRODUCTION_RULE, isProduction, resolveActiveVersion } from '../lib/versions';
 import { UploadWizard, type WizardMode } from '../wizard/UploadWizard';
@@ -55,7 +53,6 @@ import { RunsTab } from './RunsTab';
 import { AccessTab } from './AccessTab';
 import { SettingsTab } from './SettingsTab';
 import { ItemPage } from '../item/ItemPage';
-import { InlineEditDialog } from './InlineEditDialog';
 import styles from './DatasetDetailPage.module.css';
 
 export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
@@ -233,9 +230,12 @@ function DetailBody({
   const [search] = useSearchParams();
   const toast = useToast();
   const setProduction = useSetProduction(slug, dataset.slug);
-  const [dialog, setDialog] = useState<'draft' | 'publish' | 'name' | 'rename' | 'describe' | null>(null);
+  const [dialog, setDialog] = useState<'draft' | 'publish' | 'name' | null>(null);
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  // the draft that the first Add item just made: its item toast says so (C116)
+  const [newDraft, setNewDraft] = useState<DatasetVersion | null>(null);
+  const createVersion = useCreateVersion(slug, dataset.slug);
   const [accessDirty, setAccessDirty] = useState(false);
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
   const qc = useQueryClient();
@@ -280,16 +280,36 @@ function DetailBody({
     }
   }
 
+  // A dataset with no versions: the first Add item makes draft v1 itself (C116), no separate draft step.
+  async function addFirstItem() {
+    try {
+      const r = await createVersion.mutateAsync({});
+      setNewDraft(r.version);
+      navigate(datasetPath(slug, ref, { tab: 'items', v: r.version.version }));
+      setAddItemOpen(true);
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Could not create the draft', {
+        tone: 'error',
+      });
+    }
+  }
+
   const primaryActions =
     !canWrite || !contentAccess ? null : !active ? (
-      <Button
-        variant="primary"
-        icon={<Icon name="plus" size={12} />}
-        onPress={() => setDialog('draft')}
-        data-testid="create-first-draft"
-      >
-        Create first draft
-      </Button>
+      <>
+        <Button
+          variant="neutral"
+          icon={<Icon name="plus" size={12} />}
+          onPress={() => void addFirstItem()}
+          loading={createVersion.isPending}
+          data-testid="add-item"
+        >
+          Add item
+        </Button>
+        <Button variant="neutral" onPress={() => setWizard('new-version')} data-testid="import-draft">
+          Import
+        </Button>
+      </>
     ) : isDraft ? (
       <>
         <Button
@@ -343,7 +363,12 @@ function DetailBody({
     );
 
   const tabItems = [
-    { id: 'items', label: 'Items', count: active?.item_count },
+    // the active items: disabled ones are left out of runs (C042)
+    {
+      id: 'items',
+      label: 'Items',
+      count: active ? active.item_count - (active.disabled_count ?? 0) : undefined,
+    },
     { id: 'runs', label: 'Runs', count: active?.run_count },
     { id: 'lineage', label: 'Lineage', count: versions.length },
     // the grant count shows for a restricted dataset only: "0" on a project-wide one would read as "nobody" (QD10)
@@ -362,9 +387,6 @@ function DetailBody({
         title={
           <span className={styles.titleRow}>
             <span dir="auto">{dataset.name}</span>
-            {canWrite ? (
-              <IconButton label="Rename dataset" icon="edit" onPress={() => setDialog('rename')} />
-            ) : null}
             {dataset.private_test_set ? (
               <Flag tone="warning" icon="eye-off">
                 Private test set
@@ -387,58 +409,18 @@ function DetailBody({
             ) : null}
           </span>
         }
+        // Plain text: Settings › General is the one place to edit the name and description (C169).
         description={
           dataset.description ? (
-            <button
-              type="button"
-              className={styles.descButton}
-              onClick={() => canWrite && setDialog('describe')}
-              disabled={!canWrite}
-              dir="auto"
-            >
-              {dataset.description}
-            </button>
+            <span dir="auto">{dataset.description}</span>
           ) : canWrite ? (
-            <button type="button" className={styles.descButton} onClick={() => setDialog('describe')}>
-              + Add a description
-            </button>
+            <Link to={datasetPath(slug, ref, { tab: 'settings' })} className={styles.addDescription}>
+              Add a description
+            </Link>
           ) : undefined
         }
-        meta={[
-          pluralize(versions.length, 'version'),
-          pluralize(dataset.run_count, 'run'),
-          <span key="items" data-testid="meta-items">
-            {active?.disabled_count ? (
-              <>
-                {pluralize(active.item_count, 'item')}{' '}
-                <span className={styles.disabledCount}>({active.disabled_count} disabled)</span>
-              </>
-            ) : (
-              versionItemsText(active?.item_count ?? 0, 0)
-            )}
-          </span>,
-          ...(active?.parent_version_id
-            ? [
-                <span key="fork">
-                  forked from{' '}
-                  <Link
-                    to={hrefFor(versions.find((v) => v.id === active.parent_version_id) ?? active)}
-                    className={styles.inlineLink}
-                  >
-                    {versions.find((v) => v.id === active.parent_version_id)?.version ?? '?'}
-                  </Link>
-                </span>,
-              ]
-            : []),
-          ...(active ? [<span key="source">source: {active.source_type}</span>] : []),
-          ...(active?.published_by
-            ? [<UserPill key="pub" user={active.published_by} label="Published by:" />]
-            : []),
-          ...(active?.created_by
-            ? [<UserPill key="drafted" user={active.created_by} label="Drafted By:" />]
-            : []),
-          `updated ${relativeTime(dataset.updated_at)}`,
-        ]}
+        // The header holds the name, description, version switcher and actions only; counts stay on the state
+        // filter, the pager and the Items tab, and provenance is on the Lineage card (C042).
         actions={
           <div className={styles.heroActions}>
             {active ? (
@@ -593,20 +575,17 @@ function DetailBody({
           version={active}
         />
       ) : null}
-      <InlineEditDialog
-        open={dialog === 'rename' || dialog === 'describe'}
-        field={dialog === 'describe' ? 'description' : 'name'}
-        onOpenChange={(o) => !o && setDialog(null)}
-        slug={slug}
-        dataset={dataset}
-      />
       {active && isDraft ? (
         <AddItemDialog
           open={addItemOpen}
-          onOpenChange={setAddItemOpen}
+          onOpenChange={(o) => {
+            setAddItemOpen(o);
+            if (!o) setNewDraft(null);
+          }}
           slug={slug}
           dataset={dataset}
           version={active}
+          newDraft={newDraft?.id === active.id}
         />
       ) : null}
       <UploadWizard

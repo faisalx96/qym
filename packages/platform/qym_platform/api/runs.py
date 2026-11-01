@@ -178,7 +178,7 @@ from qym_platform.services.run_means import (
     run_metric_mean,
     supersede_metric_error,
 )
-from qym_platform.services.retention import purge_due_at
+from qym_platform.services.retention import purge_deleted_runs_now, purge_due_at
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
     delete_repeat_pass,
@@ -7074,6 +7074,71 @@ def restore_run(
     logger.info("Run %s restored by admin %s", run.id, principal.user.id)
 
     return {"ok": True}
+
+
+# Delete permanently takes at most this many runs per request: each run's
+# children go in batches inside the request.
+PURGE_NOW_MAX = 50
+
+
+@router.post("/api/runs/purge")
+def purge_deleted_runs(
+    request: Dict[str, Any],
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Delete soft-deleted runs permanently, now (admin only; C118).
+
+    ``{"run_ids": [...]}``, at most ``PURGE_NOW_MAX``. This ignores the
+    retention setting and the archive pause: with retention Off, it is the one
+    way to empty a project's Deleted runs so the project can be deleted. Runs
+    that are not in Deleted runs, or that are busy, are listed in ``skipped``
+    with the reason. Each purged run gets a ``run.purged`` audit entry.
+    """
+    if principal.user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    run_ids = request.get("run_ids")
+    if (
+        not isinstance(run_ids, list)
+        or not run_ids
+        or not all(isinstance(value, str) and value for value in run_ids)
+    ):
+        raise HTTPException(status_code=400, detail="run_ids must be a non-empty list of run ids")
+    if len(run_ids) > PURGE_NOW_MAX:
+        raise HTTPException(
+            status_code=400, detail=f"Delete at most {PURGE_NOW_MAX} runs permanently at a time"
+        )
+    wanted = list(dict.fromkeys(run_ids))
+    found = {
+        run.id: run.audit_snapshot()
+        for run in db.query(Run).filter(Run.id.in_(wanted), Run.deleted_at.isnot(None)).all()
+    }
+    # End the read before the purge: it deletes in its own short transactions.
+    db.commit()
+    skipped: List[Dict[str, str]] = [
+        {"run_id": run_id, "reason": "Deleted run not found"} for run_id in wanted if run_id not in found
+    ]
+    result = purge_deleted_runs_now(db.get_bind(), [run_id for run_id in wanted if run_id in found])
+    skipped += [{"run_id": run_id, "reason": reason} for run_id, reason in result["skipped"].items()]
+    for run_id in result["purged"]:
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="run.purged",
+                entity_type="run",
+                entity_id=run_id,
+                before=found[run_id],
+                after={},
+            )
+        )
+    db.commit()
+    logger.info(
+        "Runs deleted permanently by admin %s: %d deleted, %d skipped",
+        principal.user.id,
+        len(result["purged"]),
+        len(skipped),
+    )
+    return {"ok": True, "purged": result["purged"], "skipped": skipped}
 
 
 def _restore_deleted_run(db: Session, run: Run, principal: Principal) -> None:

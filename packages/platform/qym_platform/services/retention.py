@@ -295,15 +295,25 @@ def _delete_children_in_batches(
 
 
 def _purge_one(
-    engine: Engine, run_id: str, due: Dict[str, Any], *, batch_size: int
+    engine: Engine,
+    run_id: str,
+    due: Dict[str, Any],
+    *,
+    batch_size: int,
+    due_sql: str = _PURGE_DUE,
 ) -> bool:
-    """Hard-delete one due run; False when it was skipped."""
+    """Hard-delete one due run; False when it was skipped.
+
+    ``due_sql`` is the SQL condition a run must still meet (with ``due`` as its
+    parameters): the retention clock by default, or only "is deleted" for an
+    admin's Delete permanently (``purge_deleted_runs_now``).
+    """
     postgres = engine.dialect.name == "postgresql"
     with engine.begin() as conn:
         if postgres:
             conn.execute(text("SET LOCAL lock_timeout = '5s'"))
         # Rechecked: the project may have been archived since the scan.
-        candidate = f"SELECT id FROM runs WHERE id = :r AND {_PURGE_DUE}"
+        candidate = f"SELECT id FROM runs WHERE id = :r AND {due_sql}"
         if postgres:
             candidate += " FOR UPDATE SKIP LOCKED"
         if conn.execute(text(candidate), {**due, "r": run_id}).scalar() is None:
@@ -322,7 +332,7 @@ def _purge_one(
         # Cascade source rows before taking the partition lock: backfill
         # and normal writes also lock source rows before their partition.
         deleted = conn.execute(
-            text(f"DELETE FROM runs WHERE id = :r AND {_PURGE_DUE}"),
+            text(f"DELETE FROM runs WHERE id = :r AND {due_sql}"),
             {**due, "r": run_id},
         ).rowcount
         if not deleted:
@@ -423,6 +433,46 @@ def purge_soft_deleted_runs(
     if purged:
         logger.info("purged %d soft-deleted runs", len(purged))
     return purged
+
+
+# An admin's Delete permanently ignores the retention clock and the archive pause:
+# deleting an archived project needs its deleted runs gone first (C118).
+_PURGE_NOW = "deleted_at IS NOT NULL"
+
+PURGE_BUSY = "Not deleted yet: the run is busy or still leaving the dashboard. Try again in a minute."
+
+
+def purge_deleted_runs_now(
+    engine: Engine, run_ids: List[str], *, batch_size: int = PURGE_BATCH_ROWS
+) -> Dict[str, Any]:
+    """Hard-delete these soft-deleted runs now, whatever the retention setting.
+
+    The admin "Delete permanently" action of Deleted runs (C118). It uses the
+    retention purge path, so children go in short batches and the dashboard
+    rows go with the run. A run that the dashboard worker has not removed yet,
+    or that a lock holds, is skipped with ``PURGE_BUSY``.
+    Returns ``{"purged": [...], "skipped": {run_id: reason}}``.
+    """
+    purged: List[str] = []
+    skipped: Dict[str, str] = {}
+    if engine.dialect.name == "postgresql":
+        with engine.connect() as conn:
+            if conn.execute(text("SELECT to_regclass('spans_legacy')")).scalar() is not None:
+                reason = "Not deleted: a span migration is still running. Try again later."
+                return {"purged": [], "skipped": {run_id: reason for run_id in run_ids}}
+    for run_id in run_ids:
+        try:
+            done = _purge_one(engine, run_id, {}, batch_size=batch_size, due_sql=_PURGE_NOW)
+        except OperationalError as exc:
+            logger.warning("Delete permanently of run %s deferred: %s", run_id, exc.orig or exc)
+            done = False
+        if done:
+            purged.append(run_id)
+        else:
+            skipped[run_id] = PURGE_BUSY
+    if purged:
+        logger.info("deleted %d runs permanently on request", len(purged))
+    return {"purged": purged, "skipped": skipped}
 
 
 def run_retention(

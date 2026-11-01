@@ -312,9 +312,9 @@ PREVIEW_CASES = {
             GEN,
             GEN,
             GEN,
-            {"item_id": "n"},
-            {"item_id": "n"},
-            {"item_id": "a", "op": "create"},
+            {"item_id": "n", "input": "x"},
+            {"item_id": "n", "input": "x"},
+            {"item_id": "a", "op": "create", "input": "x"},
         ]
     },
 }

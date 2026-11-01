@@ -65,6 +65,9 @@ async function openReview(file = jsonl) {
   await user.upload(input, new File([file], 'faq-import-fixed.jsonl', { type: 'text/plain' }));
   await screen.findByText(/Detected format:/);
   await user.click(screen.getByTestId('wizard-next'));
+  // JSONL has the Map columns step too (C013)
+  await screen.findByText('Column mapping');
+  await user.click(screen.getByTestId('wizard-next'));
   await screen.findByText(/preview shows first/);
   return user;
 }

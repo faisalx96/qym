@@ -33,7 +33,9 @@ import {
 } from '@/ui';
 import { CreateDraftDialog, DisableItemDialog } from '../components/dialogs';
 import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
+import { ConflictNotice } from '../components/ConflictNotice';
 import { FieldEditor } from '../components/FieldEditor';
+import { VersionBadge } from '../components/VersionSwitcher';
 import { useItemEditor } from './useItemEditor';
 import { formatDate, relativeTime } from '../lib/itemValue';
 import { metaFiltersToParams, metaModesToParams, parseMetaFilters } from '../lib/metaFilter';
@@ -130,6 +132,15 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
     }
   }
 
+  async function keepMine() {
+    try {
+      const saved = await editor.keepMine();
+      if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
+    }
+  }
+
   // Ctrl/⌘+S saves.
   useEffect(() => {
     if (!editable) return;
@@ -198,9 +209,10 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
           <span key="id" className={styles.mono}>
             id {item.item_id}
           </span>,
-          <Tag key="v" kind="version">
-            {version.version} {version.status}
-          </Tag>,
+          <span key="v" className={styles.versionMeta}>
+            <span className={styles.mono}>{version.version}</span>
+            <VersionBadge version={version} />
+          </span>,
           ...(neighbors.data
             ? [`${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString()} in this view`]
             : []),
@@ -208,24 +220,15 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         actions={
           <div className={styles.actions}>
             {version.status !== 'draft' && !readOnly ? (
-              <>
-                <Button
-                  variant="accent"
-                  size="md"
-                  onPress={() => setDraftOpen(true)}
-                  data-testid="create-draft-to-edit"
-                >
-                  Create draft to edit
-                </Button>
-                <Button
-                  variant="neutral"
-                  size="md"
-                  onPress={() => setDraftOpen(true)}
-                  data-testid="item-state-action"
-                >
-                  {item.state === 'disabled' ? 'Create a draft to enable' : 'Create a draft to disable'}
-                </Button>
-              </>
+              // one action to change a published item, the same as in the pane (C142)
+              <Button
+                variant="accent"
+                size="md"
+                onPress={() => setDraftOpen(true)}
+                data-testid="create-draft-to-edit"
+              >
+                Edit in a new draft
+              </Button>
             ) : null}
             {editable && item.state !== 'disabled' ? (
               <Button
@@ -310,6 +313,14 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         <TabPanel id="details">
           <div className={styles.panels}>
             <div className={styles.mainCol}>
+              {editor.conflict ? (
+                <ConflictNotice
+                  conflict={editor.conflict}
+                  busy={editor.saving}
+                  onReview={editor.reviewTheirs}
+                  onKeep={() => void keepMine()}
+                />
+              ) : null}
               <FieldEditor
                 label="Input"
                 value={item.input}

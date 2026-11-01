@@ -146,6 +146,11 @@ export function ItemsWorkspace({
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
   const index = paneId ? rows.findIndex((r) => r.item_id === paneId) : -1;
+  const byId = new Map(rows.map((r) => [r.item_id, r] as const));
+  const selectedMayBeDisabled = [...selected].some((k) => {
+    const row = byId.get(String(k));
+    return !row || row.state === 'disabled';
+  });
   const open = (item: DatasetItem) => {
     if (item.item_id === paneId) return;
     attempt(() => setPaneId(item.item_id));
@@ -227,15 +232,18 @@ export function ItemsWorkspace({
               >
                 Disable {selected.size}…
               </Button>
-              <Button
-                variant="neutral"
-                size="sm"
-                loading={selectedBatch.isPending && !disableSelected}
-                onPress={() => void enableSelected()}
-                data-testid="bulk-enable-selected"
-              >
-                Enable {selected.size}
-              </Button>
+              {/* Enable only when a selected row is disabled (or not loaded on this page) (C228) */}
+              {selectedMayBeDisabled ? (
+                <Button
+                  variant="neutral"
+                  size="sm"
+                  loading={selectedBatch.isPending && !disableSelected}
+                  onPress={() => void enableSelected()}
+                  data-testid="bulk-enable-selected"
+                >
+                  Enable {selected.size}
+                </Button>
+              ) : null}
               <Button
                 variant="danger"
                 size="sm"

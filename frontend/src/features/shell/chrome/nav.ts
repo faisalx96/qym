@@ -25,7 +25,6 @@ export function projectNav(slug: string): NavItem[] {
     { id: 'overview', label: 'Dashboard', icon: 'home', to: projectPath(slug, 'overview') },
     { id: 'charts', label: 'Charts', icon: 'chart', to: projectPath(slug, 'charts') },
     { id: 'runs', label: 'Runs', icon: 'list', to: projectPath(slug), activeFor: ['run-detail', 'compare'] },
-    { id: 'models', label: 'Models', icon: 'grid', to: projectPath(slug, 'models') },
     {
       id: 'experiments',
       label: 'Experiments',

@@ -77,7 +77,7 @@ describe('json records', () => {
     const r = parseJSONRecords('{"input":"a"}\n\nnot json\n[1]\n', 'x.jsonl');
     expect(r.format).toBe('jsonl');
     expect(r.rows).toHaveLength(1);
-    expect(r.errors).toEqual([
+    expect(r.errors).toMatchObject([
       { where: 'Line 3', message: 'is not valid JSON' },
       { where: 'Line 4', message: 'must be a JSON object' },
     ]);
@@ -181,11 +181,11 @@ describe('versions', () => {
     expect(catalogStateLine(base)).toBe('empty');
     expect(
       catalogStateLine({ ...base, production_version: versions[2]!, latest_version: versions[0]! }),
-    ).toBe('v1 prod · v3 draft');
-    expect(catalogStateLine({ ...base, latest_version: versions[0]! })).toBe('v3 draft · never published');
+    ).toBe('v1 Production · v3 Draft');
+    expect(catalogStateLine({ ...base, latest_version: versions[0]! })).toBe('v3 Draft · never published');
     expect(
       catalogStateLine({ ...base, production_version: versions[2]!, latest_version: versions[2]! }),
-    ).toBe('v1 prod · current');
+    ).toBe('v1 Production');
   });
 });
 
@@ -204,5 +204,50 @@ describe('itemValue', () => {
     expect(sameValue('a\r\nb', 'a\nb')).toBe(true);
     expect(sameValue({ a: 1 }, { a: 1 })).toBe(true);
     expect(sameValue('1', 1)).toBe(false);
+  });
+});
+
+describe('JSON import mapping (C013, C120)', () => {
+  it('maps other key names, keeps own metadata and labels, and reads alias pairs like the server', async () => {
+    const { autoMapJson, jsonMappedUpserts, recordsWithInput } = await import('../mapping');
+    const { jsonMappableKeys } = await import('../jsonRecords');
+    const rows = [
+      { question: 'q1', answer: 'a1', topic: 'billing', metadata: { src: 'x' }, labels: 'gold' },
+      { question: 'q2', answer: 'a2', topic: 'auth' },
+    ];
+    const mapping = autoMapJson(jsonMappableKeys(rows));
+    expect(mapping).toEqual({ input: ['question'], expected: ['answer'], id: '', metadata: ['topic'] });
+    expect(jsonMappedUpserts(rows, mapping)).toEqual([
+      { input: 'q1', expected_output: 'a1', metadata: { src: 'x', topic: 'billing' }, labels: ['gold'] },
+      { input: 'q2', expected_output: 'a2', metadata: { topic: 'auth' } },
+    ]);
+    const aliased = [
+      { item_id: ' a ', input: 'x' },
+      { id: 0, input: 'y', expected: 'z' },
+    ];
+    const m2 = autoMapJson(jsonMappableKeys(aliased));
+    expect(m2.metadata).toEqual([]);
+    expect(jsonMappedUpserts(aliased, m2)).toEqual([
+      { item_id: 'a', input: 'x' },
+      { input: 'y', expected_output: 'z' },
+    ]);
+    expect(recordsWithInput([{ input: '' }, { input: null }, { input: 'ok' }])).toBe(1);
+  });
+
+  it('names a JSONL parse error by line and character, never with the engine text', async () => {
+    const { parseJSONRecords, jsonErrorText } = await import('../jsonRecords');
+    const r = parseJSONRecords('{"input":"a"}\n{"input" "b"}\n', 'f.jsonl');
+    expect(r.errors[0]).toMatchObject({ line: 2, snippet: '{"input" "b"}' });
+    expect(jsonErrorText(r.errors[0]!)).toMatch(/^Not valid JSON at line 2(, character \d+)?$/);
+  });
+});
+
+describe('versionSourceText (C042, C246)', () => {
+  it('says where a version came from in words', async () => {
+    const { versionSourceText } = await import('../versions');
+    const v = (source_type: string) => ({ version: 'v2', source_type }) as unknown as DatasetVersion;
+    expect(versionSourceText(v('api'))).toBe('Added by hand');
+    expect(versionSourceText(v('derived'), { version: 'v1' } as DatasetVersion)).toBe('Copied from v1');
+    expect(versionSourceText(v('jsonl'))).toBe('Imported from a JSONL file');
   });
 });

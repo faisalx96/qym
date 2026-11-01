@@ -14,6 +14,7 @@ import {
   StatusMark,
 } from '@/ui';
 import { DisableItemDialog } from '../components/dialogs';
+import { ConflictNotice } from '../components/ConflictNotice';
 import { FieldEditor } from '../components/FieldEditor';
 import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
 import { useItemEditor } from '../item/useItemEditor';
@@ -81,7 +82,8 @@ export function ItemPane({
     try {
       const saved = await editor.save();
       if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
-      return true;
+      // null: someone saved first, and the conflict notice asks what to keep
+      return Boolean(saved);
     } catch (e) {
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
       return false;
@@ -136,6 +138,23 @@ export function ItemPane({
               </div>
             ) : null}
           </div>
+        ) : null}
+        {editor.conflict ? (
+          <ConflictNotice
+            conflict={editor.conflict}
+            busy={editor.saving}
+            onReview={editor.reviewTheirs}
+            onKeep={() =>
+              void editor
+                .keepMine()
+                .then((saved) => saved && toast.show(`Item ${saved.item_id} saved`, { tone: 'success' }))
+                .catch((e: unknown) =>
+                  toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', {
+                    tone: 'error',
+                  }),
+                )
+            }
+          />
         ) : null}
         {item && editor.state ? (
           <div className={styles.fields} data-disabled={disabled ? '' : undefined}>
@@ -194,12 +213,13 @@ export function ItemPane({
       ) : null}
       {!readOnly && published && item && onCreateDraft ? (
         <footer className={styles.foot}>
+          {/* one action to change a published item, the same as on the item page (C142) */}
           <Button
-            variant="neutral"
+            variant="accent"
             onPress={() => onCreateDraft(item.item_id)}
-            data-testid="item-state-action"
+            data-testid="pane-edit-in-draft"
           >
-            {disabled ? 'Create a draft to enable' : 'Create a draft to disable'}
+            Edit in a new draft
           </Button>
         </footer>
       ) : null}

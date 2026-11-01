@@ -415,3 +415,10 @@ export function firstColumnLabel(mode: GroupMode): string {
     }[mode] ?? 'Model'
   );
 }
+
+/** The best value of one metric across the card's runs: the highest, or the lowest for a minimize metric. */
+export function bestValue(runs: ChartRun[], metric: string, direction: MetricDirection): number | null {
+  const values = runs.map((r) => r.metric_averages[metric]).filter((v): v is number => Number.isFinite(v));
+  if (!values.length) return null;
+  return direction === 'minimize' ? Math.min(...values) : Math.max(...values);
+}

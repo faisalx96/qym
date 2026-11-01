@@ -126,6 +126,7 @@ export function FieldEditor({
             <textarea
               id={`${id}-input`}
               className={styles.textarea}
+              data-mode={jsonOnly ? 'json' : local.mode}
               aria-labelledby={`${id}-label`}
               aria-describedby={`${id}-status`}
               aria-invalid={!status.ok || undefined}
@@ -191,7 +192,12 @@ export function ReadOnlyValue({
 }) {
   if (typeof value === 'string') {
     return (
-      <pre className={styles.pre} data-compact={compact ? '' : undefined} {...(dir ?? textDirAttrs(value))}>
+      <pre
+        className={styles.pre}
+        data-kind="text"
+        data-compact={compact ? '' : undefined}
+        {...(dir ?? textDirAttrs(value))}
+      >
         {value || (
           <Text as="span" variant="sm" tone="muted">
             (empty)

@@ -110,7 +110,6 @@ const pages = (w: World) => [
     path: `/projects/${w.seeded.project.slug}/environments/${w.staging.id}`,
     ready: '[data-environment-page]',
   },
-  { name: 'models', path: `/projects/${w.seeded.project.slug}/models`, ready: '[data-models-page]' },
   {
     name: 'settings environments tab',
     path: `/projects/${w.seeded.project.slug}/settings?tab=environments`,
@@ -152,27 +151,17 @@ test.describe('axe', () => {
   test('every page', async ({ page }) => {
     for (const p of pages(world)) {
       await open(page, p);
-      if (p.name === 'models') await expect(page.locator('[data-model^="model-a|"]')).toBeVisible();
       if (p.name === 'environment')
         await expect(page.locator('[data-section="env-default-preset"]')).toBeVisible();
       await expectNoSeriousViolations(page, p.name);
     }
   });
 
-  test('settings drawer and the models run-selection dialog', async ({ page }) => {
+  test('settings drawer', async ({ page }) => {
     const { project } = world.seeded;
     await gotoApp(page, `/projects/${project.slug}/settings?tab=environments&env=${world.staging.id}`);
     await expect(page.locator(`[data-env-body="${world.staging.id}"]`)).toBeVisible();
     await expectNoSeriousViolations(page, 'environment drawer');
-
-    await gotoApp(page, `/projects/${project.slug}/models`);
-    await page
-      .locator('[data-model^="model-a|"]')
-      .getByRole('button', { name: /Edit run selection/ })
-      .click();
-    await expect(page.getByRole('dialog', { name: /Select runs/ })).toBeVisible();
-    await expect(page.getByRole('dialog').getByRole('checkbox').first()).toBeVisible();
-    await expectNoSeriousViolations(page, 'run selection dialog');
   });
 
   test('queue: split cancel dialog and remote section', async ({ page }) => {
@@ -313,18 +302,6 @@ test.describe('keyboard', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(add).toBeFocused();
-  });
-
-  test('models: Edit opens the run selection and Escape closes it', async ({ page }) => {
-    await open(page, pages(world)[6]!);
-    const edit = page.locator('[data-model^="model-a|"]').getByRole('button', { name: /Edit run selection/ });
-    await edit.focus();
-    await page.keyboard.press('Enter');
-    const dialog = page.getByRole('dialog', { name: /Select runs/ });
-    await expect(dialog).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
-    await expect(edit).toBeFocused();
   });
 });
 

@@ -60,8 +60,9 @@ test.describe('items table (DataTable v2)', () => {
     const cards = page.getByRole('list', { name: /Items in v1/ }).getByRole('listitem');
     await expect(cards).toHaveCount(3);
     await expect(cards.first().locator('[data-item-link]')).toBeVisible();
+    // the whole card opens the item pane (C142)
     await cards.first().locator('[data-item-link]').click();
-    await expect(page).toHaveURL(/item=/);
+    await expect(page.locator('[data-item-pane]')).toBeVisible();
   });
 
   test('a JSON input reads as its prompt in the items table (Arabic included), not as raw JSON', async ({

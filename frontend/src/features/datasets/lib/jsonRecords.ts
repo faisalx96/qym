@@ -6,6 +6,29 @@
 export interface JsonRecordError {
   where: string;
   message: string;
+  /** A parse error: 1-based line and character, and the first 80 characters of that line (C120). */
+  line?: number;
+  character?: number;
+  snippet?: string;
+}
+
+/** Where a JSON.parse error happened in `text`: 1-based line and character, when the engine says. */
+export function jsonErrorPlace(error: unknown, text: string): { line: number; character: number } | null {
+  const msg = error instanceof Error ? error.message : String(error);
+  const lc = /line (\d+) column (\d+)/i.exec(msg);
+  if (lc) return { line: Number(lc[1]), character: Number(lc[2]) };
+  const pos = /position (\d+)/i.exec(msg);
+  if (!pos) return null;
+  const before = text.slice(0, Number(pos[1]));
+  const line = before.split('\n').length;
+  return { line, character: Number(pos[1]) - before.lastIndexOf('\n') };
+}
+
+/** One parse error in words: 'Not valid JSON at line 3, character 64' (C246), never the engine's own text. */
+export function jsonErrorText(e: JsonRecordError): string {
+  if (e.line && e.character) return `Not valid JSON at line ${e.line}, character ${e.character}`;
+  if (e.line) return `Not valid JSON at line ${e.line}`;
+  return `${e.where} ${e.message}`;
 }
 
 export interface JsonRecordsResult {
@@ -35,10 +58,18 @@ export function parseJSONRecords(text: string, fileName: string): JsonRecordsRes
     try {
       doc = JSON.parse(body);
     } catch (e) {
+      const place = jsonErrorPlace(e, body);
+      const lineText = place ? (body.split('\n')[place.line - 1] ?? '') : '';
       return {
         format: 'json',
         rows,
-        errors: [{ where: 'File', message: `is not valid JSON (${(e as Error).message})` }],
+        errors: [
+          {
+            where: 'File',
+            message: 'is not valid JSON',
+            ...(place ? { ...place, snippet: lineText.trim().slice(0, 80) } : {}),
+          },
+        ],
         total: 0,
       };
     }
@@ -58,8 +89,17 @@ export function parseJSONRecords(text: string, fileName: string): JsonRecordsRes
     let obj: unknown;
     try {
       obj = JSON.parse(t);
-    } catch {
-      errors.push({ where: `Line ${index + 1}`, message: 'is not valid JSON' });
+    } catch (e) {
+      const place = jsonErrorPlace(e, t);
+      // the character counts from the start of the line as the file has it (leading spaces included)
+      const lead = line.length - line.trimStart().length;
+      errors.push({
+        where: `Line ${index + 1}`,
+        message: 'is not valid JSON',
+        line: index + 1,
+        ...(place ? { character: place.character + lead } : {}),
+        snippet: t.slice(0, 80),
+      });
       return;
     }
     const problem = jsonRecordProblem(obj);
@@ -86,5 +126,13 @@ export function unknownJsonKeys(rows: Record<string, unknown>[]): string[] {
   for (const row of rows.slice(0, 500)) {
     for (const key of Object.keys(row)) if (!JSON_ITEM_KEYS.includes(key)) seen.add(key);
   }
+  return [...seen];
+}
+
+/** The keys a mapping can place, in first-seen order: every record key but metadata and labels, which import as such. */
+export function jsonMappableKeys(rows: Record<string, unknown>[]): string[] {
+  const seen = new Set<string>();
+  for (const row of rows.slice(0, 500))
+    for (const key of Object.keys(row)) if (key !== 'metadata' && key !== 'labels') seen.add(key);
   return [...seen];
 }

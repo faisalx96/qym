@@ -46,7 +46,6 @@
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  font-family: var(--font-mono);
   font-size: var(--font-base);
   line-height: 1.6;
   resize: vertical;
@@ -152,4 +151,13 @@
 
 .tokLit {
   color: var(--warning);
+}
+
+/* Item text in the sans face (design-language rule 4): Text mode and a string value; JSON stays mono (C153). */
+.textarea[data-mode='json'] {
+  font-family: var(--font-mono);
+}
+
+.pre[data-kind='text'] {
+  font-family: var(--font-sans);
 }

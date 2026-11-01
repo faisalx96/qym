@@ -143,3 +143,17 @@ export function itemIdentity(itemId: string, index: number | null | undefined): 
     return `Item #${index}`;
   return itemId;
 }
+
+const FIELD_LABELS: Record<string, string> = {
+  input: 'Input',
+  expected_output: 'Expected output',
+  metadata: 'Metadata',
+  labels: 'Labels',
+  state: 'State',
+};
+
+/** A field's name in words ('Expected output'), never its key ('expected_output' or 'EXPECTED_OUTPUT') (C246). */
+export function fieldLabel(key: string): string {
+  const k = key.toLowerCase();
+  return FIELD_LABELS[k] ?? k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+}

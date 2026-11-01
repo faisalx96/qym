@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LinkButton, Section, Skeleton, Tag, Text, Card 
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
 import { formatDate, pluralize } from '../lib/itemValue';
+import { versionSourceText } from '../lib/versions';
 import { comparePath, datasetPath } from '../lib/route';
 import styles from './LineageTab.module.css';
 
@@ -80,6 +81,10 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
             ) : null}
           </div>
           <div className={styles.dates}>
+            {/* the version's origin, which the dataset header no longer lists (C042) */}
+            {versionSourceText(v, v.parent_version_id ? byId.get(v.parent_version_id) : null)
+              ? `${versionSourceText(v, v.parent_version_id ? byId.get(v.parent_version_id) : null)} · `
+              : ''}
             created {formatDate(v.created_at)}
             {v.published_at ? ` · published ${formatDate(v.published_at)}` : ''}
             {orphans.includes(v) ? ' · parent version no longer exists' : ''}
@@ -132,7 +137,7 @@ export function describeChange(c: LineageChange, byId: Map<string, DatasetVersio
     case 'published':
       return `${v} published${s.item_count != null ? ` (${pluralize(s.item_count, 'item')})` : ''}`;
     case 'uploaded':
-      return `${pluralize(s.item_count ?? 0, 'item')} uploaded into ${v}${s.source_type ? ` from ${s.source_type}` : ''}`;
+      return `${pluralize(s.item_count ?? 0, 'item')} uploaded into ${v}${s.source_type ? ` from a ${String(s.source_type).toUpperCase()} file` : ''}`;
     case 'alias_set':
       return `alias “${s.alias ?? 'production'}” set to ${v}`;
     default:

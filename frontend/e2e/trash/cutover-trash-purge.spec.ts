@@ -105,14 +105,17 @@ test.describe('trash purge countdown', () => {
     await gotoApp(page, '/trash');
     await expect(dataRows(page)).toHaveCount(1);
     await expect(
-      page.getByText('Automatic purge is off: deleted runs are kept until removed by an operator.'),
+      page.getByText(
+        'Retention is off: deleted runs are kept until an admin restores them or deletes them permanently.',
+      ),
     ).toBeVisible();
-    await expect(page.getByText('Retention Off')).toBeVisible();
-    await expect(dataRows(page).first()).toContainText('Not scheduled');
+    await expect(page.getByText('Retention Off (kept until restored)')).toBeVisible();
+    // nothing is ever purged, so there is no Purges column (C151)
+    await expect(page.getByRole('columnheader', { name: 'Purges' })).toHaveCount(0);
     await expect(page.locator('[data-soon]')).toHaveCount(0);
   });
 
-  test('the Purges column keeps Restore in view on a laptop screen', async ({ page }) => {
+  test('the Purges column keeps the row menu handle in view on a laptop screen', async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 900 });
     const long = [
       ['chunk_512_overlap_64_hybrid_bm25', 'openai/gpt-4o'],
@@ -130,18 +133,16 @@ test.describe('trash purge countdown', () => {
     await mockTrash(page, long, 30);
     await gotoApp(page, '/trash');
     await expect(dataRows(page)).toHaveCount(3);
-    const buttons = page.getByRole('button', { name: 'Restore', exact: true });
+    const buttons = page.locator('[role=grid] button[data-row-menu]');
     await expect(buttons).toHaveCount(3);
-    // The table may scroll sideways, but the sticky Restore column stays inside the visible part of it.
+    // The table may scroll sideways, but the sticky actions column stays inside the visible part of it.
     const report = await page.evaluate(() => {
       const grid = document.querySelector('[role=grid]') as HTMLElement;
       let scroller: HTMLElement | null = grid;
       while (scroller && !['auto', 'scroll'].includes(getComputedStyle(scroller).overflowX))
         scroller = scroller.parentElement;
       const box = (scroller ?? grid).getBoundingClientRect();
-      const buttons = Array.from(grid.querySelectorAll('button')).filter(
-        (b) => b.textContent?.trim() === 'Restore',
-      );
+      const buttons = Array.from(grid.querySelectorAll('button[data-row-menu]'));
       return {
         buttons: buttons.length,
         clipped: buttons.filter(
@@ -151,6 +152,9 @@ test.describe('trash purge countdown', () => {
       };
     });
     expect(report).toMatchObject({ buttons: 3, clipped: 0 });
-    for (let i = 0; i < 3; i++) await expect(buttons.nth(i)).toBeInViewport();
+    for (let i = 0; i < 3; i++) {
+      await dataRows(page).nth(i).hover();
+      await expect(buttons.nth(i)).toBeInViewport();
+    }
   });
 });

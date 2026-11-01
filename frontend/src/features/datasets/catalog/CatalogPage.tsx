@@ -26,6 +26,8 @@ import {
   Flag,
 } from '@/ui';
 import { NewDatasetDialog } from '../components/dialogs';
+import { VersionBadge } from '../components/VersionSwitcher';
+import { UnregisteredNames } from './UnregisteredNames';
 import { UserPill } from '../components/UserPill';
 import { formatDate, pluralize, relativeTime } from '../lib/itemValue';
 import { catalogPath, datasetPath } from '../lib/route';
@@ -33,6 +35,7 @@ import {
   CATALOG_SORTS,
   catalogItemCount,
   catalogStateLine,
+  catalogStateVersions,
   catalogVersionCount,
   filterCatalog,
   sortCatalog,
@@ -52,6 +55,7 @@ export function CatalogPage() {
   const sort = (CATALOG_SORTS.some((s) => s.key === sortRaw) ? sortRaw : 'updated_desc') as CatalogSort;
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [registering, setRegistering] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
   // Debounced mirror of the search box into ?q= (replaceState).
@@ -188,7 +192,18 @@ export function CatalogPage() {
           ))}
         </ul>
       ) : null}
+      {query.data ? (
+        <UnregisteredNames slug={slug} canRegister={canCreate} onRegister={(name) => setRegistering(name)} />
+      ) : null}
       <NewDatasetDialog open={creating} onOpenChange={setCreating} slug={slug} />
+      <NewDatasetDialog
+        open={registering !== null}
+        onOpenChange={(o) => {
+          if (!o) setRegistering(null);
+        }}
+        slug={slug}
+        initialName={registering ?? undefined}
+      />
       <UploadWizard
         open={importing}
         onOpenChange={setImporting}
@@ -217,20 +232,19 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
               <Text variant="lg" as="span" className={styles.cardName} data-testid="da-card-name">
                 {d.name}
               </Text>
-              <span className={styles.state}>
-                {catalogStateLine(d)
-                  .split(' · ')
-                  .map((part, i) => (
-                    <span
-                      key={part}
-                      data-kind={
-                        part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined
-                      }
-                    >
-                      {i ? ' · ' : ''}
-                      {part}
-                    </span>
-                  ))}
+              {/* each version with its own status mark, Production in full (C168) */}
+              <span className={styles.state} aria-label={catalogStateLine(d)}>
+                {catalogStateVersions(d).map((v, i) => (
+                  <span key={v.id} className={styles.stateVersion}>
+                    {i ? <span aria-hidden="true">·</span> : null}
+                    <span className={styles.stateLabel}>{v.version}</span>
+                    <VersionBadge version={v} />
+                  </span>
+                ))}
+                {!catalogStateVersions(d).length ? <span>empty</span> : null}
+                {!d.production_version && d.latest_version?.status === 'draft' ? (
+                  <span>· never published</span>
+                ) : null}
               </span>
             </div>
             {d.private_test_set || d.access_mode === 'restricted' ? (

@@ -2,10 +2,10 @@
  * /projects/:slug/overview — KPI band, Trend, then two panels (round 10): Live and Recent runs together, and Pending
  * reviews beside Approved runs (brief 03 J8).
  */
-import { lazy, Suspense, useMemo, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useKpis, usePendingCorrections, useRunsPage, useTrend } from '@/api/dashboard';
-import type { DashboardFilters, RunRow } from '@/api/dashboardTypes';
+import type { DashboardFilters, PendingCorrection, RunRow } from '@/api/dashboardTypes';
 import {
   DataTable,
   EmptyState,
@@ -32,12 +32,13 @@ import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
 import { ModelCell, Mono, OwnerCell, StatusCell } from './cells';
 import { modelKeyOf } from './model';
+import { TrendChart } from './TrendChart';
+import { pendingIssue } from './pendingReview';
 import { isActiveRun } from './polling';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { useKpiTopbar } from './kpiTopbar';
 import { trendFormat, trendFormatDelta, trendIsRate } from './trendModel';
 // Recharts is ~100 kB: load it only with the Overview page.
-const TrendChart = lazy(() => import('./TrendChart').then((m) => ({ default: m.TrendChart })));
 import styles from './OverviewPage.module.css';
 
 const LIVE = ['RUNNING', 'PENDING'];
@@ -269,9 +270,7 @@ export function OverviewPage() {
                       {formatPercentValue(s?.execution_success ?? null)}
                     </Text>
                   </div>
-                  <Suspense fallback={<Skeleton kind="chart" label="Loading chart" />}>
-                    <TrendChart trend={trend} />
-                  </Suspense>
+                  <TrendChart trend={trend} />
                 </>
               )
             ) : trendQ.isPending ? (
@@ -315,9 +314,7 @@ export function OverviewPage() {
                           >
                             #{String(c.id)}
                           </Link>
-                          <Text variant="sm" tone="secondary" as="span" className={styles.reviewText}>
-                            {String(c.ai_root_cause ?? c.human_root_cause ?? '—')}
-                          </Text>
+                          <PendingReviewText c={c} />
                         </li>
                       ))}
                       {pendingTotal > pendingItems.length ? (
@@ -353,6 +350,34 @@ export function OverviewPage() {
         </div>
       </div>
     </RunsCtx.Provider>
+  );
+}
+
+function PendingReviewText({ c }: { c: PendingCorrection }) {
+  const issue = pendingIssue(c);
+  return (
+    <span className={styles.reviewBody}>
+      <Text variant="sm" tone="secondary" as="span" className={styles.reviewText}>
+        {issue ? (
+          <>
+            {issue.category ? (
+              <Text as="span" variant="sm" weight={600}>
+                {issue.category}
+              </Text>
+            ) : null}
+            {issue.category && issue.finding ? ' · ' : null}
+            {issue.finding}
+          </>
+        ) : (
+          '—'
+        )}
+      </Text>
+      {c.input_preview ? (
+        <Text variant="sm" tone="muted" as="span" className={styles.reviewText} title={c.input_preview}>
+          {c.input_preview}
+        </Text>
+      ) : null}
+    </span>
   );
 }
 

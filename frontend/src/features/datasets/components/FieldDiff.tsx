@@ -13,14 +13,30 @@ export interface FieldDiffProps {
   /** Only one side exists (created / deleted). */
   onlyAfter?: boolean;
   onlyBefore?: boolean;
+  /** Pane names: 'before' / 'after' by default ('mine' / 'theirs' in a save conflict, C015). */
+  beforeLabel?: string;
+  afterLabel?: string;
 }
 
-export function FieldDiff({ field, before, after, onlyAfter, onlyBefore }: FieldDiffProps) {
+export function FieldDiff({
+  field,
+  before,
+  after,
+  onlyAfter,
+  onlyBefore,
+  beforeLabel = 'before',
+  afterLabel = 'after',
+}: FieldDiffProps) {
   const a = diffText(before);
   const b = diffText(after);
   const typeChanged = !onlyAfter && !onlyBefore && storedType(before) !== storedType(after);
   const ops = useMemo(() => (onlyAfter || onlyBefore ? null : wordDiff(a, b)), [a, b, onlyAfter, onlyBefore]);
   const tooLarge = !onlyAfter && !onlyBefore && ops === null;
+  // A string diff reads in the sans face; JSON values stay mono (C153).
+  const isText =
+    (onlyAfter || typeof before === 'string' || before == null) &&
+    (onlyBefore || typeof after === 'string' || after == null) &&
+    (typeof before === 'string' || typeof after === 'string');
   return (
     <div className={styles.field}>
       <div className={styles.fieldHead}>
@@ -36,12 +52,16 @@ export function FieldDiff({ field, before, after, onlyAfter, onlyBefore }: Field
           </Text>
         ) : null}
       </div>
-      <div className={styles.panes} data-single={onlyAfter || onlyBefore ? '' : undefined}>
+      <div
+        className={styles.panes}
+        data-single={onlyAfter || onlyBefore ? '' : undefined}
+        data-kind={isText ? 'text' : undefined}
+      >
         {!onlyAfter ? (
-          <Pane label="before" text={a} ops={ops ? diffSide(ops, 'before') : null} tone="before" />
+          <Pane label={beforeLabel} text={a} ops={ops ? diffSide(ops, 'before') : null} tone="before" />
         ) : null}
         {!onlyBefore ? (
-          <Pane label="after" text={b} ops={ops ? diffSide(ops, 'after') : null} tone="after" />
+          <Pane label={afterLabel} text={b} ops={ops ? diffSide(ops, 'after') : null} tone="after" />
         ) : null}
       </div>
     </div>

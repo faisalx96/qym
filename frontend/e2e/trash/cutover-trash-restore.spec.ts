@@ -5,23 +5,21 @@
  */
 import { test, expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { seedTrash } from './support';
+import { openTrashRowMenu, seedTrash } from './support';
 
 const tag = () => `trf${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
-test('a failed restore shows the server reason and keeps the row with its Restore button', async ({
-  page,
-  request,
-}) => {
+test('a failed restore shows the server reason and keeps the row restorable', async ({ page, request }) => {
   const s = await seedTrash(request, tag(), 2);
   await page.route('**/api/runs/restore', (route) =>
     route.fulfill({ status: 404, json: { detail: 'Deleted run not found' } }),
   );
   await gotoApp(page, `/trash?q=${s.prefix}`);
-  const restore = page.getByTestId(`restore-${s.runs[1]!.id}`);
-  await restore.click();
+  const runRow = page.getByRole('row').filter({ hasText: `${s.prefix}-1` });
+  await (await openTrashRowMenu(page, runRow)).getByRole('menuitem', { name: 'Restore' }).click();
   await expect(page.getByText('Deleted run not found')).toBeVisible();
-  await expect(restore).toBeVisible();
-  await expect(restore).toBeEnabled();
+  // the row stays, and its menu still offers Restore
+  const menu = await openTrashRowMenu(page, runRow);
+  await expect(menu.getByRole('menuitem', { name: 'Restore' })).not.toHaveAttribute('aria-disabled', 'true');
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
