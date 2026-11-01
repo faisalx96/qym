@@ -73,7 +73,11 @@ export function useRenameProject(projectId: string) {
   });
 }
 
-export function useReviewRules(projectId: string) {
+/**
+ * Save the correction review rules. The saved rules go into the cached project at once, so the
+ * settings form compares against them: setting a rule back after a save enables Save rules (C010).
+ */
+export function useReviewRules(project: Pick<Project, 'id' | 'slug'>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: {
@@ -84,8 +88,18 @@ export function useReviewRules(projectId: string) {
         project_id: string;
         correction_approvers: 'members' | 'managers';
         correction_require_different_reviewer: boolean;
-      }>(`/v1/projects/${projectId}/review-rules`, body),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: meKey }),
+      }>(`/v1/projects/${project.id}/review-rules`, body),
+    onSuccess: (res) => {
+      const rules = {
+        correction_approvers: res.correction_approvers,
+        correction_require_different_reviewer: res.correction_require_different_reviewer,
+      };
+      qc.setQueryData<Project>(projectKey(project.slug), (p) => (p ? { ...p, ...rules } : p));
+      qc.setQueryData<Me>(meKey, (me) =>
+        me ? { ...me, projects: me.projects.map((p) => (p.id === project.id ? { ...p, ...rules } : p)) } : me,
+      );
+      void qc.invalidateQueries({ queryKey: meKey });
+    },
   });
 }
 
@@ -114,6 +128,16 @@ export const fetchUnarchivePreview = (id: string) =>
   api.get<UnarchivePreview>(`/v1/admin/projects/${id}/unarchive-preview`);
 export const fetchDeletionPreview = (id: string) =>
   api.get<DeletionPreview>(`/v1/admin/projects/${id}/deletion`);
+
+/** What a delete would remove and whether it is blocked, for the Danger zone row (admins only, C118). */
+export function useDeletionPreview(projectId: string) {
+  return useQuery({
+    queryKey: ['project-deletion', projectId] as const,
+    queryFn: () => fetchDeletionPreview(projectId),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
 
 export function useArchiveProject() {
   const qc = useQueryClient();

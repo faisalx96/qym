@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TrashRun } from '@/api/trash';
-import { purgeInfo, retentionLabel } from '../TrashPage';
+import { retentionLabel } from '@/lib/retention';
+import { purgeInfo } from '../TrashPage';
 
 const NOW = Date.parse('2026-10-11T12:00:00Z');
 const run = (p: Partial<TrashRun>) =>
@@ -33,9 +34,9 @@ describe('purgeInfo', () => {
 
 describe('retentionLabel', () => {
   it('says Off with what that means at 0, never "0 days" (C178)', () => {
-    expect(retentionLabel(null)).toBe('Retention Off (kept until restored)');
-    expect(retentionLabel(0)).toBe('Retention Off (kept until restored)');
-    expect(retentionLabel(30)).toBe('Retention 30 days');
+    expect(retentionLabel(null)).toBe('Off (kept until restored)');
+    expect(retentionLabel(0)).toBe('Off (kept until restored)');
+    expect(retentionLabel(30)).toBe('30 days');
     expect(retentionLabel(1)).toBe('Retention 1 day');
   });
 });

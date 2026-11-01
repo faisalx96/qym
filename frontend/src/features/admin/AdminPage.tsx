@@ -89,7 +89,7 @@ export function AdminPage() {
           { id: 'projects', label: 'Projects', count: projects.data?.length },
           { id: 'users', label: 'Users', count: users.data?.length },
           { id: 'maintenance', label: 'Maintenance', count: activeJobs || undefined },
-          { id: 'feedback', label: 'Feedback agent' },
+          { id: 'feedback', label: 'Feedback assistant' },
         ]}
         selected={selected}
         onSelect={(id) => navigate(`/admin/${id as AdminTab}`)}

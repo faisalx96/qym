@@ -706,6 +706,80 @@ def set_default_llm_connection(
     return _serialize_connection(conn)
 
 
+class LlmConnectionDraftTest(BaseModel):
+    """An unsaved connection to test (C157). ``connection_id`` with no key tests the stored key, on its own host."""
+
+    llm_base_url: str = Field(default="https://api.openai.com/v1")
+    llm_model: str = Field(default="gpt-4o-mini")
+    llm_api_key: str = Field(default="")
+    connection_id: Optional[str] = None
+    available_for_experiments: Optional[bool] = None
+
+
+@router.post("/v1/projects/{project_id}/llm-connections/test")
+async def test_llm_connection_draft(
+    project_id: str,
+    req: LlmConnectionDraftTest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Test the values in the form before they are saved, with the same rules a save applies (C157)."""
+    _require_project_manager(db, principal, project_id)
+    settings = PlatformSettings()
+    base_url = _validate_llm_base_url(req.llm_base_url, settings)
+    if req.available_for_experiments and experiment_base_url_needs_https(
+        base_url, allow_private=settings.allow_private_llm_base_urls
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only https:// connections can be available for experiments. Use an "
+                'https:// base URL or turn off "Available for experiments".'
+            ),
+        )
+    api_key = req.llm_api_key.strip()
+    if (not api_key or api_key == "__KEEP__") and req.connection_id:
+        conn = _get_connection(db, project_id, req.connection_id)
+        if conn.llm_api_key_encrypted and key_host_changed(
+            conn.llm_base_url or DEFAULT_LLM_BASE_URL, base_url
+        ):
+            raise HTTPException(status_code=400, detail=KEY_FOR_NEW_HOST_MESSAGE)
+        try:
+            api_key = resolve_llm_api_key(
+                {
+                    "llm_api_key_encrypted": conn.llm_api_key_encrypted,
+                    "llm_api_key_last4": conn.llm_api_key_last4,
+                },
+                settings,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    if not api_key or api_key == "__KEEP__":
+        raise HTTPException(status_code=400, detail="Enter an API key to test this connection")
+    model = req.llm_model.strip() or "gpt-4o-mini"
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        http_client=create_llm_http_client(allow_private=settings.allow_private_llm_base_urls),
+    )
+    db.close()
+    try:
+        resp = await create_chat_completion_compat(
+            client,
+            model=model,
+            messages=[{"role": "user", "content": "Reply with: ok"}],
+            max_tokens=4,
+        )
+        return {"ok": True, "model": model, "response": resp.choices[0].message.content}
+    except Exception as e:  # noqa: BLE001 - surface provider error to the user
+        logger.warning(
+            "LLM connection draft test failed (project=%s, model=%s)", project_id, model, exc_info=True
+        )
+        raise HTTPException(status_code=400, detail=f"LLM connection failed: {e}")
+
+
 @router.post("/v1/projects/{project_id}/llm-connections/{connection_id}/test")
 async def test_llm_connection(
     project_id: str,
@@ -1728,7 +1802,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
     if runs:
         parts.append(f"{runs} run{'s' if runs != 1 else ''}")
     if trashed:
-        parts.append(f"{trashed} run{'s' if trashed != 1 else ''} in Trash")
+        parts.append(f"{trashed} deleted run{'s' if trashed != 1 else ''}")
     # Deleted runs keep blocking until retention purges them, so say when.
     grace_days = PlatformSettings().deleted_run_grace_days
     if grace_days > 0:
@@ -1736,7 +1810,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
         if archived:
             purge += ", and purging is paused while the project is archived"
     else:
-        purge = "automatic Trash purging is turned off on this platform"
+        purge = "Retention is Off on this platform, so deleted runs are kept until restored"
     advice = (
         "It stays archived and keeps its data."
         if archived
@@ -1745,7 +1819,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
     return (
         f"This project still has {' and '.join(parts)}. Runs are never deleted with "
         "a project: it can be deleted only once all its runs are deleted and purged "
-        f"from Trash ({purge}). {advice}"
+        f"from Deleted runs ({purge}). {advice}"
     )
 
 

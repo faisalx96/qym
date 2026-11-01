@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useResetPassword, useUpdateUser, type AdminUser, type UpdateUserBody } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
-import { Button, Checkbox, ConfirmDialog, CopyButton, Dialog, Select, Text, TextField, useToast } from '@/ui';
+import { Button, ConfirmDialog, CopyButton, Dialog, Select, Text, TextField, useToast } from '@/ui';
 import { isValidEmail } from '../format';
 import styles from './users.module.css';
 
@@ -10,7 +10,7 @@ export interface EditUserDialogProps {
   user: AdminUser | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The signed-in admin (role/active lock on their own row). */
+  /** The signed-in admin (role lock on their own row). */
   meId: string;
   /** Local password auth enabled → reset password available. */
   localAuth: boolean;
@@ -21,8 +21,9 @@ function errorText(e: unknown): string {
 }
 
 /**
- * Edit user: email, display name, role, active; self-edit locks role + active
- * and omits them from the PUT. Reset password (local auth, not self) shows the
+ * Edit user: email, display name, role; self-edit locks the role and omits it
+ * from the PUT. Status changes only through the row action, Disable (confirm
+ * and Undo) or Enable, so no checkbox here signs someone out by mistake (C158). Reset password (local auth, not self) shows the
  * one-time password inline. While a save/reset is pending every control locks
  * and the dialog cannot close; the temporary password is cleared on close.
  */
@@ -44,7 +45,6 @@ function EditUserDialogInner({
   const [email, setEmail] = useState(user.email);
   const [name, setName] = useState(user.display_name ?? '');
   const [role, setRole] = useState<'ADMIN' | 'MEMBER'>(user.role === 'ADMIN' ? 'ADMIN' : 'MEMBER');
-  const [active, setActive] = useState(user.is_active);
   const [error, setError] = useState<string | null>(null);
   const [temp, setTemp] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -69,7 +69,6 @@ function EditUserDialogInner({
     const body: UpdateUserBody = { email: trimmed, display_name: name.trim() };
     if (!isSelf) {
       body.role = role;
-      body.is_active = active;
     }
     try {
       await update.mutateAsync({ id: user.id, body });
@@ -149,12 +148,9 @@ function EditUserDialogInner({
             isDisabled={busy || isSelf}
             name="role"
           />
-          <Checkbox isSelected={active} onChange={setActive} isDisabled={busy || isSelf} name="is_active">
-            Active
-          </Checkbox>
           {isSelf ? (
             <Text variant="sm" tone="muted" data-self-note>
-              You are editing your own account: role and active status cannot be changed here.
+              You are editing your own account: your role cannot be changed here.
             </Text>
           ) : null}
           {localAuth && !isSelf ? (

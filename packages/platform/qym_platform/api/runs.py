@@ -14,6 +14,7 @@ from sqlalchemy import Text, case, cast, func, null, or_, select, type_coerce
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session, load_only
 
+from qym_platform.api.paging import PAGE_FORMAT, decode_cursor, page_body
 from qym_platform.services.html_export import (
     build_compare_export_html,
     build_run_export_html,
@@ -1975,7 +1976,7 @@ def _published_run_rows(db: Session, run_ids: List[str]) -> Dict[str, Dict[str, 
 
 @router.get("/api/runs")
 def legacy_list_runs(
-    limit: int = Query(default=100, le=500),
+    limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     project_slug: Optional[str] = Query(default=None),
     status: Optional[str] = Query(
@@ -2747,6 +2748,14 @@ def list_recent_runs(
     per_project_limit: int = Query(default=5, ge=1, le=25),
     include_projects: bool = Query(default=True),
     all_projects: bool = Query(default=False),
+    project_id: Optional[str] = Query(
+        default=None, max_length=36, description="Only this project's runs (the Admin Project filter)."
+    ),
+    q: Optional[str] = Query(
+        default=None,
+        max_length=200,
+        description="Run name (as shown, or the SDK run name) or run id contains this text.",
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
@@ -2760,6 +2769,21 @@ def list_recent_runs(
         .join(Project, Project.id == Run.project_id)
         .filter(Project.is_active.is_(True), ~Run.status.in_(_LIVE_RUN_STATUSES))
     )
+    # Admin landing (C093): a Project filter and a run search over every project.
+    if project_id:
+        base_q = base_q.filter(Run.project_id == project_id)
+    term = (q or "").strip().lower()
+    if term:
+        # The same fields and wildcard rules as the Deleted runs search.
+        pattern = _trash_like(term)
+        run_name = func.coalesce(Run.run_config["run_name"].as_string(), "")
+        base_q = base_q.filter(
+            or_(
+                func.lower(run_name).like(pattern, escape="\\"),
+                func.lower(func.coalesce(Run.external_run_id, "")).like(pattern, escape="\\"),
+                func.lower(Run.id).like(pattern, escape="\\"),
+            )
+        )
     total_count = base_q.count()
     global_runs = (
         base_q.order_by(Run.created_at.desc())
@@ -4414,9 +4438,11 @@ def list_deleted_runs(
     offset: int = Query(default=0, ge=0),
     project_id: Optional[str] = Query(default=None),
     q: str = Query(default="", max_length=200),
+    cursor: Optional[str] = Query(default=None, max_length=200),
+    format: str = PAGE_FORMAT,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-) -> List[Dict[str, Any]]:
+) -> Any:
     """List soft-deleted runs (admin only) with the date retention purges each.
 
     Pages through every deleted run: ``limit``/``offset`` select the page and
@@ -4431,6 +4457,9 @@ def list_deleted_runs(
     grace_days = PlatformSettings().deleted_run_grace_days
     response.headers["X-Qym-Deleted-Run-Grace-Days"] = str(grace_days)
 
+    # The list contract (C160): a cursor stands for an offset of the same order.
+    if cursor:
+        offset = decode_cursor(cursor)
     query = _deleted_runs_query(db, project_id, q)
     total = query.order_by(None).count()
     response.headers["X-Qym-Total-Count"] = str(total)
@@ -4514,6 +4543,8 @@ def list_deleted_runs(
                 "project_slug": projects[r.project_id].slug if r.project_id in projects else "",
             }
         )
+    if format == "page":
+        return page_body(result, offset=offset, total=total)
     return result
 
 
@@ -4553,10 +4584,11 @@ def run_passes(
 ) -> Dict[str, Any]:
     """Repeat runs: per-pass slice aggregates (lazy-loaded on runs-list expand)."""
     run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        return {"error": "Run not found"}
-    if not can_view_run(db, principal, run):
-        return {"error": "Access denied"}
+    # A missing run and one the caller cannot view both answer 404, so a run id's
+    # existence does not leak (C057). The frontend still reads a 200 {error} body
+    # from older servers for one release.
+    if not run or not can_view_run(db, principal, run):
+        raise HTTPException(status_code=404, detail="Run not found")
 
     from qym_platform.db.models import RunItemPassScore
 
@@ -4959,10 +4991,11 @@ def run_group_metrics(
     uncertainty) the run page uses; ``group`` is the same in both.
     """
     run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        return {"error": "Run not found"}
-    if not can_view_run(db, principal, run):
-        return {"error": "Access denied"}
+    # A missing run and one the caller cannot view both answer 404, so a run id's
+    # existence does not leak (C057). The frontend still reads a 200 {error} body
+    # from older servers for one release.
+    if not run or not can_view_run(db, principal, run):
+        raise HTTPException(status_code=404, detail="Run not found")
 
     from qym.core.reducers import group_stats
 
@@ -4977,7 +5010,7 @@ def run_group_metrics(
     }
     metric_name = metric or primary_metric(run.metrics, specs)
     if not metric_name:
-        return {"error": "Run has no metrics"}
+        raise HTTPException(status_code=422, detail="Run has no metrics")
     # Passes follow the metric's declared direction. Without one the page
     # shows only averages; the pass math keeps the historical default.
     spec = specs.get(metric_name)
@@ -5529,10 +5562,11 @@ def legacy_run_data(
     fields: Optional[str] = None,
 ) -> Dict[str, Any]:
     run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        return {"error": "Run not found"}
-    if not can_view_run(db, principal, run):
-        return {"error": "Access denied"}
+    # A missing run and one the caller cannot view both answer 404, so a run id's
+    # existence does not leak (C057). The frontend still reads a 200 {error} body
+    # from older servers for one release.
+    if not run or not can_view_run(db, principal, run):
+        raise HTTPException(status_code=404, detail="Run not found")
     _reconcile_run_liveness(db, [run])
 
     if view not in (None, "full", "compact", "summary"):
@@ -7516,7 +7550,7 @@ def get_run_spans(
     limit: int = Query(default=SPANS_PAGE_DEFAULT, ge=1, le=SPANS_PAGE_MAX),
     offset: int = Query(default=0, ge=0),
     trace_id: Optional[str] = Query(default=None, max_length=200),
-):
+) -> Dict[str, Any]:
     """Return a page of a run's OTEL spans, ordered by start time.
 
     At most ``limit`` spans (default 1000, max 5000) from ``offset``,
@@ -7527,7 +7561,8 @@ def get_run_spans(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_view_run(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
+        # Hidden runs answer like missing ones (C057).
+        raise HTTPException(status_code=404, detail="Run not found")
 
     query = db.query(Span).filter(Span.run_id == run_id)
     if trace_id:
@@ -7558,13 +7593,14 @@ def get_item_spans(
     item_id: str,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+) -> Dict[str, Any]:
     """Return OTEL spans for a specific run item, looked up via trace_id."""
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_view_run(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
+        # Hidden runs answer like missing ones (C057).
+        raise HTTPException(status_code=404, detail="Run not found")
 
     item = (
         db.query(RunItem)

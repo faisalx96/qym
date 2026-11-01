@@ -16,7 +16,6 @@ import {
   ConfirmDialog,
   DataTable,
   ErrorState,
-  FormDialog,
   SearchField,
   Select,
   Skeleton,
@@ -50,7 +49,7 @@ export function MembersTab() {
   const toast = useToast();
   const updateRole = useUpdateMemberRole(project.id);
   const removeMember = useRemoveMember(project.id);
-  const [editing, setEditing] = useState<Member | null>(null);
+  const [inlineRole, setInlineRole] = useState<string | null>(null);
   const [removing, setRemoving] = useState<{ member: Member; preview: RemovalPreview | null } | null>(null);
   const [transferTo, setTransferTo] = useState<string | null>(null);
 
@@ -79,8 +78,39 @@ export function MembersTab() {
       header: 'Role',
       width: 110,
       priority: 1,
-      // the role is a tag, as in admin users; Edit changes it (round 11)
-      cell: (m) => <Tag kind="role">{m.role.toLowerCase()}</Tag>,
+      // the role is a tag, as in admin users; the pencil turns it into a Select that saves on pick and
+      // Escape cancels (C186: no one-field modal per person)
+      cell: (m) =>
+        inlineRole === m.user_id ? (
+          <Select
+            label={`Role of ${m.display_name || m.email}`}
+            hideLabel
+            items={ROLE_ITEMS}
+            value={m.role}
+            defaultOpen
+            autoFocus
+            width={110}
+            onOpenChange={(open) => {
+              if (!open) setInlineRole(null);
+            }}
+            onChange={(k) => {
+              setInlineRole(null);
+              const role = k as Role;
+              if (!role || role === m.role) return;
+              updateRole
+                .mutateAsync({ userId: m.user_id, role })
+                .then(() => toast.show('Role saved', { tone: 'success' }))
+                .catch((e: unknown) =>
+                  toast.show(
+                    e instanceof ApiError ? e.detail || 'Could not save the role' : 'Could not save the role',
+                    { tone: 'error' },
+                  ),
+                );
+            }}
+          />
+        ) : (
+          <Tag kind="role">{m.role.toLowerCase()}</Tag>
+        ),
     },
   ];
 
@@ -92,7 +122,7 @@ export function MembersTab() {
             label: `Change the role of ${m.display_name || m.email}`,
             icon: 'edit',
             primary: true,
-            onPress: () => setEditing(m),
+            onPress: () => setInlineRole(m.user_id),
           },
         ]
       : []),
@@ -172,36 +202,6 @@ export function MembersTab() {
           empty="No members yet."
         />
       )}
-      {editing ? (
-        <FormDialog
-          open
-          onOpenChange={(o) => !o && setEditing(null)}
-          title={`Change the role of ${editing.display_name || editing.email}`}
-          description="Managers add and remove members, change roles and edit the project settings."
-          fields={[
-            {
-              name: 'role',
-              label: 'Role',
-              type: 'select',
-              value: editing.role,
-              options: ROLE_ITEMS.map((r) => ({ value: r.key, label: r.label })),
-            },
-          ]}
-          confirmLabel="Save role"
-          onSubmit={async (values) => {
-            const role = values.role as Role;
-            if (role === editing.role) return;
-            try {
-              await updateRole.mutateAsync({ userId: editing.user_id, role });
-              toast.show('Role saved', { tone: 'success' });
-            } catch (e) {
-              return e instanceof ApiError
-                ? e.detail || 'Could not save the role'
-                : 'Could not save the role';
-            }
-          }}
-        />
-      ) : null}
       {removing ? (
         <ConfirmDialog
           open

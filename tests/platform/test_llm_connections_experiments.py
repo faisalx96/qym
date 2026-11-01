@@ -195,3 +195,51 @@ def test_list_experiment_connections_helper(session_factory) -> None:
         everything = project_connections_query(session, PROJECT_ID).all()
         assert {c.id for c in everything} == {"c-default", "c-off", "c-on"}
         assert list_experiment_connections(session, "missing-project") == []
+
+
+def test_draft_test_checks_the_form_values_before_a_save(client, monkeypatch):
+    """C157: Test connection works on unsaved values, with the rules a save applies."""
+    from types import SimpleNamespace
+
+    from qym_platform.api import projects as projects_api
+
+    seen = {}
+
+    async def provider(client_obj, **kwargs):
+        seen["model"] = kwargs["model"]
+        seen["key"] = client_obj.api_key
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))])
+
+    monkeypatch.setattr(projects_api, "create_chat_completion_compat", provider)
+    url = f"{CONNECTIONS_URL}/test"
+    ok = client.post(
+        url,
+        headers=_headers(),
+        json={"llm_base_url": "https://llm.example.com/v1", "llm_model": "m-1", "llm_api_key": "sk-new"},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["ok"] is True and seen == {"model": "m-1", "key": "sk-new"}
+
+    # The experiments https rule answers as a save does (this fixture allows private hosts).
+    body = {"llm_base_url": "http://llm.example.com/v1", "llm_api_key": "sk", "available_for_experiments": True}
+    plain = client.post(url, headers=_headers(), json=body)
+    save = client.post(CONNECTIONS_URL, headers=_headers(), json={"name": "plain", **body})
+    assert plain.status_code == save.status_code
+
+    # A saved connection's key is used on its own host, and refused on another.
+    saved = _create(client, "stored", llm_base_url="https://llm.example.com/v1")
+    same = client.post(
+        url,
+        headers=_headers(),
+        json={"llm_base_url": "https://llm.example.com/v2", "connection_id": saved["id"]},
+    )
+    assert same.status_code == 200 and seen["key"] == "sk-secret-1234"
+    other = client.post(
+        url,
+        headers=_headers(),
+        json={"llm_base_url": "https://evil.example.com/v1", "connection_id": saved["id"]},
+    )
+    assert other.status_code == 400
+
+    no_key = client.post(url, headers=_headers(), json={"llm_base_url": "https://llm.example.com/v1"})
+    assert no_key.status_code == 400 and "API key" in no_key.json()["detail"]

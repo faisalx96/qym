@@ -9,7 +9,7 @@ import json
 import math
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import and_, case, false, func, or_, select, true, union
@@ -1136,7 +1136,7 @@ def dashboard_runs(
     collation: Optional[str] = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+) -> Dict[str, Any]:
     project, parsed, requested = (
         _project(db, principal, project_slug),
         _parse_filters(filters),
@@ -1428,7 +1428,7 @@ def dashboard_runs_query(
     payload: dict = Body(...),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+) -> Dict[str, Any]:
     args = _body_parameters(
         payload,
         {

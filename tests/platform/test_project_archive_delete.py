@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
@@ -321,7 +323,7 @@ def test_delete_is_refused_while_the_project_has_runs(client, session_factory, t
 
     preview = client.get(f"/v1/admin/projects/{project_id}/deletion", headers=ADMIN).json()
     assert preview["can_delete"] is False
-    assert ("in Trash" in preview["blocked_reason"]) is trashed
+    assert bool(re.search(r"\b1 deleted run\b", preview["blocked_reason"])) is trashed
 
     response = client.delete(f"/v1/admin/projects/{project_id}?confirm=has-runs", headers=ADMIN)
     assert response.status_code == 409
@@ -333,19 +335,19 @@ def test_delete_is_refused_while_the_project_has_runs(client, session_factory, t
 
 
 def test_blocked_delete_says_when_trash_stops_blocking(client, session_factory, monkeypatch):
-    """Deleting the runs is not enough: they block until Trash purges them."""
+    """Deleting the runs is not enough: they block until Deleted runs purges them (C178 names)."""
     project_id = _create_project(client, session_factory, "trash-wait")
     _add_run(session_factory, project_id, trashed=True)
     url = f"/v1/admin/projects/{project_id}/deletion"
 
     monkeypatch.setenv("QYM_DELETED_RUN_GRACE_DAYS", "7")
     reason = client.get(url, headers=ADMIN).json()["blocked_reason"]
-    assert "1 run in Trash" in reason
+    assert "1 deleted run" in reason and "Trash" not in reason
     assert "purged 7 days after deletion" in reason
 
     monkeypatch.setenv("QYM_DELETED_RUN_GRACE_DAYS", "0")
     reason = client.get(url, headers=ADMIN).json()["blocked_reason"]
-    assert "automatic Trash purging is turned off" in reason
+    assert "Retention is Off on this platform, so deleted runs are kept until restored" in reason
 
 
 def test_patch_toggling_is_active_is_audited_like_archive(client, session_factory):

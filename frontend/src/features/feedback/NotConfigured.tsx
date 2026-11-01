@@ -21,13 +21,13 @@ export function NotConfigured() {
           title="The feedback assistant is not set up yet"
           body={
             isAdmin
-              ? 'Connect a model for it under Admin, Feedback agent. Until then people can read every request but not start a new one.'
+              ? 'Connect a model for it under Admin, Feedback assistant. Until then people can read every request but not start a new one.'
               : 'An administrator has to connect a model for it first. You can read every request in the meantime.'
           }
           action={
             isAdmin ? (
               <Button variant="accent" size="md" onPress={() => navigate('/admin/feedback')}>
-                Open Feedback agent settings
+                Open Feedback assistant settings
               </Button>
             ) : (
               <Button variant="neutral" size="md" onPress={() => navigate('/feedback')}>

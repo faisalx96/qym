@@ -2968,7 +2968,7 @@ def list_items(
     dataset_ref: str,
     version_ref: str,
     project_slug: Optional[str] = Query(default=None),
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     search: Optional[str] = Query(default=None),
     sort: str = Query(default="index_asc"),

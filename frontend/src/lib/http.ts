@@ -141,9 +141,17 @@ export async function apiFetch<T = unknown>(path: string, init: ApiFetchInit = {
   }
   if (!response.ok) {
     const obj = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
-    let detail = obj ? (obj.detail ?? obj.error ?? '') : '';
+    // The one error body (C159): {error: {code, message, details, request_id}, detail}; feedback errors carry code.
+    const envelope =
+      obj?.error && typeof obj.error === 'object' ? (obj.error as Record<string, unknown>) : null;
+    const code =
+      obj && typeof obj.code === 'string'
+        ? obj.code
+        : envelope && typeof envelope.code === 'string'
+          ? envelope.code
+          : undefined;
+    let detail = obj ? (obj.detail ?? envelope?.message ?? obj.error ?? '') : '';
     if (detail && typeof detail !== 'string') detail = formatDetail(detail);
-    const code = obj && typeof obj.code === 'string' ? obj.code : undefined;
     const err = new ApiError(
       response.status,
       String(detail || (typeof data === 'string' ? data.slice(0, 200) : '')),

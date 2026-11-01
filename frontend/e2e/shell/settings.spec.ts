@@ -103,10 +103,9 @@ test.describe('members (§8.7 scenario 8)', () => {
     await combo.press('Escape');
     await expect(listbox).toBeHidden();
 
-    // Role change for the new member
-    await row.getByRole('button', { name: `Role for ${user.email}` }).click();
+    // Role change for the new member: the pencil opens an inline Select that saves on pick (C186)
+    await row.getByRole('button', { name: /^Change the role of/ }).click();
     await page.getByRole('option', { name: 'Manager' }).click();
-    await row.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Role saved' })).toBeVisible();
 
     // Remove: destructive dialog opens focused on Cancel; no transfer select (member owns no runs)

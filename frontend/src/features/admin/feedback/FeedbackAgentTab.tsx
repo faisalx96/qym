@@ -9,8 +9,14 @@ import {
   type AgentTestResult,
 } from '@/api/feedback';
 import feedbackStyles from '@/features/feedback/feedback.module.css';
+import {
+  ConnectionFields,
+  httpsError,
+  placeConnectionError,
+  type ConnectionErrors,
+} from '@/features/shell/settings/ConnectionFields';
 import { ApiError } from '@/lib/http';
-import { KEY_FOR_NEW_HOST_PLACEHOLDER, keyHostChanged } from '@/lib/keyHost';
+import { keyHostChanged } from '@/lib/keyHost';
 import {
   Button,
   Card,
@@ -18,11 +24,10 @@ import {
   ErrorState,
   Icon,
   NumberField,
+  Section,
   Skeleton,
-  StatStrip,
   StatusMark,
   Text,
-  TextField,
   useToast,
 } from '@/ui';
 
@@ -36,7 +41,20 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
   const [key, setKey] = useState('');
   const [result, setResult] = useState<AgentTestResult | null>(null);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<ConnectionErrors>({});
   const [removing, setRemoving] = useState(false);
+  /** The https rule before any request (C157). */
+  function checked(): boolean {
+    const https = httpsError(url, true);
+    setFieldErrors(https ? { baseUrl: https } : {});
+    return !https;
+  }
+  /** A server error goes under its field; anything else stays in the callout. */
+  function place(e: unknown, fallback: string) {
+    const placed = placeConnectionError(e instanceof ApiError && e.detail ? e.detail : fallback);
+    setFieldErrors(placed.errors);
+    setError(placed.formError);
+  }
   const stored = data.connection;
   // The stored key stays with its host: another host needs the key again (C004).
   // A blank URL tests the saved one, as the server does.
@@ -81,10 +99,11 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
             onPress={async () => {
               setError('');
               setResult(null);
+              if (!checked()) return;
               try {
                 setResult(await test.mutateAsync(values()));
               } catch (e) {
-                setError(e instanceof ApiError && e.detail ? e.detail : 'The test could not run.');
+                place(e, 'The test could not run.');
               }
             }}
           >
@@ -96,12 +115,13 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
             loading={save.isPending}
             onPress={async () => {
               setError('');
+              if (!checked()) return;
               try {
                 await save.mutateAsync({ ...values(), ...(key ? {} : { llm_api_key: '__KEEP__' }) });
                 setKey('');
                 toast.show('Connection saved', { tone: 'success' });
               } catch (e) {
-                setError(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save the connection.');
+                place(e, 'Couldn’t save the connection.');
               }
             }}
           >
@@ -118,39 +138,28 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
           </Callout>
         ) : null}
         <div className={feedbackStyles.connGrid}>
-          <TextField
-            label="Base URL"
-            mono
-            isRequired
-            value={url}
-            onChange={setUrl}
-            placeholder="https://api.openai.com/v1"
-            help="Any OpenAI-compatible endpoint. An https:// URL is required."
-          />
-          <TextField
-            label="Model"
-            mono
-            isRequired
-            value={model}
-            onChange={setModel}
-            placeholder="gpt-4.1"
-            help="Must support tool calls."
-          />
-          <TextField
-            label="API key"
-            type="password"
-            mono
-            value={key}
-            onChange={setKey}
-            isRequired={needsKey}
-            placeholder={
-              needsKey
-                ? KEY_FOR_NEW_HOST_PLACEHOLDER
-                : stored.llm_api_key_set
-                  ? `Keep current (${stored.llm_api_key_hint})`
-                  : 'sk-…'
-            }
-            autoComplete="new-password"
+          {/* One connection recipe with Project settings, errors under their field (C157). */}
+          <ConnectionFields
+            baseUrl={url}
+            onBaseUrl={(v) => {
+              setUrl(v);
+              if (fieldErrors.baseUrl) setFieldErrors((e) => ({ ...e, baseUrl: undefined }));
+            }}
+            model={model}
+            onModel={(v) => {
+              setModel(v);
+              if (fieldErrors.model) setFieldErrors((e) => ({ ...e, model: undefined }));
+            }}
+            apiKey={key}
+            onApiKey={(v) => {
+              setKey(v);
+              if (fieldErrors.key) setFieldErrors((e) => ({ ...e, key: undefined }));
+            }}
+            needsKey={needsKey}
+            storedKeyHint={stored.llm_api_key_set ? stored.llm_api_key_hint : null}
+            baseUrlHelp="Any OpenAI-compatible endpoint. An https:// URL is required."
+            modelHelp="Must support tool calls."
+            errors={fieldErrors}
           />
         </div>
         {result?.ok ? (
@@ -241,7 +250,7 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
   );
 }
 
-/** Admin, Feedback agent (QE-109 to QE-122): the platform-level connection and the two numbers. */
+/** Admin, Feedback assistant (QE-109 to QE-122, C244): the platform-level connection and the two numbers. */
 export function FeedbackAgentTab() {
   const q = useAgentAdmin();
   if (q.isError)
@@ -255,23 +264,17 @@ export function FeedbackAgentTab() {
   if (!q.data) return <Skeleton kind="rows" rows={3} rowHeight={80} label="Loading the feedback assistant" />;
   const key = String(q.data.configured);
   const d = q.data;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  // One titled Section, its totals in the description: no second stat strip under the admin tiles (C244).
+  const totals = [
+    `${plural(d.counts.requests, 'request')}, ${d.counts.new} new`,
+    `${plural(d.counts.open_drafts, 'open draft')}, deleted after ${d.behaviour.draft_retention_days} days`,
+    `${plural(d.counts.assistant_calls_7d, 'assistant call')} in 7 days`,
+  ].join(' · ');
   return (
-    <div className={feedbackStyles.stackCol}>
-      <StatStrip
-        variant="compact-header"
-        aria-label="Feedback totals"
-        items={[
-          { label: 'Requests', value: d.counts.requests, sub: `${d.counts.new} new` },
-          {
-            label: 'Open drafts',
-            value: d.counts.open_drafts,
-            sub: `deleted after ${d.behaviour.draft_retention_days} days`,
-          },
-          { label: 'Assistant calls, 7 days', value: d.counts.assistant_calls_7d },
-        ]}
-      />
+    <Section title="Feedback assistant" description={totals} bodyClassName={feedbackStyles.stackCol}>
       <ConnectionCard key={key} data={q.data} />
       <BehaviourCard key={`b-${key}`} data={q.data} />
-    </div>
+    </Section>
   );
 }

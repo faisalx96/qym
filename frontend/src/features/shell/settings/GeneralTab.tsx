@@ -14,7 +14,7 @@ export function GeneralTab() {
   const rename = useRenameProject(project.id);
   const [approvers, setApprovers] = useState<'members' | 'managers'>(project.correction_approvers);
   const [differentReviewer, setDifferentReviewer] = useState(project.correction_require_different_reviewer);
-  const rules = useReviewRules(project.id);
+  const rules = useReviewRules(project);
   const lock = useSubmitLock();
 
   function saveName() {

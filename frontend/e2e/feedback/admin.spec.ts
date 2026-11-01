@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-/** QE-109 to QE-122: Admin, Feedback agent. */
+/** QE-109 to QE-122: Admin, Feedback assistant (C244). */
 import { test, expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import { box, configureAgent, COLUMN, near, overflowX, record, setViewport, shot, STUB_URL, WIDTHS } from './support';
@@ -11,12 +11,14 @@ test('QE-109 to QE-113: the fifth tab, the totals and the connection card at thr
   for (const w of WIDTHS) {
     await setViewport(page, w);
     await gotoApp(page, '/admin/feedback');
-    await expect(page.getByRole('tab', { name: 'Feedback agent' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Feedback assistant' })).toHaveAttribute('aria-selected', 'true');
     const conn = page.getByTestId('connection');
     await expect(conn).toBeVisible();
     await expect(conn).toContainText('Configured');
     const tabs = await box(page.getByRole('tablist', { name: 'Admin sections' }));
-    const totals = await box(page.getByLabel('Feedback totals'));
+    // The totals are the description of the titled Section (C244), not a second stat strip.
+    await expect(page.getByRole('region', { name: 'Feedback assistant' })).toContainText('assistant calls in 7 days');
+    const totals = await box(page.getByRole('region', { name: 'Feedback assistant' }));
     const card = await box(conn);
     if (w !== 390) near(tabs.w, COLUMN[w]);
     near(card.w, COLUMN[w]);

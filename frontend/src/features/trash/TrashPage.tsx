@@ -46,6 +46,7 @@ import {
   StatusMark,
 } from '@/ui';
 import styles from './TrashPage.module.css';
+import { retentionLabel } from '@/lib/retention';
 
 const DAY = 86_400_000;
 
@@ -66,13 +67,6 @@ export function purgeInfo(
     soon: n < 3,
     sub: new Date(row.purge_at).toLocaleDateString(),
   };
-}
-
-/** The header's retention fact (C178): 0 means off, and runs then stay until restored. */
-export function retentionLabel(graceDays: number | null | undefined): string {
-  return graceDays
-    ? `Retention ${graceDays} day${graceDays === 1 ? '' : 's'}`
-    : 'Retention Off (kept until restored)';
 }
 
 function plural(n: number) {
@@ -345,7 +339,7 @@ export function TrashPage() {
             : 'Retention is off: deleted runs are kept until an admin restores them or deletes them permanently.'
         }
         meta={[
-          <span key="r">{retentionLabel(grace)}</span>,
+          <span key="r">Retention {retentionLabel(grace)}</span>,
           <span key="n">
             {filtered ? `${total} matching` : `${total} deleted run${total === 1 ? '' : 's'}`}
           </span>,
@@ -395,7 +389,7 @@ export function TrashPage() {
         />
       ) : list.data && rows.length === 0 ? (
         <EmptyState
-          title={filtered ? 'No deleted runs match' : 'Nothing in the trash'}
+          title={filtered ? 'No deleted runs match' : 'No deleted runs'}
           body={
             filtered ? 'Try another search or project.' : 'Runs you delete appear here until they are purged.'
           }
