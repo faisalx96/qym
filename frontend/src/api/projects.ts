@@ -89,6 +89,25 @@ export function useReviewRules(projectId: string) {
   });
 }
 
+/** Save which way is better for a metric that declares no direction, for the whole project (C129). */
+export function useSetMetricDirection(project: Project) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { metric: string; direction: 'maximize' | 'minimize' | null }) =>
+      api.patch<{ project_id: string; metric_directions: Record<string, 'maximize' | 'minimize'> }>(
+        `/v1/projects/${project.id}/metric-directions`,
+        body,
+      ),
+    onSuccess: (res) => {
+      const next = { ...project, metric_directions: res.metric_directions };
+      qc.setQueryData<Project>(projectKey(project.slug), (p) =>
+        p ? { ...p, metric_directions: res.metric_directions } : p,
+      );
+      upsertProjectInCache(qc, next);
+    },
+  });
+}
+
 export const fetchArchivePreview = (id: string) =>
   api.get<ArchivePreview>(`/v1/admin/projects/${id}/archive-preview`);
 export const fetchUnarchivePreview = (id: string) =>

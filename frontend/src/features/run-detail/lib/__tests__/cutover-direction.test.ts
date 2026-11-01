@@ -184,3 +184,71 @@ describe('category metadata without scores has no performance report (test_repor
     expect(categoryBreakdown(ctx, ctx.model.rows, 'domain', 'accuracy', null)).toBeNull();
   });
 });
+
+describe('a 0-1 score with no direction reads as higher is better, unless the project saved otherwise (C129)', () => {
+  const specs = {
+    correctness: { score_type: 'percentage', schema_version: 2 },
+    flag: { score_type: 'boolean' },
+    count: { score_type: 'number' },
+    tone: { score_type: 'percentage', direction: 'minimize', schema_version: 2 },
+  };
+  const rows = [0.9, 0.85, 0.5, 0.3].map((v, i) => ({
+    index: i,
+    item_id: `item-${i}`,
+    status: 'completed',
+    metric_values: [v, 1, i, 0.1],
+    metric_meta: {},
+  })) as unknown as Row[];
+  const payload = {
+    run: {
+      run_id: 'r',
+      status: 'COMPLETED',
+      samples: 1,
+      metric_names: Object.keys(specs),
+      metric_specs: specs,
+    },
+    snapshot: { rows, metric_names: Object.keys(specs), metric_specs: specs },
+  } as unknown as RunPayload;
+
+  it('assumes maximize with the 80% bar, so items pass and fail; numbers, booleans and declared metrics keep theirs', () => {
+    const model = buildRunModel(payload, null);
+    expect(model.metricDirections).toEqual({
+      correctness: 'maximize',
+      flag: null,
+      count: null,
+      tone: 'minimize',
+    });
+    expect(model.metricDirectionSource).toEqual({
+      correctness: 'assumed',
+      flag: null,
+      count: null,
+      tone: 'declared',
+    });
+    expect(model.defaultThresholds.correctness).toBe(0.8);
+    const ctx: FilterContext = {
+      model,
+      thresholds: effectiveThresholds(model, emptyView()),
+      selectedMetric: 'correctness',
+      repeatAggregate: false,
+    };
+    expect(model.rows.map((r) => rowStatus(ctx, r, 'correctness').kind)).toEqual([
+      'pass',
+      'pass',
+      'fail',
+      'fail',
+    ]);
+  });
+
+  it("the project's saved choice wins over the default, never over the metric's own direction", () => {
+    const model = buildRunModel(payload, null, {
+      correctness: 'minimize',
+      tone: 'maximize',
+      count: 'maximize',
+    });
+    expect(model.metricDirections.correctness).toBe('minimize');
+    expect(model.metricDirectionSource.correctness).toBe('project');
+    expect(model.defaultThresholds.correctness).toBe(0.2);
+    expect(model.metricDirections.tone).toBe('minimize');
+    expect(model.metricDirections.count).toBeNull();
+  });
+});

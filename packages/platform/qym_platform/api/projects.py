@@ -71,6 +71,12 @@ from qym_platform.services.analysis_prompts import (
     serialize_analysis_prompt_settings,
 )
 from qym_platform.services.llm_connections import project_connections_query
+from qym_platform.services.metric_directions import (
+    DIRECTIONS as METRIC_DIRECTIONS,
+    metric_directions,
+    metric_directions_for,
+    set_metric_direction,
+)
 from qym_platform.services.retention import resume_purge_clocks
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
 from sqlalchemy import and_, func, or_, select
@@ -267,6 +273,7 @@ def _project_payload(
     member_counts: Optional[Dict[str, int]] = None,
     run_counts: Optional[Dict[str, int]] = None,
     role: Optional[str] = None,
+    directions: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     member_count = (
         int(member_counts[project.id])
@@ -296,6 +303,12 @@ def _project_payload(
         "updated_at": to_api_timestamp(project.updated_at),
         # Who may decide diagnosis corrections (C074).
         **correction_rules(project),
+        # The direction saved for metrics that declare none (C129).
+        "metric_directions": (
+            directions.get(project.id, {})
+            if directions is not None
+            else metric_directions(db, project.id)
+        ),
     }
 
 
@@ -309,6 +322,7 @@ def serialize_project_payloads(
     project_ids = [project.id for project in project_list]
     member_counts = _project_member_counts(db, project_ids)
     run_counts = _project_run_counts(db, project_ids)
+    directions = metric_directions_for(db, project_ids)
 
     if principal.user.role == UserRole.ADMIN:
         role_map = {project.id: ProjectRole.MANAGER.value for project in project_list}
@@ -334,6 +348,7 @@ def serialize_project_payloads(
             member_counts=member_counts,
             run_counts=run_counts,
             role=role_map.get(project.id, ""),
+            directions=directions,
         )
         for project in project_list
     ]
@@ -1023,6 +1038,50 @@ def add_project_member(
     db.refresh(member)
     logger.info("User %s added to project %s as %s", user.id, project.id, getattr(req.role, "value", req.role))
     return _serialize_member(member, user)
+
+
+class MetricDirectionRequest(BaseModel):
+    metric: str
+    direction: Optional[str] = None
+
+
+@router.patch("/v1/projects/{project_id}/metric-directions")
+def update_project_metric_direction(
+    project_id: str,
+    req: MetricDirectionRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Save which way is better for a metric that declares no direction, for this project (C129).
+
+    Project managers and admins. ``direction`` null clears the choice, and the
+    run page then assumes higher is better again for 0-1 scores.
+    """
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Only project managers can set a metric's direction")
+    require_project_writable(db, project_id)
+    project = _get_project(db, project_id)
+    metric = req.metric.strip()
+    if not metric or len(metric) > 200:
+        raise HTTPException(status_code=422, detail="metric is required (at most 200 characters)")
+    if req.direction is not None and req.direction not in METRIC_DIRECTIONS:
+        raise HTTPException(status_code=422, detail="direction must be maximize, minimize or null")
+    before = metric_directions(db, project.id)
+    after = set_metric_direction(db, project.id, metric, req.direction)
+    if after != before:
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="project.metric_direction_updated",
+                entity_type="project",
+                entity_id=project.id,
+                before={"metric_directions": before},
+                after={"metric_directions": after},
+            )
+        )
+    db.commit()
+    return {"project_id": project.id, "metric_directions": after}
 
 
 class ReviewRulesRequest(BaseModel):

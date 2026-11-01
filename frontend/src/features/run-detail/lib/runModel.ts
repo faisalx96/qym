@@ -18,6 +18,9 @@ import type { Row, RunPayload } from '../types';
 import { getMetadataCategoryValues, HIDDEN_METADATA_KEYS } from './rowMeta';
 import { scopeRowToPass } from './passScope';
 
+/** Where a metric's direction comes from: its spec, the project's saved choice, or the default for 0-1 scores (C129). */
+export type DirectionSource = 'declared' | 'project' | 'assumed';
+
 export interface RunModel {
   runId: string;
   metricNames: string[];
@@ -25,6 +28,8 @@ export interface RunModel {
   metricTypes: Record<string, MetricType>;
   metricIsBoolean: Record<string, boolean>;
   metricDirections: Record<string, MetricDirection>;
+  /** null: the metric has no direction (numbers and booleans that declare none). */
+  metricDirectionSource: Record<string, DirectionSource | null>;
   defaultThresholds: Record<string, number>;
   defaultMetric: string | null;
   samples: number;
@@ -45,7 +50,15 @@ export function isRepeatRunPayload(run: RunPayload['run']): boolean {
   return (parseInt(String(run.samples ?? 1), 10) || 1) > 1 || !!run.metadata?.has_repeat_pass_context;
 }
 
-export function buildRunModel(payload: RunPayload, requestedPass: number | null): RunModel {
+/**
+ * `projectDirections`: the project's saved direction per metric, for metrics that declare none. A 0-1 score with no
+ * direction is read as higher is better (the old default, 80% bar) unless the project saved otherwise (C129).
+ */
+export function buildRunModel(
+  payload: RunPayload,
+  requestedPass: number | null,
+  projectDirections: Record<string, string> = {},
+): RunModel {
   const { run, snapshot } = payload;
   const metricNames = snapshot.metric_names ?? run.metric_names ?? [];
   const metricSpecs = snapshot.metric_specs ?? run.metric_specs ?? {};
@@ -58,6 +71,7 @@ export function buildRunModel(payload: RunPayload, requestedPass: number | null)
   const metricTypes: Record<string, MetricType> = {};
   const metricIsBoolean: Record<string, boolean> = {};
   const metricDirections: Record<string, MetricDirection> = {};
+  const metricDirectionSource: Record<string, DirectionSource | null> = {};
   const defaultThresholds: Record<string, number> = {};
   metricNames.forEach((name, idx) => {
     const spec = metricSpecs[name];
@@ -73,8 +87,19 @@ export function buildRunModel(payload: RunPayload, requestedPass: number | null)
     const type = spec && spec.score_type !== 'legacy' ? metricTypeFromSpec(spec) : inferred;
     metricTypes[name] = type;
     metricIsBoolean[name] = type === 'boolean';
-    metricDirections[name] = metricDirection(spec);
-    defaultThresholds[name] = defaultPassThreshold(spec);
+    const declared = metricDirection(spec);
+    const saved = projectDirections[name];
+    const direction: MetricDirection =
+      declared ?? (type === 'score' ? (saved === 'minimize' ? 'minimize' : 'maximize') : null);
+    metricDirections[name] = direction;
+    metricDirectionSource[name] = declared
+      ? 'declared'
+      : direction
+        ? saved === 'minimize' || saved === 'maximize'
+          ? 'project'
+          : 'assumed'
+        : null;
+    defaultThresholds[name] = defaultPassThreshold(spec, direction);
   });
 
   const metaKeys = new Set<string>();
@@ -125,6 +150,7 @@ export function buildRunModel(payload: RunPayload, requestedPass: number | null)
     metricTypes,
     metricIsBoolean,
     metricDirections,
+    metricDirectionSource,
     defaultThresholds,
     defaultMetric: defaultMetricName(metricNames, metricSpecs),
     samples,

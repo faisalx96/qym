@@ -344,6 +344,13 @@ REFUSED = [
         {"json": {"correction_approvers": "managers"}},
         MGR,
     ),
+    (
+        "PATCH",
+        "/v1/projects/{project_id}/metric-directions",
+        "/v1/projects/pa/metric-directions",
+        {"json": {"metric": "quality", "direction": "minimize"}},
+        MGR,
+    ),
     ("POST", "/v1/projects/{project_id}/llm-connections", "/v1/projects/pa/llm-connections", {"json": {"name": "b"}}, MGR),
     (
         "PUT",
