@@ -46,7 +46,7 @@ type Days = '7' | '30' | '90';
 
 export function OverviewPage() {
   const { slug, project, readOnly } = useProjectContext();
-  useDocumentTitle(project.name);
+  useDocumentTitle('Dashboard');
   const { params, replaceUrlQuery } = useSearchParamsState();
   const origin = (
     ['official', 'local'].includes(params.get('origin') ?? '') ? params.get('origin') : 'all'

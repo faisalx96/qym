@@ -84,7 +84,7 @@ const PAGE_LABELS: Record<string, string> = {
   datasets: 'Datasets',
   analysis: 'Auto-analysis',
   analyzer: 'Auto-analysis',
-  settings: 'Settings',
+  settings: 'Project settings',
   'run-detail': 'Run',
   'not-found': 'Not found',
 };

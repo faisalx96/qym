@@ -2,20 +2,34 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useLocation, useNavigationType } from 'react-router-dom';
 import { KEYS, readLocal, writeLocal } from '@/lib/storage';
 
+import { useOptionalProject } from './ProjectContext';
+
 const TITLE_SUFFIX = 'قيِّم';
 
 /** `document.title = "<title> · قيِّم"` while mounted. */
+/**
+ * C147: the tab title is '<entity or page> · <project> · قيِّم' (the project only on a project page). A caller may still
+ * pass the project name in its title; it is taken out so it shows once, in its place.
+ */
 export function useDocumentTitle(title: string | null | undefined): void {
+  const projectName = useOptionalProject()?.project.name ?? null;
   useEffect(() => {
     const previous = document.title;
-    document.title = title ? `${title} · ${TITLE_SUFFIX}` : TITLE_SUFFIX;
+    document.title = documentTitle(title, projectName);
     return () => {
       document.title = previous;
     };
-  }, [title]);
+  }, [title, projectName]);
 }
 
-/** C134: below 1023px the sidebar is an overlay (tablets and phones); below 600px there is no rail either. */
+export function documentTitle(title: string | null | undefined, projectName: string | null): string {
+  const parts = (title ?? '')
+    .split(' · ')
+    .map((p) => p.trim())
+    .filter((p) => p && p !== projectName);
+  return [...parts, ...(projectName ? [projectName] : []), TITLE_SUFFIX].join(' · ');
+}
+
 export const COLLAPSE_BREAKPOINT = 1023;
 
 /** Sidebar collapse persisted in localStorage['qym:sidebar-collapsed']; auto-collapse ≤1023px. */

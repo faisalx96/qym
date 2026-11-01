@@ -6,21 +6,9 @@ import { actionErrorMessage } from '@/lib/http';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import {
-  Button,
-  DataTable,
-  EmptyState,
-  LinkButton,
-  PageHeader,
-  RelativeTime,
-  Tag,
-  Text,
-  Tooltip,
-  useToast,
-  Icon,
-} from '@/ui';
+import { Button, DataTable, EmptyState, PageHeader, RelativeTime, Tag, Text, Tooltip, useToast } from '@/ui';
 import { UserPill } from '../components/UserPill';
-import { catalogPath, datasetPath } from '../lib/route';
+import { datasetPath } from '../lib/route';
 import { RESTORE_RULE } from '../lib/versions';
 
 export function DeletedDatasetsPage() {
@@ -53,11 +41,6 @@ export function DeletedDatasetsPage() {
       <PageHeader
         title="Deleted datasets"
         description="Deleted datasets keep their versions, items and history until a project manager restores them."
-        actions={
-          <LinkButton to={catalogPath(slug)} variant="ghost" icon={<Icon name="chevron-left" size={12} />}>
-            All datasets
-          </LinkButton>
-        }
       />
       <DataTable<Dataset>
         aria-label="Deleted datasets"

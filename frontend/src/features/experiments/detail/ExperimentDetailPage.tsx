@@ -3,7 +3,7 @@
  * strip, matrix with compare selection, setting-vs-metric chart, job history.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useMe } from '@/api/me';
 import { hasLiveJobs, useExperiment, type ExperimentDetail, type ExperimentJob } from '@/api/experiments';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
@@ -32,15 +32,9 @@ export function ExperimentDetailPage({ experimentId }: { experimentId: string })
   const showSkeleton = useDelayedPending(query.isPending);
   useDocumentTitle(`${query.data?.name ?? 'Experiment'} · ${project.name}`);
   useCrumbLabel(query.data?.name);
-  const back = (
-    <Link to={experimentsPath(slug)} className={styles.back}>
-      ← All experiments
-    </Link>
-  );
   if (query.data) return <Loaded detail={query.data} />;
   return (
     <div className={`${fullWidth} ${styles.page}`}>
-      {back}
       {query.isError ? (
         <ErrorState
           error={query.error}
@@ -137,9 +131,6 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
 
   return (
     <div className={`${fullWidth} ${styles.page}`} data-exp-detail={x.id}>
-      <Link to={experimentsPath(slug)} className={styles.back}>
-        ← All experiments
-      </Link>
       <PageHeader
         title={
           <span className={styles.titleRow}>

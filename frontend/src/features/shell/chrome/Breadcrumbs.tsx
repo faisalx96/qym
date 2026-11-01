@@ -17,7 +17,7 @@ export interface BreadcrumbsProps {
  * the current item carries aria-current="page".
  */
 export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const pageLabel = useCurrentCrumbLabel();
   const crumbs: { label: string; to?: string; mono?: boolean }[] = [];
   if (project) {
@@ -47,6 +47,12 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
           : { label: pageLabel || 'Environment' },
       );
       if (nested) crumbs.push({ label: 'Default preset' });
+    } else if (route.page === 'datasets' && new URLSearchParams(search).get('view') === 'deleted') {
+      // C233: Datasets is a crumb, so Deleted datasets needs no in-page back link
+      crumbs.push(
+        { label: 'Datasets', to: projectPath(project.slug, 'datasets') },
+        { label: 'Deleted datasets' },
+      );
     } else if (route.page === 'datasets' && /\/datasets\/[^/]+/.test(pathname)) {
       crumbs.push(
         { label: 'Datasets', to: projectPath(project.slug, 'datasets') },

@@ -20,7 +20,7 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number];
 export function ProjectSettingsPage() {
   const { project, readOnly, canManage, isAdmin } = useProjectContext();
   const { params, replaceUrlQuery } = useSearchParamsState();
-  useDocumentTitle(`${project.name} · Settings`);
+  useDocumentTitle('Project settings');
 
   const items = useMemo(
     () =>

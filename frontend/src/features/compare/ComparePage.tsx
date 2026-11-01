@@ -57,7 +57,7 @@ export function ComparePage() {
   const project = useOptionalProject();
   const slug = project?.slug ?? readLocal(KEYS.lastProjectSlug) ?? undefined;
   const store = useNewDetailsStore();
-  useDocumentTitle('Compare runs');
+  useDocumentTitle('Compare');
   // A run removed from the comparison unmounts the body while the new set loads; put the reader back where they were.
   useLayoutEffect(() => {
     if (c.model) restoreScroll();
@@ -102,8 +102,7 @@ export function ComparePage() {
     );
   else if (c.query.error)
     body = <ErrorState error={c.query.error} title="Couldn’t load this comparison" onRetry={c.retry} />;
-  else if (c.query.isPending)
-    body = pending ? <CompareSkeleton runs={c.refs.length} /> : null;
+  else if (c.query.isPending) body = pending ? <CompareSkeleton runs={c.refs.length} /> : null;
   else if (!c.model || c.model.runs.length < 2)
     body = (
       <ErrorState
