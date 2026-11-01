@@ -9707,7 +9707,9 @@ def get_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
-    if not c.is_active:
+    # A review of a deleted pass keeps its own history: after the delete, the
+    # surviving passes are renumbered, so its pass number names another pass.
+    if not c.is_active and c.pass_deleted_at is None:
         c = _current_revision(db, c) or c
     return _serialize_corrections_with_history(db, [c], principal)[0]
 
