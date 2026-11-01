@@ -35,6 +35,7 @@ export * from './Skeleton';
 export * from './EmptyState';
 export * from './ErrorState';
 export * from './StaleBanner';
+export * from './InlineNotice';
 export * from './KeyValueGrid';
 export * from './StatStrip';
 export * from './StatTiles';

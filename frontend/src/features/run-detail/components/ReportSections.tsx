@@ -12,6 +12,7 @@ import {
 import { AnalysisSpark } from '@/features/runs-list/AnalyzeAction';
 import { metricDirectionLabel } from '@/lib/metrics';
 import { Icon, LinkButton, ReportSection, SectionBoundary, Stack, StatStrip, Text } from '@/ui';
+import { plannedItems } from '../lib/heroModel';
 import { runCounts } from '../lib/overviewModel';
 import { errorBucketCount } from '../lib/panelCounts';
 import { getRowRootCauseAnalyses } from '../lib/rowMeta';
@@ -182,6 +183,11 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
       ),
     [items, model.isRepeat, model.viewPass],
   );
+  // RF2 (C097): a failed run's items were scored, not completed; a stopped run shows what it planned, muted
+  const status = String(payload.run.status ?? '').toUpperCase();
+  const planned = status === 'STOPPED' && !model.viewPass ? plannedItems(payload.run) : null;
+  // coverage counts every received item, not the filtered ones
+  const received = rowsPending ? (payload.snapshot.rows_total ?? null) : model.rows.length;
   return (
     <>
       <ReportSection
@@ -199,11 +205,24 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
                 label: 'Items',
                 icon: <Icon name="list" size={12} />,
                 tone: 'info',
-                value: rowsPending ? (payload.snapshot.rows_total ?? '—') : counts.total,
+                value:
+                  planned && received != null && received < planned ? (
+                    <>
+                      {received}
+                      <Text as="span" tone="muted" weight={400}>
+                        {' '}
+                        of {planned}
+                      </Text>
+                    </>
+                  ) : rowsPending ? (
+                    (payload.snapshot.rows_total ?? '—')
+                  ) : (
+                    counts.total
+                  ),
               },
               {
                 key: 'completed',
-                label: 'Completed',
+                label: status === 'FAILED' && !model.viewPass ? 'Scored' : 'Completed',
                 icon: <Icon name="check" size={12} />,
                 tone: 'success',
                 value: rowsPending ? '—' : counts.completed,

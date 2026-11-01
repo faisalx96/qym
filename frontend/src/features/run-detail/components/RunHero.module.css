@@ -79,16 +79,6 @@
   font-family: var(--font-mono);
 }
 
-.stop {
-  margin: 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.stop[data-danger] {
-  color: var(--error-text);
-}
-
 /* Band 2: seven labelled facts in one row of columns (4 and 2 columns as the column narrows). */
 .facts {
   display: grid;
