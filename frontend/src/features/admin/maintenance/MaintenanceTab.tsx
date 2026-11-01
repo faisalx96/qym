@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useDbStats, useMaintenance, useRefreshMaintenance, type DbStats as DbStatsUnion } from '@/api/admin';
 import { useDelayedPending } from '@/lib/pending';
 import { Button, Card, DataTable, ErrorState, Section, Skeleton, Text, useToast, type Column } from '@/ui';
@@ -83,9 +84,13 @@ const EVENT_COLS: Column<EventRow>[] = [
   },
 ];
 
+/** The table list opens on the largest tables only; 'Show all N tables' expands it in place (C093). */
+export const LARGEST_TABLES_SHOWN = 10;
+
 /** The statistics tables, loaded on their own: the rest of the tab never waits for them. */
 function DbStatsTables({ query }: { query: ReturnType<typeof useDbStats> }) {
   const skeleton = useDelayedPending(query.isPending);
+  const [allTables, setAllTables] = useState(false);
   if (query.isError)
     return (
       <ErrorState
@@ -104,6 +109,8 @@ function DbStatsTables({ query }: { query: ReturnType<typeof useDbStats> }) {
         Table statistics are unavailable (they need PostgreSQL). Jobs still work. <code>{stats.error}</code>
       </div>
     );
+  const tables = stats.tables ?? [];
+  const hidden = tables.length - LARGEST_TABLES_SHOWN;
   return (
     <div className={styles.tables}>
       <DataTable
@@ -121,11 +128,26 @@ function DbStatsTables({ query }: { query: ReturnType<typeof useDbStats> }) {
         densityLocked
         aria-label="Largest tables"
         columns={TABLE_COLS}
-        rows={stats.tables ?? []}
+        rows={allTables || hidden <= 0 ? tables : tables.slice(0, LARGEST_TABLES_SHOWN)}
         rowKey={(r) => r.table}
         storageKey="admin-db-tables"
         empty="No table statistics."
-      />
+      >
+        {hidden > 0 ? (
+          <DataTable.Footer
+            summary={
+              allTables
+                ? `All ${tables.length} tables`
+                : `${LARGEST_TABLES_SHOWN} largest of ${tables.length} tables`
+            }
+            trailing={
+              <Button variant="neutral" size="sm" onPress={() => setAllTables((v) => !v)}>
+                {allTables ? `Show the ${LARGEST_TABLES_SHOWN} largest` : `Show all ${tables.length} tables`}
+              </Button>
+            }
+          />
+        ) : null}
+      </DataTable>
     </div>
   );
 }
@@ -152,6 +174,24 @@ export function MaintenanceTab() {
   const active = data.jobs.some((j) => ['queued', 'running', 'cancel_requested'].includes(j.status));
   return (
     <>
+      {/* Jobs first: the form is what admins come for; the long table list follows (C093). */}
+      <Section
+        title="Maintenance jobs"
+        description="Jobs run in the worker in small committed steps and survive restarts. Irreversible jobs require typing their name."
+        actions={
+          active ? (
+            <Text variant="sm" tone="muted" role="status">
+              Refreshing every 3 s while jobs are active
+            </Text>
+          ) : undefined
+        }
+        bodyClassName={styles.jobsBody}
+      >
+        <Card compact>
+          <EnqueueJobForm kinds={data.job_kinds} />
+        </Card>
+        <JobsTable jobs={data.jobs} />
+      </Section>
       <Section
         title="Database"
         description={
@@ -177,23 +217,6 @@ export function MaintenanceTab() {
       >
         <MaintenanceSummary data={data} sizeBytes={sizeBytes} outbox={outbox} />
         <DbStatsTables query={stats} />
-      </Section>
-      <Section
-        title="Maintenance jobs"
-        description="Jobs run in the worker in small committed steps and survive restarts. Irreversible jobs require typing their name."
-        actions={
-          active ? (
-            <Text variant="sm" tone="muted" role="status">
-              Refreshing every 3 s while jobs are active
-            </Text>
-          ) : undefined
-        }
-        bodyClassName={styles.jobsBody}
-      >
-        <Card compact>
-          <EnqueueJobForm kinds={data.job_kinds} />
-        </Card>
-        <JobsTable jobs={data.jobs} />
       </Section>
     </>
   );

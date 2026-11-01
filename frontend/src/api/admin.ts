@@ -148,7 +148,8 @@ export const adminKeys = {
   users: ['admin', 'users'] as const,
   projects: ['admin', 'projects'] as const,
   live: ['admin', 'runs', 'live'] as const,
-  recent: (page: number, size: number) => ['admin', 'runs', 'recent', page, size] as const,
+  recent: (page: number, size: number, q = '', projectId = '') =>
+    ['admin', 'runs', 'recent', page, size, q, projectId] as const,
   recentAll: ['admin', 'runs', 'recent'] as const,
   maintenance: ['admin', 'maintenance'] as const,
   dbStats: ['admin', 'maintenance', 'db-stats'] as const,
@@ -157,7 +158,8 @@ export const adminKeys = {
 export const ACTIVE_JOB_STATUSES: JobStatus[] = ['queued', 'running', 'cancel_requested'];
 export const LIVE_POLL_MS = 10_000;
 export const JOB_POLL_MS = 3_000;
-export const RECENT_PAGE_SIZE = 6;
+/** Admin landing: 25 recent runs per page (C093). */
+export const RECENT_PAGE_SIZE = 25;
 
 // ── Users ────────────────────────────────────────────────────────────────
 
@@ -236,13 +238,25 @@ export function useLiveRuns(enabled = true) {
   });
 }
 
-export function useRecentRuns(page: number, pageSize = RECENT_PAGE_SIZE, enabled = true) {
+/** Recent finished runs across projects; `q` searches run names and ids, `projectId` narrows to one project (C093). */
+export function useRecentRuns(
+  page: number,
+  pageSize = RECENT_PAGE_SIZE,
+  enabled = true,
+  filters: { q?: string; projectId?: string | null } = {},
+) {
   const offset = Math.max(0, page - 1) * pageSize;
+  const q = (filters.q ?? '').trim();
+  const projectId = filters.projectId ?? '';
+  const extra = new URLSearchParams();
+  if (q) extra.set('q', q);
+  if (projectId) extra.set('project_id', projectId);
+  const suffix = extra.toString() ? `&${extra.toString()}` : '';
   return useQuery({
-    queryKey: adminKeys.recent(page, pageSize),
+    queryKey: adminKeys.recent(page, pageSize, q, projectId),
     queryFn: () =>
       api.get<RunsPage>(
-        `/api/runs/recent?all_projects=true&include_projects=false&global_limit=${pageSize}&global_offset=${offset}`,
+        `/api/runs/recent?all_projects=true&include_projects=false&global_limit=${pageSize}&global_offset=${offset}${suffix}`,
       ),
     enabled,
     placeholderData: keepPreviousData,

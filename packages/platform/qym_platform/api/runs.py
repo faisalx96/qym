@@ -2747,6 +2747,14 @@ def list_recent_runs(
     per_project_limit: int = Query(default=5, ge=1, le=25),
     include_projects: bool = Query(default=True),
     all_projects: bool = Query(default=False),
+    project_id: Optional[str] = Query(
+        default=None, max_length=36, description="Only this project's runs (the Admin Project filter)."
+    ),
+    q: Optional[str] = Query(
+        default=None,
+        max_length=200,
+        description="Run name (as shown, or the SDK run name) or run id contains this text.",
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
@@ -2760,6 +2768,21 @@ def list_recent_runs(
         .join(Project, Project.id == Run.project_id)
         .filter(Project.is_active.is_(True), ~Run.status.in_(_LIVE_RUN_STATUSES))
     )
+    # Admin landing (C093): a Project filter and a run search over every project.
+    if project_id:
+        base_q = base_q.filter(Run.project_id == project_id)
+    term = (q or "").strip().lower()
+    if term:
+        # The same fields and wildcard rules as the Deleted runs search.
+        pattern = _trash_like(term)
+        run_name = func.coalesce(Run.run_config["run_name"].as_string(), "")
+        base_q = base_q.filter(
+            or_(
+                func.lower(run_name).like(pattern, escape="\\"),
+                func.lower(func.coalesce(Run.external_run_id, "")).like(pattern, escape="\\"),
+                func.lower(Run.id).like(pattern, escape="\\"),
+            )
+        )
     total_count = base_q.count()
     global_runs = (
         base_q.order_by(Run.created_at.desc())

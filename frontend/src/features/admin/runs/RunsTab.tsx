@@ -1,17 +1,36 @@
 import { useEffect, useState } from 'react';
-import { RECENT_PAGE_SIZE, useLiveRuns, useRecentRuns, type AdminRunSummary } from '@/api/admin';
+import {
+  RECENT_PAGE_SIZE,
+  useAllProjects,
+  useLiveRuns,
+  useRecentRuns,
+  type AdminRunSummary,
+} from '@/api/admin';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { ErrorState, Section, Skeleton, useToast } from '@/ui';
+import { DataTable, ErrorState, SearchField, Section, Select, Skeleton, useToast } from '@/ui';
 import { ForceStopDialog } from './ForceStopDialog';
 import { RunTable } from './RunTables';
 
-/** Live runs (10 s poll, force stop) + most recent runs (6/page, `?page=`). */
+/**
+ * Live runs (10 s poll, force stop; the empty table stays, owner note on C093) + the most recent runs: 25 a page
+ * (`?page=`), with a run search (`?q=`) and a Project filter (`?project=`) across every project (C093).
+ */
 export function RunsTab({ announce }: { announce: (text: string) => void }) {
   const live = useLiveRuns();
   const { params, replaceUrlQuery } = useSearchParamsState();
   const page = Math.max(1, Number(params.get('page')) || 1);
-  const recent = useRecentRuns(page);
+  const q = params.get('q') ?? '';
+  const projectId = params.get('project') || null;
+  const [search, setSearch] = useState(q);
+  useEffect(() => {
+    if (search.trim() === q) return;
+    const t = setTimeout(() => replaceUrlQuery({ q: search.trim() || null, page: null }), 250);
+    return () => clearTimeout(t);
+  }, [search, q, replaceUrlQuery]);
+  const projects = useAllProjects();
+  const recent = useRecentRuns(page, RECENT_PAGE_SIZE, true, { q, projectId });
+  const filtered = Boolean(q || projectId);
   const toast = useToast();
   const lastPage = recent.data ? Math.max(1, Math.ceil(recent.data.total_count / RECENT_PAGE_SIZE)) : null;
   useEffect(() => {
@@ -54,7 +73,11 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
       <Section
         id="recent-runs"
         title="Most recent eval runs"
-        description={`${recent.data?.total_count ?? 0} total finished runs`}
+        description={
+          filtered
+            ? `${recent.data?.total_count ?? 0} matching finished runs`
+            : `${recent.data?.total_count ?? 0} total finished runs`
+        }
       >
         {recent.isError ? (
           <ErrorState
@@ -75,7 +98,39 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
               storageKey="admin-recent-runs"
               runs={recent.data.runs}
               onForceStop={setTarget}
-              emptyState="No recent eval runs"
+              emptyState={filtered ? 'No finished runs match' : 'No recent eval runs'}
+              toolbar={
+                <DataTable.Toolbar
+                  columnsMenu={false}
+                  search={
+                    <SearchField
+                      label="Search runs"
+                      placeholder="Search run name or ID"
+                      value={search}
+                      onChange={setSearch}
+                      onClear={() => setSearch('')}
+                      width={280}
+                    />
+                  }
+                  filters={
+                    <Select
+                      label="Project"
+                      hideLabel
+                      placeholder="All projects"
+                      items={[
+                        { key: '', label: 'All projects' },
+                        ...(projects.data ?? [])
+                          .filter((p) => p.is_active)
+                          .map((p) => ({ key: p.id, label: p.name })),
+                      ]}
+                      value={projectId ?? ''}
+                      onChange={(k) => replaceUrlQuery({ project: k ? String(k) : null, page: null })}
+                      searchable="auto"
+                      width={220}
+                    />
+                  }
+                />
+              }
               pagination={{
                 total: recent.data.total_count,
                 page,

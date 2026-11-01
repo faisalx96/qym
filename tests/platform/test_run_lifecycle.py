@@ -740,6 +740,22 @@ def test_recent_runs_endpoint_returns_global_and_per_project_admin_views(client,
     assert [run["run_id"] for run in page_payload["runs"]] == ["run-recent-a-old"]
     assert page_payload["projects"] == []
 
+    # Admin landing (C093): a run search (name or id, wildcards literal) and a Project filter.
+    def recent(query):
+        response = client.get(
+            f"/api/runs/recent?all_projects=true&include_projects=false&{query}",
+            headers=_ui_headers("admin-recent@example.com"),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        return body["total_count"], [run["run_id"] for run in body["runs"]]
+
+    assert recent("q=a%20old") == (1, ["run-recent-a-old"])
+    assert recent("q=RECENT-A-NEW") == (1, ["run-recent-a-new"])
+    assert recent("q=%25") == (0, [])
+    assert recent("project_id=project-recent-a") == (2, ["run-recent-a-new", "run-recent-a-old"])
+    assert recent("project_id=project-recent-a&q=new") == (1, ["run-recent-a-new"])
+
     project_response = client.get(
         "/api/runs?project_slug=recent-b&exclude_live=true",
         headers=_ui_headers("owner-recent-b@example.com"),

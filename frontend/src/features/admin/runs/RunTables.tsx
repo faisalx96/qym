@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { AdminRunSummary } from '@/api/admin';
 import { runPath } from '@/app/routes';
 import {
@@ -36,6 +36,8 @@ export interface RunTableProps {
   'aria-label': string;
   footerSummary?: string;
   pagination?: PaginationProps;
+  /** A toolbar over the table (the recent runs search and Project filter, C093). */
+  toolbar?: ReactNode;
   /** Live table: pulsing status + progress; recent: status badge + items. */
   variant: 'live' | 'recent';
 }
@@ -49,6 +51,7 @@ export function RunTable({
   variant,
   footerSummary,
   pagination,
+  toolbar,
   'aria-label': label,
 }: RunTableProps) {
   const columns = useMemo<Column<AdminRunSummary>[]>(
@@ -133,6 +136,7 @@ export function RunTable({
       }
       rowState={(r) => (variant === 'live' ? 'live' : /^FAILED$/i.test(r.status) ? 'error' : undefined)}
     >
+      {toolbar}
       <DataTable.Footer summary={footerSummary} pagination={pagination} />
     </DataTable>
   );
