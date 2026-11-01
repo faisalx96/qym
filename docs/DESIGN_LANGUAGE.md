@@ -200,6 +200,11 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 ### 3.1 Controls, navigation and overlays
 
+**Focus and hit targets (C087, C202).** Only a focused control draws a ring: a tab button, a field, a button; a tab
+area, a list or a panel never outlines as a whole. Every small control has a 24x24 hit area without changing its drawn
+size (a checkbox box, an info marker, the pager arrows, the row `>` handle, which is 32px on a touch screen). Delete sits
+in the row menu, apart from the other row actions.
+
 **Ctrl K (C043).** The palette lists projects, pages (with aliases: "trash" finds Deleted runs, "overview" the
 Dashboard; Queue, Environments and Deleted datasets included) and actions; from 2 characters it also shows the current
 project's Runs, Datasets and Experiments that match, 5 of each. With no query the current project's first page is
