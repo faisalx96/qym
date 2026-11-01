@@ -201,6 +201,20 @@ export function formatDelta(delta: number, type: string): string {
   return `${sign}${(abs * 100).toFixed(1)} pts`;
 }
 
+/**
+ * The change on an item chip (K3, C029): '▲ +8.4' (points for a score), '▼ −0.120' for a numeric metric, '≈ 0.0' for no
+ * change. A boolean metric shows the glyph only.
+ */
+export function chipDelta(delta: number, type: string): string {
+  const same = Math.abs(delta) <= DELTA_EPSILON;
+  const glyph = same ? '≈' : delta > 0 ? '▲' : '▼';
+  if (type === 'boolean') return glyph;
+  if (same) return type === 'numeric' ? '≈ 0' : '≈ 0.0';
+  const sign = delta > 0 ? '+' : '−';
+  const abs = Math.abs(delta);
+  return `${glyph} ${sign}${type === 'numeric' ? formatNumericValue(abs, abs < 1 ? 3 : 1) : (abs * 100).toFixed(1)}`;
+}
+
 export function formatBand(halfWidth: number, type: string): string {
   if (type === 'numeric') return '±' + formatNumericValue(halfWidth, halfWidth < 1 ? 3 : 1);
   return '±' + (halfWidth * 100).toFixed(1);

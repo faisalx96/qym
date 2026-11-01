@@ -99,6 +99,15 @@ export function ItemsToolbar({
         <Text variant="sm" tone="muted" className={styles.count} role="status" data-part="items-count">
           {items.length} of {model.itemIds.length} items{searchPending ? ' · searching…' : ''}
         </Text>
+        {/* K3 (C029): one Sort, in the toolbar; it lists 'Biggest change vs baseline' */}
+        <Select
+          label="Sort"
+          hideLabel
+          value={c.view.sort}
+          onChange={(k) => k && c.setView({ sort: String(k) as SortBy })}
+          items={(['index', ...SORT_VALUES] as SortBy[]).map((s) => ({ key: s, label: SORT_LABEL[s] }))}
+          width="15rem"
+        />
         <Popover
           label="Display options"
           trigger={
@@ -124,12 +133,6 @@ export function ItemsToolbar({
                 items={model.metrics.map((m) => ({ key: m, label: m }))}
               />
             ) : null}
-            <Select
-              label="Sort"
-              value={c.view.sort}
-              onChange={(k) => k && c.setView({ sort: String(k) as SortBy })}
-              items={(['index', ...SORT_VALUES] as SortBy[]).map((s) => ({ key: s, label: SORT_LABEL[s] }))}
-            />
             <SegmentedControl<TextMode>
               label="Text mode"
               value={textMode}

@@ -6,7 +6,7 @@ import type { Row } from '@/features/run-detail/types';
 import { runColor, useCompare } from '../../CompareContext';
 import { metricCellFor, pillState } from '../../lib/rowCells';
 import { runShortName } from '../../lib/labels';
-import { deltaKind } from '../../lib/baseline';
+import { chipDelta, deltaKind } from '../../lib/baseline';
 import type { FilteredItem } from '../../lib/filters';
 import { useRunMark } from '../RunTag';
 import { ItemDetail } from './ItemDetail';
@@ -26,11 +26,14 @@ function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
   const baseScore = item.scores[baseline.runIdxs[0] ?? 0] ?? null;
   const s = item.scores[runIdx] ?? null;
   const isBase = baseline.runIdxs.includes(runIdx);
-  const move = !isBase && s !== null && baseScore !== null ? deltaKind(s - baseScore, ctx.direction) : 'same';
+  const paired = !isBase && s !== null && baseScore !== null;
+  const move = paired ? deltaKind(s - baseScore, ctx.direction) : 'same';
   const view =
     row && p.score !== null && p.state !== 'error' ? metricCellFor(model, run, row, ctx.metric) : null;
   const mark = useRunMark(runIdx);
-  const band = view ? metricBand(view.value, view.type, view.direction) : null;
+  // K3 (C029): a run chip shows its change against the baseline, green or red by the change; the baseline is neutral
+  const delta = paired && view ? chipDelta(s - baseScore, view.type) : null;
+  const band = view && !isBase && !paired ? metricBand(view.value, view.type, view.direction) : null;
   const moveWord =
     move === 'improved' ? ', better than baseline' : move === 'regressed' ? ', worse than baseline' : '';
   const spoken = `${letter(runIdx)} ${view ? `${view.text} ` : ''}${WORD[p.state]}${moveWord}`;
@@ -41,6 +44,8 @@ function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
       data-part="item-score-chip"
       data-state={p.state}
       data-band={band ?? undefined}
+      data-baseline={isBase ? '' : undefined}
+      data-move={delta ? move : undefined}
       title={`${runShortName(run)}: ${spoken.slice(2)}`}
       {...mark}
     >
@@ -56,6 +61,11 @@ function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
       ) : (
         <>
           <span aria-hidden>{view ? view.text : '—'}</span>
+          {delta ? (
+            <span className={styles.delta} aria-hidden data-part="item-chip-delta">
+              {delta}
+            </span>
+          ) : null}
           <span className={styles.srOnly}>{spoken}</span>
         </>
       )}
