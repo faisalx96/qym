@@ -697,10 +697,12 @@ Recipes that exist only on the run report. They compose the primitives above and
   latency, ⚡ Median latency, Errors (red above 0), Items. The per-pass score spread lives in Deep analysis, "Across
   passes".
 
-- **Deep analysis** (round 10): "Between metrics", the correlation matrix (positive towards `--accent-primary`, negative
-  towards `--accent-tertiary`) beside the relationship scatter from 1000px of column; the scatter's X and Y pickers and r
-  sit in its head, its legend on its own row under the head. For a repeat run, "Across passes": the page metric's box
-  per pass.
+- **Deep analysis** (round 10; C221, C167 Nov 1): "Between metrics", the correlation matrix beside the relationship
+  scatter from 1000px of column; the scatter's X and Y pickers and r sit in its head, its legend on its own row under the
+  head. The matrix is a heatmap of strength only: one `--chart-1` ramp by |r| on a fixed 0 to 1 scale (strength is
+  neither good nor bad, and teal and purple are not data), the sign in the number (+0.20, −0.15), a blank diagonal, and
+  a small "|r| 0 to 1" key under it. The scatter fits both axes to the data with 5% padding (a threshold line, when the
+  chart draws one, stays inside). For a repeat run, "Across passes": the page metric's box per pass.
 
 - **Errors** (round 10): one group per kind (Task, Metric, Trace, Analysis): a 24px icon tile and the title in the kind's
   colour (`--error`, `--metric-error`, `--warning`, `--accent-tertiary`), its total, and one muted line on what the kind

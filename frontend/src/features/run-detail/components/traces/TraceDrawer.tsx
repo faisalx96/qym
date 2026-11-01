@@ -194,10 +194,15 @@ function attemptLabel(
 export function TraceDrawer({
   itemId,
   pass,
+  passCount = 0,
+  onPass,
   onClose,
 }: {
   itemId: string;
   pass: number | null;
+  /** A repeat run's sample count: the drawer shows one pass at a time, with a chip per pass (C009). 0 otherwise. */
+  passCount?: number;
+  onPass?: (pass: number) => void;
   onClose: () => void;
 }) {
   const { runId, payload } = useRunPage();
@@ -503,10 +508,19 @@ export function TraceDrawer({
         ) : null}
         {norm && active ? (
           <>
+            {passCount > 1 ? (
+              <div className={styles.attempts} role="group" aria-label="Passes" data-testid="trace-passes">
+                {Array.from({ length: passCount }, (_, i) => i + 1).map((p) => (
+                  <Chip key={p} isSelected={pass === p} onChange={() => pass !== p && onPass?.(p)}>
+                    Pass {p}
+                  </Chip>
+                ))}
+              </div>
+            ) : null}
             {norm.attempts.length > 1 ? (
               <div className={styles.attempts} role="group" aria-label="Attempts">
                 <Chip isSelected={attempt === 'combined'} onChange={() => setAttempt('combined')}>
-                  All attempts
+                  {passCount > 1 ? 'Retries combined' : 'All attempts'}
                 </Chip>
                 {norm.attempts.map((a) => (
                   <Chip

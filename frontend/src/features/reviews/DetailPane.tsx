@@ -3,19 +3,7 @@ import { Link } from 'react-router-dom';
 import { useCorrection, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
 import { textDirAttrs } from '@/lib/text';
-import {
-  Button,
-  ErrorState,
-  JsonTree,
-  Kbd,
-  Skeleton,
-  Tag,
-  Text,
-  TextBlock,
-  StatusMark,
-  type StatusShape,
-  type StatusTone,
-} from '@/ui';
+import { Button, ErrorState, JsonTree, Kbd, Skeleton, Tag, Text, TextBlock, ReviewStatusMark } from '@/ui';
 import { formatDate } from '../datasets/lib/itemValue';
 import { IssueEditForm, IssueList } from './IssueList';
 import { correctionPriority } from './lib/filters';
@@ -39,17 +27,7 @@ export interface DetailPaneProps {
   onCancelEdit: () => void;
 }
 
-const REVIEW_FIGURES: Record<string, [StatusTone, StatusShape]> = {
-  pending: ['neutral', 'hourglass'],
-  approved: ['success', 'check'],
-  rejected: ['danger', 'cross'],
-};
-
-/** A correction's review status as a `StatusMark`. */
-export function ReviewStatusMark({ status }: { status: string }) {
-  const [tone, shape] = REVIEW_FIGURES[status] ?? ['neutral', 'ring'];
-  return <StatusMark tone={tone} shape={shape} label={status} data-status={status} />;
-}
+export { ReviewStatusMark };
 
 /** The diagnosis an edit starts from: the human issues, else the AI's (an AI candidate has no human issues yet). */
 export function editSeed(row: CorrectionRow): CorrectionRow['human_root_cause_issues'] {

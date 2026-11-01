@@ -121,7 +121,16 @@ export function rootCauseIssues(value: unknown, legacyFallback = true): RootCaus
           category_reason: String(issue.category_reason ?? issue.root_cause_reason ?? '').trim(),
         };
         (
-          ['issue_id', 'solution', 'solution_note', 'review_status', 'source', 'reviewed_at'] as const
+          [
+            'issue_id',
+            'solution',
+            'solution_note',
+            'review_status',
+            'source',
+            'reviewed_at',
+            'reviewed_by_name',
+            'review_comment',
+          ] as const
         ).forEach((key) => {
           if (Object.prototype.hasOwnProperty.call(issue, key)) normalized[key] = String(issue[key] ?? '');
         });
@@ -165,13 +174,18 @@ export function rootCauseIssues(value: unknown, legacyFallback = true): RootCaus
   }));
 }
 
+/** A rejected issue is not a root cause: it leaves the category counts and the filter (C067). */
+export function isRejectedIssue(issue: RootCauseIssue): boolean {
+  return String(issue.review_status ?? '').toLowerCase() === 'rejected';
+}
+
 export function rootCauseCategories(value: unknown): string[] {
   const hasCanonical =
     !!value &&
     typeof value === 'object' &&
     !Array.isArray(value) &&
     Array.isArray((value as MetricAnalysis).root_cause_issues);
-  const issues = rootCauseIssues(value, false);
+  const issues = rootCauseIssues(value, false).filter((issue) => !isRejectedIssue(issue));
   if (hasCanonical || issues.length) {
     const out: string[] = [];
     const seen = new Set<string>();

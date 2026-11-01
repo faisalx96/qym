@@ -7,6 +7,7 @@ import { REASON_ORDER } from '../lib/itemReasons';
 import { emptyFilters, type SortBy } from '../lib/filterRules';
 import { useRunPage } from '../RunContext';
 import { CsvExport } from './items/CsvExport';
+import { DirectionNote } from './items/DirectionNote';
 import { FilterBar } from './items/FilterBar';
 import { Heatmap } from './items/Heatmap';
 import { defaultPageSize } from '../lib/itemsPaging';
@@ -135,6 +136,7 @@ export function ItemsSection() {
           <div className={styles.sticky} data-run-filters="">
             <FilterBar display={{ textMode, onTextMode: setTextMode }} />
           </div>
+          <DirectionNote metric={metric} />
           {showBanner && metric ? (
             <div className={styles.banner} role="status" data-testid="filter-banner">
               Filtered to {items.length.toLocaleString('en-US')} items that {bannerKinds[view.show]} {metric}

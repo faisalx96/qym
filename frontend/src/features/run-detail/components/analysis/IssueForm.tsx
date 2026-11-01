@@ -1,7 +1,10 @@
-/** Add / edit / delete one root-cause issue of a metric (brief 04 J8). */
-import { useEffect, useRef, useState } from 'react';
+/**
+ * Add / edit / delete one root-cause issue of a metric (brief 04 J8). The form opens inline in the Root cause card,
+ * under the item's Metrics table, so the evidence stays in view (C128). Delete asks first (C125).
+ */
+import { useRef, useState } from 'react';
 import { useCategoryCatalogQuery, useIssueAction } from '@/api/runs';
-import { Button, Dialog, Select, Textarea, TextField } from '@/ui';
+import { Button, ConfirmDialog, Select, Textarea, TextField } from '@/ui';
 import { messageFor } from '../items/ScoreEditor';
 import { useRunPage } from '../../RunContext';
 import type { RootCauseIssue, Row } from '../../types';
@@ -9,9 +12,8 @@ import styles from './MetricAnalysisCards.module.css';
 
 const NEW = '__new__';
 
-export interface IssueDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+export interface IssueFormProps {
+  onClose: () => void;
   row: Row;
   metric: string;
   /** null = a new issue. */
@@ -28,9 +30,9 @@ function uuid(): string {
       });
 }
 
-export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber }: IssueDialogProps) {
+export function IssueForm({ onClose, row, metric, issue, passNumber }: IssueFormProps) {
   const { runId, slug, model } = useRunPage();
-  const catalog = useCategoryCatalogQuery(slug, open);
+  const catalog = useCategoryCatalogQuery(slug, true);
   const mutation = useIssueAction(runId);
   const [category, setCategory] = useState(issue?.category ?? '');
   const [customCategory, setCustomCategory] = useState('');
@@ -40,6 +42,7 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
   const [solution, setSolution] = useState(issue?.solution ?? '');
   const [solutionNote, setSolutionNote] = useState(issue?.solution_note ?? '');
   const [message, setMessage] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const clientId = useRef(uuid());
 
   const reset = () => {
@@ -53,19 +56,6 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
     setMessage('');
     clientId.current = uuid();
   };
-  useEffect(() => {
-    if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCategory(issue?.category ?? '');
-    setSubcategory(issue?.subcategory ?? '');
-    setFinding(issue?.finding ?? '');
-    setReason(issue?.category_reason ?? '');
-    setSolution(issue?.solution ?? '');
-    setSolutionNote(issue?.solution_note ?? '');
-    setMessage('');
-    clientId.current = uuid();
-  }, [open, issue]);
-
   const known = catalog.data?.categories ?? [];
   const inCatalog = !category || known.includes(category);
   const chosen =
@@ -111,45 +101,16 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
     mutation.mutate(body(action), {
       onSuccess: () => {
         if (again) reset();
-        else onOpenChange(false);
+        else onClose();
       },
       onError: (e) => setMessage(messageFor(e)),
     });
   };
 
+  const title = issue ? `Edit issue · ${metric}` : `Add issue · ${metric}`;
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      size="lg"
-      title={issue ? `Edit issue · ${metric}` : `Add issue · ${metric}`}
-      data-testid="issue-dialog"
-      footer={
-        <>
-          {issue ? (
-            <Button variant="danger" onPress={() => submit('delete')} isDisabled={mutation.isPending}>
-              Delete issue
-            </Button>
-          ) : null}
-          <Button variant="neutral" onPress={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          {!issue ? (
-            <Button variant="neutral" onPress={() => submit('add', true)} isDisabled={mutation.isPending}>
-              Save and add another
-            </Button>
-          ) : null}
-          <Button
-            variant="accent"
-            onPress={() => submit(issue ? 'edit' : 'add')}
-            loading={mutation.isPending}
-            data-testid="issue-save"
-          >
-            Save
-          </Button>
-        </>
-      }
-    >
+    <section className={styles.inlineForm} aria-label={title} data-testid="issue-form">
+      <h6 className={styles.formTitle}>{title}</h6>
       <div className={styles.form}>
         <Select
           label="Category"
@@ -179,6 +140,39 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
           </p>
         ) : null}
       </div>
-    </Dialog>
+      <div className={styles.formActions}>
+        {issue ? (
+          <Button variant="danger" onPress={() => setConfirmDelete(true)} isDisabled={mutation.isPending}>
+            Delete issue
+          </Button>
+        ) : null}
+        <span className={styles.formSpacer} />
+        <Button variant="neutral" onPress={onClose}>
+          Cancel
+        </Button>
+        {!issue ? (
+          <Button variant="neutral" onPress={() => submit('add', true)} isDisabled={mutation.isPending}>
+            Save and add another
+          </Button>
+        ) : null}
+        <Button
+          variant="accent"
+          onPress={() => submit(issue ? 'edit' : 'add')}
+          loading={mutation.isPending}
+          data-testid="issue-save"
+        >
+          Save
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this issue?"
+        description={`The ${issue?.category || 'issue'} issue on ${metric} and its review go away.`}
+        confirmLabel="Delete issue"
+        tone="danger"
+        onConfirm={() => submit('delete')}
+      />
+    </section>
   );
 }

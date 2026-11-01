@@ -292,7 +292,7 @@ test.describe('read-only (archived) project', () => {
 });
 
 test.describe('root-cause issues (scenario 9)', () => {
-  test('add an issue through the dialog: "Pending review"; Approve: "Approved"', async ({ page }) => {
+  test('add an issue in the inline form: "pending"; Approve: "Approved"', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 3).click(); // item-0003: quality 60.5% < 70% => failing
     const c = card(page, 'item-0003');
@@ -301,7 +301,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await expect(rc).toBeVisible();
     await expect(rc).toContainText('No issues recorded');
     await rc.getByRole('button', { name: '+ Add issue' }).click();
-    const dlg = page.getByTestId('issue-dialog');
+    const dlg = page.getByTestId('issue-form');
     await expect(dlg).toBeVisible();
     await dlg.getByRole('button', { name: /Category/ }).click();
     await page
@@ -316,7 +316,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await expect(dlg).toHaveCount(0);
     const issue = rc.getByTestId('issue');
     await expect(issue).toHaveCount(1);
-    await expect(issue).toContainText('Pending review');
+    await expect(issue).toContainText('pending');
     await expect(issue).toContainText('The answer cites the wrong clause.');
     await expect(issue).toContainText('Improve retrieval ranking');
     await issue.getByRole('button', { name: /Approve issue/ }).click();
@@ -336,7 +336,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await openRootCause(card(page, 'item-0004'));
     const rc = card(page, 'item-0004').locator('[data-testid=metric-analysis-card][data-metric=exact_match]');
     await rc.getByRole('button', { name: '+ Add issue' }).click();
-    const dlg = page.getByTestId('issue-dialog');
+    const dlg = page.getByTestId('issue-form');
     await dlg.getByRole('button', { name: /Category/ }).click();
     await page
       .getByRole('listbox', { name: /Category/ })
@@ -353,7 +353,12 @@ test.describe('root-cause issues (scenario 9)', () => {
     await dlg.getByTestId('issue-save').click();
     await expect(issue).toContainText('far too strict');
     await issue.getByRole('button', { name: 'Edit' }).click();
-    await dlg.getByRole('button', { name: /Delete issue|Delete/ }).click();
+    await dlg.getByRole('button', { name: 'Delete issue' }).click();
+    // C125: Delete asks first
+    await page
+      .getByRole('alertdialog', { name: 'Delete this issue?' })
+      .getByRole('button', { name: 'Delete issue' })
+      .click();
     await expect(rc.getByTestId('issue')).toHaveCount(0);
   });
 
@@ -363,10 +368,10 @@ test.describe('root-cause issues (scenario 9)', () => {
     await openRootCause(card(page, 'item-0009'));
     const rc = card(page, 'item-0009').locator('[data-testid=metric-analysis-card][data-metric=quality]');
     await rc.getByRole('button', { name: '+ Add issue' }).click();
-    const dlg = page.getByTestId('issue-dialog');
+    const dlg = page.getByTestId('issue-form');
     await dlg.getByTestId('issue-save').click();
     await expect(dlg).toContainText('Choose or type a category.');
-    await page.keyboard.press('Escape');
+    await dlg.getByRole('button', { name: 'Cancel' }).click();
     await expect(dlg).toHaveCount(0);
   });
 
@@ -390,7 +395,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     const rc = c3.locator('[data-testid=metric-analysis-card]').first();
     await expect(rc).toBeVisible();
     await rc.getByRole('button', { name: '+ Add issue' }).click();
-    const dlg = page.getByTestId('issue-dialog');
+    const dlg = page.getByTestId('issue-form');
     await dlg.getByRole('button', { name: /Category/ }).click();
     await page
       .getByRole('listbox', { name: /Category/ })
@@ -399,7 +404,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await dlg.getByRole('textbox', { name: 'New category' }).fill('SQL schema');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('Relation does not exist.');
     await dlg.getByTestId('issue-save').click();
-    await expect(rc.getByTestId('issue')).toContainText('Pending review');
+    await expect(rc.getByTestId('issue')).toContainText('pending');
     await rc
       .getByTestId('issue')
       .getByRole('button', { name: /Approve issue/ })

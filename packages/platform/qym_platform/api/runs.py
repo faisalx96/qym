@@ -575,7 +575,7 @@ def _apply_metric_analysis_patch(
     elif "root_cause_issues" in patch:
         # The old endpoint must not allow a form to invent approval markers.
         for issue in analysis.get("root_cause_issues", []):
-            for key in ("review_status", "reviewed_at", "reviewed_by_user_id", "issue_id"):
+            for key in ("review_status", "reviewed_at", "reviewed_by_user_id", "reviewed_by_name", "review_comment", "issue_id"):
                 issue.pop(key, None)
 
     meaningful = {
@@ -6473,7 +6473,7 @@ def update_root_cause_issue(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Save or approve exactly one issue, with explicit run/metric/pass scope."""
+    """Save, approve or reject exactly one issue, with explicit run/metric/pass scope."""
     run_id = str(request.get("run_id") or "")
     item_id = str(request.get("item_id") or "")
     metric_name = str(request.get("metric_name") or "").strip()
@@ -6486,7 +6486,8 @@ def update_root_cause_issue(
     )
     if run is None:
         raise HTTPException(404, "Run not found")
-    permission = can_review_run if request.get("action") == "approve" else can_modify_run
+    deciding = request.get("action") in {"approve", "reject"}
+    permission = can_review_run if deciding else can_modify_run
     if not permission(db, principal, run):
         raise HTTPException(403, "Access denied")
     require_project_writable(db, run.project_id)
@@ -6516,7 +6517,7 @@ def update_root_cause_issue(
         analysis = (pass_score.meta or {}).get(PASS_ANALYSIS_META_KEY) or {}
     else:
         analysis = metric_analyses.get(metric_name) or {}
-    if request.get("action") == "approve":
+    if deciding:
         _require_issue_decision(
             db, principal, run, item_id, metric_name, pass_number, request.get("issue_id"),
             issue_index=request.get("issue_index"), analysis=analysis,
@@ -6551,6 +6552,57 @@ def update_root_cause_issue(
     return _with_item_visibility(
         db, principal, run, {"ok": True, "row": _updated_item_row(db, run, item_id)}
     )
+
+
+@router.get("/api/runs/{run_id}/items/{item_id}/issue-blocks")
+def get_issue_decision_blocks(
+    run_id: str,
+    item_id: str,
+    pass_number: Optional[int] = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Why this viewer may not approve or reject each root-cause issue of one item (C125).
+
+    ``blocks`` maps metric -> issue_id -> reason, for issues with their own
+    review row (the 'Require a different reviewer' rule needs the author).
+    ``role_block`` is the role rule alone: it applies to every issue,
+    also those with no review row yet. Nothing here changes data.
+    """
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if run is None:
+        raise HTTPException(404, "Run not found")
+    if not can_view_run(db, principal, run):
+        raise HTTPException(403, "Access denied")
+    if not can_review_run(db, principal, run):
+        return {"role_block": "You cannot review this run.", "blocks": {}}
+    role_block = correction_decision_block(db, principal, run.project_id)
+    blocks: Dict[str, Dict[str, str]] = {}
+    if role_block is None:
+        metrics = {str(name) for name in (run.metrics or [])}
+        rows = (
+            db.query(ReviewCorrection)
+            .filter(
+                ReviewCorrection.run_id == run.id,
+                ReviewCorrection.item_id == item_id,
+                ReviewCorrection.metric_name.isnot(None),
+                ReviewCorrection.is_active.is_(True),
+                (
+                    ReviewCorrection.pass_number.is_(None)
+                    if pass_number is None
+                    else ReviewCorrection.pass_number == pass_number
+                ),
+            )
+            .all()
+        )
+        for row in rows:
+            issue_id = correction_issue_id(row)
+            if not issue_id or (metrics and row.metric_name not in metrics):
+                continue
+            reason = correction_decision_block(db, principal, run.project_id, row)
+            if reason:
+                blocks.setdefault(str(row.metric_name), {})[issue_id] = reason
+    return {"role_block": role_block, "blocks": blocks}
 
 
 @router.post("/api/runs/update_root_cause")

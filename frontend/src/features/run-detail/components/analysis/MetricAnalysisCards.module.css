@@ -114,3 +114,55 @@
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
+
+/* C125: why the viewer may not decide, and the decision line under a decided issue */
+.blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.decision {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.rejectForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* C128: the issue form inline in the card, under the Metrics table */
+.inlineForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.formTitle {
+  margin: 0;
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.formSpacer {
+  flex: 1;
+}

@@ -16,11 +16,23 @@ import { MATRIX_NUMBER_MIN, matrixCellSide } from '../charts/chartLabels';
 import chart from '../charts/Charts.module.css';
 import styles from './Panels.module.css';
 
-/** The first qym's scale: positive towards the accent, negative towards purple, strength as the share of colour. */
-function tone(r: number | null): string | undefined {
+/**
+ * A heatmap of strength only (C167, owner note "we still need some sort of heatmap"): one `--chart-1` ramp by |r| on a
+ * fixed 0 to 1 scale. Strength is neither good nor bad, and teal and purple are not data; the sign is in the number.
+ */
+const RAMP_MIN = 4;
+const RAMP_MAX = 48;
+export function correlationTone(r: number | null): string | undefined {
   if (r === null) return undefined;
   const a = Math.min(1, Math.abs(r));
-  return `color-mix(in srgb, ${r >= 0 ? 'var(--accent-primary)' : 'var(--accent-tertiary)'} ${Math.round(18 + a * 62)}%, var(--bg-elevated))`;
+  return `color-mix(in srgb, var(--chart-1) ${Math.round(RAMP_MIN + a * (RAMP_MAX - RAMP_MIN))}%, var(--bg-elevated))`;
+}
+
+/** +0.20, −0.15 (a true minus), 0.00. */
+export function signedR(r: number): string {
+  const v = r.toFixed(2);
+  if (Number(v) === 0) return '0.00';
+  return r > 0 ? `+${v}` : `\u2212${v.slice(1)}`;
 }
 
 export function DeepTab() {
@@ -134,7 +146,7 @@ export function DeepTab() {
                       width="15ch"
                     />
                     <span className={styles.rValue}>
-                      r <b>{r === null || r === undefined ? '—' : r.toFixed(2)}</b>
+                      r <b>{r === null || r === undefined ? '—' : signedR(r)}</b>
                     </span>
                   </span>
                 }
@@ -148,6 +160,7 @@ export function DeepTab() {
                 }
               >
                 <Scatter
+                  fit
                   points={points}
                   xLabel={names[xi] ?? ''}
                   yLabel={names[yi] ?? ''}
@@ -220,24 +233,49 @@ function CorrelationMatrix({
             </span>
             {names.map((colName, j) => {
               const v = r[i]?.[j] ?? null;
+              if (i === j)
+                return (
+                  <span role="gridcell" key={colName} aria-label={`${rowName} versus itself`}>
+                    <span
+                      className={styles.matrixSelf}
+                      style={{ height: side }}
+                      data-testid="matrix-diagonal"
+                    />
+                  </span>
+                );
               return (
                 <span role="gridcell" key={colName}>
                   <button
                     type="button"
                     className={chart.matrixCell}
-                    style={{ width: '100%', height: side, background: tone(v) }}
-                    aria-label={`${rowName} versus ${colName}: ${v === null ? 'not enough data' : v.toFixed(2)}`}
+                    style={{ width: '100%', height: side, background: correlationTone(v) }}
+                    aria-label={`${rowName} versus ${colName}: ${v === null ? 'not enough data' : signedR(v)}`}
                     aria-pressed={i === selected[0] && j === selected[1]}
-                    disabled={i === j}
                     onClick={() => onPick(j, i)}
                   >
-                    {colWidth >= MATRIX_NUMBER_MIN ? (v === null ? '—' : v.toFixed(2)) : null}
+                    {colWidth >= MATRIX_NUMBER_MIN ? (v === null ? '—' : signedR(v)) : null}
                   </button>
                 </span>
               );
             })}
           </div>
         ))}
+      </div>
+      <div className={styles.rampKey} data-testid="correlation-key">
+        <span>|r|</span>
+        <span className={styles.rampScale}>
+          <span
+            className={styles.rampBar}
+            style={{ background: `linear-gradient(to right, ${correlationTone(0)}, ${correlationTone(1)})` }}
+            aria-hidden="true"
+          />
+          <span className={styles.rampTicks} aria-hidden="true">
+            <span>0</span>
+            <span>0.5</span>
+            <span>1</span>
+          </span>
+        </span>
+        <span>More colour, stronger correlation. The sign is in the number.</span>
       </div>
     </div>
   );

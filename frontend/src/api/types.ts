@@ -15,6 +15,8 @@ export interface Project {
   updated_at: string;
   correction_approvers: 'members' | 'managers';
   correction_require_different_reviewer: boolean;
+  /** Which way is better for metrics that declare no direction, saved per project and metric (C129). */
+  metric_directions?: Record<string, 'maximize' | 'minimize'>;
 }
 
 export interface Me {

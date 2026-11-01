@@ -1106,3 +1106,36 @@ def test_reset_of_an_edit_made_before_numbers_were_saved(client, session_factory
     response = _reset(client, "r1")
     assert response.status_code == 409, response.text
     assert _score(session_factory, "r1") == (pytest.approx(0.3), {"modified": "true", "original_score": "pass"})
+
+
+def test_only_managers_save_a_metric_direction_and_every_project_payload_carries_it(client, session_factory):
+    """C129: a metric that declares no direction gets one per project and metric (platform_settings, no migration)."""
+    assert _ok(client.get("/v1/projects/by-slug/project", headers=_ui(MEMBER)))["metric_directions"] == {}
+
+    def _set(email, **body):
+        return client.patch("/v1/projects/project-1/metric-directions", json=body, headers=_ui(email))
+
+    assert _set(MEMBER, metric="correctness", direction="minimize").status_code == 403
+    assert _set(MANAGER, metric="correctness", direction="sideways").status_code == 422
+    assert _set(MANAGER, metric="  ", direction="minimize").status_code == 422
+    body = _ok(_set(MANAGER, metric="correctness", direction="minimize"))
+    assert body == {"project_id": "project-1", "metric_directions": {"correctness": "minimize"}}
+    _ok(_set(ADMIN, metric="tone", direction="maximize"))
+    project = _ok(client.get("/v1/projects/by-slug/project", headers=_ui(MEMBER)))
+    assert project["metric_directions"] == {"correctness": "minimize", "tone": "maximize"}
+    me = _ok(client.get("/v1/me", headers=_ui(MEMBER)))
+    assert next(p for p in me["projects"] if p["id"] == "project-1")["metric_directions"] == project["metric_directions"]
+    with session_factory() as db:
+        audit = db.query(AuditLog).filter_by(action="project.metric_direction_updated").order_by(AuditLog.id).first()
+        assert audit.before == {"metric_directions": {}}
+        assert audit.after == {"metric_directions": {"correctness": "minimize"}}
+    assert _ok(_set(MANAGER, metric="correctness", direction=None))["metric_directions"] == {"tone": "maximize"}
+
+
+def test_metric_direction_storage_ignores_bad_values():
+    from qym_platform.services.metric_directions import _parse
+
+    assert _parse(None) == {}
+    assert _parse("not json") == {}
+    assert _parse("[1, 2]") == {}
+    assert _parse('{"a": "minimize", "b": "up", "c": null}') == {"a": "minimize"}

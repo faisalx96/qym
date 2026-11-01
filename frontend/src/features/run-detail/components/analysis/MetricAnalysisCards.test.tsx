@@ -13,13 +13,16 @@ import { effectiveThresholds, type FilterContext } from '../../lib/filterRules';
 import type { Row, RunPayload } from '../../types';
 
 let current: ReturnType<typeof makeContext>;
+const mutate = vi.fn();
+let blocks: { role_block: string | null; blocks: Record<string, Record<string, string>> } | undefined;
 vi.mock('../../RunContext', () => ({ useRunPage: () => current }));
 vi.mock('@/api/runs', () => ({
-  useIssueAction: () => ({ mutate: vi.fn(), isPending: false }),
+  useIssueAction: () => ({ mutate, isPending: false }),
   useCategoryCatalogQuery: () => ({ data: undefined }),
+  useIssueBlocksQuery: () => ({ data: blocks }),
 }));
 
-import { MetricAnalysisCards } from './MetricAnalysisCards';
+import { decisionLine, MetricAnalysisCards } from './MetricAnalysisCards';
 
 const specs = {
   passing_boolean: { score_type: 'boolean', direction: 'maximize', schema_version: 2 },
@@ -162,5 +165,99 @@ describe('what a card lists', () => {
     expect(card).toHaveTextContent('analysis failed');
     expect(card.querySelectorAll('[data-testid=issue]')).toHaveLength(0);
     expect(JSON.stringify(analysis)).toBe(before);
+  });
+});
+
+describe('deciding an issue on the run page (C125, C128, C174)', () => {
+  const issue = {
+    issue_id: 'issue-1',
+    category: 'Knowledge Gap',
+    subcategory: 'Old refund policy',
+    finding: 'Cites the old policy',
+    category_reason: '',
+    review_status: 'pending',
+  };
+  const withIssue = (extra = {}) =>
+    base({
+      metric_values: [1, 1, 0.9, 0.5, 1, 42, 1],
+      item_metadata: { metric_analyses: { failing_score: { root_cause_issues: [{ ...issue, ...extra }] } } },
+    });
+
+  it('a pending issue has Reject beside Approve; Reject asks for an optional comment and sends it', () => {
+    blocks = undefined;
+    mutate.mockReset();
+    show(withIssue());
+    fireEvent.click(screen.getByRole('button', { name: /Root cause/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reject issue Knowledge Gap' }));
+    const form = screen.getByTestId('reject-form');
+    fireEvent.change(form.querySelector('textarea')!, { target: { value: ' A dataset issue. ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reject issue' }));
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate.mock.calls[0]![0]).toMatchObject({
+      action: 'reject',
+      issue_id: 'issue-1',
+      metric_name: 'failing_score',
+      comment: 'A dataset issue.',
+    });
+  });
+
+  it('the status is a ReviewStatusMark, and a decided issue prints who, when and the comment', () => {
+    blocks = undefined;
+    show(
+      withIssue({
+        review_status: 'rejected',
+        reviewed_by_name: 'Perf User 03',
+        reviewed_at: '2026-10-29T10:00:00Z',
+        review_comment: 'The source is right; this is a dataset issue.',
+      }),
+    );
+    const item = screen.getByTestId('issue');
+    expect(item.querySelector('[data-status=rejected]')).not.toBeNull();
+    expect(screen.getByTestId('issue-decision')).toHaveTextContent(
+      'Rejected by Perf User 03 · Oct 29, 2026: The source is right; this is a dataset issue.',
+    );
+    expect(screen.queryByRole('button', { name: /Reject issue|Approve issue/ })).toBeNull();
+  });
+
+  it('the decision line drops what it does not know', () => {
+    expect(decisionLine('approved', { ...issue, review_status: 'approved' })).toBe('Approved');
+    expect(decisionLine('pending', issue)).toBe('');
+  });
+
+  it('a blocked viewer sees both buttons disabled, with the reason', () => {
+    blocks = {
+      role_block: null,
+      blocks: { failing_score: { 'issue-1': 'Ask another reviewer: you wrote it.' } },
+    };
+    show(withIssue());
+    fireEvent.click(screen.getByRole('button', { name: /Root cause/ }));
+    expect(screen.getByRole('button', { name: 'Approve issue Knowledge Gap' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reject issue Knowledge Gap' })).toBeDisabled();
+    expect(screen.getByTestId('issue-block')).toHaveTextContent('Ask another reviewer: you wrote it.');
+    blocks = undefined;
+  });
+
+  it('Add issue opens the form inline in the card, with no modal', () => {
+    blocks = undefined;
+    show(withIssue());
+    fireEvent.click(screen.getByRole('button', { name: /Root cause/ }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Add issue' }));
+    const card = screen.getByTestId('metric-analysis-card');
+    expect(card.querySelector('[data-testid=issue-form]')).not.toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save and add another' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('issue-form')).toBeNull();
+  });
+
+  it('Delete issue asks first', () => {
+    blocks = undefined;
+    mutate.mockReset();
+    show(withIssue());
+    fireEvent.click(screen.getByRole('button', { name: /Root cause/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete issue' }));
+    expect(mutate).not.toHaveBeenCalled();
+    expect(screen.getByRole('alertdialog', { name: 'Delete this issue?' })).toBeInTheDocument();
   });
 });

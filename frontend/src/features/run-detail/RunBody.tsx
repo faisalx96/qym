@@ -179,10 +179,14 @@ export function RunBody({
   /** The summary has not answered (the header is the list row): hold the requests it makes unnecessary. */
   summaryPending?: boolean;
 }) {
-  const { slug, readOnly } = useProjectContext();
+  const { slug, readOnly, project } = useProjectContext();
   const [params] = useSearchParams();
   const passParam = readPassParam(params);
-  const model = useMemo(() => buildRunModel(payload, passParam), [payload, passParam]);
+  const directions = project.metric_directions;
+  const model = useMemo(
+    () => buildRunModel(payload, passParam, directions ?? {}),
+    [payload, passParam, directions],
+  );
   const api = useRunView(model);
   const live = useLiveRun(runId, payload);
   const passesQuery = usePassesQuery(runId, model.isRepeat);

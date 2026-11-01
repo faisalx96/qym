@@ -432,6 +432,16 @@ export function ScatterLegend({
   );
 }
 
+/** The data's range with 5% padding on each side; a threshold, when given, is kept inside (C221). */
+export function fittedDomain(values: number[], keep?: number): [number, number] {
+  const all = keep === undefined || !Number.isFinite(keep) ? values : [...values, keep];
+  if (!all.length) return [0, 1];
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const span = hi - lo || Math.max(Math.abs(hi) * 0.1, 0.1);
+  return [lo - span * 0.05, hi + span * 0.05];
+}
+
 export function Scatter({
   points,
   xLabel,
@@ -441,6 +451,7 @@ export function Scatter({
   fmtX,
   fmtY,
   quadrants,
+  fit = false,
 }: {
   points: ScatterPoint[];
   xLabel: string;
@@ -450,6 +461,8 @@ export function Scatter({
   fmtX?: (v: number) => string;
   fmtY?: (v: number) => string;
   quadrants?: ScatterQuadrants;
+  /** Fit both axes to the data with 5% padding, not 0 to 1 (C221). A threshold line stays inside the axes. */
+  fit?: boolean;
 }) {
   const [boxRef, W] = useMeasuredWidth<HTMLDivElement>(300);
   const H = scatterHeight(W);
@@ -462,8 +475,8 @@ export function Scatter({
   );
   const xs = shown.map((p) => p.x);
   const ys = shown.map((p) => p.y);
-  const [x0, x1] = [Math.min(...xs, 0), Math.max(...xs, 1)];
-  const [y0, y1] = [Math.min(...ys, 0), Math.max(...ys, 1)];
+  const [x0, x1] = fit ? fittedDomain(xs, quadrants?.x) : [Math.min(...xs, 0), Math.max(...xs, 1)];
+  const [y0, y1] = fit ? fittedDomain(ys, quadrants?.y) : [Math.min(...ys, 0), Math.max(...ys, 1)];
   const sx = (v: number) => pad.l + ((v - x0) / (x1 - x0 || 1)) * (W - pad.l - pad.r);
   const sy = (v: number) => H - pad.b - ((v - y0) / (y1 - y0 || 1)) * (H - pad.t - pad.b);
   const ticks = [0, 0.5, 1];
