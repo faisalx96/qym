@@ -122,6 +122,8 @@ export interface LiveTurnsPage {
   total: number;
   facets: {
     labels: Record<string, number>;
+    statuses: Record<string, number>;
+    outcomes: Record<string, number>;
     modes: Record<string, number>;
     services: Record<string, number>;
     users: { user_ref: string; n: number }[];

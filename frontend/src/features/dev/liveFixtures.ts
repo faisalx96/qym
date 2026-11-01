@@ -245,6 +245,8 @@ export const liveTurnsPage: LiveTurnsPage = {
   total: 6,
   facets: {
     labels: labelMix,
+    statuses: { completed: 6 },
+    outcomes: { agent_failed: 6 },
     modes: { inquiry: 47 },
     services: { sql_generation: 30, sql_execution: 5, visualization: 3 },
     users: [

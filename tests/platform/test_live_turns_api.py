@@ -193,6 +193,8 @@ def test_facets_count_the_filtered_set(client, session_factory):
     ]
     assert body["facets"] == {
         "labels": {"problem_a": 1, "problem_b": 1},
+        "statuses": {"failed": 2},
+        "outcomes": {"agent_failed": 2},
         "modes": {"standard": 2},
         "services": {"sql_generation": 2},
         "users": [{"user_ref": "user-0", "n": 1}, {"user_ref": "user-1", "n": 1}],
@@ -203,8 +205,71 @@ def test_facets_count_the_filtered_set(client, session_factory):
     assert empty == {
         "rows": [],
         "total": 0,
-        "facets": {"labels": {}, "modes": {}, "services": {}, "users": []},
+        "facets": {
+            "labels": {
+                "ok": 2,
+                "suboptimal": 1,
+                "problem_a": 1,
+                "problem_b": 1,
+                "inconclusive": 1,
+            },
+            "statuses": {},
+            "outcomes": {},
+            "modes": {},
+            "services": {},
+            "users": [],
+        },
     }
+
+
+def test_facets_exclude_their_own_filter(client, session_factory):
+    with session_factory() as db:
+        db.query(LiveTurn).filter_by(turn_id=f"turn-{DAY}-0").one().mode = "chat"
+        db.query(LiveTurn).filter_by(turn_id=f"turn-{DAY}-1").one().mode = "report"
+        db.commit()
+
+    body = _turns(client, day=DAY, label="ok", page_size=1)
+    assert body["total"] == 2
+    assert len(body["rows"]) == 1
+    assert body["facets"]["labels"] == {
+        "ok": 2,
+        "suboptimal": 1,
+        "problem_a": 1,
+        "problem_b": 1,
+        "inconclusive": 1,
+    }
+    assert body["facets"]["modes"] == {"chat": 1, "report": 1}
+    assert body["facets"]["statuses"] == {"completed": 2}
+    assert body["facets"]["outcomes"] == {"ok": 2}
+
+    body = _turns(client, day=DAY, mode="chat")
+    assert body["total"] == 1
+    assert body["facets"]["modes"] == {"chat": 1, "report": 1, "standard": 4}
+    assert body["facets"]["labels"] == {"ok": 1}
+    assert _turns(client, day=DAY, mode=["chat", "report"])["total"] == 2
+
+    body = _turns(client, day=DAY, status="completed")
+    assert body["total"] == 3
+    assert body["facets"]["statuses"] == {"completed": 3, "failed": 3}
+    assert body["facets"]["outcomes"] == {"ok": 3}
+
+    body = _turns(client, day=DAY, outcome="ok")
+    assert body["total"] == 3
+    assert body["facets"]["outcomes"] == {"ok": 3, "agent_failed": 3}
+    assert body["facets"]["statuses"] == {"completed": 3}
+
+    body = _turns(client, day=DAY, user="user-0")
+    assert body["total"] == 3
+    assert body["facets"]["users"] == [
+        {"user_ref": "user-0", "n": 3},
+        {"user_ref": "user-1", "n": 3},
+    ]
+    assert body["facets"]["labels"] == {"ok": 1, "suboptimal": 1, "problem_b": 1}
+
+    body = _turns(client, day=DAY, service="sql_generation", service_status="not_ok")
+    assert body["total"] == 2
+    assert body["facets"]["services"] == {"sql_generation": 2, "viz_agent": 1}
+    assert body["facets"]["labels"] == {"problem_a": 1, "problem_b": 1}
 
 
 def test_turn_detail_has_conversation_siblings_in_time_order(client, session_factory):

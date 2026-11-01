@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from itertools import islice
 from math import isfinite
@@ -398,10 +398,16 @@ def _turn_row(turn: LiveTurn, scores: dict[str, LiveTurnScore]) -> dict[str, Any
     }
 
 
-def _facets(query: Query, source: LiveSource) -> dict[str, Any]:
-    """Count facet values over every matching turn before pagination."""
+def _facets(db: Session, source: LiveSource, filters: TurnFilters) -> dict[str, Any]:
+    """Count each facet with all filters except its own dimension applied."""
     counts = {}
-    for name, attr in (("labels", LiveTurn.label), ("modes", LiveTurn.mode)):
+    for name, attr in (
+        ("labels", LiveTurn.label),
+        ("statuses", LiveTurn.status),
+        ("outcomes", LiveTurn.outcome),
+        ("modes", LiveTurn.mode),
+    ):
+        query = _filtered_turns(db, source, replace(filters, **{name: []}))
         counts[name] = dict(
             query.with_entities(attr, func.count(LiveTurn.id))
             .filter(attr.isnot(None))
@@ -409,7 +415,8 @@ def _facets(query: Query, source: LiveSource) -> dict[str, Any]:
             .all()
         )
     services = (
-        query.join(LiveTurnScore, LiveTurnScore.turn_pk == LiveTurn.id)
+        _filtered_turns(db, source, replace(filters, service=None, service_status=None))
+        .join(LiveTurnScore, LiveTurnScore.turn_pk == LiveTurn.id)
         .outerjoin(
             LiveMetricSpec,
             and_(
@@ -428,7 +435,8 @@ def _facets(query: Query, source: LiveSource) -> dict[str, Any]:
         .all()
     )
     users = (
-        query.with_entities(LiveTurn.user_ref, func.count(LiveTurn.id).label("n"))
+        _filtered_turns(db, source, replace(filters, user=None))
+        .with_entities(LiveTurn.user_ref, func.count(LiveTurn.id).label("n"))
         .filter(LiveTurn.user_ref.isnot(None))
         .group_by(LiveTurn.user_ref)
         .order_by(func.count(LiveTurn.id).desc(), LiveTurn.user_ref)
@@ -461,7 +469,7 @@ def list_turns(
     return {
         "rows": [_turn_row(turn, scores) for turn, scores in batch],
         "total": query.count(),
-        "facets": _facets(query, source),
+        "facets": _facets(db, source, filters),
     }
 
 

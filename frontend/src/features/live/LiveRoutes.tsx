@@ -1,3 +1,4 @@
+import { useParams } from 'react-router-dom';
 import { useLiveSources } from '@/api/live';
 import { useProjectContext } from '@/features/shell/ProjectContext';
 import { useDocumentTitle } from '@/features/shell/hooks';
@@ -7,6 +8,8 @@ import { useSearchParamsState } from '@/lib/url-state';
 import { ErrorState, PageHeader, Skeleton, Text } from '@/ui';
 import { LiveEmptyState } from './LiveEmptyState';
 import { LiveOverviewPage } from './LiveOverviewPage';
+import { LiveTurnPage } from './LiveTurnPage';
+import { LiveTurnsPage } from './LiveTurnsPage';
 import styles from './live.module.css';
 
 function LiveRoute({ title }: { title: string }) {
@@ -55,9 +58,27 @@ export function LiveOverviewRoute() {
 }
 
 export function LiveTurnsRoute() {
+  const { slug } = useProjectContext();
+  const query = useLiveSources(slug);
+  const { get } = useSearchParamsState();
+  const source = get('source') || query.data?.default_source || query.data?.sources[0]?.key;
+  if (query.data?.sources.length && source) return <LiveTurnsPage slug={slug} source={source} />;
   return <LiveRoute title="Turns" />;
 }
 
 export function LiveTurnRoute() {
+  const { slug } = useProjectContext();
+  const query = useLiveSources(slug);
+  const { get } = useSearchParamsState();
+  // The turn id is the splat after live/turns/; producers may use ids with slashes.
+  const splat = useParams()['*'] ?? '';
+  const turnId = splat
+    .split('/')
+    .map((part) => decodeURIComponent(part))
+    .join('/');
+  const source = get('source') || query.data?.default_source || query.data?.sources[0]?.key;
+  if (query.data?.sources.length && source && turnId) {
+    return <LiveTurnPage slug={slug} source={source} turnId={turnId} />;
+  }
   return <LiveRoute title="Turn" />;
 }
