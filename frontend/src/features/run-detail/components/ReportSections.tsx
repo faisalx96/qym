@@ -14,7 +14,7 @@ import { metricDirectionLabel } from '@/lib/metrics';
 import { Icon, LinkButton, ReportSection, SectionBoundary, Stack, StatStrip, Text } from '@/ui';
 import { plannedItems } from '../lib/heroModel';
 import { runCounts } from '../lib/overviewModel';
-import { errorBucketCount } from '../lib/panelCounts';
+import { navErrorCount } from '../lib/panelCounts';
 import { getRowRootCauseAnalyses } from '../lib/rowMeta';
 import { analyzerHref } from '../lib/runActions';
 import { useRunPage } from '../RunContext';
@@ -94,6 +94,8 @@ export interface SectionEntry {
   label: string;
   count?: number;
   danger?: boolean;
+  /** Tooltip of the nav link (the Errors badge says what it counts). */
+  tip?: string;
 }
 
 /** Items with at least one root-cause analysis: the nav's Root cause count. */
@@ -139,7 +141,7 @@ function RootCauseEmpty() {
 export function useSectionEntries(): SectionEntry[] {
   const { model, items, payload, rowsPending } = useRunPage();
   // Until the rows arrive the nav shows the sections the summary knows about, without counts.
-  const errorCount = rowsPending ? 0 : errorBucketCount(model.rows, model.isRepeat && !model.viewPass);
+  const errors = useMemo(() => (rowsPending ? null : navErrorCount(model.rows)), [rowsPending, model.rows]);
   const rootCauseCount = useRootCauseCount();
   const total = payload.snapshot.rows_total ?? payload.snapshot.rows.length;
   return [
@@ -153,7 +155,12 @@ export function useSectionEntries(): SectionEntry[] {
     { id: 'latency', label: 'Latency' },
     { id: 'deep', label: 'Deep analysis' },
     { id: 'categories', label: 'Categories' },
-    { id: 'errors', label: 'Errors', ...(rowsPending ? {} : { count: errorCount, danger: errorCount > 0 }) },
+    // C175: items with a task or metric error, the number the Overview strip and the Errors filter show
+    {
+      id: 'errors',
+      label: 'Errors',
+      ...(errors ? { count: errors.items, danger: errors.items > 0, tip: errors.tip } : {}),
+    },
     // RF3 (C113): Root cause is always in the nav, before Items, so the first analysis shifts no link
     { id: 'root-cause', label: 'Root cause', ...(rowsPending ? {} : { count: rootCauseCount }) },
     {

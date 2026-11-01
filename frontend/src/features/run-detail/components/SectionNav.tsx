@@ -272,11 +272,12 @@ export function SectionNav({ onSection }: SectionNavProps) {
   }, []);
   const status = String(run.status || '').toUpperCase();
 
-  const link = (id: SectionId, label: string, opts: { count?: number; danger?: boolean }) => (
+  const link = (id: SectionId, label: string, opts: { count?: number; danger?: boolean; tip?: string }) => (
     <a
       key={id}
       href={`#run-section-${id}`}
       className={styles.link}
+      title={opts.tip}
       data-link="block"
       aria-current={active === id ? 'location' : undefined}
       data-section={id}
@@ -304,7 +305,7 @@ export function SectionNav({ onSection }: SectionNavProps) {
         <RunStatusBadge status={status} label={String(run.status || '').toLowerCase()} />
       </span>
       <span ref={rowRef} className={styles.links}>
-        {visible.map((e) => link(e.id, e.label, { count: e.count, danger: e.danger }))}
+        {visible.map((e) => link(e.id, e.label, { count: e.count, danger: e.danger, tip: e.tip }))}
         {overflow.length ? (
           <DropdownMenu
             label="More sections"
