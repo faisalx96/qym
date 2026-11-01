@@ -320,7 +320,9 @@ def test_local_run_has_no_experiment_panel(client, seed):
 
 def test_non_member_cannot_read_run(client, seed):
     response = client.get("/api/runs/run-official", headers=_headers(OUTSIDER))
-    assert response.json() == {"error": "Access denied"}
+    # 404, not a 200 {error} body, and the same answer as a missing run (C057).
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Run not found"
 
 
 def test_clone_with_job_prefills_only_that_combination(client, seed):

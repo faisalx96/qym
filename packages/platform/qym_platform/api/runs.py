@@ -4576,10 +4576,11 @@ def run_passes(
 ) -> Dict[str, Any]:
     """Repeat runs: per-pass slice aggregates (lazy-loaded on runs-list expand)."""
     run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        return {"error": "Run not found"}
-    if not can_view_run(db, principal, run):
-        return {"error": "Access denied"}
+    # A missing run and one the caller cannot view both answer 404, so a run id's
+    # existence does not leak (C057). The frontend still reads a 200 {error} body
+    # from older servers for one release.
+    if not run or not can_view_run(db, principal, run):
+        raise HTTPException(status_code=404, detail="Run not found")
 
     from qym_platform.db.models import RunItemPassScore
 
@@ -4982,10 +4983,11 @@ def run_group_metrics(
     uncertainty) the run page uses; ``group`` is the same in both.
     """
     run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        return {"error": "Run not found"}
-    if not can_view_run(db, principal, run):
-        return {"error": "Access denied"}
+    # A missing run and one the caller cannot view both answer 404, so a run id's
+    # existence does not leak (C057). The frontend still reads a 200 {error} body
+    # from older servers for one release.
+    if not run or not can_view_run(db, principal, run):
+        raise HTTPException(status_code=404, detail="Run not found")
 
     from qym.core.reducers import group_stats
 
@@ -5000,7 +5002,7 @@ def run_group_metrics(
     }
     metric_name = metric or primary_metric(run.metrics, specs)
     if not metric_name:
-        return {"error": "Run has no metrics"}
+        raise HTTPException(status_code=422, detail="Run has no metrics")
     # Passes follow the metric's declared direction. Without one the page
     # shows only averages; the pass math keeps the historical default.
     spec = specs.get(metric_name)
@@ -5552,10 +5554,11 @@ def legacy_run_data(
     fields: Optional[str] = None,
 ) -> Dict[str, Any]:
     run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        return {"error": "Run not found"}
-    if not can_view_run(db, principal, run):
-        return {"error": "Access denied"}
+    # A missing run and one the caller cannot view both answer 404, so a run id's
+    # existence does not leak (C057). The frontend still reads a 200 {error} body
+    # from older servers for one release.
+    if not run or not can_view_run(db, principal, run):
+        raise HTTPException(status_code=404, detail="Run not found")
     _reconcile_run_liveness(db, [run])
 
     if view not in (None, "full", "compact", "summary"):
@@ -7474,7 +7477,8 @@ def get_run_spans(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_view_run(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
+        # Hidden runs answer like missing ones (C057).
+        raise HTTPException(status_code=404, detail="Run not found")
 
     query = db.query(Span).filter(Span.run_id == run_id)
     if trace_id:
@@ -7511,7 +7515,8 @@ def get_item_spans(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_view_run(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
+        # Hidden runs answer like missing ones (C057).
+        raise HTTPException(status_code=404, detail="Run not found")
 
     item = (
         db.query(RunItem)
