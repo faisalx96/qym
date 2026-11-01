@@ -72,7 +72,6 @@ export function RunShell({
   const run = summary.data?.run;
   return (
     <AnalyzerFrame
-      slug={slug}
       scope={scope}
       tab={route.scope}
       onTab={route.setScope}

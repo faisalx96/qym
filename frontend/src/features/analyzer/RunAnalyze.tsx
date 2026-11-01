@@ -11,7 +11,7 @@ import { MetricChips } from './blocks/MetricChips';
 import { PreviewDrawer } from './blocks/PreviewDrawer';
 import { ResultsSlot } from './blocks/ResultsSlot';
 import { RunHeader } from './blocks/RunHeader';
-import { SamplePicker } from './blocks/SamplePicker';
+import { PassPicker } from './blocks/SamplePicker';
 import { TargetFilters, TargetList } from './blocks/Targets';
 import { mappingSummary } from './model/settings';
 import { useAnalysisPhase } from './useAnalysisPhase';
@@ -78,7 +78,8 @@ export function RunAnalyze(props: Common) {
       );
     return skeleton ? <LoadingLayout /> : null;
   }
-  if (data.needsPass) return <SamplePicker passes={data.passes} onPick={route.setPass} />;
+  if (data.needsPass)
+    return <PassPicker slug={props.slug} runId={runId} passes={data.passes} onPick={route.setPass} />;
   return <Workspace key={key} {...props} data={data} onNeedBodies={() => setBodies(true)} />;
 }
 

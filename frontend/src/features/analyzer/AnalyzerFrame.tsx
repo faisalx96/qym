@@ -11,7 +11,6 @@ import s from './analyzer.module.css';
  * analysis puts a dot on "Analyze run" so it stays visible from every tab.
  */
 export function AnalyzerFrame({
-  slug,
   scope,
   tab,
   onTab,
@@ -20,7 +19,6 @@ export function AnalyzerFrame({
   live,
   children,
 }: {
-  slug: string;
   scope: AnalysisScope;
   tab: AnalyzerScope;
   onTab: (tab: AnalyzerScope) => void;
@@ -36,7 +34,8 @@ export function AnalyzerFrame({
       <PageHeader
         title="Auto-analysis"
         description={description}
-        meta={[`Project ${slug}`, ...(meta ?? [])]}
+        // C212: the project is in the breadcrumb's switcher; the header does not repeat its slug
+        meta={meta}
         tabs={
           <Tabs
             label="Auto-analysis views"

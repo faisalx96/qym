@@ -31,7 +31,6 @@ export function AnalyzerPage() {
 
   return (
     <AnalyzerFrame
-      slug={slug}
       scope={scope}
       tab={route.scope}
       onTab={route.setScope}
