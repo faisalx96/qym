@@ -11,7 +11,10 @@ export interface SecretRevealDialogProps {
   description?: string;
 }
 
-/** Shows a one-time secret (API key, read token, temporary password) with Copy. */
+/**
+ * Shows a one-time secret (API key, read token, temporary password) with Copy. Only Done or the
+ * × button closes it: a stray click outside or Escape would lose a secret that shows once (C045).
+ */
 export function SecretRevealDialog({
   open,
   onClose,
@@ -25,6 +28,8 @@ export function SecretRevealDialog({
     <Dialog
       open={open && secret !== null}
       onOpenChange={(o) => !o && onClose()}
+      dismissOnBackdrop={false}
+      isKeyboardDismissDisabled
       title={title}
       description={description ?? `Copy this ${noun} now. It is shown once and cannot be retrieved later.`}
       footer={
