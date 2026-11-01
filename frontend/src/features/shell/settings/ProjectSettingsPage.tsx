@@ -19,7 +19,7 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number];
 /** /projects/:slug/settings?tab=… — the tab is persistent URL state (brief 01 §9.6). */
 export function ProjectSettingsPage() {
   const { project, readOnly, canManage, isAdmin } = useProjectContext();
-  const { params, replaceUrlQuery } = useSearchParamsState();
+  const { params, replaceUrlQuery, pushUrlQuery } = useSearchParamsState();
   useDocumentTitle('Project settings');
 
   const items = useMemo(
@@ -87,7 +87,8 @@ export function ProjectSettingsPage() {
         label="Settings sections"
         items={items}
         selected={selected}
-        onSelect={(id) => replaceUrlQuery({ tab: id === 'general' ? null : id })}
+        // C117: a view tab is a place, so Back returns to the previous tab
+        onSelect={(id) => pushUrlQuery({ tab: id === 'general' ? null : id })}
       >
         <TabPanel id="general">
           <GeneralTab />

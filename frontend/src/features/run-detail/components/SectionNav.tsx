@@ -283,6 +283,12 @@ export function SectionNav({ onSection }: SectionNavProps) {
       data-tone={opts.danger ? 'danger' : undefined}
       onClick={(e) => {
         e.preventDefault();
+        // C117: the URL names the section in view (a replace, so Back still leaves the run)
+        window.history.replaceState(
+          window.history.state,
+          '',
+          `${window.location.pathname}${window.location.search}#run-section-${id}`,
+        );
         onSection(id);
       }}
     >
