@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/http';
+import { foldSearchText } from '@/lib/text';
 import { encodeRunId } from '@/api/runs';
 import type { ItemSearchPayload } from '@/features/run-detail/types';
 import type { CompareModel } from '../lib/model';
@@ -117,9 +118,10 @@ export function useCompareSearch(model: CompareModel | null, q: string, rules: F
     const haveAll = (condId: string) => bases.every(({ base }) => sets.get(base)?.has(condId));
     return (field, needle, c) => {
       if (field === 'content') {
-        if (c.itemId.toLowerCase().includes(needle.toLowerCase())) return true;
+        const q = foldSearchText(needle);
+        if (foldSearchText(c.itemId).includes(q)) return true;
         if (haveAll('q')) return serverHit('q', c);
-        return c.rows.some((r) => rowText(r).toLowerCase().includes(needle.toLowerCase()));
+        return c.rows.some((r) => foldSearchText(rowText(r)).includes(q));
       }
       const id = `o:${needle}`;
       if (haveAll(id)) return serverHit(id, c);

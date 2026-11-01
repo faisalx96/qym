@@ -947,6 +947,9 @@ def test_csv_run_upload_preserves_multi_pass_structure(client, session_factory) 
 
     assert response.status_code == 200, response.text
     run_id = response.json()["run_id"]
+    # C209: the upload answers with the canonical project run URL, as run start does.
+    assert "/projects/" in response.json()["live_url"]
+    assert response.json()["live_url"].endswith(f"/runs/{run_id}")
     with session_factory() as session:
         run = session.get(Run, run_id)
         items = session.query(RunItem).filter(RunItem.run_id == run_id).all()

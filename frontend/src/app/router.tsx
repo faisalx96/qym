@@ -10,6 +10,7 @@ import { ProfilePage } from '@/features/shell/profile/ProfilePage';
 import { ProjectSettingsPage } from '@/features/shell/settings/ProjectSettingsPage';
 import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
+import { RunsIndexRedirect } from '@/features/shell/RunsIndexRedirect';
 import { RouteError } from '@/features/shell/RouteError';
 import { AdminGuard } from '@/features/admin/AdminGuard';
 import { DocsRedirect } from '@/features/docs/DocsRedirect';
@@ -66,9 +67,14 @@ const projectChildren: RouteObject[] = [
   { path: C.reviews, element: <ReviewsPage /> },
   { path: C.compare, element: <ComparePage /> },
   { path: C.settings, element: <ProjectSettingsPage /> },
+  // A run URL trimmed to its list (C209); ranks above the run page's splat.
+  { path: C.runsTrimmed, element: <RunsIndexRedirect /> },
   {
     path: C.runs_detail,
     loader: runRouteLoader,
+    // The loader returns at once (it only starts prefetches), so nothing needs to show while it runs. Without
+    // this, every deep link to a run logs React Router's missing-HydrateFallback warning (C197).
+    hydrateFallbackElement: null,
     element: (
       <RunAnalyzerRedirect>
         <RunDetailPage />
@@ -123,6 +129,8 @@ export const routes: RouteObject[] = [
           { path: ROUTES.docsPage, element: <DocsPage /> },
           { path: ROUTES.docsNew, element: <DocsRedirect /> },
           { path: ROUTES.legacyRun, element: <LegacyRunRedirect /> },
+          // A trimmed project URL goes to the projects list (C209).
+          { path: ROUTES.projectsIndex, element: <Navigate to="/" replace /> },
           { path: ROUTES.project, element: <ProjectLayout />, children: projectChildren },
           { path: '/index.html', element: <Navigate to="/" replace /> },
           { path: '*', element: <NotFound /> },

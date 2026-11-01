@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import os
 import re
@@ -114,6 +116,7 @@ from qym_platform.services.run_versioning import (
     versioning_conditions,
 )
 from qym_platform.services.run_payloads import (
+    lean_finished_index_rows,
     compact_attempt,
     compact_row,
     detail_item_ids,
@@ -180,6 +183,8 @@ from qym_platform.services.run_means import (
     supersede_metric_error,
 )
 from qym_platform.services.retention import purge_deleted_runs_now, purge_due_at
+from qym_platform.middleware.etag import mark_cacheable
+from qym_platform.services.text_search import fold_search_text
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
     delete_repeat_pass,
@@ -3127,6 +3132,7 @@ def legacy_compare(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
     view: Optional[str] = None,
+    response: Response = None,
 ) -> Dict[str, Any]:
     """Return multiple run snapshots for comparison.
 
@@ -3180,6 +3186,10 @@ def legacy_compare(
         if str(data.get("run", {}).get("compare_alignment_status") or "") != "aligned"
     ]
     compare_alignment_status = "unalignable" if unalignable_runs else "aligned"
+    # C072: an ETag when every compared run is finished (missing runs make no difference to the body's hash)
+    statuses = [str((data.get("run") or {}).get("status") or "") for data in runs_data]
+    if runs_data and all(status.upper() not in {"RUNNING", "PENDING"} for status in statuses):
+        mark_cacheable(response, [SimpleNamespace(status=status) for status in statuses])
 
     return {
         "runs": runs_data,
@@ -3611,6 +3621,11 @@ def _build_run_batch(
             ),
         )
 
+    if compact:
+        # C084: a finished run's index rows drop the output digests and the zero values of attempt trace stats
+        for state in states.values():
+            if state.run.status not in _LIVE_RUN_STATUSES:
+                lean_finished_index_rows(state.rows)
     return _run_payloads(db, states, metric_specs, principal, access)
 
 
@@ -4581,6 +4596,7 @@ def run_passes(
     run_id: str,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    response: Response = None,
 ) -> Dict[str, Any]:
     """Repeat runs: per-pass slice aggregates (lazy-loaded on runs-list expand)."""
     run = Run.active(db).filter(Run.id == run_id).first()
@@ -4589,6 +4605,7 @@ def run_passes(
     # from older servers for one release.
     if not run or not can_view_run(db, principal, run):
         raise HTTPException(status_code=404, detail="Run not found")
+    mark_cacheable(response, [run])  # C072
 
     from qym_platform.db.models import RunItemPassScore
 
@@ -4977,6 +4994,7 @@ def run_group_metrics(
     view: Optional[Literal["group"]] = Query(None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    response: Response = None,
 ) -> Dict[str, Any]:
     """Repeat runs: the group set (k = samples) plus the full accuracy-vs-k band.
 
@@ -4996,6 +5014,7 @@ def run_group_metrics(
     # from older servers for one release.
     if not run or not can_view_run(db, principal, run):
         raise HTTPException(status_code=404, detail="Run not found")
+    mark_cacheable(response, [run])  # C072
 
     from qym.core.reducers import group_stats
 
@@ -5357,7 +5376,7 @@ def search_run_items(
         for (item_id,) in (
             db.query(RunItem.item_id).filter(RunItem.run_id == run.id).yield_per(1000)
         ):
-            lowered_id = str(item_id or "").lower()
+            lowered_id = fold_search_text(str(item_id or ""))
             for condition in conditions:
                 if condition["field"] == "all" and condition["value"] in lowered_id:
                     for scope_matches in matches_by_scope.values():
@@ -5440,9 +5459,10 @@ def search_run_items(
 
         texts = pass_texts()
     for item_id, content, outputs in texts:
-        content_lowered = [value.lower() for value in content]
+        # C066: fold the text the way the terms are folded (search_conditions)
+        content_lowered = [fold_search_text(value) for value in content]
         for scope, output in outputs.items():
-            lowered = content_lowered + [output.lower()]
+            lowered = content_lowered + [fold_search_text(output)]
             for condition in conditions:
                 candidates = (
                     lowered if condition["field"] == "all"
@@ -5560,6 +5580,7 @@ def legacy_run_data(
     view: Optional[str] = None,
     pass_number: Optional[int] = None,
     fields: Optional[str] = None,
+    response: Response = None,
 ) -> Dict[str, Any]:
     run = Run.active(db).filter(Run.id == run_id).first()
     # A missing run and one the caller cannot view both answer 404, so a run id's
@@ -5568,6 +5589,8 @@ def legacy_run_data(
     if not run or not can_view_run(db, principal, run):
         raise HTTPException(status_code=404, detail="Run not found")
     _reconcile_run_liveness(db, [run])
+    # C072: a finished run's payload gets an ETag; a revisit with the same body is a 304
+    mark_cacheable(response, [run])
 
     if view not in (None, "full", "compact", "summary"):
         raise HTTPException(422, "view must be full, compact or summary")

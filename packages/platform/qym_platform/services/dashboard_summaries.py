@@ -2703,6 +2703,8 @@ class DashboardSummaryWorker:
                     live = db.info.pop("dashboard_live_refresh", {})
                     db.commit()
                     self._note_live(live)
+                    if applied:
+                        self._store_step_latency(run_id)
                     processed += applied
                     self._made_progress |= bool(scanned or applied)
             except Exception as exc:
@@ -2789,6 +2791,27 @@ class DashboardSummaryWorker:
             ][: len(self._live_refresh) - self.LIVE_REFRESH_MAX_RUNS]:
                 del self._live_refresh[run_id]
 
+    def _store_step_latency(self, run_id):
+        """Keep the run page's step-latency summary stored after this worker published the run (C022).
+
+        Its own short transaction after the partition commit, so the span scan never holds the partition lock.
+        A finished run is built once (its fingerprint then holds); a live one at most every
+        ``LIVE_SUMMARY_REBUILD``. A failure is logged: the run page then builds the summary on read.
+        """
+        from qym_platform.api.step_latency import refresh_stored_summary
+        from qym_platform.db.models import Run
+
+        try:
+            with self.session_factory() as db:
+                db.info["dashboard_projection_worker"] = True
+                run = db.get(Run, run_id)
+                if run is None or run.deleted_at is not None:
+                    return
+                refresh_stored_summary(db, run)
+                db.commit()
+        except Exception:
+            self._logger.exception("Step-latency summary refresh failed for run %s", run_id)
+
     def _refresh_live_summaries(self, *, force=False):
         """Rebuild deferred live summaries whose throttle interval elapsed.
 
@@ -2815,8 +2838,10 @@ class DashboardSummaryWorker:
             try:
                 with self.session_factory() as db:
                     db.info["dashboard_projection_worker"] = True
-                    refresh_live_summary(db, run_id, nowait=True)
+                    rebuilt = refresh_live_summary(db, run_id, nowait=True)
                     db.commit()
+                if rebuilt:
+                    self._store_step_latency(run_id)
                 entry[1] = False
                 self._live_refresh.move_to_end(run_id)
             except Exception as exc:

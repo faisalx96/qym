@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import styles from './Button.module.css';
 
@@ -14,6 +14,8 @@ export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style'
   loading?: boolean;
   className?: string;
   children?: ReactNode;
+  /** The keys that press the button. React Aria does not pass this attribute through, so the button sets it. */
+  'aria-keyshortcuts'?: string;
 }
 
 /**
@@ -21,12 +23,31 @@ export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style'
  * primary = filled accent (.btn-primary); ghost = text only.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'neutral', size = 'sm', icon, iconEnd, loading, className, children, isDisabled, ...rest },
+  {
+    variant = 'neutral',
+    size = 'sm',
+    icon,
+    iconEnd,
+    loading,
+    className,
+    children,
+    isDisabled,
+    'aria-keyshortcuts': keyShortcuts,
+    ...rest
+  },
   ref,
 ) {
+  const inner = useRef<HTMLButtonElement>(null);
+  useImperativeHandle(ref, () => inner.current as HTMLButtonElement);
+  useLayoutEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    if (keyShortcuts) el.setAttribute('aria-keyshortcuts', keyShortcuts);
+    else el.removeAttribute('aria-keyshortcuts');
+  }, [keyShortcuts]);
   return (
     <AriaButton
-      ref={ref}
+      ref={inner}
       className={[styles.button, className].filter(Boolean).join(' ')}
       data-variant={variant}
       data-size={size}

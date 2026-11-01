@@ -344,12 +344,13 @@ def test_compare_rows_send_their_trace_stats_once(client, session_factory):
         assert row["trace_stats"] == TRACE_STATS
         assert "trace_stats" not in row["item_metadata"]
     assert official["snapshot"]["rows"][0]["item_metadata"] == {"topic": "a"}
-    # A pass attempt keeps the trace error counts a pass column reads.
+    # A pass attempt keeps the trace error counts a pass column reads; a finished
+    # run's index leaves out the zero counts (C084), which the page reads as 0.
     attempts = repeat["snapshot"]["rows"][0]["pass_attempts"]
     assert [attempt["trace_stats"] for attempt in attempts] == [
-        {"tool_errors": 0, "malformed_tool_calls": 0, "provider_errors": 0},
-        {"tool_errors": 1, "malformed_tool_calls": 0, "provider_errors": 0},
-        {"tool_errors": 2, "malformed_tool_calls": 0, "provider_errors": 1},
+        {},
+        {"tool_errors": 1},
+        {"tool_errors": 2, "provider_errors": 1},
     ]
     # The run page still gets every copy.
     page = _ok(client.get(f"/api/runs/{run_ids[1]}?view=compact", headers=_ui(OWNER)))

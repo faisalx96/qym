@@ -19,14 +19,15 @@ export const loadRootCauseTab = once(() => import('./components/panels/RootCause
  * The panel chunks other than the Overview and the Items table (those two go first and have their own calls), all at
  * once: on a slow link a one-after-the-other chain costs a round trip per chunk.
  */
-export function preloadPanels(): void {
+export function preloadPanels({ rootCause = true }: { rootCause?: boolean } = {}): void {
   void Promise.all([
     loadCategoriesTab(),
     loadErrorsTab(),
     loadLatencyTab(),
     loadDeepTab(),
     loadRepeatTab(),
-    loadRootCauseTab(),
+    // C086: the Root cause chunk only when the run has analyses (an empty section is one line and a button)
+    rootCause ? loadRootCauseTab() : undefined,
     loadTraceHost(),
   ]).catch(() => undefined);
 }

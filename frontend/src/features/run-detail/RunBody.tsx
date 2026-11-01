@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { runPath } from '@/app/routes';
+import { getRowRootCauseAnalyses } from './lib/rowMeta';
 import { api as http } from '@/lib/http';
 import {
   loadedGroups,
@@ -27,7 +28,7 @@ import { ItemsSkeleton } from './components/StageSkeletons';
 import { loadItemsSection, loadTraceHost, preloadPanels } from './chunks';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
-import { alignToElement } from '@/lib/scrollToElement';
+import { alignToElement, focusSectionHeading } from '@/lib/scrollToElement';
 import { useSidebarHidden } from '@/lib/useSidebarHidden';
 import { useScope } from './hooks/useScope';
 import { readPassParam, useRunView } from './hooks/useRunView';
@@ -55,8 +56,11 @@ export const WIDE_QUERY = '(min-width: 1200px)';
 /** Old anchors that name no section (`#summary`) or a retired alias. */
 const HASH_ALIASES: Record<string, SectionId> = { summary: 'summary' };
 
-/** Scroll the shell to a section; lazy sections above it mount while it travels, so re-align until the layout settles. */
-function scrollToSection(id: SectionId, host: HTMLElement | null) {
+/**
+ * Scroll the shell to a section; lazy sections above it mount while it travels, so re-align until the layout settles.
+ * `focus` (a section link or button the reader pressed) also moves keyboard focus to the section heading (C091).
+ */
+function scrollToSection(id: SectionId, host: HTMLElement | null, focus = false) {
   const scroller = document.getElementById('shell-content');
   if (id === 'summary') {
     scroller?.scrollTo({ top: 0 });
@@ -65,6 +69,7 @@ function scrollToSection(id: SectionId, host: HTMLElement | null) {
   const el = document.getElementById(sectionDomId(id));
   if (!el) return;
   alignToElement(el, host);
+  if (focus) focusSectionHeading(el);
 }
 
 /** Everything below the hero: nav, scope bar, sidebar, sections and items (needs the run context). */
@@ -81,7 +86,7 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
   if (!scope.active && drawerOpen) setDrawerOpen(false);
   if (!scope.searchOnly && searchSidebar) setSearchSidebar(false);
   const sidebarShown = scope.active && (scope.searchOnly ? searchSidebar : !sidebarHidden);
-  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current), [pageRef]);
+  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current, true), [pageRef]);
 
   // Links from before the report layout: `#overview`, `#run-section-errors`, `?panel=latency`.
   const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
@@ -239,6 +244,15 @@ export function RunBody({
   // Everything else loads by itself once the core rows have painted, with no scroll or click: the item texts and the
   // remaining panel chunks and section data, in the browser's idle time (aborted when the page is left).
   const qc = useQueryClient();
+  // C086: the Root cause chunk is fetched only for a run that has analyses
+  const hasRootCause = useMemo(
+    () =>
+      !!payload.run.metadata?.analysis_aggregation ||
+      model.rows.some(
+        (row) => getRowRootCauseAnalyses(row, 'all', model.isRepeat && !model.viewPass).length > 0,
+      ),
+    [payload.run.metadata, model.rows, model.isRepeat, model.viewPass],
+  );
   useEffect(() => {
     if (rowsPending) return undefined;
     const run = () => {
@@ -246,7 +260,7 @@ export function RunBody({
       // the other chunks would share the bandwidth with it
       void loadItemsSection().finally(() => {
         needGroup('text');
-        preloadPanels();
+        preloadPanels({ rootCause: hasRootCause });
       });
       void qc.prefetchQuery({
         queryKey: runKeys.stepLatency(runId, null),
@@ -260,7 +274,7 @@ export function RunBody({
     }
     const id = window.requestIdleCallback(run, { timeout: 300 });
     return () => window.cancelIdleCallback(id);
-  }, [rowsPending, needGroup, qc, runId]);
+  }, [rowsPending, needGroup, qc, runId, hasRootCause]);
 
   const basePath = runPath(slug, runId);
   const value: RunPageValue = {

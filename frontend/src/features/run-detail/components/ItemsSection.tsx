@@ -50,6 +50,12 @@ export function ItemsSection() {
     [expanded, itemParam, setItemParam],
   );
 
+  // A pass switch (the 'Pass N' links of a repeat item, C127) keeps ?item: treat it as a deep link again, so the item
+  // opens on the right page of the new pass and scrolls into view.
+  useEffect(() => {
+    handled.current = null;
+  }, [model.viewPass]);
+
   // Deep link: ?item=ID opens that item on the right page and scrolls it into view with a highlight.
   useEffect(() => {
     if (!itemParam) {
