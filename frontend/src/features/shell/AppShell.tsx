@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useProject } from '@/api/projects';
 import { KEYS, readLocal } from '@/lib/storage';
-import { Icon, IconButton, Kbd, Tag } from '@/ui';
+import { Icon, IconButton, Kbd } from '@/ui';
 import { useAuth } from './AuthContext';
-import { TopbarStatsProvider } from './TopbarStats';
 import { useContentScrollRestoration, useSidebarCollapsed } from './hooks';
 import { Breadcrumbs } from './chrome/Breadcrumbs';
 import { UserMenu } from './chrome/UserMenu';
-import { TopbarStatsBar } from './chrome/TopbarStatsBar';
 import { CommandPalette } from './chrome/CommandPalette';
 import { GLOBAL_NAV, PLATFORM_NAV, isNavActive, parseRoute, projectNav, type NavItem } from './chrome/nav';
 import brandIcon from '@/assets/brand/qym-icon.png';
@@ -20,19 +18,11 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 /**
  * Variant A (UX_DECISION.md): persistent left sidebar (brand · global · project
  * pages · Platform for admins · user footer) + 50px topbar (collapse toggle,
- * breadcrumb project switcher, page stats, read-only tag, Ctrl/Cmd+K palette).
+ * breadcrumb project switcher, read-only tag, Ctrl/Cmd+K palette). Pages keep their own counts.
  * `main#shell-content` is the only scroller; ≤760px the sidebar auto-collapses
  * and expands as an overlay.
  */
 export function AppShell() {
-  return (
-    <TopbarStatsProvider>
-      <ShellFrame />
-    </TopbarStatsProvider>
-  );
-}
-
-function ShellFrame() {
   const { me, isAdmin } = useAuth();
   const location = useLocation();
   const route = parseRoute(location.pathname);
@@ -187,7 +177,6 @@ function ShellFrame() {
           />
           <Breadcrumbs route={route} project={project} />
           <div className={styles.topbarEnd}>
-            <TopbarStatsBar />
             <button
               type="button"
               className={styles.paletteButton}
@@ -250,7 +239,6 @@ function NavSection({
               <Icon name={item.icon} size={16} />
             </span>
             {!collapsed ? <span className={styles.navLabel}>{item.label}</span> : null}
-            {!collapsed && item.adminOnly && item.id === 'admin' ? <Tag kind="accent">Admin</Tag> : null}
           </Link>
         );
       })}

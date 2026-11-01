@@ -35,7 +35,6 @@ import {
 } from './chartModel';
 import { plainModelName } from './model';
 import { RunsToolbar } from './RunsToolbar';
-import { useKpiTopbar } from './kpiTopbar';
 import { readVisibleColumns, writeVisibleColumns } from './selection';
 import { contextForView, countActiveFilters, DEFAULT_VIEW, type RunsView } from './urlState';
 import { useRefetchOnVisible, useRunsCadence } from './polling';
@@ -100,7 +99,6 @@ export function ChartsPage() {
   const [visibleKeys, setVisibleKeys] = useState<Set<string> | null>(readVisibleColumns);
   const d = useRunsDataLite(slug, view, visibleKeys);
   const overview = d.overview;
-  useKpiTopbar(overview?.kpis);
   const showSkeleton = useDelayedPending(d.overviewQ.isPending);
   const owners = useMemo(
     () =>

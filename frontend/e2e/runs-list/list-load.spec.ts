@@ -31,45 +31,30 @@ test.describe('runs list: load (J1)', () => {
     expect(heads[heads.length - 1]).toBe('actions');
   });
 
-  test('topbar KPIs equal the Overview KPI cards and /api/dashboard/kpis', async ({ page, request }) => {
+  test('the topbar has no KPI strip; the Overview KPI cards equal /api/dashboard/kpis', async ({
+    page,
+    request,
+  }) => {
     const s = await sharedProject(request, 12);
     const res = await request.post('/api/dashboard/kpis', {
       data: { project_slug: s.project.slug, filters: {} },
     });
     expect(res.ok()).toBeTruthy();
-    const { kpis } = (await res.json()) as {
-      kpis: {
-        runs: number;
-        runs_with_errors: number;
-        models: number;
-        items: number;
-        execution_success: number;
-      };
-    };
+    const { kpis } = (await res.json()) as { kpis: { runs: number; models: number; items: number } };
 
+    // C150: each page keeps its own counts (the Runs footer, the Dashboard tiles), none in the topbar.
     await openRuns(page, s.project.slug);
-    const topbar = page.locator('[data-topbar-stats]');
-    await expect(topbar).toBeVisible();
-    const topText = (await topbar.innerText()).replace(/\s+/g, ' ');
-    expect(topText).toContain(`${kpis.runs} runs`);
-    expect(topText).toContain(`${kpis.models} models`);
-    expect(topText).toContain(`${kpis.items.toLocaleString('en-US')} items`);
-    expect(topText).toMatch(/\d+(\.\d)?% execution success/);
-    expect(topText).toMatch(/run(s)? with errors/);
+    await expect(page.locator('[data-topbar-stats]')).toHaveCount(0);
+    await expect(page.getByTestId('status-bar')).toContainText(`${kpis.runs} runs`);
 
     await page.goto(`${APP}/projects/${s.project.slug}/overview`);
+    await expect(page.locator('[data-topbar-stats]')).toHaveCount(0);
     const cards = page.getByLabel('Project KPIs');
     await expect(cards).toBeVisible();
     const cardText = (await cards.innerText()).replace(/\s+/g, ' ');
-    // every topbar value token appears on the Overview cards too
-    const values = [...topText.matchAll(/(\d[\d,.]*%?|<0\.1%)\s+(?=run|model|item|execution)/g)].map(
-      (m) => m[1]!,
-    );
-    expect(values.length).toBeGreaterThanOrEqual(5);
-    for (const v of values) expect(cardText, `value ${v}`).toContain(v);
-    // and the Overview topbar shows the same chips
-    const topOnOverview = (await topbar.innerText()).replace(/\s+/g, ' ');
-    expect(topOnOverview).toBe(topText);
+    expect(cardText).toContain(String(kpis.runs));
+    expect(cardText).toContain(String(kpis.models));
+    expect(cardText).toContain(kpis.items.toLocaleString('en-US'));
   });
 
   test('empty project shows "No evaluation runs found"', async ({ page, request }) => {

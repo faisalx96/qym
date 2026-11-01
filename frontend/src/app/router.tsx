@@ -46,7 +46,6 @@ const EnvironmentsRoute = lazyPage(
 const FeedbackIndexRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackIndexRoute');
 const FeedbackNewRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackNewRoute');
 const FeedbackItemRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackItemRoute');
-const ModelsPage = lazyPage(() => import('@/features/models/ModelsPage'), 'ModelsPage');
 
 const C = ROUTES.projectChildren;
 
@@ -55,7 +54,8 @@ const projectChildren: RouteObject[] = [
   { index: true, element: <RunsPage /> },
   { path: C.overview, element: <OverviewPage /> },
   { path: C.charts, element: <ChartsPage /> },
-  { path: C.models, element: <ModelsPage /> },
+  // The Models page was removed (C052): old links land on Charts.
+  { path: C.models, element: <Navigate to="../charts" replace /> },
   { path: C.experimentsQueue, element: <QueuePage /> },
   { path: C.experiments, element: <ExperimentsIndexRoute /> },
   { path: C.experimentsSplat, element: <ExperimentsSplatRoute /> },

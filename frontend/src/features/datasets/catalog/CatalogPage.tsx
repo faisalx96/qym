@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDatasetCatalog, type Dataset } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
@@ -63,18 +63,6 @@ export function CatalogPage() {
   const datasets = useMemo(() => query.data?.datasets ?? [], [query.data]);
   const visible = useMemo(() => sortCatalog(filterCatalog(datasets, search), sort), [datasets, search, sort]);
   const runTotal = datasets.reduce((n, d) => n + d.run_count, 0);
-  const hasData = Boolean(query.data);
-  const stats = useMemo(
-    () =>
-      hasData
-        ? [
-            { value: datasets.length, label: 'datasets' },
-            { value: runTotal, label: 'runs' },
-          ]
-        : null,
-    [hasData, datasets.length, runTotal],
-  );
-  useTopbarStats(stats);
 
   const canCreate = !readOnly;
   const header = (

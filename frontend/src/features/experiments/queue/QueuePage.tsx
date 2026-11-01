@@ -28,7 +28,7 @@ import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
 import { errorMessage } from '@/api/evalCommon';
 import { runPath } from '@/app/routes';
-import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
@@ -124,11 +124,6 @@ export function QueuePage() {
     () => new Set([...selectedRaw].filter((k) => jobs.some((j) => j.id === k))),
     [selectedRaw, jobs],
   );
-  const stats = useMemo(
-    () => (query.data ? [{ value: query.data.total, label: 'jobs' }] : null),
-    [query.data],
-  );
-  useTopbarStats(stats);
 
   const experimentItems = useMemo(() => {
     const byId = new Map<string, string>();

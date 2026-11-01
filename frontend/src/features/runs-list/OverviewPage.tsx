@@ -34,7 +34,6 @@ import { ModelCell, Mono, OwnerCell, StatusCell } from './cells';
 import { modelKeyOf } from './model';
 import { isActiveRun } from './polling';
 import { RunsCtx, type RunsCtxValue } from './context';
-import { useKpiTopbar } from './kpiTopbar';
 import { trendFormat, trendFormatDelta, trendIsRate } from './trendModel';
 // Recharts is ~100 kB: load it only with the Overview page.
 const TrendChart = lazy(() => import('./TrendChart').then((m) => ({ default: m.TrendChart })));
@@ -61,7 +60,6 @@ export function OverviewPage() {
   const kpisQ = useKpis(slug, filters, { refetchInterval: 30_000 });
   const kpis = kpisQ.data?.kpis;
   const updating = Boolean(kpisQ.data?.freshness.updating);
-  useKpiTopbar(kpis);
 
   const live = useRunsPage(
     {

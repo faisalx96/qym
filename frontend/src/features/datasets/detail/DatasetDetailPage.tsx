@@ -20,7 +20,7 @@ import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
 import { useCrumbLabel } from '@/lib/crumb-label';
-import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
@@ -122,21 +122,6 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
     slug,
     datasetRef,
   ]);
-
-  const runCount = dataset?.run_count;
-  const itemCount = active?.item_count ?? 0;
-  const stats = useMemo(
-    () =>
-      runCount === undefined
-        ? null
-        : [
-            { value: versions.length, label: 'versions' },
-            { value: runCount, label: 'runs' },
-            { value: itemCount, label: 'items' },
-          ],
-    [runCount, versions.length, itemCount],
-  );
-  useTopbarStats(stats);
 
   if (showSkeleton && !dataset)
     return (

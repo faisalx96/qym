@@ -17,7 +17,6 @@ import { useRunsToolbarParts } from './RunsToolbar';
 import { SelectionBar } from './SelectionBar';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { FooterTrailing } from './StatusBar';
-import { useKpiTopbar } from './kpiTopbar';
 import { useRunsData } from './useRunsData';
 import { useRunsKeyboard, type RunsKeyboardHandlers } from './useRunsKeyboard';
 import { useRunsView } from './useRunsView';
@@ -86,7 +85,6 @@ export function RunsPage() {
   // Open pass groups are kept for the tab, so Back from a pass returns to the same groups.
   useEffect(() => writeExpanded(slug, pruneExpanded(expanded, rows)), [slug, expanded, rows]);
   const analyzingRuns = useAnalyzingRuns(rows.map((r) => r.run_id));
-  useKpiTopbar(d.overview?.kpis);
 
   const known = useMemo(
     () => new Map([...d.pinnedRows, ...rows].map((r) => [r.run_id, r])),

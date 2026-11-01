@@ -46,7 +46,6 @@ const pages: { name: string; path: () => string; ready?: (page: Page) => Promise
   { name: 'charts', path: () => `/projects/${tour.slug}/charts` },
   { name: 'runs', path: () => `/projects/${tour.slug}` },
   { name: 'admin runs', path: () => '/admin/runs' },
-  { name: 'models', path: () => `/projects/${tour.slug}/models` },
   {
     name: 'run detail',
     path: () => runUrl(tour.slug, tour.runId),
