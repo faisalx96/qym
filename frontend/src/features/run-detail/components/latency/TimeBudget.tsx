@@ -3,7 +3,7 @@
  * one bar of where its time goes by kind, and the kind legend under it.
  */
 import { useMemo, useState } from 'react';
-import { Card, ChartTooltipHost, Mark, SegmentedControl, Text } from '@/ui';
+import { Card, ChartTooltipHost, Mark, SegmentedControl, Text, Tag } from '@/ui';
 import {
   budgetBrackets,
   budgetSegments,
@@ -88,9 +88,9 @@ export function TimeBudget({ D }: { D: LatencyData }) {
               <b>{fmtInt(D.traces)}</b> trace{D.traces === 1 ? '' : 's'}
             </span>
             {D.failed ? (
-              <span className={styles.failPill} title={`${pct(D.failed, D.traces).toFixed(1)}% of traces`}>
+              <Tag kind="count" tone="danger" title={`${pct(D.failed, D.traces).toFixed(1)}% of traces`}>
                 {fmtInt(D.failed)} failed
-              </span>
+              </Tag>
             ) : null}
           </div>
           <div className={styles.brackets}>

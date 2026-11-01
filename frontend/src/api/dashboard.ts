@@ -122,6 +122,15 @@ export function useOverview(
   });
 }
 
+/**
+ * The project's model index (models in frequency order): the one source of model colours on every page (C051). It
+ * reads the project's unfiltered overview, the same query the runs list starts with.
+ */
+export function useModelIndex(slug: string | null | undefined): Record<string, number> | null {
+  const q = useOverview(slug ?? '', {}, { enabled: Boolean(slug) });
+  return q.data?.chart_data?.modelIndex ?? null;
+}
+
 export function useKpis(
   slug: string,
   filters: DashboardFilters,

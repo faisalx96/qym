@@ -57,9 +57,11 @@
   background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
 }
 
-/* Task, dataset and model names read as plain text inside their tint: 500, not the 650 of a role or count tag. */
+/* Task, dataset and model names read as plain text inside their tint: 500, not the 650 of a role or count tag, and at
+   11px (--font-sm), while count and role tags stay at 10px (C165). */
 .tag[data-kind='task'],
 .tag[data-kind='dataset'],
 .tag[data-kind='model'] {
+  font-size: var(--font-sm);
   font-weight: 500;
 }

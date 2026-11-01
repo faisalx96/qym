@@ -90,27 +90,6 @@
   background: var(--border-default);
 }
 
-.failPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px var(--space-sm) 2px 7px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
-  color: var(--error-text);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  font-weight: 600;
-}
-
-.failPill::before {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--error);
-  content: '';
-}
-
 .brackets {
   position: relative;
   height: 22px;

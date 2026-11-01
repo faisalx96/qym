@@ -1,24 +1,26 @@
-/* Version pill (.dsx-version-pill) + popover listbox; composes Popover/SearchField/Badge. */
-.pill {
+/* Version switcher: a Select-style trigger at the 24px control height (C238: no third control height; 3px + 16px line +
+   3px + the 1px edges) + popover listbox. */
+.trigger {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
   max-width: 420px;
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border-default);
+  padding: 3px var(--space-sm);
+  line-height: 16px;
+  border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  font-size: var(--font-base);
+  font-size: var(--font-sm);
   cursor: pointer;
   outline: none;
 }
 
-.pill[data-hovered] {
+.trigger[data-hovered] {
   border-color: var(--border-strong);
 }
 
-.pill[data-focus-visible] {
+.trigger[data-focus-visible] {
   box-shadow: var(--focus-ring);
 }
 

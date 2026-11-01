@@ -4,7 +4,7 @@
  * (SeriesHighlightRoot dims every `[data-mark][data-series]` of another run).
  */
 import type { CSSProperties, FocusEvent } from 'react';
-import { isBareRunId, useSeriesHighlight } from '@/ui';
+import { isBareRunId, useSeriesHighlight, Flag } from '@/ui';
 import { letterOf, runColor, runSeries } from '../CompareContext';
 import styles from './RunTag.module.css';
 
@@ -73,10 +73,16 @@ function Inner({
       {showName && name ? (
         <span className={styles.name} data-id={isBareRunId(name) ? '' : undefined}>
           {name}
-          {baseline ? <span className={styles.baselineTag} data-part="baseline-tag">Baseline</span> : null}
+          {baseline ? (
+            <Flag tone="info" icon="star" data-part="baseline-tag">
+              Baseline
+            </Flag>
+          ) : null}
         </span>
       ) : baseline ? (
-        <span className={styles.baselineTag} data-part="baseline-tag">Baseline</span>
+        <Flag tone="info" icon="star" data-part="baseline-tag">
+          Baseline
+        </Flag>
       ) : null}
     </span>
   );

@@ -43,7 +43,7 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
         if (!o) setQuery('');
       }}
       trigger={
-        <AriaButton className={styles.pill} aria-haspopup="listbox" data-testid="version-switcher">
+        <AriaButton className={styles.trigger} aria-haspopup="listbox" data-testid="version-switcher">
           <span className={styles.pillVersion}>{active.version}</span>
           {active.name ? <span className={styles.pillName}>{active.name}</span> : null}
           <VersionBadge version={active} />

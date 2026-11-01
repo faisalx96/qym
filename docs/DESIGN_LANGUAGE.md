@@ -411,6 +411,13 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 ### 3.3 Labels, statistics and identity
 
+**People, models and tags (C144, C165, C051, C238).** A person is always `UserName` (an initials disc in the person's
+series colour, then the name): the runs Owner, the run header, admin, API keys, datasets, presets, Reviews and Deleted
+runs. Task, dataset and model names are `TaskTag`, `DatasetTag` and `ModelTag` at 11px (`--font-sm`); count and role
+tags stay at 10px. A model's colour comes from one source, the project's model index (`useModelIndex` and `modelSlot`),
+on every page. A count is `Tag kind="count"` (a failure count is `tone="danger"`), a fact such as Baseline,
+Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill.
+
 - **Status mark** (`StatusMark`, `RunStatusBadge`): the one status component. Every lifecycle or state of a
   run, pass, job, experiment, review, request, version, credential, environment or save is a `StatusMark`. No pill,
   outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project marks) in the status

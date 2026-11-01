@@ -771,6 +771,33 @@ describe('buttons (C049, C136, C166, C232)', () => {
   });
 });
 
+describe('people, models and tags (C144, C165, C051, C238)', () => {
+  it('draws no local pill beside Tag and Flag (the class names the crawl found may not come back)', () => {
+    const banned = /\.(baselineTag|failPill|errPill|errTotal)\b/;
+    const problems: string[] = [];
+    for (const file of cssFiles)
+      if (!rel(file).startsWith('features/dev/') && banned.test(read(file))) problems.push(rel(file));
+    const pills = [
+      read(join(SRC, 'features/datasets/components/UserPill.module.css')),
+      read(join(SRC, 'features/datasets/components/VersionSwitcher.module.css')),
+    ].join('\n');
+    expect(problems).toEqual([]);
+    expect(pills).not.toMatch(/^\.(pill|avatar)\s*\{/m);
+  });
+
+  it('sets name tags at 11px and count tags at 10px', () => {
+    const css = read(join(SRC, 'ui/Tag/Tag.module.css'));
+    expect(css).toMatch(/\[data-kind='model'\]\s*\{\s*font-size:\s*var\(--font-sm\)/);
+    expect(css).toMatch(/\.tag\s*\{[^}]*font-size:\s*var\(--font-xs\)/);
+  });
+
+  it('colours a model from the project model index only (no name hash)', () => {
+    const hero = read(join(SRC, 'features/run-detail/components/RunHero.tsx'));
+    expect(hero).toContain('useModelIndex');
+    expect(hero).not.toMatch(/charCodeAt/);
+  });
+});
+
 describe('documentation wiring', () => {
   it('README points at the design language', () => {
     const readme = read(join(FRONTEND, 'README.md'));

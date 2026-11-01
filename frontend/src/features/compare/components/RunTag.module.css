@@ -48,17 +48,6 @@
   font-weight: 650;
 }
 
-.baselineTag {
-  margin-inline-start: var(--space-xs);
-  padding: 0 var(--space-xs);
-  border-radius: var(--control-radius);
-  background: var(--bg-active);
-  color: var(--text-muted);
-  font-size: var(--font-xs);
-  font-weight: 400;
-  white-space: nowrap;
-}
-
 .name[data-id] {
   font-family: var(--font-mono);
   font-weight: 500;

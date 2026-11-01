@@ -28,7 +28,6 @@ import {
   SearchField,
   Select,
   Skeleton,
-  Tag,
   Text,
   Tooltip,
   useToast,
@@ -36,6 +35,10 @@ import {
   type Column,
   Flag,
   StatusMark,
+  ModelTag,
+  TaskTag,
+  DatasetTag,
+  UserName,
 } from '@/ui';
 import styles from './TrashPage.module.css';
 import { formatDay } from '@/lib/dates';
@@ -227,7 +230,7 @@ export function TrashPage() {
       cell: (r) => (
         <span className={styles.stack}>
           <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
-          {r.deleted_by_name ? <span className={styles.sub}>by {r.deleted_by_name}</span> : null}
+          {r.deleted_by_name ? <UserName name={r.deleted_by_name} /> : null}
         </span>
       ),
     },
@@ -244,15 +247,16 @@ export function TrashPage() {
       priority: 3,
       header: 'Model',
       width: 130,
-      cell: (r) => (
-        <span className={styles.stack}>
-          <span>{r.model ?? '—'}</span>
-          {r.trace_stats?.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
-        </span>
-      ),
+      cell: (r) => (r.model ? <ModelTag name={r.model} reasoning={!!r.trace_stats?.has_reasoning} /> : '—'),
     },
-    { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => r.task ?? '—' },
-    { id: 'dataset', header: 'Dataset', priority: 3, width: 120, cell: (r) => r.dataset ?? '—' },
+    { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => <TaskTag name={r.task} /> },
+    {
+      id: 'dataset',
+      header: 'Dataset',
+      priority: 3,
+      width: 120,
+      cell: (r) => <DatasetTag name={r.dataset} />,
+    },
     {
       id: 'actions',
       header: 'Restore',

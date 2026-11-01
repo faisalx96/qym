@@ -28,6 +28,7 @@ import {
   type Column,
   Card,
   TwoLine,
+  UserName,
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
@@ -91,7 +92,12 @@ function KeysCard({
       header: 'Created by',
       width: 180,
       priority: 2,
-      cell: (k) => k.creator?.display_name || k.creator?.email || '—',
+      cell: (k) =>
+        k.creator ? (
+          <UserName id={k.creator.id} name={k.creator.display_name} email={k.creator.email} />
+        ) : (
+          '—'
+        ),
     },
     {
       id: 'created',
@@ -280,7 +286,12 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
       header: 'Created by',
       width: 180,
       priority: 2,
-      cell: (t) => t.creator?.display_name || t.creator?.email || '—',
+      cell: (t) =>
+        t.creator ? (
+          <UserName id={t.creator.id} name={t.creator.display_name} email={t.creator.email} />
+        ) : (
+          '—'
+        ),
     },
     {
       id: 'created',

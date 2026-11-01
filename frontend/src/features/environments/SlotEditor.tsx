@@ -16,7 +16,19 @@ import {
 } from '@/api/evalEnvironments';
 import { errorCode, errorList, errorMessage, type EvalEnvironment } from '@/api/evalCommon';
 import { ApiError, api } from '@/lib/http';
-import { Button, Dialog, ErrorState, Select, Skeleton, Tag, TextField, useToast, Card, Icon } from '@/ui';
+import {
+  Button,
+  Dialog,
+  ErrorState,
+  Select,
+  Skeleton,
+  Tag,
+  TextField,
+  useToast,
+  Card,
+  Icon,
+  Flag,
+} from '@/ui';
 import styles from './SlotEditor.module.css';
 import {
   candidatesFor,
@@ -316,7 +328,7 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
               {status.label}
             </Tag>
           ) : null}
-          {slot.required ? <Tag title="Required by the service">Required</Tag> : null}
+          {slot.required ? <Flag title="Required by the service">Required</Flag> : null}
         </header>
         <div className={styles.keysets}>
           {sets.map((_, setIdx) => (

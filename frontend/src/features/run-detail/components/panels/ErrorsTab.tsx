@@ -5,7 +5,7 @@
  * the page's filter for that error.
  */
 import { useMemo } from 'react';
-import { Icon, type IconName } from '@/ui';
+import { Icon, type IconName, Tag } from '@/ui';
 import {
   collectErrors,
   slotOfKind,
@@ -73,7 +73,9 @@ export function ErrorsTab() {
               <Icon name={ICON[g.kind]} size={14} />
             </span>
             <h3 className={styles.errKind}>{g.kind}s</h3>
-            <span className={styles.errTotal}>{g.total}</span>
+            <Tag kind="count" tone="danger">
+              {g.total}
+            </Tag>
             <p className={styles.errMeaning}>{MEANING[g.kind]}</p>
           </header>
           <div className={styles.errGrid} role="group" aria-label={`${g.kind}s by message`}>

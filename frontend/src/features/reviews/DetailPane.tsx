@@ -1,9 +1,24 @@
 /** Right-hand correction detail: header actions, AI vs Human issues, previews, lazy full detail (o), inline edit. */
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useCorrection, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
 import { textDirAttrs } from '@/lib/text';
-import { Button, ErrorState, JsonTree, Kbd, Skeleton, Tag, Text, TextBlock, ReviewStatusMark } from '@/ui';
+import {
+  Button,
+  ErrorState,
+  JsonTree,
+  Kbd,
+  Skeleton,
+  Tag,
+  Text,
+  TextBlock,
+  ReviewStatusMark,
+  TaskTag,
+  DatasetTag,
+  ModelTag,
+  UserName,
+} from '@/ui';
 import { formatDate } from '../datasets/lib/itemValue';
 import { IssueEditForm, IssueList } from './IssueList';
 import { correctionPriority } from './lib/filters';
@@ -65,7 +80,14 @@ export function DetailPane(p: DetailPaneProps) {
             <span>AI confidence {Math.round(row.ai_confidence * 100)}%</span>
           ) : null}
           {row.corrected_by ? (
-            <span>by {row.corrected_by.display_name || row.corrected_by.email}</span>
+            <span>
+              by{' '}
+              <UserName
+                id={row.corrected_by.id}
+                name={row.corrected_by.display_name}
+                email={row.corrected_by.email}
+              />
+            </span>
           ) : null}
           <span>{formatDate(row.created_at)}</span>
         </div>
@@ -132,7 +154,7 @@ export function DetailPane(p: DetailPaneProps) {
       </header>
 
       <div className={styles.chips}>
-        <Chipline label="Task" value={row.task} />
+        <Chipline label="Task" value={row.task} node={<TaskTag name={row.task} />} />
         <Chipline label="Metric" value={row.metric_name} />
         {p.showProject ? (
           <Chipline
@@ -143,10 +165,11 @@ export function DetailPane(p: DetailPaneProps) {
         ) : null}
         <Chipline label="Run" value={row.run_name} href={runHref} />
         {row.pass_number != null ? <Chipline label="Pass" value={String(row.pass_number)} /> : null}
-        <Chipline label="Dataset" value={row.dataset} />
+        <Chipline label="Dataset" value={row.dataset} node={<DatasetTag name={row.dataset} />} />
         <Chipline
           label="Model"
-          value={row.has_reasoning && row.model ? `${row.model} (reasoning)` : row.model}
+          value={row.model}
+          node={row.model ? <ModelTag name={row.model} reasoning={!!row.has_reasoning} /> : null}
         />
       </div>
 
@@ -189,7 +212,12 @@ export function DetailPane(p: DetailPaneProps) {
 
       {row.reviewed_by ? (
         <footer className={styles.reviewed}>
-          Reviewed by {row.reviewed_by.display_name || row.reviewed_by.email}
+          Reviewed by{' '}
+          <UserName
+            id={row.reviewed_by.id}
+            name={row.reviewed_by.display_name}
+            email={row.reviewed_by.email}
+          />
           {row.reviewed_at ? ` · ${formatDate(row.reviewed_at)}` : ''}
           {row.review_comment ? ` · “${row.review_comment}”` : ''}
         </footer>
@@ -202,16 +230,21 @@ function Chipline({
   label,
   value,
   href,
+  node,
 }: {
   label: string;
   value: string | null | undefined;
   href?: string | null;
+  /** Draws the value with a shared component (TaskTag, DatasetTag, ModelTag: C165). */
+  node?: ReactNode;
 }) {
   if (!value) return null;
   return (
     <span className={styles.chip}>
       <span className={styles.chipLabel}>{label}</span>
-      {href ? (
+      {node ? (
+        node
+      ) : href ? (
         <Link to={href} className={styles.chipLink}>
           {value}
         </Link>
@@ -289,7 +322,15 @@ function FullDetail({ id }: { id: number }) {
               <li key={h.revision_id}>
                 <span className={styles.histWhen}>{formatDate(h.created_at)}</span>
                 <span>#{h.revision_number}</span>
-                <span>{h.actor_user?.display_name || h.actor_user?.email || h.actor_source}</span>
+                {h.actor_user ? (
+                  <UserName
+                    id={h.actor_user.id}
+                    name={h.actor_user.display_name}
+                    email={h.actor_user.email}
+                  />
+                ) : (
+                  <span>{h.actor_source}</span>
+                )}
                 {h.review ? <ReviewStatusMark status={h.review.status} /> : null}
                 {h.review?.review_comment ? <span>“{h.review.review_comment}”</span> : null}
               </li>

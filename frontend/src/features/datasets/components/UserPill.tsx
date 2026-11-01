@@ -1,5 +1,6 @@
 /** Creator / Published by pill: initials avatar + display name (shell owner-pill). */
 import type { DsUser } from '@/api/datasets';
+import { UserName } from '@/ui';
 import styles from './UserPill.module.css';
 
 export function initials(user: DsUser | null | undefined): string {
@@ -12,16 +13,13 @@ export function initials(user: DsUser | null | undefined): string {
   return letters.join('') || '?';
 }
 
+/** A person in the datasets area: the shared UserName (C144), after an optional label such as "Drafted By:". */
 export function UserPill({ user, label }: { user: DsUser | null | undefined; label?: string }) {
   if (!user) return null;
-  const name = user.display_name || user.email;
   return (
-    <span className={styles.pill} title={user.email}>
+    <span className={styles.person}>
       {label ? <span className={styles.label}>{label}</span> : null}
-      <span className={styles.avatar} aria-hidden="true">
-        {initials(user)}
-      </span>
-      <span className={styles.name}>{name}</span>
+      <UserName id={user.id} name={user.display_name} email={user.email} />
     </span>
   );
 }

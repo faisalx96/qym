@@ -332,20 +332,6 @@ button.label[aria-expanded='true'] .chev {
   transform: rotate(45deg);
 }
 
-/* A red count pill; no errors is a quiet dash. */
-.errPill {
-  display: inline-flex;
-  justify-content: center;
-  min-width: 22px;
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--error) 14%, transparent);
-  color: var(--error-text);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  font-weight: 600;
-}
-
 .none {
   color: var(--text-muted);
 }
