@@ -80,9 +80,3 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-
-/* ActionTile: the tile drawn alone inside a menu item; the item takes the pointer. */
-.iconAction[data-static] {
-  flex: none;
-  cursor: inherit;
-}
