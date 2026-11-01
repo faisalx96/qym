@@ -22,6 +22,17 @@ export function alignToElement(el: Element, host?: Element | null, settleMs = 20
   events.forEach((t) => window.addEventListener(t, stop, { passive: true, once: true }));
 }
 
+/**
+ * Move keyboard focus to a section's heading without scrolling (C091): after a section link, the next Tab starts inside
+ * that section instead of at the top of the page. The heading becomes focusable by script only (tabindex -1).
+ */
+export function focusSectionHeading(section: Element): void {
+  const heading = section.querySelector<HTMLElement>('h2, h3');
+  if (!heading) return;
+  if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+  heading.focus({ preventScroll: true });
+}
+
 let remembered: string | null = null;
 
 /** Remember which report section the reader is in before an action that unmounts the page body (a run removed from a comparison). */

@@ -27,7 +27,7 @@ import { ItemsSkeleton } from './components/StageSkeletons';
 import { loadItemsSection, loadTraceHost, preloadPanels } from './chunks';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
-import { alignToElement } from '@/lib/scrollToElement';
+import { alignToElement, focusSectionHeading } from '@/lib/scrollToElement';
 import { useSidebarHidden } from '@/lib/useSidebarHidden';
 import { useScope } from './hooks/useScope';
 import { readPassParam, useRunView } from './hooks/useRunView';
@@ -55,8 +55,11 @@ export const WIDE_QUERY = '(min-width: 1200px)';
 /** Old anchors that name no section (`#summary`) or a retired alias. */
 const HASH_ALIASES: Record<string, SectionId> = { summary: 'summary' };
 
-/** Scroll the shell to a section; lazy sections above it mount while it travels, so re-align until the layout settles. */
-function scrollToSection(id: SectionId, host: HTMLElement | null) {
+/**
+ * Scroll the shell to a section; lazy sections above it mount while it travels, so re-align until the layout settles.
+ * `focus` (a section link or button the reader pressed) also moves keyboard focus to the section heading (C091).
+ */
+function scrollToSection(id: SectionId, host: HTMLElement | null, focus = false) {
   const scroller = document.getElementById('shell-content');
   if (id === 'summary') {
     scroller?.scrollTo({ top: 0 });
@@ -65,6 +68,7 @@ function scrollToSection(id: SectionId, host: HTMLElement | null) {
   const el = document.getElementById(sectionDomId(id));
   if (!el) return;
   alignToElement(el, host);
+  if (focus) focusSectionHeading(el);
 }
 
 /** Everything below the hero: nav, scope bar, sidebar, sections and items (needs the run context). */
@@ -81,7 +85,7 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
   if (!scope.active && drawerOpen) setDrawerOpen(false);
   if (!scope.searchOnly && searchSidebar) setSearchSidebar(false);
   const sidebarShown = scope.active && (scope.searchOnly ? searchSidebar : !sidebarHidden);
-  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current), [pageRef]);
+  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current, true), [pageRef]);
 
   // Links from before the report layout: `#overview`, `#run-section-errors`, `?panel=latency`.
   const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
