@@ -17,11 +17,7 @@ from qym_platform.datetime_utils import to_api_timestamp
 from qym_platform.db.models import LiveDay, LiveSource, Project
 from qym_platform.deps import get_db
 from qym_platform.log import get_logger
-from qym_platform.permissions import (
-    ARCHIVED_PROJECT_DETAIL,
-    PROJECT_STATE_HEADER,
-    is_project_archived,
-)
+from qym_platform.permissions import require_project_writable
 from qym_platform.services import live_ingest
 
 logger = get_logger(__name__)
@@ -184,12 +180,7 @@ def _source_scope(
         raise HTTPException(
             status_code=403, detail="API key belongs to another project"
         )
-    if is_project_archived(db, project_id):
-        raise HTTPException(
-            status_code=409,
-            detail=ARCHIVED_PROJECT_DETAIL,
-            headers={PROJECT_STATE_HEADER: "archived"},
-        )
+    require_project_writable(db, project_id)
     project = db.get(Project, project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
