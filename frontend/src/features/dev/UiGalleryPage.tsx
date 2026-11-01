@@ -14,6 +14,7 @@ import { EvalFlagsMocks } from './EvalFlagsMocks';
 import { QaExperimentsMocks } from './QaExperimentsMocks';
 import { MultiLaunchMocks } from './MultiLaunchMocks';
 import { AiFeedbackMocks } from './AiFeedbackMocks';
+import { LiveMocks } from './LiveMocks';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -957,6 +958,9 @@ export default function UiGalleryPage() {
       <QaExperimentsMocks Section={Section} Case={Case} />
       <MultiLaunchMocks Section={Section} Case={Case} />
       <AiFeedbackMocks Section={Section} Case={Case} />
+      <Section id="live" title="Live evaluation (round 2026-11)">
+        <LiveMocks />
+      </Section>
     </div>
   );
 }

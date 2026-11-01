@@ -1,0 +1,510 @@
+/* Gallery compositions use the real shell dimensions; content responds to its own column. */
+.gallery {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--space-xl);
+  min-inline-size: 0;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  inline-size: 100vw;
+  min-block-size: calc(var(--topbar-h) * 18);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-md) var(--space-sm);
+  border-inline-end: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+}
+
+.brand {
+  padding: var(--space-xs) var(--space-sm) var(--space-md);
+  font-size: var(--font-xl);
+  font-weight: 650;
+  color: var(--accent-primary);
+}
+
+.nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: calc(var(--space-xs) / 2);
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: var(--space-xl);
+  padding-inline: var(--space-sm);
+  border-radius: var(--control-radius);
+  font-size: var(--shell-font-sm);
+}
+
+.navItem[data-active] {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.project {
+  margin-block: var(--space-md) var(--space-xs);
+  padding-inline: var(--space-sm);
+}
+
+.user,
+.inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.user {
+  padding: var(--space-sm);
+  font-size: var(--font-sm);
+}
+
+.main {
+  min-inline-size: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-block-size: var(--topbar-h);
+  padding: var(--space-sm) var(--space-md);
+  border-block-end: 1px solid var(--border-subtle);
+  font-size: var(--font-base);
+}
+
+.content {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) calc(var(--space-xl) + var(--space-xs) - 1px) var(--space-xl) var(--space-lg);
+  min-inline-size: 0;
+  font-size: var(--font-base);
+}
+
+.content > *,
+.twoColumns > *,
+.threeColumns > *,
+.mixRow > * {
+  min-inline-size: 0;
+}
+
+.content [dir='auto'] {
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  font-size: var(--font-base);
+}
+
+.status[data-stale] {
+  color: var(--error-text);
+}
+
+.number {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.quantity {
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}
+
+.toneText,
+.serviceFault {
+  color: var(--tone-text);
+}
+
+/* StatTiles currently defaults to seven columns. Six-cell geometry stays local to this mock. */
+.tiles > [role='list'] {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.tiles a {
+  color: inherit;
+}
+
+.tiles a[data-tone] {
+  color: var(--tone-text);
+}
+
+.mixRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--space-md);
+}
+
+.mix {
+  display: flex;
+  gap: 1px;
+  min-inline-size: 0;
+  block-size: var(--control-height);
+}
+
+.mixSegment {
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  background: var(--tone);
+}
+
+.mixLegend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm) var(--space-md);
+  margin-block-start: var(--space-md);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.legendItem strong {
+  margin-inline-start: auto;
+  color: var(--text-primary);
+}
+
+.swatch {
+  flex: none;
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border-radius: calc(var(--space-xs) / 2);
+  background: var(--tone);
+}
+
+.received {
+  display: block;
+  margin-block-start: var(--space-md);
+}
+
+.metricRows {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.metricRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-sm);
+  padding-block: var(--space-xs);
+  font-size: var(--font-base);
+}
+
+.services {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.service {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.service + .service {
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.service > :first-child {
+  font-size: var(--font-xl);
+  font-weight: 700;
+}
+
+.canaries {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  padding-block-start: var(--space-md);
+  margin-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+  font-size: var(--font-sm);
+}
+
+.trendPlot {
+  position: relative;
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: calc(var(--space-xl) * 6);
+}
+
+.rateLine {
+  position: absolute;
+  inset-block: var(--space-lg) calc(var(--space-md) + var(--space-xs));
+  inset-inline: calc(var(--space-xs) / 2);
+  inline-size: calc(100% - var(--space-xs));
+  block-size: calc(100% - var(--space-lg) - var(--space-md) - var(--space-xs));
+  overflow: visible;
+  pointer-events: none;
+}
+
+.rateLine path {
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineKey {
+  inline-size: var(--space-md);
+  border-block-start: 2px solid var(--text-primary);
+}
+
+.trendPlot [data-live-gap='true'] [data-part='bar'] {
+  flex: 1;
+  min-block-size: var(--bar-action-h);
+}
+
+.trendPlot [data-live-gap='true'] [data-part='well']::before {
+  flex: 0;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-md);
+}
+
+.filterLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.search {
+  flex: 1;
+  min-inline-size: min(100%, var(--dropdown-width));
+}
+
+.question {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.6;
+}
+
+.diagnosisCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  white-space: normal;
+}
+
+.reason[dir='auto'] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.serviceFault {
+  display: block;
+  white-space: normal;
+}
+
+.turnTitle {
+  display: block;
+  line-height: 1.6;
+}
+
+.diagnosis {
+  display: grid;
+  gap: var(--space-md);
+  padding-block-start: var(--space-md);
+}
+
+.twoColumns,
+.threeColumns {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.threeColumns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.copy,
+.answer {
+  margin-block: 0 var(--space-md);
+  font-size: var(--font-base);
+  line-height: 1.6;
+}
+
+.answer {
+  font-size: var(--font-md);
+}
+
+.deviationGroup + .deviationGroup {
+  border-block-start: 1px solid var(--border-subtle);
+  padding-block-start: var(--space-md);
+}
+
+.deviation {
+  display: flex;
+  align-items: start;
+  gap: var(--space-sm);
+  margin-block-start: var(--space-sm);
+}
+
+.sqlParts {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.sqlMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block-end: var(--space-sm);
+}
+
+.sqlMeta > :last-child {
+  margin-inline-start: auto;
+}
+
+.sql {
+  margin: 0;
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notes,
+.evaluator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block-start: var(--space-md);
+  font-size: var(--font-sm);
+}
+
+.evaluator {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.chartPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--stat-strip-min-height);
+  margin-block-end: var(--space-sm);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.stateSheet {
+  display: grid;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  padding: var(--space-md);
+}
+
+@container (max-width: 899px) {
+  .mixRow,
+  .twoColumns,
+  .threeColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tiles > [role='list'] {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .tiles > [role='list'] > [data-tile]:nth-child(n + 5) {
+    grid-column: span 6;
+  }
+
+  .services {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: var(--space-md);
+  }
+
+  .service:nth-child(4) {
+    border-inline-start: 0;
+  }
+}
+
+@container (max-width: 479px) {
+  .mixLegend {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .services {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service:nth-child(odd) {
+    border-inline-start: 0;
+  }
+
+  .service:nth-child(even) {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+}
+
+@media (width <= 480px) {
+  .shell {
+    grid-template-columns: var(--sidebar-collapsed-w) minmax(0, 1fr);
+  }
+
+  .brand,
+  .project,
+  .navItem > span,
+  .user > span:last-child {
+    display: none;
+  }
+
+  .navItem {
+    justify-content: center;
+    padding-inline: 0;
+  }
+}
