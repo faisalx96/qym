@@ -26,7 +26,15 @@ function mount(url: string, platform = installFakePlatform([envRecord()])) {
         path: '/projects/:slug/experiments/new',
         element: (
           <ProjectContext.Provider
-            value={{ project, slug: 'proj', readOnly: false, canManage: true, isAdmin: false }}
+            value={{
+              project,
+              slug: 'proj',
+              readOnly: false,
+              archived: false,
+              viewer: false,
+              canManage: true,
+              isAdmin: false,
+            }}
           >
             <LaunchPage />
           </ProjectContext.Provider>
@@ -181,7 +189,15 @@ describe('LaunchPage', () => {
           path: '/projects/:slug/experiments/new',
           element: (
             <ProjectContext.Provider
-              value={{ project, slug: 'proj', readOnly: false, canManage: true, isAdmin: false }}
+              value={{
+                project,
+                slug: 'proj',
+                readOnly: false,
+                archived: false,
+                viewer: false,
+                canManage: true,
+                isAdmin: false,
+              }}
             >
               <LaunchPage />
             </ProjectContext.Provider>

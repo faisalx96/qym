@@ -67,7 +67,15 @@ function mount(url: string) {
         path: '/projects/:slug/experiments',
         element: (
           <ProjectContext.Provider
-            value={{ project, slug: 'demo', readOnly: false, canManage: true, isAdmin: false }}
+            value={{
+              project,
+              slug: 'demo',
+              readOnly: false,
+              archived: false,
+              viewer: false,
+              canManage: true,
+              isAdmin: false,
+            }}
           >
             <ExperimentsPage />
             <Where />

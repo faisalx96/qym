@@ -273,6 +273,13 @@
   font-size: var(--font-sm);
 }
 
+/* What each project role can do (C033), under the add-member bar. */
+.roleHelp {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
 /* Experiment tokens: the name wraps (never cut) and the kind tag follows it. */
 .tokenName {
   display: inline-flex;

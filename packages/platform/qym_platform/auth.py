@@ -216,7 +216,9 @@ def require_api_key_principal(
     token = _bearer_token(authorization)
     if not token:
         raise HTTPException(status_code=401, detail="Missing Bearer API key")
-    return resolve_api_key_principal(db, token)
+    principal = resolve_api_key_principal(db, token)
+    db.info[PRINCIPAL_INFO_KEY] = principal
+    return principal
 
 
 def require_api_key_scope(principal: Principal, required_scope: str) -> None:
@@ -250,12 +252,31 @@ def proxy_headers_trusted(request: Request, settings: PlatformSettings) -> bool:
     )
 
 
+# The request's principal, kept on its database session: write helpers that
+# take only the session (permissions.require_project_writable) read the
+# caller's project role from it (C033).
+PRINCIPAL_INFO_KEY = "qym_principal"
+
+
 def require_ui_principal(
     request: Request,
     db: Session = Depends(get_db),
     x_user_email: Optional[str] = Header(default=None, alias="X-User-Email"),
     x_email: Optional[str] = Header(default=None, alias="X-Email"),
     x_admin_bootstrap: Optional[str] = Header(default=None, alias="X-Admin-Bootstrap"),
+) -> Principal:
+    """UI auth; the principal is also kept on ``db.info`` for the write checks."""
+    principal = _ui_principal(request, db, x_user_email, x_email, x_admin_bootstrap)
+    db.info[PRINCIPAL_INFO_KEY] = principal
+    return principal
+
+
+def _ui_principal(
+    request: Request,
+    db: Session,
+    x_user_email: Optional[str],
+    x_email: Optional[str],
+    x_admin_bootstrap: Optional[str],
 ) -> Principal:
     """UI auth for internal deployments.
 

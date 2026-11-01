@@ -4,8 +4,8 @@ Every POST, PUT, PATCH and DELETE route of the app is listed here. The roles:
 
 - public: no sign-in (sign-in and sign-up).
 - any_user: any signed-in user, no project role needed.
-- reader: a project member: a read sent as POST.
-- member: a project member.
+- reader: a project member of any role, a Viewer included: a read sent as POST.
+- member: a project member who may change it; a Viewer (C033) is refused.
 - review_rule: the project's review rule decides (managers, or members too).
 - owner_or_manager: the owner of the run, experiment or key, or a project manager.
 - manager: a project manager.
@@ -25,8 +25,8 @@ from typing import Dict, Tuple
 ROLES: Dict[str, str] = {
     "public": "no sign-in (sign-in and sign-up)",
     "any_user": "any signed-in user, no project role needed",
-    "reader": "a project member: a read sent as POST",
-    "member": "a project member",
+    "reader": "a project member of any role, a Viewer included: a read sent as POST",
+    "member": "a project member who may change it; a Viewer is refused",
     "review_rule": "the project's review rule decides (managers, or members too)",
     "owner_or_manager": "the owner of the run, experiment or key, or a project manager",
     "manager": "a project manager",
@@ -61,10 +61,10 @@ ROUTE_ROLES: Dict[Tuple[str, str], str] = {
     ("POST", "/api/projects/{project_slug}/analysis-documents"): "manager",
     ("DELETE", "/api/projects/{project_slug}/analysis-documents/{document_id}"): "manager",
     ("PATCH", "/api/projects/{project_slug}/analysis-documents/{document_id}"): "manager",
-    ("POST", "/api/projects/{project_slug}/analysis-examples"): "member",
+    ("POST", "/api/projects/{project_slug}/analysis-examples"): "reader",
     ("POST", "/api/projects/{project_slug}/analysis-rule-aliases/{alias_name}"): "manager",
     ("POST", "/api/projects/{project_slug}/analysis-rule-jobs"): "manager",
-    ("POST", "/api/projects/{project_slug}/analysis-rule-jobs/{job_id}/cancel"): "member",
+    ("POST", "/api/projects/{project_slug}/analysis-rule-jobs/{job_id}/cancel"): "manager",
     ("POST", "/api/projects/{project_slug}/analysis-rule-versions"): "manager",
     ("POST", "/api/projects/{project_slug}/analysis-rule-versions/{target_ref}:merge"): "manager",
     ("DELETE", "/api/projects/{project_slug}/analysis-rule-versions/{version_id}"): "manager",
@@ -84,12 +84,12 @@ ROUTE_ROLES: Dict[Tuple[str, str], str] = {
     ("POST", "/api/runs/{run_id:path}/analysis-documents"): "owner_or_manager",
     ("DELETE", "/api/runs/{run_id:path}/analysis-documents/{document_id}"): "manager",
     ("PATCH", "/api/runs/{run_id:path}/analysis-documents/{document_id}"): "owner_or_manager",
-    ("POST", "/api/runs/{run_id:path}/analysis-examples"): "member",
+    ("POST", "/api/runs/{run_id:path}/analysis-examples"): "reader",
     ("POST", "/api/runs/{run_id:path}/analysis-jobs"): "owner_or_manager",
     ("POST", "/api/runs/{run_id:path}/analysis-jobs/{job_id}/cancel"): "member",
     ("POST", "/api/runs/{run_id:path}/analysis-rule-aliases/{alias_name}"): "manager",
     ("POST", "/api/runs/{run_id:path}/analysis-rule-jobs"): "manager",
-    ("POST", "/api/runs/{run_id:path}/analysis-rule-jobs/{job_id}/cancel"): "member",
+    ("POST", "/api/runs/{run_id:path}/analysis-rule-jobs/{job_id}/cancel"): "manager",
     ("POST", "/api/runs/{run_id:path}/analysis-rule-versions"): "manager",
     ("POST", "/api/runs/{run_id:path}/analysis-rule-versions/{target_ref}:merge"): "manager",
     ("DELETE", "/api/runs/{run_id:path}/analysis-rule-versions/{version_id}"): "manager",
@@ -174,7 +174,7 @@ ROUTE_ROLES: Dict[Tuple[str, str], str] = {
     ("POST", "/v1/projects/{project_id}/eval-queue/remote/cancel"): "manager",
     ("POST", "/v1/projects/{project_id}/experiments"): "member",
     ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/cancel"): "owner_or_manager",
-    ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/clone"): "member",
+    ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/clone"): "reader",
     ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/jobs/{job_id}/cancel"): "owner_or_manager",
     ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/jobs/{job_id}/retry"): "owner_or_manager",
     ("POST", "/v1/projects/{project_id}/llm-connections"): "manager",

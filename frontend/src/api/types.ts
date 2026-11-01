@@ -1,6 +1,6 @@
 /** API payload types for the shell area (brief 01 §4). */
 export type GlobalRole = 'ADMIN' | 'MEMBER';
-export type ProjectRole = '' | 'MEMBER' | 'MANAGER';
+export type ProjectRole = '' | 'VIEWER' | 'MEMBER' | 'MANAGER';
 export type AuthType = 'api_key' | 'proxy_headers' | 'oidc' | 'local_password' | 'none' | string;
 
 export interface Project {
@@ -51,7 +51,7 @@ export interface Member {
   user_id: string;
   email: string;
   display_name: string;
-  role: 'MEMBER' | 'MANAGER';
+  role: 'VIEWER' | 'MEMBER' | 'MANAGER';
   is_active: boolean;
   created_at: string;
   updated_at: string;

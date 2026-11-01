@@ -55,6 +55,7 @@ from qym_platform.llm_endpoint_security import (
     validate_llm_base_url,
 )
 from qym_platform.permissions import (
+    require_project_writer,
     ARCHIVED_PROJECT_DETAIL,
     apply_reviewable_run_filter,
     can_delete_run,
@@ -4855,6 +4856,7 @@ def cancel_analysis_job(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     require_run_items_visible(db, principal, run)
+    require_project_writer(db, run.project_id)  # a Viewer cannot run the analyzer (C033)
     job = analysis_job_manager.get(job_id, db=db)
     if job is None or job.run_id != run.id:
         raise HTTPException(status_code=404, detail="Analysis job not found")
@@ -7376,6 +7378,7 @@ async def analyze_test(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     require_run_items_visible(db, principal, run)
+    require_project_writer(db, run.project_id)  # a Viewer cannot run the analyzer (C033)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)

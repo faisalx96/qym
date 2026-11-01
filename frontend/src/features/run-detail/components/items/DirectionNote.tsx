@@ -3,7 +3,7 @@
  * better (80% bar) unless the project saved otherwise. Project managers switch it, per project and metric.
  */
 import { useSetMetricDirection } from '@/api/projects';
-import { useProjectContext } from '@/features/shell';
+import { readOnlyReason, useProjectContext } from '@/features/shell';
 import { Button, useToast } from '@/ui';
 import { useRunPage } from '../../RunContext';
 import { messageFor } from './ScoreEditor';
@@ -11,7 +11,8 @@ import styles from './DirectionNote.module.css';
 
 export function DirectionNote({ metric }: { metric: string | null }) {
   const { model } = useRunPage();
-  const { project, canManage, readOnly } = useProjectContext();
+  const project_ = useProjectContext();
+  const { project, canManage, readOnly } = project_;
   const toast = useToast();
   const save = useSetMetricDirection(project);
   const source = metric ? model.metricDirectionSource[metric] : null;
@@ -27,7 +28,7 @@ export function DirectionNote({ metric }: { metric: string | null }) {
       { onError: (e) => toast.show(messageFor(e), { tone: 'error' }) },
     );
   const locked = !canManage || readOnly;
-  const why = readOnly ? 'This project is archived.' : 'Only project managers can set a metric’s direction.';
+  const why = readOnly ? readOnlyReason(project_) : 'Only project managers can set a metric’s direction.';
   return (
     <p className={styles.note} data-testid="direction-note">
       <span>{text}</span>

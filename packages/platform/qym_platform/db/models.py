@@ -44,6 +44,8 @@ class UserRole(str, enum.Enum):
 
 
 class ProjectRole(str, enum.Enum):
+    # A viewer opens, compares and exports; every write answers 403 (C033).
+    VIEWER = "VIEWER"
     MEMBER = "MEMBER"
     MANAGER = "MANAGER"
 

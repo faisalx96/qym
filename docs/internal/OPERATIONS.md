@@ -207,12 +207,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0096`, following `0050` through
+The combined migration chain has one head, `0097`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084`, `0086`–`0092`, `0094` and `0095` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084`, `0086`–`0092`, `0094`, `0095` and `0097` are quick DDL or small job/queue inserts.
 `0093` builds one partial index on `dashboard_change_events`; when that table is over
 256 MB it queues the build (`create_deferred_indexes`, CONCURRENTLY) instead.
 `0096` builds two covering indexes (`run_item_pass_scores`, and `spans` on every partition);
@@ -254,6 +254,7 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0097 | `projectrole` gains `VIEWER` (Postgres `ALTER TYPE ... ADD VALUE`, outside the transaction; no rewrite) | None. Managers can now give a member the Viewer role (C033) |
 | 0096 | Covering indexes `ix_run_item_pass_scores_cover` (`run_id, metric_name, item_id, pass_number` INCLUDE `score_numeric`) and `ix_span_run_start_cover` on every span partition (`run_id, start_time_ns` INCLUDE the columns step latency reads), so these reads are index-only (C073) | `create_deferred_indexes` — **queued, runs by itself** only for a table over 256 MB: builds each index CONCURRENTLY (span partitions one by one, attached to the parent index), then runs `VACUUM (ANALYZE)` on `run_item_pass_scores` and on the finished span partitions. About 0.6–0.7 GB of index for 3 M spans |
 | 0095 | Empty `run_create_keys` (an `Idempotency-Key` of `POST /v1/runs` and the run it created, kept 24 hours; FK to the run `ON DELETE CASCADE`) | None: clients that send no key create runs as before |
 | 0094 | Empty `run_step_latency_summaries` (the run page's step-latency summary of a run or a pass, keyed by run, pass and rollup, FK to the run `ON DELETE CASCADE`) | None: a summary is built and stored the first time it is read; a late span or a removed pass changes its fingerprint, and the next read builds it again |
@@ -351,7 +352,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0096` and a healthy API. The API process then runs every queued job itself.
+   `0097` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -533,7 +534,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0096`.
+deployment only after the API has migrated to `0097`.
 
 ```yaml
 apiVersion: apps/v1

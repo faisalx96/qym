@@ -18,7 +18,7 @@ const ARCHIVED_HIDDEN = /^(analysis|reviews)$/;
 
 /**
  * Resolves the project from me.projects or GET /v1/projects/by-slug; provides
- * readOnly for archived projects; renders the Not Found / Access Denied panel.
+ * readOnly for archived projects and Viewers; renders the Not Found / Access Denied panel.
  */
 export function ProjectLayout() {
   const { slug = '' } = useParams();
@@ -35,7 +35,18 @@ export function ProjectLayout() {
   const value = useMemo<ProjectValue | null>(() => {
     if (!query.data) return null;
     const p = query.data;
-    return { project: p, slug, readOnly: !p.is_active, canManage: isAdmin || p.role === 'MANAGER', isAdmin };
+    const archived = !p.is_active;
+    // A Viewer reads every page and changes nothing (C033); the archived banner stays tied to archived.
+    const viewer = !isAdmin && p.role === 'VIEWER';
+    return {
+      project: p,
+      slug,
+      readOnly: archived || viewer,
+      archived,
+      viewer,
+      canManage: isAdmin || p.role === 'MANAGER',
+      isAdmin,
+    };
   }, [query.data, slug, isAdmin]);
 
   if (query.isPending) {
@@ -49,12 +60,12 @@ export function ProjectLayout() {
     const kind = isNoAccess(query.error) ? 'forbidden' : isNotFound(query.error) ? 'not_found' : 'error';
     return <ProjectNotFound slug={slug} kind={kind} error={query.error} onRetry={() => query.refetch()} />;
   }
-  if (value.readOnly && ARCHIVED_HIDDEN.test(sub)) {
+  if (value.archived && ARCHIVED_HIDDEN.test(sub)) {
     return <ProjectNotFound slug={slug} kind="not_found" archived />;
   }
   return (
     <ProjectContext.Provider key={slug} value={value}>
-      {value.readOnly && ARCHIVED_NOTICE.test(sub) ? <ArchivedBanner project={value.project} /> : null}
+      {value.archived && ARCHIVED_NOTICE.test(sub) ? <ArchivedBanner project={value.project} /> : null}
       <Outlet />
     </ProjectContext.Provider>
   );

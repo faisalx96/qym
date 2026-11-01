@@ -45,7 +45,7 @@ export function useMemberCandidates(projectId: string | undefined, q: string, en
 export function useAddMember(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { user_id: string; role: 'MEMBER' | 'MANAGER' }) =>
+    mutationFn: (body: { user_id: string; role: 'VIEWER' | 'MEMBER' | 'MANAGER' }) =>
       api.post<Member>(`/v1/projects/${projectId}/members`, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: k.members(projectId) });
@@ -58,7 +58,7 @@ export function useAddMember(projectId: string) {
 export function useUpdateMemberRole(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: 'MEMBER' | 'MANAGER' }) =>
+    mutationFn: ({ userId, role }: { userId: string; role: 'VIEWER' | 'MEMBER' | 'MANAGER' }) =>
       api.patch<Member>(`/v1/projects/${projectId}/members/${userId}`, { role }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: k.members(projectId) }),
   });

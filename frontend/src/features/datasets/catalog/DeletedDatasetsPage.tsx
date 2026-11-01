@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDatasetCatalog, useRestoreDataset, type Dataset } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
-import { useDocumentTitle, useProjectContext } from '@/features/shell';
+import { readOnlyReason, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
@@ -23,7 +23,8 @@ import { catalogPath, datasetPath } from '../lib/route';
 import { RESTORE_RULE } from '../lib/versions';
 
 export function DeletedDatasetsPage() {
-  const { slug, project, readOnly } = useProjectContext();
+  const projectContext = useProjectContext();
+  const { slug, project, readOnly } = projectContext;
   useDocumentTitle(`${project.name} · Deleted datasets`);
   const query = useDatasetCatalog(slug, true);
   const showSkeleton = useDelayedPending(query.isPending);
@@ -135,14 +136,14 @@ export function DeletedDatasetsPage() {
                   Restore
                 </Button>
               ) : (
-                <Tooltip content={readOnly ? 'This project is archived.' : RESTORE_RULE}>
+                <Tooltip content={readOnly ? readOnlyReason(projectContext) : RESTORE_RULE}>
                   <Button
                     variant="neutral"
                     size="sm"
                     aria-disabled="true"
                     data-disabled-reason=""
                     onPress={() =>
-                      toast.show(readOnly ? 'This project is archived.' : RESTORE_RULE, { tone: 'info' })
+                      toast.show(readOnly ? readOnlyReason(projectContext) : RESTORE_RULE, { tone: 'info' })
                     }
                   >
                     Restore
