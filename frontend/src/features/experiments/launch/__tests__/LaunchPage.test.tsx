@@ -63,6 +63,15 @@ describe('LaunchPage', () => {
     expect(screen.getByRole('radio', { name: /Default preset v1/ })).toBeChecked();
   });
 
+  it('C130: opens with the dataset and version a dataset page named, over the preset dataset', async () => {
+    mount('/projects/proj/experiments/new?env=e1&dataset=ds2&version=3');
+    await waitFor(() =>
+      expect(screen.getByText('Default preset v1', { selector: 'strong' })).toBeInTheDocument(),
+    );
+    expect(await screen.findByRole('button', { name: 'Remove ds2' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove ds1' })).not.toBeInTheDocument();
+  });
+
   it('asks before changing the starting point when there are edits', async () => {
     mount('/projects/proj/experiments/new?env=e1');
     await waitFor(() =>

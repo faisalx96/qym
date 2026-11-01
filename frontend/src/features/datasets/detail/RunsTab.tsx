@@ -6,16 +6,22 @@ import { runPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { DataTable, EmptyState, RelativeTime, ScoreBar, StatusCell, Text, type Column } from '@/ui';
 import { formatLatency } from '../lib/itemValue';
+import { RunOnVersionLink, SdkLine } from './RunOnVersion';
 import { metricDir } from '../lib/metricDir';
 
 export function RunsTab({
   slug,
   datasetRef,
+  datasetName,
   version,
+  canLaunch,
 }: {
   slug: string;
   datasetRef: string;
+  datasetName: string;
   version: DatasetVersion | null;
+  /** The project has an active environment and the reader may launch: a published version offers a run (C130). */
+  canLaunch: boolean;
 }) {
   const [page, setPage] = useState(1);
   const query = useDatasetRuns(slug, datasetRef, version?.version ?? null, (page - 1) * DATASET_RUNS_PAGE);
@@ -102,10 +108,19 @@ export function RunsTab({
             <EmptyState
               title={version ? `No runs on ${version.version} yet` : 'No runs yet'}
               body={
-                <>
-                  Point the SDK at this dataset (<code>Evaluator(task, &quot;{datasetRef}&quot;, …)</code>) to
-                  see runs here.
-                </>
+                canLaunch && version?.status === 'published' ? (
+                  'Run an experiment on this version, or point the SDK at the dataset.'
+                ) : (
+                  <>
+                    Point the SDK at this dataset to see runs here:{' '}
+                    <SdkLine slug={slug} datasetRef={datasetRef} />
+                  </>
+                )
+              }
+              action={
+                canLaunch && version?.status === 'published' ? (
+                  <RunOnVersionLink slug={slug} datasetName={datasetName} version={version.version} />
+                ) : undefined
               }
             />
           ) : undefined
