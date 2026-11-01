@@ -19,7 +19,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
@@ -29,6 +29,7 @@ from qym_platform.api.ingest import _span_oi_kind, _span_usage_scope
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.db.models import Run, RunItemAttempt, RunStepLatencySummary, Span
 from qym_platform.deps import get_db
+from qym_platform.middleware.etag import mark_cacheable
 from qym_platform.permissions import can_view_run
 from qym_platform.services.repeat_passes import pass_revision
 
@@ -833,8 +834,12 @@ def multi_run_step_latency(
     ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    response: Response = None,
 ):
     ids = [rid.strip() for rid in run_ids.split(",") if rid.strip()]
+    # C072: an ETag when every run asked for is finished (access is checked below, before any body is sent)
+    bases = list(dict.fromkeys(_parse_run_ref(ref)[0] for ref in ids))
+    mark_cacheable(response, Run.active(db).filter(Run.id.in_(bases)).all() if len(bases) <= MAX_STEP_LATENCY_RUNS else [])
     if len(ids) == 1 and "::" not in ids[0] and level == "summary" and format == "json" and group_by is None:
         # The run page's request: one run (or one pass), summary JSON. Served from the stored summary (C022).
         return _stored_summary(db, principal, ids[0], rollup, pass_number)
@@ -912,6 +917,7 @@ def single_run_step_latency(
     pass_number: Optional[int] = Query(None, ge=1, description="Restrict to one repeat pass"),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    response: Response = None,
 ):
     return multi_run_step_latency(
         run_ids=run_id,
@@ -919,6 +925,8 @@ def single_run_step_latency(
         level=level,
         rollup=rollup,
         pass_number=pass_number,
+        group_by=None,
         db=db,
         principal=principal,
+        response=response,
     )

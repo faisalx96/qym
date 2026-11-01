@@ -618,3 +618,54 @@ def test_the_worker_stores_the_summary_after_publishing(session_factory):
     worker._store_step_latency("run-1")
     with session_factory() as session:
         assert session.query(RunStepLatencySummary).count() == 1
+
+
+# C072: a finished run's reads carry an ETag; a revisit with the same body is a 304 with no body.
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/runs/run-1",
+        "/api/runs/run-1?view=summary",
+        "/api/runs/run-1/passes",
+        "/api/runs/step-latency?run_ids=run-1&rollup=site",
+        "/api/runs/run-1/step-latency",
+        "/api/compare?files=run-1",
+    ],
+)
+def test_finished_run_reads_answer_304_on_revisit(client, session_factory, path):
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    first = client.get(path, headers=headers)
+    assert first.status_code == 200
+    etag = first.headers["etag"]
+    assert first.headers["cache-control"] == "private, no-cache"
+    assert "x-qym-cacheable" not in first.headers
+    again = client.get(path, headers={**headers, "If-None-Match": etag})
+    assert again.status_code == 304
+    assert again.content == b""
+    assert again.headers["etag"] == etag
+
+
+def test_a_live_run_keeps_no_store(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+        session.get(Run, "run-1").status = RunWorkflowStatus.RUNNING
+        session.commit()
+    response = client.get("/api/runs/run-1", headers=_headers("owner@example.com"))
+    assert response.status_code == 200
+    assert "etag" not in response.headers
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_an_outsider_gets_no_cached_body(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+    first = client.get("/api/runs/run-1/step-latency", headers=_headers("owner@example.com"))
+    denied = client.get(
+        "/api/runs/run-1/step-latency",
+        headers={**_headers("other@example.com"), "If-None-Match": first.headers["etag"]},
+    )
+    assert denied.status_code == 403

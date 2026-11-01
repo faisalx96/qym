@@ -198,6 +198,11 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
                 "Dashboard summary worker did not stop within the shutdown timeout"
             )
 
+    # A finished run's reads get an ETag and a 304 on revisit (C072). Added before GZip, so it runs inside it and
+    # hashes the JSON, not the compressed bytes.
+    from qym_platform.middleware.etag import FinishedRunEtagMiddleware
+
+    app.add_middleware(FinishedRunEtagMiddleware)
     # Run lists and detail payloads are large JSON; gzip cuts them ~5-10x.
     app.add_middleware(GZipExceptStatic, minimum_size=1024, compresslevel=GZIP_COMPRESSLEVEL)
     # Private pages and API data must not be replayed from the browser cache

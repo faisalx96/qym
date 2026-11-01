@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import os
 import re
@@ -179,6 +181,7 @@ from qym_platform.services.run_means import (
     supersede_metric_error,
 )
 from qym_platform.services.retention import purge_due_at
+from qym_platform.middleware.etag import mark_cacheable
 from qym_platform.services.text_search import fold_search_text
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
@@ -3104,6 +3107,7 @@ def legacy_compare(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
     view: Optional[str] = None,
+    response: Response = None,
 ) -> Dict[str, Any]:
     """Return multiple run snapshots for comparison.
 
@@ -3157,6 +3161,10 @@ def legacy_compare(
         if str(data.get("run", {}).get("compare_alignment_status") or "") != "aligned"
     ]
     compare_alignment_status = "unalignable" if unalignable_runs else "aligned"
+    # C072: an ETag when every compared run is finished (missing runs make no difference to the body's hash)
+    statuses = [str((data.get("run") or {}).get("status") or "") for data in runs_data]
+    if runs_data and all(status.upper() not in {"RUNNING", "PENDING"} for status in statuses):
+        mark_cacheable(response, [SimpleNamespace(status=status) for status in statuses])
 
     return {
         "runs": runs_data,
@@ -4551,6 +4559,7 @@ def run_passes(
     run_id: str,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    response: Response = None,
 ) -> Dict[str, Any]:
     """Repeat runs: per-pass slice aggregates (lazy-loaded on runs-list expand)."""
     run = Run.active(db).filter(Run.id == run_id).first()
@@ -4558,6 +4567,7 @@ def run_passes(
         return {"error": "Run not found"}
     if not can_view_run(db, principal, run):
         return {"error": "Access denied"}
+    mark_cacheable(response, [run])  # C072
 
     from qym_platform.db.models import RunItemPassScore
 
@@ -4946,6 +4956,7 @@ def run_group_metrics(
     view: Optional[Literal["group"]] = Query(None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    response: Response = None,
 ) -> Dict[str, Any]:
     """Repeat runs: the group set (k = samples) plus the full accuracy-vs-k band.
 
@@ -4964,6 +4975,7 @@ def run_group_metrics(
         return {"error": "Run not found"}
     if not can_view_run(db, principal, run):
         return {"error": "Access denied"}
+    mark_cacheable(response, [run])  # C072
 
     from qym.core.reducers import group_stats
 
@@ -5529,6 +5541,7 @@ def legacy_run_data(
     view: Optional[str] = None,
     pass_number: Optional[int] = None,
     fields: Optional[str] = None,
+    response: Response = None,
 ) -> Dict[str, Any]:
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
@@ -5536,6 +5549,8 @@ def legacy_run_data(
     if not can_view_run(db, principal, run):
         return {"error": "Access denied"}
     _reconcile_run_liveness(db, [run])
+    # C072: a finished run's payload gets an ETag; a revisit with the same body is a 304
+    mark_cacheable(response, [run])
 
     if view not in (None, "full", "compact", "summary"):
         raise HTTPException(422, "view must be full, compact or summary")
