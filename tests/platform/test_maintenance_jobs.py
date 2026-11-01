@@ -561,6 +561,8 @@ def test_deferred_index_catalog_matches_the_migrations_that_queue_it():
     for filename, attr in (
         ("0051_maintenance_jobs_and_event_indexes.py", "DEFERRED_INDEXES"),
         ("0055_dashboard_extrema_indexes.py", "INDEXES"),
+        ("0093_dashboard_event_published_index.py", "INDEXES"),
+        ("0096_covering_score_span_indexes.py", "INDEXES"),
     ):
         loader = importlib.util.spec_from_file_location(
             f"_migration_{filename[:4]}", versions / filename
