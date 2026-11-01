@@ -126,6 +126,23 @@ test.describe('open an item (scenario 6, J6)', () => {
     expect(Math.abs((await scrollTop(page)) - settled)).toBeLessThan(5);
   });
 
+  test('Escape closes the open item, drops ?item and keeps focus on its row (C231)', async ({ page }) => {
+    await openRun(page, s.slug, classic);
+    await itemButton(page, 3).click();
+    await expect(card(page, 'item-0003')).toBeVisible();
+    await card(page, 'item-0003').getByRole('button').first().focus();
+    await page.keyboard.press('Escape');
+    await expect(card(page, 'item-0003')).toHaveCount(0);
+    expect(params(page).get('item')).toBeNull();
+    await expect(page.locator('tr[data-item-id="item-0003"]')).toBeFocused();
+    // Escape with focus on an open row closes it too
+    await itemButton(page, 3).click();
+    await expect(card(page, 'item-0003')).toBeVisible();
+    await page.locator('tr[data-item-id="item-0003"]').focus();
+    await page.keyboard.press('Escape');
+    await expect(card(page, 'item-0003')).toHaveCount(0);
+  });
+
   test('Copy link copies the deep link of the item', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 2).click();

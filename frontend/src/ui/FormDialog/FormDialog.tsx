@@ -74,6 +74,7 @@ function FormDialogInner({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inflight = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   function set(name: string, value: FormValue) {
     setValues((prev) => {
@@ -95,7 +96,13 @@ function FormDialogInner({
       if (custom) nextErrors[f.name] = custom;
     }
     setErrors(nextErrors);
-    if (Object.values(nextErrors).some(Boolean)) return;
+    if (Object.values(nextErrors).some(Boolean)) {
+      // C231: focus the first invalid field, so a screen reader announces its error (focus stayed on the button)
+      requestAnimationFrame(() =>
+        formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid] input')?.focus(),
+      );
+      return;
+    }
     inflight.current = true;
     setBusy(true);
     setFormError(null);
@@ -133,6 +140,7 @@ function FormDialogInner({
       }
     >
       <form
+        ref={formRef}
         className={styles.form}
         onSubmit={(e) => {
           e.preventDefault();

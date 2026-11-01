@@ -260,7 +260,20 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
   ];
 
   return (
-    <div className={styles.wrap} ref={wrapRef}>
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- Escape on an open row closes it (C231)
+    <div
+      className={styles.wrap}
+      ref={wrapRef}
+      onKeyDown={(e) => {
+        // C231: Escape with focus on an open item's row closes the item (and drops ?item); focus stays on the row
+        const tr = e.target as HTMLElement;
+        if (e.key !== 'Escape' || e.defaultPrevented || tr.tagName !== 'TR') return;
+        const id = tr.dataset.itemId;
+        if (!id || !ui.expanded.has(id)) return;
+        e.preventDefault();
+        ui.toggleExpanded(id, false);
+      }}
+    >
       <DataTable<FilteredItem>
         aria-label="Items"
         storageKey="run.items.v3"

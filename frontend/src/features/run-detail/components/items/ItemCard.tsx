@@ -74,6 +74,16 @@ export function analysisWarnings(row: Row): string[] {
   return out;
 }
 
+/** A field where Escape belongs to the text (search boxes, the score editor, comment fields). */
+function isTextEntry(target: EventTarget): boolean {
+  const el = target as HTMLElement;
+  return (
+    el.isContentEditable ||
+    el.tagName === 'TEXTAREA' ||
+    (el.tagName === 'INPUT' && (el as HTMLInputElement).type !== 'checkbox')
+  );
+}
+
 export function ItemCard({ row }: { row: Row }) {
   const { payload, model, api, items } = useRunPage();
   const ui = useItemsUi();
@@ -158,13 +168,27 @@ export function ItemCard({ row }: { row: Row }) {
   const langfuse =
     row.trace_url || buildLangfuseTraceUrl(run.langfuse_host, run.langfuse_project_id, row.trace_id);
   const shownForMatrix = shownPasses(selected);
+  const collapse = () => {
+    ui.toggleExpanded(row.item_id, false);
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(`tr[data-item-id="${CSS.escape(row.item_id)}"]`)?.focus(),
+    );
+  };
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape closes the item from anywhere inside it
     <article
       ref={articleRef}
       className={styles.state}
       data-testid="item-card"
       data-item-id={row.item_id}
       aria-label={`Item #${row.index + 1}`}
+      onKeyDown={(e) => {
+        // C231: Escape closes the open item and puts focus back on its row. Widgets that use Escape themselves
+        // (the score editor, a metric detail, menus) stop it first; a text field keeps it for its own text.
+        if (e.key !== 'Escape' || e.defaultPrevented || isTextEntry(e.target)) return;
+        e.preventDefault();
+        collapse();
+      }}
     >
       <ItemBar
         number={row.index + 1}
@@ -172,12 +196,7 @@ export function ItemCard({ row }: { row: Row }) {
         verdict={itemVerdict(api.ctx, row, api.selectedMetric)}
         preview={(input.split('\n')[0] ?? '').slice(0, 200)}
         link={link}
-        onCollapse={() => {
-          ui.toggleExpanded(row.item_id, false);
-          requestAnimationFrame(() =>
-            document.querySelector<HTMLElement>(`tr[data-item-id="${CSS.escape(row.item_id)}"]`)?.focus(),
-          );
-        }}
+        onCollapse={collapse}
       />
       {run.items_restricted ? (
         <p className={styles.muted} data-testid="run-item-redacted">
