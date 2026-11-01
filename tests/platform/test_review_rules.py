@@ -756,6 +756,46 @@ def test_editing_an_approved_correction_returns_it_to_pending(client, session_fa
         assert (old.reviewed_by_user_id, old.review_comment) == ("manager-1", "Checked the trace, correct")
 
 
+def test_editing_a_decided_diagnosis_needs_the_decision_right(client, session_factory):
+    """C054: an edit withdraws the decision, so the managers-only rule covers it too (Reviews and run page)."""
+    with session_factory() as db:
+        _run(db, "r1")
+        approved = _correction(db, author="owner-1", status=CorrectionStatus.APPROVED, reviewer="manager-1")
+    _ok(_rules(client, correction_approvers="managers"))
+    response = client.put(
+        f"/api/corrections/{approved}", json={"human_root_cause": "Metric bug"}, headers=_ui(MEMBER)
+    )
+    assert response.status_code == 403, response.text
+    assert "Only project managers and admins" in response.json()["detail"]
+    assert _correction_status(session_factory, approved) == CorrectionStatus.APPROVED
+    # A manager may still send the decided one back to review.
+    edited = _ok(
+        client.put(f"/api/corrections/{approved}", json={"human_root_cause": "Metric bug"}, headers=_ui(MANAGER))
+    )
+    assert edited["status"] == "pending"
+
+    # The run page's issue edit follows the same rule for an approved issue.
+    with session_factory() as db:
+        item = db.query(RunItem).filter_by(run_id="r1").one()
+        item.item_metadata = {
+            "metric_analyses": {
+                "accuracy": {
+                    "root_cause_issues": [
+                        {"issue_id": "i1", "category": "Retrieval miss", "finding": "x", "review_status": "approved"}
+                    ]
+                }
+            }
+        }
+        db.commit()
+    body = {
+        "run_id": "r1", "item_id": "item-1", "metric_name": "accuracy", "action": "edit", "issue_id": "i1",
+        "issue": {"category": "Metric bug", "finding": "y"},
+    }
+    response = client.post("/api/runs/update_root_cause_issue", json=body, headers=_ui(OWNER))
+    assert response.status_code == 403, response.text
+    assert "Only project managers and admins" in response.json()["detail"]
+
+
 def test_review_rules_migration_is_quick_ddl_and_reversible(monkeypatch):
     import importlib.util
 

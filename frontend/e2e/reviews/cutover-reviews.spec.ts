@@ -98,11 +98,11 @@ test.describe('racing and failing loads', () => {
     await expect(rows(page)).toHaveCount(4);
     const gone = rows(page).filter({ hasText: 'text2sql' }).first();
     const goneId = Number(await gone.getAttribute('data-correction-row'));
-    await page.getByRole('checkbox', { name: `Select correction ${goneId}` }).check({ force: true });
+    await page.getByRole('checkbox', { name: `Select diagnosis ${goneId}` }).check({ force: true });
     await expect(bulk(page)).toContainText('1 selected');
     await page.getByRole('searchbox', { name: 'Search diagnoses' }).fill('router');
     // while the new filter loads, the old list is not offered for ticking
-    await expect(page.getByRole('checkbox', { name: `Select correction ${goneId}` })).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: `Select diagnosis ${goneId}` })).toHaveCount(0);
     await expect(rows(page)).toHaveCount(2);
     await expect(row(page, goneId)).toHaveCount(0);
     await expect(bulk(page)).not.toContainText('selected');
@@ -141,7 +141,7 @@ test.describe('keyboard and focus', () => {
     const [c0, c1] = s.corrections;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
     await expect(rows(page)).toHaveCount(4);
-    await page.getByRole('button', { name: `Approve correction ${c0!.id}` }).click();
+    await page.getByRole('button', { name: `Approve diagnosis ${c0!.id}` }).click();
     await expect(row(page, c0!.id)).toHaveCount(0);
     await expect(row(page, c1!.id)).toHaveAttribute('data-current', '');
     await expect(row(page, c1!.id).locator('[data-review-card]')).toBeFocused();
@@ -200,7 +200,7 @@ test.describe('All-tab bulk actions act only on the rows they fit', () => {
     await allTab(page, s.project.slug);
     await expect(rows(page)).toHaveCount(5);
     for (const c of s.corrections)
-      await page.getByRole('checkbox', { name: `Select correction ${c.id}` }).check({ force: true });
+      await page.getByRole('checkbox', { name: `Select diagnosis ${c.id}` }).check({ force: true });
     await expect(bulk(page)).toContainText('5 selected');
     await expect(page.getByTestId('bulk-approve')).toContainText('Approve (2 of 5)');
     await expect(page.getByTestId('bulk-reset')).toContainText('Reset (3 of 5)');
@@ -211,10 +211,10 @@ test.describe('All-tab bulk actions act only on the rows they fit', () => {
         sent.push(r.postDataJSON());
     });
     await page.getByTestId('bulk-approve').click();
-    const dialog = page.getByRole('dialog', { name: 'Approve 2 corrections' });
+    const dialog = page.getByRole('dialog', { name: 'Approve 2 diagnoses' });
     await expect(dialog).toBeVisible();
     await dialog.getByTestId('comment-confirm').click();
-    await expect(page.getByText('2 corrections approved')).toBeVisible();
+    await expect(page.getByText('2 diagnoses approved')).toBeVisible();
     expect(sent).toHaveLength(1);
     expect([...sent[0]!.ids].sort()).toEqual(pending.map((c) => c.id).sort());
     expect(sent[0]!.action).toBe('approve');
@@ -234,7 +234,7 @@ test.describe('All-tab bulk actions act only on the rows they fit', () => {
     await allTab(page, s.project.slug);
     await expect(rows(page)).toHaveCount(3);
     for (const c of approved)
-      await page.getByRole('checkbox', { name: `Select correction ${c.id}` }).check({ force: true });
+      await page.getByRole('checkbox', { name: `Select diagnosis ${c.id}` }).check({ force: true });
     await expect(page.getByTestId('bulk-approve')).toBeDisabled();
     await expect(page.getByTestId('bulk-reject')).toBeDisabled();
     const sent: string[] = [];

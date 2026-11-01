@@ -114,7 +114,7 @@ export function ReviewsPage() {
         setLinked(row);
         if (filters.status !== 'all' && filters.status !== row.status) setFilters({ status: row.status });
       })
-      .catch(() => toast.show(`Correction #${linkedId} could not be opened`, { tone: 'error' }));
+      .catch(() => toast.show(`Diagnosis #${linkedId} could not be opened`, { tone: 'error' }));
     return () => {
       cancelled = true;
     };
@@ -280,7 +280,9 @@ export function ReviewsPage() {
       await deleteMut.mutateAsync(row.id);
       applyUpdate(row, { ...row, status: 'rejected' });
       if (currentId === row.id) moveTo(next);
-      toast.show(`Correction #${row.id} deleted (marked rejected)`, { tone: 'success' });
+      toast.show(`Diagnosis #${row.id} deleted: it left the run’s root causes and Reviews`, {
+        tone: 'success',
+      });
     } catch (e) {
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
       throw e;
@@ -321,12 +323,12 @@ export function ReviewsPage() {
       } else invalidateCorrections(qc);
       setSelected(new Set());
       toast.show(
-        `${r.affected ?? ids.length} correction${(r.affected ?? ids.length) === 1 ? '' : 's'} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reset' ? 'reset' : 'deleted'}`,
+        `${r.affected ?? ids.length} ${(r.affected ?? ids.length) === 1 ? 'diagnosis' : 'diagnoses'} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reset' ? 'reset' : 'deleted'}`,
         { tone: 'success' },
       );
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        setConflict(e.detail || 'The selected corrections changed.');
+        setConflict(e.detail || 'The selected diagnoses changed.');
         return;
       }
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Bulk action failed', { tone: 'error' });
@@ -367,7 +369,7 @@ export function ReviewsPage() {
       });
     },
     bulkApprove: () => {
-      if (!selected.size) toast.show('Select corrections with x first.', { tone: 'info' });
+      if (!selected.size) toast.show('Select diagnoses with x first.', { tone: 'info' });
       else openBulk('approve');
     },
     focusSearch: () => searchRef.current?.focus(),
@@ -544,7 +546,7 @@ export function ReviewsPage() {
           </div>
 
           {showSkeleton ? (
-            <Skeleton kind="table" rows={7} label="Loading corrections" />
+            <Skeleton kind="table" rows={7} label="Loading diagnoses" />
           ) : list.isError ? (
             <ErrorState
               error={list.error}
@@ -664,14 +666,15 @@ export function ReviewsPage() {
             focusRow(id);
           }
         }}
-        title="Reject correction"
+        title="Reject diagnosis"
         description={
           dialog?.kind === 'reject'
-            ? `Reject #${dialog.row.id} (${dialog.row.item_id}). A comment helps the author.`
+            ? `Reject #${dialog.row.id} (${dialog.row.item_id}). It stays on the run, marked wrong. Say why.`
             : ''
         }
         confirmLabel="Reject"
         tone="danger"
+        requireComment
         onConfirm={async (comment) => {
           if (dialog?.kind === 'reject') await decide(dialog.row, 'reject', comment);
         }}
@@ -681,10 +684,11 @@ export function ReviewsPage() {
         onOpenChange={(o) => !o && setDialog(null)}
         title={
           dialog?.kind === 'bulk'
-            ? `${dialog.action === 'approve' ? 'Approve' : 'Reject'} ${bulkSelection(rows, selected, dialog.action).ids.length} corrections`
+            ? `${dialog.action === 'approve' ? 'Approve' : 'Reject'} ${bulkSelection(rows, selected, dialog.action).ids.length} diagnoses`
             : ''
         }
-        description={`Applies to the selected corrections in ${describeView(filters)}.`}
+        description={`Applies to the selected diagnoses in ${describeView(filters)}.`}
+        requireComment={dialog?.kind === 'bulk' && dialog.action === 'reject'}
         confirmLabel={dialog?.kind === 'bulk' && dialog.action === 'reject' ? 'Reject' : 'Approve'}
         tone={dialog?.kind === 'bulk' && dialog.action === 'reject' ? 'danger' : 'primary'}
         onConfirm={async (comment) => {
@@ -694,8 +698,8 @@ export function ReviewsPage() {
       <ConfirmDialog
         open={dialog?.kind === 'delete'}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={dialog?.kind === 'delete' ? `Delete correction #${dialog.row.id}?` : ''}
-        description="It is marked rejected and its history is kept."
+        title={dialog?.kind === 'delete' ? `Delete diagnosis #${dialog.row.id}?` : ''}
+        description="It leaves the run’s root causes and Reviews; an audit record is kept. To keep it on the run as wrong, use Reject instead."
         confirmLabel="Delete"
         tone="danger"
         onConfirm={async () => {
@@ -705,8 +709,8 @@ export function ReviewsPage() {
       <ConfirmDialog
         open={dialog?.kind === 'bulk-delete'}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={`Delete ${selected.size} correction${selected.size === 1 ? '' : 's'}?`}
-        description="They are marked rejected and their history is kept."
+        title={`Delete ${selected.size} ${selected.size === 1 ? 'diagnosis' : 'diagnoses'}?`}
+        description="They leave the runs’ root causes and Reviews; an audit record is kept. To keep them on the runs as wrong, use Reject instead."
         confirmLabel="Delete"
         tone="danger"
         onConfirm={() => runBulk('delete')}

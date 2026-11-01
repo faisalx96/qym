@@ -193,11 +193,11 @@ test.describe('reviews: keyboard triage', () => {
     const bulk = page.getByRole('region', { name: 'Bulk actions' });
     await expect(bulk).toContainText('2 selected');
     await page.keyboard.press('Shift+A');
-    const dialog = page.getByRole('dialog', { name: 'Approve 2 corrections' });
+    const dialog = page.getByRole('dialog', { name: 'Approve 2 diagnoses' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('textbox', { name: /Comment/ }).fill('looks right');
     await dialog.getByTestId('comment-confirm').click();
-    await expect(page.getByText('2 corrections approved')).toBeVisible();
+    await expect(page.getByText('2 diagnoses approved')).toBeVisible();
     await expect(row(page, c0!.id)).toHaveCount(0);
     await expect(row(page, c1!.id)).toHaveCount(0);
     await expect(rows(page)).toHaveCount(2);
@@ -214,7 +214,7 @@ test.describe('reviews: keyboard triage', () => {
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
     await row(page, s.corrections[0]!.id).locator('[data-review-card]').focus();
     await page.keyboard.press('Shift+A');
-    await expect(page.getByText('Select corrections with x first.')).toBeVisible();
+    await expect(page.getByText('Select diagnoses with x first.')).toBeVisible();
     await page.keyboard.press('?');
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
     await page.keyboard.press('Escape');
@@ -232,7 +232,7 @@ test.describe('reviews: keyboard triage', () => {
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
     await row(page, c0.id).locator('[data-review-card]').focus();
     await page.keyboard.press('r');
-    const dialog = page.getByRole('dialog', { name: 'Reject correction' });
+    const dialog = page.getByRole('dialog', { name: 'Reject diagnosis' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('textbox', { name: /Comment/ })).toBeFocused();
     await page.keyboard.press('Escape');
@@ -256,14 +256,14 @@ test.describe('reviews: keyboard triage', () => {
     const s = await seedReviews(request, 'revbtn', 2);
     const [c0, c1] = s.corrections;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
-    await page.getByRole('button', { name: `Approve correction ${c0!.id}` }).click();
+    await page.getByRole('button', { name: `Approve diagnosis ${c0!.id}` }).click();
     await expect(row(page, c0!.id)).toHaveCount(0);
     await page.getByTestId('detail-approve').click(); // current moved to c1
     await expect(row(page, c1!.id)).toHaveCount(0);
     await expect(page.getByText('Nothing to review')).toBeVisible();
     await tabCount(page, 'Approved').click();
     await expect(rows(page)).toHaveCount(2);
-    await page.getByRole('button', { name: `Reset correction ${c0!.id}` }).click();
+    await page.getByRole('button', { name: `Reset diagnosis ${c0!.id}` }).click();
     await expect(row(page, c0!.id)).toHaveCount(0);
     await expect(tabCount(page, 'To review')).toContainText('1');
   });
@@ -338,8 +338,8 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     await expect(page.locator('[data-review-block]')).toBeVisible();
     await expect(page.getByTestId('detail-approve')).toBeDisabled();
     await expect(page.getByTestId('detail-reject')).toBeDisabled();
-    await expect(page.getByRole('button', { name: `Approve correction ${c0.id}` })).toBeDisabled();
-    await expect(page.getByRole('button', { name: `Reject correction ${c0.id}` })).toBeDisabled();
+    await expect(page.getByRole('button', { name: `Approve diagnosis ${c0.id}` })).toBeDisabled();
+    await expect(page.getByRole('button', { name: `Reject diagnosis ${c0.id}` })).toBeDisabled();
     // keyboard shortcuts must not act either
     await row(page, c0.id).locator('[data-review-card]').focus();
     await page.keyboard.press('a');
@@ -354,8 +354,8 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     const s = await seedReviews(request, 'revconflict', 4);
     const [c0, c1, c2] = s.corrections;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
-    await page.getByRole('checkbox', { name: `Select correction ${c0!.id}` }).check({ force: true });
-    await page.getByRole('checkbox', { name: `Select correction ${c1!.id}` }).check({ force: true });
+    await page.getByRole('checkbox', { name: `Select diagnosis ${c0!.id}` }).check({ force: true });
+    await page.getByRole('checkbox', { name: `Select diagnosis ${c1!.id}` }).check({ force: true });
     await expect(page.getByRole('region', { name: 'Bulk actions' })).toContainText('2 selected');
     // another reviewer approves one of the selected rows in the meantime
     await decideViaApi(request, c0!.id, 'approve');
@@ -405,10 +405,10 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
 
     await tabCount(page, 'To review').click();
     await expect(rows(page)).toHaveCount(3);
-    await page.getByRole('checkbox', { name: `Select correction ${c2!.id}` }).check({ force: true });
+    await page.getByRole('checkbox', { name: `Select diagnosis ${c2!.id}` }).check({ force: true });
     await page.getByTestId('bulk-delete').click();
     await page
-      .getByRole('alertdialog', { name: 'Delete 1 correction?' })
+      .getByRole('alertdialog', { name: 'Delete 1 diagnosis?' })
       .getByRole('button', { name: 'Delete' })
       .click();
     await expect(row(page, c2!.id)).toHaveCount(0);

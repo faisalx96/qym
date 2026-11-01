@@ -9705,6 +9705,10 @@ def update_correction(
     if not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     require_project_writable(db, run.project_id)
+    # C054: an edit sends a decided diagnosis back to review, so it needs the
+    # decision right (the project's role rule), like approving or rejecting it.
+    if c.status != CorrectionStatus.PENDING:
+        require_correction_decision(db, principal, run.project_id)
     item = (
         db.query(RunItem)
         .filter(RunItem.run_id == c.run_id, RunItem.item_id == c.item_id)

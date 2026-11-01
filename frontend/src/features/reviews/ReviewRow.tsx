@@ -4,6 +4,7 @@ import { Checkbox, IconButton, Tag, Tooltip } from '@/ui';
 import { textDirAttrs } from '@/lib/text';
 import { correctionPriority } from './lib/filters';
 import { ReviewStatusMark } from './DetailPane';
+import { REJECT_TIP } from './DetailPane';
 import styles from './ReviewRow.module.css';
 
 export interface ReviewRowProps {
@@ -52,7 +53,7 @@ export function ReviewRow({
       <Checkbox
         isSelected={selected}
         onChange={onToggleSelected}
-        aria-label={`Select correction ${row.id}`}
+        aria-label={`Select diagnosis ${row.id}`}
         hideLabel
       />
       <button
@@ -94,16 +95,16 @@ export function ReviewRow({
           <>
             <Tooltip content={blocked ? blockTip : 'Approve'}>
               <IconButton
-                label={`Approve correction ${row.id}`}
+                label={`Approve diagnosis ${row.id}`}
                 icon="check"
                 tone="approve"
                 isDisabled={decideDisabled}
                 onPress={onApprove}
               />
             </Tooltip>
-            <Tooltip content={blocked ? blockTip : 'Reject'}>
+            <Tooltip content={blocked ? blockTip : REJECT_TIP}>
               <IconButton
-                label={`Reject correction ${row.id}`}
+                label={`Reject diagnosis ${row.id}`}
                 icon="close"
                 tone="reject"
                 isDisabled={decideDisabled}
@@ -114,7 +115,7 @@ export function ReviewRow({
         ) : (
           <Tooltip content={blocked ? blockTip : 'Reset to pending'}>
             <IconButton
-              label={`Reset correction ${row.id}`}
+              label={`Reset diagnosis ${row.id}`}
               icon="retry"
               isDisabled={decideDisabled}
               onPress={onReset}

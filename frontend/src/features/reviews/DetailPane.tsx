@@ -1,13 +1,29 @@
-/** Right-hand correction detail: header actions, AI vs Human issues, previews, lazy full detail (o), inline edit. */
+/** Right-hand diagnosis detail: header actions, AI vs Human issues, previews, lazy full detail (o), inline edit. */
 import { Link } from 'react-router-dom';
 import { useCorrection, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
 import { textDirAttrs } from '@/lib/text';
-import { Button, ErrorState, JsonTree, Kbd, Skeleton, Tag, Text, TextBlock, ReviewStatusMark } from '@/ui';
+import {
+  Button,
+  ErrorState,
+  JsonTree,
+  Kbd,
+  Skeleton,
+  Tag,
+  Text,
+  TextBlock,
+  ReviewStatusMark,
+  Tooltip,
+} from '@/ui';
 import { formatDate } from '../datasets/lib/itemValue';
 import { IssueEditForm, IssueList } from './IssueList';
 import { correctionPriority } from './lib/filters';
 import styles from './DetailPane.module.css';
+
+/** C179: Reject and Delete say what they do, because they end in different places. */
+export const REJECT_TIP = 'Reject: the issue stays on the run, marked wrong, and leaves the queue.';
+export const DELETE_TIP =
+  'Delete: the issue leaves the run’s root causes and Reviews. An audit record is kept.';
 
 export interface DetailPaneProps {
   row: CorrectionRow;
@@ -43,7 +59,7 @@ export function DetailPane(p: DetailPaneProps) {
     : null;
   const pending = row.status === 'pending';
   return (
-    <aside className={styles.pane} aria-label={`Correction ${row.id}`} data-detail-pane={row.id}>
+    <aside className={styles.pane} aria-label={`Diagnosis ${row.id}`} data-detail-pane={row.id}>
       <header className={styles.head}>
         <div className={styles.titleRow}>
           <Text as="h2" variant="lg" mono>
@@ -81,15 +97,17 @@ export function DetailPane(p: DetailPaneProps) {
               >
                 Approve <Kbd>a</Kbd>
               </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onPress={p.onReject}
-                isDisabled={p.busy || Boolean(row.review_block)}
-                data-testid="detail-reject"
-              >
-                Reject <Kbd>r</Kbd>
-              </Button>
+              <Tooltip content={REJECT_TIP}>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onPress={p.onReject}
+                  isDisabled={p.busy || Boolean(row.review_block)}
+                  data-testid="detail-reject"
+                >
+                  Reject <Kbd>r</Kbd>
+                </Button>
+              </Tooltip>
             </>
           ) : (
             <Button
@@ -109,7 +127,8 @@ export function DetailPane(p: DetailPaneProps) {
             isDisabled={p.editing}
             data-testid="detail-edit"
           >
-            Edit <Kbd>e</Kbd>
+            {/* C054: an edit withdraws the decision; the server asks for the decision right */}
+            {pending ? 'Edit' : 'Edit (sends back to review)'} <Kbd>e</Kbd>
           </Button>
           <Button
             variant="ghost"
@@ -120,9 +139,17 @@ export function DetailPane(p: DetailPaneProps) {
           >
             {p.expanded ? 'Hide details' : 'Details'} <Kbd>o</Kbd>
           </Button>
-          <Button variant="ghost" size="sm" onPress={p.onDelete} isDisabled={p.busy}>
-            Delete
-          </Button>
+          <Tooltip content={DELETE_TIP}>
+            <Button
+              variant="danger"
+              size="sm"
+              onPress={p.onDelete}
+              isDisabled={p.busy}
+              data-testid="detail-delete"
+            >
+              Delete
+            </Button>
+          </Tooltip>
         </div>
         {row.review_block ? (
           <Text variant="sm" tone="warning" role="status" data-review-block>
@@ -288,8 +315,10 @@ function FullDetail({ id }: { id: number }) {
             {d.history.map((h) => (
               <li key={h.revision_id}>
                 <span className={styles.histWhen}>{formatDate(h.created_at)}</span>
-                <span>#{h.revision_number}</span>
-                <span>{h.actor_user?.display_name || h.actor_user?.email || h.actor_source}</span>
+                <span>
+                  Revision {h.revision_number} by{' '}
+                  {h.actor_user?.display_name || h.actor_user?.email || h.actor_source}
+                </span>
                 {h.review ? <ReviewStatusMark status={h.review.status} /> : null}
                 {h.review?.review_comment ? <span>“{h.review.review_comment}”</span> : null}
               </li>
