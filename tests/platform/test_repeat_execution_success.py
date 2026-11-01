@@ -446,7 +446,7 @@ def test_summaries_before_shape_four_fall_back_to_items_then_refresh(database):
             db.commit()
         drain(database)
     _assert_per_pass(projected(database))
-    assert projected(database)["summary_shape"] == service.SUMMARY_SHAPE == 5
+    assert projected(database)["summary_shape"] == service.SUMMARY_SHAPE == 6
     assert not any(
         table in sql
         for sql in statements

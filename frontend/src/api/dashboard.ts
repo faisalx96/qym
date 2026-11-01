@@ -317,21 +317,6 @@ export function useGroupMetrics(
   });
 }
 
-/** Warm the cache for a run the reader has not opened yet (never throws: a failed prefetch shows nothing). */
-export function prefetchRunPasses(qc: QueryClient, runId: string): Promise<void> {
-  return qc.prefetchQuery(runPassesQuery(runId));
-}
-
-export function prefetchGroupMetrics(
-  qc: QueryClient,
-  runId: string,
-  metric: string,
-  threshold: number,
-  view: GroupMetricsView = 'group',
-): Promise<void> {
-  return qc.prefetchQuery(groupMetricsQuery(runId, metric, threshold, view));
-}
-
 export function useProjectMembers(projectId: string | undefined) {
   return useQuery({
     queryKey: ['project', projectId, 'members'],

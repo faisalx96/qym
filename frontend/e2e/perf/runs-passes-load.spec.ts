@@ -1,14 +1,14 @@
 /// <reference lib="dom" />
 /**
  * Redesign round 7, Q2 (docs/internal/ui-migration/redesign7/qa.md): loading the passes of a repeat run on the runs page.
- * The page warms the passes and the strip statistics of its finished repeat runs after the list has settled, so a click finds
- * them in the cache; a run nobody prefetched still costs two requests (`/passes` and `group-metrics?view=group`) and no
- * bootstrap; the loading frame has the loaded height. Runs on the Vite dev server (slower than the production build the
+ * Since C023 a finished run's published summary holds its pass rows and each metric's group set, so the page sends no
+ * background prefetch and a click sends no request; only another metric or threshold asks `group-metrics?view=group`
+ * (never the bootstrap); the loading frame has the loaded height. Runs on the Vite dev server (slower than the production build the
  * numbers in impl-notes.md come from), so times carry the CI margin and counts are exact (criteria Q2-4 to Q2-10, Q2-12).
  */
 import { test, expect, type APIRequestContext, type Page, type Request } from '@playwright/test';
 import { seedR7, type SeededR7 } from '../runs-list/seed';
-import { openRuns, table, withoutPrefetch } from '../runs-list/support';
+import { openRuns, table } from '../runs-list/support';
 import { limit } from './support';
 
 const g = globalThis as unknown as { __r7Passes?: Promise<SeededR7> };
@@ -144,53 +144,25 @@ for (const width of [1440, 1024] as const) {
   test.describe(`Q2 at ${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
 
-    test('Q2-7 and Q2-8: the prefetch starts after the list settles, in row order, four at a time, finished repeat runs only', async ({
+    test('C023: the page sends no /passes or group-metrics request of its own (no background prefetch)', async ({
       page,
       request,
     }) => {
       const s = await seeded(request);
       const log = logApi(page);
       await openRuns(page, s.project.slug);
-      await page.waitForTimeout(3500); // the idle callback fires (500 ms at the latest) and the queue drains
-      const prefetch = log.all.filter((r) => isPrefetchApi(r.url) && !r.failed);
-      const own = log.all.filter((r) => !isPrefetchApi(r.url));
-      // the runs that are prefetched are the repeat runs (4 x 10 passes and the 19-pass run), nothing else, 2 requests each
-      const ids = (rs: Logged[]) => [...new Set(rs.map((r) => /\/api\/runs\/([^/?]+)/.exec(r.url)![1]!))];
-      const repeat = [...s.repeat, s.passes19!].map((r) => r.id);
-      expect(ids(prefetch)).toEqual(repeat); // row order, repeat runs only (the classic runs have one pass)
-      expect(prefetch.filter((r) => isPasses(r.url))).toHaveLength(repeat.length);
-      expect(prefetch.filter((r) => isGroup(r.url))).toHaveLength(repeat.length);
-      expect(prefetch.length).toBeLessThanOrEqual(2 * 20);
-      for (const r of prefetch.filter((x) => isGroup(x.url))) expect(r.url).toContain('view=group');
-      // Q2-7: it starts after the list's own requests are done, within 600 ms of that moment
-      const listDone = Math.max(...own.map((r) => (Number.isNaN(r.end) ? 0 : r.end)));
-      const firstStart = Math.min(...prefetch.map((r) => r.start));
-      expect(firstStart).toBeGreaterThanOrEqual(listDone - 5);
-      expect(firstStart - listDone).toBeLessThanOrEqual(limit(1500, 600));
-      // never more than four in flight
-      let worst = 0;
-      for (const r of prefetch)
-        worst = Math.max(
-          worst,
-          prefetch.filter((o) => o.start <= r.start && (Number.isNaN(o.end) || o.end > r.start)).length,
-        );
-      expect(worst).toBeLessThanOrEqual(4);
-      // the page's own request count is unchanged by the prefetch
-      expect(own.length).toBeLessThanOrEqual(8);
+      await page.waitForTimeout(3500);
+      expect(log.all.filter((r) => isPrefetchApi(r.url))).toEqual([]);
+      expect(log.all.length).toBeLessThanOrEqual(8);
     });
 
-    test('Q2-4 and Q2-6: a click on a prefetched run paints its rows at once and sends no request, for five groups in a row', async ({
+    test('Q2-4 and Q2-6: a click on a finished run paints its rows at once and sends no request, for five groups in a row', async ({
       page,
       request,
     }) => {
       const s = await seeded(request);
       const log = logApi(page);
       await openRuns(page, s.project.slug);
-      await expect
-        .poll(() => log.all.filter((r) => isPrefetchApi(r.url) && !Number.isNaN(r.end)).length, {
-          timeout: 15_000,
-        })
-        .toBe(2 * (s.repeat.length + 1));
       await page.waitForTimeout(300);
       log.reset();
       const timings: number[] = [];
@@ -218,29 +190,19 @@ for (const width of [1440, 1024] as const) {
       });
     });
 
-    test('Q2-5: without a prefetch a click costs exactly two requests, `/passes` and `group-metrics?view=group`, and no bootstrap', async ({
+    test('Q2-5 (C023): a click on a finished run sends no request, and its rows paint from the summary', async ({
       page,
       request,
     }) => {
       const s = await seeded(request);
-      await withoutPrefetch(page);
       const log = logApi(page);
       await openRuns(page, s.project.slug);
       await page.waitForTimeout(1500);
-      expect(
-        log.all.filter((r) => isPrefetchApi(r.url)),
-        'saveData: nothing is prefetched',
-      ).toEqual([]);
       const run = s.repeat[1]!;
       log.reset();
       const t = await openTimed(page, run.name, run.id, 10);
       await page.waitForTimeout(300);
-      const calls = log.all.filter((r) => isPrefetchApi(r.url) && !r.failed);
-      expect(
-        calls.map((r) => r.url.replace(/\?.*/, '').replace(run.id, ':id')).sort(),
-        calls.map((r) => r.url).join('  '),
-      ).toEqual(['/api/runs/:id/group-metrics', '/api/runs/:id/passes']);
-      expect(calls.find((r) => isGroup(r.url))!.url).toContain('view=group');
+      expect(log.all.filter((r) => isPrefetchApi(r.url) && !r.failed)).toEqual([]);
       expect(Math.max(t.rows, t.strip)).toBeLessThanOrEqual(limit(2500, 250));
     });
 
@@ -249,7 +211,6 @@ for (const width of [1440, 1024] as const) {
       request,
     }) => {
       const s = await seeded(request);
-      await withoutPrefetch(page);
       // hold both requests so the frame is on screen for a while
       await page.route(/\/api\/runs\/[^/?]+\/(passes|group-metrics)/, async (route) => {
         await new Promise((r) => setTimeout(r, 700));
@@ -283,7 +244,6 @@ for (const width of [1440, 1024] as const) {
       request,
     }) => {
       const s = await seeded(request);
-      await withoutPrefetch(page);
       const log = logApi(page);
       await openRuns(page, s.project.slug);
       const run = s.repeat[2]!;
@@ -334,13 +294,12 @@ test('Q2-12: the run page still reads the default view, and its group equals the
 test.describe('Q2-5 at 10 passes x 1,200 items', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('a click on a run nobody prefetched paints its rows in <= 500 ms (CI margin on the dev server), with 2 requests', async ({
+  test('a click on a finished run paints its rows in <= 500 ms (CI margin on the dev server), with no request (C023)', async ({
     page,
     request,
   }) => {
     test.setTimeout(180_000);
     const s = await seedR7(request, { repeat: 1, items: 24, big: 1200, classic: 1, slugPrefix: 'r7big' });
-    await withoutPrefetch(page);
     const log = logApi(page);
     await openRuns(page, s.project.slug);
     await page.waitForTimeout(1500);
@@ -348,12 +307,7 @@ test.describe('Q2-5 at 10 passes x 1,200 items', () => {
     const run = s.big!;
     const t = await openTimed(page, run.name, run.id, 10);
     await page.waitForTimeout(300);
-    const calls = log.all.filter((r) => isPrefetchApi(r.url) && !r.failed);
-    expect(
-      calls.map((r) => r.url.replace(/\?.*/, '').replace(run.id, ':id')).sort(),
-      calls.map((r) => r.url).join('  '),
-    ).toEqual(['/api/runs/:id/group-metrics', '/api/runs/:id/passes']);
-    expect(calls.find((r) => isGroup(r.url))!.url).toContain('view=group');
+    expect(log.all.filter((r) => isPrefetchApi(r.url) && !r.failed)).toEqual([]);
     // spec Q2-5 (amended): <= 500 ms on the production build (measured 460); the dev server carries the usual CI margin
     const ms = Math.max(t.rows, t.strip);
     test.info().annotations.push({ type: 'Q2-5 1,200', description: `${Math.round(ms)} ms` });

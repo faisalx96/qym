@@ -232,7 +232,7 @@ def test_published_repeat_summaries_are_refreshed_without_reading_source_rows(
     finally:
         event.remove(database, "before_cursor_execute", capture)
     published = projected(database, last)
-    assert published["summary_shape"] == summaries_service.SUMMARY_SHAPE == 5
+    assert published["summary_shape"] == summaries_service.SUMMARY_SHAPE == 6
     assert published["metric_averages"] == _approx(EXPECTED)
     assert not any(
         table in sql

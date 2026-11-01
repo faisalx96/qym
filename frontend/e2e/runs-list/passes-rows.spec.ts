@@ -15,7 +15,6 @@ import {
   revealActions,
   rowOf,
   table,
-  withoutPrefetch,
 } from './support';
 
 const NAME = 'rag-answer-v7';
@@ -51,8 +50,7 @@ const settle = (page: Page) =>
 
 async function open(page: Page, request: APIRequestContext, opts: Parameters<typeof seedRepeat>[1] = {}) {
   const s = await seedRepeat(request, opts);
-  // the loading and request-count cases below are the click-before-prefetch path; the prefetch has its own spec (e2e/perf)
-  await withoutPrefetch(page);
+  // a finished run opens on its published summary (C023)
   await openRuns(page, s.project.slug);
   return s;
 }
@@ -384,7 +382,6 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
       if (r.method() === 'GET' && u.pathname.endsWith('/group-metrics')) reqs.push(u);
     });
     await expand(page);
-    await expect.poll(() => reqs.length).toBeGreaterThan(0);
     await expect(table(page).locator('tr[data-strip-row]')).toHaveCount(1);
     const order = await table(page)
       .locator('tbody')

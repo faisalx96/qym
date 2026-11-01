@@ -40,7 +40,7 @@ import type { ColumnDef } from './columns';
 import { useRunsCtx } from './context';
 import { isActiveRun } from './polling';
 import { PassGroupStrip } from './passes/PassGroupStrip';
-import { usePassesPrefetch } from './passes/usePassesPrefetch';
+import { summaryPasses } from './passes/groupQuery';
 import {
   ErrorRetry,
   PassActions,
@@ -54,7 +54,14 @@ import {
 } from './passes/PassCells';
 import { passHref } from './passes/links';
 import { readStoredMetric, writeStoredMetric } from './passes/model';
-import { childRowsOf, resolveMetric, runKeyOf, type ChildOf, type TableRow } from './passes/rows';
+import {
+  childRowsOf,
+  resolveMetric,
+  runKeyOf,
+  type ChildOf,
+  type PassesState,
+  type TableRow,
+} from './passes/rows';
 import { defaultMetricName } from './chartModel';
 import { isPassRef, passRef, passRefBase, PASS_REF_SEP } from './selection';
 import { defaultDirection, type SortSpec } from './urlState';
@@ -262,7 +269,7 @@ const runName = (r: RunRow) => r.external_run_id || r.run_name || r.run_id.slice
 
 export function RunsTable(p: RunsTableProps) {
   const wide = useWideDefault();
-  const { slug: ctxSlug, listContext, metricTypes: prefetchMetricTypes } = useRunsCtx();
+  const { slug: ctxSlug, listContext } = useRunsCtx();
   const navigate = useNavigate();
   const toast = useToast();
   const del = useDeletePasses(p.slug);
@@ -274,22 +281,40 @@ export function RunsTable(p: RunsTableProps) {
     setChoice(m);
     writeStoredMetric(memSlug, m);
   };
-  // Warm the passes and the strip statistics of the page's finished repeat runs once the list has settled (round 7, Q2)
-  usePassesPrefetch(p.rows, choice, prefetchMetricTypes);
 
   const runRows = useMemo<TableRow[]>(
     () => p.rows.map((row) => ({ kind: 'run' as const, key: row.run_id, row })),
     [p.rows],
   );
-  // The open groups: one passes query each (cached, shared with the strip); live runs refetch every 15 s.
+  // The open groups. A finished run's passes come with its summary (C023: no request, no background prefetch); the
+  // others get one passes query each (cached, shared with the strip), and live runs refetch every 15 s.
   const openRuns = useMemo(
     () => p.rows.filter((r) => r.samples > 1 && p.expanded.has(r.run_id)),
     [p.rows, p.expanded],
   );
-  const passQs = useRunPassesMany(
-    openRuns.map((r) => ({ runId: r.run_id, refetchInterval: isActiveRun(r) ? 15_000 : false })),
+  const storedPasses = useMemo(
+    () =>
+      new Map(
+        openRuns.flatMap((r) => {
+          const stored = summaryPasses(r);
+          return stored ? [[r.run_id, stored] as const] : [];
+        }),
+      ),
+    [openRuns],
   );
-  const passesOf = (runId: string) => passQs[openRuns.findIndex((r) => r.run_id === runId)];
+  const fetchedRuns = useMemo(
+    () => openRuns.filter((r) => !storedPasses.has(r.run_id)),
+    [openRuns, storedPasses],
+  );
+  const passQs = useRunPassesMany(
+    fetchedRuns.map((r) => ({ runId: r.run_id, refetchInterval: isActiveRun(r) ? 15_000 : false })),
+  );
+  const passesOf = (runId: string): PassesState | undefined => {
+    const stored = storedPasses.get(runId);
+    if (stored)
+      return { data: stored, isPending: false, isError: false, error: null, refetch: () => undefined };
+    return passQs[fetchedRuns.findIndex((r) => r.run_id === runId)];
+  };
   const openIds = useMemo(() => new Set<string>(openRuns.map((r) => r.run_id)), [openRuns]);
   const openKey = openRuns.map((r) => `${r.run_id}:${r.pass_revision ?? 0}`).join(',');
   const notePassRevision = p.onNotePassRevision;

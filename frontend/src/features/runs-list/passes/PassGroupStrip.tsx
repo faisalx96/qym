@@ -7,7 +7,7 @@ import type { RunRow } from '@/api/dashboardTypes';
 import { useGroupMetrics, useRunPasses } from '@/api/dashboard';
 import { HelpMarker, Select, Text } from '@/ui';
 import { useRunsCtx } from '../context';
-import { groupChoiceFor } from './groupQuery';
+import { groupChoiceFor, projectedGroup, summaryPasses } from './groupQuery';
 import { PassStats, statDefinitions } from './PassStats';
 import { PassThreshold } from './PassThreshold';
 import styles from './PassGroupStrip.module.css';
@@ -23,26 +23,31 @@ export function PassGroupStrip({
   onMetric: (metric: string) => void;
 }) {
   const { metricTypes } = useRunsCtx();
-  const passesQ = useRunPasses(row.run_id);
-  // the metric and threshold a fresh strip opens with come from the row alone (the page prefetches the same request)
+  // A finished run's summary holds its passes and group sets (C023): the strip then makes no request
+  const stored = summaryPasses(row);
+  const passesQ = useRunPasses(row.run_id, { enabled: !stored });
+  const passesMetrics = stored?.metrics ?? passesQ.data?.metrics;
   const {
     scoreMetrics,
     metric: activeMetric,
     direction: dir,
     threshold: defaultThreshold,
-  } = groupChoiceFor(row, remembered, metricTypes, passesQ.data?.metrics);
+  } = groupChoiceFor(row, remembered, metricTypes, passesMetrics);
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
   const activeThreshold = (activeMetric ? thresholds[activeMetric] : undefined) ?? defaultThreshold;
   // `view=group`: the five statistics this strip shows, none of the bootstrap curve the run page reads (round 7, Q2)
-  const wantsGroup = Boolean(activeMetric) && row.samples > 1;
+  const projected = projectedGroup(row, activeMetric, activeThreshold);
+  // the server is asked only when the reader picks another metric or threshold than the summary holds
+  const wantsGroup = Boolean(activeMetric) && row.samples > 1 && !projected;
   const groupQ = useGroupMetrics(row.run_id, activeMetric, activeThreshold, {
     enabled: wantsGroup,
     view: 'group',
   });
-  const g = groupQ.data?.group ?? null;
+  const g = projected ?? groupQ.data?.group ?? null;
   // The frame is always the strip's own layout (round 7, Q2-9): while the passes or the statistics are on their way the
   // labels, the select and the threshold are real and the values are skeletons, so the group never changes height.
-  const loading = g === null && !groupQ.isError && (passesQ.isPending || (wantsGroup && groupQ.isPending));
+  const loading =
+    g === null && !groupQ.isError && ((!stored && passesQ.isPending) || (wantsGroup && groupQ.isPending));
   const k = g?.k ?? row.samples;
   const items = g?.total_items ?? row.total_items;
   return (
@@ -84,7 +89,7 @@ export function PassGroupStrip({
           {groupQ.error instanceof Error ? groupQ.error.message : 'request failed'}
         </Text>
       ) : (
-        <PassStats group={g} k={k} dir={dir} busy={groupQ.isFetching} loading={loading} />
+        <PassStats group={g} k={k} dir={dir} busy={wantsGroup && groupQ.isFetching} loading={loading} />
       )}
       <HelpMarker label="group metrics">
         <dl className={styles.defs}>

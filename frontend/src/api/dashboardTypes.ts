@@ -148,7 +148,30 @@ export interface RunRow {
   duration_ms: number | null;
   analysis_cause_count: number;
   pass_summaries: PassSummary[];
+  /**
+   * A finished repeat run's pass rows (every metric mean, item counts, latency and timing; no trace stats) and each
+   * metric's group set at its default threshold, from the published summary: the runs list opens the run with no
+   * request (C023). Absent or null for a live run and for a summary published before shape 6.
+   */
+  pass_details?: PassDetail[] | null;
+  pass_groups?: Record<string, { threshold: number; group: GroupMetrics['group'] }> | null;
 }
+
+export type PassDetail = Pick<
+  RunPass,
+  | 'pass_number'
+  | 'metric_means'
+  | 'items_scored'
+  | 'items_total'
+  | 'completed_count'
+  | 'avg_latency_ms'
+  | 'median_latency_ms'
+  | 'p95_latency_ms'
+  | 'started_at'
+  | 'ended_at'
+  | 'duration_ms'
+  | 'trace_stats'
+>;
 
 export interface Kpis {
   scope: 'project' | 'filtered';
