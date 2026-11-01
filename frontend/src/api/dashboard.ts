@@ -225,6 +225,27 @@ export function usePendingCorrections(slug: string, limit = 12) {
   });
 }
 
+/** The Charts scatter reads at most this many runs (the newest first). */
+export const SCATTER_MAX_RUNS = 2000;
+
+/** Every run in the page filters, across tasks and datasets, newest first: the Charts scatter (C052). */
+export function useScatterPoints(slug: string, filters: DashboardFilters, opts: { enabled?: boolean } = {}) {
+  return useInfiniteQuery({
+    queryKey: [...dashboardKeys.points(slug, filters, 'time-desc', '', ''), 'all'] as const,
+    queryFn: ({ pageParam, signal }) =>
+      api.post<RunsPage>(
+        '/api/dashboard/points',
+        { project_slug: slug, filters, limit: POINTS_PAGE, offset: pageParam, sort: 'time-desc' },
+        { signal },
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (last) =>
+      last.has_more && last.offset + last.limit < SCATTER_MAX_RUNS ? last.offset + last.limit : undefined,
+    enabled: opts.enabled ?? true,
+    staleTime: 60_000,
+  });
+}
+
 /** `{error}` with HTTP 200 on the legacy run routes → thrown Error. */
 function unwrapLegacy<T extends { error?: string }>(data: T): T {
   if (data && typeof data === 'object' && typeof data.error === 'string' && data.error)

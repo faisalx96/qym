@@ -1,7 +1,7 @@
 /**
  * /projects/:slug/charts — one card per task, dataset tabs, model legend
  * (click toggles the model filter, double-click solos it: `?model=` updates),
- * Rows: Runs | Grouped, mini bars, sortable headers with aria-sort, group
+ * Rows: Runs | Grouped, score numbers with the column's best in bold, sortable headers with aria-sort, group
  * Pass@K / Consistency / Reliability (batched models/stats), lazy per-card
  * history, remembered card height (brief 03 J7).
  */
@@ -25,6 +25,7 @@ import {
   groupMetricName,
   groupStatRule,
   prefersBar,
+  runsMetricDirection,
   sortRuns,
   toChartRun,
   TRACE_METRICS,
@@ -35,6 +36,7 @@ import {
 } from './chartModel';
 import { plainModelName } from './model';
 import { RunsToolbar } from './RunsToolbar';
+import { RunScatterCard } from './RunScatterCard';
 import { useKpiTopbar } from './kpiTopbar';
 import { readVisibleColumns, writeVisibleColumns } from './selection';
 import { contextForView, countActiveFilters, DEFAULT_VIEW, type RunsView } from './urlState';
@@ -168,8 +170,8 @@ export function ChartsPage() {
             </Text>
             <Text variant="sm" tone="muted" as="p">
               {countActiveFilters(view) && overview ? `Filtered: ${overview.total_runs} runs · ` : ''}Average
-              metric scores across all items in matching runs. Score bars use a 0-100% scale; numeric metrics
-              and latency are relative to the best run in the card.
+              metric scores across all items in matching runs. The best score in each column is bold; latency
+              bars are relative to the best run in the card.
             </Text>
           </div>
           {models.length ? (
@@ -231,18 +233,21 @@ export function ChartsPage() {
             }
           />
         ) : (
-          overview.chart_data.tasks.map((t) => (
-            <TaskCard
-              key={t.task}
-              slug={slug}
-              view={view}
-              task={t.task}
-              combos={t.datasets}
-              metricTypes={overview.metric_types}
-              visibleKeys={visibleKeys}
-              revisionKey={overview.filtered_revision}
-            />
-          ))
+          <>
+            <RunScatterCard slug={slug} filters={d.filters} metricTypes={overview.metric_types} />
+            {overview.chart_data.tasks.map((t) => (
+              <TaskCard
+                key={t.task}
+                slug={slug}
+                view={view}
+                task={t.task}
+                combos={t.datasets}
+                metricTypes={overview.metric_types}
+                visibleKeys={visibleKeys}
+                revisionKey={overview.filtered_revision}
+              />
+            ))}
+          </>
         )}
         {d.overviewQ.dataUpdatedAt ? (
           <Text variant="sm" tone="muted" as="p" aria-live="polite">
@@ -432,9 +437,7 @@ function TaskCard({
 
   const sortedRuns = sortRuns(runs, sortKey, sortDir);
   const maxOf = (f: (r: ChartRun) => number | null | undefined) => Math.max(0, ...runs.map((r) => f(r) ?? 0));
-  const scaleMax = Object.fromEntries(
-    metricsForAgg.map((m) => [m, metricTypes[m] === 'numeric' ? maxOf((r) => r.metric_averages[m]) : 1]),
-  );
+  const directions = Object.fromEntries(metricsForAgg.map((m) => [m, runsMetricDirection(runs, m)]));
   const maxLatency = maxOf((r) => r.latency);
   const maxMedian = maxOf((r) => r.median_latency);
   const traceMax = Object.fromEntries(
@@ -579,7 +582,7 @@ function TaskCard({
                 showMedian={showMedian}
                 statKinds={statKinds}
                 metricTypes={metricTypes}
-                scaleMax={scaleMax}
+                directions={directions}
                 maxLatency={maxLatency}
                 maxMedian={maxMedian}
                 traceMax={traceMax}

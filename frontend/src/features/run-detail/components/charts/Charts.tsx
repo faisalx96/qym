@@ -379,6 +379,10 @@ export interface ScatterPoint {
   y: number;
   /** Colours the dot: pass = band 5, fail = band 1, error = an open ring on the x axis; none = neutral. */
   outcome?: ScatterOutcome | null;
+  /** The name in the tooltip when it is not the id (a run name on the Charts page). */
+  label?: string;
+  /** A model's series slot (1-8): the dot takes that model's colour, as on Charts (C052). */
+  series?: number;
 }
 
 /** Split lines for the two faint quadrant washes (good = success tint, bad = danger tint). */
@@ -452,6 +456,7 @@ export function Scatter({
   fmtY,
   quadrants,
   fit = false,
+  noun = 'items',
 }: {
   points: ScatterPoint[];
   xLabel: string;
@@ -463,6 +468,8 @@ export function Scatter({
   quadrants?: ScatterQuadrants;
   /** Fit both axes to the data with 5% padding, not 0 to 1 (C221). A threshold line stays inside the axes. */
   fit?: boolean;
+  /** What one dot is, for the chart's name ("runs" on Charts). */
+  noun?: string;
 }) {
   const [boxRef, W] = useMeasuredWidth<HTMLDivElement>(300);
   const H = scatterHeight(W);
@@ -497,7 +504,7 @@ export function Scatter({
           height={H}
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`${yLabel} versus ${xLabel}, ${points.length} items`}
+          aria-label={`${yLabel} versus ${xLabel}, ${points.length} ${noun}`}
         >
           {quadrants ? (
             <g aria-hidden="true">
@@ -549,7 +556,7 @@ export function Scatter({
               pointerOnly
               tip={
                 <>
-                  <b>{p.id}</b>
+                  <b>{p.label ?? p.id}</b>
                   <br />
                   {xLabel} {fx(p.x)}
                   {p.outcome === 'error' ? ' · task error' : ` · ${yLabel} ${fy(p.y)}`}
@@ -563,6 +570,7 @@ export function Scatter({
                 className={styles.dot2}
                 data-enter={enter ? '' : undefined}
                 data-outcome={p.outcome ?? undefined}
+                data-series={p.series ?? undefined}
                 cx={sx(p.x)}
                 cy={sy(p.y)}
                 r={3.5}
