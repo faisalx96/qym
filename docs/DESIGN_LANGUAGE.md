@@ -381,6 +381,11 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   (round 11). Members show the person, a role tag and an Edit action that changes the role in a dialog, as admin users
   do (round 11). The AI prompt editor is a `Textarea` with `quietFocus` (a click in brightens the border to
   `--border-strong` instead of the green ring; keyboard focus keeps the ring) and spell check off (round 11).
+  **One footer and two title recipes (C145, C235):** a card that saves settings ends with `SaveFooter` (pass `save` to
+  `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "All changes saved"), the 24px
+  primary Save at the end, disabled with the reason "No changes to save" until something changed; Discard or Test sit
+  before Save. Titles come in two recipes only: `SettingsCard` (13px, `--font-md`) for blocks that edit settings and
+  `Section` (18px) for read-mostly blocks. The run page title is the page title at 22px (`--font-title`).
 - **Person** (`UserName`; round 11): a user is an initials disc in the person's series colour (the same person is the
   same colour everywhere), then the name; lists that must tell two people apart add the email after the name, muted
   and mono. The runs Owner cell, admin users, project members and the add-member search all use it, and every user

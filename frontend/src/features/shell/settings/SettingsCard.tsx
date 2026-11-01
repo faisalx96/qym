@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { Card, Text, type CardTone } from '@/ui';
+import { Button, Card, Text, type CardTone } from '@/ui';
 import styles from './settings.module.css';
 
 export interface SettingsCardProps {
@@ -10,7 +10,10 @@ export interface SettingsCardProps {
   description?: ReactNode;
   /** The block's main action (Add, Create), on the title row's end side. */
   action?: ReactNode;
+  /** A custom footer. A card that saves settings passes `save` instead (C145: one footer recipe). */
   footer?: ReactNode;
+  /** The one settings footer: state text at the start, a 24px Save at the end, disabled until there are changes. */
+  save?: SaveFooterProps;
   tone?: CardTone;
   children?: ReactNode;
   [data: `data-${string}`]: string | boolean | undefined;
@@ -27,6 +30,7 @@ export function SettingsCard({
   description,
   action,
   footer,
+  save,
   tone,
   children,
   ...rest
@@ -38,7 +42,7 @@ export function SettingsCard({
       id={anchor}
       aria-labelledby={id}
       tone={tone}
-      footer={footer}
+      footer={save ? <SaveFooter {...save} /> : footer}
       header={
         <div className={styles.cardHeader}>
           <div>
@@ -54,5 +58,56 @@ export function SettingsCard({
     >
       <div className={styles.cardBody}>{children}</div>
     </Card>
+  );
+}
+
+export interface SaveFooterProps {
+  /** There are unsaved changes: Save is enabled and the state text says so. */
+  dirty: boolean;
+  saving?: boolean;
+  onSave: () => void;
+  /** Default 'Save'; name the object when the card holds more than one thing ('Save rules'). */
+  label?: string;
+  /** Extra facts before the state text (a character count, when it was last edited). */
+  meta?: ReactNode;
+  /** Actions before Save, such as Discard or Test (neutral or accent). */
+  secondary?: ReactNode;
+  /** No Save at all (read-only or no permission); the state text stays. */
+  hideSave?: boolean;
+}
+
+/** C145: every settings card ends the same way: what state it is in, then Save. */
+export function SaveFooter({
+  dirty,
+  saving,
+  onSave,
+  label = 'Save',
+  meta,
+  secondary,
+  hideSave,
+}: SaveFooterProps) {
+  return (
+    <div className={styles.saveFooter} data-save-footer>
+      <div className={styles.saveState}>
+        {meta}
+        <span data-dirty={dirty ? '' : undefined}>
+          {saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved'}
+        </span>
+      </div>
+      {hideSave ? null : (
+        <div className={styles.cardAction}>
+          {secondary}
+          <Button
+            variant="primary"
+            isDisabled={!dirty}
+            disabledReason="No changes to save"
+            loading={saving}
+            onPress={onSave}
+          >
+            {label}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
