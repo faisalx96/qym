@@ -23,5 +23,5 @@
 
 <h2>Where the data comes from</h2>
 <p>The evaluation worker registers the source and metric definitions, sends a heartbeat after each poll, and uploads daily counters, turns with scores and evidence, and canary results through the project API-key-authenticated ingest API. qym stores and presents these reports; it does not run the evaluation worker from this tab. Republishing the same source and turn ID replaces that turn's evidence and scores. The explicit reporting day supplied by the evaluation worker determines the day grouping; times in the UI are UTC.</p>
-<p>For authentication, payloads, limits and reconciliation, see the <a href="https://github.com/faisalx96/qym/blob/main/docs/live-evaluation-ingest-v1.0.md">Live evaluation ingest guide v1.0</a> (<code>docs/live-evaluation-ingest-v1.0.md</code> in the repository).</p>
+<p>For authentication, payloads, limits and reconciliation, see the Live evaluation ingest guide v1.0 (<code>docs/live-evaluation-ingest-v1.0.md</code> in the qym repository, shipped with the release; no network link, so it reads the same in an air-gapped deployment).</p>
 <p>By default, retention removes turns, their scores and canary results after 180 days; daily counter rows remain for 730 days. Older counters can therefore outlive the detailed evidence and score aggregates computed from retained turns.</p>

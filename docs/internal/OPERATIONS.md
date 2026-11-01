@@ -891,6 +891,8 @@ Worker env file:
 | `QYM_LIVE_SOURCE_KEY` | Stable key, for example `worker-preprod`; use a separate key per worker/environment |
 | `QYM_LIVE_SOURCE_NAME` | Display name in the Live tab |
 | `QYM_LIVE_ENVIRONMENT` | Environment label, for example `preprod` |
+| `QYM_LIVE_TIMEOUT_SECONDS` | Optional; HTTP timeout per push in seconds (default 10) |
+| `QYM_LIVE_DETAIL` | Optional; `full` (default) pushes the complete per-turn evidence as the turn detail, `summary` pushes the summary only |
 
 Compose variables (set in the shell or Compose `.env`, not the worker env file):
 
