@@ -10,7 +10,7 @@ import { ToggleButton } from 'react-aria-components';
 import { useModelsStats, useOverview, usePoints, useRunsPage } from '@/api/dashboard';
 import type { Combo, GroupStats, MetricType, RunRow } from '@/api/dashboardTypes';
 import { Button, Card, EmptyState, ErrorState, SegmentedControl, Skeleton, Tabs, TabPanel, Text } from '@/ui';
-import { useDocumentTitle, useProjectContext } from '@/features/shell';
+import { useAuth, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { formatClock } from '@/lib/format';
 import { useDelayedPending } from '@/lib/pending';
 import { Mono, ModelMark } from './cells';
@@ -37,7 +37,7 @@ import {
 import { plainModelName } from './model';
 import { RunsToolbar } from './RunsToolbar';
 import { RunScatterCard } from './RunScatterCard';
-import { readVisibleColumns, writeVisibleColumns } from './selection';
+import { readChartColumns, writeChartColumns } from './selection';
 import { contextForView, countActiveFilters, DEFAULT_VIEW, type RunsView } from './urlState';
 import { useRefetchOnVisible, useRunsCadence } from './polling';
 import { useRunsView } from './useRunsView';
@@ -98,7 +98,8 @@ export function ChartsPage() {
   const { slug } = useProjectContext();
   useDocumentTitle('Charts');
   const { view, setView } = useRunsView();
-  const [visibleKeys, setVisibleKeys] = useState<Set<string> | null>(readVisibleColumns);
+  const { me } = useAuth();
+  const [visibleKeys, setVisibleKeys] = useState<Set<string> | null>(() => readChartColumns(me.id));
   const d = useRunsDataLite(slug, view, visibleKeys);
   const overview = d.overview;
   const showSkeleton = useDelayedPending(d.overviewQ.isPending);
@@ -156,7 +157,7 @@ export function ChartsPage() {
               visible={d.columnSet.visible}
               onChange={(keys) => {
                 setVisibleKeys(keys);
-                writeVisibleColumns(keys);
+                writeChartColumns(me.id, keys);
               }}
             />
           }
@@ -197,6 +198,9 @@ export function ChartsPage() {
                   Show all
                 </Button>
               ) : null}
+              <Text variant="sm" tone="muted" as="span">
+                Double-click a model to show only it.
+              </Text>
             </div>
           ) : null}
         </div>

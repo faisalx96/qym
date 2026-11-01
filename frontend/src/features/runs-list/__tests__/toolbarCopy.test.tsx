@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Facets } from '@/api/dashboardTypes';
-import { showOriginControl } from '../FilterBar';
+import { expandModelValues } from '@/lib/runs-order';
+import { facetSummary, showOriginControl } from '../FilterBar';
 import { buildFacetDefs } from '../FiltersPopover';
 import { deleteDescription, retentionLabel } from '../RunDialogs';
 import { SelectionBar } from '../SelectionBar';
@@ -95,5 +96,18 @@ describe('select mode counts runs (C251)', () => {
   it('keeps the name Cohort', () => {
     bar(2);
     expect(screen.getByRole('button', { name: 'Cohort' })).toBeInTheDocument();
+  });
+});
+
+describe('model facet summary (C225)', () => {
+  it('counts a model picked by name once, though it selects its plain and reasoning keys', () => {
+    const models = expandModelValues(['gpt-4.1']);
+    expect(models.length).toBe(2);
+    const view: RunsView = { ...DEFAULT_VIEW, models };
+    const facets = { models } as unknown as Facets;
+    const def = buildFacetDefs(view, facets, {}).find((d) => d.id === 'models')!;
+    expect(facetSummary(def, view.models)).toBe('gpt-4.1');
+    const two = [...models, ...expandModelValues(['claude'])];
+    expect(facetSummary(def, two)).toBe('2');
   });
 });

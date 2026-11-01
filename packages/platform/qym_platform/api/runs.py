@@ -4598,7 +4598,9 @@ def run_passes(
     principal: Principal = Depends(require_ui_principal),
     response: Response = None,
 ) -> Dict[str, Any]:
-    """Repeat runs: per-pass slice aggregates (lazy-loaded on runs-list expand)."""
+    """Repeat runs: per-pass slice aggregates (the runs list reads them from the
+    published summary of a finished run, C023; this route serves live runs and the
+    other pages)."""
     run = Run.active(db).filter(Run.id == run_id).first()
     # A missing run and one the caller cannot view both answer 404, so a run id's
     # existence does not leak (C057). The frontend still reads a 200 {error} body
@@ -4606,7 +4608,15 @@ def run_passes(
     if not run or not can_view_run(db, principal, run):
         raise HTTPException(status_code=404, detail="Run not found")
     mark_cacheable(response, [run])  # C072
+    return run_passes_payload(db, run)
 
+
+def run_passes_payload(db: Session, run: Run) -> Dict[str, Any]:
+    """The ``/passes`` body of ``run``: one row per pass (no access check).
+
+    The summary projection stores it for a finished repeat run (C023), so the
+    runs list opens a run's passes without a request.
+    """
     from qym_platform.db.models import RunItemPassScore
 
     samples = int(getattr(run, "samples", 1) or 1)
@@ -5015,11 +5025,70 @@ def run_group_metrics(
     if not run or not can_view_run(db, principal, run):
         raise HTTPException(status_code=404, detail="Run not found")
     mark_cacheable(response, [run])  # C072
+    from qym_platform.services.repeat_analysis import cached_repeat_analysis
 
+    group = repeat_group_set(db, run, metric, threshold)
+    metric_name, direction, threshold = group["metric"], group["direction"], group["threshold"]
+    samples, report_k, stats = group["samples"], group["report_k"], group["group"]
+    score_rows, items_scores, eligible = group.pop("_inputs")
+    if view == "group":
+        return {
+            "run_id": run.id,
+            "metric": metric_name,
+            "direction": direction,
+            "threshold": threshold,
+            "samples": samples,
+            "report_k": report_k,
+            "group": stats,
+        }
+    analysis = cached_repeat_analysis(
+        db,
+        run_id=run.id,
+        metric_name=metric_name,
+        threshold=threshold,
+        samples=samples,
+        rows=score_rows,
+        items_scores=items_scores,
+        eligible=eligible,
+        direction=direction or "maximize",
+    )
+    return {
+        "run_id": run.id,
+        "metric": metric_name,
+        "direction": direction,
+        "threshold": threshold,
+        "samples": samples,
+        "report_k": report_k,
+        "group": stats,
+        "band": analysis.get("band", {}),
+        "distribution": analysis.get("distribution", []),
+        "uncertainty": {
+            "confidence": analysis.get("confidence"),
+            "bootstrap_iterations": analysis.get("bootstrap_iterations"),
+            "minimum_items": analysis.get("minimum_uncertainty_items"),
+            "method": analysis.get("method"),
+            "method_version": analysis.get("method_version"),
+        },
+    }
+
+
+def repeat_group_set(
+    db: Session,
+    run: Run,
+    metric: Optional[str] = None,
+    threshold: Optional[float] = None,
+) -> Dict[str, Any]:
+    """The group set of a repeat run for one metric (no access check).
+
+    Pass@k, Pass^k, Avg@k, Consistency and Reliability at ``threshold`` (default:
+    the metric's declared pass threshold, else 0.8, or 0.2 when lower is better).
+    ``_inputs`` holds the score rows that the full ``/group-metrics`` view also
+    needs. The summary projection stores the set of every metric of a finished
+    repeat run at its default threshold (C023).
+    """
     from qym.core.reducers import group_stats
 
     from qym_platform.db.models import RunItemPassScore
-    from qym_platform.services.repeat_analysis import cached_repeat_analysis
 
     samples = int(getattr(run, "samples", 1) or 1)
     # Default to the declared primary metric, else the first (C008).
@@ -5116,27 +5185,6 @@ def run_group_metrics(
         # Every pass errored: no average or best score, as the run mean (0
         # would read as this lower-is-better metric's best value).
         stats["avg_at_k"] = stats["max_at_k"] = None
-    if view == "group":
-        return {
-            "run_id": run.id,
-            "metric": metric_name,
-            "direction": direction,
-            "threshold": threshold,
-            "samples": samples,
-            "report_k": report_k,
-            "group": stats,
-        }
-    analysis = cached_repeat_analysis(
-        db,
-        run_id=run.id,
-        metric_name=metric_name,
-        threshold=threshold,
-        samples=samples,
-        rows=score_rows,
-        items_scores=items_scores,
-        eligible=eligible,
-        direction=direction or "maximize",
-    )
     return {
         "run_id": run.id,
         "metric": metric_name,
@@ -5145,15 +5193,7 @@ def run_group_metrics(
         "samples": samples,
         "report_k": report_k,
         "group": stats,
-        "band": analysis.get("band", {}),
-        "distribution": analysis.get("distribution", []),
-        "uncertainty": {
-            "confidence": analysis.get("confidence"),
-            "bootstrap_iterations": analysis.get("bootstrap_iterations"),
-            "minimum_items": analysis.get("minimum_uncertainty_items"),
-            "method": analysis.get("method"),
-            "method_version": analysis.get("method_version"),
-        },
+        "_inputs": (score_rows, items_scores, eligible),
     }
 
 

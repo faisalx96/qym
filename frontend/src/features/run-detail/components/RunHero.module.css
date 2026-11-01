@@ -121,6 +121,7 @@
 .passPill {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-xs);
   min-height: 20px;
   padding: 0 var(--space-sm);
   border-radius: var(--control-radius);

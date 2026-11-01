@@ -709,6 +709,18 @@ export function LaunchProvider({
             };
           }
         }
+        // C130: 'Run experiment on v2' on a dataset page opens the form with that dataset and version chosen. It is the
+        // reader's choice, so a starting point loaded later keeps it (layering's dataset edit).
+        const datasetParam = params.get('dataset');
+        if (datasetParam && mode === 'launch' && !patch.dataset) {
+          const version = params.get('version');
+          patch.dataset = {
+            mode: 'project',
+            name: datasetParam,
+            ref: version ? `v:${version}` : '',
+            custom: '',
+          };
+        }
         if (!alive.current) return;
         setDoc((d) => ({ ...d, ...patch }));
         setInitState('ready');

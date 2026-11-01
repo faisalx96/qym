@@ -217,6 +217,39 @@ def test_projected_legacy_evidence_matches_source_and_deduplicates(database, sam
     if samples > 1:
         assert [p["error_count"] for p in actual["pass_summaries"]] == [1, 1, 0]
         assert [p["retry_count"] for p in actual["pass_summaries"]] == [2, 4, 0]
+        # C023: a finished repeat run carries what the runs list shows of its
+        # passes, by the rules of /passes and /group-metrics, so the list opens
+        # it with no request.
+        from qym_platform.api.runs import repeat_group_set, run_passes_payload
+        from qym_platform.db.models import Run
+
+        with Session(database) as db:
+            stored = db.get(Run, "r")
+            api_passes = run_passes_payload(db, stored)["passes"]
+            groups = {}
+            for name in stored.metrics:
+                group = repeat_group_set(db, stored, name)
+                groups[name] = {
+                    "threshold": group["threshold"],
+                    "group": group["group"],
+                }
+        fields = (
+            "pass_number",
+            "metric_means",
+            "items_scored",
+            "items_total",
+            "completed_count",
+            "avg_latency_ms",
+            "median_latency_ms",
+            "p95_latency_ms",
+            "duration_ms",
+        )
+        assert [{f: p[f] for f in fields} for p in actual["pass_details"]] == [
+            {f: p[f] for f in fields} for p in api_passes
+        ]
+        assert actual["pass_groups"] == groups
+    else:
+        assert actual["pass_details"] is None and actual["pass_groups"] is None
 
 
 def test_historical_event_backfill_is_bounded_and_replay_safe(database):
@@ -842,7 +875,8 @@ def test_soft_deleted_run_leaves_list_before_projection_catches_up(database):
     from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
 
     with Session(database) as db:
-        principal = MagicMock(); principal.user.id = "u"
+        principal = MagicMock()
+        principal.user.id = "u"
         with patch.object(runs, "can_delete_run", return_value=True):
             runs.delete_run({"file_path": "gone"}, db=db, principal=principal)
         # worker has not run yet: the list must already exclude the run

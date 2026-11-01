@@ -14,14 +14,6 @@ import { useRunPage } from '../../RunContext';
 import { messageFor } from '../items/ScoreEditor';
 import styles from './Panels.module.css';
 
-const TONES = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
-
-function toneFor(category: string): string {
-  let h = 0;
-  for (let i = 0; i < category.length; i++) h = (h * 31 + category.charCodeAt(i)) >>> 0;
-  return TONES[h % TONES.length]!;
-}
-
 export function RootCauseTab() {
   const { model, api, items, runId, basePath, readOnly, payload } = useRunPage();
   const toast = useToast();
@@ -126,7 +118,6 @@ export function RootCauseTab() {
               tone="neutral"
               isSelected={on}
               data-testid="root-cause-card"
-              style={{ '--tone': toneFor(cat) } as React.CSSProperties}
               onPress={() => {
                 if (on) api.setFilters({ rootCause: null, rootCauseMetric: 'all' });
                 else api.setFilters({ rootCause: [cat], rootCauseMetric: metric });

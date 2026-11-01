@@ -1,9 +1,8 @@
 /**
- * Which metric and threshold the passes strip of a run opens with, from the run row alone. The strip and the page's
- * background prefetch both ask this one function, so the group-metrics request a prefetch warms is the request the
- * strip makes when the group is opened (same query key, round 7 Q2.3).
+ * Which metric and threshold the passes strip of a run opens with, from the run row alone, and what a finished run's
+ * published summary already holds of its passes (C023: the strip and the pass rows then need no request).
  */
-import type { MetricType, RunRow } from '@/api/dashboardTypes';
+import type { GroupMetrics, MetricType, RunPasses, RunRow } from '@/api/dashboardTypes';
 import { metricDirection, type MetricDirection } from '@/lib/metrics';
 import { defaultMetricName, defaultPassThreshold, groupStatRule, toChartRun } from '../chartModel';
 import { resolveMetric } from './rows';
@@ -36,17 +35,49 @@ export function groupChoiceFor(
   );
   const rule = metric ? groupStatRule([toChartRun(row)], metric) : null;
   const direction = metricDirection(row.metric_specs[metric ?? '']);
+  // A finished run's summary holds the group set at the server's default threshold: open on it, so no request is made
+  const projected = metric ? row.pass_groups?.[metric]?.threshold : undefined;
   const threshold =
-    rule?.threshold ?? defaultPassThreshold(metric ? row.metric_specs[metric] : undefined, direction);
+    projected ??
+    rule?.threshold ??
+    defaultPassThreshold(metric ? row.metric_specs[metric] : undefined, direction);
   return { scoreMetrics, metric, direction, threshold };
 }
 
-/** The group-metrics request of a freshly opened strip, or null for a run with no score metric. */
-export function groupQueryFor(
-  row: RunRow,
-  remembered: string | null,
-  metricTypes: Record<string, MetricType>,
-): { metric: string; threshold: number } | null {
-  const { metric, threshold } = groupChoiceFor(row, remembered, metricTypes);
-  return metric ? { metric, threshold } : null;
+/** The group set the summary holds for `metric` at `threshold`, or null when the strip must ask the server. */
+export function projectedGroup(row: RunRow, metric: string | null, threshold: number): GroupMetrics['group'] {
+  const stored = metric ? row.pass_groups?.[metric] : undefined;
+  return stored && Math.abs(stored.threshold - threshold) < 1e-9 ? (stored.group ?? null) : null;
+}
+
+/**
+ * A finished run's pass rows from its published summary, in the shape of the /passes response, or undefined when the
+ * summary has none (a live run, or a summary published before shape 6): then the list asks /passes.
+ */
+export function summaryPasses(row: RunRow): RunPasses | undefined {
+  const details = row.pass_details;
+  if (!details?.length || !row.pass_summaries?.length) return undefined;
+  const byNumber = new Map(details.map((d) => [d.pass_number, d]));
+  return {
+    run_id: row.run_id,
+    samples: row.samples,
+    pass_revision: row.pass_revision,
+    metrics: row.metrics,
+    passes: row.pass_summaries.map((s) => ({
+      ...s,
+      ...(byNumber.get(s.pass_number) ?? {
+        metric_means: {},
+        items_scored: 0,
+        items_total: row.total_items,
+        completed_count: 0,
+        avg_latency_ms: null,
+        median_latency_ms: null,
+        p95_latency_ms: null,
+        started_at: null,
+        ended_at: null,
+        duration_ms: null,
+        trace_stats: null,
+      }),
+    })),
+  };
 }

@@ -125,6 +125,20 @@
   justify-content: flex-start;
 }
 
+/* the best and the worst pass of a metric: a coloured word, not a pill (C222) */
+.extremeWord {
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.extremeWord[data-tone='success'] {
+  color: var(--success);
+}
+
+.extremeWord[data-tone='danger'] {
+  color: var(--error-text);
+}
+
 .errors[data-tone='danger'] {
   color: var(--error-text);
   font-weight: 650;

@@ -51,6 +51,7 @@ import { UploadWizard, type WizardMode } from '../wizard/UploadWizard';
 import { ItemsWorkspace } from './ItemsWorkspace';
 import { LineageTab } from './LineageTab';
 import { RunsTab } from './RunsTab';
+import { RunOnVersionLink, useCanLaunch } from './RunOnVersion';
 import { AccessTab } from './AccessTab';
 import { SettingsTab } from './SettingsTab';
 import { ItemPage } from '../item/ItemPage';
@@ -282,6 +283,10 @@ function DetailBody({
     }
   }
 
+  // C130: with an active environment, a published version offers 'Run experiment on v2' (any member who can launch)
+  const { project } = useProjectContext();
+  const canLaunch = useCanLaunch(project.id) === true && !archived;
+  const launchable = canLaunch && active?.status === 'published';
   const primaryActions =
     !canWrite || !contentAccess ? null : !active ? (
       <>
@@ -416,6 +421,9 @@ function DetailBody({
             ) : (
               <Tag>no versions</Tag>
             )}
+            {launchable && active ? (
+              <RunOnVersionLink slug={slug} datasetName={dataset.name} version={active.version} />
+            ) : null}
             {primaryActions}
             {active ? (
               <DropdownMenu
@@ -503,7 +511,13 @@ function DetailBody({
           )}
         </TabPanel>
         <TabPanel id="runs">
-          <RunsTab slug={slug} datasetRef={ref} version={active} />
+          <RunsTab
+            slug={slug}
+            datasetRef={ref}
+            datasetName={dataset.name}
+            version={active}
+            canLaunch={canLaunch}
+          />
         </TabPanel>
         <TabPanel id="lineage">
           <LineageTab slug={slug} datasetRef={ref} />

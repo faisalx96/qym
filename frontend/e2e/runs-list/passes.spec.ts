@@ -1,15 +1,7 @@
 /** J6 / §8.7: expanding a repeat run: passes, group metrics, select mode, pass delete. */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { BOOL, LOWER, SCORE, seedRun } from './seed';
-import {
-  clickBox,
-  freshProject,
-  openRuns,
-  rowOf,
-  openPassMenu,
-  deletePassFromMenu,
-  withoutPrefetch,
-} from './support';
+import { clickBox, freshProject, openRuns, rowOf, openPassMenu, deletePassFromMenu } from './support';
 
 const NAME = 'summarize-repeat-done';
 
@@ -25,7 +17,6 @@ async function seedRepeat(page: Page, request: APIRequestContext) {
     samples: 3,
     status: 'COMPLETED',
   });
-  await withoutPrefetch(page); // these tests count the requests an open makes: the prefetch has its own spec (e2e/perf)
   await openRuns(page, s.project.slug);
   return s;
 }
@@ -77,11 +68,10 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       .click();
     const panel = page.getByTestId('runs-table');
     await expect(panel.locator('[aria-label="Group metrics"]').first()).toContainText('Pass@3');
-    await expect.poll(() => reqs.length).toBeGreaterThanOrEqual(1);
+    // C023: a finished run opens on its summary; only another metric or threshold asks the server
     const base = reqs.length;
-    const first = reqs.at(-1)!;
     // metric select
-    const current = first.searchParams.get('metric');
+    const current = (await panel.getByRole('button', { name: /Metric/ }).innerText()).trim();
     await panel.getByRole('button', { name: /Metric/ }).click();
     const other = current === 'quality' ? 'accuracy' : 'quality';
     await page.getByRole('option', { name: other }).click();
