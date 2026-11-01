@@ -76,6 +76,14 @@ class MetricSpecsBody(BaseModel):
 
     specs: list[MetricSpecBody]
 
+    @field_validator("specs")
+    @classmethod
+    def _one_primary(cls, specs: list[MetricSpecBody]) -> list[MetricSpecBody]:
+        """Reject metric sets with more than one primary metric."""
+        if sum(spec.is_primary for spec in specs) > 1:
+            raise ValueError("at most one metric may be primary")
+        return specs
+
 
 class DayBody(BaseModel):
     model_config = ConfigDict(extra="forbid")

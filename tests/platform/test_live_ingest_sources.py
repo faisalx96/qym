@@ -237,6 +237,34 @@ def test_metric_specs_replace_the_set(client, session_factory):
         assert rows[0].group_name == "quality"
 
 
+def test_metric_specs_reject_two_primaries(client, session_factory):
+    _create_source(client)
+    specs = [
+        {
+            "metric_name": name,
+            "group": "quality",
+            "label": name.title(),
+            "score_type": "percentage",
+            "is_primary": True,
+        }
+        for name in ("accuracy", "compliance")
+    ]
+    response = client.put(
+        BASE + "/metric-specs", headers=_auth_headers(), json={"specs": specs[:1]}
+    )
+    assert response.status_code == 200, response.text
+    response = client.put(
+        BASE + "/metric-specs", headers=_auth_headers(), json={"specs": specs}
+    )
+    assert response.status_code == 422, response.text
+    assert any(
+        "at most one metric may be primary" in error["msg"]
+        for error in response.json()["detail"]
+    )
+    with session_factory() as session:
+        assert session.query(LiveMetricSpec).one().metric_name == "accuracy"
+
+
 def test_day_upsert_keeps_counters(client, session_factory):
     _create_source(client)
     response = client.put(BASE + "/days/2026-11-01", headers=_auth_headers(), json={})

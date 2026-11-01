@@ -26,6 +26,7 @@ from qym_platform.api.runs import router as runs_router
 from qym_platform.api.step_latency import router as step_latency_router
 from qym_platform.api.ingest import router as ingest_router
 from qym_platform.api.live_ingest import live_ingest_router
+from qym_platform.api.live import live_router
 from qym_platform.api.analysis import router as analysis_router
 from qym_platform.api.root_cause_dashboard import router as root_cause_dashboard_router
 from qym_platform.api.product_evals import router as product_evals_router
@@ -281,6 +282,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(feedback_router)
     app.include_router(step_latency_router)
     app.include_router(run_datasets_router)
+    app.include_router(live_router)
     app.include_router(runs_router)
     serves_ingest = layout.service != "main" or layout.main_include_ingest
     if serves_ingest:
