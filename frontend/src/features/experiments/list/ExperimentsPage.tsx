@@ -35,6 +35,7 @@ import { ConnectFirst } from '../components/ConnectFirst';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
 import { baseSourceLabel, jobsText, plural, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
+import { loadLaunchPage } from '../lazy';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
 
@@ -171,8 +172,17 @@ export function ExperimentsPage() {
     },
   ];
 
+  // C081: the pointer on (or focus of) New experiment starts loading the launch form
+  const prefetchLaunch = () => void loadLaunchPage();
   const launch = readOnly ? undefined : (
-    <LinkButton to={launchPath(slug)} variant="primary" size="md" icon={<Icon name="plus" size={12} />}>
+    <LinkButton
+      to={launchPath(slug)}
+      variant="primary"
+      size="md"
+      icon={<Icon name="plus" size={12} />}
+      onPointerEnter={prefetchLaunch}
+      onFocus={prefetchLaunch}
+    >
       New experiment
     </LinkButton>
   );
