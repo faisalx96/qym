@@ -200,6 +200,11 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 ### 3.1 Controls, navigation and overlays
 
+**Ctrl K (C043).** The palette lists projects, pages (with aliases: "trash" finds Deleted runs, "overview" the
+Dashboard; Queue, Environments and Deleted datasets included) and actions; from 2 characters it also shows the current
+project's Runs, Datasets and Experiments that match, 5 of each. With no query the current project's first page is
+preselected.
+
 - **Control** (`TextField`, `Select`, `MultiSelect`, `SearchField`, `NumberField`,
   `Textarea`, `Button`, `LinkButton`, `SegmentedControl`): one aligned density,
   `--control-height` (24px) and `--control-radius`, `--font-sm`, sans. There are

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Dialog as AriaDialog, Modal, ModalOverlay } from 'react-aria-components';
 import type { Project } from '@/api/types';
 import { canCreateProject } from '@/api/me';
-import { projectPath } from '@/app/routes';
+import { projectPath, runPath } from '@/app/routes';
+import { fetchRunsPage } from '@/api/dashboard';
+import { api } from '@/lib/http';
 import { KEYS, writeLocal } from '@/lib/storage';
 import { Icon, Identicon, StatusMark, type IconName } from '@/ui';
 import { useAuth } from '../AuthContext';
@@ -13,13 +16,72 @@ import styles from './CommandPalette.module.css';
 
 interface Entry {
   id: string;
-  group: 'Projects' | 'Pages' | 'Actions';
+  group: Group;
   label: string;
   hint?: string;
   icon?: IconName;
   seed?: string;
   archived?: boolean;
   run: () => void;
+}
+
+type Group = 'Projects' | 'Pages' | 'Runs' | 'Datasets' | 'Experiments' | 'Actions';
+const GROUPS: Group[] = ['Projects', 'Pages', 'Runs', 'Datasets', 'Experiments', 'Actions'];
+
+/** Other words people type for a page (C043): 'trash' finds Deleted runs, 'overview' the Dashboard. */
+const ALIASES: Record<string, string> = {
+  overview: 'dashboard home trend',
+  trash: 'deleted bin restore',
+  settings: 'project settings members keys prompts llm',
+  analysis: 'auto-analysis analyzer root cause',
+  charts: 'models scatter',
+  queue: 'jobs experiments queue',
+  environments: 'environment presets',
+};
+
+/** C043: the current project's runs, datasets and experiments that match the query (2+ characters), 5 of each. */
+function useServerResults(slug: string | undefined, projectId: string | undefined, q: string) {
+  const [debounced, setDebounced] = useState(q);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(q), 200);
+    return () => clearTimeout(t);
+  }, [q]);
+  const on = Boolean(slug) && debounced.trim().length >= 2;
+  const needle = debounced.trim().toLowerCase();
+  const runs = useQuery({
+    queryKey: ['palette-runs', slug, needle],
+    enabled: on,
+    staleTime: 30_000,
+    queryFn: ({ signal }) => fetchRunsPage({ project_slug: slug!, filters: { q: needle }, limit: 5 }, signal),
+  });
+  const datasets = useQuery({
+    queryKey: ['palette-datasets', slug],
+    enabled: on,
+    staleTime: 60_000,
+    queryFn: () =>
+      api.get<{ datasets: { slug: string; name: string }[] }>(
+        `/v1/datasets?project_slug=${encodeURIComponent(slug!)}&limit=1000`,
+      ),
+  });
+  const experiments = useQuery({
+    queryKey: ['palette-experiments', projectId],
+    enabled: on && Boolean(projectId),
+    staleTime: 60_000,
+    queryFn: () =>
+      api.get<{ experiments: { id: string; name: string }[] }>(
+        `/v1/projects/${encodeURIComponent(projectId!)}/experiments?limit=200`,
+      ),
+  });
+  if (!on) return { runs: [], datasets: [], experiments: [] };
+  return {
+    runs: (runs.data?.rows ?? []).slice(0, 5).map((r) => ({ id: r.run_id, name: r.run_name || r.run_id })),
+    datasets: (datasets.data?.datasets ?? [])
+      .filter((d) => d.name.toLowerCase().includes(needle) || d.slug.toLowerCase().includes(needle))
+      .slice(0, 5),
+    experiments: (experiments.data?.experiments ?? [])
+      .filter((x) => x.name.toLowerCase().includes(needle))
+      .slice(0, 5),
+  };
 }
 
 export interface CommandPaletteProps {
@@ -33,13 +95,14 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
   const { me, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
+  // -1 = the default pick (the current project's first page); a key or the mouse sets an index.
+  const [active, setActive] = useState(-1);
   const [creating, setCreating] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   // Picking an entry closes through here (not the overlay), so reset the search too.
   const close = () => {
     setQuery('');
-    setActive(0);
+    setActive(-1);
     onOpenChange(false);
   };
 
@@ -66,6 +129,28 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
       ...GLOBAL_NAV,
       ...(isAdmin ? PLATFORM_NAV : []),
       { id: 'profile', label: 'Profile', icon: 'user' as IconName, to: '/profile' },
+      ...(project
+        ? [
+            {
+              id: 'queue',
+              label: 'Queue',
+              icon: 'clock' as IconName,
+              to: projectPath(project.slug, 'experiments/queue'),
+            },
+            {
+              id: 'environments',
+              label: 'Environments',
+              icon: 'settings' as IconName,
+              to: projectPath(project.slug, 'environments'),
+            },
+            {
+              id: 'deleted-datasets',
+              label: 'Deleted datasets',
+              icon: 'trash' as IconName,
+              to: `${projectPath(project.slug, 'datasets')}?view=deleted`,
+            },
+          ]
+        : []),
     ].map((i) => ({
       id: `page:${i.id}`,
       group: 'Pages' as const,
@@ -119,12 +204,60 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me, project, isAdmin, navigate]);
 
+  const server = useServerResults(project?.slug, project?.id, query);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return entries;
-    return entries.filter((e) => e.label.toLowerCase().includes(q) || e.hint?.toLowerCase().includes(q));
-  }, [entries, query]);
-  const current = filtered[Math.min(active, Math.max(0, filtered.length - 1))];
+    const go = (to: string) => () => {
+      close();
+      navigate(to);
+    };
+    const found: Entry[] = project
+      ? [
+          ...server.runs.map((r) => ({
+            id: `run:${r.id}`,
+            group: 'Runs' as const,
+            label: r.name,
+            hint: project.name,
+            icon: 'list' as IconName,
+            run: go(runPath(project.slug, r.id)),
+          })),
+          ...server.datasets.map((d) => ({
+            id: `dataset:${d.slug}`,
+            group: 'Datasets' as const,
+            label: d.name,
+            hint: project.name,
+            icon: 'database' as IconName,
+            run: go(projectPath(project.slug, `datasets/${encodeURIComponent(d.slug)}`)),
+          })),
+          ...server.experiments.map((x) => ({
+            id: `experiment:${x.id}`,
+            group: 'Experiments' as const,
+            label: x.name,
+            hint: project.name,
+            icon: 'flask' as IconName,
+            run: go(projectPath(project.slug, `experiments/${encodeURIComponent(x.id)}`)),
+          })),
+        ]
+      : [];
+    const matches = (e: Entry) =>
+      e.label.toLowerCase().includes(q) ||
+      e.hint?.toLowerCase().includes(q) ||
+      (ALIASES[e.id.replace(/^page:/, '')] ?? '').includes(q);
+    const local = q ? entries.filter(matches) : entries;
+    // Server results already match; keep the group order of GROUPS.
+    const all = [...local, ...found];
+    return GROUPS.flatMap((g) => all.filter((e) => e.group === g));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, query, server.runs, server.datasets, server.experiments, project]);
+  // C043: with no query, the first page of the current project is preselected (not the first project).
+  const firstProjectPage = query.trim()
+    ? 0
+    : Math.max(
+        0,
+        filtered.findIndex((e) => e.group === 'Pages' && Boolean(project) && e.hint === project?.name),
+      );
+  const current =
+    filtered[Math.min(active === -1 ? firstProjectPage : active, Math.max(0, filtered.length - 1))];
 
   useEffect(() => {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
@@ -137,7 +270,7 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
         onOpenChange={(o) => {
           if (!o) {
             setQuery('');
-            setActive(0);
+            setActive(-1);
           }
           onOpenChange(o);
         }}
@@ -165,12 +298,13 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
                   setActive(0);
                 }}
                 onKeyDown={(e) => {
+                  const at = current ? filtered.indexOf(current) : 0;
                   if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    setActive((a) => Math.min(a + 1, filtered.length - 1));
+                    setActive(Math.min(at + 1, filtered.length - 1));
                   } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
-                    setActive((a) => Math.max(a - 1, 0));
+                    setActive(Math.max(at - 1, 0));
                   } else if (e.key === 'Enter' && current) {
                     e.preventDefault();
                     current.run();
@@ -189,7 +323,7 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
               aria-label="Results"
             >
               {filtered.length === 0 ? <li className={styles.empty}>No matches for “{query}”</li> : null}
-              {(['Projects', 'Pages', 'Actions'] as const).map((group) => {
+              {GROUPS.map((group) => {
                 const items = filtered.filter((e) => e.group === group);
                 if (!items.length) return null;
                 return (
