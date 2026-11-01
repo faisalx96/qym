@@ -348,13 +348,8 @@ export function TraceDrawer({
         {stats && formatCost(stats.totalCost) ? <Tag kind="data">{formatCost(stats.totalCost)}</Tag> : null}
         {norm.attempts.length > 1 ? (
           <Tag kind="data" tone="warning">
-            {norm.attempts.length} attempts ·{' '}
-            {
-              norm.attempts.filter((a) =>
-                ['failed', 'error', 'timeout'].includes(String(a.status).toLowerCase()),
-              ).length
-            }{' '}
-            failed
+            {norm.attempts.length} attempts ({norm.attempts.length - 1}{' '}
+            {norm.attempts.length === 2 ? 'retry' : 'retries'})
           </Tag>
         ) : null}
         {errors ? <Tag tone="danger">{errors} errors</Tag> : null}
@@ -387,7 +382,7 @@ export function TraceDrawer({
             ref={searchRef}
             type="search"
             className={styles.searchInput}
-            placeholder="Filter spans… (/)"
+            placeholder="Filter spans (/)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {

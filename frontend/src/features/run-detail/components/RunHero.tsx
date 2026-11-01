@@ -287,8 +287,10 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
                 className={styles.passPill}
                 to={basePath}
                 title={`Viewing pass ${viewPass} of ${samples}. Return to all passes.`}
+                aria-label={`Pass ${viewPass} of ${samples}. Show all passes`}
               >
                 Pass {viewPass}/{samples}
+                <Icon name="close" size={12} />
               </Link>
             ) : samples === 1 && model.isRepeat ? (
               <Link

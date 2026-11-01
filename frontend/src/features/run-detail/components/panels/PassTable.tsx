@@ -7,7 +7,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { formatPercent, type MetricDirection } from '@/lib/metrics';
-import { DataTable, ScoreValue, Tag, type Column } from '@/ui';
+import { DataTable, ScoreValue, type Column } from '@/ui';
 import type { RunModel } from '../../lib/runModel';
 import { latencyLabel } from '../../lib/rowDisplay';
 import type { PassSummary } from '../../types';
@@ -95,8 +95,16 @@ export function PassTable({ passes, model, metric, basePath, medianHint, queued 
               />
             )}
             <span className={styles.extreme}>
-              {ext?.best === p.pass_number ? <Tag tone="success">best</Tag> : null}
-              {ext?.worst === p.pass_number ? <Tag tone="danger">worst</Tag> : null}
+              {ext?.best === p.pass_number ? (
+                <span className={styles.extremeWord} data-tone="success">
+                  best
+                </span>
+              ) : null}
+              {ext?.worst === p.pass_number ? (
+                <span className={styles.extremeWord} data-tone="danger">
+                  worst
+                </span>
+              ) : null}
             </span>
           </span>
         );
