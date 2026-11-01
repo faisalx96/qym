@@ -1,13 +1,14 @@
-/* The one sticky element (--bar-link-h, 36 px): section links only. */
+/* The one sticky element (--bar-link-h, 36 px): section links, then the page-level controls (K6, C154). */
 .bar {
   position: sticky;
   top: 0;
   z-index: 5;
   display: flex;
   align-items: center;
+  gap: var(--space-md);
   min-width: 0;
   box-sizing: border-box;
-  block-size: var(--bar-link-h);
+  min-block-size: var(--bar-link-h);
   padding-inline: var(--space-xs);
   background: var(--bg-base);
   border-bottom: 1px solid var(--border-subtle);
@@ -16,4 +17,28 @@
 .bar > nav {
   flex: 1;
   min-width: 0;
+}
+
+.controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* A phone has no room beside the links: the controls take a second row */
+@media (max-width: 760px) {
+  .bar {
+    flex-wrap: wrap;
+    row-gap: 0;
+    padding-block-end: var(--space-xs);
+  }
+
+  .bar > nav {
+    flex-basis: 100%;
+  }
+
+  .controls {
+    flex-wrap: wrap;
+  }
 }

@@ -1,5 +1,6 @@
 /** The compare report: stacked full-width sections in legacy order, a jump nav with scroll-spy, and section anchors. */
 import { useEffect, useMemo, useState } from 'react';
+import { useCompareStepLatency } from '@/api/compare';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { metricDirectionLabel, passThresholdLabel } from '@/lib/metrics';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
@@ -9,7 +10,7 @@ import { hasAnyRootCause } from '../lib/breakdown';
 import { CategoriesSection } from './panel/CategoriesTab';
 import { ErrorsTab } from './panel/ErrorsTab';
 import { MetricsTab } from './panel/MetricsTab';
-import { OverviewControls, OverviewTab } from './panel/OverviewTab';
+import { OverviewTab } from './panel/OverviewTab';
 import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
 import { ItemsHeadAside, ItemsSection } from './items/ItemsSection';
@@ -36,15 +37,19 @@ const ALIASES: Record<string, SectionKey> = {
 
 /** The sections this comparison offers, in page order. */
 export function useSectionList(): Array<{ key: SectionKey; label: string; count?: number }> {
-  const { model, items } = useCompare();
+  const { model, items, columns } = useCompare();
   const traced = model.runs.some((r) => r.run.trace_stats?.has_spans);
+  // C216: the Step latency section and its link show only when the step-latency answer has a group (shared query)
+  const refs = useMemo(() => columns.map((c) => c.key), [columns]);
+  const steps = useCompareStepLatency(refs, traced);
+  const hasSteps = Object.values(steps.data?.groups_by_ref ?? {}).some((groups) => groups.length > 0);
   const rootCause = useMemo(() => hasAnyRootCause(model, new Set(model.itemIds)), [model]);
   return [
     { key: 'runs', label: 'Runs' },
     { key: 'averages', label: 'Averages' },
     { key: 'overview', label: 'Overview' },
     { key: 'categories', label: 'Categories' },
-    ...(traced ? [{ key: 'steps' as const, label: 'Steps' }] : []),
+    ...(traced && hasSteps ? [{ key: 'steps' as const, label: 'Steps' }] : []),
     { key: 'errors', label: 'Errors' },
     ...(rootCause ? [{ key: 'root-cause' as const, label: 'Root cause' }] : []),
     { key: 'items', label: 'Items', count: items.length },
@@ -163,7 +168,6 @@ export function CompareReport() {
         part="section-overview"
         title="Comparison overview"
         description={overviewDescription}
-        aside={<OverviewControls />}
       >
         <OverviewTab />
       </ReportSection>

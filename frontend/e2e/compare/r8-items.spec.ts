@@ -46,7 +46,9 @@ test('C-items-3: the toolbar is not sticky; one 24 px row at 1440, at most 56 at
       .map((e) => Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2)),
   );
   expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(1);
-  within((await box(part(page, 'items-filters-btn'))).w, 117, 8, 'Filters button');
+  // K6 (C154): Filters is in the sticky nav, not in the items toolbar
+  await expect(part(page, 'items-toolbar').locator('[data-part="items-filters-btn"]')).toHaveCount(0);
+  await expect(part(page, 'page-controls').locator('[data-part="items-filters-btn"]')).toBeVisible();
 });
 
 test('C-items-4: the count is a status in mono 11 and follows the filters', async ({ page }) => {
@@ -157,24 +159,21 @@ test('C-items-6: the Winner values say "<run name> won" and "Only <run name> sol
   await expect(page.getByText(/^B won$/)).toHaveCount(0);
 });
 
-test('C-items-7: Display is a 300 px popover with the metric, sort, text mode; Escape returns focus', async ({
+test('K6 (C154): Display is a 300 px popover with text mode only; Sort sits beside it; Escape returns focus', async ({
   page,
 }) => {
   await openCompare(page, s.four, 1440);
   const btn = part(page, 'items-display-btn');
-  await expect(btn).toContainText('Display · quality');
+  await expect(btn).toHaveText('Display');
   within((await box(btn)).h, 24, 1, 'Display button');
+  await expect(part(page, 'items-toolbar').getByRole('button', { name: /Sort/ })).toBeVisible();
   await btn.click();
   const pop = part(page, 'display-popover');
   await expect(pop).toBeVisible();
   within((await box(pop)).w, 300, 2, 'popover width');
-  await expect(pop.getByRole('button', { name: /Analysis metric/ })).toBeVisible();
-  await expect(pop.getByRole('button', { name: /Sort/ })).toBeVisible();
+  await expect(pop.getByRole('button', { name: /Analysis metric/ })).toHaveCount(0);
+  await expect(pop.getByRole('button', { name: /Sort/ })).toHaveCount(0);
   await expect(pop.getByRole('radiogroup', { name: 'Text mode' })).toBeVisible();
-  // switching the analysis metric updates the button label
-  await pop.getByRole('button', { name: /Analysis metric/ }).click();
-  await page.getByRole('option', { name: 'correct' }).click();
-  await expect(btn).toContainText('Display · correct');
   await page.keyboard.press('Escape');
   await expect(pop).toHaveCount(0);
   await expect(btn).toBeFocused();

@@ -78,11 +78,29 @@ export function PassToggle() {
   );
 }
 
-/** The analysis metric: segmented tabs up to four metrics, a select beyond (round 8, C-ov-1). */
-export function MetricTabs() {
+/**
+ * The analysis metric: segmented tabs up to four metrics, a select beyond (round 8, C-ov-1). `compact` (the sticky
+ * nav, K6) is always a labelled select.
+ */
+export function MetricTabs({ compact }: { compact?: boolean } = {}) {
   const { model, metric, c } = useCompare();
   if (model.metrics.length < 2) return null;
   const set = (k: string) => c.setView({ metric: k, filters: { ...c.view.filters, baseline: null } });
+  if (compact)
+    return (
+      <span className={styles.inlineLabel} data-part="metric-control">
+        <span aria-hidden="true">Metric</span>
+        <Select
+          label="Metric"
+          hideLabel
+          value={metric}
+          onChange={(k) => k && set(String(k))}
+          items={model.metrics.map((m) => ({ key: m, label: m }))}
+          searchable="auto"
+          width={150}
+        />
+      </span>
+    );
   if (model.metrics.length > 4)
     return (
       <Select

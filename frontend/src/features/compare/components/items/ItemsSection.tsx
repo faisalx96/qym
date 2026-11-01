@@ -14,6 +14,7 @@ import { FilterBuilder } from './FilterBuilder';
 import { ItemList } from './ItemList';
 import { ItemsBanner } from './ItemsBanner';
 import { ItemsToolbar } from './ItemsToolbar';
+import { useItemsUi } from './ItemsUi';
 import styles from './ItemsSection.module.css';
 
 const WIDE_QUERY = '(min-width: 1200px)';
@@ -43,11 +44,12 @@ export function ItemsSection() {
     () => model.metadataKeys.filter((k) => !HIDDEN_METADATA_KEYS.has(k)),
     [model.metadataKeys],
   );
-  const { items, c } = useCompare();
+  const { items } = useCompare();
   const wide = useMediaQuery(WIDE_QUERY);
   // The facet list is opened from the toolbar and never on its own (owner decision H2).
   const [facets, setFacets] = useState(false);
-  const [panel, setPanel] = useState(() => c.view.filters.rules.children.length > 0);
+  // The Filters button is in the sticky nav (K6, C154); the panel opens here
+  const { filtersOpen: panel, setFiltersOpen: setPanel } = useItemsUi();
   // Escape closes the inline Filters panel wherever the focus is (on the button after a click, inside the panel, on the page);
   // a popover or listbox that handles Escape first has already stopped the event.
   useEffect(() => {
@@ -59,7 +61,7 @@ export function ItemsSection() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [panel]);
+  }, [panel, setPanel]);
   if (model.alignment.status !== 'aligned')
     return (
       <EmptyState
@@ -71,13 +73,7 @@ export function ItemsSection() {
   return (
     <div className={styles.section}>
       <ItemsBanner />
-      <ItemsToolbar
-        metaKeys={metaKeys}
-        panelOpen={panel}
-        onPanelOpen={setPanel}
-        facetsOpen={facets}
-        onFacetsOpen={setFacets}
-      />
+      <ItemsToolbar metaKeys={metaKeys} facetsOpen={facets} onFacetsOpen={setFacets} />
       {panel ? (
         <FilterBuilder
           onClose={() => {
@@ -107,7 +103,11 @@ export function ItemsSection() {
           {items.length ? (
             <ItemList />
           ) : (
-            <EmptyState compact title="No items match" body="Clear a filter or the search to see more items." />
+            <EmptyState
+              compact
+              title="No items match"
+              body="Clear a filter or the search to see more items."
+            />
           )}
         </div>
       </ReportLayout>

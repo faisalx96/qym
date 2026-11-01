@@ -130,9 +130,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
         {scope.shown.toLocaleString('en-US')} of {scope.total.toLocaleString('en-US')} items
       </Text>
       <div className={styles.actions}>
-        <Button size="sm" variant="ghost" onPress={scope.clearAll}>
-          Clear all
-        </Button>
+        {/* K6 (C154): one Clear, in the sticky nav */}
         <Button size="sm" variant="neutral" onPress={onViewItems}>
           View {scope.shown.toLocaleString('en-US')} items
         </Button>

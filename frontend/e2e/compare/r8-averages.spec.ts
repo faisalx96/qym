@@ -9,7 +9,7 @@ test.beforeAll(async () => {
   s = await seedR8('r8-avg');
 });
 
-test('K1 (C036): the Baseline select is by the page title (14 rem x 24); the sticky nav has neither select nor pass toggle', async ({
+test('K1 (C036): the Baseline select is by the page title (14 rem x 24); the sticky nav has no Baseline and no pass toggle', async ({
   page,
 }) => {
   await openCompare(page, s.four, 1440);
@@ -18,7 +18,10 @@ test('K1 (C036): the Baseline select is by the page title (14 rem x 24); the sti
   const trigger = control.getByRole('button', { name: /Baseline/ });
   within((await box(trigger)).w, 224, 3, 'select width');
   within((await box(trigger)).h, 24, 1, 'select height');
-  await expect(part(page, 'section-nav').locator('select, [role=radiogroup], button')).toHaveCount(0);
+  // K6 (C154): the sticky nav holds Metric, the slider, Filters and Clear, but not the Baseline or the pass toggle
+  await expect(
+    part(page, 'section-nav').locator('[data-part="baseline-control"], [role=radiogroup]'),
+  ).toHaveCount(0);
   // no repeat run selected: no pass toggle
   await expect(page.getByRole('radiogroup', { name: 'Repeat run columns' })).toHaveCount(0);
 });

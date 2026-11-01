@@ -1,8 +1,7 @@
 /** Stats strip, winner breakdown and "how many runs were correct" over the filtered items (brief 05 J4). */
 import { formatLatency, formatMetricValue, metricBand } from '@/lib/metrics';
 import type { CSSProperties } from 'react';
-import { HelpMarker, Slider } from '@/ui';
-import { MetricTabs } from '../SelectionBar';
+import { HelpMarker } from '@/ui';
 import { scrollToSection } from '../sectionIds';
 import { runSeries, useCompare } from '../../CompareContext';
 import { runShortName } from '../../lib/labels';
@@ -11,34 +10,6 @@ import { statRates } from '../../lib/stats';
 import styles from './Overview.module.css';
 
 const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(1)}%`);
-
-/** Section-head controls: the pass threshold, then the analysis metric (round 8, C-ov-1). */
-export function OverviewControls() {
-  const { model, metric, ctx, c } = useCompare();
-  const type = model.types[metric] ?? 'score';
-  const dir = ctx.direction;
-  const slider =
-    type === 'boolean' || type === 'numeric' || !dir ? null : (
-      <Slider
-        key={`${metric}:${ctx.threshold}`}
-        label={dir === 'minimize' ? 'Pass if ≤' : 'Pass if ≥'}
-        unit="%"
-        minValue={5}
-        maxValue={100}
-        step={5}
-        width="13rem"
-        className={styles.passSlider}
-        defaultValue={Math.round(ctx.threshold * 100)}
-        onChangeEnd={(v) => c.setThreshold(metric, v / 100)}
-      />
-    );
-  return (
-    <>
-      {slider}
-      <MetricTabs />
-    </>
-  );
-}
 
 interface StatItem {
   key: string;
@@ -149,7 +120,12 @@ export function OverviewTab() {
       {dir ? (
         <section className={styles.block} aria-label="Winner breakdown">
           <h3 className={styles.h3}>Winner breakdown</h3>
-          <div className={styles.winBar} data-part="winner-bar" role="group" aria-label="Items won by each run">
+          <div
+            className={styles.winBar}
+            data-part="winner-bar"
+            role="group"
+            aria-label="Items won by each run"
+          >
             {stats.wins.map((w, i) =>
               w ? (
                 <WinnerSegment
@@ -194,7 +170,12 @@ export function OverviewTab() {
       {dir ? (
         <section className={styles.block} aria-label="Correct distribution">
           <h3 className={styles.h3}>Runs correct per item</h3>
-          <div className={styles.distBar} data-part="distribution-bar" role="group" aria-label="Runs correct per item">
+          <div
+            className={styles.distBar}
+            data-part="distribution-bar"
+            role="group"
+            aria-label="Runs correct per item"
+          >
             {stats.correctDistribution.map((count, k) =>
               count ? (
                 <button
@@ -216,8 +197,8 @@ export function OverviewTab() {
             )}
           </div>
           <p className={styles.note}>
-            Segment label: runs correct, then items. {stats.correctDistribution.reduce((a, b) => a + b, 0)} items in
-            all.
+            Segment label: runs correct, then items. {stats.correctDistribution.reduce((a, b) => a + b, 0)}{' '}
+            items in all.
           </p>
         </section>
       ) : null}
