@@ -18,8 +18,8 @@ import {
   ErrorState,
   Icon,
   NumberField,
+  Section,
   Skeleton,
-  StatStrip,
   StatusMark,
   Text,
   TextField,
@@ -241,7 +241,7 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
   );
 }
 
-/** Admin, Feedback agent (QE-109 to QE-122): the platform-level connection and the two numbers. */
+/** Admin, Feedback assistant (QE-109 to QE-122, C244): the platform-level connection and the two numbers. */
 export function FeedbackAgentTab() {
   const q = useAgentAdmin();
   if (q.isError)
@@ -255,23 +255,17 @@ export function FeedbackAgentTab() {
   if (!q.data) return <Skeleton kind="rows" rows={3} rowHeight={80} label="Loading the feedback assistant" />;
   const key = String(q.data.configured);
   const d = q.data;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  // One titled Section, its totals in the description: no second stat strip under the admin tiles (C244).
+  const totals = [
+    `${plural(d.counts.requests, 'request')}, ${d.counts.new} new`,
+    `${plural(d.counts.open_drafts, 'open draft')}, deleted after ${d.behaviour.draft_retention_days} days`,
+    `${plural(d.counts.assistant_calls_7d, 'assistant call')} in 7 days`,
+  ].join(' · ');
   return (
-    <div className={feedbackStyles.stackCol}>
-      <StatStrip
-        variant="compact-header"
-        aria-label="Feedback totals"
-        items={[
-          { label: 'Requests', value: d.counts.requests, sub: `${d.counts.new} new` },
-          {
-            label: 'Open drafts',
-            value: d.counts.open_drafts,
-            sub: `deleted after ${d.behaviour.draft_retention_days} days`,
-          },
-          { label: 'Assistant calls, 7 days', value: d.counts.assistant_calls_7d },
-        ]}
-      />
+    <Section title="Feedback assistant" description={totals} bodyClassName={feedbackStyles.stackCol}>
       <ConnectionCard key={key} data={q.data} />
       <BehaviourCard key={`b-${key}`} data={q.data} />
-    </div>
+    </Section>
   );
 }

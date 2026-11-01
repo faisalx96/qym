@@ -88,7 +88,7 @@ test('QE-34, QE-123: not configured replaces the form with the not-set-up page',
     await gotoApp(page, '/feedback/new');
     await expect(page.getByTestId('feedback-unconfigured-page')).toBeVisible();
     await expect(page.getByText('The feedback assistant is not set up yet')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open Feedback agent settings' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open Feedback assistant settings' })).toBeVisible();
     const empty = await box(page.locator('[data-empty-state]'));
     record('unconfigured-1440', { emptyState: empty });
     await shot(page, 'unconfigured', 1440);

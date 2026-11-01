@@ -72,3 +72,16 @@ describe('feedback agent connection: the stored key stays with its host (C004)',
     );
   });
 });
+
+describe('feedback assistant tab (C244)', () => {
+  it('opens with one titled Section whose description holds the totals, with no second stat strip', () => {
+    renderTab();
+    expect(screen.getByRole('heading', { name: 'Feedback assistant' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '0 requests, 0 new · 0 open drafts, deleted after 30 days · 0 assistant calls in 7 days',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Feedback totals')).toBeNull();
+  });
+});
