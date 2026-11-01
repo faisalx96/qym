@@ -23,6 +23,7 @@
         { "id": "navigation", "title": "Navigation & roles" },
         { "id": "runs", "title": "Runs, selection & cohorts" },
         { "id": "run-detail", "title": "Run detail & item analysis" },
+        { "id": "live", "title": "Live evaluation" },
         { "id": "projects-data-review", "title": "Projects, data & review" }
       ]
     },

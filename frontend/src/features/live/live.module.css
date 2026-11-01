@@ -262,7 +262,7 @@
   visibility: hidden;
 }
 
-@container (max-width: 899px) {
+@container (width < 900px) {
   .mixRow {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -292,7 +292,7 @@
   }
 }
 
-@container (max-width: 479px) {
+@container (width < 480px) {
   .mixLegend {
     grid-template-columns: minmax(0, 1fr);
   }

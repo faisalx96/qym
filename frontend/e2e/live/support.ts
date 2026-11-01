@@ -22,7 +22,11 @@ interface SeededDay {
 }
 
 /** A small producer fixture, authenticated exactly like a live worker. */
-export async function seedLive(request: APIRequestContext, slug: string, opts: { stale?: boolean } = {}) {
+export async function seedLive(
+  request: APIRequestContext,
+  slug: string,
+  opts: { stale?: boolean; days?: number } = {},
+) {
   const project = await createProject(request, 'Live evaluation demo', slug);
   const token = await createApiKey(request, project.id);
   const sourceKey = 'worker-preprod';
@@ -83,7 +87,7 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
   });
   expect(specs.ok(), await specs.text()).toBeTruthy();
 
-  for (let offset = 2; offset >= 0; offset--) {
+  for (let offset = (opts.days ?? 3) - 1; offset >= 0; offset--) {
     const date = new Date(now);
     date.setUTCDate(date.getUTCDate() - offset);
     const day = date.toISOString().slice(0, 10);
@@ -134,7 +138,8 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
         label: diagnosis.value,
         label_reason: diagnosis.label,
         question: index === 0 ? 'ما إجمالي الطلبات؟' : `What is the total for group ${index + 1}?`,
-        answer: failed || incomplete ? null : `The total is ${index + 10}.`,
+        answer:
+          failed || incomplete ? null : index === 0 ? 'إجمالي الطلبات 10.' : `The total is ${index + 10}.`,
         sql: [{ query: 'SELECT COUNT(*) AS total FROM orders', rows: 1 }],
         latency_ms: (index + 1) * 1000,
         result_rows: failed ? 0 : 1,

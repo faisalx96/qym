@@ -137,6 +137,7 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
       id: 'charts',
       header: 'Charts',
       width: 100,
+      mono: true,
       cell: (row) => (
         <span className={styles.number}>
           {row.charts.count}

@@ -32,6 +32,7 @@ export function DaysTable({
       id: 'primary_rate',
       header: primary?.label ?? 'Primary rate',
       width: 120,
+      mono: true,
       cell: (row) => (
         <ScoreValue
           value={row.primary_rate}

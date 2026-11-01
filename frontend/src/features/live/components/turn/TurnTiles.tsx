@@ -48,7 +48,10 @@ export function TurnTiles({ data }: { data: LiveTurnDetail }) {
             value: chartsOf(data.summary).length,
             meaning: 'Charts included in the evaluation evidence.',
           },
-        ]}
+        ].map((item) => ({
+          ...item,
+          value: <span data-live-stat={item.key}>{item.value}</span>,
+        }))}
       />
     </div>
   );

@@ -275,6 +275,8 @@ describe('live turn evidence presentation', () => {
     };
     const { container } = render(createElement(TurnTiles, { data }));
     expect(screen.getAllByRole('listitem')).toHaveLength(6);
+    expect(container.querySelectorAll('[data-live-stat]')).toHaveLength(6);
+    expect(container.querySelector('[data-live-stat="rows"]')).toHaveTextContent('0');
     expect(container.querySelector('[data-tile="compliance_a"] [data-part="value"]')).toHaveTextContent('0%');
     expect(container.querySelector('[data-tile="compliance_b"] [data-part="value"]')).toHaveTextContent(
       '38%',

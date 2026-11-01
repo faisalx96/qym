@@ -1,3 +1,23 @@
+# November 2026 — Platform 2.2.0 (unreleased) / SDK 2.1.0
+
+Projects gain a **Live** tab for real user turns reported by the evaluation worker, with daily health, searchable turns and evaluation evidence. SDK 2.1.0 is unchanged.
+
+## Before you update
+
+- **Migration `0092`.** Creates six empty `live_*` tables and their indexes. This is quick DDL with no backfill; existing evaluation runs are unchanged.
+- **Five platform settings.** `QYM_LIVE_RETENTION_DAYS=180` keeps turns, scores and canary results for 180 days; `QYM_LIVE_STALE_AFTER_SECONDS=300` controls heartbeat staleness; `QYM_LIVE_TURN_BATCH_MAX=100` caps turns per ingest batch; `QYM_LIVE_DETAIL_MAX_BYTES=524288` caps a turn's opaque detail; `QYM_LIVE_TREND_MAX_DAYS=90` caps the trend window. These are the defaults.
+- **Ingestion routing.** `/v1/projects/{project_id}/live/*` belongs on the ingestion surface and requires a project API key. The main app also serves it when `QYM_MAIN_INCLUDE_INGEST` is enabled. The ingestion alias uses `QYM_INGESTION_PREFIX` (default `/ingestion`); unprefixed ingestion paths depend on `QYM_INGESTION_LEGACY_PATHS`. In split deployments, include the rule from `docker/nginx.split.conf`: `location ~ ^/v1/projects/[^/]+/live/ { proxy_pass http://qym_ingestion; }`. UI reads under `/api/projects/{slug}/live` stay on main.
+- **Optional compose `live` profile.** Both compose files provide `live-worker`. Configure the separate worker image with `QYM_LIVE_WORKER_IMAGE` and its credentials in `QYM_LIVE_WORKER_ENV_FILE` (default `./live-worker.env`), then run `docker compose -f docker/docker-compose.yml --profile live up -d` (or use `docker/docker-compose.split.yml`). The default image `qym-live-worker:unset` is a placeholder; the profile needs a supplied worker image. The worker sends reports to qym's ingest API; see [operations](internal/OPERATIONS.md) for deployment details.
+
+## What changed
+
+### Live evaluation
+
+- **Three pages under Live.** Overview combines the worker heartbeat, daily counters, diagnosis mix, metric means, service health, canaries, a 14/30/90-day trend and the Days table. Turns supports filters, search, sorting and CSV export. Turn detail brings together diagnosis, answers and SQL, judges, charts, services and tools, conversation and evaluator evidence. Pages adapt to narrow screens, keep Arabic text within LTR controls and support keyboard navigation.
+- **Ingest guide v1.0.** The [Live evaluation ingest guide](live-evaluation-ingest-v1.0.md) documents source registration, heartbeats, metric definitions, daily counters, turn batches, canaries and reconciliation, including project-key authentication and per-turn rejection results.
+- **Retention.** Maintenance deletes expired turns with their scores and canary results in batches (180 days by default), retains daily counter rows for 730 days and records an audit entry when data is removed. Sources and metric definitions remain.
+- **Development seed.** `python frontend/scripts/seed_live.py --base http://127.0.0.1:8800 --slug demo --days 14` populates a development project through the ingest API with synthetic English and Arabic turns, diagnoses and evidence. The default is 14 days and 30 turns per day; the final heartbeat ages normally, so a seeded source becomes stale after the configured interval.
+
 # October 2026 — Platform 2.1.0 / SDK 2.1.0
 
 One evaluation can run over several datasets, and several versions of one dataset, at once. SDK 2.1.0 takes a list for `dataset=`, `qym run create` repeats `--dataset`, and the platform shows such a run (a union run) with a Datasets group in its header, a per-dataset score table and a Dataset column and filter on its items. A single dataset, written as before, behaves exactly as in 2.0.0: same item ids, same upload, same results file. Platform 2.1.0 still accepts SDK 2.0.0 runs; SDK 2.1.0 union runs reach a 2.0.0 platform as a plain run named by its label (the per-dataset view needs 2.1.0).
