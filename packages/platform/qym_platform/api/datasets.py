@@ -1736,6 +1736,15 @@ def _upload_format(requested: str, filename: str, raw: bytes) -> str:
 _INSERT_BATCH_SIZE = 1000
 
 
+def _mark_dataset_changed(dataset: Dataset) -> None:
+    """A version, its items or an alias changed: the dataset's "updated" time follows.
+
+    The catalog shows and sorts by this time ("Last updated"), so a new item, an
+    import, a publish or a production move must count, not only a rename (C065).
+    """
+    dataset.updated_at = utc_now_naive()
+
+
 def _insert_items(db: Session, version_id: str, items: list[Dict[str, Any]]) -> int:
     """Insert parsed items in batches with Core inserts (no ORM objects kept).
 
@@ -2511,6 +2520,7 @@ def create_version(
     _record_change(
         db, version, {"type": "created", "from_version_id": parent.id if parent else None}, actor_user_id=principal.user.id
     )
+    _mark_dataset_changed(dataset)
     db.commit()
     logger.info("Dataset version %s created (dataset=%s)", version.id, version.dataset_id)
     return {"version": _version_payload(db, version)}
@@ -2552,6 +2562,7 @@ def publish_version(
     _store_published_counts(db, version)
     if req.set_alias:
         _set_alias(db, dataset, req.set_alias, version, principal)
+    _mark_dataset_changed(dataset)
     db.commit()
     logger.info("Dataset %s version %s published (%s items)", dataset.id, version.version, item_count)
     return {"version": _version_payload(db, version)}
@@ -2588,6 +2599,7 @@ def update_version(
     if req.description is not None:
         version.description = req.description
     version.updated_at = utc_now_naive()
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"version": _version_payload(db, version)}
 
@@ -2695,6 +2707,7 @@ def set_alias(
     dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     version = _resolve_version(db, dataset, req.version)
     alias = _set_alias(db, dataset, alias_name, version, principal)
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"alias": {"dataset_id": dataset.id, "alias": alias.alias, "dataset_version_id": alias.dataset_version_id}}
 
@@ -3019,6 +3032,7 @@ def create_item(
         after=_item_snapshot(item),
         actor_user_id=principal.user.id,
     )
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"item": _item_payload(item)}
 
@@ -3104,6 +3118,7 @@ def update_item(
     item.fingerprint = build_identity_fingerprint(input_value=input_value, expected_value=expected, metadata=metadata)
     item.updated_at = utc_now_naive()
     _record_item_revision(db, version, item, change_type="updated", before=before, after=_item_snapshot(item), actor_user_id=principal.user.id)
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"item": _item_payload(item, users=_item_users(db, [item]))}
 
@@ -3136,6 +3151,7 @@ def delete_item(
     _detach_item_run_results(db, item)
     db.delete(item)
     version.item_count = max(0, int(version.item_count or 0) - 1)
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"ok": True}
 
@@ -3220,6 +3236,7 @@ def _toggle_item_state(
         dataset,
         after={"version": version.version, "item_id": item.item_id, "reason": text},
     )
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"item": _item_payload(item, users=_item_users(db, [item])), "changed": True}
 
@@ -3389,6 +3406,7 @@ def batch_items(
             },
         )
         version.updated_at = utc_now_naive()
+    _mark_dataset_changed(dataset)
     db.commit()
     logger.info(
         "Dataset %s version %s batch %s: %d of %d items",
@@ -3758,6 +3776,7 @@ def bulk_items(
     version.item_count = int(
         db.query(func.count(DatasetItem.id)).filter(DatasetItem.dataset_version_id == version.id).scalar() or 0
     )
+    _mark_dataset_changed(dataset)
     db.commit()
     return {
         "summary": {
@@ -4643,6 +4662,7 @@ def _upload_dataset_sync(
         _store_published_counts(db, version_row)
         if set_alias:
             _set_alias(db, dataset, set_alias, version_row, principal)
+    _mark_dataset_changed(dataset)
     db.commit()
     logger.info(
         "Dataset %s uploaded: version %s, %d items from %s%s",
