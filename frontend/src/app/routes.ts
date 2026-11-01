@@ -32,6 +32,9 @@ export const ROUTES = {
     /** A run URL trimmed to `runs`: redirects to the list. */
     runsTrimmed: 'runs',
     overview: 'overview',
+    live: 'live',
+    liveTurns: 'live/turns',
+    liveTurn: 'live/turns/*',
     charts: 'charts',
     models: 'models',
     experiments: 'experiments',

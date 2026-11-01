@@ -12,7 +12,7 @@ import { constrained } from './layout';
 
 /** Pages where the archived banner shows (shell.js ARCHIVED_NOTICE_PAGES). */
 const ARCHIVED_NOTICE =
-  /^(|overview|charts|models|datasets(\/.*)?|settings|runs\/.*|experiments(\/.*)?|environments(\/.*)?)$/;
+  /^(|overview|live(\/.*)?|charts|models|datasets(\/.*)?|settings|runs\/.*|experiments(\/.*)?|environments(\/.*)?)$/;
 /** Pages an archived project does not have (server 404s them). */
 const ARCHIVED_HIDDEN = /^(analysis|reviews)$/;
 
