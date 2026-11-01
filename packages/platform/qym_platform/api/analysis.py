@@ -6789,6 +6789,25 @@ def publish_project_analysis_rule_version(
     version.published_at = now
     version.published_by_user_id = principal.user.id
     version.updated_at = now
+    # C016: a project's first publish becomes its production version; later
+    # publishes move production only when asked ("Set as production" on).
+    has_production = (
+        db.query(ProjectAnalysisRuleAlias.id)
+        .filter(
+            ProjectAnalysisRuleAlias.project_id == run.project_id,
+            ProjectAnalysisRuleAlias.alias == "production",
+        )
+        .first()
+        is not None
+    )
+    if not has_production and request.set_alias != "production":
+        _set_analysis_rule_alias(
+            db,
+            project_id=run.project_id,
+            alias_name="production",
+            version=version,
+            actor_user_id=principal.user.id,
+        )
     if request.set_alias:
         _set_analysis_rule_alias(
             db,
