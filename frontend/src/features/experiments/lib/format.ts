@@ -97,21 +97,37 @@ export function sweepSummary(job: ExperimentJob, labels: Record<string, string> 
 export interface JobTally {
   ok: number;
   failed: number;
+  /** Queued, blocked or running: every job that has not finished. */
   live: number;
   cancelled: number;
+  /** The part of `live` that is on the Evaluation Service (not queued or blocked here). */
+  running: number;
 }
 
 /** ok / failed / live / cancelled from the experiment's `job_counts`. */
 export function tallyJobCounts(counts: Experiment['job_counts'] | null | undefined): JobTally {
-  const tally: JobTally = { ok: 0, failed: 0, live: 0, cancelled: 0 };
+  const tally: JobTally = { ok: 0, failed: 0, live: 0, cancelled: 0, running: 0 };
   for (const [status, raw] of Object.entries(counts ?? {})) {
     const n = Number(raw) || 0;
     if (status === 'SUCCEEDED') tally.ok += n;
     else if (status === 'FAILED' || status === 'TIMED_OUT') tally.failed += n;
     else if (status === 'CANCELLED') tally.cancelled += n;
-    else tally.live += n;
+    else {
+      tally.live += n;
+      // queued and blocked jobs wait on the platform; the others are on the Evaluation Service
+      if (status !== 'QUEUED' && status !== 'BLOCKED') tally.running += n;
+    }
   }
   return tally;
+}
+
+/** "5/6 · 1 failed": succeeded of all jobs; the failed and cancelled parts only when they are not zero (C139). */
+export function jobsText(t: JobTally): string {
+  const total = t.ok + t.failed + t.cancelled + t.live;
+  const parts = [`${t.ok}/${total}`];
+  if (t.failed) parts.push(`${t.failed} failed`);
+  if (t.cancelled) parts.push(`${t.cancelled} cancelled`);
+  return parts.join(' · ');
 }
 
 /** "kb_version" -> "KB version": words of two letters or fewer read as acronyms. */

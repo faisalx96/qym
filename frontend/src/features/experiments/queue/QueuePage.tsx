@@ -54,7 +54,6 @@ import {
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { experimentPath } from '../paths';
-import { relTime } from '../lib/format';
 import { CancelSplitDialog, type CancelSplitDialogProps } from './CancelSplitDialog';
 import { RemoteQueueSection } from './RemoteQueueSection';
 import {
@@ -386,14 +385,6 @@ export function QueuePage() {
       <PageHeader
         title="Queue"
         description="Jobs waiting for or running on this project’s Evaluation Service environments, in dispatch order."
-        meta={[
-          query.data ? `${plural(query.data.total, 'job')}` : '',
-          query.dataUpdatedAt ? (
-            <span key="r">refreshed {relTime(new Date(query.dataUpdatedAt).toISOString(), now)}</span>
-          ) : (
-            ''
-          ),
-        ].filter(Boolean)}
         tabs={<ExperimentsTabs current="queue" />}
       />
       {query.data ? null : filterControls}
