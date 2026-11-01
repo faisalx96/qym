@@ -43,8 +43,7 @@ export default defineConfig({
     target: 'es2022',
     rollupOptions: {
       output: {
-        // Merge chunks under 20 kB into a neighbour: on a high-latency link every request is a round trip (perf round 6).
-        experimentalMinChunkSize: 20_000,
+        // C079: no experimentalMinChunkSize: merging small chunks pulled other pages' code into the entry chunk.
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           query: ['@tanstack/react-query'],
@@ -60,15 +59,10 @@ export default defineConfig({
     // Same-origin for the browser: cookies, the write guard and the login
     // redirect all see the platform's own origin. No CORS exists or is added.
     proxy: Object.fromEntries(
-      [
-        '/v1',
-        '/api',
-        '/healthz',
-        '/api-docs',
-        '/openapi.json',
-        '/ingestion',
-        '/workers',
-      ].map((p) => [p, { target: platform, changeOrigin: false }]),
+      ['/v1', '/api', '/healthz', '/api-docs', '/openapi.json', '/ingestion', '/workers'].map((p) => [
+        p,
+        { target: platform, changeOrigin: false },
+      ]),
     ),
   },
 });

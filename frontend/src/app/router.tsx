@@ -4,10 +4,7 @@ import { ROUTES } from './routes';
 import { AppShell } from '@/features/shell/AppShell';
 import { RequireAuth } from '@/features/shell/RequireAuth';
 import { ProjectLayout } from '@/features/shell/ProjectLayout';
-import { LoginPage } from '@/features/shell/login/LoginPage';
 import { ProjectsPage } from '@/features/shell/projects/ProjectsPage';
-import { ProfilePage } from '@/features/shell/profile/ProfilePage';
-import { ProjectSettingsPage } from '@/features/shell/settings/ProjectSettingsPage';
 import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { ProjectRedirect } from '@/features/shell/ProjectRedirect';
@@ -19,7 +16,14 @@ import { RunAnalyzerRedirect } from '@/features/analyzer/RunAnalyzerRedirect';
 import { lazyPage } from './lazyPage';
 import { loadRunDetailPage, runRouteLoader } from './prefetch';
 
-// Heavy pages are fetched on first visit so the entry chunk stays small (see frontend/README.md).
+// Heavy pages are fetched on first visit so the entry chunk stays small (see frontend/README.md). C079: settings (with
+// its environment editors), profile and login load only when opened.
+const LoginPage = lazyPage(() => import('@/features/shell/login/LoginPage'), 'LoginPage');
+const ProfilePage = lazyPage(() => import('@/features/shell/profile/ProfilePage'), 'ProfilePage');
+const ProjectSettingsPage = lazyPage(
+  () => import('@/features/shell/settings/ProjectSettingsPage'),
+  'ProjectSettingsPage',
+);
 const OverviewPage = lazyPage(() => import('@/features/runs-list/OverviewPage'), 'OverviewPage');
 const ChartsPage = lazyPage(() => import('@/features/runs-list/ChartsPage'), 'ChartsPage');
 const RunDetailPage = lazyPage(loadRunDetailPage, 'RunDetailPage');
