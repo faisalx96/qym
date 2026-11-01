@@ -1,6 +1,7 @@
 import type { MaintenanceOverview } from '@/api/admin';
+import { retentionLabel } from '@/lib/retention';
 import { KeyValueGrid, Skeleton } from '@/ui';
-import { formatBytes } from '../format';
+import { formatBytes, formatCount } from '../format';
 import styles from './maintenance.module.css';
 
 type Workers = MaintenanceOverview['workers'];
@@ -35,16 +36,39 @@ function WorkersValue({ w }: { w: Workers }) {
 
 const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 
+export interface OutboxStats {
+  total_bytes: number;
+  rows: number;
+  oldest_age_seconds: number | null;
+}
+
+/** An age in its largest whole unit: '31 days', '5 h', '40 min'. */
+function age(seconds: number): string {
+  if (seconds >= 86_400) return days(Math.floor(seconds / 86_400));
+  if (seconds >= 3_600) return `${Math.floor(seconds / 3_600)} h`;
+  return `${Math.max(1, Math.floor(seconds / 60))} min`;
+}
+
+/** The outbox fact (C074): size and rows, and the oldest row's age when there is one. */
+export function outboxText(o: OutboxStats): string {
+  const parts = [formatBytes(o.total_bytes), `${formatCount(o.rows)} rows`];
+  if (o.oldest_age_seconds !== null && o.rows > 0) parts.push(`oldest ${age(o.oldest_age_seconds)}`);
+  return parts.join(' · ');
+}
+
 /**
- * Platform settings and worker state: eight facts in two rows of four, plain words and numbers (no pills). The database
- * size comes from the slow statistics request: until it arrives its value is a skeleton of the same height.
+ * Platform settings and worker state: plain words and numbers in rows of four (no pills). The database size and the
+ * outbox come from the slow statistics request: until it arrives their values are skeletons of the same height.
  */
 export function MaintenanceSummary({
   data,
   sizeBytes,
+  outbox,
 }: {
   data: MaintenanceOverview;
   sizeBytes?: number | null;
+  /** undefined = still loading, null = not available (SQLite, or the statistics failed). */
+  outbox?: OutboxStats | null;
 }) {
   const s = data.settings;
   return (
@@ -64,9 +88,29 @@ export function MaintenanceSummary({
               ),
             mono: true,
           },
+          ...(outbox === null
+            ? []
+            : [
+                {
+                  key: 'outbox',
+                  label: 'Outbox',
+                  value:
+                    outbox === undefined ? (
+                      <Skeleton kind="value" width={96} label="Loading the outbox size" />
+                    ) : (
+                      outboxText(outbox)
+                    ),
+                  mono: true,
+                },
+              ]),
           { key: 'events', label: 'Event log', value: s.event_log_mode },
           { key: 'spans', label: 'Span retention', value: days(s.span_retention_days), mono: true },
-          { key: 'grace', label: 'Deleted-run grace', value: days(s.deleted_run_grace_days), mono: true },
+          {
+            key: 'grace',
+            label: 'Deleted runs retention',
+            value: retentionLabel(s.deleted_run_grace_days),
+            mono: s.deleted_run_grace_days !== 0,
+          },
           {
             key: 'partitions',
             label: 'Span partitions ahead',

@@ -148,6 +148,7 @@ export function MaintenanceTab() {
     : 'error' in db
       ? null
       : (db.database?.size_bytes ?? null);
+  const outbox = !db ? (stats.isError ? null : undefined) : 'error' in db ? null : (db.outbox ?? null);
   const active = data.jobs.some((j) => ['queued', 'running', 'cancel_requested'].includes(j.status));
   return (
     <>
@@ -174,7 +175,7 @@ export function MaintenanceTab() {
         }
         bodyClassName={styles.dbBody}
       >
-        <MaintenanceSummary data={data} sizeBytes={sizeBytes} />
+        <MaintenanceSummary data={data} sizeBytes={sizeBytes} outbox={outbox} />
         <DbStatsTables query={stats} />
       </Section>
       <Section

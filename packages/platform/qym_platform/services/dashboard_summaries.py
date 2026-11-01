@@ -2187,17 +2187,27 @@ def prune_dashboard_state(db, *, before=None, limit=1000):
 
 
 def prune_dashboard_events(db, *, before=None, limit=1000):
-    """Bounded retention of published outbox rows behind settled watermarks."""
+    """Bounded retention of published outbox rows behind settled watermarks.
+
+    Published rows of a deleted run's partition go too, at any age (C074):
+    deletion removes the publication, and a restore rebuilds from source instead
+    of replaying them, so nothing reads them again. Without this they stayed
+    until the run purge, which never comes with retention off, and every prune
+    rescanned them.
+    """
     before = before or datetime.utcnow() - MAX_LATE_EVENT_AGE
+    settled = and_(
+        Partition.queue_state == "ready",
+        Partition.last_applied_version >= Change.source_version,
+        Change.created_at < before,
+    )
     versions = list(
         db.scalars(
             select(Change.source_version)
             .join(Partition, Partition.partition_key == Change.partition_key)
             .where(
                 Change.published_at.isnot(None),
-                Change.created_at < before,
-                Partition.last_applied_version >= Change.source_version,
-                Partition.queue_state == "ready",
+                or_(settled, Partition.queue_state == "deleted"),
                 Partition.lease_until.is_(None),
             )
             .order_by(Change.source_version)
@@ -2597,6 +2607,8 @@ class DashboardSummaryWorker:
 
     # Live runs whose last rebuild time this process remembers.
     LIVE_REFRESH_MAX_RUNS = 1024
+    # Seconds between two outbox retention passes (C074).
+    EVENT_PRUNE_INTERVAL = 60.0
 
     def __init__(
         self,
@@ -2627,6 +2639,8 @@ class DashboardSummaryWorker:
         # Discovery/reconcile scans are cheap but need not run 20x per second.
         self._next_reconcile = 0.0
         self._next_bootstrap = 0.0
+        # Outbox retention needs no 1 s cadence: it runs at most once a minute (C074).
+        self._next_event_prune = 0.0
 
     def start(self):
         with self._lock:
@@ -2746,7 +2760,10 @@ class DashboardSummaryWorker:
             db.info["dashboard_projection_worker"] = True
             repair_dirty_buckets(db, limit=self.max_partitions)
             prune_dashboard_state(db, limit=self.max_events)
-            prune_dashboard_events(db, limit=self.max_events)
+            now = time.monotonic()
+            if now >= self._next_event_prune:
+                self._next_event_prune = now + self.EVENT_PRUNE_INTERVAL
+                prune_dashboard_events(db, limit=self.max_events)
             db.commit()
         self._made_progress &= not failed
         return processed

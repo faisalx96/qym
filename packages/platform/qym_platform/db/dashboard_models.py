@@ -75,6 +75,13 @@ class DashboardChangeEvent(NumericContribution, Base):
             "published_at",
             "source_version",
         ),
+        # Outbox retention walks published rows in source order (C074, migration 0092).
+        Index(
+            "ix_dashboard_event_published",
+            "source_version",
+            postgresql_where=text("published_at IS NOT NULL"),
+            sqlite_where=text("published_at IS NOT NULL"),
+        ),
         {"sqlite_autoincrement": True},
     )
 

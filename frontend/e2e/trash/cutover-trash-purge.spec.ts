@@ -107,7 +107,7 @@ test.describe('trash purge countdown', () => {
     await expect(
       page.getByText('Automatic purge is off: deleted runs are kept until removed by an operator.'),
     ).toBeVisible();
-    await expect(page.getByText('Retention Off')).toBeVisible();
+    await expect(page.getByText('Retention Off (kept until restored)')).toBeVisible();
     await expect(dataRows(page).first()).toContainText('Not scheduled');
     await expect(page.locator('[data-soon]')).toHaveCount(0);
   });

@@ -15,6 +15,7 @@ import { bootstrap } from '@/lib/runtime';
 import { errorsLeftOut, metricDirection } from '@/lib/metrics';
 import { ConfirmDialog, Dialog, FormDialog, KeyValueGrid, Text, Button, useToast } from '@/ui';
 import { passNumber, passRefBase } from './selection';
+import { retentionLabel } from '@/lib/retention';
 
 export type DialogState =
   | { kind: 'workflow'; action: 'approve' | 'reject' | 'unapprove' | 'unreject'; row: RunRow }
@@ -56,9 +57,7 @@ const WORKFLOW_COPY = {
 };
 
 /** C251 (with C178's words): the place is Deleted runs, and the dialog names its Retention. */
-export function retentionLabel(days: number): string {
-  return days === 0 ? 'Off (kept until restored)' : `${days} day${days === 1 ? '' : 's'}`;
-}
+export { retentionLabel };
 
 export function deleteDescription(graceDays: number | null): string {
   const retention = graceDays === null ? '' : ` Retention: ${retentionLabel(graceDays)}.`;

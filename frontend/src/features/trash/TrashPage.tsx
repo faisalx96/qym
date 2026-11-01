@@ -38,6 +38,7 @@ import {
   StatusMark,
 } from '@/ui';
 import styles from './TrashPage.module.css';
+import { retentionLabel } from '@/lib/retention';
 
 const DAY = 86_400_000;
 
@@ -296,7 +297,7 @@ export function TrashPage() {
             : 'Automatic purge is off: deleted runs are kept until removed by an operator.'
         }
         meta={[
-          <span key="r">Retention {grace ? `${grace} days` : 'Off'}</span>,
+          <span key="r">Retention {retentionLabel(grace ?? 0)}</span>,
           <span key="n">
             {filtered ? `${total} matching` : `${total} deleted run${total === 1 ? '' : 's'}`}
           </span>,
@@ -342,7 +343,7 @@ export function TrashPage() {
         />
       ) : list.data && rows.length === 0 ? (
         <EmptyState
-          title={filtered ? 'No deleted runs match' : 'Nothing in the trash'}
+          title={filtered ? 'No deleted runs match' : 'No deleted runs'}
           body={
             filtered ? 'Try another search or project.' : 'Runs you delete appear here until they are purged.'
           }

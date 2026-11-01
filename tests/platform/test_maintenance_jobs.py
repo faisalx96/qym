@@ -574,3 +574,34 @@ def test_deferred_index_catalog_matches_the_migrations_that_queue_it():
         assert maintenance.validate_params(
             "create_deferred_indexes", {"indexes": [spec]}
         ) == {"indexes": [spec["name"]]}
+
+
+def test_outbox_stats_read_size_rows_and_oldest_age_without_a_count():
+    """C074: Maintenance shows the outbox size, rows and oldest row age; rows come from the table statistics."""
+    from qym_platform.tools.perf.db_stats import outbox_stats
+
+    class Conn:
+        def __init__(self):
+            self.sql = []
+
+        def execute(self, statement):
+            self.sql.append(str(statement))
+
+            class Result:
+                @staticmethod
+                def scalar():
+                    return 2678400.4
+
+            return Result()
+
+    conn = Conn()
+    tables = [
+        {"table": "runs", "total_bytes": 1, "live_rows": 1},
+        {"table": "dashboard_change_events", "total_bytes": 2_000_000_000, "live_rows": 15174},
+    ]
+    assert outbox_stats(conn, tables) == {
+        "total_bytes": 2_000_000_000,
+        "rows": 15174,
+        "oldest_age_seconds": 2678400,
+    }
+    assert len(conn.sql) == 1 and "count(" not in conn.sql[0].lower()

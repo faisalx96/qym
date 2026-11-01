@@ -1728,7 +1728,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
     if runs:
         parts.append(f"{runs} run{'s' if runs != 1 else ''}")
     if trashed:
-        parts.append(f"{trashed} run{'s' if trashed != 1 else ''} in Trash")
+        parts.append(f"{trashed} deleted run{'s' if trashed != 1 else ''}")
     # Deleted runs keep blocking until retention purges them, so say when.
     grace_days = PlatformSettings().deleted_run_grace_days
     if grace_days > 0:
@@ -1736,7 +1736,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
         if archived:
             purge += ", and purging is paused while the project is archived"
     else:
-        purge = "automatic Trash purging is turned off on this platform"
+        purge = "Retention is Off on this platform, so deleted runs are kept until restored"
     advice = (
         "It stays archived and keeps its data."
         if archived
@@ -1745,7 +1745,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
     return (
         f"This project still has {' and '.join(parts)}. Runs are never deleted with "
         "a project: it can be deleted only once all its runs are deleted and purged "
-        f"from Trash ({purge}). {advice}"
+        f"from Deleted runs ({purge}). {advice}"
     )
 
 

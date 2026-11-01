@@ -90,6 +90,8 @@ export type DbStats =
       database?: { size_bytes?: number; [k: string]: unknown };
       tables?: DbTableStats[];
       run_events_by_type?: { type: string; rows: number; payload_bytes: number }[];
+      /** The dashboard outbox (C074): absent on SQLite. */
+      outbox?: { total_bytes: number; rows: number; oldest_age_seconds: number | null };
     };
 
 /** GET /api/admin/maintenance/db-stats: collected at most once a minute (they scan run_events, so they are slow). */

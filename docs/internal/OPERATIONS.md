@@ -207,12 +207,14 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0091`, following `0050` through
+The combined migration chain has one head, `0092`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
 Migrations `0058`–`0084` and `0086`–`0091` are quick DDL or small job/queue inserts.
+`0092` builds one partial index on `dashboard_change_events`; when that table is over
+256 MB it queues the build (`create_deferred_indexes`, CONCURRENTLY) instead.
 `0085` switches `spans` to daily partitions; it locks `spans` for an instant only
 to drop still-empty monthly partitions that start after today.
 
@@ -249,7 +251,8 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
-| 0091 | Four empty tables: `feedback_requests`, `feedback_messages`, `feedback_request_events` and the singleton `feedback_agent_connection` (checks, indexes) | None: Feedback shows "not configured" until an administrator saves the connection in Admin → Feedback agent. |
+| 0092 | Partial index `ix_dashboard_event_published` on `dashboard_change_events (source_version) WHERE published_at IS NOT NULL` (outbox retention, C074) | `create_deferred_indexes` — **queued, runs by itself** only when the table is over 256 MB: builds the index CONCURRENTLY. Smaller tables get it in the migration |
+| 0091 | Four empty tables: `feedback_requests`, `feedback_messages`, `feedback_request_events` and the singleton `feedback_agent_connection` (checks, indexes) | None: Feedback shows "not configured" until an administrator saves the connection in Admin → Feedback assistant. |
 | 0090 | `eval_experiment_jobs.dataset_index` (constant default 0, `CHECK >= 0`); the unique key `uq_eval_experiment_job_attempt` widens to `(experiment_id, environment_id, combo_index, dataset_index, attempt)` (PostgreSQL alters in place; SQLite rebuilds the table and restores the run links) | None: existing jobs get `dataset_index = 0`. The downgrade refuses while any job has `dataset_index > 0` (a per-dataset fan-out) |
 | 0089 | Empty `run_datasets` table (the dataset versions of a run over several datasets: one row per entry, FK to the run `ON DELETE CASCADE`, FKs to the dataset and version `ON DELETE SET NULL`); `runs.dataset_count` (constant default 1); `run_items.dataset_position` (nullable `SMALLINT`) | None: no backfill, every existing run reads as a single-dataset run; no index on `run_items` |
 | 0088 | `eval_experiments.dataset_read_token_id` (nullable FK) / `dataset_read_token_encrypted` (nullable) / `latency_sensitive` (constant default false); `eval_environments.latency_sensitive_min_role` (constant default `member`); `dataset_read_tokens.kind` (constant default `admin`) / `experiment_id` (nullable FK); `eval_experiment_jobs.admitted_at` / `deferral_reason` (nullable), `deferrals` / `contaminated_attempts` (constant default 0) | None: existing experiments keep using the worker's own dataset read token until retried, nothing is latency-sensitive, every environment allows latency-sensitive runs to any member |
@@ -341,7 +344,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0091` and a healthy API. The API process then runs every queued job itself.
+   `0092` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -523,7 +526,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0091`.
+deployment only after the API has migrated to `0092`.
 
 ```yaml
 apiVersion: apps/v1
