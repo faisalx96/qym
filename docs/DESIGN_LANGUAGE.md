@@ -285,7 +285,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   focus outline. Semantic actions keep their meaning (approve/submit green,
   reject/delete red). The one exception is `tile` (table row actions only): the
   tone's `--tint-soft` 20px square at rest and `--tint-strong` on hover, focus and press,
-  the glyph in the tone (accent, or `--error` for danger). Help markers and passive icons are not icon actions.
+  the glyph in the tone (accent, `--error` for danger, `--accent-tertiary` for `meta`, the auto-analysis purple).
+  `ActionTile` draws the same square with no action of its own, as the glyph of a `RowMenu` item. Help markers and
+  passive icons are not icon actions.
   Revoking a key or token and disabling a user use the `ban` glyph (a circle with a slash), never a bare square or a
   cross (round 10). A row action menu that would hold one action with a glyph, or a delete, shows it as an icon
   instead; a lone action with no glyph stays in the menu (round 10).
@@ -539,10 +541,19 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   or a press outside folds it). Scrolled to the end, or with no overflow, the column renders as usual, with its
   title (`Actions`, end-aligned; the title is hidden while folded). A fold
   column never shows a boundary line or shade, in any state. A row with nothing to act on has no handle. **Row
-  actions** are the old qym tiles (round 9): `IconButton tile`, 20px (`--badge-height`, 12px glyph), 4px apart, in this order: the review menu
-  (`file` glyph, accent tile: Approve, Reject, Unapprove, Unreject, Transfer ownership), Submit for review (`send`
-  glyph, accent tile; never a check, which reads as a status) and Delete (`trash`, danger tile) at the edge. Pass
-  rows carry the menu (Open pass) and Delete the same way. Wide
+  actions** (owner decision, Nov 1: "all action buttons inside >"): the runs Actions column is a `Column.menuColumn`
+  (a fold column with no body) whose cell is one `RowMenu`: a borderless 20px handle (`chevron-right`, named
+  "Actions for <row>", `--bg-elevated`) on the hovered or focused row (every row on a touch screen) that opens one
+  menu with every row action. Each item leads with its action tile (`ActionTile`: the tone's `--tint-soft` 20px square,
+  12px glyph), so the menu keeps the row's iconography: Open auto-analysis (sparkle, `meta` purple tile and label),
+  Submit (`send`, accent; never a check, which reads as a status), the review items (Approve `check`, Reject `close`
+  danger, Unapprove and Unreject `retry`, Transfer ownership on the review menu's `file` tile), then Delete (`trash`,
+  danger) after a separator. No tile sits in the row itself. Pass rows carry the same handle and menu (Open
+  auto-analysis, Open pass, Delete pass).
+  **Keyboard** (`singleTabStop`, the runs table, C089): the rows are one Tab stop (the grid pattern): arrows and j/k
+  move between rows, Enter opens, F2 moves focus into the focused row's links and buttons (Tab walks them) and Escape
+  returns to the row. The first Tab into the table shows a `Skip to pagination` button at its top start (hidden until
+  focused). A cell keeps `--space-xs` of block room inside its clip, so a control's full 2px focus ring shows (C090). Wide
   tables expose only the persistent mirrored horizontal scrollbar rail (never both native and mirror), which is the
   overflow cue. Below 640px tables that declare
   column `priority` become stacked cards. Chrome parts (`DataTable.Toolbar`, `DataTable.Footer`, selection bar, Columns
@@ -755,7 +766,7 @@ cross, trace clock, analysis sparkle), series keep their letter or name.
 | Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts |
 | Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` | 3px rail, glyph, title colour | rail and glyph, never a filled card |
 | Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is sky blue (teal is reserved for selection, links and the primary action), never relied on alone |
-| Definition metadata | what was run | `--accent-tertiary` (purple) | `Tag kind=task|version|config`, `KeyValueGrid kind` | purple is only this |
+| Definition metadata | what was run | `--accent-tertiary` (purple) | `Tag kind=task|version|config`, `KeyValueGrid kind` | purple is only this, and the auto-analysis entry points (Analyze, N causes, Open auto-analysis), which keep their purple (owner decision, Nov 1) |
 
 Palette rules from the design pass (`docs/internal/ui-migration/redesign2/colour-review.md`): the score ramp is
 red `#ef4444`, orange `#f97316`, yellow `#facc15`, light green `#4ade80`, green `#10b981`; adjacent bands stay at

@@ -10,7 +10,8 @@ import {
   freshProject,
   openFacet,
   openRuns,
-  revealActions,
+  openRowMenu,
+  pickRowAction,
   rowOf,
 } from './support';
 
@@ -62,7 +63,7 @@ test.describe('axe on the runs-list surfaces', () => {
     await openRuns(page, await ensureProject(request));
     await page.getByRole('button', { name: 'Select', exact: true }).click();
     await clickBox(dataRows(page).first().getByRole('checkbox'));
-    await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
     await expectClean(page, 'select mode');
   });
 
@@ -78,17 +79,10 @@ test.describe('axe on the runs-list surfaces', () => {
 
   test('Runs: row More menu and a confirm dialog open', async ({ page, request }) => {
     await openRuns(page, await ensureProject(request));
-    await revealActions(rowOf(page, 'text2sql-gpt-4o-000'));
-    await rowOf(page, 'text2sql-gpt-4o-000')
-      .getByRole('button', { name: /^More actions for / })
-      .click();
-    await expect(page.getByRole('menu')).toBeVisible();
-    await expectClean(page, 'more menu');
+    await openRowMenu(page, rowOf(page, 'text2sql-gpt-4o-000'));
+    await expectClean(page, 'row menu');
     await page.keyboard.press('Escape');
-    await revealActions(rowOf(page, 'text2sql-gpt-4o-000'));
-    await rowOf(page, 'text2sql-gpt-4o-000')
-      .getByRole('button', { name: /^Delete / })
-      .click();
+    await pickRowAction(page, rowOf(page, 'text2sql-gpt-4o-000'), 'Delete');
     await expect(page.getByRole('alertdialog').or(page.getByRole('dialog'))).toBeVisible();
     await expectClean(page, 'delete dialog');
   });

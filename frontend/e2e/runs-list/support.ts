@@ -183,27 +183,33 @@ export function failOnNativeDialogs(page: Page): { seen: () => string[] } {
 }
 
 /**
- * Opens a row's folded actions (round 8): while the table still has columns past its end edge the Actions cell is
- * one small handle, which this presses. A no-op when the actions already show (scrolled to the end, no overflow,
- * card mode) or the row has nothing to act on.
+ * Shows a row's menu handle (owner decision, Nov 1: every row action sits in one menu behind the row's '>' handle,
+ * which shows on the hovered or focused row).
  */
 export async function revealActions(row: Locator): Promise<void> {
-  const handle = row.locator('td[data-col="actions"] button[data-fold-handle]');
-  if (!(await handle.count()) || !(await handle.isVisible())) return;
-  if ((await handle.getAttribute('aria-expanded')) !== 'true') await handle.click();
-  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  await row.hover();
 }
 
-/** Opens the overflow menu of pass row `n` (its own row of the runs table; Open pass is in it). */
-export async function openPassMenu(panel: Locator, page: Page, n: number): Promise<void> {
-  const row = panel.locator(`tr[data-pass-row="${n}"]`);
-  await revealActions(row);
-  await row.getByRole('button', { name: new RegExp(`^More actions for pass ${n}`) }).click();
-  await expect(page.getByRole('menu')).toBeVisible();
+/** Opens a row's menu (its one '>' handle, named "Actions for <row>") and returns the menu. */
+export async function openRowMenu(page: Page, row: Locator): Promise<Locator> {
+  await row.hover();
+  await row.locator('td[data-col="actions"] button[data-row-menu]').click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  return menu;
 }
-/** Pass rows carry a Delete pass icon button (redesign 4: no menu step). */
-export async function deletePassFromMenu(panel: Locator, _page: Page, n: number): Promise<void> {
-  const row = panel.locator(`tr[data-pass-row="${n}"]`);
-  await revealActions(row);
-  await row.getByRole('button', { name: `Delete pass ${n}` }).click();
+
+/** Opens a row's menu and picks one of its items. */
+export async function pickRowAction(page: Page, row: Locator, item: string): Promise<void> {
+  const menu = await openRowMenu(page, row);
+  await menu.getByRole('menuitem', { name: item, exact: true }).click();
+}
+
+/** Opens the menu of pass row `n` (its own row of the runs table; Open pass is in it). */
+export async function openPassMenu(panel: Locator, page: Page, n: number): Promise<void> {
+  await openRowMenu(page, panel.locator(`tr[data-pass-row="${n}"]`));
+}
+/** Pass rows: Delete pass is the last item of the pass's row menu. */
+export async function deletePassFromMenu(panel: Locator, page: Page, n: number): Promise<void> {
+  await pickRowAction(page, panel.locator(`tr[data-pass-row="${n}"]`), `Delete pass ${n}`);
 }

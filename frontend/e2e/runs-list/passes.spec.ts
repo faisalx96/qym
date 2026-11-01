@@ -115,7 +115,7 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await expect(passBoxes).toHaveCount(3);
     const parent = page.getByRole('checkbox', { name: `Select ${NAME}`, exact: true });
     await clickBox(passBoxes.nth(0));
-    await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
     await expect.poll(() => parent.evaluate((el) => (el as HTMLInputElement).indeterminate)).toBe(true);
     const stored = await page.evaluate(
       (slug) => JSON.parse(sessionStorage.getItem(`qym:runs-selection:${slug}`) ?? 'null'),
@@ -123,15 +123,15 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     );
     expect(stored.selected).toEqual([expect.stringMatching(/::pass1$/)]);
     await clickBox(passBoxes.nth(1));
-    await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('2 runs selected');
     // ticking the parent of an expanded repeat run ticks all of its passes (3 executions)
     await clickBox(page.getByRole('checkbox', { name: `Select ${NAME}`, exact: true }));
-    await expect(page.getByTestId('selection-bar')).toContainText('3 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('3 runs selected');
     await expect(passBoxes.nth(2)).toBeChecked();
     await expect(parent).toBeChecked();
     // and clears them all again
     await clickBox(parent);
-    await expect(page.getByTestId('selection-bar')).toContainText('0 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('0 runs selected');
     await expect(passBoxes.nth(0)).not.toBeChecked();
   });
 
@@ -166,7 +166,7 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       s.project.slug,
     );
     expect(stored.selected).toEqual([expect.stringMatching(/::pass1$/)]);
-    await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
     await clickBox(passBoxes.nth(1));
     await page.getByTestId('selection-bar').getByRole('button', { name: 'Compare' }).click();
     await expect(page).toHaveURL(/\/compare\?/);
@@ -226,6 +226,6 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(3);
     await openPassMenu(panel, page, 1);
     await expect(page.getByRole('menuitem', { name: /Open pass 1/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Delete pass/ })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: /Delete pass/ })).toHaveCount(0);
   });
 });

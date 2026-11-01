@@ -215,10 +215,10 @@ test.describe('runs list: filters, sort, search (J2)', () => {
   }) => {
     const s = await sharedProject(request, 12);
     const cap = capture(page, 'runs');
-    await openRuns(page, s.project.slug, 'task=summarize');
+    // C208: with no official run the Origin control shows only while an Origin filter is set (the URL keeps working)
+    await openRuns(page, s.project.slug, 'task=summarize&origin=official');
     await openFilters(page);
     const origin = page.getByRole('radiogroup', { name: 'Origin' });
-    await origin.getByText('Official', { exact: true }).click();
     await expect.poll(() => urlParams(page).get('origin')).toBe('official');
     await expect.poll(() => listRequests(cap).at(-1)!.body.filters.origins).toEqual(['official']);
     await expect(page.getByText('No runs match current filters')).toBeVisible();
@@ -344,7 +344,9 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await openRuns(page, s.project.slug);
     await page.locator('body').click({ position: { x: 5, y: 5 } });
     await page.keyboard.press('/');
-    const search = page.getByRole('searchbox', { name: 'Search runs' }).or(page.getByLabel('Search runs'));
+    const search = page
+      .getByRole('searchbox', { name: 'Search run or dataset names' })
+      .or(page.getByLabel('Search run or dataset names'));
     await expect(search).toBeFocused();
     const before = listRequests(cap).length;
     await search.pressSequentially('summarize', { delay: 20 });
@@ -374,7 +376,7 @@ test.describe('runs list: filters, sort, search (J2)', () => {
   test('Esc in the search box clears the field and the q filter', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug, 'q=summarize');
-    const search = page.getByLabel('Search runs');
+    const search = page.getByLabel('Search run or dataset names');
     await expect(search).toHaveValue('summarize');
     await search.focus();
     await page.keyboard.press('Escape');

@@ -96,7 +96,13 @@ class TestFallback:
                 assert res.headers["cache-control"] == "no-store"
                 assert '<base href="/">' in res.text
                 boot = _bootstrap(res.text)
-                assert boot == {"rootPath": "", "authMode": "none", "sessionAuth": False, "environment": "test"}
+                assert boot == {
+                    "rootPath": "",
+                    "authMode": "none",
+                    "sessionAuth": False,
+                    "environment": "test",
+                    "deletedRunGraceDays": 30,
+                }
                 assert 'window.__QYM_ROOT_PATH__ = ""' in res.text
                 assert "<!--__QYM_APP_BOOTSTRAP__-->" not in res.text
 

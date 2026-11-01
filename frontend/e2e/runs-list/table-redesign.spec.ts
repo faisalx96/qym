@@ -65,7 +65,7 @@ test.describe('runs table redesign', () => {
   test('Tab enters the header row once, arrows move between headers', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
-    await page.getByPlaceholder('Search runs').focus();
+    await page.getByPlaceholder('Search run or dataset names').focus();
     let inHeader = 0;
     for (let i = 0; i < 12; i++) {
       await page.keyboard.press('Tab');
@@ -133,7 +133,7 @@ test.describe('runs table redesign', () => {
       .nth(3)
       .locator('td[data-col="time"]')
       .click({ modifiers: ['Shift'] });
-    await expect(page.getByTestId('selection-bar')).toContainText('4 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('4 runs selected');
     expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
   });
 

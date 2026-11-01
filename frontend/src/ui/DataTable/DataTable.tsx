@@ -224,6 +224,13 @@ export interface DataTableProps<R> {
   focusedKey?: Key | null;
   onFocusedKeyChange?: (key: Key | null) => void;
 
+  /**
+   * One Tab stop for the body (the grid pattern, runs list C089): the controls inside rows leave the Tab order; arrows
+   * and j/k move between rows, Enter opens, F2 moves focus into the focused row's controls (Tab then walks them) and
+   * Escape returns to the row. A 'Skip to pagination' button opens the body for keyboard users.
+   */
+  singleTabStop?: boolean;
+
   children?: ReactNode;
 }
 
@@ -264,6 +271,30 @@ const VIRTUAL_FALLBACK = 30;
 const INTERACTIVE =
   'a, button, input, label, select, textarea, [role="button"], [role="checkbox"], [role="menuitem"]';
 
+const TABBABLE = 'a[href], button, input, select, textarea, [tabindex]';
+
+/** singleTabStop: take a row's controls out of the Tab order (their own tabindex is kept to restore). */
+function lockRow(tr: HTMLElement): void {
+  for (const el of tr.querySelectorAll<HTMLElement>(TABBABLE)) {
+    if (el.hasAttribute('data-dt-locked') || el.getAttribute('tabindex') === '-1') continue;
+    el.setAttribute('data-dt-prev-tabindex', el.getAttribute('tabindex') ?? '');
+    el.setAttribute('data-dt-locked', '');
+    el.setAttribute('tabindex', '-1');
+  }
+}
+
+/** Put a locked row's controls back in the Tab order; returns the first of them. */
+function unlockRow(tr: HTMLElement): HTMLElement | null {
+  for (const el of tr.querySelectorAll<HTMLElement>('[data-dt-locked]')) {
+    const prev = el.getAttribute('data-dt-prev-tabindex');
+    if (prev) el.setAttribute('tabindex', prev);
+    else el.removeAttribute('tabindex');
+    el.removeAttribute('data-dt-locked');
+    el.removeAttribute('data-dt-prev-tabindex');
+  }
+  return tr.querySelector<HTMLElement>(`:is(${TABBABLE}):not([tabindex="-1"]):not([disabled])`);
+}
+
 interface DataCellProps<R> {
   col: Column<R>;
   row: R;
@@ -295,12 +326,13 @@ const DataCell = memo(function DataCell<R>({
   const cellContent = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
   const fold = pin === 'end' && col.foldLabel ? col.foldLabel(row) : null;
   const content = fold !== null ? <FoldCell label={fold}>{cellContent}</FoldCell> : cellContent;
+  const menuFold = pin === 'end' && col.menuColumn === true;
   const sec = col.secondary?.(row);
   return (
     <td
       className={styles.td}
       data-col={col.id}
-      data-fold={fold !== null ? '' : undefined}
+      data-fold={fold !== null || menuFold ? '' : undefined}
       data-pin={pin ?? undefined}
       data-pin-edge={edge}
       style={{
@@ -435,6 +467,7 @@ function DataTableInner<R>({
   onGroupCollapsedChange,
   focusedKey: focusedProp,
   onFocusedKeyChange,
+  singleTabStop = false,
   children,
   ...rest
 }: DataTableProps<R>) {
@@ -925,6 +958,8 @@ function DataTableInner<R>({
 
   /* keyboard */
   const pendingNav = useRef<number | null>(null);
+  // singleTabStop: the row whose controls are in the Tab order after F2 (null: every row is locked)
+  const enteredRow = useRef<HTMLElement | null>(null);
   const rowEls = () => Array.from(bodyRef.current?.querySelectorAll<HTMLElement>('tr[data-row-id]') ?? []);
   const onBodyKeyDown = (e: ReactKeyboardEvent<HTMLTableSectionElement>) => {
     const tr = (e.target as HTMLElement).closest<HTMLElement>('tr[data-row-id]');
@@ -933,7 +968,18 @@ function DataTableInner<R>({
     if (inside) {
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (singleTabStop) lockRow(tr);
         tr.focus();
+      }
+      return;
+    }
+    if (singleTabStop && e.key === 'F2') {
+      // into the row: its controls join the Tab order until focus leaves the row (see the lock effect)
+      const first = unlockRow(tr);
+      if (first) {
+        e.preventDefault();
+        enteredRow.current = tr;
+        first.focus();
       }
       return;
     }
@@ -1409,7 +1455,7 @@ function DataTableInner<R>({
         data-col={col.id}
         data-align={align}
         data-pin={pin ?? undefined}
-        data-fold={pin === 'end' && col.foldLabel ? '' : undefined}
+        data-fold={pin === 'end' && (col.foldLabel || col.menuColumn) ? '' : undefined}
         data-pin-edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}
         data-sorted={active ? sort!.direction : undefined}
         data-sortable={canSort ? '' : undefined}
@@ -1761,6 +1807,43 @@ function DataTableInner<R>({
 
   const progress = refreshing;
 
+  // singleTabStop: keep every control inside a body row out of the Tab order, except in the row entered with F2. A
+  // MutationObserver re-locks rows that mount or re-render (virtual windows, child rows, live updates).
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!singleTabStop || cardMode || !body) return undefined;
+    const lockAll = () => {
+      for (const tr of body.querySelectorAll<HTMLElement>('tr[data-row-id]'))
+        if (tr !== enteredRow.current) lockRow(tr);
+    };
+    lockAll();
+    let frame = 0;
+    const mo = new MutationObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(lockAll);
+    });
+    mo.observe(body, { childList: true, subtree: true });
+    const onOut = (e: FocusEvent) => {
+      const row = enteredRow.current;
+      if (row && !row.contains(e.relatedTarget as Node | null)) {
+        lockRow(row);
+        enteredRow.current = null;
+      }
+    };
+    body.addEventListener('focusout', onOut);
+    return () => {
+      mo.disconnect();
+      cancelAnimationFrame(frame);
+      body.removeEventListener('focusout', onOut);
+    };
+  });
+  const skipToPagination = () => {
+    const target = cardRef.current?.querySelector<HTMLElement>(
+      '[data-dt-footer] nav :is(input, select, button:not([disabled]))',
+    );
+    target?.focus();
+  };
+
   const spacer = (key: string, height: number) => (
     <tr key={`spacer-${key}`} className={styles.spacer} aria-hidden="true" data-spacer={key}>
       <td colSpan={colCount} style={{ height }} />
@@ -1865,6 +1948,11 @@ function DataTableInner<R>({
         {otherKids}
         {banner}
         <div ref={hostRef} className={styles.bodyHost} data-cues={scrollCues ? '' : undefined}>
+          {singleTabStop && !cardMode && footerNode ? (
+            <button type="button" className={styles.skipLink} onClick={skipToPagination}>
+              Skip to pagination
+            </button>
+          ) : null}
           {progress ? <div className={styles.progress} role="progressbar" aria-label="Refreshing" /> : null}
           {cardMode ? (
             <CardList

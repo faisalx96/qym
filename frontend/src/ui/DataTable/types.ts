@@ -76,6 +76,12 @@ export interface Column<R> {
    * nothing to act on (see-through, no handle).
    */
   foldLabel?: (row: R) => string;
+  /**
+   * A pinned-end column whose cell holds only the row's `RowMenu` handle (the runs Actions column, owner decision
+   * Nov 1): like a fold column it is see-through while columns remain past the end (no line, no shade, clicks pass,
+   * the title hidden), and it renders as usual at the end. The handle shows on the hovered or focused row.
+   */
+  menuColumn?: boolean;
 }
 
 export interface RowAction<R> {

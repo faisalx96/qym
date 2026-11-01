@@ -3,7 +3,7 @@
  * Round 10: every action is a visible button at rest (no ghost), each with its icon; the ready action is the green one
  * (Compare, then Open Cohort once B balances A); Done selecting sits with the actions instead of across the toolbar.
  */
-import { Button, Icon, Text } from '@/ui';
+import { Button, Icon, Text, Tooltip } from '@/ui';
 import styles from './SelectionBar.module.css';
 
 export interface SelectionBarProps {
@@ -33,7 +33,7 @@ export interface SelectionBarProps {
 
 /** Guidance for the cohort picker: "Select k more", "Remove k", overlap, "Balanced: n vs n". */
 export function cohortGuidance(ua: number, ub: number, overlap: boolean): { text: string; valid: boolean } {
-  if (ub === 0) return { text: `Select ${ua} executions for Cohort B.`, valid: false };
+  if (ub === 0) return { text: `Select ${ua} runs for Cohort B.`, valid: false };
   if (ub < ua) return { text: `Select ${ua - ub} more`, valid: false };
   if (ub > ua) return { text: `Remove ${ub - ua}`, valid: false };
   if (overlap) return { text: 'Cohort B cannot include runs already in Cohort A.', valid: false };
@@ -66,7 +66,7 @@ export function SelectionBar(p: SelectionBarProps) {
         </span>
       ) : (
         <Text variant="sm" as="span" tone={n ? 'primary' : 'muted'} weight={600} className={styles.count}>
-          {`${n} ${n === 1 ? 'execution' : 'executions'} selected`}
+          {`${n} ${n === 1 ? 'run' : 'runs'} selected`}
         </Text>
       )}
       {cohortMode ? null : (
@@ -79,14 +79,22 @@ export function SelectionBar(p: SelectionBarProps) {
           Compare
         </Button>
       )}
-      <Button
-        variant={cohortMode ? 'accent' : 'neutral'}
-        onPress={p.onCohort}
-        isDisabled={cohortMode ? !cohort.valid : n < 1}
-        icon={<Icon name="split" size={12} />}
+      <Tooltip
+        content={
+          cohortMode
+            ? 'Compare Cohort A with the runs you picked as Cohort B.'
+            : 'Compare two groups of runs. The runs you picked become Cohort A, then you pick Cohort B.'
+        }
       >
-        {cohortMode ? 'Open Cohort' : 'Cohort'}
-      </Button>
+        <Button
+          variant={cohortMode ? 'accent' : 'neutral'}
+          onPress={p.onCohort}
+          isDisabled={cohortMode ? !cohort.valid : n < 1}
+          icon={<Icon name="split" size={12} />}
+        >
+          {cohortMode ? 'Open Cohort' : 'Cohort'}
+        </Button>
+      </Tooltip>
       {!p.readOnly && !cohortMode ? (
         <>
           {p.canSubmit ? (

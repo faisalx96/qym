@@ -21,7 +21,8 @@ export function analyzeLabel(state: AnalyzeState, causeCount: number): string {
   return 'Analyze';
 }
 
-function Spark({ filled }: { filled: boolean }) {
+/** The auto-analysis sparkle: the Analyze button's glyph, and the row menu's 'Open auto-analysis' tile. */
+export function AnalysisSpark({ filled }: { filled: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -82,7 +83,7 @@ export function AnalyzeAction({
         state === 'running' ? (
           <span className={styles.pulse} aria-hidden="true" />
         ) : (
-          <Spark filled={state === 'done'} />
+          <AnalysisSpark filled={state === 'done'} />
         )
       }
     >

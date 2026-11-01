@@ -222,10 +222,31 @@ function PhoneFilters({
   );
 }
 
-function TimeOriginInline({ view, onChange }: { view: RunsView; onChange: (patch: ViewPatch) => void }) {
+/**
+ * C208: the Origin control shows only when the project has an official run (or an Origin filter is already set, so the
+ * URL parameter keeps working and can be reset).
+ */
+export function showOriginControl(view: RunsView, facets: Facets | undefined): boolean {
+  return view.origin !== 'all' || (facets?.origins ?? []).includes('official');
+}
+
+function TimeOriginInline({
+  view,
+  facets,
+  onChange,
+}: {
+  view: RunsView;
+  facets: Facets | undefined;
+  onChange: (patch: ViewPatch) => void;
+}) {
   return (
     <div className={styles.inline}>
-      <TimeOriginControls view={view} onChange={onChange} labels={false} />
+      <TimeOriginControls
+        view={view}
+        onChange={onChange}
+        labels={false}
+        showOrigin={showOriginControl(view, facets)}
+      />
     </div>
   );
 }
@@ -257,20 +278,20 @@ export function useFilterBarParts({
     search: showSearch ? (
       <SearchField
         ref={searchRef}
-        label="Search runs"
-        placeholder="Search runs"
+        label="Search run or dataset names"
+        placeholder="Search run or dataset names"
         hint="/"
         value={search.text}
         onChange={search.change}
         onClear={() => search.flush('')}
         onSubmit={(v) => search.flush(v)}
-        width={phone ? 200 : 260}
+        width={phone ? 220 : 280}
       />
     ) : null,
     filters: phone ? (
       <PhoneFilters view={view} facets={facets} owners={owners} onChange={onChange} onClear={clear} />
     ) : (
-      <TimeOriginInline view={view} onChange={onChange} />
+      <TimeOriginInline view={view} facets={facets} onChange={onChange} />
     ),
     rows: phone ? null : (
       <FacetRow

@@ -34,16 +34,30 @@ export function useRunsData(
       ),
     [overview?.has_trace_stats],
   );
-  const columnSet = useMemo(
-    () => buildColumns(metrics ?? [], traceWithData, visibleKeys, hidden),
-    [metrics, traceWithData, visibleKeys, hidden],
+  // C028: a metric the SDK declares as primary leads the scores; C223: Experiment and Version hide by default when no
+  // run in the filtered scope has one (an experiment run is an official run; a version is a git commit).
+  const specs = overview?.metric_specs;
+  const mainMetric = useMemo(
+    () => (metrics ?? []).find((m) => specs?.[m]?.primary === true) ?? null,
+    [metrics, specs],
   );
-  // What the table hides until the user chooses: the legacy session set, else trace stats without data.
+  const hasOfficial = overview ? (overview.facets?.origins ?? []).includes('official') : true;
+  const hasVersion = overview ? (overview.sort_values?.git_commits ?? []).some(Boolean) : true;
+  const columnOptions = useMemo(
+    () => ({ mainMetric, withData: { experiment: hasOfficial, version: hasVersion } }),
+    [mainMetric, hasOfficial, hasVersion],
+  );
+  const columnSet = useMemo(
+    () => buildColumns(metrics ?? [], traceWithData, visibleKeys, hidden, columnOptions),
+    [metrics, traceWithData, visibleKeys, hidden, columnOptions],
+  );
+  // What the table hides until the user chooses: the legacy session set, else trace stats, Experiment and Version
+  // without data.
   const defaultHidden = useMemo(() => {
-    const set = buildColumns(metrics ?? [], traceWithData, visibleKeys);
+    const set = buildColumns(metrics ?? [], traceWithData, visibleKeys, null, columnOptions);
     const shown = new Set(set.visible.map((c) => c.id));
     return new Set(set.all.filter((c) => !shown.has(c.id)).map((c) => c.id));
-  }, [metrics, traceWithData, visibleKeys]);
+  }, [metrics, traceWithData, visibleKeys, columnOptions]);
   // A metric/trace sort waits for the overview (the column set is empty until it lands): no flash of time-desc.
   const needsColumns = /^(metric-|trace-)/.test(view.sort);
   const columnsKnown = !needsColumns || Boolean(overview);

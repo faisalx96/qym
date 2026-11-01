@@ -1,39 +1,18 @@
 /** Cells of a child row (a pass, the waiting passes, a loading or error placeholder) in the runs table's columns. */
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { RunPass, RunRow } from '@/api/dashboardTypes';
-import { Button, DropdownMenu, IconButton, RunStatusBadge, ScoreValue, StatusMark, Tooltip } from '@/ui';
+import { ActionTile, Button, RowMenu, RunStatusBadge, ScoreValue, StatusMark, type MenuItemSpec } from '@/ui';
 import { formatDateParts, formatNumericValue } from '@/lib/format';
 import { formatPercent, metricDirection } from '@/lib/metrics';
-import { AnalyzeAction } from '../AnalyzeAction';
-import { Mono } from '../cells';
+import { AnalysisSpark, AnalyzeAction, analyzeState } from '../AnalyzeAction';
+import { Mono, passSignalItems, SignalMarkers } from '../cells';
 import { useRunsCtx } from '../context';
 import { smartDigits } from '../model';
 import { passHref } from './links';
-import { queuedText, type PassIssue, type QueuedView } from './model';
+import { queuedText, type QueuedView } from './model';
 import styles from './PassCells.module.css';
 
 const runName = (run: RunRow) => run.external_run_id || run.run_name || run.run_id.slice(0, 8);
-
-export function IssuesCell({ issues }: { issues: PassIssue[] }) {
-  if (!issues.length) return <span className={styles.none}>–</span>;
-  return (
-    <span className={styles.issues}>
-      {issues.map((i) => (
-        <span
-          key={i.kind}
-          className={styles.issue}
-          data-tone={i.tone}
-          title={i.text}
-          role="img"
-          aria-label={i.text}
-        >
-          <span aria-hidden="true">{i.glyph}</span>
-          <Mono>{i.count}</Mono>
-        </span>
-      ))}
-    </span>
-  );
-}
 
 /** "Pass 2" at the run name's x, linking to the pass; only while running or partial, how far it got. */
 export function PassNameCell({ run, pass, status }: { run: RunRow; pass: RunPass; status: string }) {
@@ -77,8 +56,21 @@ export function QueuedStatus({ queued }: { queued: QueuedView }) {
   );
 }
 
-export function PassStatus({ status }: { status: string }) {
-  return <RunStatusBadge status={status.toUpperCase() as 'COMPLETED'} />;
+/** The pass status, then its signals, drawn as a run's and linking to the pass's Errors section (C028, C115). */
+export function PassStatus({ run, pass, status }: { run: RunRow; pass: RunPass; status: string }) {
+  const { slug, listContext } = useRunsCtx();
+  const items = passSignalItems(pass);
+  return (
+    <span className={styles.statusRow}>
+      <RunStatusBadge status={status.toUpperCase() as 'COMPLETED'} />
+      {items.length ? (
+        <SignalMarkers
+          items={items}
+          href={`${passHref(slug, listContext, run.run_id, pass.pass_number)}#errors`}
+        />
+      ) : null}
+    </span>
+  );
 }
 
 export function PassDate({ pass }: { pass: RunPass }) {
@@ -91,9 +83,12 @@ export function PassDate({ pass }: { pass: RunPass }) {
   );
 }
 
+/** 'N causes' or 'Analyzing' only, as on the run row (C133); starting one is in the pass's row menu. */
 export function PassAnalysis({ run, pass, status }: { run: RunRow; pass: RunPass; status: string }) {
   const { slug, listContext, analyzing } = useRunsCtx();
   if (status === 'running' || status === 'pending') return null;
+  if (analyzeState(pass.analysis_cause_count ?? 0, analyzing?.has(run.run_id) ?? false) === 'idle')
+    return null;
   return (
     <AnalyzeAction
       to={passHref(slug, listContext, run.run_id, pass.pass_number, '/analyzer')}
@@ -143,40 +138,52 @@ export function PassMetricCell({ run, pass, metric }: { run: RunRow; pass: RunPa
   );
 }
 
+/** A pass row's actions in one menu behind its handle, as on the run row: auto-analysis, open the pass, delete it. */
 export function PassActions({
   run,
   pass,
+  status,
   canDelete,
   onDelete,
   onOpen,
 }: {
   run: RunRow;
   pass: RunPass;
+  status: string;
   canDelete: boolean;
   onDelete: (n: number) => void;
   onOpen: (n: number) => void;
 }) {
+  const { slug, listContext } = useRunsCtx();
+  const navigate = useNavigate();
   const n = pass.pass_number;
+  const items: MenuItemSpec[] = [];
+  if (status !== 'running' && status !== 'pending')
+    items.push({
+      id: 'analyze',
+      label: 'Open auto-analysis',
+      icon: <ActionTile tone="meta" icon={<AnalysisSpark filled={false} />} />,
+      tone: 'meta',
+    });
+  items.push({ id: 'open', label: `Open pass ${n}`, icon: <ActionTile icon="file" /> });
+  if (canDelete)
+    items.push({
+      id: 'delete',
+      label: `Delete pass ${n}`,
+      icon: <ActionTile tone="danger" icon="trash" />,
+      tone: 'danger',
+      separatorBefore: true,
+    });
   return (
-    <span className={styles.actions}>
-      <DropdownMenu
-        label={`More actions for pass ${n} of ${runName(run)}`}
-        trigger={<IconButton label={`More actions for pass ${n} of ${runName(run)}`} icon="file" tile />}
-        items={[{ id: 'open', label: `Open pass ${n}` }]}
-        onAction={() => onOpen(n)}
-      />
-      {canDelete ? (
-        <Tooltip content={`Delete pass ${n}`}>
-          <IconButton
-            label={`Delete pass ${n}`}
-            icon="trash"
-            tone="danger"
-            tile
-            onPress={() => onDelete(n)}
-          />
-        </Tooltip>
-      ) : null}
-    </span>
+    <RowMenu
+      label={`Actions for pass ${n} of ${runName(run)}`}
+      items={items}
+      onAction={(id) => {
+        if (id === 'analyze') navigate(passHref(slug, listContext, run.run_id, n, '/analyzer'));
+        else if (id === 'open') onOpen(n);
+        else if (id === 'delete') onDelete(n);
+      }}
+    />
   );
 }
 
