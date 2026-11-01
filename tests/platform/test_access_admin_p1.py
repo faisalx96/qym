@@ -268,7 +268,8 @@ def test_unknown_email_costs_a_password_hash_like_a_known_one(local, monkeypatch
         unknown = _login(client, "nobody@x.com", "wrong-password")
         known = _login(client, "person@x.com", "wrong-password")
     assert unknown.status_code == known.status_code == 401
-    assert unknown.json() == known.json() == {"detail": "Invalid email or password"}
+    assert unknown.json()["detail"] == known.json()["detail"] == "Invalid email or password"
+    assert unknown.json()["error"]["code"] == known.json()["error"]["code"]
     assert len(calls) == 2 and all(stored for stored in calls)
 
 

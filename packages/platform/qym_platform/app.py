@@ -2,7 +2,6 @@ from __future__ import annotations
 
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -14,7 +13,7 @@ from qym_platform.settings import (
     auth_config_error,
     auth_config_warning,
 )
-from qym_platform.validation_errors import validation_exception_handler
+from qym_platform.error_body import install_error_handlers
 from qym_platform.api.web import router as web_router
 from qym_platform.api.projects import router as projects_router
 from qym_platform.api.eval_environments import router as eval_environments_router
@@ -97,8 +96,8 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json",
     )
-    # 422 responses must never echo a submitted key (security checklist §15).
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    # One error body for /api and /v1 (C159); 422s never echo a submitted key (security checklist §15).
+    install_error_handlers(app)
     from qym_platform.api.feedback import feedback_error_handler
     from qym_platform.feedback_agent.store import FeedbackError
 
@@ -357,7 +356,7 @@ def create_ingestion_app(settings: PlatformSettings | None = None) -> FastAPI:
     settings = settings or PlatformSettings()
     layout = resolve_layout(settings)
     app = FastAPI(title="qym-ingestion", version="0.2.3", docs_url=None, redoc_url=None, openapi_url=None)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    install_error_handlers(app)
     app.state.service_layout = layout
     app.add_middleware(NoStoreMiddleware)
     app.add_middleware(UploadLimitMiddleware, max_upload_bytes=settings.max_upload_bytes)

@@ -99,7 +99,7 @@
 <div class="docs-callout tip"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><p><span class="docs-callout-title">Page with <code>offset</code>, don't fetch everything.</span> <code>limit</code> is capped per endpoint, so to walk a large result set you advance <code>offset</code> by <code>limit</code> until a short page comes back. The SDK's platform dataset reader does exactly this, paging items 1000 at a time.</p></div>
 
 <h2>Error responses</h2>
-<p>Errors use standard HTTP status codes with a JSON body of the form <code>{ "detail": "..." }</code>. The detail strings are stable but human-facing — branch on the status code, and use the detail for diagnostics. The codes you will encounter most:</p>
+<p>Errors use standard HTTP status codes with one JSON body on <code>/api</code> and <code>/v1</code>: <code>{ "error": { "code": "run_not_found", "message": "Run not found", "details": [...], "request_id": "..." }, "detail": "..." }</code>. Branch on the status code and <code>error.code</code>; <code>message</code> is human-facing, <code>details</code> holds the field errors of a <code>422</code>, and <code>request_id</code> matches the <code>X-Request-ID</code> header for support. <code>detail</code> repeats the old body for one release. The codes you will encounter most:</p>
 
 <table>
   <thead><tr><th>Status</th><th>Meaning</th><th>Typical cause</th></tr></thead>
