@@ -819,7 +819,7 @@ export function applyFilters(input: ApplyInput): ApplyResult {
   }
   if (view.sort === 'change_desc') {
     const columns = metricColumns(model, view.columns);
-    const base = resolveBaseline(columns, view.baseline);
+    const base = resolveBaseline(columns, view.baseline, model);
     const baseIdxs = base ? base.runIdxs : [0];
     const keyed = out.map((item) => [changeMagnitude(item.scores, baseIdxs), item] as const);
     keyed.sort((a, b) => b[0] - a[0]);

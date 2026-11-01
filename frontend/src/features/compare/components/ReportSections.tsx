@@ -14,7 +14,7 @@ import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
 import { ItemsHeadAside, ItemsSection } from './items/ItemsSection';
 import { RunCards, RunsDiff } from './RunCards';
-import { BaselineSelect, PassToggle } from './SelectionBar';
+import { PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
 
 import { scrollToSection, sectionDomId, type SectionKey } from './sectionIds';
@@ -154,12 +154,7 @@ export function CompareReport() {
         part="section-averages"
         title="Per-run averages"
         description="Each run against the baseline: the change, its 95% noise band, and how many items improved or regressed. Press a count to filter the items."
-        aside={
-          <>
-            <BaselineSelect />
-            <PassToggle />
-          </>
-        }
+        aside={<PassToggle />}
       >
         <MetricsTab />
       </ReportSection>

@@ -68,7 +68,7 @@ export async function goSection(page: Page, name: string): Promise<void> {
 export const itemDetail = (page: Page, id: string) =>
   page.locator(`[data-testid="item-detail"][data-item-id="${id}"]`);
 
-/** The baseline select trigger (round 8: in the Per-run averages head, not in the sticky bar). */
+/** The baseline select trigger (K1: by the page title, not in the sticky bar). */
 export const baselineSelect = (page: Page) =>
   page.locator('[data-part="baseline-control"]').getByRole('button', { name: /Baseline/ });
 

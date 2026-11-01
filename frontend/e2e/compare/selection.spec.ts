@@ -23,7 +23,8 @@ test('four runs: summary, the change against the baseline in the averages and th
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c]));
   await waitLoaded(page);
-  await expect(page.getByRole('heading', { name: 'Compare runs', level: 1 })).toBeVisible();
+  // K1 (C245): the title names what is compared
+  await expect(page.getByTestId('compare-title')).toHaveText(/^4 runs/);
   await expect(page.getByText('4 columns')).toBeVisible();
   await expect(page.getByText('cmp-qa-v1').first()).toBeVisible();
   await expect(page.getByText('40 aligned items')).toBeVisible();

@@ -1,7 +1,7 @@
 /** The cohort banner with inline-editable labels, and the metric / baseline / pass controls. */
 import { useState } from 'react';
 import { IconButton, Select, SegmentedControl, Tag, TextField } from '@/ui';
-import { useCompare, letterOf } from '../CompareContext';
+import { useCompare } from '../CompareContext';
 import { columnName } from '../lib/columnName';
 import styles from './SelectionBar.module.css';
 
@@ -109,14 +109,14 @@ const RESET_KEY = '__reset-baseline__';
 
 /** Which column every change is measured against; also resets thresholds. Lives in the Averages head (C-avg-1). */
 export function BaselineSelect() {
-  const { columns, baseline, model, c } = useCompare();
+  const { columns, baseline, model, c, letter } = useCompare();
   if (columns.length < 2) return null;
   const dirty = !!c.view.baseline || Object.keys(c.view.thresholds).length > 0;
   const items = [
     ...columns.map((col) => {
       const idx = col.runIdxs[0] ?? 0;
       const name = columnName(model, col);
-      return { key: col.key, label: `${letterOf(idx)}  ${name}` };
+      return { key: col.key, label: `${letter(idx)}  ${name}` };
     }),
     ...(dirty ? [{ key: RESET_KEY, label: 'Reset baseline and thresholds' }] : []),
   ];

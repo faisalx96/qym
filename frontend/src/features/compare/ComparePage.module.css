@@ -26,14 +26,17 @@
   font-weight: 650;
 }
 
-.subtitle,
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+}
+
 .meta {
   margin: var(--space-xs) 0 0;
   color: var(--text-muted);
   font-size: var(--font-sm);
-}
-
-.meta {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm);

@@ -1,12 +1,12 @@
 /** Read-only, different-data and alignment notices (brief 05 §3 "Page load / selection"). */
 import { useMemo } from 'react';
 import { Icon, Stack, Text } from '@/ui';
-import { letterOf, useCompare } from '../CompareContext';
+import { useCompare } from '../CompareContext';
 import { datasetSetsDiffer, runDatasetCount } from '../lib/datasetSets';
 import styles from './Notices.module.css';
 
 export function Notices() {
-  const { model } = useCompare();
+  const { model, letter } = useCompare();
   const readOnlyRuns = useMemo(
     () =>
       Array.from(
@@ -44,11 +44,11 @@ export function Notices() {
     if (!datasetSetsDiffer(runs)) return null;
     const sentences = runs.map((run, i) => {
       const n = runDatasetCount(run);
-      return `${i === 0 ? 'Run' : 'run'} ${letterOf(i)} evaluated ${n}${i === 0 ? ` dataset${n === 1 ? '' : 's'}` : ''}`;
+      return `${i === 0 ? 'Run' : 'run'} ${letter(model.runs.findIndex((r) => r.run === run))} evaluated ${n}${i === 0 ? ` dataset${n === 1 ? '' : 's'}` : ''}`;
     });
     const shared = model.itemIds.filter((id) => model.runs.every((r) => r.byItem.has(id))).length;
     return { sentences, shared };
-  }, [model]);
+  }, [model, letter]);
   // Nothing to say: render nothing, so the page's flex gap does not reserve an empty slot.
   if (!readOnlyRuns.length && !data && !datasetsNote && model.alignment.status === 'aligned') return null;
   return (

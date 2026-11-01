@@ -9,11 +9,11 @@ test.beforeAll(async () => {
   s = await seedR8('r8-avg');
 });
 
-test('C-avg-1: the Baseline select is in the head (14 rem x 24); the sticky nav has neither select nor pass toggle', async ({
+test('K1 (C036): the Baseline select is by the page title (14 rem x 24); the sticky nav has neither select nor pass toggle', async ({
   page,
 }) => {
   await openCompare(page, s.four, 1440);
-  const control = part(page, 'section-averages').locator('[data-part="section-head"] [data-part="baseline-control"]');
+  const control = part(page, 'title-block').locator('[data-part="baseline-control"]');
   await expect(control).toBeVisible();
   const trigger = control.getByRole('button', { name: /Baseline/ });
   within((await box(trigger)).w, 224, 3, 'select width');

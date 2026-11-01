@@ -23,13 +23,13 @@ import {
   SeriesHighlightRoot,
   useToast,
 } from '@/ui';
-import { CompareCtx, type CompareValue } from './CompareContext';
+import { CompareCtx, runLetters, type CompareValue } from './CompareContext';
 import { CompareBar } from './components/CompareBar';
 import { CompareBody } from './components/CompareBody';
 import { CompareSkeleton } from './components/CompareSkeleton';
 import { ItemsUiHost } from './components/items/ItemsUi';
 import { Notices } from './components/Notices';
-import { CohortBanner } from './components/SelectionBar';
+import { BaselineSelect, CohortBanner } from './components/SelectionBar';
 import { SweepView } from './components/sweep/SweepView';
 import { DetailsProvider, useNewDetailsStore } from './hooks/useDetails';
 import { useCompareController, type CompareController } from './hooks/useCompareController';
@@ -39,6 +39,7 @@ import { applyFilters } from './lib/filters';
 import { MAX_COMPARE_RUNS } from './lib/refs';
 import type { CompareModel } from './lib/model';
 import { computeComparisonStats } from './lib/stats';
+import { compareTitle } from './lib/title';
 import styles from './ComparePage.module.css';
 
 /** `GET /api/compare/export-html`: a summary of the runs plus each run's offline report, in one file. */
@@ -57,7 +58,12 @@ export function ComparePage() {
   const project = useOptionalProject();
   const slug = project?.slug ?? readLocal(KEYS.lastProjectSlug) ?? undefined;
   const store = useNewDetailsStore();
-  useDocumentTitle('Compare runs');
+  const titleInfo = useColumns(c.model, c.view);
+  useDocumentTitle(
+    c.model && c.model.runs.length >= 2 && titleInfo
+      ? compareTitle(c.model, titleInfo.baseline)
+      : 'Compare runs',
+  );
   // A run removed from the comparison unmounts the body while the new set loads; put the reader back where they were.
   useLayoutEffect(() => {
     if (c.model) restoreScroll();
@@ -102,21 +108,17 @@ export function ComparePage() {
     );
   else if (c.query.error)
     body = <ErrorState error={c.query.error} title="Couldn’t load this comparison" onRetry={c.retry} />;
-  else if (c.query.isPending)
-    body = pending ? <CompareSkeleton runs={c.refs.length} /> : null;
+  else if (c.query.isPending) body = pending ? <CompareSkeleton runs={c.refs.length} /> : null;
   else if (!c.model || c.model.runs.length < 2)
     body = (
-      <ErrorState
-        error={Object.assign(new Error('Not found'), { status: 404 })}
+      <EmptyState
         title={
           c.missing.length === 1
             ? 'A run in this comparison was not found'
             : 'Runs in this comparison were not found'
         }
-        message={`${c.missing.length || 'Some'} of the runs in this link ${c.missing.length === 1 ? 'was' : 'were'} deleted or ${c.missing.length === 1 ? 'is' : 'are'} not visible to you. A comparison needs at least 2 runs.${c.missing.length ? ` Missing: ${c.missing.slice(0, 5).join(', ')}${c.missing.length > 5 ? ` + ${c.missing.length - 5} more` : ''}` : ''}`}
-        notFoundMessage="Not found"
+        body={`${c.missing.length || 'Some'} of the runs in this link ${c.missing.length === 1 ? 'was' : 'were'} deleted or ${c.missing.length === 1 ? 'is' : 'are'} not visible to you. A comparison needs at least 2 runs.${c.missing.length ? ` Missing: ${c.missing.slice(0, 5).join(', ')}${c.missing.length > 5 ? ` + ${c.missing.length - 5} more` : ''}` : ''}`}
         action={<BackLink slug={slug} />}
-        compact
       />
     );
   else
@@ -128,11 +130,13 @@ export function ComparePage() {
 
   return (
     <div className={`${fullWidth} ${styles.page}`} data-testid="compare-page">
-      {c.model && c.selectionState === 'ok' ? null : (
-        <PageHeader
-          title="Compare runs"
-          description="Review configuration, performance and item-level differences."
-        />
+      {/* C245: every state but the loaded report keeps the page header */}
+      {c.model &&
+      c.selectionState === 'ok' &&
+      !c.tooMany &&
+      !c.query.error &&
+      c.model.runs.length >= 2 ? null : (
+        <PageHeader title="Compare runs" />
       )}
       {body}
     </div>
@@ -186,6 +190,14 @@ function CompareLoaded({
     [model, c.ctx, itemIds],
   );
   const barRef = useRef<HTMLDivElement>(null);
+  const letters = useMemo(
+    () =>
+      runLetters(
+        model.runs.map((r) => r.ref),
+        c.cohorts,
+      ),
+    [model, c.cohorts],
+  );
   // Sections and the sticky toolbar offset themselves by the real height of the sticky bar.
   const stuck =
     !!info && !!metric && !!c.ctx && !!result && !!stats && !(c.view.tab === 'sweep' && !!c.cohorts);
@@ -228,18 +240,22 @@ function CompareLoaded({
     cohorts: c.cohorts,
     slug,
     searchPending: search.pending,
+    letter: (i: number) => letters[i] ?? String(i + 1),
   };
   const sweep = c.view.tab === 'sweep' && !!c.cohorts;
   const first = model.runs[0]?.run;
+  const title = compareTitle(model, info.baseline);
   return (
     <CompareCtx.Provider value={value}>
       <MissingToast missing={c.missing} />
       <header className={styles.titleBlock} data-part="title-block">
         <div>
-          <h1 className={styles.title}>Compare runs</h1>
-          <p className={styles.subtitle}>
-            Review configuration, performance and item-level differences across {model.bases.length} runs.
-          </p>
+          <div className={styles.titleRow}>
+            <h1 className={styles.title} data-testid="compare-title">
+              {title}
+            </h1>
+            <BaselineSelect />
+          </div>
           <p className={styles.meta}>
             <span>
               {info.columns.length} column{info.columns.length === 1 ? '' : 's'}

@@ -65,13 +65,53 @@ function baseLabel(label: string): string {
   return label.replace(/ · pass \d+$/, '');
 }
 
-/** The chosen baseline, else the same run's first column, else the first column. */
-export function resolveBaseline(columns: MetricColumn[], key: string | null): MetricColumn | null {
+function startedAt(run: { started_at?: string | null; created_at?: string | null }): number {
+  const t = Date.parse(run.started_at ?? run.created_at ?? '');
+  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * The default baseline (K1, C036): the reference run of the set, as the run header picks it (C034): the latest
+ * approved run, else the latest official run; else the run that started first. A repeat run starts at its first column.
+ */
+export function defaultBaselineKey(model: CompareModel, columns: MetricColumn[]): string | null {
+  const runs = new Map<string, CompareModel['runs'][number]['run']>();
+  for (const col of columns) {
+    const run = model.runs[col.runIdxs[0] ?? 0]?.run;
+    if (run && !runs.has(col.base)) runs.set(col.base, run);
+  }
+  const entries = Array.from(runs.entries());
+  const latest = (list: typeof entries) =>
+    list.reduce<(typeof entries)[number] | null>(
+      (best, e) => (!best || startedAt(e[1]) > startedAt(best[1]) ? e : best),
+      null,
+    );
+  const approved = latest(entries.filter(([, r]) => String(r.status).toUpperCase() === 'APPROVED'));
+  const official = approved ? null : latest(entries.filter(([, r]) => r.origin === 'official'));
+  const first = entries.reduce<(typeof entries)[number] | null>(
+    (best, e) => (!best || startedAt(e[1]) < startedAt(best[1]) ? e : best),
+    null,
+  );
+  const base = (approved ?? official ?? first)?.[0];
+  return columns.find((c) => c.base === base)?.key ?? columns[0]?.key ?? null;
+}
+
+/** The chosen baseline, else the same run's first column, else the default (K1) when the model is given, else the first column. */
+export function resolveBaseline(
+  columns: MetricColumn[],
+  key: string | null,
+  model?: CompareModel,
+): MetricColumn | null {
   if (key) {
     const exact = columns.find((c) => c.key === key);
     if (exact) return exact;
     const same = columns.find((c) => c.base === passRefBase(key));
     if (same) return same;
+  }
+  if (model) {
+    const fallback = defaultBaselineKey(model, columns);
+    const col = columns.find((c) => c.key === fallback);
+    if (col) return col;
   }
   return columns[0] ?? null;
 }

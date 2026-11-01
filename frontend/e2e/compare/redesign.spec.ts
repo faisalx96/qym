@@ -287,7 +287,7 @@ test.describe('polish', () => {
     await expect(cards.filter({ hasText: 'Side B' })).toHaveCount(2);
   });
 
-  test('390px: the sticky bar is the 36px nav only; the Baseline select sits in the Averages head', async ({
+  test('390px: the sticky bar is the 36px nav only; the Baseline select sits by the page title', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -296,7 +296,7 @@ test.describe('polish', () => {
     const bar = page.locator('[data-compare-sticky]');
     await expect(bar.getByRole('button')).toHaveCount(0);
     await expect(bar.getByRole('link')).toHaveCount(6);
-    await expect(page.locator('[data-part="section-averages"] [data-part="baseline-control"]')).toBeVisible();
+    await expect(page.locator('[data-part="title-block"] [data-part="baseline-control"]')).toBeVisible();
   });
 });
 

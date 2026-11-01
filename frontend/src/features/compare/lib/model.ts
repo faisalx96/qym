@@ -16,7 +16,13 @@ import {
 } from '@/lib/metrics';
 import type { Row, Run, RunPayload } from '@/features/run-detail/types';
 import { scopeRowToPass } from '@/features/run-detail/lib/passScope';
-import { computeRunLabels, disambiguateRunNames, modelShortName, runShortName, type RunLabel } from './labels';
+import {
+  computeRunLabels,
+  disambiguateRunNames,
+  modelShortName,
+  runShortName,
+  type RunLabel,
+} from './labels';
 import { SKIPPED_METADATA } from './skipMetadata';
 import { expandRefs, makePassRef, passRefBase, passRefNumber } from './refs';
 
@@ -31,6 +37,8 @@ export interface ComparePayload {
 
 export type PassRun = Run & {
   pass_number?: number;
+  /** Passes of the run this slice comes from; a '· pass N' suffix shows only when it is more than 1 (C162). */
+  pass_count?: number;
   base_run_name?: string;
   compare_alignment_status?: string;
   compare_alignment_issues?: string[];
@@ -80,6 +88,7 @@ export function getRowCompareId(row: Row | null | undefined): string | null {
 export function slicePayloadToPass(base: RunPayload, ref: string, pass: number): RunPayload {
   const baseRun = base.run;
   const name = baseRun.run_name || baseRun.run_id || 'run';
+  const passCount = Number(baseRun.samples) || 1;
   const metricNames = base.snapshot.metric_names ?? baseRun.metric_names ?? [];
   const rows = (base.snapshot.rows ?? []).map((row) => scopeRowToPass(row, metricNames, pass));
   const failed = rows.filter((r) => r.status === 'error').length;
@@ -87,9 +96,10 @@ export function slicePayloadToPass(base: RunPayload, ref: string, pass: number):
   const run: PassRun = {
     ...baseRun,
     file_path: ref,
-    run_name: `${name} · pass ${pass}`,
+    run_name: passCount > 1 ? `${name} · pass ${pass}` : name,
     base_run_name: name,
     pass_number: pass,
+    pass_count: passCount,
     samples: 1,
     error_count: failed,
     execution_error_count: failed,
@@ -157,6 +167,9 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
     const metricIndex: Record<string, number> = {};
     names.forEach((n, i) => (metricIndex[n] = i));
     const lab = labels[p.base] ?? { label: p.base, title: p.base };
+    const name = String(byBase.get(p.base)!.run.run_name || byBase.get(p.base)!.run.run_id || p.base).trim();
+    const passCount = Number(byBase.get(p.base)!.run.samples) || 1;
+    const suffix = p.pass && passCount > 1 ? ` · pass ${p.pass}` : '';
     return {
       ref: p.ref,
       base: p.base,
@@ -165,8 +178,8 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
       rows,
       byItem,
       metricIndex,
-      label: p.pass ? `${lab.label} · pass ${p.pass}` : lab.label,
-      title: p.pass ? `${lab.title} · pass ${p.pass}` : lab.title,
+      label: `${name}${suffix}`,
+      title: `${lab.title}${suffix}`,
       position,
       snapshot,
     };
@@ -182,7 +195,10 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
   );
   runs.forEach((r, i) => {
     const base = runShortName({ label: r.label, run: r.run }).replace(/ · pass \d+$/, '');
-    if (shown[i] !== base) r.run = { ...r.run, run_name: shown[i] } as PassRun;
+    if (shown[i] !== base) {
+      r.run = { ...r.run, run_name: shown[i] } as PassRun;
+      r.label = r.label.replace(base, shown[i]!);
+    }
   });
 
   const metrics = mergeMetricNames(metricLists);

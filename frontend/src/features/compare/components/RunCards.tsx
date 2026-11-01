@@ -3,12 +3,13 @@ import { Button, Icon, Popover, RunStatusBadge, Tag, Text } from '@/ui';
 import type { RunPayload } from '@/features/run-detail/types';
 import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
 import { datasetsTitle } from '@/features/run-detail/lib/heroModel';
-import { formatDateParts } from '@/lib/format';
+import { datasetVersionLabel, formatDateParts } from '@/lib/format';
 import { runSeries, useCompare } from '../CompareContext';
 import { runShortName } from '../lib/labels';
 import { MIN_COMPARE_RUNS, passRefBase } from '../lib/refs';
 import { runDatasetCount } from '../lib/datasetSets';
 import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
+import { RunCardActions } from './RunCardActions';
 import { RunTag, useRunMark } from './RunTag';
 import styles from './RunCards.module.css';
 
@@ -134,12 +135,14 @@ function RunCard({
       datasets > 1 ? 'Datasets' : 'Dataset',
       datasets > 1
         ? `${datasets} datasets`
-        : `${run.dataset_name ?? ''}${run.dataset_version ? ` v${run.dataset_version}` : ''}`,
+        : [run.dataset_name ?? '', datasetVersionLabel(run.dataset_version)].filter(Boolean).join(' '),
       true,
     ],
     ['Started', started.date === '—' ? '' : `${started.date}, ${started.time}`, false],
     ['Runtime', runtime === '—' ? '' : runtime, true],
-    ...(run.samples && run.samples > 1 ? ([['Samples', String(run.samples), true]] as Array<[string, string, boolean]>) : []),
+    ...(run.samples && run.samples > 1
+      ? ([['Samples', String(run.samples), true]] as Array<[string, string, boolean]>)
+      : []),
   ];
   return (
     <li
@@ -164,6 +167,7 @@ function RunCard({
             <span data-part="run-status">
               <RunStatusBadge status={status} label={status.charAt(0) + status.slice(1).toLowerCase()} />
             </span>
+            {isBase ? null : <RunCardActions run={run} name={name} />}
           </span>
           {removable ? (
             <button
@@ -187,7 +191,10 @@ function RunCard({
           {facts.map(([k, v, mono]) => (
             <div key={k}>
               <dt>{k}</dt>
-              <dd className={mono ? styles.mono : undefined} title={k === 'Datasets' ? datasetsTitle(run.datasets ?? []) : undefined}>
+              <dd
+                className={mono ? styles.mono : undefined}
+                title={k === 'Datasets' ? datasetsTitle(run.datasets ?? []) : undefined}
+              >
                 {v || '—'}
               </dd>
             </div>
@@ -229,7 +236,10 @@ export function RunsDiff() {
       placement="bottom end"
       trigger={
         <Button size="sm" variant="neutral" data-part="runs-diff-btn">
-          What differs between the runs <Tag kind="count">{diff.length} setting{diff.length === 1 ? '' : 's'}</Tag>
+          What differs between the runs{' '}
+          <Tag kind="count">
+            {diff.length} setting{diff.length === 1 ? '' : 's'}
+          </Tag>
         </Button>
       }
     >
