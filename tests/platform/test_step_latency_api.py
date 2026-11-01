@@ -491,3 +491,81 @@ def test_call_site_rollup_names_models_and_keeps_them_in_csv(client, session_fac
     # The default rollup's CSV is unchanged.
     plain = client.get("/api/runs/run-1/step-latency?format=csv", headers=headers).text
     assert plain.splitlines()[0].startswith("phase,step_type,kind,n,error_count")
+
+
+# C022: the run page's summary is stored on first read and served from the stored row while the span set holds.
+
+
+def _stored(session_factory, run_id="run-1"):
+    from qym_platform.db.models import RunStepLatencySummary
+
+    with session_factory() as session:
+        return session.query(RunStepLatencySummary).filter_by(run_id=run_id).all()
+
+
+def test_run_page_summary_is_stored_and_served_without_the_spans(client, session_factory, monkeypatch):
+    import qym_platform.api.step_latency as step_latency
+
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=site"
+    first = client.get(url, headers=headers)
+    assert first.status_code == 200
+    (row,) = _stored(session_factory)
+    assert (row.pass_number, row.rollup) == (0, "site")
+
+    def no_scan(*args, **kwargs):
+        raise AssertionError("the stored summary must be served without loading spans")
+
+    monkeypatch.setattr(step_latency, "_load_spans", no_scan)
+    second = client.get(url, headers=headers)
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+
+def test_a_late_span_rebuilds_the_stored_summary(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=name"
+    before = client.get(url, headers=headers).json()
+    with session_factory() as session:
+        session.add(
+            _span("run-1", "trace-1-late", "sql_execute", parent="trace-1-task", dur=700.0,
+                  attrs=_tool_attrs("sql_execute"))
+        )
+        session.commit()
+    after = client.get(url, headers=headers).json()
+    task_sql = lambda body: next(  # noqa: E731
+        g for g in body["groups"] if (g["phase"], g["step_type"]) == ("task", "sql_execute")
+    )
+    assert task_sql(before)["n"] == 2
+    assert task_sql(after)["n"] == 3
+
+
+def test_stored_summary_keeps_access_checks(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=site"
+    assert client.get(url, headers=_headers("owner@example.com")).status_code == 200
+    assert client.get(url, headers=_headers("other@example.com")).status_code == 403
+    assert client.get("/api/runs/step-latency?run_ids=nope", headers=_headers("owner@example.com")).status_code == 404
+
+
+def test_a_running_run_reuses_its_summary_for_a_few_seconds(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+        session.get(Run, "run-1").status = RunWorkflowStatus.RUNNING
+        session.commit()
+    headers = _headers("owner@example.com")
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=name"
+    before = client.get(url, headers=headers).json()
+    with session_factory() as session:
+        session.add(
+            _span("run-1", "trace-1-late", "sql_execute", parent="trace-1-task", dur=700.0,
+                  attrs=_tool_attrs("sql_execute"))
+        )
+        session.commit()
+    # within LIVE_SUMMARY_REUSE the stored summary answers; the next build picks the new span up
+    assert client.get(url, headers=headers).json() == before

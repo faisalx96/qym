@@ -2056,6 +2056,20 @@ class RunTraceContribution(Base):
     __table_args__ = (Index("ix_trace_contribution_run_trace", "run_id", "trace_id"),)
 
 
+class RunStepLatencySummary(Base):
+    """The run page's step-latency summary of a run or one pass, stored on first read (C022, migration 0092)."""
+
+    __tablename__ = "run_step_latency_summaries"
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True)
+    # 0 = every pass of the run
+    pass_number: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rollup: Mapped[str] = mapped_column(String(8), primary_key=True)
+    # The span set it was built from: run status, span count and highest span id.
+    fingerprint: Mapped[str] = mapped_column(String(200))
+    payload: Mapped[dict[str, Any]] = mapped_column(BIG_JSON)
+    computed_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class RunTraceNamedContribution(Base):
     """Indexed first-contributor order for named outer-scope trace latencies."""
 
