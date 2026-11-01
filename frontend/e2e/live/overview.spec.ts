@@ -155,6 +155,13 @@ test('two sources can be selected on the overview and reload its numbers', async
   await expect(page.locator('[data-live-day]')).toHaveCount(1);
   await expect(source).toContainText('Development worker');
   const box = await source.boundingBox();
-  expect(box?.width).toBeCloseTo(194, 0);
+  // Content-sized control: the whole source name is visible, never cut with an ellipsis.
+  expect(box?.width).toBeGreaterThan(120);
+  expect(
+    await source.evaluate((el) => {
+      const trigger = el.querySelector('button') ?? el;
+      return trigger.scrollWidth <= trigger.clientWidth;
+    }),
+  ).toBe(true);
   expect(box?.height).toBeCloseTo(24, 0);
 });

@@ -64,6 +64,8 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
   const services = [
     ...new Set([...Object.keys(facets?.services ?? {}), ...(filters.service ? [filters.service] : [])]),
   ];
+  const serviceName = (name: string) =>
+    specs.find((spec) => spec.metric_name === `service.${name}`)?.label ?? name;
   const toggle = (key: string, selected: string[], value: string) => {
     update({
       [key]: selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value],
@@ -140,7 +142,7 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
     ? `${specs.find((spec) => spec.metric_name === filters.metric)?.label ?? filters.metric}${filters.min === undefined ? '' : ` ≥ ${filters.min}`}${filters.max === undefined ? '' : ` ≤ ${filters.max}`}`
     : 'Any metric';
   const serviceLabel = filters.service
-    ? `${filters.service}${filters.service_status ? ` · ${filters.service_status.replaceAll('_', ' ')}` : ''}`
+    ? `${serviceName(filters.service)}${filters.service_status ? ` · ${filters.service_status.replaceAll('_', ' ')}` : ''}`
     : 'Any service';
   const serviceCount = filters.service ? (facets?.services[filters.service] ?? 0) : undefined;
 
@@ -296,9 +298,19 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
                   label="Service"
                   value={filters.service ?? ''}
                   items={[
-                    { key: '', label: 'Any service' },
-                    ...services.map((value) => ({ key: value, label: value })),
+                    { key: '', label: 'Any service', count: undefined },
+                    ...services.map((value) => ({
+                      key: value,
+                      label: serviceName(value),
+                      count: facets?.services[value] ?? 0,
+                    })),
                   ]}
+                  renderItem={(item) =>
+                    item.count === undefined ? item.label : countLabel(item.label, item.count)
+                  }
+                  renderValue={(item) =>
+                    item.count === undefined ? item.label : countLabel(item.label, item.count)
+                  }
                   onChange={(value) =>
                     update({ service: value ? String(value) : null, service_status: null })
                   }

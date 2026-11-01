@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LiveFilters, LiveMetricSpec } from '@/api/live';
+import { liveTurnsQuery, type LiveFilters, type LiveMetricSpec } from '@/api/live';
 import { filterChips, listedScoreColumns } from '../lib/filters';
 
 const metric = (name: string, overrides: Partial<LiveMetricSpec> = {}): LiveMetricSpec => ({
@@ -84,6 +84,24 @@ describe('filterChips', () => {
     expect(filterChips(both, undefined, specs)[0]!.onRemove(both)).toEqual({
       metric: 'compliance_a',
       max: 1,
+    });
+  });
+
+  it('omits default page size and sort when removing a chip', () => {
+    const filters = { day: '2026-11-01', page: 1, page_size: 50, sort: '-turn_at' };
+    const next = filterChips(filters, undefined, specs)[0]!.onRemove(filters);
+    expect(next).not.toHaveProperty('page_size');
+    expect(next).not.toHaveProperty('page');
+    expect(next).not.toHaveProperty('sort');
+    expect(liveTurnsQuery(next).toString()).toBe('');
+    expect(filters).toEqual({ day: '2026-11-01', page: 1, page_size: 50, sort: '-turn_at' });
+  });
+
+  it('preserves non-default page size and sort when removing a chip', () => {
+    const filters = { day: '2026-11-01', page: 3, page_size: 100, sort: 'latency_ms' };
+    expect(filterChips(filters, undefined, specs)[0]!.onRemove(filters)).toEqual({
+      page_size: 100,
+      sort: 'latency_ms',
     });
   });
 

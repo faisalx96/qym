@@ -5,7 +5,7 @@ import { Card, HelpMarker, ScoreValue, Text } from '@/ui';
 import styles from '../live.module.css';
 
 /** One framed strip of equal cells (DESIGN_LANGUAGE stat tiles: seven or fewer in a row). */
-export function serviceColumns(count: number): number {
+function serviceColumns(count: number): number {
   return Math.min(Math.max(count, 1), 7);
 }
 

@@ -14,6 +14,11 @@ export function Canaries({
       <Text variant="sm" tone="muted">
         Canaries
       </Text>
+      {!canaries.length ? (
+        <Text variant="sm" tone="muted">
+          No canary results for this day
+        </Text>
+      ) : null}
       {[...canaries]
         .sort((a, b) => Number(b.status === 'failed') - Number(a.status === 'failed'))
         .map((probe) => (

@@ -91,7 +91,7 @@ export function DayNumbers({
     {
       key: 'latency',
       label: 'Median latency',
-      value: <Link to={linkTo({ sort: 'latency_desc' })}>{formatLatency(day.latency.median_ms)}</Link>,
+      value: <Link to={linkTo({ sort: '-latency_ms' })}>{formatLatency(day.latency.median_ms)}</Link>,
       meaning: `Median response latency. P90: ${formatLatency(day.latency.p90_ms)}; ${day.latency.over_5min} turns took more than 5 minutes.`,
     },
   ];

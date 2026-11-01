@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { LiveSourceInfo } from '@/api/live';
 import { formatRelative } from '@/lib/format';
 import { Card, StatusMark, Tag } from '@/ui';
-import { staleText } from '../lib/stale';
+import { staleText, statusTime } from '../lib/stale';
 import styles from '../live.module.css';
 
 export function StatusLine({ status }: { status: LiveSourceInfo }) {
@@ -16,9 +16,7 @@ export function StatusLine({ status }: { status: LiveSourceInfo }) {
     worker.judges && typeof worker.judges === 'object'
       ? Object.values(worker.judges).filter((judge): judge is string => typeof judge === 'string')
       : [];
-  const lastTurn = status.last_turn_at
-    ? `${new Date(status.last_turn_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`
-    : '—';
+  const lastTurn = status.last_turn_at ? statusTime(status.last_turn_at, now) : '—';
   return (
     <Card
       compact

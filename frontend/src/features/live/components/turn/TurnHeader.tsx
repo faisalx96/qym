@@ -71,8 +71,13 @@ export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug:
           <span key="time" className={styles.number}>
             {utcTime(turn.turn_at)}
           </span>,
-          <span key="user" className={styles.number} dir="auto" title={user ?? undefined}>
-            {user && user.length > 16 ? `${user.slice(0, 8)}…${user.slice(-4)}` : (user ?? '—')}
+          <span
+            key="user"
+            className={`${styles.number} ${styles.userRef}`}
+            dir="auto"
+            title={user ?? undefined}
+          >
+            {user ?? '—'}
           </span>,
           ...(turn.conversation_id
             ? [

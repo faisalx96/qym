@@ -86,22 +86,24 @@ export function Facts({ value, label }: { value: Record<string, unknown> | null;
   if (!value || Object.keys(value).length === 0)
     return <Text tone="muted">No {label.toLowerCase()} available for this turn.</Text>;
   return (
-    <KeyValueGrid
-      columns={1}
-      dense
-      aria-label={label}
-      items={Object.entries(value).map(([key, fact]) => ({
-        key,
-        label: <span dir="auto">{key}</span>,
-        mono: typeof fact === 'number',
-        value:
-          fact !== null && typeof fact === 'object' ? (
-            <StructuredValue value={fact} />
-          ) : (
-            <span dir="auto">{fact == null ? '—' : String(fact)}</span>
-          ),
-      }))}
-    />
+    <div className={styles.facts}>
+      <KeyValueGrid
+        columns={1}
+        dense
+        aria-label={label}
+        items={Object.entries(value).map(([key, fact]) => ({
+          key,
+          label: <span dir="auto">{key}</span>,
+          mono: typeof fact === 'number',
+          value:
+            fact !== null && typeof fact === 'object' ? (
+              <StructuredValue value={fact} />
+            ) : (
+              <span dir="auto">{fact == null ? '—' : String(fact)}</span>
+            ),
+        }))}
+      />
+    </div>
   );
 }
 

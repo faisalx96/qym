@@ -30,6 +30,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.userRef {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .turnTitle {
   display: block;
   line-height: 1.6;
@@ -43,6 +48,7 @@
 .stack,
 .loading {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-md);
   min-inline-size: 0;
 }
@@ -64,9 +70,17 @@
 }
 
 .page > *,
+.panel > *,
+.stack > *,
+.loading > *,
 .twoColumns > *,
 .threeColumns > * {
   min-inline-size: 0;
+}
+
+.facts {
+  min-inline-size: 0;
+  overflow-x: auto;
 }
 
 .copy,

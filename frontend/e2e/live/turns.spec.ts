@@ -105,6 +105,13 @@ test('two sources can be selected on Turns and reload its numbers', async ({ pag
   await expect(page.getByText(/^3 of 3 turns on/)).toBeVisible();
   await expect(source).toContainText('Development worker');
   const box = await source.boundingBox();
-  expect(box?.width).toBeCloseTo(194, 0);
+  // Content-sized control: the whole source name is visible, never cut with an ellipsis.
+  expect(box?.width).toBeGreaterThan(120);
+  expect(
+    await source.evaluate((el) => {
+      const trigger = el.querySelector('button') ?? el;
+      return trigger.scrollWidth <= trigger.clientWidth;
+    }),
+  ).toBe(true);
   expect(box?.height).toBeCloseTo(24, 0);
 });

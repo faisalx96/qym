@@ -6,8 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseLiveFilters, type LiveMetricSpec, type LiveTurnRow } from '@/api/live';
 import { TurnFilters } from '../components/TurnFilters';
 import { TurnsTable } from '../components/TurnsTable';
+import { TurnHeader } from '../components/turn/TurnHeader';
 import { LiveTurnsPage } from '../LiveTurnsPage';
-import { liveOverview } from '@/features/dev/liveFixtures';
+import { liveOverview, liveTurnDetail } from '@/features/dev/liveFixtures';
 
 vi.mock('@/features/shell/ProjectContext', () => ({
   useProjectContext: () => ({ project: { name: 'Demo project' }, slug: 'demo' }),
@@ -30,6 +31,13 @@ const primary: LiveMetricSpec = {
 const specs: LiveMetricSpec[] = [
   primary,
   { ...primary, metric_name: 'compliance', label: 'Compliance', is_primary: false, position: 1 },
+  {
+    ...primary,
+    metric_name: 'service.viz_agent',
+    group: 'service',
+    label: 'Visualization',
+    is_primary: false,
+  },
   {
     ...primary,
     metric_name: 'diagnosis',
@@ -67,7 +75,7 @@ const facets = {
   statuses: { completed: 2, failed: 1 },
   outcomes: { ok: 2 },
   modes: { chat: 2, report: 3 },
-  services: { 'service-a': 1 },
+  services: { 'service-a': 1, viz_agent: 2 },
   users: [],
 };
 const initial = '/projects/demo/live/turns?day=2026-11-01&label=agent_problem&source=worker&page=3';
@@ -163,6 +171,21 @@ describe('Turns filters and table', () => {
     expect(currentUrl().searchParams.get('source')).toBe('worker');
     expect(currentUrl().searchParams.has('label')).toBe(false);
     expect(currentUrl().searchParams.has('page')).toBe(false);
+  });
+
+  it('removes a day chip without writing default pagination or sort to the URL', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[`${initial}&page_size=50&sort=-turn_at`]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Remove 1 Nov 2026' }));
+    for (const key of ['day', 'page', 'page_size', 'sort']) {
+      expect(currentUrl().searchParams.has(key)).toBe(false);
+    }
+    expect(currentUrl().searchParams.get('source')).toBe('worker');
+    expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
   });
 
   it('debounces Arabic search for 300 ms and preserves the other filters', () => {
@@ -349,7 +372,7 @@ describe('Turns filters and table', () => {
     );
     await user.click(screen.getByRole('button', { name: /^Service:/ }));
     await user.click(screen.getByRole('button', { name: /Any service.*Service/ }));
-    await user.click(screen.getByRole('option', { name: 'service-a' }));
+    await user.click(screen.getByRole('option', { name: 'service-a 1' }));
     await user.click(screen.getByRole('button', { name: /Any status.*Service status/ }));
     await user.click(screen.getByRole('option', { name: 'Not OK' }));
     await user.click(screen.getByRole('button', { name: 'Done' }));
@@ -364,6 +387,83 @@ describe('Turns filters and table', () => {
     expect(currentUrl().searchParams.has('service_status')).toBe(false);
     expect(currentUrl().searchParams.get('charts')).toBe('failed');
     expect(currentUrl().searchParams.has('page')).toBe(false);
+  });
+
+  it('shows service spec labels and not-ok counts in options and the selected trigger', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: /^Service:/ }));
+    await user.click(screen.getByRole('button', { name: /Any service.*Service/ }));
+    expect(screen.getByRole('option', { name: 'service-a 1' })).toBeVisible();
+    await user.click(screen.getByRole('option', { name: 'Visualization 2' }));
+    expect(currentUrl().searchParams.get('service')).toBe('viz_agent');
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('button', { name: 'Service: Visualization 2' })).toBeVisible();
+  });
+
+  it('keeps the full long question in its title and visible text', () => {
+    const question = Array.from({ length: 20 }, () => 'ما إجمالي الطلبات؟').join(' ');
+    const { container } = render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness rows={[{ ...row, question }]} />
+      </MemoryRouter>,
+    );
+    const cell = container.querySelector('[data-live-question]')!;
+    expect(cell).toHaveAttribute('title', question);
+    expect(cell).toHaveTextContent(question);
+    expect(cell).toHaveAttribute('dir', 'auto');
+  });
+
+  it('labels not-ok services from the spec and preserves unknown names and faults', () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness
+          rows={[
+            { ...row, services_not_ok: [{ name: 'viz_agent', fault: 'agent' }, ...row.services_not_ok] },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    const cell = container.querySelector('[data-live-turn-row] [data-col="services"]')!;
+    expect(cell).toHaveTextContent('Visualization · agent');
+    expect(cell).toHaveTextContent('service-a · agent');
+    expect(cell).not.toHaveTextContent('viz_agent');
+  });
+
+  it('renders the full user reference in the turns table', () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness />
+      </MemoryRouter>,
+    );
+    const user = container.querySelector('[data-live-turn-row] [data-col="user"] [title]')!;
+    expect(user).toHaveTextContent(row.user_ref!);
+    expect(user).toHaveAttribute('title', row.user_ref);
+  });
+
+  it('renders the full user reference in the turn header', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ sources: [] }))),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    clients.push(client);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <TurnHeader
+            data={{ ...liveTurnDetail, turn: { ...liveTurnDetail.turn, user_ref: row.user_ref } }}
+            slug="demo"
+            source="worker"
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTitle(row.user_ref!)).toHaveTextContent(row.user_ref!);
   });
 
   it('uses the spec tone, keeps question text and skips scores without showing a value', () => {
@@ -419,10 +519,10 @@ describe('Turns filters and table', () => {
     expect(currentUrl().searchParams.get('list')).toBe(query);
   });
 
-  it('conversation links filter the list without opening the turn', async () => {
+  it('conversation links clear all date bounds, preserve other filters and do not open the turn', async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={[initial]}>
+      <MemoryRouter initialEntries={[`${initial}&from=2026-10-01&to=2026-11-01&mode=chat&sort=latency_ms`]}>
         <Harness />
       </MemoryRouter>,
     );
@@ -430,7 +530,22 @@ describe('Turns filters and table', () => {
     expect(currentUrl().pathname).toBe('/projects/demo/live/turns');
     expect(currentUrl().searchParams.get('conversation')).toBe(row.conversation_id);
     expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
-    expect(currentUrl().searchParams.has('page')).toBe(false);
+    expect(currentUrl().searchParams.get('source')).toBe('worker');
+    expect(currentUrl().searchParams.get('mode')).toBe('chat');
+    expect(currentUrl().searchParams.get('sort')).toBe('latency_ms');
+    for (const key of ['day', 'from', 'to', 'page']) {
+      expect(currentUrl().searchParams.has(key)).toBe(false);
+    }
+  });
+
+  it('omits the turn index from a conversation link when it is unknown', () => {
+    render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness rows={[{ ...row, conversation_id: 'conversation-c76', turn_index: null }]} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'conversation c76' })).toBeVisible();
+    expect(screen.queryByText(/turn —/)).toBeNull();
   });
 
   it('shows an empty result as No turns match', () => {

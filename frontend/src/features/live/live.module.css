@@ -26,7 +26,8 @@
 .source[data-multiple] {
   display: inline-grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  inline-size: calc(var(--space-xl) * 6 + 2px);
+  inline-size: max-content;
+  max-inline-size: 100%;
 }
 
 .inline {

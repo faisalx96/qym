@@ -182,6 +182,26 @@ describe('overview blocks', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it.each([
+    ['2026-11-01', '12:31 UTC'],
+    ['2026-10-14', '14 Oct 12:31 UTC'],
+  ])('dates last turns and stale heartbeats from %s relative to today in UTC', (day, expected) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-01T13:00:00Z'));
+    render(
+      <StatusLine
+        status={{
+          ...overview.status,
+          stale: true,
+          last_heartbeat_at: `${day}T12:31:00Z`,
+          last_turn_at: `${day}T12:31:00Z`,
+        }}
+      />,
+    );
+    expect(screen.getByText(`Worker not heard from since ${expected}`)).toBeVisible();
+    expect(screen.getByText(expected).parentElement).toHaveTextContent(`Last turn ${expected}`);
+  });
+
   it('moves by UTC days while preserving source and disables next on today', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-01T23:00:00Z'));

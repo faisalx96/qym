@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { LiveFilters, LiveMetricSpec, LiveTurnRow, LiveTurnsPage } from '@/api/live';
-import { useSearchParamsState } from '@/lib/url-state';
+import { applyQueryUpdates, useSearchParamsState } from '@/lib/url-state';
 import { DataTable, EmptyState, ScoreValue, StatusMark, Tag, type Column, type SortState } from '@/ui';
 import { listedScoreColumns } from '../lib/filters';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
@@ -29,6 +29,8 @@ function scoreText(row: LiveTurnRow, spec: LiveMetricSpec): string {
 export function TurnsTable({ slug, source, filters, data, specs, refreshing }: TurnsTableProps) {
   const { params, replaceUrlQuery } = useSearchParamsState();
   const path = `/projects/${encodeURIComponent(slug)}/live/turns`;
+  const linkTo = (conversation: string) =>
+    `${path}?${applyQueryUpdates(params, { source, conversation, day: null, from: null, to: null, page: null })}`;
   const diagnosis = diagnosisSpec(specs);
   const labels = mixSegments(
     Object.fromEntries(data.rows.filter((row) => row.label).map((row) => [row.label!, 1])),
@@ -136,7 +138,7 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
     {
       id: 'charts',
       header: 'Charts',
-      width: 100,
+      width: 120,
       mono: true,
       cell: (row) => (
         <span className={styles.number}>
@@ -167,7 +169,7 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
                 }
                 dir="auto"
               >
-                {service.name}
+                {specs.find((spec) => spec.metric_name === `service.${service.name}`)?.label ?? service.name}
                 {service.fault ? ` · ${service.fault}` : ''}
               </span>
             ))
@@ -178,26 +180,24 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
       header: 'User · conversation',
       width: 180,
       cell: (row) => {
-        const conversationQuery = new URLSearchParams(params);
-        conversationQuery.set('source', source);
-        conversationQuery.set('conversation', row.conversation_id ?? '');
-        conversationQuery.delete('page');
         return (
           <span className={styles.diagnosisCell}>
-            <span className={styles.number} dir="auto" title={row.user_ref ?? undefined}>
-              {row.user_ref && row.user_ref.length > 16
-                ? `${row.user_ref.slice(0, 8)}…${row.user_ref.slice(-4)}`
-                : (row.user_ref ?? '—')}
+            <span
+              className={`${styles.number} ${styles.userRef}`}
+              dir="auto"
+              title={row.user_ref ?? undefined}
+            >
+              {row.user_ref ?? '—'}
             </span>
             {row.conversation_id ? (
               <Link
                 className={styles.number}
-                to={`${path}?${conversationQuery}`}
+                to={linkTo(row.conversation_id)}
                 title={row.conversation_id}
                 dir="auto"
               >
-                conversation {row.conversation_id.slice(-3)} · turn{' '}
-                {row.turn_index === null ? '—' : row.turn_index + 1}
+                conversation {row.conversation_id.slice(-3)}
+                {row.turn_index === null ? '' : ` · turn ${row.turn_index + 1}`}
               </Link>
             ) : null}
           </span>

@@ -61,17 +61,24 @@
   min-inline-size: 0;
 }
 
+/* Multi-line cells (two-line reason, several services) keep clear of the row edges. */
+.table td {
+  padding-block: var(--space-xs);
+}
+
 .loading {
   min-block-size: calc(var(--row-comfortable) * 6 + var(--space-lg) * 6 + var(--space-xs));
 }
 
 .question {
   display: -webkit-box;
+  min-inline-size: 0;
   text-align: start;
   overflow: hidden;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   white-space: normal;
+  overflow-wrap: anywhere;
   line-height: 1.6;
 }
 
@@ -98,6 +105,11 @@
 .number {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.userRef {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .toneText,

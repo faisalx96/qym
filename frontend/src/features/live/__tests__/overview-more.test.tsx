@@ -114,6 +114,15 @@ describe('overview service and history blocks', () => {
     expect(marks[2]).toHaveTextContent('Other skipped—');
     expect(marks[2]?.querySelector('[data-shape="pause"][data-tone="neutral"]')).not.toBeNull();
     expect(canaries[0]?.canary).toBe('search');
+    expect(screen.queryByText('No canary results for this day')).toBeNull();
+  });
+
+  it('explains an empty canary list after the Canaries label', () => {
+    const { container } = render(<Canaries canaries={[]} specs={specs} />);
+    const block = container.querySelector('[data-live-block="canaries"]')!;
+    expect(block).toHaveTextContent('CanariesNo canary results for this day');
+    expect(within(block as HTMLElement).getByText('No canary results for this day')).toBeVisible();
+    expect(container.querySelectorAll('[data-live-canary]')).toHaveLength(0);
   });
 
   it('renders every trend day, hatches gaps, breaks missing rates and retains a measured zero', () => {

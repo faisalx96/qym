@@ -16,6 +16,8 @@ export function filterChips(
   const remove = (f: LiveFilters, ...keys: (keyof LiveFilters)[]): LiveFilters => {
     const next = { ...f };
     for (const key of [...keys, 'page'] as const) delete next[key];
+    if (next.page_size === 50) delete next.page_size;
+    if (next.sort === '-turn_at') delete next.sort;
     return next;
   };
   const add = (key: keyof LiveFilters, label: string, ...related: (keyof LiveFilters)[]) => {
