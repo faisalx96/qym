@@ -3,8 +3,10 @@ import { useProjectContext } from '@/features/shell/ProjectContext';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
+import { useSearchParamsState } from '@/lib/url-state';
 import { ErrorState, PageHeader, Skeleton, Text } from '@/ui';
 import { LiveEmptyState } from './LiveEmptyState';
+import { LiveOverviewPage } from './LiveOverviewPage';
 import styles from './live.module.css';
 
 function LiveRoute({ title }: { title: string }) {
@@ -36,6 +38,19 @@ function LiveRoute({ title }: { title: string }) {
 }
 
 export function LiveOverviewRoute() {
+  const { slug } = useProjectContext();
+  const query = useLiveSources(slug);
+  const { get } = useSearchParamsState();
+  const source = get('source') || query.data?.default_source || query.data?.sources[0]?.key;
+  if (query.data?.sources.length && source) {
+    return (
+      <LiveOverviewPage
+        slug={slug}
+        source={source}
+        day={get('day') || new Date().toISOString().slice(0, 10)}
+      />
+    );
+  }
   return <LiveRoute title="Live evaluation" />;
 }
 

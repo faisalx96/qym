@@ -6,12 +6,12 @@ test('Live is the second project link and a seeded project opens the overview', 
   const { projectSlug } = await seedLive(request, uniqueSlug('live-nav'));
   await gotoApp(page, `/projects/${projectSlug}/live`);
   await expect(page.getByRole('heading', { name: 'Live evaluation', exact: true })).toBeVisible();
-  await expect(page.getByText('Coming in the next task', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-live-block="tiles"]')).toBeVisible();
   const projectLinks = page.locator(`[data-nav][href^="/projects/${projectSlug}"]`);
   await expect(projectLinks.nth(0)).toHaveAttribute('data-nav', 'overview');
   await expect(projectLinks.nth(1)).toHaveAttribute('data-nav', 'live');
   await expect(projectLinks.nth(1)).toHaveAttribute('aria-current', 'page');
-  await expect(page).toHaveTitle(/Live evaluation/);
+  await expect(page).toHaveTitle(/Live · Live evaluation demo/);
 
   await gotoApp(page, `/projects/${projectSlug}/live/turns`);
   await expect(page.getByRole('heading', { name: 'Turns', exact: true })).toBeVisible();

@@ -10,6 +10,17 @@ const diagnoses = [
   { value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' },
 ];
 
+interface SeededDay {
+  day: string;
+  turns_seen: number;
+  evaluated: number;
+  turns: {
+    label: string;
+    latency_ms: number;
+    scores: { metric_name: string; score_numeric: number | null; skipped: boolean }[];
+  }[];
+}
+
 /** A small producer fixture, authenticated exactly like a live worker. */
 export async function seedLive(request: APIRequestContext, slug: string, opts: { stale?: boolean } = {}) {
   const project = await createProject(request, 'Live evaluation demo', slug);
@@ -17,8 +28,15 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
   const sourceKey = 'worker-preprod';
   const base = `/v1/projects/${project.id}/live/sources/${sourceKey}`;
   const headers = { Authorization: `Bearer ${token}` };
-  const worker = { version: 'e2e-v1', poll_interval_s: 60 };
+  const worker = {
+    version: 'e2e-v1',
+    poll_interval_s: 60,
+    judges: { a: 'judge-a', b: 'judge-b' },
+    eval_code_version: 'e2e-v1',
+    manifest_hash: 'e2e-manifest',
+  };
   const now = new Date();
+  const days: SeededDay[] = [];
 
   const source = await request.put(base, {
     headers,
@@ -44,6 +62,7 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
     { metric_name: 'compliance_a', group: 'quality', label: 'Compliance A', score_type: 'percentage' },
     { metric_name: 'compliance_b', group: 'quality', label: 'Compliance B', score_type: 'percentage' },
     { metric_name: 'chart_fidelity', group: 'charts', label: 'Chart fidelity', score_type: 'percentage' },
+    { metric_name: 'chart_design', group: 'charts', label: 'Chart design', score_type: 'percentage' },
     {
       metric_name: 'service.sql_generation',
       group: 'service',
@@ -68,15 +87,12 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
     const date = new Date(now);
     date.setUTCDate(date.getUTCDate() - offset);
     const day = date.toISOString().slice(0, 10);
+    const counters = { turns_seen: 14, evaluated: 8, failed: 2, incomplete: 2, excluded: 0 };
     const dayResult = await request.put(`${base}/days/${day}`, {
       headers,
       data: {
         status: offset ? 'closed' : 'running',
-        turns_seen: 14,
-        evaluated: 8,
-        failed: 2,
-        incomplete: 2,
-        excluded: 0,
+        ...counters,
         first_poll_at: `${day}T09:00:00Z`,
         last_poll_at: `${day}T09:12:00Z`,
         closed_at: offset ? `${day}T23:59:00Z` : null,
@@ -127,6 +143,7 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
         detail: { evidence: { note: 'Synthetic evaluation evidence' } },
         scores: metrics.map((metric) => {
           const categorical = metric.score_type === 'categorical';
+          const skipped = incomplete || metric.metric_name === 'chart_design';
           const score =
             metric.metric_name === 'service.sql_generation'
               ? Number(!failed)
@@ -139,14 +156,14 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
                     : 0.5;
           return {
             metric_name: metric.metric_name,
-            score_numeric: categorical || incomplete ? null : score,
+            score_numeric: categorical || skipped ? null : score,
             score_raw: categorical ? diagnosis.value : score,
             label: categorical ? diagnosis.value : null,
             explanation: 'Synthetic evaluation score',
             meta:
               metric.group === 'service' && score === 0 ? { fault: failed ? 'timeout' : 'validation' } : {},
-            skipped: incomplete,
-            skip_reason: incomplete ? 'incomplete_ingest' : null,
+            skipped,
+            skip_reason: incomplete ? 'incomplete_ingest' : skipped ? 'not_applicable' : null,
           };
         }),
       };
@@ -154,6 +171,7 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
     const result = await request.post(`${base}/turns`, { headers, data: { turns } });
     expect(result.ok(), await result.text()).toBeTruthy();
     expect(await result.json()).toMatchObject({ accepted: 12, rejected: 0 });
+    days.push({ day, ...counters, turns });
   }
 
   const canaries = await request.post(`${base}/canaries`, {
@@ -184,5 +202,5 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
     });
     expect(heartbeat.ok(), await heartbeat.text()).toBeTruthy();
   }
-  return { projectId: project.id, projectSlug: project.slug, sourceKey };
+  return { projectId: project.id, projectSlug: project.slug, sourceKey, days, labels: diagnoses, metrics };
 }
