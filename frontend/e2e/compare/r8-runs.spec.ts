@@ -14,15 +14,25 @@ test('C-title-1: the title block is 70 high at 1440 with Export on the title row
   const block = part(page, 'title-block');
   within((await box(block)).h, 70, 4, 'title block');
   const h1 = block.getByRole('heading', { level: 1 });
-  const css = await h1.evaluate((e) => ({ size: getComputedStyle(e).fontSize, weight: getComputedStyle(e).fontWeight }));
+  const css = await h1.evaluate((e) => ({
+    size: getComputedStyle(e).fontSize,
+    weight: getComputedStyle(e).fontWeight,
+  }));
   expect(css.size).toBe('22px');
   expect(Number(css.weight)).toBe(650);
   for (const sel of ['p:nth-of-type(1)', 'p:nth-of-type(2)']) {
-    const p = await block.locator(sel).evaluate((e) => ({ size: getComputedStyle(e).fontSize, color: getComputedStyle(e).color }));
+    const p = await block
+      .locator(sel)
+      .evaluate((e) => ({ size: getComputedStyle(e).fontSize, color: getComputedStyle(e).color }));
     expect(p.size).toBe('11px');
   }
   const exp = block.getByRole('link', { name: 'Export HTML' });
-  within((await box(exp)).y + (await box(exp)).h / 2, (await box(h1)).y + (await box(h1)).h / 2, 4, 'Export on the title row');
+  within(
+    (await box(exp)).y + (await box(exp)).h / 2,
+    (await box(h1)).y + (await box(h1)).h / 2,
+    4,
+    'Export on the title row',
+  );
 });
 
 test('C-title-1: at 390 the block is at most 140 high and Export wraps under', async ({ page }) => {
@@ -31,7 +41,9 @@ test('C-title-1: at 390 the block is at most 140 high and Export wraps under', a
   await noSidewaysScroll(page);
 });
 
-test('C-cohort-1: two sides, 2 columns from 1024, 1 column at 390, at most 95 high at 1440', async ({ page }) => {
+test('C-cohort-1: two sides, 2 columns from 1024, 1 column at 390, at most 95 high at 1440', async ({
+  page,
+}) => {
   const { base, a, b, c } = s.seed.runs;
   for (const [w, cols] of [
     [1440, 2],
@@ -71,7 +83,9 @@ test('C-run-1: 4-up at 1440, 2-up at 1024, 1-up at 390; the same card at any run
   await openCompare(page, s.four, 1440);
   within((await box(part(page, 'run-card').first())).h, 239, 4, 'card height');
   await openCompare(page, s.eight, 1440);
-  const hs = await part(page, 'run-card').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+  const hs = await part(page, 'run-card').evaluateAll((els) =>
+    els.map((e) => Math.round(e.getBoundingClientRect().height)),
+  );
   expect(Math.max(...hs) - Math.min(...hs)).toBeLessThanOrEqual(4);
   within((await box(part(page, 'run-grid'))).h, 500, 8, 'two rows of 8 runs (amended from 478)');
 });
@@ -80,7 +94,13 @@ test('C-run-2/3/4: card head, stat strip and the six meta rows', async ({ page }
   await openCompare(page, s.four, 1440);
   const card = part(page, 'run-card').first();
   await expect(card.locator('[data-part="run-name"]')).toBeVisible();
-  expect(Number(await card.locator('[data-part="run-name"]').evaluate((e) => getComputedStyle(e.lastElementChild!).fontWeight))).toBe(650);
+  expect(
+    Number(
+      await card
+        .locator('[data-part="run-name"]')
+        .evaluate((e) => getComputedStyle(e.lastElementChild!).fontWeight),
+    ),
+  ).toBe(650);
   await expect(card.locator('[data-part="baseline-tag"]')).toHaveCount(1);
   await expect(part(page, 'run-card').nth(1).locator('[data-part="baseline-tag"]')).toHaveCount(0);
   within((await box(card.locator('[data-part="run-status"] > *'))).h, 20, 2, 'status badge');
@@ -91,11 +111,20 @@ test('C-run-2/3/4: card head, stat strip and the six meta rows', async ({ page }
   const cells = card.locator('[data-part="run-stat-strip"] > div');
   await expect(cells).toHaveCount(3);
   for (let i = 0; i < 3; i++) within((await box(cells.nth(i))).h, 36, 1, `strip cell ${i}`);
-  const val = await cells.nth(0).locator('dd').evaluate((e) => ({ f: getComputedStyle(e).fontFamily, w: getComputedStyle(e).fontWeight }));
+  const val = await cells
+    .nth(0)
+    .locator('dd')
+    .evaluate((e) => ({ f: getComputedStyle(e).fontFamily, w: getComputedStyle(e).fontWeight }));
   expect(val.f).toMatch(/mono/i);
   expect(Number(val.w)).toBe(650);
   // errors > 0 is red text, 0 is not
-  const errCol = (i: number) => part(page, 'run-card').nth(i).locator('[data-part="run-stat-strip"] > div').nth(2).locator('dd').evaluate((e) => getComputedStyle(e).color);
+  const errCol = (i: number) =>
+    part(page, 'run-card')
+      .nth(i)
+      .locator('[data-part="run-stat-strip"] > div')
+      .nth(2)
+      .locator('dd')
+      .evaluate((e) => getComputedStyle(e).color);
   expect(await errCol(0)).not.toBe(await errCol(3));
   // meta: Task, Model, Owner, Dataset, Started, Runtime = 6 x 20
   const meta = card.locator('[data-part="run-meta"]');
@@ -103,9 +132,15 @@ test('C-run-2/3/4: card head, stat strip and the six meta rows', async ({ page }
   within((await box(meta)).h, 120, 2, 'meta list');
 });
 
-test('C-run-4: a repeat run adds a Samples row', async ({ page }) => {
+test('K2 (C062): a repeat run counts executions, with items × passes under the strip', async ({ page }) => {
   await openCompare(page, [s.seed.runs.repeat3, s.seed.runs.base], 1440);
-  await expect(part(page, 'run-card').first().locator('[data-part="run-meta"] dt')).toContainText(['Samples']);
+  const card = part(page, 'run-card').first();
+  await expect(card.locator('[data-part="run-stat-strip"] dt')).toHaveText([
+    'Executions',
+    'Succeeded',
+    'Errors',
+  ]);
+  await expect(card.locator('[data-part="run-passes"]')).toContainText('× 3 passes');
 });
 
 test('C-run-2: the remove button is absent at two runs', async ({ page }) => {
@@ -120,7 +155,9 @@ test('C-run-5: the left border is 3 px in the run colour', async ({ page }) => {
     els.map((e) => {
       const article = e.firstElementChild as HTMLElement;
       const cs = getComputedStyle(article);
-      const sw = getComputedStyle(e.querySelector('[data-part="run-name"]')!.firstElementChild as HTMLElement).backgroundColor;
+      const sw = getComputedStyle(
+        e.querySelector('[data-part="run-name"]')!.firstElementChild as HTMLElement,
+      ).backgroundColor;
       return { w: cs.borderInlineStartWidth, c: cs.borderInlineStartColor, sw };
     }),
   );
@@ -148,7 +185,9 @@ test('C-run-6: X removes the run, updates the URL, moves focus to the next X; En
 test('C-run-1: 8 runs at 390 stack one card per row without sideways scroll', async ({ page }) => {
   await openCompare(page, s.eight, 390);
   await noSidewaysScroll(page);
-  const tops = await part(page, 'run-card').evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size);
+  const tops = await part(page, 'run-card').evaluateAll(
+    (els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size,
+  );
   expect(tops).toBe(8);
   await page.goto(compareUrl(s.four));
 });

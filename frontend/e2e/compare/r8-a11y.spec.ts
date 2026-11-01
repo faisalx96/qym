@@ -11,19 +11,17 @@ test.beforeAll(async () => {
 });
 
 /** The order the spec lists: nav, run X, baseline, pass toggle, counts, slider, metric tabs, winner, distribution, chips, cards, search, Filters, Display, CSV, row heads, pagination. */
+// K1: the Baseline select sits by the title, before the nav; K6: Metric, the slider and Filters are part of the nav
 const STOPS = [
+  'baseline',
   'nav',
   'run-remove',
-  'baseline',
   'counts',
-  'slider',
-  'metric-tabs',
   'winner',
   'distribution',
   'chips',
   'cards',
   'search',
-  'filters',
   'display',
   'csv',
   'row-head',
@@ -52,14 +50,22 @@ test('C-kbd-1: Tab follows the visual order and every stop has the 2 px focus ri
       else if (part('[data-part="distribution-bar"]')) kind = 'distribution';
       else if (part('[data-part="category-chip-bar"]')) kind = 'chips';
       else if (part('[data-part="category-card"]') || part('[data-part="error-card"]')) kind = 'cards';
-      else if (e.matches('input[type="search"], [role="searchbox"], input') && part('[data-part="items-toolbar"]')) kind = 'search';
+      else if (
+        e.matches('input[type="search"], [role="searchbox"], input') &&
+        part('[data-part="items-toolbar"]')
+      )
+        kind = 'search';
       else if (e.matches('[data-part="items-filters-btn"]')) kind = 'filters';
       else if (e.matches('[data-part="items-display-btn"]')) kind = 'display';
       else if (e.matches('[data-part="items-csv-btn"]')) kind = 'csv';
       else if (e.matches('[data-part="item-head"]')) kind = 'row-head';
       else if (part('[data-part="pagination"]')) kind = 'pagination';
       const cs = getComputedStyle(e);
-      return { kind, ring: `${cs.outlineStyle} ${cs.outlineWidth}`, focusVisible: e.matches(':focus-visible') };
+      return {
+        kind,
+        ring: `${cs.outlineStyle} ${cs.outlineWidth}`,
+        focusVisible: e.matches(':focus-visible'),
+      };
     });
     if (!info) continue;
     if (info.kind && seen[seen.length - 1] !== info.kind) seen.push(info.kind);
@@ -67,12 +73,17 @@ test('C-kbd-1: Tab follows the visual order and every stop has the 2 px focus ri
     if (info.kind === 'pagination') break;
   }
   const order = seen.map((k) => STOPS.indexOf(k as (typeof STOPS)[number]));
-  expect(order.every((v) => v >= 0), `unknown stop in ${seen.join(',')}`).toBe(true);
+  expect(
+    order.every((v) => v >= 0),
+    `unknown stop in ${seen.join(',')}`,
+  ).toBe(true);
   expect(order, `stops in order: ${seen.join(' > ')}`).toEqual([...order].sort((a, b) => a - b));
   for (const wanted of STOPS) expect(seen, `reached ${wanted}`).toContain(wanted);
   // every focus-visible stop shows an outline of 2 px
   const thin = rings.filter((r) => !/solid 2px/.test(r));
-  expect(thin.length, `rings: ${[...new Set(thin)].join(' | ')}`).toBeLessThanOrEqual(Math.ceil(rings.length * 0.15));
+  expect(thin.length, `rings: ${[...new Set(thin)].join(' | ')}`).toBeLessThanOrEqual(
+    Math.ceil(rings.length * 0.15),
+  );
 });
 
 for (const width of [1440, 390]) {

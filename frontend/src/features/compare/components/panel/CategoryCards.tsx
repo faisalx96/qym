@@ -5,6 +5,7 @@ import { runSeries, useCompare } from '../../CompareContext';
 import { formatBand, formatDelta } from '../../lib/baseline';
 import { categoryDelta, type CategoryGroup } from '../../lib/breakdown';
 import { columnName } from '../../lib/columnName';
+import { changeGlyph } from '../../lib/noise';
 import { RunTag, useRunMark } from '../RunTag';
 import styles from './CategoryCards.module.css';
 
@@ -143,7 +144,12 @@ export function CategoryCards({
                       direction={model.directions[metric] ?? null}
                       max={numeric ? max || 1 : undefined}
                       marker={base?.score ?? null}
-                      change={d && d.mean !== null ? formatDelta(d.mean, type) : '—'}
+                      // C161: the change carries its noise glyph: ▲ or ▼ beyond the 95% band, ≈ within it
+                      change={
+                        d && d.mean !== null
+                          ? `${changeGlyph(d.mean, verdict === 'improved' || verdict === 'regressed')} ${formatDelta(d.mean, type)}`
+                          : '—'
+                      }
                       changeTitle={
                         d && d.halfWidth !== null
                           ? `95% noise band ${formatBand(d.halfWidth, type)}`

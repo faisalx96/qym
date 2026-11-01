@@ -86,3 +86,13 @@ describe('estimators', () => {
     expect(normalCdf(-1.2) + normalCdf(1.2)).toBeCloseTo(1, 6);
   });
 });
+
+describe('changeGlyph (C161)', () => {
+  it('marks a change beyond noise with its direction and one within noise with ≈', async () => {
+    const { changeGlyph } = await import('../noise');
+    expect(changeGlyph(0.17, true)).toBe('▲');
+    expect(changeGlyph(-0.05, true)).toBe('▼');
+    expect(changeGlyph(0.17, false)).toBe('≈');
+    expect(changeGlyph(0, true)).toBe('≈');
+  });
+});

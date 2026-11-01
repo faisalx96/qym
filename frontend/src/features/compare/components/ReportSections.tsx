@@ -1,5 +1,6 @@
 /** The compare report: stacked full-width sections in legacy order, a jump nav with scroll-spy, and section anchors. */
 import { useEffect, useMemo, useState } from 'react';
+import { useCompareStepLatency } from '@/api/compare';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { metricDirectionLabel, passThresholdLabel } from '@/lib/metrics';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
@@ -9,12 +10,13 @@ import { hasAnyRootCause } from '../lib/breakdown';
 import { CategoriesSection } from './panel/CategoriesTab';
 import { ErrorsTab } from './panel/ErrorsTab';
 import { MetricsTab } from './panel/MetricsTab';
-import { OverviewControls, OverviewTab } from './panel/OverviewTab';
+import { OverviewTab } from './panel/OverviewTab';
 import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
 import { ItemsHeadAside, ItemsSection } from './items/ItemsSection';
+import { Deferred, useAfterFirstPaint } from './Deferred';
 import { RunCards, RunsDiff } from './RunCards';
-import { BaselineSelect, PassToggle } from './SelectionBar';
+import { PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
 
 import { scrollToSection, sectionDomId, type SectionKey } from './sectionIds';
@@ -36,15 +38,19 @@ const ALIASES: Record<string, SectionKey> = {
 
 /** The sections this comparison offers, in page order. */
 export function useSectionList(): Array<{ key: SectionKey; label: string; count?: number }> {
-  const { model, items } = useCompare();
+  const { model, items, columns } = useCompare();
   const traced = model.runs.some((r) => r.run.trace_stats?.has_spans);
+  // C216: the Step latency section and its link show only when the step-latency answer has a group (shared query)
+  const refs = useMemo(() => columns.map((c) => c.key), [columns]);
+  const steps = useCompareStepLatency(refs, traced);
+  const hasSteps = Object.values(steps.data?.groups_by_ref ?? {}).some((groups) => groups.length > 0);
   const rootCause = useMemo(() => hasAnyRootCause(model, new Set(model.itemIds)), [model]);
   return [
     { key: 'runs', label: 'Runs' },
     { key: 'averages', label: 'Averages' },
     { key: 'overview', label: 'Overview' },
     { key: 'categories', label: 'Categories' },
-    ...(traced ? [{ key: 'steps' as const, label: 'Steps' }] : []),
+    ...(traced && hasSteps ? [{ key: 'steps' as const, label: 'Steps' }] : []),
     { key: 'errors', label: 'Errors' },
     ...(rootCause ? [{ key: 'root-cause' as const, label: 'Root cause' }] : []),
     { key: 'items', label: 'Items', count: items.length },
@@ -136,6 +142,8 @@ export function CompareReport() {
   const sections = useSectionList();
   const has = (k: SectionKey) => sections.some((s) => s.key === k);
   useSectionAnchor();
+  // C076: header, run cards and averages first; the rest after the first paint or when the reader nears them
+  const ready = useAfterFirstPaint();
   const passes = ctx.direction && !ctx.isBoolean && model.types[metric] !== 'numeric';
   const overviewDescription = `Pass rates, winners and how many runs got each item right for ${metric}. ${metricDirectionLabel(ctx.direction)}${passes ? `; a run passes when its score is ${passThresholdLabel(ctx.threshold, ctx.direction)}` : ''}.`;
   return (
@@ -154,12 +162,7 @@ export function CompareReport() {
         part="section-averages"
         title="Per-run averages"
         description="Each run against the baseline: the change, its 95% noise band, and how many items improved or regressed. Press a count to filter the items."
-        aside={
-          <>
-            <BaselineSelect />
-            <PassToggle />
-          </>
-        }
+        aside={<PassToggle />}
       >
         <MetricsTab />
       </ReportSection>
@@ -168,11 +171,14 @@ export function CompareReport() {
         part="section-overview"
         title="Comparison overview"
         description={overviewDescription}
-        aside={<OverviewControls />}
       >
-        <OverviewTab />
+        <Deferred ready={ready}>
+          <OverviewTab />
+        </Deferred>
       </ReportSection>
-      <CategoriesSection />
+      <Deferred ready={ready}>
+        <CategoriesSection />
+      </Deferred>
       <ReportSection
         id={sectionDomId('steps')}
         part="section-steps"
@@ -180,7 +186,9 @@ export function CompareReport() {
         description="Mean latency per traced step and run."
         hidden={!has('steps')}
       >
-        <StepsTab />
+        <Deferred ready={ready}>
+          <StepsTab />
+        </Deferred>
       </ReportSection>
       <ReportSection
         id={sectionDomId('errors')}
@@ -188,7 +196,9 @@ export function CompareReport() {
         title="Error distribution"
         description="Errors by kind and message for each run. Press a card to filter the items."
       >
-        <ErrorsTab />
+        <Deferred ready={ready}>
+          <ErrorsTab />
+        </Deferred>
       </ReportSection>
       <ReportSection
         id={sectionDomId('root-cause')}
@@ -197,7 +207,9 @@ export function CompareReport() {
         description="Why items failed, from the analyzer, per run."
         hidden={!has('root-cause')}
       >
-        <RootCauseTab />
+        <Deferred ready={ready}>
+          <RootCauseTab />
+        </Deferred>
       </ReportSection>
       <ReportSection
         id={sectionDomId('items')}
@@ -206,7 +218,9 @@ export function CompareReport() {
         description="Filter and inspect aligned inputs, outputs, scores and review metadata."
         aside={<ItemsHeadAside />}
       >
-        <ItemsSection />
+        <Deferred ready={ready} minHeight={480}>
+          <ItemsSection />
+        </Deferred>
       </ReportSection>
     </div>
   );

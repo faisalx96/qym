@@ -253,7 +253,7 @@ test('root-cause issues: validation, add, show on the card, edit, delete, and fi
   await cat.click();
   await expect(page.getByTestId('baseline-delta-banner')).toContainText('Root cause: Hallucination');
   await expect(page.getByRole('status').filter({ hasText: /of 40 items/ })).toContainText('1 of 40');
-  await page.getByTestId('baseline-delta-banner').getByRole('button', { name: 'Clear' }).click();
+  await page.locator('[data-part="items-clear-btn"]').click(); // K6: the one Clear is in the sticky nav
   await expect(page.getByRole('status').filter({ hasText: /of 40 items/ })).toContainText('40 of 40');
 
   // edit then delete

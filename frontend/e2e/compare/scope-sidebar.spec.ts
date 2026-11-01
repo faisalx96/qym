@@ -15,7 +15,9 @@ const sidebar = (page: Page) => page.getByRole('complementary', { name: 'Quick f
 // Owner decision H2 (round 8): the Quick-filters facet list stays, opened from the items toolbar, beside the list only.
 const facetsBtn = (page: Page) => page.locator('[data-part="items-facets-btn"]');
 
-test('H2: the sidebar is closed by default and a search, count button or card never opens it', async ({ page }) => {
+test('H2: the sidebar is closed by default and a search, count button or card never opens it', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(compareUrl(four(), { q: 'policy' }));
   await waitLoaded(page);
@@ -23,12 +25,18 @@ test('H2: the sidebar is closed by default and a search, count button or card ne
   await expect(facetsBtn(page)).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('scope-bar')).toHaveCount(0);
   await page.getByRole('button', { name: /^Clear \d/ }).click();
-  await page.getByRole('table', { name: 'Per-run averages' }).getByRole('button', { name: /improved/ }).first().click();
+  await page
+    .getByRole('table', { name: 'Per-run averages' })
+    .getByRole('button', { name: /improved/ })
+    .first()
+    .click();
   await expect(page.getByTestId('baseline-delta-banner')).toBeVisible();
   await expect(sidebar(page)).toHaveCount(0);
 });
 
-test('H2: open at 1440 the sidebar sits beside the list only; every section above keeps its width', async ({ page }) => {
+test('H2: open at 1440 the sidebar sits beside the list only; every section above keeps its width', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(compareUrl(four()));
   await waitLoaded(page);
@@ -60,8 +68,8 @@ test('H2: open at 1440 the sidebar sits beside the list only; every section abov
   const different = sidebar(page).getByRole('button', { name: 'Different outputs' }).first();
   await different.click();
   await expect(different).toHaveAttribute('aria-pressed', 'true');
-  // Clear all clears the filters and leaves the sidebar as the reader had it
-  await sidebar(page).getByRole('button', { name: 'Clear all' }).click();
+  // K6 (C154): the one Clear (sticky nav) clears the filters and leaves the sidebar as the reader had it
+  await page.locator('[data-part="items-clear-btn"]').click();
   await expect(sidebar(page)).toBeVisible();
   // Hide closes it, focus returns to the toolbar button
   await sidebar(page).getByRole('button', { name: 'Hide quick filters' }).click();

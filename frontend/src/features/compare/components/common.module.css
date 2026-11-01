@@ -29,12 +29,13 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
-  block-size: 20px;
+  block-size: 24px;
 }
 
+/* C201: 24 px hit targets */
 .counts button {
   min-inline-size: 24px;
-  block-size: 20px;
+  block-size: 24px;
   padding: 0 var(--space-xs);
   border: 0;
   border-radius: var(--control-radius);

@@ -44,7 +44,12 @@ describe('refs', () => {
     const sel = readSelection(q, storage);
     expect(sel.refs).toEqual(['a', 'b', 'c', 'd']);
     expect(sel.cohorts).toMatchObject({ leftLabel: 'X', rightLabel: '' });
-    expect(readSelection(new URLSearchParams('runs=a'), { getItem: () => null }).source).toBe('none');
+    // C211: one whole run is taken (it expands to its passes once it loads); one pass alone is not
+    expect(readSelection(new URLSearchParams('runs=a'), { getItem: () => null })).toMatchObject({
+      refs: ['a'],
+      source: 'url',
+    });
+    expect(readSelection(new URLSearchParams('runs=a::pass2'), { getItem: () => null }).source).toBe('none');
   });
   it('cohorts must be paired', () => {
     expect(normalizeCohorts({ left: ['a'], right: ['b', 'c'] })).toBeNull();

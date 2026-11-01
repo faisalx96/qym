@@ -480,6 +480,7 @@ export function RunsPage() {
           readOnly={readOnly}
           canSubmit={canSubmitAll}
           canDelete={canDeleteAll}
+          mixedTasks={new Set(picked.map((r) => r.task_name)).size > 1}
           onCompare={compare}
           onCohort={cohort}
           onSubmit={() => setDialog({ kind: 'submit', rows: selectedRows() })}

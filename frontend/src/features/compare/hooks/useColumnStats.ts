@@ -20,7 +20,7 @@ export function useColumns(model: CompareModel | null, view: CompareView): Colum
   return useMemo(() => {
     if (!model) return null;
     const columns = metricColumns(model, view.columns);
-    const baseline = resolveBaseline(columns, view.baseline);
+    const baseline = resolveBaseline(columns, view.baseline, model);
     return baseline ? { columns, baseline } : null;
   }, [model, view.columns, view.baseline]);
 }

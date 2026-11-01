@@ -122,3 +122,9 @@ export function localDateString(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+/** A dataset version as the runs list writes it: 'v1' for 'v1', 'V1' or 1; '' when there is none (C248). */
+export function datasetVersionLabel(version: string | number | null | undefined): string {
+  const v = version === null || version === undefined ? '' : String(version).trim();
+  return v ? `v${v.replace(/^v/i, '')}` : '';
+}

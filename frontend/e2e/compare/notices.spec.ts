@@ -14,18 +14,22 @@ test.beforeAll(async () => {
   archived = await seedScenario('cmp-arch');
 });
 
-test('runs on different dataset names show the Different data notice', async ({ page }) => {
+test('K7 (C058): runs on different dataset names are not paired, and the notice names each run', async ({
+  page,
+}) => {
   const { base, a } = seed.runs;
   await page.goto(compareUrl([base, a, otherDataset]));
   await waitLoaded(page);
-  const note = page.locator('[data-notice="different-data"]');
+  const note = page.locator('[data-notice="unpaired"]');
   await expect(note).toBeVisible();
-  await expect(note).toContainText('Different data.');
-  await expect(note).toContainText('different datasets');
+  await expect(note).toContainText('items are not paired');
   await expect(note).toContainText('cmp-qa-v1');
   await expect(note).toContainText('cmp-qa-v2');
-  await expect(note).toContainText('only items present in both runs are paired');
+  await expect(page.locator('[data-notice="different-data"]')).toHaveCount(0);
   await expect(page.locator('[data-notice="read-only"]')).toHaveCount(0);
+  // no baseline, no aligned-items claim
+  await expect(page.locator('[data-part="baseline-control"]')).toHaveCount(0);
+  await expect(page.getByText(/\d+ aligned items/)).toHaveCount(0);
 });
 
 test('same-dataset runs need no notice', async ({ page }) => {

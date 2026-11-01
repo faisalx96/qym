@@ -181,3 +181,9 @@ export function computeSweepNoise(
     reliability: null,
   };
 }
+
+/** The glyph of a change (C161): ▲ or ▼ when it is beyond the noise band, ≈ when it is within it. */
+export function changeGlyph(delta: number, beyond: boolean): '▲' | '▼' | '≈' {
+  if (!beyond || delta === 0) return '≈';
+  return delta > 0 ? '▲' : '▼';
+}

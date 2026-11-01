@@ -23,7 +23,8 @@ test('four runs: summary, the change against the baseline in the averages and th
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c]));
   await waitLoaded(page);
-  await expect(page.getByRole('heading', { name: 'Compare runs', level: 1 })).toBeVisible();
+  // K1 (C245): the title names what is compared
+  await expect(page.getByTestId('compare-title')).toHaveText(/^4 runs/);
   await expect(page.getByText('4 columns')).toBeVisible();
   await expect(page.getByText('cmp-qa-v1').first()).toBeVisible();
   await expect(page.getByText('40 aligned items')).toBeVisible();
@@ -159,9 +160,10 @@ test('empty and too-few states', async ({ page }) => {
   await page.goto('/compare');
   await expect(page.getByText('No runs to compare')).toBeVisible();
   await expect(page.getByRole('link', { name: /Back to runs/ })).toBeVisible();
-  // a single ?runs= ref is below the minimum, so it is treated as no selection
+  // C211: a single ?runs= ref of a one-pass run loads and says it has one pass
   await page.goto(compareUrl([seed.runs.base]));
-  await expect(page.getByText('No runs to compare')).toBeVisible();
+  await expect(page.getByText('Select at least two runs')).toBeVisible();
+  await expect(page.getByText(/This run has one pass/)).toBeVisible();
 });
 
 test('more than 20 runs shows the too-many error without calling the API', async ({ page }) => {

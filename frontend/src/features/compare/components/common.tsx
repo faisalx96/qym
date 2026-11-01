@@ -43,7 +43,7 @@ export function DeltaTag({ stats, type, metric }: { stats: BaselineStats; type: 
   );
 }
 
-/** Items improved / regressed vs the baseline: two small buttons `↑9 ↓2`; pressing one filters the item list (C-avg-7). */
+/** Items improved / regressed vs the baseline: two small buttons `▲9 ▼2`; pressing one filters the item list (C-avg-7). */
 export function CountButtons({
   stats,
   active,
@@ -59,28 +59,33 @@ export function CountButtons({
 }) {
   const up = kindLabel('improved', direction);
   const down = kindLabel('regressed', direction);
+  // C201: a count of 0 filters to nothing, so it has no button
   return (
     <span className={styles.counts} data-part="averages-counts">
-      <button
-        type="button"
-        data-kind="up"
-        aria-pressed={active === 'improved'}
-        aria-label={`${stats.counts.improved} items ${up} vs baseline on ${label}; filter items`}
-        onClick={() => onToggle('improved')}
-      >
-        {'↑'}
-        {stats.counts.improved}
-      </button>
-      <button
-        type="button"
-        data-kind="down"
-        aria-pressed={active === 'regressed'}
-        aria-label={`${stats.counts.regressed} items ${down} vs baseline on ${label}; filter items`}
-        onClick={() => onToggle('regressed')}
-      >
-        {'↓'}
-        {stats.counts.regressed}
-      </button>
+      {stats.counts.improved > 0 || active === 'improved' ? (
+        <button
+          type="button"
+          data-kind="up"
+          aria-pressed={active === 'improved'}
+          aria-label={`${stats.counts.improved} items ${up} vs baseline on ${label}; filter items`}
+          onClick={() => onToggle('improved')}
+        >
+          {'▲'}
+          {stats.counts.improved}
+        </button>
+      ) : null}
+      {stats.counts.regressed > 0 || active === 'regressed' ? (
+        <button
+          type="button"
+          data-kind="down"
+          aria-pressed={active === 'regressed'}
+          aria-label={`${stats.counts.regressed} items ${down} vs baseline on ${label}; filter items`}
+          onClick={() => onToggle('regressed')}
+        >
+          {'▼'}
+          {stats.counts.regressed}
+        </button>
+      ) : null}
     </span>
   );
 }

@@ -1,5 +1,6 @@
 /** Which dataset versions a run evaluated (a union run lists several), and whether compared runs share them. */
 import type { Run } from '@/features/run-detail/types';
+import { datasetVersionLabel } from '@/lib/format';
 
 export const runDatasetCount = (run: Pick<Run, 'dataset_count'>): number => run.dataset_count ?? 1;
 
@@ -15,8 +16,7 @@ export function datasetSetOf(run: Run): string[] {
 /** One cell of "What differs": `3 datasets`, or `support-tickets v3` for a single dataset. */
 export function datasetSummary(run: Run): string {
   if (runDatasetCount(run) > 1) return `${runDatasetCount(run)} datasets`;
-  const version = run.dataset_version != null && run.dataset_version !== '' ? ` ${run.dataset_version}` : '';
-  return `${run.dataset_name ?? ''}${version}`.trim();
+  return [run.dataset_name ?? '', datasetVersionLabel(run.dataset_version)].filter(Boolean).join(' ');
 }
 
 /** Whether any compared run is a union run and the runs do not all evaluate the same set of dataset versions. */

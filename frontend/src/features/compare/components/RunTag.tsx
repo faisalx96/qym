@@ -3,9 +3,9 @@
  * colour-blind readers) and the run's name. Hovering or focusing a tag highlights that run everywhere
  * (SeriesHighlightRoot dims every `[data-mark][data-series]` of another run).
  */
-import type { CSSProperties, FocusEvent } from 'react';
+import { useContext, type CSSProperties, type FocusEvent } from 'react';
 import { isBareRunId, useSeriesHighlight } from '@/ui';
-import { letterOf, runColor, runSeries } from '../CompareContext';
+import { CompareCtx, letterOf, runColor, runSeries } from '../CompareContext';
 import styles from './RunTag.module.css';
 
 /** Props that make an element part of the run-focus linking: it dims when another run is hovered or focused. */
@@ -50,6 +50,7 @@ function Inner({
   className,
   rest,
 }: RunTagProps & { rest: object }) {
+  const letter = useContext(CompareCtx)?.letter ?? letterOf;
   return (
     <span
       className={[styles.tag, className].filter(Boolean).join(' ')}
@@ -67,16 +68,22 @@ function Inner({
           data-part="run-letter"
           aria-hidden
         >
-          {letterOf(index)}
+          {letter(index)}
         </span>
       ) : null}
       {showName && name ? (
         <span className={styles.name} data-id={isBareRunId(name) ? '' : undefined}>
           {name}
-          {baseline ? <span className={styles.baselineTag} data-part="baseline-tag">Baseline</span> : null}
+          {baseline ? (
+            <span className={styles.baselineTag} data-part="baseline-tag">
+              Baseline
+            </span>
+          ) : null}
         </span>
       ) : baseline ? (
-        <span className={styles.baselineTag} data-part="baseline-tag">Baseline</span>
+        <span className={styles.baselineTag} data-part="baseline-tag">
+          Baseline
+        </span>
       ) : null}
     </span>
   );

@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { Select, Text } from '@/ui';
 import { platformUrl } from '@/lib/runtime';
 import { hasAnyRootCause, rootCauseSummary } from '../../lib/breakdown';
-import { letterOf, useCompare } from '../../CompareContext';
+import { useCompare } from '../../CompareContext';
 import { columnName } from '../../lib/columnName';
 import { RunDot } from '../common';
 import { RunTag } from '../RunTag';
@@ -12,7 +12,7 @@ import styles from './Panel.module.css';
 
 /** Links to each run's auto-analysis workspace. */
 export function AnalyzeLinks() {
-  const { model, slug } = useCompare();
+  const { model, slug, letter } = useCompare();
   return (
     <div className={`${styles.stack} ${styles.analyzeLinks}`}>
       <Text variant="sm" tone="muted">
@@ -28,7 +28,7 @@ export function AnalyzeLinks() {
           return (
             <li key={run.ref}>
               <a href={platformUrl(href)} title={`Analyze ${run.title}`}>
-                <RunDot index={i} /> {letterOf(i)} · {run.label}
+                <RunDot index={i} /> {letter(i)} · {run.label}
               </a>
             </li>
           );

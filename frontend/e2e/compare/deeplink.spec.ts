@@ -47,12 +47,12 @@ test('a full deep link restores metric, filters, search, sort, page and the open
   await expect(page.getByRole('button', { name: /^Filters/ })).toContainText('1');
   await openFilters(page);
   await expect(activeFilters(page)).toContainText('Complexity: easy, medium');
-  await expect(page.getByRole('button', { name: /^Display · correct$/ })).toBeVisible();
+  // K6 (C154): the metric is the sticky nav's; Sort is one select in the items toolbar
+  await expect(page.locator('[data-part="metric-control"]')).toContainText('correct');
   await expect(averagesGrid(page)).toBeVisible();
-  // sort in the Display popover
-  await page.getByRole('button', { name: /^Display/ }).click();
-  await expect(page.getByRole('dialog').getByRole('button', { name: /Score, high to low/ })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(
+    page.locator('[data-part="items-toolbar"]').getByRole('button', { name: /Score, high to low/ }),
+  ).toBeVisible();
   // the item: on its page, expanded, scrolled into view
   const row = page.locator('[data-testid="item-row"][data-item-id="cmp-040"]');
   await expect(row).toBeVisible();

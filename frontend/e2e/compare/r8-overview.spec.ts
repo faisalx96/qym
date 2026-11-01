@@ -1,7 +1,7 @@
 /** Round 8: Comparison overview (C-ov-1..6): controls in the head, stat grid, winner bar, distribution bar. */
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { expectShown, urlParams } from './support';
-import { box, noSidewaysScroll, openCompare, part, seedR8, within, type R8Seed } from './r8';
+import { box, openCompare, part, seedR8, within, type R8Seed } from './r8';
 
 let s: R8Seed;
 test.beforeAll(async () => {
@@ -9,41 +9,36 @@ test.beforeAll(async () => {
   s = await seedR8('r8-ov');
 });
 
-const aside = (page: Page) => part(page, 'section-overview').locator('[data-part="section-head"] > div').last();
+const navControls = (page: Page) => part(page, 'page-controls');
 
-test('C-ov-1: the pass slider and the metric tabs sit in the head on one centre line; both keep the URL', async ({
+test('K6 (C154): Metric and the pass slider sit in the sticky nav, not in the Overview head; both keep the URL', async ({
   page,
 }) => {
   await openCompare(page, s.four, 1440);
-  const slider = aside(page).getByRole('slider', { name: /Pass if/ });
-  const tabs = aside(page).getByRole('radiogroup', { name: 'Overview metric' });
+  const slider = navControls(page).getByRole('slider', { name: /Pass if/ });
+  const metric = navControls(page)
+    .locator('[data-part="metric-control"]')
+    .getByRole('button', { name: /Metric/ });
   await expect(slider).toBeVisible();
-  await expect(tabs).toBeVisible();
-  within((await box(tabs)).h, 24, 1, 'tabs height');
-  const centre = async (l: Locator) => (await box(l)).y + (await box(l)).h / 2;
-  // the slider is inline in the head: label, value and track on one 24 px line, centred with the tabs
-  const block = slider.locator('xpath=ancestor::*[contains(@class,"lider")][1]');
-  within((await box(block)).h, 24, 1, 'slider block height');
-  within(await centre(tabs), await centre(block), 1, 'one centre line');
-  // metric tabs: correct -> URL and the stat values change
+  await expect(metric).toBeVisible();
+  await expect(part(page, 'section-overview').getByRole('slider')).toHaveCount(0);
+  await expect(
+    part(page, 'section-overview').getByRole('radiogroup', { name: 'Overview metric' }),
+  ).toHaveCount(0);
+  // metric -> URL and the stat values change
   const stat = () => part(page, 'stat-grid').innerText();
   const before = await stat();
-  await tabs.getByText('correct').click();
+  await metric.click();
+  await page.getByRole('option', { name: 'correct' }).click();
   await expect.poll(() => urlParams(page).get('metric')).toBe('correct');
   await expect.poll(stat).not.toBe(before);
   // slider -> thr
-  await tabs.getByText('quality').click();
+  await metric.click();
+  await page.getByRole('option', { name: 'quality' }).click();
   await slider.focus();
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
   await expect.poll(() => urlParams(page).getAll('thr')).toEqual(['quality:0.6']);
-  // at 390 the aside wraps under the description
-  await openCompare(page, s.four, 390);
-  const head = part(page, 'section-overview').locator('[data-part="section-head"]');
-  const text = await box(head.locator('h2'));
-  const asideBox = await box(aside(page));
-  expect(asideBox.y).toBeGreaterThan(text.y + text.h);
-  await noSidewaysScroll(page);
 });
 
 test('C-ov-2/3: the stat grid is 8 / 4 / 2 columns with 1 px gaps drawn by the grid', async ({ page }) => {
@@ -55,24 +50,37 @@ test('C-ov-2/3: the stat grid is 8 / 4 / 2 columns with 1 px gaps drawn by the g
     await openCompare(page, s.four, w);
     const grid = part(page, 'stat-grid');
     within((await box(grid)).h, h, 2, `grid height at ${w}`);
-    const tops = await part(page, 'stat-box').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().y)));
+    const tops = await part(page, 'stat-box').evaluateAll((els) =>
+      els.map((e) => Math.round(e.getBoundingClientRect().y)),
+    );
     expect(tops.filter((t) => t === tops[0]).length).toBe(perRow);
     if (boxW) within((await box(part(page, 'stat-box').first())).w, boxW, 2, 'box width');
     within((await box(part(page, 'stat-box').first())).h, 74, 2, 'box height');
-    const borders = await part(page, 'stat-box').first().evaluate((e) => getComputedStyle(e).borderTopWidth);
+    const borders = await part(page, 'stat-box')
+      .first()
+      .evaluate((e) => getComputedStyle(e).borderTopWidth);
     expect(borders).toBe('0px');
   }
   await openCompare(page, s.four, 1440);
   const boxes = part(page, 'stat-box');
-  const label = await boxes.first().locator('span').first().evaluate((e) => ({ size: getComputedStyle(e).fontSize, weight: getComputedStyle(e).fontWeight }));
+  const label = await boxes
+    .first()
+    .locator('span')
+    .first()
+    .evaluate((e) => ({ size: getComputedStyle(e).fontSize, weight: getComputedStyle(e).fontWeight }));
   expect(label.size).toBe('11px');
   expect(Number(label.weight)).toBe(600);
-  const value = await boxes.first().locator('b').evaluate((e) => ({ f: getComputedStyle(e).fontFamily, w: getComputedStyle(e).fontWeight }));
+  const value = await boxes
+    .first()
+    .locator('b')
+    .evaluate((e) => ({ f: getComputedStyle(e).fontFamily, w: getComputedStyle(e).fontWeight }));
   expect(value.f).toMatch(/mono/i);
   expect(Number(value.w)).toBe(650);
   // Pass@4 carries a help marker; the Errors value is red text
   await expect(boxes.first().getByRole('button')).toHaveCount(1);
-  const colours = await boxes.evaluateAll((els) => els.map((e) => getComputedStyle(e.querySelector('b')!).color));
+  const colours = await boxes.evaluateAll((els) =>
+    els.map((e) => getComputedStyle(e.querySelector('b')!).color),
+  );
   expect(colours[7]).not.toBe(colours[6]); // Errors vs Avg latency (primary)
 });
 
@@ -95,7 +103,14 @@ test('C-ov-4: the winner bar is 28 high, proportional, named and clickable; the 
   // widths are proportional to wins (flex-grow = wins)
   const ratio = widths.map((w, i) => w / wins[i]!);
   for (const r of ratio) within(r, ratio[0]!, ratio[0]! * 0.06, 'width per win');
-  const seg = await segs.first().evaluate((e) => ({ bg: getComputedStyle(e).backgroundColor, f: getComputedStyle(e.firstElementChild!).fontFamily, s: getComputedStyle(e).fontSize, w: getComputedStyle(e).fontWeight }));
+  const seg = await segs
+    .first()
+    .evaluate((e) => ({
+      bg: getComputedStyle(e).backgroundColor,
+      f: getComputedStyle(e.firstElementChild!).fontFamily,
+      s: getComputedStyle(e).fontSize,
+      w: getComputedStyle(e).fontWeight,
+    }));
   expect(seg.f).toMatch(/mono/i);
   expect(seg.s).toBe('11px');
   expect(Number(seg.w)).toBe(650);
@@ -140,7 +155,9 @@ test('C-ov-5: the distribution bar is one 32 px stacked bar, a segment per count
   await expect(first).toHaveAttribute('aria-pressed', 'true');
   await expect(part(page, 'baseline-delta-banner')).toContainText(`Passing runs = ${m[2]} of 4`);
   // the old histogram is gone
-  await expect(part(page, 'section-overview').getByRole('button', { name: /items with \d of 4 runs correct; filter$/ })).toHaveCount(await segs.count());
+  await expect(
+    part(page, 'section-overview').getByRole('button', { name: /items with \d of 4 runs correct; filter$/ }),
+  ).toHaveCount(await segs.count());
 });
 
 test('C-ov-6: the overview section is at most 410 high at 1440 with 4 runs', async ({ page }) => {

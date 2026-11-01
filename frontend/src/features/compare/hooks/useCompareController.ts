@@ -15,10 +15,11 @@ import {
   MAX_COMPARE_RUNS,
   MIN_COMPARE_RUNS,
   passRefBase,
+  passRefNumber,
   readSelection,
   selectionParams,
 } from '../lib/refs';
-import { readView, writeView, type CompareView } from '../lib/filters';
+import { defaultColumns, readView, writeView, type CompareView } from '../lib/filters';
 import { resolveCohorts, type CohortGroups } from '../lib/cohort';
 import { metricCtx, type MetricCtx } from '../lib/scoring';
 import { useQueryClient } from '@tanstack/react-query';
@@ -74,18 +75,24 @@ export function useCompareController(): CompareController {
 
   const bases = useMemo(() => baseRunIds(selection.refs), [selection.refs]);
   const tooMany = bases.length > MAX_COMPARE_RUNS;
-  const selectionState: CompareController['selectionState'] = !selection.refs.length
+  // C211: a single whole run loads, and expands to its passes; it is too few only once it turns out to have one pass
+  const single = selection.refs.length === 1 && passRefNumber(selection.refs[0]!) === null;
+  const requested: CompareController['selectionState'] = !selection.refs.length
     ? 'none'
-    : selection.refs.length < MIN_COMPARE_RUNS
+    : selection.refs.length < MIN_COMPARE_RUNS && !single
       ? 'too_few'
       : 'ok';
-  const query = useCompareQuery(selectionState === 'ok' && !tooMany ? bases : []);
+  const query = useCompareQuery(requested === 'ok' && !tooMany ? bases : []);
 
   const model = useMemo(() => {
     if (!query.data) return null;
     const refs = selection.cohorts ? [...selection.cohorts.left, ...selection.cohorts.right] : selection.refs;
     return buildCompareModel(query.data, refs);
   }, [query.data, selection]);
+  const selectionState: CompareController['selectionState'] =
+    single && model && model.runs.length < MIN_COMPARE_RUNS && !(query.data?.missing_runs ?? []).length
+      ? 'too_few'
+      : requested;
 
   const cohortGroups = useMemo(() => {
     if (!model || !query.data) return null;
@@ -113,6 +120,7 @@ export function useCompareController(): CompareController {
         metadataKeys: model?.metadataKeys ?? [],
         runCount: model?.runs.length ?? 0,
         rows: model ? model.runs.flatMap((r) => r.rows) : [],
+        baseCount: model?.bases.length ?? 2,
       }),
     [params, model],
   );
@@ -123,9 +131,11 @@ export function useCompareController(): CompareController {
     [model, metric, thresholds],
   );
 
+  const baseCount = model?.bases.length ?? 2;
   const write = useCallback(
-    (next: CompareView) => replaceUrlQuery(writeView(next, model?.defaultMetric ?? null)),
-    [replaceUrlQuery, model?.defaultMetric],
+    (next: CompareView) =>
+      replaceUrlQuery(writeView(next, model?.defaultMetric ?? null, defaultColumns(baseCount))),
+    [replaceUrlQuery, model?.defaultMetric, baseCount],
   );
   const setView = useCallback<CompareController['setView']>(
     (patch, opts) => {
