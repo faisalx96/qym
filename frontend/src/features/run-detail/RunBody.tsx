@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { runPath } from '@/app/routes';
+import { getRowRootCauseAnalyses } from './lib/rowMeta';
 import { api as http } from '@/lib/http';
 import {
   loadedGroups,
@@ -243,6 +244,15 @@ export function RunBody({
   // Everything else loads by itself once the core rows have painted, with no scroll or click: the item texts and the
   // remaining panel chunks and section data, in the browser's idle time (aborted when the page is left).
   const qc = useQueryClient();
+  // C086: the Root cause chunk is fetched only for a run that has analyses
+  const hasRootCause = useMemo(
+    () =>
+      !!payload.run.metadata?.analysis_aggregation ||
+      model.rows.some(
+        (row) => getRowRootCauseAnalyses(row, 'all', model.isRepeat && !model.viewPass).length > 0,
+      ),
+    [payload.run.metadata, model.rows, model.isRepeat, model.viewPass],
+  );
   useEffect(() => {
     if (rowsPending) return undefined;
     const run = () => {
@@ -250,7 +260,7 @@ export function RunBody({
       // the other chunks would share the bandwidth with it
       void loadItemsSection().finally(() => {
         needGroup('text');
-        preloadPanels();
+        preloadPanels({ rootCause: hasRootCause });
       });
       void qc.prefetchQuery({
         queryKey: runKeys.stepLatency(runId, null),
@@ -264,7 +274,7 @@ export function RunBody({
     }
     const id = window.requestIdleCallback(run, { timeout: 300 });
     return () => window.cancelIdleCallback(id);
-  }, [rowsPending, needGroup, qc, runId]);
+  }, [rowsPending, needGroup, qc, runId, hasRootCause]);
 
   const basePath = runPath(slug, runId);
   const value: RunPageValue = {

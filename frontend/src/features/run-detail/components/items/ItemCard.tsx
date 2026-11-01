@@ -74,6 +74,20 @@ export function analysisWarnings(row: Row): string[] {
   return out;
 }
 
+/** True after the browser's next idle period (C086): an opened item renders its heavy parts in a second step. */
+function useIdleReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(() => setReady(true), { timeout: 200 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = globalThis.setTimeout(() => setReady(true), 0);
+    return () => globalThis.clearTimeout(id);
+  }, []);
+  return ready;
+}
+
 /** A field where Escape belongs to the text (search boxes, the score editor, comment fields). */
 function isTextEntry(target: EventTarget): boolean {
   const el = target as HTMLElement;
@@ -128,6 +142,7 @@ export function ItemCard({ row }: { row: Row }) {
   );
   const multi = repeatAggregate && model.samples > 1;
   const [selected, setSelected] = useState<number[]>(() => defaultSelection(model.samples));
+  const heavyReady = useIdleReady();
 
   if (!loaded && state?.status === 'error') {
     return (
@@ -277,23 +292,30 @@ export function ItemCard({ row }: { row: Row }) {
       />
       <TraceChips stats={row.trace_stats} retries={row.retry_count ?? 0} />
       <hr className={styles.divider} />
-      <section className={styles.metrics} aria-label="Metrics">
-        {run.items_restricted || noVerdict ? (
-          <>
-            <h3 className={styles.metricsTitle}>Metrics</h3>
-            <p className={styles.muted}>
-              {run.items_restricted
-                ? run.items_restricted_reason === 'dataset_access'
-                  ? HIDDEN_DATASET_ITEMS
-                  : 'Scores are visible to admins only'
-                : 'No scores: this item produced no output to score.'}
-            </p>
-          </>
-        ) : (
-          <MetricMatrix row={row} passes={passes} multi={multi} shown={shownForMatrix} />
-        )}
-      </section>
-      <MetricAnalysisCards row={row} />
+      {/* C086: the bar and the output paint first; the metric matrix and the root-cause cards follow in idle time */}
+      {heavyReady ? (
+        <>
+          <section className={styles.metrics} aria-label="Metrics">
+            {run.items_restricted || noVerdict ? (
+              <>
+                <h3 className={styles.metricsTitle}>Metrics</h3>
+                <p className={styles.muted}>
+                  {run.items_restricted
+                    ? run.items_restricted_reason === 'dataset_access'
+                      ? HIDDEN_DATASET_ITEMS
+                      : 'Scores are visible to admins only'
+                    : 'No scores: this item produced no output to score.'}
+                </p>
+              </>
+            ) : (
+              <MetricMatrix row={row} passes={passes} multi={multi} shown={shownForMatrix} />
+            )}
+          </section>
+          <MetricAnalysisCards row={row} />
+        </>
+      ) : (
+        <div className={styles.metricsPending} aria-busy="true" data-testid="item-metrics-pending" />
+      )}
     </article>
   );
 }
