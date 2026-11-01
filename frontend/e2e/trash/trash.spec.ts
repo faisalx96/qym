@@ -5,7 +5,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { archiveProject, createProject, gotoApp, uniqueSlug } from '../helpers';
 import { pickSelect, query } from '../datasets/ui';
-import { seedTrash } from './support';
+import { openTrashRowMenu, pickTrashAction, seedTrash } from './support';
 
 const row = (page: Page, text: string) => page.getByRole('row').filter({ hasText: text });
 const dataRows = (page: Page) =>
@@ -22,7 +22,7 @@ test.describe('trash', () => {
     await gotoApp(page, '/trash');
     await expect(page.locator('[data-trash-page]')).toBeVisible();
     await expect(page).toHaveTitle(/Deleted runs/);
-    await expect(page.getByText(/Retention/)).toBeVisible();
+    await expect(page.getByText(/^Retention (Off \(kept until restored\)|\d+ days?)$/)).toBeVisible();
     await expect(page.getByText('Only admins can restore runs')).toBeVisible();
 
     const search = page.getByRole('searchbox', { name: 'Search run name or ID' });
@@ -36,7 +36,8 @@ test.describe('trash', () => {
     await expect(dataRows(page)).toHaveCount(1);
     await expect(row(page, `${prefix}-1`)).toContainText(s.runs[1]!.id);
     await expect(row(page, `${prefix}-1`)).toContainText(s.project.name);
-    await expect(row(page, `${prefix}-1`)).toContainText(/in \d+ days?|Not scheduled|Due now/);
+    // the Deleted date (the Purges column shows only while retention is on)
+    await expect(row(page, `${prefix}-1`)).toContainText(/[A-Z][a-z]{2} \d{1,2}, \d{4}/);
     await page.reload();
     await expect(page.getByRole('searchbox', { name: 'Search run name or ID' })).toHaveValue(s.runs[1]!.id);
     await expect(dataRows(page)).toHaveCount(1);
@@ -113,7 +114,7 @@ test.describe('trash', () => {
     expect(((await res.json()) as unknown[]).length).toBe(1);
   });
 
-  test('select all (Ctrl+A) skips runs of archived projects, which stay unrestorable', async ({
+  test('select all (Ctrl+A) takes every row; Restore skips runs of archived projects', async ({
     page,
     request,
   }) => {
@@ -126,28 +127,54 @@ test.describe('trash', () => {
     await expect(dataRows(page)).toHaveCount(5);
     const archivedRow = row(page, `${arch.prefix}-0`);
     await expect(archivedRow).toContainText('Project archived');
-    await expect(archivedRow).toContainText('Paused');
-    await expect(archivedRow.getByRole('button', { name: 'Restore' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+    // the archived run's menu explains why Restore is off
+    const menu = await openTrashRowMenu(page, archivedRow);
+    await expect(menu.getByRole('menuitem', { name: /Restore/ })).toHaveAttribute('aria-disabled', 'true');
+    await expect(menu).toContainText('Unarchive the project to restore this run.');
+    await page.keyboard.press('Escape');
 
     await row(page, `${live.prefix}-0`).focus();
     await page.keyboard.press('Control+a');
-    await expect(page.getByRole('region', { name: 'Selection actions' })).toContainText('3 selected');
+    await expect(page.getByRole('region', { name: 'Selection actions' })).toContainText('5 selected');
     await expect(page.getByTestId('restore-selected')).toHaveText(/Restore 3 selected/);
-    // clicking a disabled row action only explains, it restores nothing
-    await archivedRow.getByRole('button', { name: 'Restore' }).click({ force: true });
-    await expect(page.getByText('Unarchive the project to restore this run.').first()).toBeVisible();
+    await expect(page.getByTestId('purge-selected')).toHaveText(/Delete 5 permanently/);
     await page.getByTestId('restore-selected').click();
     await expect(page.getByText('3 runs restored')).toBeVisible();
     await expect(dataRows(page)).toHaveCount(2);
     await expect(row(page, `${arch.prefix}-1`)).toHaveCount(1);
 
-    // archived-only view: nothing can be selected
+    // archived-only view: the rows can be selected for Delete permanently, but not restored
     await row(page, `${arch.prefix}-0`).focus();
     await page.keyboard.press('Control+a');
-    await expect(page.getByTestId('restore-selected')).toHaveCount(0);
+    await expect(page.getByTestId('restore-selected')).toBeDisabled();
+    await expect(page.getByTestId('purge-selected')).toHaveText(/Delete 2 permanently/);
+  });
+
+  test('Delete permanently asks for the typed count, then the runs are gone for good', async ({
+    page,
+    request,
+  }) => {
+    const s = await seedTrash(request, tag(), 3);
+    await gotoApp(page, `/trash?q=${s.prefix}`);
+    await expect(dataRows(page)).toHaveCount(3);
+    await row(page, `${s.prefix}-0`).click();
+    await row(page, `${s.prefix}-1`).click();
+    await page.getByTestId('purge-selected').click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Delete 2 runs permanently?');
+    const confirm = dialog.getByRole('button', { name: 'Delete 2 runs permanently' });
+    await expect(confirm).toBeDisabled();
+    await dialog.getByRole('textbox').fill('delete 2 runs');
+    await confirm.click();
+    await expect(page.getByText('2 runs deleted permanently')).toBeVisible();
+    await expect(dataRows(page)).toHaveCount(1);
+    // one row from its menu
+    await pickTrashAction(page, row(page, `${s.prefix}-2`), 'Delete permanently');
+    await dialog.getByRole('textbox').fill('delete 1 run');
+    await dialog.getByRole('button', { name: 'Delete 1 run permanently' }).click();
+    await expect(page.getByText('1 run deleted permanently')).toBeVisible();
+    const res = await request.get(`/api/runs/trash?q=${s.prefix}&limit=50`);
+    expect(((await res.json()) as unknown[]).length).toBe(0);
   });
 
   test('[BUG] the table has a select-all header checkbox and per-row checkboxes', async ({
@@ -160,10 +187,10 @@ test.describe('trash', () => {
     await expect(page.getByRole('grid', { name: 'Deleted runs' }).getByRole('checkbox')).not.toHaveCount(0);
   });
 
-  test('single Restore button restores one run', async ({ page, request }) => {
+  test('Restore in the row menu restores one run', async ({ page, request }) => {
     const s = await seedTrash(request, tag(), 2);
     await gotoApp(page, `/trash?q=${s.prefix}`);
-    await page.getByTestId(`restore-${s.runs[0]!.id}`).click();
+    await pickTrashAction(page, row(page, `${s.prefix}-0`), 'Restore');
     await expect(page.getByText('1 run restored')).toBeVisible();
     await expect(dataRows(page)).toHaveCount(1);
     await expect(row(page, `${s.prefix}-0`)).toHaveCount(0);

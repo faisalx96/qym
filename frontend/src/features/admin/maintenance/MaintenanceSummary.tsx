@@ -66,7 +66,13 @@ export function MaintenanceSummary({
           },
           { key: 'events', label: 'Event log', value: s.event_log_mode },
           { key: 'spans', label: 'Span retention', value: days(s.span_retention_days), mono: true },
-          { key: 'grace', label: 'Deleted-run grace', value: days(s.deleted_run_grace_days), mono: true },
+          {
+            key: 'grace',
+            label: 'Deleted runs retention',
+            // 0 keeps deleted runs until someone restores them; "0 days" read as "deleted at once" (C178)
+            value: s.deleted_run_grace_days ? days(s.deleted_run_grace_days) : 'Off (kept until restored)',
+            mono: Boolean(s.deleted_run_grace_days),
+          },
           {
             key: 'partitions',
             label: 'Span partitions ahead',

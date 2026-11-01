@@ -189,7 +189,7 @@ function DeleteProjectDialogInner({ project, open, onOpenChange, onArchiveInstea
         onConfirm={() => {
           onOpenChange(false);
           if (project.is_active) onArchiveInstead();
-          else navigate(`/trash?project=${encodeURIComponent(project.slug)}`);
+          else navigate(`/trash?project=${encodeURIComponent(project.id)}`);
         }}
       />
     );

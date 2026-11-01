@@ -119,3 +119,25 @@ export function useRestoreRuns() {
     },
   });
 }
+
+export interface PurgeResult {
+  ok: boolean;
+  purged: string[];
+  skipped: { run_id: string; reason: string }[];
+}
+
+/** Delete permanently takes at most this many runs per request (the server's PURGE_NOW_MAX). */
+export const PURGE_MAX = 50;
+
+/** Admin Delete permanently (C118): ignores retention, also for runs of an archived project. */
+export function usePurgeRuns() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runIds: string[]) =>
+      apiFetch<PurgeResult>('/api/runs/purge', { method: 'POST', body: { run_ids: runIds } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['trash'] });
+      void qc.invalidateQueries({ queryKey: trashKeys.projects });
+    },
+  });
+}
