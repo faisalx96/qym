@@ -24,7 +24,14 @@ describe('buildMatrix with dataset versions', () => {
     ...combined.map((d, k) =>
       makeJob({ id: `p${k}`, environment_id: 'e2', dataset_index: k, dataset: d, combo_label: '' }),
     ),
-    makeJob({ id: 'p1r', environment_id: 'e2', dataset_index: 1, dataset: combined[1], attempt: 1, retry_of_job_id: 'p1' }),
+    makeJob({
+      id: 'p1r',
+      environment_id: 'e2',
+      dataset_index: 1,
+      dataset: combined[1],
+      attempt: 1,
+      retry_of_job_id: 'p1',
+    }),
   ];
   jobs[2] = { ...jobs[2]!, superseded: true };
   const matrix = buildMatrix(makeDetail(jobs));
@@ -50,7 +57,11 @@ describe('buildMatrix with dataset versions', () => {
 
   it('QD-57 groups: the combined job first, then each dataset version', () => {
     const groups = jobs.map((j) => jobGroup(j));
-    expect(groups[0]).toEqual({ key: 'combined', order: -1, label: 'All 4 dataset versions · one combined run' });
+    expect(groups[0]).toEqual({
+      key: 'combined',
+      order: -1,
+      label: 'All 4 dataset versions · one combined run',
+    });
     expect(groups[3]).toEqual({ key: 'pair-2', order: 2, label: 'b · v1' });
     expect(jobGroup(makeJob())).toBeNull();
   });
@@ -336,7 +347,8 @@ describe('buildChart', () => {
 
 describe('format helpers', () => {
   it('formats metrics, params, base sources and job tallies', () => {
-    expect(formatMetric(0.12345)).toBe('0.123');
+    expect(formatMetric(0.12345)).toBe('12.3%');
+    expect(formatMetric(12.345)).toBe('12.345');
     expect(formatMetric(1234.5)).toBe('1235');
     expect(formatMetric(undefined)).toBe('—');
     expect(formatParam({ temporary: { model: 'jais' } })).toBe('jais');
@@ -350,8 +362,8 @@ describe('format helpers', () => {
   it('writes relative times', () => {
     const now = Date.parse('2026-01-02T00:00:00Z');
     expect(relTime('2026-01-01T23:59:40Z', now)).toBe('just now');
-    expect(relTime('2026-01-01T23:30:00Z', now)).toBe('30 min ago');
-    expect(relTime('2026-01-01T20:00:00Z', now)).toBe('4 hr ago');
+    expect(relTime('2026-01-01T23:30:00Z', now)).toBe('30m ago');
+    expect(relTime('2026-01-01T20:00:00Z', now)).toBe('4h ago');
     expect(relTime(null, now)).toBe('—');
   });
 });

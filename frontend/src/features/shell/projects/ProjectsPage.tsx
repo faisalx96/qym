@@ -8,14 +8,11 @@ import { useDocumentTitle } from '../hooks';
 import { constrained } from '../layout';
 import { CreateProjectDialog } from '../dialogs';
 import styles from './ProjectsPage.module.css';
+import { formatAgo } from '@/lib/dates';
 
+/** Freshness, then the day (lib/dates, C048). */
 function relativeDate(iso: string): string {
-  const d = new Date(iso);
-  const days = Math.round((Date.now() - d.getTime()) / 86_400_000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 30) return `${days} days ago`;
-  return d.toLocaleDateString();
+  return formatAgo(iso);
 }
 
 /** Projects landing: card grid filtered client-side by name/slug. */

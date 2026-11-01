@@ -38,6 +38,7 @@ import {
   StatusMark,
 } from '@/ui';
 import styles from './TrashPage.module.css';
+import { formatDay } from '@/lib/dates';
 
 const DAY = 86_400_000;
 
@@ -56,12 +57,12 @@ export function purgeInfo(
     text: `in ${n} day${n === 1 ? '' : 's'}`,
     tone: n < 3 ? 'warning' : undefined,
     soon: n < 3,
-    sub: new Date(row.purge_at).toLocaleDateString(),
+    sub: formatDay(row.purge_at),
   };
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return formatDay(iso);
 }
 
 export function TrashPage() {

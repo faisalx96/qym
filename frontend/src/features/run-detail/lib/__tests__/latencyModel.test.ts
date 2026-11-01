@@ -200,9 +200,10 @@ describe('time budget brackets and kinds', () => {
 });
 
 describe('fmtMs', () => {
-  it('writes table durations compactly', () => {
+  it('writes table durations in the one duration format (C164)', () => {
     expect(fmtMs(627.4)).toBe('627ms');
-    expect(fmtMs(1940)).toBe('1.94s');
+    expect(fmtMs(1940)).toBe('1.9s');
+    expect(fmtMs(75_000)).toBe('1m 15s');
     expect(fmtMs(18500)).toBe('18.5s');
     expect(fmtMs(NaN)).toBe('—');
   });

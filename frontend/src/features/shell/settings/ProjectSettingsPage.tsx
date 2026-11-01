@@ -11,6 +11,7 @@ import { ApiKeysTab } from './ApiKeysTab';
 import { LlmConnectionsTab } from './LlmConnectionsTab';
 import { EnvironmentsTab } from './EnvironmentsTab';
 import { PromptsTab } from './PromptsTab';
+import { formatDay } from '@/lib/dates';
 
 export const SETTINGS_TABS = ['general', 'members', 'apikeys', 'llm', 'environments', 'prompts'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -58,7 +59,7 @@ export function ProjectSettingsPage() {
           </Tag>,
           plural(project.member_count, 'member'),
           plural(project.run_count, 'run'),
-          `Created ${new Date(project.created_at).toLocaleDateString()}`,
+          `Created ${formatDay(project.created_at)}`,
           // on/off state: only the exception shows
           ...(readOnly
             ? [

@@ -3,6 +3,7 @@
  * _dedupeGlobalLlmSpans / buildRetriedTree / detectRetries / computeBounds /
  * extractMessages). Pure: works on plain span objects and returns new nodes.
  */
+import { formatDuration as formatOneDuration } from '@/lib/format';
 import type { Span, TraceAttempt, TracePayload, TraceSummary } from '../types';
 
 export type SpanKind =
@@ -704,11 +705,10 @@ export function searchVisible(tree: SpanTree, query: string): Set<string> | null
   return visible;
 }
 
+/** The one duration format (C164): lib/format. */
 export function formatDuration(ms: unknown): string {
   if (ms == null) return '—';
-  const n = Number(ms);
-  if (!Number.isFinite(n)) return '—';
-  return n >= 1000 ? (n / 1000).toFixed(1) + 's' : Math.round(n) + 'ms';
+  return formatOneDuration(Number(ms));
 }
 
 export function formatCost(n: unknown): string | null {

@@ -10,6 +10,7 @@ import { RunStatusBadge } from '../../RunStatusBadge';
 import { Tag } from '../../Tag';
 import { middleTruncate } from '../model';
 import styles from './cells.module.css';
+import { formatHeaderDate, toDate } from '@/lib/dates';
 
 /* ── ScoreBar ──────────────────────────────────────────────────────────── */
 
@@ -208,10 +209,9 @@ export function IdCell({ value, keep = 8, copy = true }: { value: string; keep?:
 
 export function RelativeTime({ iso, now }: { iso: string | null | undefined; now?: Date }) {
   if (!iso) return <span>—</span>;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return <span>—</span>;
+  if (!toDate(iso)) return <span>—</span>;
   return (
-    <time dateTime={iso} title={d.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}>
+    <time dateTime={iso} title={formatHeaderDate(iso)}>
       {formatRelative(iso, now)}
     </time>
   );

@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import type { ExperimentJob } from '@/api/experiments';
 import { runPath } from '@/app/routes';
-import { Button, Checkbox, SectionHeader, Card } from '@/ui';
+import { Button, Checkbox, SectionHeader, Card, ScoreValue } from '@/ui';
 import { JobStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { formatMetric, plural } from '../lib/format';
@@ -88,7 +88,11 @@ export function MatrixCard({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.key} data-combo-index={row.combo.index} data-dataset-row={byDataset ? row.key : undefined}>
+                <tr
+                  key={row.key}
+                  data-combo-index={row.combo.index}
+                  data-dataset-row={byDataset ? row.key : undefined}
+                >
                   <th scope="row">
                     <span className={styles.comboLabel} title={row.label || row.combo.label}>
                       {row.label ||
@@ -196,7 +200,17 @@ function MatrixCell({
       </div>
       {headline && typeof headline.mean === 'number' ? (
         <div className={styles.metric}>
-          <span className={styles.metricValue}>{formatMetric(headline.mean)}</span>
+          {headline.mean >= 0 && headline.mean <= 1 ? (
+            <ScoreValue
+              value={headline.mean}
+              direction={headline.direction === 'minimize' ? 'minimize' : 'maximize'}
+              digits={1}
+              variant="plain"
+              className={styles.metricValue}
+            />
+          ) : (
+            <span className={styles.metricValue}>{formatMetric(headline.mean)}</span>
+          )}
           <span
             className={styles.metricName}
             title={headline.name + (headline.direction === 'minimize' ? ' (lower is better)' : '')}

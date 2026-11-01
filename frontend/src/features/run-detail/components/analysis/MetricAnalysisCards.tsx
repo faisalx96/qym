@@ -14,13 +14,10 @@ import type { MetricAnalysis, RootCauseIssue, Row } from '../../types';
 import { messageFor } from '../items/ScoreEditor';
 import { IssueForm } from './IssueForm';
 import styles from './MetricAnalysisCards.module.css';
+import { formatDay, toDate } from '@/lib/dates';
 
 function decidedOn(iso: string | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ''
-    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return iso && toDate(iso) ? formatDay(iso) : '';
 }
 
 /** One muted line under a decided issue: 'Rejected by Name · date: comment' (C125). */

@@ -273,7 +273,7 @@ function CurveTable({
       id: sr.name,
       header: sr.name,
       label: sr.name,
-      align: 'end' as const,
+      align: 'center' as const,
       mono: true,
       cell: (r: { k: number; i: number }) =>
         numeric

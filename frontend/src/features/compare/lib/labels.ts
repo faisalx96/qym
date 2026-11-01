@@ -3,6 +3,7 @@
  * and start date; when every run uses one model the label is the part of the
  * run name the runs do not share. Full names go in the title.
  */
+import { formatShortDay, formatTableDate, toDate } from '@/lib/dates';
 export interface LabelInput {
   base: string;
   name: string;
@@ -20,15 +21,10 @@ export function modelShortName(raw: unknown): string {
   return text ? (text.split('/').filter(Boolean).pop() ?? '') : '';
 }
 
+/** 'Sep 14' or the table form 'Sep 14 · 19:05' (lib/dates, C048). */
 export function dateLabel(value: string, withTime = false, now: Date = new Date()): string {
-  const d = new Date(value);
-  if (!value || Number.isNaN(d.getTime())) return '';
-  const sameYear = d.getFullYear() === now.getFullYear();
-  const date = d.toLocaleDateString(
-    'en-US',
-    sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' },
-  );
-  return withTime ? `${date} ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}` : date;
+  if (!value || !toDate(value)) return '';
+  return withTime ? formatTableDate(value, now) : formatShortDay(value, now);
 }
 
 /** The distinct part of each name after the prefix they all share; null when none is worth stripping. */

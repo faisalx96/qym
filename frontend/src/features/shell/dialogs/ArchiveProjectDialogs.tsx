@@ -12,6 +12,7 @@ import type { ArchivePreview, DeletionPreview, Project, UnarchivePreview } from 
 import { ApiError } from '@/lib/http';
 import { ConfirmDialog, useToast, type ConfirmWarning } from '@/ui';
 import { projectPath } from '@/app/routes';
+import { formatHeaderDate, toDate } from '@/lib/dates';
 
 function errorText(e: unknown): string {
   return e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e);
@@ -28,10 +29,7 @@ export function ArchiveProjectDialog(props: ArchiveDialogProps) {
 }
 
 function formatStarted(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : `started ${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
+  return toDate(iso) ? `started ${formatHeaderDate(iso)}` : iso;
 }
 
 function ArchiveProjectDialogInner({ project, open, onOpenChange, onArchived }: ArchiveDialogProps) {

@@ -1,21 +1,14 @@
 /** Small display helpers of the environments area. */
+import { formatAgo, formatHeaderDate } from '@/lib/dates';
 
+/** Freshness, then the day (lib/dates, C048). */
 export function relTime(value: string | null | undefined, now = Date.now()): string {
-  if (!value) return '';
-  const stamp = new Date(value);
-  if (Number.isNaN(stamp.getTime())) return '';
-  const seconds = Math.max(0, Math.floor((now - stamp.getTime()) / 1000));
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
-  return stamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return value ? formatAgo(value, now) : '';
 }
 
+/** Header form (lib/dates, C048). */
 export function absTime(value: string | null | undefined): string {
-  if (!value) return '';
-  const stamp = new Date(value);
-  return Number.isNaN(stamp.getTime()) ? '' : stamp.toLocaleString();
+  return value ? formatHeaderDate(value) : '';
 }
 
 export const shortHash = (hash: string | null | undefined) => (hash ? String(hash).slice(0, 12) : '');

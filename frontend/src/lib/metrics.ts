@@ -389,17 +389,8 @@ export function formatPercent(value: number | null | undefined, decimals = 1): s
   return (value * 100).toFixed(decimals) + '%';
 }
 
-export function formatLatency(ms: number | null | undefined): string {
-  if (!ms || ms <= 0) return '—';
-  if (ms >= 60000) {
-    const totalSeconds = Math.round(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  }
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${ms.toFixed(0)}ms`;
-}
+/** One duration format (C164): lib/format. */
+export { formatLatency } from './format';
 
 export function scoreBand(score: number): ScoreBand {
   if (score >= 0.9) return 5;
