@@ -2,7 +2,7 @@
  * Per-metric root cause cards on an item: issues, add / edit, approve / reject (brief 04 J8, §3j; C125, C128, C174).
  */
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError } from '@/lib/http';
 import { useIssueAction, useIssueBlocksQuery } from '@/api/runs';
 import { isItemTaskError } from '@/lib/metrics';
@@ -247,8 +247,29 @@ function Card({
   );
 }
 
+/**
+ * The link to one pass of a repeat item (C127): it keeps the page's filters (show, metric, threshold, q and the rest)
+ * and sets only the pass and the item, so a reviewer keeps the list of failures after the switch.
+ */
+export function passItemHref(
+  basePath: string,
+  search: URLSearchParams,
+  pass: number,
+  itemId: string,
+): string {
+  const next = new URLSearchParams(search);
+  next.delete('item_id');
+  next.delete('page');
+  next.delete('trace');
+  next.delete('trace_pass');
+  next.set('pass', String(pass));
+  next.set('item', itemId);
+  return `${basePath}?${next.toString()}`;
+}
+
 export function MetricAnalysisCards({ row }: { row: Row }) {
   const { model, api, readOnly, basePath } = useRunPage();
+  const [search] = useSearchParams();
   const repeatAggregate = model.isRepeat && !model.viewPass;
   const md = row.item_metadata ?? {};
   const analyses = (md.metric_analyses ?? {}) as Record<string, MetricAnalysis>;
@@ -257,11 +278,7 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
       <p className={styles.muted} data-testid="root-cause-pass-hint">
         Root causes are reviewed per pass.{' '}
         {Array.from({ length: model.samples }, (_, i) => i + 1).map((p) => (
-          <Link
-            key={p}
-            to={`${basePath}?pass=${p}&item=${encodeURIComponent(row.item_id)}`}
-            className={styles.link}
-          >
+          <Link key={p} to={passItemHref(basePath, search, p, row.item_id)} className={styles.link}>
             Pass {p}
           </Link>
         ))}

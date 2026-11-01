@@ -392,6 +392,18 @@ test.describe('root-cause issues (scenario 9)', () => {
     await expect(dlg).toHaveCount(0);
   });
 
+  test('repeat run: a Pass N link keeps the filters and scrolls the item into view (C127)', async ({
+    page,
+  }) => {
+    await openRun(page, s.slug, repeat, 'q=sql-001');
+    await itemButton(page, 1).click(); // sql-001
+    await card(page, 'sql-001').getByRole('link', { name: 'Pass 2' }).click();
+    await expect.poll(() => params(page).get('pass')).toBe('2');
+    expect(params(page).get('q')).toBe('sql-001');
+    expect(params(page).get('item')).toBe('sql-001');
+    await expect(card(page, 'sql-001')).toBeInViewport();
+  });
+
   test('repeat run: all-passes view links to ?pass=N, issues are added per pass', async ({ page }) => {
     await openRun(page, s.slug, repeat);
     await itemButton(page, 1).click(); // sql-001
