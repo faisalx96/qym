@@ -5,7 +5,7 @@
  */
 import { csvTable } from './csv';
 import { decodeBytes, detectCSVEncoding, looksGarbled } from './encoding';
-import { parseJSONRecords, unknownJsonKeys } from './jsonRecords';
+import { parseJSONRecords, unknownJsonKeys, type JsonRecordError } from './jsonRecords';
 
 export interface ParseRequest {
   id: number;
@@ -30,7 +30,7 @@ export interface JsonParseResult {
   kind: 'json';
   format: 'json' | 'jsonl';
   rows: Record<string, unknown>[];
-  errors: { where: string; message: string }[];
+  errors: JsonRecordError[];
   total: number;
   unknownKeys: string[];
   warnings: string[];

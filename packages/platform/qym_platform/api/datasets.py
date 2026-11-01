@@ -1627,12 +1627,18 @@ def _decode_json_text(raw: bytes, kind: str) -> str:
         raise HTTPException(status_code=400, detail=f"{kind} files must be UTF-8 encoded") from exc
 
 
+NO_INPUT_DETAIL = "An item needs an input."
+
+
 def _json_record_problem(obj: Any) -> Optional[str]:
     if not isinstance(obj, dict):
         return "must be a JSON object"
     metadata = obj.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         return "metadata must be a JSON object"
+    # A record with no input would import as an empty item, and runs would send null (C013).
+    if obj.get("input") is None:
+        return "has no input"
     return None
 
 
@@ -3057,6 +3063,8 @@ def create_item(
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
+    if req.input is None:
+        raise HTTPException(status_code=422, detail=NO_INPUT_DETAIL)
     input_value = _json_safe(req.input)
     expected = _json_safe(req.expected_output)
     metadata = _json_safe(req.metadata or {})
@@ -3583,6 +3591,16 @@ def _preview_bulk(db: Session, version: DatasetVersion, req: BulkItemsRequest, s
     upserts = req.upserts or []
     named = {(entry.item_id or "").strip() for entry in upserts if entry.item_id} - {""}
     present = ids_in_version(named) - deleted
+    # The same refusal as the apply: a new item needs an input (C013).
+    missing = [
+        entry.item_id or f"#{position + 1}"
+        for position, entry in enumerate(upserts)
+        if entry.input is None
+        and ((entry.op or "").lower() == "create" or (entry.item_id or "").strip() not in present)
+    ]
+    if missing:
+        shown = ", ".join(missing[:5]) + (f" and {len(missing) - 5} more" if len(missing) > 5 else "")
+        raise HTTPException(status_code=422, detail=f"{len(missing)} new item(s) have no input: {shown}")
     known = set(present)  # the item IDs that exist when an entry is reached
     created_here: set[str] = set()
     unchecked: list[str] = []  # generated IDs not yet checked against the version
@@ -3734,6 +3752,16 @@ def bulk_items(
         if named
         else {}
     )
+    # A new item with no input would run with a null input (C013): refuse the request, naming the first ones.
+    missing = [
+        entry.item_id or f"#{position + 1}"
+        for position, entry in enumerate(upserts)
+        if entry.input is None
+        and ((entry.op or "").lower() == "create" or (entry.item_id or "").strip() not in existing_by_id)
+    ]
+    if missing:
+        shown = ", ".join(missing[:5]) + (f" and {len(missing) - 5} more" if len(missing) > 5 else "")
+        raise HTTPException(status_code=422, detail=f"{len(missing)} new item(s) have no input: {shown}")
     # New items are flushed together; their "created" revisions need their ids.
     pending: list[tuple[DatasetItem, int]] = []
 

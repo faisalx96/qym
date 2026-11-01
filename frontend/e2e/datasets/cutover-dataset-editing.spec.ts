@@ -211,7 +211,7 @@ test.describe('draft import (C016, C017)', () => {
           format === 'jsonl' ? `${count} records` : `${count} rows`,
         );
         await next(dialog).click();
-        if (format !== 'jsonl') await next(dialog).click(); // column mapping
+        await next(dialog).click(); // column mapping (every format, C013)
         await expect(dialog.locator('table').last().locator('tbody tr')).toHaveCount(Math.min(count, 10));
         await expect(dialog).toContainText(`preview shows first ${Math.min(count, 10)}`);
         const bulk = page.waitForRequest(isBulkApply);
@@ -267,6 +267,7 @@ test.describe('draft import (C016, C017)', () => {
       .locator('#wizard-file')
       .setInputFiles({ name: 'rows.jsonl', mimeType: 'text/plain', buffer: Buffer.from(body) });
     await next(dialog).click();
+    await next(dialog).click(); // column mapping (C013)
     const bulk = page.waitForRequest(isBulkApply);
     await next(dialog).click();
     expect((await bulk).postDataJSON()).toEqual({
@@ -300,6 +301,7 @@ test.describe('draft import (C016, C017)', () => {
       .setInputFiles({ name: 'faq-import-fixed.jsonl', mimeType: 'text/plain', buffer: Buffer.from(body) });
     await expect(dialog.getByText('Detected format:')).toContainText('4 records');
     await next(dialog).click();
+    await next(dialog).click(); // column mapping (C013)
     await expect(dialog.getByText('4 of 4 records match items already in v1.')).toBeVisible();
     await expect(dialog.getByRole('radio', { name: /Skip matching items/ })).toBeChecked();
     const bulk = page.waitForRequest(isBulkApply);
@@ -312,7 +314,7 @@ test.describe('draft import (C016, C017)', () => {
     expect(((await item.json()) as { item: SeedItem }).item.expected_output).toBe(reviewed);
   });
 
-  test('invalid JSONL lines block Continue and are named with their line numbers', async ({
+  test('invalid JSONL lines block Continue; the first is named with its line and character once (C120)', async ({
     page,
     request,
   }) => {
@@ -326,9 +328,11 @@ test.describe('draft import (C016, C017)', () => {
     await dialog
       .locator('#wizard-file')
       .setInputFiles({ name: 'rows.jsonl', mimeType: 'text/plain', buffer: Buffer.from(body) });
-    const alert = dialog.getByRole('alert');
-    await expect(alert).toContainText('Line 2 is not valid JSON');
-    await expect(alert).toContainText('Line 4 must be a JSON object');
+    const alert = dialog.getByTestId('wizard-parse-error');
+    await expect(alert).toContainText('Not valid JSON at line 2');
+    await expect(alert).toContainText('and 1 more line');
+    await expect(dialog.getByText('Not valid JSON at line 2', { exact: false })).toHaveCount(1);
+    await expect(dialog.getByTestId('wizard-skip-invalid')).not.toBeChecked();
     await next(dialog).click();
     await expect(dialog.locator('table')).toHaveCount(0); // still on the source step, no preview
     expect(bulkCalls).toBe(0);

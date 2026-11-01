@@ -62,7 +62,7 @@ describe('browser encoding detection matches the server', () => {
 describe('draft JSON / JSONL import', () => {
   it('flags every bad line with its line number and keeps the good ones', () => {
     const r = parseJSONRecords('{"input": "ok"}\n{bad json}\n\n["array"]\n{"input": "fine"}\n', 'rows.jsonl');
-    expect(r.errors).toEqual([
+    expect(r.errors).toMatchObject([
       { where: 'Line 2', message: 'is not valid JSON' },
       { where: 'Line 4', message: 'must be a JSON object' },
     ]);
