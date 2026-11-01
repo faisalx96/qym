@@ -102,6 +102,7 @@ test.describe('experiment detail with several dataset versions', () => {
       m['matrix'] = await sized(matrix(page));
       // QD-57/QD-58: grouped history, the combined job first; a Task column.
       const history = page.locator('[data-exp-jobs]');
+      await history.getByRole('button', { name: /Job history/ }).click(); // starts closed (C206)
       const groups = history.locator('[data-job-group]');
       await expect(groups).toHaveText([
         'All 4 dataset versions · one combined run',
@@ -175,6 +176,7 @@ test.describe('experiment detail with several dataset versions', () => {
     const x = await launchMulti(request);
     await gotoApp(page, page0(f.project.slug, x.id));
     const history = page.locator('[data-exp-jobs]');
+    await history.getByRole('button', { name: /Job history/ }).click(); // starts closed (C206)
     await expect(history.locator('[data-job-group]')).toHaveCount(5);
     const snapshot = () => history.locator('tr').evaluateAll((rows) => rows.map((r) => `${r.className.length}:${Math.round(r.getBoundingClientRect().height)}:${r.textContent?.slice(0, 20)}`));
     const first = await snapshot();

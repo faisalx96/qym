@@ -313,6 +313,10 @@ test.describe('review of WP-D', () => {
       out.strip = await h(page.getByLabel('Job totals'));
       out.matrix = await h(page.locator('[data-exp-matrix]'));
       out.matrixRows = await page.locator('[data-exp-matrix] tbody tr').count();
+      await page
+        .locator('[data-exp-jobs]')
+        .getByRole('button', { name: /Job history/ })
+        .click(); // starts closed (C206)
       out.history = await h(page.locator('[data-exp-jobs]'));
       out.historyTable = await page
         .locator('[data-exp-jobs] table')

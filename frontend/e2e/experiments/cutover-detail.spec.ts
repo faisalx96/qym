@@ -85,7 +85,10 @@ test('a matrix cell hands its job to the default preset editor, which opens on t
   });
   await gotoApp(page, expPath(project.slug, `/${x.id}`));
   const job = x.jobs[0]!;
-  await page.locator(`[data-exp-promote="${job.id}"]`).click();
+  // the cell's actions sit behind its '>' handle (E2)
+  const cell = page.locator(`[data-exp-cell="${job.id}"]`);
+  await cell.locator('[data-row-menu]').click();
+  await page.getByRole('menuitem', { name: 'Promote to default preset' }).click();
   await expect(page).toHaveURL(
     new RegExp(
       `/projects/${project.slug}/environments/${env.id}/default-preset/edit\\?.*promote=job.*id=${job.id}`,

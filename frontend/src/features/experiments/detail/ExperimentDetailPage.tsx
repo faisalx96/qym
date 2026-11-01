@@ -76,6 +76,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
   const flows = useExperimentFlows(project.id, slug, x);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [showEarlier, setShowEarlier] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [scrollTo, setScrollTo] = useState<string | null>(null);
 
   const matrix = useMemo(() => buildMatrix(x), [x]);
@@ -115,6 +116,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
   }
 
   function showAttempts(job: ExperimentJob) {
+    setHistoryOpen(true);
     setShowEarlier(true);
     setScrollTo(job.id);
   }
@@ -270,6 +272,8 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
         detail={x}
         showEarlier={showEarlier}
         onShowEarlier={setShowEarlier}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
         flows={flows}
         canControl={canControl}
         live={live}

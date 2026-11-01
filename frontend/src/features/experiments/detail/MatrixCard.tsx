@@ -1,8 +1,13 @@
-/** Combination x environment matrix: each cell is the latest attempt of that job. */
-import { Link } from 'react-router-dom';
+/**
+ * Combination x environment matrix: each cell is the latest attempt of that job (C138, E2). A cell shows its status
+ * mark, the score in large type (a link to the run) and, like a runs-list row (owner answer, Nov 1), one '>' handle
+ * that opens one menu with every cell action, each with its action tile: Open run, Retry (failed cells), Cancel
+ * (live cells), Save as preset and Promote to default preset.
+ */
+import { Link, useNavigate } from 'react-router-dom';
 import type { ExperimentJob } from '@/api/experiments';
 import { runPath } from '@/app/routes';
-import { Button, Checkbox, SectionHeader, Card } from '@/ui';
+import { ActionTile, Button, Checkbox, RowMenu, SectionHeader, Card, type MenuItemSpec } from '@/ui';
 import { JobStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { formatMetric, plural } from '../lib/format';
@@ -88,7 +93,11 @@ export function MatrixCard({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.key} data-combo-index={row.combo.index} data-dataset-row={byDataset ? row.key : undefined}>
+                <tr
+                  key={row.key}
+                  data-combo-index={row.combo.index}
+                  data-dataset-row={byDataset ? row.key : undefined}
+                >
                   <th scope="row">
                     <span className={styles.comboLabel} title={row.label || row.combo.label}>
                       {row.label ||
@@ -166,19 +175,61 @@ function MatrixCell({
   canPromote,
   onPromote,
 }: CellProps) {
+  const navigate = useNavigate();
   const headline = job.run?.headline_metric;
   const busy = flows.busy.has(job.id);
-  const noConfig = !job.qym_config;
-  const presetReason = noConfig
+  const runId = usableRun(job) && job.run_id ? job.run_id : null;
+  const presetReason = !job.qym_config
     ? 'This job has no stored configuration'
     : !env.active
       ? 'The environment is disabled'
       : null;
+  const items: MenuItemSpec[] = [];
+  if (runId) items.push({ id: 'open', label: 'Open run', icon: <ActionTile icon="file" /> });
+  if (isRetryable(job))
+    items.push({
+      id: 'retry',
+      label: 'Retry',
+      icon: <ActionTile icon="retry" />,
+      disabled: !canControl || busy,
+    });
+  items.push({
+    id: 'save',
+    label: 'Save as preset',
+    icon: <ActionTile icon="star" />,
+    disabled: Boolean(presetReason) || !canSavePreset,
+    description: presetReason ?? undefined,
+  });
+  if (canPromote)
+    items.push({
+      id: 'promote',
+      label: 'Promote to default preset',
+      icon: <ActionTile icon="upload" />,
+      disabled: Boolean(presetReason),
+      description: presetReason ?? undefined,
+    });
+  if (isCancellable(job))
+    items.push({
+      id: 'cancel',
+      label: 'Cancel',
+      tone: 'danger',
+      separatorBefore: true,
+      icon: <ActionTile icon="stop" tone="danger" />,
+      disabled: !canControl || busy,
+    });
+  const onAction = (id: string) => {
+    if (id === 'open' && runId) navigate(runPath(slug, runId));
+    else if (id === 'retry') flows.retryJob(job);
+    else if (id === 'cancel') flows.cancelJob(job);
+    else if (id === 'save') flows.savePreset(job);
+    else if (id === 'promote') onPromote(job);
+  };
+  const value = headline && typeof headline.mean === 'number' ? formatMetric(headline.mean) : null;
   return (
     <div className={styles.cell} data-exp-cell={job.id}>
       <div className={styles.cellTop}>
-        {usableRun(job) && job.run_id ? (
-          <Checkbox isSelected={selected} onChange={(on) => onToggle(job.run_id as string, on)} hideLabel>
+        {runId ? (
+          <Checkbox isSelected={selected} onChange={(on) => onToggle(runId, on)} hideLabel>
             {`Select run for ${comboLabel} on ${env.name}`}
           </Checkbox>
         ) : null}
@@ -193,10 +244,23 @@ function MatrixCell({
             ↻ {earlier} earlier
           </button>
         ) : null}
+        <span className={styles.cellMenu}>
+          <RowMenu label={`Actions: ${comboLabel} on ${env.name}`} items={items} onAction={onAction} />
+        </span>
       </div>
-      {headline && typeof headline.mean === 'number' ? (
+      {value && headline ? (
         <div className={styles.metric}>
-          <span className={styles.metricValue}>{formatMetric(headline.mean)}</span>
+          {runId ? (
+            <Link
+              className={`${styles.metricValue} ${styles.metricLink}`}
+              to={runPath(slug, runId)}
+              title={`Open ${job.run_name || runId}`}
+            >
+              {value}
+            </Link>
+          ) : (
+            <span className={styles.metricValue}>{value}</span>
+          )}
           <span
             className={styles.metricName}
             title={headline.name + (headline.direction === 'minimize' ? ' (lower is better)' : '')}
@@ -205,13 +269,7 @@ function MatrixCell({
           </span>
         </div>
       ) : null}
-      {usableRun(job) && job.run_id ? (
-        <Link className={styles.runLink} to={runPath(slug, job.run_id)} title={job.run_name || job.run_id}>
-          {job.run_name || job.run_id}
-        </Link>
-      ) : job.run_id ? (
-        <span className={styles.sub}>Run deleted</span>
-      ) : null}
+      {!runId && job.run_id ? <span className={styles.sub}>Run deleted</span> : null}
       {job.error ? (
         <span className={`${styles.sub} ${styles.errorText}`} title={job.error}>
           {job.error}
@@ -219,51 +277,6 @@ function MatrixCell({
       ) : job.wait_reason && isCancellable(job) ? (
         <span className={styles.sub}>{job.wait_reason}</span>
       ) : null}
-      <div className={styles.cellActions}>
-        {isCancellable(job) ? (
-          <Button
-            variant="danger"
-            isDisabled={!canControl || busy}
-            onPress={() => flows.cancelJob(job)}
-            aria-label={`Cancel ${comboLabel} on ${env.name}`}
-            data-exp-job-cancel={job.id}
-          >
-            Cancel
-          </Button>
-        ) : null}
-        {isRetryable(job) ? (
-          <Button
-            variant="neutral"
-            isDisabled={!canControl || busy}
-            loading={busy}
-            onPress={() => flows.retryJob(job)}
-            aria-label={`Retry ${comboLabel} on ${env.name}`}
-            data-exp-job-retry={job.id}
-          >
-            Retry
-          </Button>
-        ) : null}
-        <Button
-          variant="neutral"
-          isDisabled={Boolean(presetReason) || !canSavePreset}
-          onPress={() => flows.savePreset(job)}
-          aria-label={`Save as preset: ${comboLabel} on ${env.name}`}
-          data-exp-save-preset={job.id}
-        >
-          Save as preset
-        </Button>
-        {canPromote ? (
-          <Button
-            variant="neutral"
-            isDisabled={Boolean(presetReason)}
-            onPress={() => onPromote(job)}
-            aria-label={`Promote to default preset: ${comboLabel} on ${env.name}`}
-            data-exp-promote={job.id}
-          >
-            Promote to default preset
-          </Button>
-        ) : null}
-      </div>
     </div>
   );
 }
