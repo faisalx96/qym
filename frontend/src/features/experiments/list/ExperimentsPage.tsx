@@ -2,7 +2,7 @@
  * /projects/:slug/experiments (brief 06 §2.1): filters in the URL, one table, live refresh.
  * `?status=&mine=1&versioning=key=value` (repeatable) and `page`.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useHref, useNavigate, useSearchParams } from 'react-router-dom';
 import { RouterProvider } from 'react-aria-components';
 import {
@@ -31,6 +31,7 @@ import {
 } from '@/ui';
 import { LATENCY_FILTER_LABEL } from '../copy';
 import { ExperimentsTabs } from '../ExperimentsTabs';
+import { ConnectFirst } from '../components/ConnectFirst';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
 import { baseSourceLabel, jobsText, plural, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
@@ -73,6 +74,9 @@ export function ExperimentsPage() {
   const envs = useEvalEnvironments(project.id);
   const showSkeleton = useDelayedPending(query.isPending);
 
+  // C121: with no active environment the empty list offers Add environment in place, then a launch on it
+  const [created, setCreated] = useState<EvalEnvironment | null>(null);
+  const noActiveEnv = Boolean(envs.data) && !(envs.data ?? []).some((e) => e.is_active);
   const envById = useMemo(() => new Map((envs.data ?? []).map((e) => [e.id, e])), [envs.data]);
   const experiments = query.data?.experiments ?? [];
   const total = query.data?.total ?? 0;
@@ -281,12 +285,29 @@ export function ExperimentsPage() {
           isFiltered={filtered}
           empty={
             emptyAll ? (
-              <EmptyState
-                icon={<Icon name="flask" />}
-                title="No experiments yet"
-                body="An experiment launches the same evaluation across settings and environments so you can compare the results."
-                action={launch}
-              />
+              noActiveEnv && !created ? (
+                <ConnectFirst onCreated={setCreated} />
+              ) : (
+                <EmptyState
+                  icon={<Icon name="flask" />}
+                  title="No experiments yet"
+                  body="An experiment launches the same evaluation across settings and environments so you can compare the results."
+                  action={
+                    created && !readOnly ? (
+                      <LinkButton
+                        to={launchPath(slug, { env: created.id })}
+                        variant="primary"
+                        size="md"
+                        icon={<Icon name="plus" size={12} />}
+                      >
+                        {`New experiment on ${created.name}`}
+                      </LinkButton>
+                    ) : (
+                      launch
+                    )
+                  }
+                />
+              )
             ) : undefined
           }
           filteredEmpty={

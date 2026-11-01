@@ -195,6 +195,9 @@ describe('LaunchPage', () => {
         <RouterProvider router={router} />
       </Providers>,
     );
-    expect(await screen.findByText('No active environments')).toBeInTheDocument();
+    // C121: the empty state opens Add environment in place, not a dead end on the environments page
+    expect(await screen.findByText('Connect an Evaluation Service first')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add environment' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 });
