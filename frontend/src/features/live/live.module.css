@@ -17,6 +17,18 @@
   overflow-wrap: anywhere;
 }
 
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.source[data-multiple] {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  inline-size: calc(var(--space-xl) * 6 + 2px);
+}
+
 .inline {
   display: inline-flex;
   flex-wrap: wrap;
@@ -243,15 +255,15 @@
   flex: 0;
 }
 
-/* Reserve the approved six-tile / six-metric mock's frames during the pending delay. */
+/* Reserve the measured implementation's frames during the pending delay (impl-*.json). */
 .loading {
   --live-status-height: calc(var(--control-height) + var(--space-md));
   --live-tiles-height: calc(var(--space-xl) * 2 + var(--space-sm) + 2px);
   --live-means-height: calc(var(--space-xl) * 8 + var(--space-sm) + 1px);
   --live-mix-height: var(--live-means-height);
-  --live-services-height: calc(var(--space-xl) * 6);
-  --live-trend-height: calc(var(--space-xl) * 10 + var(--space-sm));
-  --live-days-height: calc(var(--space-xl) * 12 + var(--space-sm) + var(--space-xs));
+  --live-services-height: var(--live-services-wide);
+  --live-trend-height: var(--live-trend-wide);
+  --live-days-height: var(--live-days-wide);
 
   display: flex;
   flex-direction: column;
@@ -287,8 +299,9 @@
   .loading {
     --live-tiles-height: calc(var(--space-xl) * 4 + var(--space-lg) - 1px);
     --live-mix-height: calc(var(--space-xl) * 6 + var(--space-md) + var(--space-xs));
-    --live-services-height: calc(var(--space-xl) * 9 + var(--space-sm) + var(--space-xs));
-    --live-days-height: calc(var(--space-xl) * 12 + var(--space-lg) + var(--space-xs));
+    --live-services-height: var(--live-services-medium);
+    --live-trend-height: var(--live-trend-medium);
+    --live-days-height: var(--live-days-medium);
   }
 }
 
@@ -310,11 +323,11 @@
   }
 
   .loading {
-    --live-status-height: calc(var(--space-xl) * 3 + var(--control-height) - 1px);
-    --live-tiles-height: calc(var(--space-xl) * 7 - var(--space-xs));
-    --live-mix-height: calc(var(--space-xl) * 9 + var(--space-sm) + var(--space-xs));
-    --live-services-height: calc(var(--space-xl) * 15 + var(--space-sm) + var(--space-xs));
-    --live-trend-height: calc(var(--space-xl) * 14 + var(--space-sm));
-    --live-days-height: calc(var(--space-xl) * 13 + var(--space-lg));
+    --live-status-height: calc(var(--space-xl) * 4 + var(--space-md) + 2px);
+    --live-tiles-height: calc(var(--space-xl) * 7 + var(--space-md) + 1px);
+    --live-mix-height: calc(var(--space-xl) * 9 - var(--space-xs) + 1px);
+    --live-services-height: var(--live-services-narrow);
+    --live-trend-height: var(--live-trend-narrow);
+    --live-days-height: var(--live-days-narrow);
   }
 }

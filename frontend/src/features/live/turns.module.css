@@ -7,22 +7,43 @@
 }
 
 .filterBlock {
-  display: grid;
-  gap: var(--space-md);
-  min-inline-size: 0;
-}
-
-.filters,
-.chips {
   display: flex;
-  flex-wrap: wrap;
   align-items: end;
   gap: var(--space-md);
   min-inline-size: 0;
 }
 
-.chips {
+.filters {
+  /* Keep absolutely positioned, visually hidden Select labels inside this scroller. */
+  position: relative;
+  display: flex;
+  align-items: end;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  min-block-size: calc(var(--control-height) + var(--space-lg) + var(--space-xs) + 1px);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.filterControl {
+  display: flex;
+  flex: none;
+  flex-direction: column;
   gap: var(--space-sm);
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height);
+}
+
+.trigger button {
+  white-space: nowrap;
+}
+
+.filterControl[data-tone] .trigger > :first-child button {
+  color: var(--tone-text);
 }
 
 .search {
@@ -30,8 +51,10 @@
   min-inline-size: min(100%, var(--dropdown-width));
 }
 
-.bound {
-  inline-size: calc(var(--space-xl) * 3);
+.filterFields {
+  display: grid;
+  gap: var(--space-md);
+  min-inline-size: var(--dropdown-width);
 }
 
 .table {
@@ -88,6 +111,11 @@
 }
 
 @container (max-width: 479px) {
+  .filterBlock {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .loading {
     min-block-size: calc(
       var(--row-comfortable) * 6 + var(--space-lg) * 6 + var(--space-xs) + var(--space-md) * 2

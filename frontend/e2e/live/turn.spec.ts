@@ -28,7 +28,14 @@ const summary = {
   judges: { a: judgeEvidence('judge-a', 0.42), b: judgeEvidence('judge-b', 0.38) },
   judges_agree: true,
   coverage: { covered: 1, total: 3 },
-  deviations: [{ judge: 'a', axis: 'sql', text: 'A requested category is missing.' }],
+  deviations: [
+    { judge: 'a', axis: 'sql', text: 'A requested category is missing.' },
+    {
+      judge: 'b',
+      axis: 'response',
+      text: 'The response omits the requested category and its explanatory context.',
+    },
+  ],
   envelope: {
     intent: 'query',
     expected_tools: ['sql_execution'],
@@ -225,4 +232,34 @@ test('next and previous preserve the originating list order and disable its ends
   await gotoApp(page, turnPath(seed, `${day}/turn-1`, { list }));
   await expect(page.getByRole('button', { name: 'Next turn' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Previous turn' })).toBeEnabled();
+});
+
+test('LV-25: response axis stays on one line at 390 while its explanation wraps', async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const seed = await seedLive(request, uniqueSlug('live-axis-width'));
+  const id = `${seed.days.at(-1)!.day}/turn-1`;
+  await addJudgeEvidence(request, seed, id);
+  await gotoApp(page, turnPath(seed, id));
+  const axis = page.locator('[data-live-block="deviations"]').getByText('response', { exact: true });
+  await expect(axis).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const geometry = await axis.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const text = element.nextElementSibling!.getBoundingClientRect();
+    return {
+      height: box.height,
+      flexShrink: getComputedStyle(element).flexShrink,
+      right: box.right,
+      textLeft: text.left,
+      textHeight: text.height,
+      lineHeight: parseFloat(getComputedStyle(element.nextElementSibling!).lineHeight),
+    };
+  });
+  expect(geometry.flexShrink).toBe('0');
+  expect(geometry.height).toBeLessThanOrEqual(21);
+  expect(geometry.textLeft).toBeGreaterThanOrEqual(geometry.right);
+  expect(geometry.textHeight).toBeGreaterThan(geometry.lineHeight);
 });

@@ -1,12 +1,14 @@
-import { liveTurnsCsvUrl, parseLiveFilters, useLiveOverview, useLiveTurns } from '@/api/live';
+import { liveTurnsCsvUrl, parseLiveFilters, useLiveTurns } from '@/api/live';
 import { useProjectContext } from '@/features/shell/ProjectContext';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { ErrorState, Icon, LinkButton, PageHeader, Skeleton, Tag, Text } from '@/ui';
+import { ErrorState, Icon, LinkButton, PageHeader, Skeleton } from '@/ui';
+import { SourceControl } from './components/SourceControl';
 import { TurnFilters } from './components/TurnFilters';
 import { TurnsTable } from './components/TurnsTable';
+import { useLiveOverview } from './lib/overview';
 import { filterChips } from './lib/filters';
 import styles from './turns.module.css';
 
@@ -35,14 +37,7 @@ export function LiveTurnsPage({ slug, source }: { slug: string; source: string }
         <PageHeader
           title="Turns"
           description={description}
-          meta={[
-            <Tag key="source" kind="data" dir="auto">
-              {overview.data?.status.name ?? source}
-            </Tag>,
-            <Text key="environment" variant="sm" tone="muted" dir="auto">
-              {overview.data?.status.environment}
-            </Text>,
-          ]}
+          meta={[<SourceControl key="source" slug={slug} source={source} status={overview.data?.status} />]}
           actions={
             <LinkButton
               href={liveTurnsCsvUrl(slug, filters, source)}
@@ -72,7 +67,12 @@ export function LiveTurnsPage({ slug, source }: { slug: string; source: string }
         </div>
       ) : turns.data && overview.data ? (
         <>
-          <TurnFilters filters={filters} facets={turns.data.facets} specs={overview.data.specs} />
+          <TurnFilters
+            filters={filters}
+            facets={turns.data.facets}
+            specs={overview.data.specs}
+            dayCount={overview.data.day.in_qym}
+          />
           <TurnsTable
             slug={slug}
             source={source}

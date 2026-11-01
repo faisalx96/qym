@@ -17,11 +17,12 @@ const viewports = [
 async function noPageOverflow(page: Page) {
   await page.evaluate(() => document.fonts.ready);
   await expect
-    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-    .toBe(true);
+    .poll(() => page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - window.innerWidth)))
+    .toBe(0);
 }
 
 async function autoDirection(text: Locator, direction: 'rtl' | 'ltr') {
+  await text.scrollIntoViewIfNeeded();
   await expect(text).toHaveAttribute('dir', 'auto');
   await expect(text).toHaveCSS('direction', direction);
   await expect(text).toHaveCSS('text-align', 'start');
@@ -97,6 +98,18 @@ for (const viewport of viewports) {
         `/projects/${seed.projectSlug}/live/turns?${new URLSearchParams({ source: seed.sourceKey, day })}`,
       );
       await expect(page.locator('[data-live-turn-row]')).toHaveCount(12);
+      await page.evaluate(() => document.fonts.ready);
+      const filters = page.locator('[data-live-block="filters"]');
+      const filterBox = (await filters.boundingBox())!;
+      expect(Math.abs(filterBox.height - (viewport.width === 390 ? 87 : 49))).toBeLessThanOrEqual(1);
+      await expect(filters.getByRole('group', { name: 'Active filters' })).toHaveCount(0);
+      await noPageOverflow(page);
+      // A compact filter strip owns its horizontal overflow; it never widens the page.
+      const strip = filters.getByRole('group', { name: 'Turn filters' });
+      await strip.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+      });
+      await expect(filters.getByRole('button', { name: /Charts$/ })).toBeVisible();
       const frame = page.getByRole('region', { name: 'Live turns (scrollable)', exact: true });
       await expect(frame).toBeVisible();
       expect(await frame.evaluate((element) => element.scrollWidth)).toBeGreaterThan(
@@ -107,6 +120,7 @@ for (const viewport of viewports) {
       const arabic = page.locator(`[data-live-turn-row="${day}/turn-1"] [data-live-question]`);
       await autoDirection(arabic, 'rtl');
       await autoDirection(page.locator(`[data-live-turn-row="${day}/turn-2"] [data-live-question]`), 'ltr');
+      await noPageOverflow(page);
       for (const question of await page.locator('[data-live-question]').all()) {
         await expect(question).toHaveAttribute('dir', 'auto');
       }

@@ -111,6 +111,46 @@ afterEach(() => {
 });
 
 describe('Turns filters and table', () => {
+  it.each([false, true])(
+    'includes the visible value and count in every filter trigger name (selected: %s)',
+    (selected) => {
+      const { container } = render(
+        <MemoryRouter>
+          <TurnFilters
+            filters={
+              selected
+                ? {
+                    labels: ['agent_problem'],
+                    modes: ['chat'],
+                    statuses: ['completed'],
+                    outcomes: ['ok'],
+                    metric: 'quality',
+                    min: 0.5,
+                    service: 'service-a',
+                    service_status: 'not_ok',
+                    charts: 'failed',
+                  }
+                : {}
+            }
+            facets={facets}
+            specs={specs}
+          />
+        </MemoryRouter>,
+      );
+      const triggers = Array.from(container.querySelectorAll('[data-live-filter]'), (filter) =>
+        filter.querySelector('button')!,
+      );
+      expect(triggers).toHaveLength(7);
+      for (const trigger of triggers) {
+        const dimension = trigger.closest('[data-live-filter]')!.getAttribute('data-live-filter')!;
+        const visibleValue = trigger.textContent!.replace(/\s+/g, ' ').trim();
+        const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        expect(trigger).toHaveAccessibleName(new RegExp(escape(dimension)));
+        expect(trigger).toHaveAccessibleName(new RegExp(escape(visibleValue)));
+      }
+    },
+  );
+
   it('removes a label chip, preserves source/day and resets the page', async () => {
     const user = userEvent.setup();
     render(
@@ -118,7 +158,7 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: 'Remove Diagnosis: Agent problem' }));
+    await user.click(screen.getByRole('button', { name: 'Clear Diagnosis' }));
     expect(currentUrl().searchParams.get('day')).toBe('2026-11-01');
     expect(currentUrl().searchParams.get('source')).toBe('worker');
     expect(currentUrl().searchParams.has('label')).toBe(false);
@@ -149,11 +189,15 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
+    await user.click(screen.getByRole('button', { name: /^Status:/ }));
     await user.click(
       within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: /^Failed/ }),
     );
     expect(currentUrl().searchParams.getAll('status')).toEqual(['failed']);
     expect(currentUrl().searchParams.has('page')).toBe(false);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox', { name: 'Minimum' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^Metric:/ }));
     expect(screen.getByRole('textbox', { name: 'Minimum' })).toBeDisabled();
   });
 
@@ -167,6 +211,7 @@ describe('Turns filters and table', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search questions and answers' }), {
       target: { value: 'إجمالي' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /^Status:/ }));
     fireEvent.click(
       within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: /^Failed/ }),
     );
@@ -176,7 +221,7 @@ describe('Turns filters and table', () => {
     expect(currentUrl().searchParams.get('status')).toBe('failed');
   });
 
-  it('keeps an active diagnosis chip in its spec tone when no rows match', () => {
+  it('keeps an active diagnosis trigger in its spec tone when no rows match', () => {
     render(
       <MemoryRouter>
         <TurnFilters
@@ -186,13 +231,13 @@ describe('Turns filters and table', () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('button', { name: 'Diagnosis: Agent problem' })).toHaveAttribute(
-      'data-tone',
-      'danger',
-    );
+    expect(
+      screen.getByRole('button', { name: /Agent problem.*Diagnosis/ }).closest('[data-tone]'),
+    ).toHaveAttribute('data-tone', 'danger');
   });
 
-  it('uses status/outcome facet options and counts, retaining selected values at zero', () => {
+  it('uses status/outcome facet options and counts, retaining selected values at zero', async () => {
+    const user = userEvent.setup();
     render(
       <MemoryRouter>
         <TurnFilters
@@ -202,6 +247,7 @@ describe('Turns filters and table', () => {
         />
       </MemoryRouter>,
     );
+    await user.click(screen.getByRole('button', { name: /^Status:/ }));
     const status = within(screen.getByRole('group', { name: 'Status' }));
     expect(status.getByRole('button', { name: /^Failed\s*3$/ })).toBeVisible();
     expect(status.getByRole('button', { name: /^Incomplete ingest\s*0$/ })).toHaveAttribute(
@@ -209,6 +255,8 @@ describe('Turns filters and table', () => {
       'true',
     );
     expect(status.queryByRole('button', { name: /Completed/ })).toBeNull();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: /^Outcome:/ }));
     const outcome = within(screen.getByRole('group', { name: 'Outcome' }));
     expect(outcome.getByRole('button', { name: /^custom result\s*4$/ })).toBeVisible();
     expect(outcome.getByRole('button', { name: /^absent\s*0$/ })).toHaveAttribute('aria-pressed', 'true');
@@ -222,11 +270,99 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
+    await user.click(screen.getByRole('button', { name: /^Mode:/ }));
     const mode = within(screen.getByRole('group', { name: 'Mode' }));
     expect(mode.getByRole('button', { name: /^chat\s*2$/ })).toHaveAttribute('aria-pressed', 'true');
     await user.click(mode.getByRole('button', { name: /^report\s*3$/ }));
     expect(currentUrl().searchParams.getAll('mode')).toEqual(['chat', 'report']);
     expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
+    expect(currentUrl().searchParams.has('page')).toBe(false);
+  });
+
+  it('uses one diagnosis select with counts and no repeated active-chip line', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('group', { name: 'Active filters' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Diagnosis' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Agent problem.*Diagnosis/ }));
+    expect(screen.getByRole('option', { name: 'Agent problem 2' })).toBeVisible();
+    await user.click(screen.getByRole('option', { name: 'Any diagnosis' }));
+    expect(currentUrl().searchParams.has('label')).toBe(false);
+    expect(currentUrl().searchParams.has('page')).toBe(false);
+  });
+
+  it('uses a Select when a facet has more than five values', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <TurnFilters
+          filters={{ modes: ['mode-6'] }}
+          specs={specs}
+          facets={{
+            ...facets,
+            modes: Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`mode-${i + 1}`, i + 1])),
+          }}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: /^Mode:/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /mode-6.*Mode/ }));
+    expect(screen.getAllByRole('option')).toHaveLength(7);
+    expect(screen.getByRole('option', { name: 'mode-1 1' })).toBeVisible();
+  });
+
+  it('updates metric bounds inside one trigger and clears them together', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: /^Metric:/ }));
+    await user.click(screen.getByRole('button', { name: /Any metric.*Metric/ }));
+    await user.click(screen.getByRole('option', { name: 'Quality' }));
+    const min = screen.getByRole('textbox', { name: 'Minimum' });
+    await user.type(min, '0.5');
+    await user.tab();
+    expect(currentUrl().searchParams.get('metric')).toBe('quality');
+    expect(currentUrl().searchParams.get('min')).toBe('0.5');
+    expect(currentUrl().searchParams.has('page')).toBe(false);
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: /^Metric:/ })).toHaveTextContent('Quality ≥ 0.5');
+    expect(screen.queryByRole('textbox', { name: 'Minimum' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Clear Metric' }));
+    expect(currentUrl().searchParams.has('metric')).toBe(false);
+    expect(currentUrl().searchParams.has('min')).toBe(false);
+    expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
+  });
+
+  it('combines service and status in one trigger and keeps charts in the URL', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Harness filtersOnly />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: /^Service:/ }));
+    await user.click(screen.getByRole('button', { name: /Any service.*Service/ }));
+    await user.click(screen.getByRole('option', { name: 'service-a' }));
+    await user.click(screen.getByRole('button', { name: /Any status.*Service status/ }));
+    await user.click(screen.getByRole('option', { name: 'Not OK' }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    expect(currentUrl().searchParams.get('service')).toBe('service-a');
+    expect(currentUrl().searchParams.get('service_status')).toBe('not_ok');
+    expect(screen.getByRole('button', { name: /^Service:/ })).toHaveTextContent('service-a · not ok 1');
+    await user.click(screen.getByRole('button', { name: /All turns.*Charts/ }));
+    await user.click(screen.getByRole('option', { name: 'Failed charts' }));
+    expect(currentUrl().searchParams.get('charts')).toBe('failed');
+    await user.click(screen.getByRole('button', { name: 'Clear Service' }));
+    expect(currentUrl().searchParams.has('service')).toBe(false);
+    expect(currentUrl().searchParams.has('service_status')).toBe(false);
+    expect(currentUrl().searchParams.get('charts')).toBe('failed');
     expect(currentUrl().searchParams.has('page')).toBe(false);
   });
 

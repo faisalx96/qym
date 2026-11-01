@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { gotoApp, uniqueSlug } from '../helpers';
 import { seedLive } from './support';
 
-test('deep-linked filters, CSV, chip removal and Arabic search stay in the URL', async ({
+test('deep-linked filters, CSV, trigger clearing and Arabic search stay in the URL', async ({
   page,
   request,
 }) => {
@@ -19,10 +19,12 @@ test('deep-linked filters, CSV, chip removal and Arabic search stay in the URL',
     year: 'numeric',
     timeZone: 'UTC',
   });
-  const chips = page.locator('[data-live-block="filters"] [aria-label="Active filters"]');
-  await expect(chips.getByRole('button', { name: dateLabel, exact: true })).toBeVisible();
+  const filters = page.locator('[data-live-block="filters"]');
   await expect(
-    chips.getByRole('button', { name: `Diagnosis: ${diagnosis.label}`, exact: true }),
+    filters.getByRole('button', { name: `${dateLabel} ${day.turns.length}`, exact: true }),
+  ).toBeVisible();
+  await expect(
+    filters.getByRole('button', { name: `${diagnosis.label} ${matching} Diagnosis`, exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText(`${matching} of ${day.turns.length} turns on ${dateLabel}`, { exact: true }),
@@ -41,7 +43,7 @@ test('deep-linked filters, CSV, chip removal and Arabic search stay in the URL',
   const download = await downloadReady;
   expect(await download.failure()).toBeNull();
 
-  await chips.getByRole('button', { name: `Remove Diagnosis: ${diagnosis.label}` }).click();
+  await filters.getByRole('button', { name: 'Clear Diagnosis' }).click();
   await expect(page).toHaveURL(
     (url) => !url.searchParams.has('label') && url.searchParams.get('day') === day.day,
   );
@@ -88,4 +90,21 @@ test('latency sorts descending and Enter opens the encoded turn with list contex
       url.searchParams.get('source') === seed.sourceKey &&
       url.searchParams.get('list') === list,
   );
+});
+
+test('two sources can be selected on Turns and reload its numbers', async ({ page, request }) => {
+  const seed = await seedLive(request, uniqueSlug('live-turn-sources'), { secondSource: true });
+  const day = seed.days.at(-1)!.day;
+  await gotoApp(page, `/projects/${seed.projectSlug}/live/turns?source=${seed.sourceKey}&day=${day}`);
+  await expect(page.locator('[data-live-turn-row]')).toHaveCount(12);
+  const source = page.locator('[data-live-block="source"]');
+  await source.getByRole('button', { name: /Live source/ }).click();
+  await page.getByRole('option', { name: 'Development worker', exact: true }).click();
+  await expect(page).toHaveURL((url) => url.searchParams.get('source') === 'worker-dev');
+  await expect(page.locator('[data-live-turn-row]')).toHaveCount(3);
+  await expect(page.getByText(/^3 of 3 turns on/)).toBeVisible();
+  await expect(source).toContainText('Development worker');
+  const box = await source.boundingBox();
+  expect(box?.width).toBeCloseTo(194, 0);
+  expect(box?.height).toBeCloseTo(24, 0);
 });

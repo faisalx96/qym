@@ -25,7 +25,7 @@ interface SeededDay {
 export async function seedLive(
   request: APIRequestContext,
   slug: string,
-  opts: { stale?: boolean; days?: number } = {},
+  opts: { stale?: boolean; days?: number; secondSource?: boolean } = {},
 ) {
   const project = await createProject(request, 'Live evaluation demo', slug);
   const token = await createApiKey(request, project.id);
@@ -207,6 +207,47 @@ export async function seedLive(
       },
     });
     expect(heartbeat.ok(), await heartbeat.text()).toBeTruthy();
+  }
+  if (opts.secondSource) {
+    const secondBase = `/v1/projects/${project.id}/live/sources/worker-dev`;
+    const secondSource = await request.put(secondBase, {
+      headers,
+      data: { name: 'Development worker', environment: 'dev', day_key_timezone: 'UTC', worker },
+    });
+    expect(secondSource.ok(), await secondSource.text()).toBeTruthy();
+    const secondSpecs = await request.put(`${secondBase}/metric-specs`, {
+      headers,
+      data: { specs: metrics.map((metric, position) => ({ ...metric, position })) },
+    });
+    expect(secondSpecs.ok(), await secondSpecs.text()).toBeTruthy();
+    const day = now.toISOString().slice(0, 10);
+    const secondDay = await request.put(`${secondBase}/days/${day}`, {
+      headers,
+      data: { status: 'running', turns_seen: 3, evaluated: 3, failed: 0, incomplete: 0, excluded: 0 },
+    });
+    expect(secondDay.ok(), await secondDay.text()).toBeTruthy();
+    const secondTurns = await request.post(`${secondBase}/turns`, {
+      headers,
+      data: {
+        turns: Array.from({ length: 3 }, (_, index) => ({
+          turn_id: `dev-turn-${index + 1}`,
+          day,
+          turn_at: `${day}T10:0${index}:00Z`,
+          status: 'completed',
+          outcome: 'success',
+          label: 'ok',
+          question: `Development question ${index + 1}`,
+          scores: [{ metric_name: 'agent_success', score_numeric: 1 }],
+        })),
+      },
+    });
+    expect(secondTurns.ok(), await secondTurns.text()).toBeTruthy();
+    expect(await secondTurns.json()).toMatchObject({ accepted: 3, rejected: 0 });
+    const secondHeartbeat = await request.post(`${secondBase}/heartbeat`, {
+      headers,
+      data: { at: now.toISOString(), last_poll_at: now.toISOString(), current_day: day, worker },
+    });
+    expect(secondHeartbeat.ok(), await secondHeartbeat.text()).toBeTruthy();
   }
   return { projectId: project.id, projectSlug: project.slug, sourceKey, days, labels: diagnoses, metrics };
 }

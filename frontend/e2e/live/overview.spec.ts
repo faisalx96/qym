@@ -141,3 +141,20 @@ test('ninety trend days fit the card at a 390-pixel viewport', async ({ page, re
     .toBeGreaterThanOrEqual(2);
   await expect.poll(() => card.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
+
+test('two sources can be selected on the overview and reload its numbers', async ({ page, request }) => {
+  const seed = await seedLive(request, uniqueSlug('live-overview-sources'), { secondSource: true });
+  await gotoApp(page, `/projects/${seed.projectSlug}/live?source=${seed.sourceKey}`);
+  await expect(page.locator('[data-live-stat="turns"]')).toHaveText('14');
+  const source = page.locator('[data-live-block="source"]');
+  await source.getByRole('button', { name: /Live source/ }).click();
+  await page.getByRole('option', { name: 'Development worker', exact: true }).click();
+  await expect(page).toHaveURL((url) => url.searchParams.get('source') === 'worker-dev');
+  await expect(page.locator('[data-live-stat="turns"]')).toHaveText('3');
+  await expect(page.locator('[data-live-stat="evaluated"]')).toHaveText('3');
+  await expect(page.locator('[data-live-day]')).toHaveCount(1);
+  await expect(source).toContainText('Development worker');
+  const box = await source.boundingBox();
+  expect(box?.width).toBeCloseTo(194, 0);
+  expect(box?.height).toBeCloseTo(24, 0);
+});

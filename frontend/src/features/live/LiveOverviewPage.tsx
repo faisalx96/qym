@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useLiveOverview, useLiveSources } from '@/api/live';
+import { overviewFrames, useCachedOverview, useLiveOverview } from './lib/overview';
 import { useProjectContext } from '@/features/shell/ProjectContext';
 import { useTopbarStats } from '@/features/shell/TopbarStats';
 import { useDocumentTitle } from '@/features/shell/hooks';
@@ -7,7 +7,8 @@ import { fullWidth } from '@/features/shell/layout';
 import { formatPercentValue } from '@/lib/format';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { ErrorState, PageHeader, Select, Skeleton, Tag } from '@/ui';
+import { ErrorState, PageHeader, Skeleton } from '@/ui';
+import { SourceControl } from './components/SourceControl';
 import { DaySwitcher } from './components/DaySwitcher';
 import { StatusLine } from './components/StatusLine';
 import { DayNumbers } from './components/DayNumbers';
@@ -27,12 +28,10 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
   const trendDays = [14, 30, 90].includes(requestedTrendDays) ? requestedTrendDays : 14;
   const requestedDaysPage = Number(get('days_page', '1'));
   const daysPage = Number.isSafeInteger(requestedDaysPage) && requestedDaysPage > 0 ? requestedDaysPage : 1;
-  const sourcesQuery = useLiveSources(slug);
   const query = useLiveOverview(slug, { source, day, trendDays, daysPage });
   const showSkeleton = useDelayedPending(query.isPending);
   const overview = query.data;
-  const sources = sourcesQuery.data?.sources ?? [];
-  const current = overview?.status ?? sources.find((item) => item.key === source || item.id === source);
+  const cachedOverview = useCachedOverview(slug, source);
   const stats = useMemo(() => {
     if (!overview) return null;
     const primary = overview.specs.find((spec) => spec.metric_name === overview.primary_metric);
@@ -55,30 +54,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
           title="Live evaluation"
           description="Every real user turn, evaluated as it happens"
           meta={[
-            <span key="source" className={styles.inline} data-live-block="source">
-              {sources.length > 1 ? (
-                <Select
-                  label="Live source"
-                  hideLabel
-                  items={sources.map((item) => ({ key: item.key, label: item.name }))}
-                  value={current?.key ?? source}
-                  onChange={(key) => {
-                    if (key !== null) replaceUrlQuery({ source: String(key) });
-                  }}
-                  renderItem={(item) => <span dir="auto">{item.label}</span>}
-                  renderValue={(item) => <span dir="auto">{item.label}</span>}
-                />
-              ) : (
-                <Tag kind="data" dir="auto">
-                  {current?.name ?? source}
-                </Tag>
-              )}
-              {current?.environment ? (
-                <Tag kind="data" dir="auto">
-                  {current.environment}
-                </Tag>
-              ) : null}
-            </span>,
+            <SourceControl key="source" slug={slug} source={source} status={overview?.status} />,
             <DaySwitcher key="day" day={day} />,
           ]}
         />
@@ -90,9 +66,10 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
           onRetry={() => void query.refetch()}
         />
       ) : null}
-      {query.isPending || showSkeleton ? (
+      {!query.isError && (query.isPending || showSkeleton) ? (
         <div
           className={styles.loading}
+          style={overviewFrames(cachedOverview, daysPage)}
           data-live-loading="true"
           data-visible={showSkeleton ? 'true' : 'false'}
         >

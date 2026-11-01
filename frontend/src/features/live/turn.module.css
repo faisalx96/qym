@@ -94,6 +94,14 @@
   margin-block-start: var(--space-sm);
 }
 
+.deviation > :first-child {
+  flex: none;
+}
+
+.deviation > p {
+  min-inline-size: 0;
+}
+
 .sqlParts {
   display: grid;
   gap: var(--space-sm);
