@@ -87,7 +87,7 @@ test('C-items-2: the banner is one line above the toolbar, names in bold, Clear 
     .locator('b')
     .evaluateAll((els) => els.some((e) => e.scrollWidth > e.clientWidth + 1));
   expect(cut).toBe(false);
-  await banner.getByRole('button', { name: 'Clear' }).click();
+  await page.locator('[data-part="items-clear-btn"]').click(); // K6: the one Clear is in the sticky nav
   await expect(banner).toHaveCount(0);
   await expectShown(page, 40);
 });
