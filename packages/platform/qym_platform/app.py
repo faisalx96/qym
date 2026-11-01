@@ -385,8 +385,10 @@ def create_ingestion_app(settings: PlatformSettings | None = None) -> FastAPI:
             healthz_router(service="ingestion", environment=settings.environment, prefix=layout.ingestion_prefix)
         )
         app.include_router(ingest_router, prefix=layout.ingestion_prefix)
+        app.include_router(live_ingest_router, prefix=layout.ingestion_prefix)
     if layout.ingestion_legacy_paths or not layout.ingestion_prefix:
         app.include_router(ingest_router)
+        app.include_router(live_ingest_router)
     install_request_context(app)
     logger.info("ingestion app created (prefix=%s)", layout.ingestion_prefix or "-")
     return app

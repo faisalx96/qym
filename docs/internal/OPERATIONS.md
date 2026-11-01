@@ -691,7 +691,8 @@ jobs for the workers service.
 ### Ingress rules
 
 SDK clients need no change: they keep `QYM_BASE_URL` pointed at the ingress
-and the ingress sends exactly the three ingest paths to ingestion. None of
+and the ingress sends the three run ingest paths to ingestion. The live
+evaluation ingest paths go to the ingestion service as well. None of
 main's own `/v1/runs/*` routes (`submit`, `owner`, `approve`, `reject`,
 `unapprove`, `unreject`, `/v1/runs/submit`) matches them (a test asserts the
 route sets are disjoint). Paths are passed through unchanged (no rewrite).
@@ -701,6 +702,7 @@ route sets are disjoint). Paths are passed through unchanged (no rewrite).
 | `= /v1/runs` | ingestion |
 | `= /v1/runs:upload` | ingestion |
 | `~ ^/v1/runs/[^/]+/events$` | ingestion |
+| `~ ^/v1/projects/[^/]+/live/` | ingestion |
 | `/ingestion/` | ingestion |
 | `/workers/` | workers |
 | `/` | main |
@@ -728,6 +730,7 @@ spec:
           - { path: "/v1/runs$",              pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/v1/runs:upload$",       pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/v1/runs/[^/]+/events$", pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
+          - { path: "/v1/projects/[^/]+/live/", pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/ingestion/",            pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/workers/",              pathType: ImplementationSpecific, backend: { service: { name: qym-workers,   port: { number: 8000 } } } }
           - { path: "/",                      pathType: ImplementationSpecific, backend: { service: { name: qym-main,      port: { number: 8000 } } } }
