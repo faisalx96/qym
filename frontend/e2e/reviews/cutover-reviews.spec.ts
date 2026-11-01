@@ -37,7 +37,7 @@ test.describe('queue header and paging', () => {
     expect(asked[0]!.get('sort')).toBe('oldest');
     expect(asked[0]!.get('limit')).toBe('25');
     await expect(rows(page).first()).toHaveAttribute('data-correction-row', String(s.corrections[4]!.id));
-    await expect(page.getByTestId('result-count')).toHaveText('26 corrections');
+    await expect(page.getByTestId('result-count')).toHaveText('26 diagnoses');
   });
 });
 
@@ -55,14 +55,14 @@ test.describe('racing and failing loads', () => {
     });
     await gotoApp(page, `/projects/${a.project.slug}/reviews`);
     await expect(rows(page)).toHaveCount(5);
-    const search = page.getByRole('searchbox', { name: 'Search corrections' });
+    const search = page.getByRole('searchbox', { name: 'Search diagnoses' });
     await search.fill('text2sql');
     await page.waitForTimeout(600); // past the debounce: the slow request is in flight
     await search.fill('router');
     await expect(rows(page)).toHaveCount(2);
     await page.waitForTimeout(2000); // the slow response has now landed
     await expect(rows(page)).toHaveCount(2);
-    await expect(page.getByTestId('result-count')).toHaveText('2 corrections');
+    await expect(page.getByTestId('result-count')).toHaveText('2 diagnoses');
     for (const text of await rows(page).allInnerTexts()) expect(text).toContain('router');
   });
 
@@ -75,12 +75,12 @@ test.describe('racing and failing loads', () => {
       if (failing) await route.fulfill({ status: 500, json: { detail: 'boom' } });
       else await route.continue();
     });
-    await page.getByRole('searchbox', { name: 'Search corrections' }).fill('nothing');
+    await page.getByRole('searchbox', { name: 'Search diagnoses' }).fill('nothing');
     await expect(page.getByText('Couldn’t load the review queue')).toBeVisible({ timeout: 20_000 }); // react-query retries first
     await expect(rows(page)).toHaveCount(0);
     failing = false;
     await page.getByRole('button', { name: 'Retry' }).click();
-    await expect(page.getByText('No corrections match these filters')).toBeVisible();
+    await expect(page.getByText('No diagnoses match these filters')).toBeVisible();
     await expect(page.getByText('Couldn’t load the review queue')).toHaveCount(0);
   });
 
@@ -100,7 +100,7 @@ test.describe('racing and failing loads', () => {
     const goneId = Number(await gone.getAttribute('data-correction-row'));
     await page.getByRole('checkbox', { name: `Select correction ${goneId}` }).check({ force: true });
     await expect(bulk(page)).toContainText('1 selected');
-    await page.getByRole('searchbox', { name: 'Search corrections' }).fill('router');
+    await page.getByRole('searchbox', { name: 'Search diagnoses' }).fill('router');
     // while the new filter loads, the old list is not offered for ticking
     await expect(page.getByRole('checkbox', { name: `Select correction ${goneId}` })).toHaveCount(0);
     await expect(rows(page)).toHaveCount(2);

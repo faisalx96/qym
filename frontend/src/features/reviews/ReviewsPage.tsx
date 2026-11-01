@@ -22,6 +22,7 @@ import {
   type ReviewFilters,
   type ReviewSort,
 } from '@/api/reviews';
+import { projectPath, ROUTES } from '@/app/routes';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useDocumentTitle } from '@/features/shell';
@@ -33,6 +34,7 @@ import {
   EmptyState,
   ErrorState,
   IconButton,
+  LinkButton,
   PageHeader,
   SearchField,
   Select,
@@ -44,7 +46,7 @@ import {
 } from '@/ui';
 import { ConflictDialog, CommentDialog, ShortcutsDialog } from './dialogs';
 import { DetailPane } from './DetailPane';
-import { FilterChips, FiltersPanel, FiltersToggle } from './FiltersPopover';
+import { FacetRow, SourceControl } from './FilterBar';
 import {
   applyFilterParams,
   bulkSelection,
@@ -146,7 +148,6 @@ export function ReviewsPage() {
     | { kind: 'bulk-delete' }
   >(null);
   const [help, setHelp] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const decideMut = useDecide();
@@ -413,7 +414,7 @@ export function ReviewsPage() {
     <div className={fullWidth} data-reviews-page>
       <PageHeader
         title="Reviews"
-        description="Validate corrections before they become examples for future auto-analysis."
+        description="Approve or reject root-cause diagnoses. Approved ones become examples for auto-analysis."
         meta={[
           <span key="q">
             Queue: <strong>{stats.pending}</strong> to review
@@ -448,17 +449,20 @@ export function ReviewsPage() {
               isSelected={allSelected}
               isIndeterminate={!allSelected && selected.size > 0}
               onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.id)) : new Set())}
-              aria-label="Select all visible corrections"
+              aria-label="Select all visible diagnoses"
               hideLabel
             />
             <SearchField
               ref={searchRef}
-              label="Search corrections"
-              placeholder="Search task, item, root cause…"
+              label="Search diagnoses"
+              placeholder="Search diagnoses"
+              hint="/"
               value={search}
               onChange={setSearch}
               width={260}
             />
+            <SourceControl filters={filters} onChange={setFilters} />
+            <span className={styles.grow} />
             <Select
               label="Sort"
               hideLabel
@@ -468,28 +472,20 @@ export function ReviewsPage() {
               searchable={false}
               width={170}
             />
-            <FiltersToggle filters={filters} open={filtersOpen} onToggle={() => setFiltersOpen((v) => !v)} />
-            <FilterChips filters={filters} onChange={setFilters} />
-            {filtered || filters.status !== 'pending' ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onPress={() => {
-                  setSearch('');
-                  setFilters(clearedFilters(filters));
-                }}
-                data-testid="clear-filters"
-              >
-                Clear filters
-              </Button>
-            ) : null}
-            <span className={styles.grow} />
             <Text as="span" variant="sm" tone="muted" aria-live="polite" data-testid="result-count">
-              {first ? `${first.total} correction${first.total === 1 ? '' : 's'}` : ''}
+              {first ? `${first.total} ${first.total === 1 ? 'diagnosis' : 'diagnoses'}` : ''}
             </Text>
             <IconButton label="Keyboard shortcuts" icon="info" onPress={() => setHelp(true)} />
           </div>
-          {filtersOpen ? <FiltersPanel filters={filters} facets={first} onChange={setFilters} /> : null}
+          <FacetRow
+            filters={filters}
+            facets={first}
+            onChange={setFilters}
+            onClear={() => {
+              setSearch('');
+              setFilters({ ...clearedFilters(filters), status: filters.status });
+            }}
+          />
           <div
             className={styles.bulk}
             role="region"
@@ -559,29 +555,37 @@ export function ReviewsPage() {
             <EmptyState
               title={
                 filtered || filters.search
-                  ? 'No corrections match these filters'
+                  ? 'No diagnoses match these filters'
                   : filters.status === 'pending'
-                    ? 'Queue is empty'
+                    ? 'Nothing to review'
                     : 'Nothing here yet'
               }
-              body={filtered ? undefined : 'Corrections appear when reviewers change an AI diagnosis.'}
+              body={
+                filtered
+                  ? undefined
+                  : 'Diagnoses arrive when auto-analysis runs, or when someone adds a root cause on a run.'
+              }
               action={
                 filtered ? (
                   <Button
                     variant="neutral"
                     onPress={() => {
                       setSearch('');
-                      setFilters(clearedFilters(filters));
+                      setFilters({ ...clearedFilters(filters), status: filters.status });
                     }}
                   >
                     Clear filters
                   </Button>
-                ) : undefined
+                ) : (
+                  <LinkButton to={projectSlug ? projectPath(projectSlug) : ROUTES.projects} variant="neutral">
+                    Open runs
+                  </LinkButton>
+                )
               }
             />
           ) : first ? (
             <div className={styles.layout} data-has-pane={current ? '' : undefined}>
-              <ul className={styles.rows} aria-label="Corrections" aria-busy={list.isFetching || undefined}>
+              <ul className={styles.rows} aria-label="Diagnoses" aria-busy={list.isFetching || undefined}>
                 {rows.map((r) => (
                   <ReviewRow
                     key={r.id}

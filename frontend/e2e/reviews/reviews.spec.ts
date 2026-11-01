@@ -23,7 +23,7 @@ test.describe('reviews: filters in the URL', () => {
     await expect(rows(page)).toHaveCount(3);
     await expect(tabCount(page, 'To review')).toContainText('3');
     await expect(tabCount(page, 'Approved')).toContainText('1');
-    await expect(page.getByTestId('result-count')).toHaveText('3 corrections');
+    await expect(page.getByTestId('result-count')).toHaveText('3 diagnoses');
 
     await tabCount(page, 'Approved').click();
     await expect.poll(() => query(page).get('status')).toBe('approved');
@@ -34,17 +34,20 @@ test.describe('reviews: filters in the URL', () => {
     await expect(tabCount(page, 'All')).toHaveAttribute('aria-selected', 'true');
     await expect(rows(page)).toHaveCount(4);
 
-    await page.getByRole('searchbox', { name: 'Search corrections' }).fill('Cat-2');
+    await page.getByRole('searchbox', { name: 'Search diagnoses' }).fill('Cat-2');
     await expect.poll(() => query(page).get('q')).toBe('Cat-2');
     await expect(rows(page)).toHaveCount(1);
-    await expect(page.getByTestId('result-count')).toHaveText('1 correction');
+    await expect(page.getByTestId('result-count')).toHaveText('1 diagnosis');
     await page.reload();
-    await expect(page.getByRole('searchbox', { name: 'Search corrections' })).toHaveValue('Cat-2');
+    await expect(page.getByRole('searchbox', { name: 'Search diagnoses' })).toHaveValue('Cat-2');
     await expect(rows(page)).toHaveCount(1);
 
+    // Clear resets the filters and the search; the status tab stays (C152)
     await page.getByTestId('clear-filters').click();
     await expect.poll(() => query(page).get('q')).toBeNull();
-    expect(query(page).get('status')).toBe('pending');
+    expect(query(page).get('status')).toBe('all');
+    await expect(rows(page)).toHaveCount(4);
+    await tabCount(page, 'To review').click();
     await expect(rows(page)).toHaveCount(3);
 
     await page.getByRole('button', { name: /Sort/ }).click();
@@ -55,7 +58,7 @@ test.describe('reviews: filters in the URL', () => {
     await expect(rows(page).first()).toHaveAttribute('data-correction-row', String(s.corrections[3]!.id));
   });
 
-  test('deep link with every filter hydrates chips, controls and the result; __none__ means none selected', async ({
+  test('deep link with every filter hydrates the bar triggers and the result; __none__ means none selected', async ({
     page,
     request,
   }) => {
@@ -63,83 +66,79 @@ test.describe('reviews: filters in the URL', () => {
     const url = `/projects/${s.project.slug}/reviews?status=all&task=qa&model=${encodeURIComponent('openai/gpt-4o')}&dataset=${encodeURIComponent(s.dataset)}&run=${encodeURIComponent(s.runName)}`;
     await gotoApp(page, url);
     await expect(rows(page)).toHaveCount(3);
-    await expect(page.locator('[data-filter-chip=task]')).toContainText('Tasks: qa');
-    await expect(page.locator('[data-filter-chip=model]')).toContainText('Models: openai/gpt-4o');
-    await expect(page.locator('[data-filter-chip=dataset]')).toContainText(`Datasets: ${s.dataset}`);
-    await expect(page.locator('[data-filter-chip=run]')).toContainText(`Runs: ${s.runName}`);
-    await expect(page.getByTestId('filters-trigger')).toContainText('Filters (4)');
+    // each bar trigger writes its value on itself (C152): no chip line, no Filters popover
+    const bar = page.getByTestId('filter-bar');
+    await expect(bar.getByRole('button', { name: /^Task/ })).toContainText('qa');
+    await expect(bar.getByRole('button', { name: /^Model/ })).toContainText('openai/gpt-4o');
+    await expect(bar.getByRole('button', { name: /^Dataset/ })).toContainText(s.dataset);
+    await expect(bar.getByRole('button', { name: /^Run/ })).toContainText(s.runName);
+    await expect(page.getByTestId('clear-filters')).toContainText('4');
 
-    // the confidence band is mirrored as conf_min / conf_max and shown as a chip
+    // the confidence band is mirrored as conf_min / conf_max and written on its trigger
     await gotoApp(page, `/projects/${s.project.slug}/reviews?status=all&conf_min=10&conf_max=90`);
-    await expect(page.locator('[data-filter-chip=conf]')).toContainText('Confidence 10–90%');
-    await page.getByRole('button', { name: /Remove filter Confidence/ }).click();
+    await expect(page.getByTestId('confidence-trigger')).toContainText('10–90%');
+    await page.getByTestId('clear-filters').click();
     await expect.poll(() => query(page).get('conf_min')).toBeNull();
     expect(query(page).get('conf_max')).toBeNull();
     await gotoApp(page, url);
     await expect(rows(page)).toHaveCount(3);
 
-    // removing a chip updates the URL and keeps the others
-    await page.getByRole('button', { name: /Remove filter Models/ }).click();
+    // Clear resets every facet at once
+    await page.getByTestId('clear-filters').click();
     await expect.poll(() => query(page).get('model')).toBeNull();
-    expect(query(page).get('task')).toBe('qa');
+    expect(query(page).get('task')).toBeNull();
     await expect(rows(page)).toHaveCount(3);
 
-    // the sentinel: none selected -> nothing matches, chip says none, URL keeps __none__
+    // the sentinel: none selected -> nothing matches, the trigger says None, URL keeps __none__
     await gotoApp(page, `/projects/${s.project.slug}/reviews?task=__none__`);
-    await expect(page.locator('[data-filter-chip=task]')).toContainText('Tasks: none');
+    await expect(bar.getByRole('button', { name: /^Task/ })).toContainText('None');
     // legacy parity: an empty facet sends no filter to the API (only the URL differs), so rows still list
     await expect(rows(page)).toHaveCount(3);
     expect(query(page).getAll('task')).toEqual(['__none__']);
     await page.reload();
-    await expect(page.locator('[data-filter-chip=task]')).toContainText('Tasks: none');
-    await page.getByRole('button', { name: 'Clear filters' }).last().click();
+    await expect(bar.getByRole('button', { name: /^Task/ })).toContainText('None');
+    await page.getByTestId('clear-filters').click();
     await expect(rows(page)).toHaveCount(3);
     expect(query(page).get('task')).toBeNull();
   });
 
-  test('Filters panel: the source segmented control writes to the URL', async ({ page, request }) => {
+  test('the source segmented control beside the search writes to the URL', async ({ page, request }) => {
     const s = await seedReviews(request, 'revpop', 3);
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
-    await page.getByTestId('filters-trigger').click();
-    const pop = page.getByRole('group', { name: 'Filters' });
-    await pop.getByText('AI only', { exact: true }).click();
+    const source = page.getByRole('radiogroup', { name: 'Source' });
+    await source.getByText('AI only', { exact: true }).click();
     await expect.poll(() => query(page).get('source')).toBe('ai_only');
     // (the SQLite test DB cannot evaluate the AI-source filters: only the URL contract is asserted)
-    await pop.getByText('Human only', { exact: true }).click();
+    await source.getByText('Human only', { exact: true }).click();
     await expect.poll(() => query(page).get('source')).toBe('human_only');
-    await expect(page.locator('[data-filter-chip=source]')).toContainText('Human only');
-    await pop.getByRole('radiogroup', { name: 'Source' }).getByText('All', { exact: true }).click();
+    await expect(source.getByRole('radio', { name: 'Human only' })).toBeChecked();
+    await source.getByText('All', { exact: true }).click();
     await expect.poll(() => query(page).get('source')).toBeNull();
     await expect(rows(page)).toHaveCount(3);
   });
 
-  test('[BUG] facet multiselect inside the Filters panel stays open and writes to the URL', async ({
-    page,
-    request,
-  }) => {
+  test('a facet trigger in the bar stays open and writes to the URL', async ({ page, request }) => {
     const s = await seedReviews(request, 'revfacet', 3);
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
-    await page.getByTestId('filters-trigger').click();
-    const pop = page.getByRole('group', { name: 'Filters' });
-    await pop.getByRole('button', { name: /Tasks/ }).click();
-    const tasks = page.getByRole('dialog', { name: 'Tasks options' });
+    await page.getByTestId('filter-bar').getByRole('button', { name: /^Task/ }).click();
+    const tasks = page.getByRole('dialog', { name: 'Task options' });
     await tasks.getByText('qa', { exact: true }).click(); // deselect the only task -> none selected
     await expect.poll(() => query(page).getAll('task')).toEqual(['__none__']);
-    await expect(page.locator('[data-filter-chip=task]')).toContainText('Tasks: none');
     await tasks.getByText('qa', { exact: true }).click(); // everything selected again -> no filter
     await expect.poll(() => query(page).getAll('task')).toEqual([]);
   });
 
-  test('source=corrected: URL contract and chip (the SQLite backend cannot list it)', async ({
+  test('source=corrected: URL contract and the selected segment (the SQLite backend cannot list it)', async ({
     page,
     request,
   }) => {
     const s = await seedReviews(request, 'revcorr', 2);
     await gotoApp(page, `/projects/${s.project.slug}/reviews?source=corrected`);
-    await expect(page.locator('[data-filter-chip=source]')).toContainText('AI+Human corrected');
+    const source = page.getByRole('radiogroup', { name: 'Source' });
+    await expect(source.getByRole('radio', { name: 'AI+Human corrected' })).toBeChecked();
     expect(query(page).get('source')).toBe('corrected');
     await page.reload();
-    await expect(page.locator('[data-filter-chip=source]')).toContainText('AI+Human corrected');
+    await expect(source.getByRole('radio', { name: 'AI+Human corrected' })).toBeChecked();
   });
 
   test('all-projects /reviews shows the project name in rows and lists corrections of every project', async ({
@@ -171,7 +170,7 @@ test.describe('reviews: keyboard triage', () => {
     await expect(rows(page)).toHaveCount(3);
     await expect(tabCount(page, 'To review')).toContainText('3');
     await expect(tabCount(page, 'Approved')).toContainText('1');
-    await expect(page.getByTestId('result-count')).toHaveText('3 corrections');
+    await expect(page.getByTestId('result-count')).toHaveText('3 diagnoses');
     await expect(page.getByText(`Approved #${c1!.id}`)).toBeVisible();
     // the neighbour becomes current and keeps keyboard focus
     await expect(row(page, c2!.id)).toHaveAttribute('data-current', '');
@@ -221,7 +220,7 @@ test.describe('reviews: keyboard triage', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeHidden();
     await page.keyboard.press('/');
-    await expect(page.getByRole('searchbox', { name: 'Search corrections' })).toBeFocused();
+    await expect(page.getByRole('searchbox', { name: 'Search diagnoses' })).toBeFocused();
   });
 
   test('r opens the Reject dialog; Esc closes it and focus returns to the row; Reject with a comment decides', async ({
@@ -261,7 +260,7 @@ test.describe('reviews: keyboard triage', () => {
     await expect(row(page, c0!.id)).toHaveCount(0);
     await page.getByTestId('detail-approve').click(); // current moved to c1
     await expect(row(page, c1!.id)).toHaveCount(0);
-    await expect(page.getByText('Queue is empty')).toBeVisible();
+    await expect(page.getByText('Nothing to review')).toBeVisible();
     await tabCount(page, 'Approved').click();
     await expect(rows(page)).toHaveCount(2);
     await page.getByRole('button', { name: `Reset correction ${c0!.id}` }).click();
@@ -380,7 +379,7 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     const s = await seedReviews(request, 'revpage', 30);
     await page.setViewportSize({ width: 1280, height: 600 });
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
-    await expect(page.getByTestId('result-count')).toHaveText('30 corrections');
+    await expect(page.getByTestId('result-count')).toHaveText('30 diagnoses');
     await expect.poll(async () => rows(page).count()).toBeGreaterThanOrEqual(25);
     await page.getByTestId('load-more').scrollIntoViewIfNeeded();
     await expect(rows(page)).toHaveCount(30);
@@ -394,7 +393,7 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     await decideViaApi(request, c1!.id, 'approve');
     await gotoApp(page, `/projects/${s.project.slug}/reviews?status=approved`);
     await page
-      .getByRole('checkbox', { name: 'Select all visible corrections' })
+      .getByRole('checkbox', { name: 'Select all visible diagnoses' })
       .check({ force: true })
       .catch(async () => {
         await page.getByRole('checkbox', { name: /Select all/ }).check({ force: true });
