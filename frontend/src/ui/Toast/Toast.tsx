@@ -19,6 +19,11 @@ export interface ToastOptions {
   action?: { label: string; onClick: () => void };
   /** ms; default 4000, min 1000, errors 6000. */
   timeout?: number;
+  /**
+   * Repeated toasts of one kind merge into one (C143): while a toast with the same `key` shows, the next one replaces
+   * its text with `text(count)` ("2 items added") and restarts its timer.
+   */
+  merge?: { key: string; text: (count: number) => string };
 }
 
 export interface ToastItem extends ToastOptions {
@@ -38,7 +43,7 @@ interface ToastApi {
 const ToastContext = createContext<ToastApi | null>(null);
 let counter = 0;
 
-/** Mount once (in the app root). Provides useToast(); renders the top-right stack. */
+/** Mount once (in the app root). Provides useToast(); renders the stack at the bottom end of the window (C143). */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
@@ -63,11 +68,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     },
     [dismiss],
   );
+  const merged = useRef(new Map<string, { id: number; count: number }>());
   const show = useCallback(
     (message: string, options: ToastOptions = {}) => {
-      const id = ++counter;
       const tone = options.tone ?? 'info';
       const timeout = Math.max(1000, options.timeout ?? (tone === 'error' ? 6000 : 4000));
+      const group = options.merge ? merged.current.get(options.merge.key) : undefined;
+      if (options.merge && group && timers.current.has(group.id)) {
+        const { text } = options.merge;
+        group.count += 1;
+        const count = group.count;
+        setToasts((prev) => prev.map((t) => (t.id === group.id ? { ...t, message: text(count) } : t)));
+        clearTimeout(timers.current.get(group.id));
+        timers.current.set(
+          group.id,
+          setTimeout(() => dismiss(group.id), timeout),
+        );
+        return group.id;
+      }
+      const id = ++counter;
+      if (options.merge) merged.current.set(options.merge.key, { id, count: 1 });
       setToasts((prev) => [...prev.slice(-4), { id, message, ...options, tone }]);
       timers.current.set(
         id,

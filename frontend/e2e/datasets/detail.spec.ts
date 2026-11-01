@@ -176,7 +176,7 @@ test.describe('detail: draft lifecycle', () => {
     await expect(add.getByText('Metadata is not valid JSON.')).toBeVisible();
   });
 
-  test('rename version from the overflow menu and rename dataset via the pencil', async ({
+  test('rename version from the overflow menu; the header has no rename pencil (C169)', async ({
     page,
     request,
   }) => {
@@ -189,6 +189,22 @@ test.describe('detail: draft lifecycle', () => {
     await dlg.getByRole('textbox', { name: 'Name' }).fill('Q3 refresh');
     await dlg.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByTestId('version-switcher')).toContainText('Q3 refresh');
+    // Settings › General is the one place to rename the dataset
+    await expect(page.getByRole('button', { name: 'Rename dataset' })).toHaveCount(0);
+  });
+
+  test('the header holds the name, description, versions and actions only (C042, C116)', async ({
+    page,
+    request,
+  }) => {
+    const { p, d } = await seed(request, 'hdr');
+    await draftWithItems(request, p.slug, d, 2);
+    await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
+    await expect(page.getByTestId('meta-items')).toHaveCount(0);
+    await expect(page.getByText(/^source: /)).toHaveCount(0);
+    // one Add item and one Import, in the header
+    await expect(page.getByRole('button', { name: 'Add item' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Add new item' })).toHaveCount(0);
   });
 });
 

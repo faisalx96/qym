@@ -241,3 +241,13 @@ describe('JSON import mapping (C013, C120)', () => {
     expect(jsonErrorText(r.errors[0]!)).toMatch(/^Not valid JSON at line 2(, character \d+)?$/);
   });
 });
+
+describe('versionSourceText (C042, C246)', () => {
+  it('says where a version came from in words', async () => {
+    const { versionSourceText } = await import('../versions');
+    const v = (source_type: string) => ({ version: 'v2', source_type }) as unknown as DatasetVersion;
+    expect(versionSourceText(v('api'))).toBe('Added by hand');
+    expect(versionSourceText(v('derived'), { version: 'v1' } as DatasetVersion)).toBe('Copied from v1');
+    expect(versionSourceText(v('jsonl'))).toBe('Imported from a JSONL file');
+  });
+});

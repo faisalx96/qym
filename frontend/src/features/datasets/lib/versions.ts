@@ -108,3 +108,14 @@ export const PRODUCTION_RULE =
   'Only project managers can move the production alias; the creator may set it the first time.';
 export const DELETE_RULE = 'Only the dataset creator or a project manager can delete a dataset.';
 export const RESTORE_RULE = 'Only project managers can restore a deleted dataset.';
+
+/** Where a version came from, in words (C042, C246): 'Copied from v1', 'Added by hand', 'Imported from a CSV file'. */
+export function versionSourceText(v: DatasetVersion, parent?: DatasetVersion | null): string {
+  const kind = (v.source_type || '').toLowerCase();
+  if (parent || kind === 'derived')
+    return parent ? `Copied from ${parent.version}` : 'Copied from an earlier version';
+  if (kind === 'api' || kind === 'manual') return 'Added by hand';
+  if (kind === 'csv' || kind === 'tsv' || kind === 'json' || kind === 'jsonl')
+    return `Imported from a ${kind.toUpperCase()} file`;
+  return kind ? `Source: ${kind}` : '';
+}

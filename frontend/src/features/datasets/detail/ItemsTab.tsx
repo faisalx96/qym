@@ -439,7 +439,12 @@ export function ItemsTab({
             labels: it.labels,
           }),
         ).then((ok) =>
-          toast.show(ok ? 'Copied item as JSON' : 'Copy failed', { tone: ok ? 'success' : 'error' }),
+          ok
+            ? toast.show('Copied item as JSON', {
+                tone: 'success',
+                merge: { key: 'copy-json', text: (n) => `Copied ${n} items as JSON` },
+              })
+            : toast.show('Copy failed', { tone: 'error' }),
         ),
     },
     ...(canEdit
@@ -652,22 +657,11 @@ export function ItemsTab({
                   onAction={(id) => onBatch(id as BatchAction, criteria)}
                 />
               ) : null}
-              {canEdit ? (
-                <Button variant="neutral" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
-                  Add item
-                </Button>
-              ) : null}
             </>
           }
         />
+        {/* Add item and Import live in the dataset header only (C116) */}
         <DataTable.Footer
-          trailing={
-            canEdit ? (
-              <Button variant="ghost" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
-                Add new item
-              </Button>
-            ) : null
-          }
           pagination={{
             total,
             page: route.page + 1,

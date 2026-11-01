@@ -777,11 +777,15 @@ test.describe('item pane, item page and the disable dialog (A2-13 to A2-35)', ()
 });
 
 test.describe('version header, download, publish note, history and compare (A2-36 to A2-48)', () => {
-  test('meta line, version row and download entries (A2-36, A2-37, A2-39)', async ({ page, request }) => {
+  test('Items tab count, version row and download entries (A2-36, A2-37, A2-39, C042)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'ver');
     await page.setViewportSize({ width: 1440, height: 900 });
     await open(page, s);
-    await expect(page.getByTestId('meta-items')).toHaveText('130 items (6 disabled)');
+    // the Items tab counts the active items; the header has no meta line (C042)
+    await expect(page.getByRole('tab', { name: /Items/ })).toContainText('124');
     await page.getByTestId('version-switcher').click();
     await expect(page.getByTestId('version-row-items').first()).toContainText('items');
     await expect(page.getByRole('listbox').getByText('130 items (6 disabled)')).toBeVisible();
@@ -791,7 +795,7 @@ test.describe('version header, download, publish note, history and compare (A2-3
     await expect(page.getByRole('menuitem', { name: '↓ Download JSONL with disabled items' })).toBeVisible();
     await page.keyboard.press('Escape');
     await open(page, s, '', s.v1);
-    await expect(page.getByTestId('meta-items')).toHaveText('130 items');
+    await expect(page.getByRole('tab', { name: /Items/ })).toContainText('130');
     await page.getByTestId('hero-more').click();
     await expect(page.getByRole('menuitem', { name: /with disabled items/ })).toHaveCount(0);
   });

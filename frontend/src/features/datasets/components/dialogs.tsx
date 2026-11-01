@@ -275,6 +275,8 @@ export function AddItemDialog(props: {
   dataset: Dataset;
   version: DatasetVersion;
   onCreated?: (item: DatasetItem) => void;
+  /** The first Add item just made this draft (C116): the toast says so. */
+  newDraft?: boolean;
 }) {
   // Remount on every open so the fields reset.
   return props.open ? <AddItemDialogInner {...props} /> : null;
@@ -287,6 +289,7 @@ function AddItemDialogInner({
   dataset,
   version,
   onCreated,
+  newDraft,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -294,6 +297,7 @@ function AddItemDialogInner({
   dataset: Dataset;
   version: DatasetVersion;
   onCreated?: (item: DatasetItem) => void;
+  newDraft?: boolean;
 }) {
   const create = useCreateItem(slug, dataset.slug, version.version);
   const toast = useToast();
@@ -330,7 +334,14 @@ function AddItemDialogInner({
         expected_output: expected.text.trim() ? expectedStatus.value : undefined,
         metadata: metaStatus ? (metaStatus.value as Record<string, unknown>) : undefined,
       });
-      toast.show(`Item ${r.item.item_id} added`, { tone: 'success' });
+      if (newDraft)
+        toast.show(`Draft ${version.version} created · item ${r.item.item_id} added`, { tone: 'success' });
+      // repeated adds merge into one toast: "2 items added" (C143)
+      else
+        toast.show(`Item ${r.item.item_id} added`, {
+          tone: 'success',
+          merge: { key: 'item-added', text: (n) => `${n} items added` },
+        });
       onCreated?.(r.item);
       onOpenChange(false);
     } catch (e) {
