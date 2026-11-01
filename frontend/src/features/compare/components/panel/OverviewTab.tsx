@@ -23,6 +23,13 @@ interface StatItem {
 
 export function OverviewTab() {
   const { model, metric, ctx, stats, c } = useCompare();
+  // C058: pass rates, winners and runs-correct need paired items
+  if (model.unpaired)
+    return (
+      <p className={styles.note}>
+        Items are not paired across these runs, so there are no winners or pass rates to compare.
+      </p>
+    );
   const type = model.types[metric] ?? 'score';
   const dir = ctx.direction;
   const n = model.runs.length;

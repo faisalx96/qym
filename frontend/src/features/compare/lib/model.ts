@@ -76,6 +76,11 @@ export interface CompareModel {
   defaultMetric: string | null;
   metadataKeys: string[];
   alignment: { status: 'aligned' | 'unalignable'; runs: Array<{ run_name: string; issues: string[] }> };
+  /**
+   * C058: the runs evaluated different tasks or datasets (by name), so items are not paired. One entry per base run
+   * (its name, task and dataset); null when the runs share a task and a dataset.
+   */
+  unpaired: Array<{ name: string; task: string; dataset: string }> | null;
   langfuseHost: string;
   langfuseProjectId: string;
   /** Distinct base runs (for labels and "remove run"). */
@@ -263,6 +268,20 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
     (u, i) => unalignable.findIndex((o) => o.run_name === u.run_name) === i,
   );
 
+  // C058: different tasks, or different dataset names on single-dataset runs, are not paired item by item
+  const baseRuns = Array.from(new Set(runs.map((r) => r.base))).map((b) => byBase.get(b)!.run);
+  const tasks = new Set(baseRuns.map((r) => String(r.task_name ?? '').trim()).filter(Boolean));
+  const singleDataset = baseRuns.every((r) => (r.dataset_count ?? 1) <= 1);
+  const datasets = new Set(baseRuns.map((r) => String(r.dataset_name ?? '').trim()).filter(Boolean));
+  const unpaired =
+    baseRuns.length > 1 && (tasks.size > 1 || (singleDataset && datasets.size > 1))
+      ? baseRuns.map((r) => ({
+          name: String(r.run_name || r.run_id),
+          task: String(r.task_name ?? ''),
+          dataset: String(r.dataset_name ?? ''),
+        }))
+      : null;
+
   const first = loaded[0]?.run;
   return {
     runs,
@@ -276,6 +295,7 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
     defaultMetric: defaultMetricName(metrics, defaultSpecs),
     metadataKeys: Array.from(metaKeys).sort(),
     alignment: { status: dedupedUnalignable.length ? 'unalignable' : 'aligned', runs: dedupedUnalignable },
+    unpaired,
     langfuseHost: payload.langfuse_host || first?.langfuse_host || '',
     langfuseProjectId: payload.langfuse_project_id || first?.langfuse_project_id || '',
     bases: Array.from(new Set(runs.map((r) => r.base))),

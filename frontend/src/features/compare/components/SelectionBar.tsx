@@ -128,7 +128,8 @@ const RESET_KEY = '__reset-baseline__';
 /** Which column every change is measured against; also resets thresholds. Lives in the Averages head (C-avg-1). */
 export function BaselineSelect() {
   const { columns, baseline, model, c, letter } = useCompare();
-  if (columns.length < 2) return null;
+  // C058: runs of different tasks have no baseline
+  if (columns.length < 2 || model.unpaired) return null;
   const dirty = !!c.view.baseline || Object.keys(c.view.thresholds).length > 0;
   const items = [
     ...columns.map((col) => {

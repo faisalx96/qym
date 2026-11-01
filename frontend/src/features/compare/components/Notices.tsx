@@ -50,9 +50,22 @@ export function Notices() {
     return { sentences, shared };
   }, [model, letter]);
   // Nothing to say: render nothing, so the page's flex gap does not reserve an empty slot.
-  if (!readOnlyRuns.length && !data && !datasetsNote && model.alignment.status === 'aligned') return null;
+  const unpaired = model.unpaired;
+  if (!readOnlyRuns.length && !data && !datasetsNote && !unpaired && model.alignment.status === 'aligned')
+    return null;
+  const differentTasks = !!unpaired && new Set(unpaired.map((u) => u.task)).size > 1;
   return (
     <Stack gap="sm">
+      {unpaired ? (
+        // C058: runs of different tasks (or datasets) are not paired item by item
+        <div className={styles.note} role="note" data-notice="unpaired" data-testid="compare-unpaired-notice">
+          <strong>{differentTasks ? 'Different tasks' : 'Different datasets'}: items are not paired.</strong>{' '}
+          {unpaired
+            .map((u) => `${u.name}: ${[u.task, u.dataset].filter(Boolean).join(' on ') || 'no task'}`)
+            .join('; ')}
+          . The averages compare the runs as a whole.
+        </div>
+      ) : null}
       {readOnlyRuns.length ? (
         <div className={styles.note} role="note" data-notice="read-only">
           <strong>Read-only.</strong>{' '}
@@ -83,7 +96,7 @@ export function Notices() {
           </div>
         </div>
       ) : null}
-      {data && !datasetsNote ? (
+      {data && !datasetsNote && !unpaired ? (
         <div className={styles.note} role="note" data-notice="different-data">
           <strong>Different data.</strong> These runs used{' '}
           {data.multipleDatasets ? 'different datasets' : `different versions of ${data.entries[0]?.dataset}`}

@@ -77,7 +77,7 @@ export function RunCards() {
             {...card}
             side={sideOf(card.base)}
             sideLabel={cohorts ? (sideOf(card.base) === 'A' ? cohorts.leftLabel : cohorts.rightLabel) : ''}
-            isBase={baseline.base === card.base}
+            isBase={!model.unpaired && baseline.base === card.base}
             removable={removable}
             onRemove={() => remove(card.base, at)}
             registerRemove={(el) => {

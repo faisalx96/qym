@@ -712,7 +712,8 @@ export function buildItemContext(
 export function applyFilters(input: ApplyInput): ApplyResult {
   const { model, view, groups } = input;
   const metric = input.metric;
-  if (!metric || model.alignment.status !== 'aligned') return { items: [], stats: null, defs: [] };
+  if (!metric || model.alignment.status !== 'aligned' || model.unpaired)
+    return { items: [], stats: null, defs: [] };
   const ctx = metricCtx(model, metric, input.thresholds);
   const stats = fullStatsFor(model, ctx);
   const defs = fieldDefsFor(model, metric);

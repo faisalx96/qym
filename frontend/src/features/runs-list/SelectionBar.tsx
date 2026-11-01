@@ -19,6 +19,8 @@ export interface SelectionBarProps {
   canSubmit: boolean;
   /** Every pick can be deleted by this user (ownership, pass rules). */
   canDelete: boolean;
+  /** The picks evaluated different tasks, so Compare does not pair their items (C058). */
+  mixedTasks?: boolean;
   onCompare: () => void;
   onCohort: () => void;
   onSubmit: () => void;
@@ -50,7 +52,9 @@ export function SelectionBar(p: SelectionBarProps) {
       ? 'Tick runs or press x on a focused row.'
       : n === 1
         ? 'Pick one more to compare.'
-        : 'Compare opens the runs side by side.';
+        : p.mixedTasks
+          ? 'Different tasks: Compare shows the run averages only; items are not paired.'
+          : 'Compare opens the runs side by side.';
   return (
     <div className={styles.actions} role="group" aria-label="Selection actions" data-testid="selection-bar">
       {cohortMode ? (

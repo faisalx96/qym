@@ -266,8 +266,12 @@ function CompareLoaded({
                 <span className={styles.mono}>{first.dataset_name}</span>
               </>
             ) : null}
-            <span aria-hidden="true">·</span>
-            <span>{model.itemIds.length} aligned items</span>
+            {model.unpaired ? null : (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{model.itemIds.length} aligned items</span>
+              </>
+            )}
           </p>
         </div>
         <div className={styles.actions}>

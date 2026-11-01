@@ -30,6 +30,8 @@ function Mark({ index, children, block }: { index: number; children: ReactNode; 
 
 export function AveragesMatrix() {
   const { model, columns, baseline, items, ctx, c } = useCompare();
+  // C058: unpaired runs show their averages side by side, with no change, band or counts
+  const unpaired = !!model.unpaired;
   const narrow = useMediaQuery('(max-width: 640px)');
   const ids = useMemo(() => new Set(items.map((i) => i.itemId)), [items]);
   const data = useMemo(
@@ -63,7 +65,7 @@ export function AveragesMatrix() {
       return (
         <>
           <span className={styles.plainValue}>{r.latency === null ? '—' : formatLatency(r.latency)}</span>
-          {!r.isBaseline && r.latencyRel !== null ? (
+          {!r.isBaseline && !unpaired && r.latencyRel !== null ? (
             <span className={styles.latDelta} data-part="averages-delta">
               {r.latencyRel < -0.02 ? '▼' : r.latencyRel > 0.02 ? '▲' : '≈'} {r.latencyRel >= 0 ? '+' : '−'}
               {Math.abs(r.latencyRel * 100).toFixed(0)}%
@@ -84,7 +86,7 @@ export function AveragesMatrix() {
     const type = model.types[m] ?? 'score';
     const dir = model.directions[m] ?? null;
     const band = metricBand(cell.mean, type, dir);
-    const beyond = !r.isBaseline && cell.delta ? verdictOf(cell.delta.verdict) : undefined;
+    const beyond = !r.isBaseline && cell.delta && !unpaired ? verdictOf(cell.delta.verdict) : undefined;
     // C201: a metric the run did not score is one muted 'not scored', with no change and no count buttons
     if (cell.mean === null)
       return (
@@ -93,7 +95,7 @@ export function AveragesMatrix() {
         </span>
       );
     // ...and a value with no baseline score to pair with stands alone
-    const paired = !!cell.delta && cell.delta.paired > 0;
+    const paired = !unpaired && !!cell.delta && cell.delta.paired > 0;
     return (
       <>
         <span
@@ -129,7 +131,7 @@ export function AveragesMatrix() {
       index={col.runIdxs[0] ?? 0}
       name={columnName(model, col)}
       title={col.title}
-      baseline={col.key === baseline.key}
+      baseline={!unpaired && col.key === baseline.key}
       compact
       bare
     />

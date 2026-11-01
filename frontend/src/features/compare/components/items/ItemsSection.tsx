@@ -62,6 +62,14 @@ export function ItemsSection() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [panel, setPanel]);
+  if (model.unpaired)
+    return (
+      <EmptyState
+        compact
+        title="Items are not paired"
+        body="These runs evaluated different tasks or datasets, so an item of one run is not matched with an item of another. Open a run to read its items."
+      />
+    );
   if (model.alignment.status !== 'aligned')
     return (
       <EmptyState
