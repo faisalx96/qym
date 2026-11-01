@@ -43,7 +43,7 @@ export function DeltaTag({ stats, type, metric }: { stats: BaselineStats; type: 
   );
 }
 
-/** Items improved / regressed vs the baseline: two small buttons `↑9 ↓2`; pressing one filters the item list (C-avg-7). */
+/** Items improved / regressed vs the baseline: two small buttons `▲9 ▼2`; pressing one filters the item list (C-avg-7). */
 export function CountButtons({
   stats,
   active,
@@ -70,7 +70,7 @@ export function CountButtons({
           aria-label={`${stats.counts.improved} items ${up} vs baseline on ${label}; filter items`}
           onClick={() => onToggle('improved')}
         >
-          {'↑'}
+          {'▲'}
           {stats.counts.improved}
         </button>
       ) : null}
@@ -82,7 +82,7 @@ export function CountButtons({
           aria-label={`${stats.counts.regressed} items ${down} vs baseline on ${label}; filter items`}
           onClick={() => onToggle('regressed')}
         >
-          {'↓'}
+          {'▼'}
           {stats.counts.regressed}
         </button>
       ) : null}

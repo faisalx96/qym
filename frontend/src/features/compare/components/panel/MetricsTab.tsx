@@ -63,7 +63,7 @@ function TraceStatsTable() {
               <tr key={r.id} data-trace-row={r.id}>
                 <th scope="row">{r.label}</th>
                 {r.values.map((v, i) => (
-                  <td key={columns[i]!.key}>
+                  <td key={columns[i]!.key} className={styles.traceValue}>
                     <span
                       className={styles.mono}
                       title={v !== null && v === starred && valid.length > 1 ? 'Best across runs' : undefined}

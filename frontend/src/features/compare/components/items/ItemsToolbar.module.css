@@ -1,4 +1,4 @@
-/* One 24 px row at 1440 (search, Filters, Quick filters, Clear | count, Display, CSV); wraps to two rows below. */
+/* One 24 px row at 1440 (search, Quick filters | count, Sort, Display, CSV); wraps to two rows below. */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -18,7 +18,8 @@
 
 .search {
   flex: 1 1 12rem;
-  min-inline-size: 0;
+  /* C217: at 390 px the field keeps room to type instead of shrinking to its icon */
+  min-inline-size: min(10rem, 100%);
 }
 
 .actions {

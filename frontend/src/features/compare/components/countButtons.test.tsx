@@ -25,7 +25,7 @@ describe('CountButtons', () => {
       />,
     );
     expect(screen.getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByRole('button').textContent).toBe('↑9');
+    expect(screen.getByRole('button').textContent).toBe('▲9');
   });
 
   it('keeps a pressed count so the filter can be turned off', () => {

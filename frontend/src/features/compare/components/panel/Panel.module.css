@@ -402,3 +402,8 @@
   font-size: var(--font-md);
   font-weight: 600;
 }
+
+/* C217: trace stats are numbers, centred like every number column */
+.table td.traceValue {
+  text-align: center;
+}

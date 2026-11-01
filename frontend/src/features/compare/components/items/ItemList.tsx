@@ -74,7 +74,7 @@ function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
 }
 
 export function ItemList() {
-  const { model, items, c, baseline, ctx } = useCompare();
+  const { model, items, c, ctx } = useCompare();
   const ui = useItemsUi();
   const page = c.view.page;
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
@@ -124,7 +124,6 @@ export function ItemList() {
 
   const hasError = (it: FilteredItem) =>
     model.runs.some((run, i) => pillState(run, it.rows[i] ?? null, ctx).state === 'error');
-  void baseline;
 
   return (
     <div className={styles.list} data-testid="item-list" data-part="item-list">

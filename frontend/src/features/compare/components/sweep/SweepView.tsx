@@ -8,6 +8,7 @@ import {
   EmptyState,
   HelpMarker,
   MultiSelect,
+  Pagination,
   SearchField,
   Select,
   Tag,
@@ -41,6 +42,9 @@ import styles from './SweepView.module.css';
 
 const pct = (v: number | null | undefined, d = 1) =>
   v === null || v === undefined || Number.isNaN(v) ? '—' : `${(v * 100).toFixed(d)}%`;
+/** Sweep item rows per page (C217). */
+const SWEEP_PAGE = 25;
+
 const signed = (v: number, d = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v * 100).toFixed(d)}%`;
 
 function useSweepFilters(): [
@@ -155,6 +159,8 @@ export function SweepView() {
   const { model, cohorts, ctx, items: filteredCompareItems, c } = useCompare();
   const [f, reverse, setF] = useSweepFilters();
   const [open, setOpen] = useState<string | null>(null);
+  // C217: the item table pages instead of drawing every row
+  const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{
     key: 'default' | 'issue' | 'left' | 'right' | 'move';
     dir: 'asc' | 'desc';
@@ -190,6 +196,8 @@ export function SweepView() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed, f.move, f.outcome, f.q, key, f.values, f.mode, f.only, sort]);
+  const pageCount = Math.max(1, Math.ceil(shown.length / SWEEP_PAGE));
+  const pageNow = Math.min(page, pageCount);
   void filteredCompareItems;
   if (!cohorts)
     return (
@@ -315,8 +323,7 @@ export function SweepView() {
               {basis.stat.verdict === 'within_noise' ? 'not distinguishable from run luck' : 'beyond noise'}
             </Text>
             <Text variant="sm" tone="muted" as="p" className={styles.verdictSub}>
-              {ctx.metric}
-              {direction === 'minimize' ? ' · lower is better' : ''} {'·'} noise {'±'}
+              {ctx.metric} {'·'} {metricDirectionLabel(direction).toLowerCase()} {'·'} noise {'±'}
               {(basis.stat.halfWidth * 100).toFixed(1)}% at 95% {'·'}{' '}
               {basis.stat.pValue < 0.001 ? 'p < 0.001' : `p = ${basis.stat.pValue.toFixed(3)}`} {'·'}{' '}
               {basis.stat.items} paired items {'·'} {metricRole} {'—'} other metrics below are context
@@ -324,9 +331,6 @@ export function SweepView() {
           </div>
         </div>
       ) : null}
-      <Text variant="sm" tone="muted">
-        {metricDirectionLabel(direction)}
-      </Text>
 
       <div className={styles.filters} role="group" aria-label="Sweep filters" data-part="sweep-filters">
         <Select
@@ -388,6 +392,14 @@ export function SweepView() {
         >
           Exclusive only
         </Checkbox>
+        {/* C217: say why Values and Exclusive only are off */}
+        {key === 'all' || !sweepKeySupportsOnly(displayed, key) ? (
+          <Text variant="sm" tone="muted" data-part="sweep-filter-hint">
+            {key === 'all'
+              ? 'Pick a metadata key to filter by its values.'
+              : 'Exclusive only needs items that carry one value of this key.'}
+          </Text>
+        ) : null}
       </div>
 
       {shown.length === 0 ? (
@@ -630,7 +642,7 @@ export function SweepView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((item) => (
+                  {shown.slice((pageNow - 1) * SWEEP_PAGE, pageNow * SWEEP_PAGE).map((item) => (
                     <tr
                       key={item.itemId}
                       className={styles.itemRow}
@@ -677,6 +689,15 @@ export function SweepView() {
                 </tbody>
               </table>
             </ScrollRegion>
+            {shown.length > SWEEP_PAGE ? (
+              <Pagination
+                total={shown.length}
+                page={pageNow}
+                pageSize={SWEEP_PAGE}
+                noun="items"
+                onPageChange={setPage}
+              />
+            ) : null}
           </section>
         </>
       )}
