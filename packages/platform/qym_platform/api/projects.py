@@ -23,6 +23,12 @@ from qym_platform.db.models import (
     EvalExperiment,
     DatasetVersion,
     DatasetVersionChange,
+    LiveCanaryResult,
+    LiveDay,
+    LiveMetricSpec,
+    LiveSource,
+    LiveTurn,
+    LiveTurnScore,
     Project,
     ProjectAnalysisCategoryCatalogVersion,
     ProjectAnalysisPromptSettings,
@@ -1791,6 +1797,16 @@ def _project_deletion_counts(db: Session, project_id: str) -> Dict[str, int]:
                 AnalyzerDocument.project_id == project_id
             )
         ),
+        "live_sources": count(
+            db.query(func.count(LiveSource.id)).filter(
+                LiveSource.project_id == project_id
+            )
+        ),
+        "live_turns": count(
+            db.query(func.count(LiveTurn.id))
+            .join(LiveSource, LiveSource.id == LiveTurn.source_id)
+            .filter(LiveSource.project_id == project_id)
+        ),
     }
 
 
@@ -1840,6 +1856,28 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
         ProjectLlmConnection.project_id == project_id
     ).delete(synchronize_session=False)
     db.query(AnalyzerDocument).filter(AnalyzerDocument.project_id == project_id).delete(
+        synchronize_session=False
+    )
+
+    # Live evaluation: scores point at turns, the other rows at sources.
+    live_source_ids = select(LiveSource.id).where(LiveSource.project_id == project_id)
+    live_turn_ids = select(LiveTurn.id).where(LiveTurn.source_id.in_(live_source_ids))
+    db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk.in_(live_turn_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(LiveTurn).filter(LiveTurn.source_id.in_(live_source_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(LiveCanaryResult).filter(
+        LiveCanaryResult.source_id.in_(live_source_ids)
+    ).delete(synchronize_session=False)
+    db.query(LiveDay).filter(LiveDay.source_id.in_(live_source_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(LiveMetricSpec).filter(LiveMetricSpec.source_id.in_(live_source_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(LiveSource).filter(LiveSource.project_id == project_id).delete(
         synchronize_session=False
     )
 
@@ -2146,9 +2184,9 @@ def delete_project(
     """Permanently delete a project that has no runs.
 
     Removes its datasets, API keys, members, LLM connections, analysis rules,
-    catalogs, prompts and reference documents. Runs are never deleted here: a
-    project that still has runs (including runs in Trash) returns 409; archive
-    it instead.
+    catalogs, prompts, reference documents and Live evaluation data. Runs are
+    never deleted here: a project that still has runs (including runs in Trash)
+    returns 409; archive it instead.
     """
     _require_admin(principal)
     project = _get_project(db, project_id)

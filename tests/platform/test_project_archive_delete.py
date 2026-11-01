@@ -44,6 +44,12 @@ from qym_platform.db.models import (
     DatasetVersion,
     DatasetVersionChange,
     DatasetVersionStatus,
+    LiveCanaryResult,
+    LiveDay,
+    LiveMetricSpec,
+    LiveSource,
+    LiveTurn,
+    LiveTurnScore,
     Project,
     ProjectAnalysisCategoryCatalogVersion,
     ProjectAnalysisRuleMergeParent,
@@ -291,6 +297,8 @@ def test_delete_removes_datasets_llm_connections_and_settings(client, session_fa
         "llm_connections": 1,
         "rule_versions": 2,
         "analyzer_documents": 1,
+        "live_sources": 0,
+        "live_turns": 0,
     }
 
     response = client.delete(f"/v1/admin/projects/{project_id}?confirm=Project%20doomed", headers=ADMIN)
@@ -307,6 +315,63 @@ def test_delete_removes_datasets_llm_connections_and_settings(client, session_fa
         audit = db.query(AuditLog).filter(AuditLog.action == "project.deleted").one()
         assert audit.entity_id == project_id
     assert _row_counts(session_factory, keep_id) == keep_before
+
+
+def test_delete_removes_live_rows_only_for_the_project(client, session_factory):
+    projects = {}
+    now = datetime(2026, 11, 1, 12)
+    for slug in ("live-doomed", "live-keeper"):
+        project_id = _create_project(client, session_factory, slug)
+        with session_factory() as db:
+            source = LiveSource(
+                project_id=project_id, key="worker", name="Worker", environment="test"
+            )
+            db.add(source)
+            db.flush()
+            turn = LiveTurn(
+                source_id=source.id, day=now.date(), turn_id="turn-1",
+                turn_at=now, status="completed", question="Question?",
+            )
+            db.add_all(
+                [
+                    LiveMetricSpec(
+                        source_id=source.id, metric_name="accuracy", score_type="numeric",
+                        group_name="quality", label="Accuracy",
+                    ),
+                    LiveDay(source_id=source.id, day=now.date()),
+                    turn,
+                    LiveCanaryResult(
+                        source_id=source.id, canary="health", checked_at=now, status="ok"
+                    ),
+                ]
+            )
+            db.flush()
+            db.add(LiveTurnScore(turn_pk=turn.id, metric_name="accuracy", score_numeric=1.0))
+            projects[slug] = (project_id, source.id, turn.id)
+            db.commit()
+
+    project_id, _, _ = projects["live-doomed"]
+    preview = client.get(f"/v1/admin/projects/{project_id}/deletion", headers=ADMIN)
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["can_delete"] is True and body["blocked_reason"] is None
+
+    response = client.delete(
+        f"/v1/admin/projects/{project_id}?confirm=live-doomed", headers=ADMIN
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["deleted"] is True
+    assert body["counts"]["live_sources"] == 1
+    assert body["counts"]["live_turns"] == 1
+    assert response.json()["counts"] == body["counts"]
+    with session_factory() as db:
+        for slug, expected in (("live-doomed", 0), ("live-keeper", 1)):
+            project_id, source_id, turn_pk = projects[slug]
+            assert db.query(Project).filter(Project.id == project_id).count() == expected
+            assert db.query(LiveSource).filter(LiveSource.project_id == project_id).count() == expected
+            for model in (LiveMetricSpec, LiveDay, LiveTurn, LiveCanaryResult):
+                assert db.query(model).filter(model.source_id == source_id).count() == expected
+            assert db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk == turn_pk).count() == expected
 
 
 def test_delete_accepts_the_slug_as_confirmation(client, session_factory):

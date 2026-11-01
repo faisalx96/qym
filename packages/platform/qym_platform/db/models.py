@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -10,6 +10,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     Float,
@@ -2127,3 +2128,148 @@ from qym_platform.db.dashboard_models import (  # noqa: E402,F401
 )
 from qym_platform.services.dashboard_outbox import install_dashboard_outbox_hooks
 install_dashboard_outbox_hooks()
+
+
+class LiveSource(Base):
+    __tablename__ = "live_sources"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
+    key: Mapped[str] = mapped_column(String(100))
+    name: Mapped[str] = mapped_column(String(200))
+    environment: Mapped[str] = mapped_column(String(50))
+    product: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_turn_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_poll_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    worker: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    day_key_timezone: Mapped[str] = mapped_column(String(40), default="UTC")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("project_id", "key", name="uq_live_source_key"),)
+
+
+class LiveMetricSpec(Base):
+    __tablename__ = "live_metric_specs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_id: Mapped[str] = mapped_column(ForeignKey("live_sources.id"))
+    metric_name: Mapped[str] = mapped_column(String(200))
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    score_type: Mapped[str] = mapped_column(String(30))
+    direction: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    pass_threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    unit: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    precision: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    group_name: Mapped[str] = mapped_column("group", String(50))
+    label: Mapped[str] = mapped_column(String(120))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    values: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(BIG_JSON, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("source_id", "metric_name", name="uq_live_metric_spec"),
+    )
+
+
+class LiveDay(Base):
+    __tablename__ = "live_days"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_id: Mapped[str] = mapped_column(ForeignKey("live_sources.id"))
+    day: Mapped[date] = mapped_column(Date)
+    run_ref: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="running")
+    turns_seen: Mapped[int] = mapped_column(Integer, default=0)
+    evaluated: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    incomplete: Mapped[int] = mapped_column(Integer, default=0)
+    excluded: Mapped[int] = mapped_column(Integer, default=0)
+    first_poll_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_poll_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    polls: Mapped[int] = mapped_column(Integer, default=0)
+    max_poll_gap_s: Mapped[int] = mapped_column(Integer, default=0)
+    parameters: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+
+    __table_args__ = (UniqueConstraint("source_id", "day", name="uq_live_day"),)
+
+
+class LiveTurn(Base):
+    __tablename__ = "live_turns"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("live_sources.id"))
+    day: Mapped[date] = mapped_column(Date)
+    turn_id: Mapped[str] = mapped_column(String(200))
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    turn_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    turn_at: Mapped[datetime] = mapped_column(DateTime)
+    evaluated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user_ref: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    mode: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(String(30))
+    outcome: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    label: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    label_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sql: Mapped[list[dict[str, Any]]] = mapped_column(BIG_JSON, default=list)
+    latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    result_rows: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tool_calls: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    trace_url: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    eval_trace_url: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    summary: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    detail: Mapped[Optional[dict[str, Any]]] = mapped_column(BIG_JSON, nullable=True)
+    rejected: Mapped[Optional[list[str]]] = mapped_column(BIG_JSON, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("source_id", "turn_id", name="uq_live_turn"),
+        Index("ix_live_turns_source_day", "source_id", "day"),
+        Index("ix_live_turns_source_turn_at", "source_id", "turn_at"),
+        Index("ix_live_turns_source_label", "source_id", "label"),
+        Index("ix_live_turns_source_conv", "source_id", "conversation_id", "turn_at"),
+        Index("ix_live_turns_source_user", "source_id", "user_ref"),
+    )
+
+
+class LiveTurnScore(Base):
+    __tablename__ = "live_turn_scores"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    turn_pk: Mapped[int] = mapped_column(BIG_ID, ForeignKey("live_turns.id", ondelete="CASCADE"))
+    metric_name: Mapped[str] = mapped_column(String(200))
+    score_numeric: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    score_raw: Mapped[Any] = mapped_column(BIG_JSON, nullable=True)
+    label: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    meta: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    skipped: Mapped[bool] = mapped_column(Boolean, default=False)
+    skip_reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("turn_pk", "metric_name", name="uq_live_turn_metric"),
+    )
+
+
+class LiveCanaryResult(Base):
+    __tablename__ = "live_canary_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_id: Mapped[str] = mapped_column(ForeignKey("live_sources.id"))
+    canary: Mapped[str] = mapped_column(String(50))
+    checked_at: Mapped[datetime] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(20))
+    fault: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    detail: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    eval_code_version: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("source_id", "canary", "checked_at", name="uq_live_canary_result"),
+        Index("ix_live_canary_results_source_canary_checked", "source_id", "canary", "checked_at"),
+    )
