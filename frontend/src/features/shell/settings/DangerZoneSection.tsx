@@ -1,13 +1,27 @@
 import { useState } from 'react';
-import { Button, Stack, Text } from '@/ui';
+import { useDeletionPreview } from '@/api/projects';
+import type { DeletionPreview } from '@/api/types';
+import { Button, Icon, Stack, Text } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import { ArchiveProjectDialog, DeleteProjectDialog, UnarchiveProjectDialog } from '../dialogs';
 import styles from './settings.module.css';
 import { SettingsCard } from './SettingsCard';
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** The blocker of a delete, said in the Delete row itself: 'Blocked: 9 runs, 2 deleted runs' (C118). */
+export function deleteBlocker(preview: DeletionPreview | undefined): string | null {
+  if (!preview || preview.can_delete) return null;
+  const runs = preview.counts.runs ?? 0;
+  const deleted = preview.counts.runs_in_trash ?? 0;
+  return `Blocked: ${plural(runs, 'run')}, ${plural(deleted, 'deleted run')}`;
+}
+
 /** Archive or delete the project: its own section at the end of General, a card like every other (round 11). */
 export function DangerZoneSection() {
   const { project } = useProjectContext();
+  const preview = useDeletionPreview(project.id);
+  const blocker = deleteBlocker(preview.data);
   const [archive, setArchive] = useState(false);
   const [unarchive, setUnarchive] = useState(false);
   const [del, setDel] = useState(false);
@@ -50,9 +64,27 @@ export function DangerZoneSection() {
               Permanent. Only possible once the project has no runs (deleted runs included).
             </Text>
           </div>
-          <Button variant="danger" size="md" onPress={() => setDel(true)}>
-            Delete
-          </Button>
+          <div className={styles.dangerAction}>
+            {blocker && (
+              <span
+                className={styles.blocker}
+                id="delete-blocker"
+                title={preview.data?.blocked_reason ?? undefined}
+              >
+                <Icon name="lock" size={14} />
+                {blocker}
+              </span>
+            )}
+            <Button
+              variant="danger"
+              size="md"
+              isDisabled={Boolean(blocker)}
+              aria-describedby={blocker ? 'delete-blocker' : undefined}
+              onPress={() => setDel(true)}
+            >
+              Delete
+            </Button>
+          </div>
         </div>
       </SettingsCard>
       <ArchiveProjectDialog project={project} open={archive} onOpenChange={setArchive} />

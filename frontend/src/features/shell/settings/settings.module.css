@@ -58,6 +58,23 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.dangerAction {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Why Delete is off, next to the button: a lock and the counts in the warning colour (C118). */
+.blocker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--warning);
+}
+
 .promptLayout {
   display: grid;
   grid-template-columns: var(--settings-prompt-tab-width) minmax(0, 1fr);

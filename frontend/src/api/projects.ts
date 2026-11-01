@@ -129,6 +129,16 @@ export const fetchUnarchivePreview = (id: string) =>
 export const fetchDeletionPreview = (id: string) =>
   api.get<DeletionPreview>(`/v1/admin/projects/${id}/deletion`);
 
+/** What a delete would remove and whether it is blocked, for the Danger zone row (admins only, C118). */
+export function useDeletionPreview(projectId: string) {
+  return useQuery({
+    queryKey: ['project-deletion', projectId] as const,
+    queryFn: () => fetchDeletionPreview(projectId),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
 export function useArchiveProject() {
   const qc = useQueryClient();
   return useMutation({
