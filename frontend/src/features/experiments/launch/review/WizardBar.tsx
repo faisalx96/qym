@@ -7,9 +7,11 @@ import { stepLabel, type WizardStepId } from '../wizard/steps';
 import styles from './review.module.css';
 
 /**
- * The wizard's one bottom bar where the review rail gives way (the settings step and every narrow layout): Back,
- * the run count and the first problem, then Skip / Continue / Launch in a single --bar-action-h row. On a phone
- * the problem link and Cancel move into the bar's overflow menu.
+ * The wizard's one bottom bar, under both columns on every step (C171): Back on the left (disabled on the first
+ * step, so the bar keeps its shape), the run count and the first problem, then Skip, Continue and "Launch N runs"
+ * on the right, always in the same place. Continue only moves to the next step, so it is neutral; Launch is the
+ * one primary button. Cancel joins the bar only where the review pane is folded under the step (`showCancel`);
+ * on a phone the problem link and Cancel move into the bar's overflow menu.
  */
 export function WizardBar({
   step,
@@ -17,41 +19,35 @@ export function WizardBar({
   prev,
   onGo,
   onCancel,
+  showCancel,
 }: {
   step: WizardStepId;
   next: WizardStepId | null;
   prev: WizardStepId | null;
   onGo: (step: WizardStepId) => void;
   onCancel: () => void;
+  showCancel: boolean;
 }) {
   const { review, isLaunching, launch, focusIssue, readOnly } = useLaunch();
   const phone = useMediaQuery('(max-width: 760px)');
   const first = review.items[0];
   const optional = step === 'models' || step === 'settings' || step === 'evaluation';
   const problem = first ? `Fix ${plural(review.items.length, 'problem')} first: ${first.label}` : '';
+  const overflow = [
+    ...(phone && first ? [{ id: 'problem', label: problem }] : []),
+    ...(phone && showCancel ? [{ id: 'cancel', label: 'Cancel' }] : []),
+  ];
   return (
     <div className={styles.wizardBar} role="region" aria-label="Launch">
       <nav className={styles.wizardNav} aria-label="Step navigation">
-        {prev ? (
-          <Button size="sm" variant="neutral" onPress={() => onGo(prev)}>
-            Back
-          </Button>
-        ) : null}
-        {optional ? (
-          <Button size="sm" variant="neutral" aria-label="Skip to review" onPress={() => onGo('review')}>
-            Skip<span className={styles.long}> to review</span>
-          </Button>
-        ) : null}
-        {next ? (
-          <Button
-            size="sm"
-            variant="accent"
-            aria-label={`Continue to ${stepLabel(next).toLowerCase()}`}
-            onPress={() => onGo(next)}
-          >
-            Continue<span className={styles.long}>{` to ${stepLabel(next).toLowerCase()}`}</span>
-          </Button>
-        ) : null}
+        <Button
+          size="sm"
+          variant="neutral"
+          isDisabled={!prev}
+          onPress={() => (prev ? onGo(prev) : undefined)}
+        >
+          Back
+        </Button>
       </nav>
       <div className={styles.wizardStatus}>
         <span className={styles.barTitle} aria-live="polite" data-compact="">
@@ -65,21 +61,37 @@ export function WizardBar({
         {!first && !phone ? <span className={styles.ok}>{review.status || 'Ready'}</span> : null}
       </div>
       <div className={styles.wizardActions}>
-        {phone ? (
+        {optional ? (
+          <Button size="sm" variant="neutral" aria-label="Skip to review" onPress={() => onGo('review')}>
+            Skip<span className={styles.long}> to review</span>
+          </Button>
+        ) : null}
+        {next ? (
+          <Button
+            size="sm"
+            variant="neutral"
+            aria-label={`Continue to ${stepLabel(next).toLowerCase()}`}
+            onPress={() => onGo(next)}
+          >
+            Continue<span className={styles.long}>{` to ${stepLabel(next).toLowerCase()}`}</span>
+          </Button>
+        ) : null}
+        {overflow.length ? (
           <DropdownMenu
             label="More launch options"
             trigger={<IconButton label="More launch options" icon="more" />}
-            items={[...(first ? [{ id: 'problem', label: problem }] : []), { id: 'cancel', label: 'Cancel' }]}
+            items={overflow}
             onAction={(id) => {
               if (id === 'problem' && first) focusIssue(first);
               else if (id === 'cancel') onCancel();
             }}
           />
-        ) : (
+        ) : null}
+        {showCancel && !phone ? (
           <Button size="sm" variant="ghost" onPress={onCancel}>
             Cancel
           </Button>
-        )}
+        ) : null}
         <Button
           size="sm"
           variant="primary"

@@ -49,7 +49,8 @@ test.describe('wizard', () => {
     await nameBox(page).fill('wizard run');
     await page.getByRole('button', { name: /Customize/ }).click();
     await expect(rail(page).locator('[aria-current="step"]')).toContainText('Where it runs');
-    await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(0);
+    // the bottom bar keeps its shape on every step: Back shows on step 1 too, disabled (C171)
+    await expect(page.getByRole('button', { name: 'Back' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Skip to review' })).toHaveCount(0);
     await expect(review(page)).toBeVisible();
 
@@ -60,7 +61,7 @@ test.describe('wizard', () => {
       await expect(page).toHaveURL(new RegExp(`step=${STEPS[i]}`));
       const optional = i >= 2;
       await expect(page.getByRole('button', { name: 'Skip to review' })).toHaveCount(optional ? 1 : 0);
-      await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(1);
+      await expect(page.getByRole('button', { name: 'Back' })).toBeEnabled();
     }
     await page.getByRole('button', { name: 'Skip to review' }).click();
     await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible();
@@ -167,7 +168,7 @@ test.describe('layout', () => {
     expect(aside!.x).toBeGreaterThan(panel!.x);
   });
 
-  test('390px: Continue lives in the one launch bar and the bar is gone on the review step', async ({
+  test('390px: Continue lives in the one launch bar, which keeps Launch on the review step', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 800 });
@@ -180,7 +181,9 @@ test.describe('layout', () => {
     expect(nb!.y).toBeGreaterThanOrEqual(bb!.y);
     expect(nb!.y + nb!.height).toBeLessThanOrEqual(bb!.y + bb!.height + 1);
     await goStep(page, 'review');
-    await expect(page.getByRole('region', { name: 'Launch', exact: true })).toHaveCount(0);
+    // one bar on every step (C171): the review step keeps it, with Launch in the same place
+    await expect(bar.getByRole('button', { name: /^Launch/ })).toBeVisible();
+    await expect(bar.getByRole('button', { name: /Continue to/ })).toHaveCount(0);
   });
 });
 
@@ -283,8 +286,9 @@ test.describe('polish', () => {
     expect(bb!.height).toBeGreaterThanOrEqual(56);
     expect(bb!.height).toBeLessThanOrEqual(57);
     await expect(bar.getByRole('navigation', { name: 'Step navigation' })).toBeVisible();
-    await expect(nav.getByRole('button', { name: 'Continue to environment configurations' })).toBeVisible();
-    await expect(nav.getByRole('button', { name: 'Skip to review' })).toBeVisible();
+    await expect(nav.getByRole('button', { name: 'Back' })).toBeVisible();
+    await expect(bar.getByRole('button', { name: 'Continue to environment configurations' })).toBeVisible();
+    await expect(bar.getByRole('button', { name: 'Skip to review' })).toBeVisible();
   });
 
   test('home: Launch as is is the accent action; saved presets and "Other" are separate rows', async ({

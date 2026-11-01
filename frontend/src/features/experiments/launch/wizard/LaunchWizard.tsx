@@ -16,8 +16,6 @@ import { ModelsSection } from '../sections/ModelsSection';
 import { RawJsonSection } from '../sections/RawJsonSection';
 import { SettingsSection } from '../sections/SettingsSection';
 import { SweepsSection } from '../sections/SweepsSection';
-import { prefersReducedMotion } from '../state/useSections';
-import { StepNav } from './StepNav';
 import { StepPanel } from './StepPanel';
 import { stepLabel, stepOfItem, WIZARD_STEPS, type WizardStepId } from './steps';
 import wizard from './wizard.module.css';
@@ -38,7 +36,11 @@ interface Props {
   onCancel: () => void;
 }
 
-/** Customize: the six-step wizard. One step on screen at a time over a progress rail; the review stays in view. */
+/**
+ * Customize: the six-step wizard (C171). The stepper sits above both columns, so it keeps one width on every step;
+ * one step is on screen at a time, the review stays in view, and one bottom bar under both columns holds Back,
+ * Continue and Launch in the same place on every step.
+ */
 export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
   const { doc, ctx, review, flags, sectionSummary } = useLaunch();
   const wide = useMediaQuery('(min-width: 1200px)');
@@ -55,9 +57,9 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
     return `Step ${index} of ${WIZARD_STEPS.length}: ${stepLabel(step)}`;
   }, [step]);
 
-  // A step change: the rail comes to the top of the view and the heading takes focus. The stage keeps
-  // the previous step's height until the scroll ends, so a shorter step cannot clamp the scroll to 0
-  // and make it jump back down to the rail.
+  // A step change: the heading takes focus, and the view does not scroll (C171) unless the rail is above the view,
+  // where it jumps (no glide) so the new step reads from its top. The stage keeps the previous step's height for a
+  // moment, so a shorter step cannot clamp the scroll to 0.
   const stage = useRef<HTMLDivElement>(null);
   const lastHeight = useRef(0);
   const held = useRef(false);
@@ -73,18 +75,14 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
   }, []);
   useLayoutEffect(() => {
     const el = stage.current;
-    const smooth = !prefersReducedMotion();
     let timer: ReturnType<typeof setTimeout> | undefined;
     if (el && !firstStep.current && lastHeight.current) {
       held.current = true;
       el.style.minHeight = `${lastHeight.current}px`;
-      timer = setTimeout(
-        () => {
-          el.style.minHeight = '';
-          held.current = false;
-        },
-        smooth ? 700 : 50,
-      );
+      timer = setTimeout(() => {
+        el.style.minHeight = '';
+        held.current = false;
+      }, 50);
     }
     const wasFirst = firstStep.current;
     firstStep.current = false;
@@ -95,7 +93,9 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
     const before = scroller?.scrollTop ?? 0;
     queueMicrotask(() => {
       if (scroller && !wasFirst) scroller.scrollTop = before;
-      rail.current?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
+      const top = rail.current?.getBoundingClientRect().top ?? 0;
+      const viewTop = scroller?.getBoundingClientRect().top ?? 0;
+      if (!wasFirst && top < viewTop) rail.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
     });
     heading.current?.focus({ preventScroll: true });
     return () => {
@@ -172,7 +172,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           title="Review and launch"
           description="Check the summary, then launch."
         >
-          <ReviewPane onCancel={onCancel} rawAction={false} />
+          <ReviewPane onCancel={onCancel} rawAction={false} hideLaunch />
           {hasEnv ? (
             <StaticSections>
               <RawJsonSection />
@@ -201,7 +201,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
                   {swept ? <SweepsSection /> : null}
                 </>
               ) : null}
-              {step === 'evaluation' ? <EvaluationSection /> : null}
+              {step === 'evaluation' ? <EvaluationSection inWizard /> : null}
             </StaticSections>
           )}
         </StepPanel>
@@ -215,38 +215,41 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
   const showAside = wide && step !== 'review' && !compactReview;
   const reviewBelow = !showAside && step !== 'review';
   return (
-    <div
-      className={`${styles.layout} ${showAside ? '' : styles.layoutSingle}`}
-      data-compact-review={compactReview ? '' : undefined}
-    >
-      <div className={styles.main}>
-        <div ref={rail} className={wizard.rail}>
-          <Stepper
-            aria-label="Steps"
-            steps={steps}
-            current={step}
-            onSelect={(id) => onGo(id as WizardStepId)}
-          />
-        </div>
-        <div className={wizard.live} role="status" aria-live="polite">
-          {announce}
-          {review.items.length ? `, ${plural(review.items.length, 'problem')} to fix` : ''}
-        </div>
-        <div ref={stage}>{body}</div>
-        {reviewBelow ? (
-          <>
-            <ReviewPane onCancel={onCancel} hideActions />
-            <WizardBar step={step} next={next} prev={prev} onGo={onGo} onCancel={onCancel} />
-          </>
-        ) : (
-          <StepNav step={step} next={next} prev={prev} onGo={onGo} />
-        )}
+    <div className={styles.wizard}>
+      <div ref={rail} className={wizard.rail}>
+        <Stepper
+          aria-label="Steps"
+          steps={steps}
+          current={step}
+          onSelect={(id) => onGo(id as WizardStepId)}
+        />
       </div>
-      {showAside ? (
-        <div className={styles.aside}>
-          <ReviewPane onCancel={onCancel} />
+      <div className={wizard.live} role="status" aria-live="polite">
+        {announce}
+        {review.items.length ? `, ${plural(review.items.length, 'problem')} to fix` : ''}
+      </div>
+      <div
+        className={`${styles.layout} ${showAside ? '' : styles.layoutSingle}`}
+        data-compact-review={compactReview ? '' : undefined}
+      >
+        <div className={styles.main}>
+          <div ref={stage}>{body}</div>
+          {reviewBelow ? <ReviewPane onCancel={onCancel} hideActions /> : null}
         </div>
-      ) : null}
+        {showAside ? (
+          <div className={styles.aside}>
+            <ReviewPane onCancel={onCancel} hideLaunch />
+          </div>
+        ) : null}
+      </div>
+      <WizardBar
+        step={step}
+        next={next}
+        prev={prev}
+        onGo={onGo}
+        onCancel={onCancel}
+        showCancel={reviewBelow}
+      />
     </div>
   );
 }

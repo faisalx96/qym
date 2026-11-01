@@ -231,10 +231,13 @@ function DatasetLines() {
 export function ReviewPane({
   onCancel,
   hideActions,
+  hideLaunch,
   rawAction = true,
 }: {
   onCancel: () => void;
   hideActions?: boolean;
+  /** The wizard keeps Launch in its bottom bar (C171): the pane keeps Cancel and Raw JSON. */
+  hideLaunch?: boolean;
   /** Offer the "Raw JSON" action (off on the review step, which has its own Show raw JSON button). */
   rawAction?: boolean;
 }) {
@@ -364,7 +367,9 @@ export function ReviewPane({
           </details>
         ) : null}
         {readOnly ? <Callout tone="warning">Archived project: read only.</Callout> : null}
-        {hideActions ? null : <LaunchActions onCancel={onCancel} hideRaw={!rawAction} />}
+        {hideActions ? null : (
+          <LaunchActions onCancel={onCancel} hideRaw={!rawAction} hideLaunch={hideLaunch} />
+        )}
       </div>
     </Card>
   );

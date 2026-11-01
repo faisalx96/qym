@@ -5,6 +5,14 @@
   min-width: 0;
 }
 
+/* Customize: the stepper, the two columns, then the bottom bar (C171) */
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

@@ -20,6 +20,41 @@ async function open(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /Evaluation configurations/ }));
 }
 
+function setupWizard(capabilities?: { datasets: boolean; task: boolean }) {
+  const env = makeEnv(PRODUCTION, 'production', capabilities ? { capabilities } : {});
+  const doc = createDocument({ environmentIds: [PRODUCTION] });
+  return renderSection(<EvaluationSection inWizard />, {
+    envs: [env],
+    doc,
+    overrides: { ctx: makeCtx({ envs: [env] }) },
+  });
+}
+
+describe('EvaluationSection in the wizard (C172)', () => {
+  it('moves the task and dataset inputs to Where it runs when the environment accepts both', async () => {
+    const user = userEvent.setup();
+    setupWizard({ datasets: true, task: true });
+    await open(user);
+    for (const name of ['task_name', 'dataset_version', 'dataset_alias'])
+      expect(document.querySelector(`[data-eval-field="${name}"]`)).toBeNull();
+    expect(document.querySelector('[data-eval-field="samples"]')).toBeInTheDocument();
+    expect(screen.getByTestId('set-in-where')).toHaveTextContent(
+      'Dataset and task are set in Where it runs.',
+    );
+    expect(
+      within(screen.getByTestId('set-in-where')).getByRole('button', { name: 'Edit' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the inputs for an environment that does not accept them', async () => {
+    const user = userEvent.setup();
+    setupWizard();
+    await open(user);
+    expect(document.querySelector('[data-eval-field="task_name"]')).toBeInTheDocument();
+    expect(screen.queryByTestId('set-in-where')).toBeNull();
+  });
+});
+
 describe('EvaluationSection', () => {
   it('generates the evaluation inputs and writes edits on top of the base', async () => {
     const user = userEvent.setup();
