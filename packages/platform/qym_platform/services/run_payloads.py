@@ -41,10 +41,56 @@ def text_preview(value: str) -> str:
     return " ".join(value[: INPUT_PREVIEW_CHARS * 4].split())[:INPUT_PREVIEW_CHARS]
 
 
+_EMPTY_STAT_VALUES = (None, False, 0, "", (), [], {})
+
+
+def lean_trace_stats(stats: Any) -> Any:
+    """A pass attempt's trace stats without zero, false and empty values (C084).
+
+    About half of a repeat run's index payload was per-attempt trace stats, most
+    of them 0 or false. The run page reads a missing key of a present stats object
+    as the row-level value's empty form (passScope.ts), so nothing changes on screen.
+    """
+    if not isinstance(stats, dict):
+        return stats
+    return {
+        key: value
+        for key, value in stats.items()
+        # The duration sums and the outer-scope maps feed only run-level latency; no section reads them per attempt.
+        if not key.endswith(("_duration_ms_total", "_duration_ms_count"))
+        and not key.startswith("outer_scope_")
+        and (
+            isinstance(value, float)
+            and value != 0.0
+            or not isinstance(value, float)
+            and not any(
+                value is empty or (type(value) is type(empty) and value == empty)
+                for empty in _EMPTY_STAT_VALUES
+            )
+        )
+    }
+
+
+def lean_finished_index_rows(rows: List[Dict[str, Any]]) -> None:
+    """Index rows of a finished run (C084): lean attempt trace stats and no output digests.
+
+    The digests let a page that follows a live run notice a changed output; a
+    finished run's outputs no longer change, so its rows do not carry them.
+    """
+    for row in rows:
+        row.pop("output_digest", None)
+        for attempt in row.get("pass_attempts") or []:
+            if not attempt:
+                continue
+            attempt.pop("output_digest", None)
+            if attempt.get("trace_stats"):
+                attempt["trace_stats"] = lean_trace_stats(attempt["trace_stats"])
+
+
 def compact_attempt(attempt: Dict[str, Any]) -> Dict[str, Any]:
     """Index form of a pass attempt; an attempt already in that form is kept."""
     result = dict(attempt)
-    if "output" not in result and "output_digest" in result:
+    if "output" not in result and "__has_output" in result:
         return result
     output = result.pop("output", None)
     result["__has_output"] = output is not None

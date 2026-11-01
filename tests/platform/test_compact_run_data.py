@@ -647,3 +647,31 @@ def test_multi_pass_search_matches_each_pass_searched_alone(data, monkeypatch):
                 run.id, {"conditions": conditions, **invalid}, db, principal
             )
         assert error.value.status_code == 422
+
+
+def test_finished_index_rows_drop_digests_and_zero_attempt_stats():
+    """C084: lean attempt trace stats and no output digests on a finished run's index rows."""
+    from qym_platform.services.run_payloads import lean_finished_index_rows
+
+    rows = [
+        {
+            "item_id": "a",
+            "output_digest": "abc",
+            "pass_attempts": [
+                {
+                    "output_digest": "d1",
+                    "trace_stats": {
+                        "tokens": 12,
+                        "cost": 0.0,
+                        "tool_errors": 0,
+                        "has_reasoning": False,
+                        "outer": {},
+                    },
+                },
+                None,
+            ],
+        }
+    ]
+    lean_finished_index_rows(rows)
+    assert "output_digest" not in rows[0]
+    assert rows[0]["pass_attempts"][0] == {"trace_stats": {"tokens": 12}}

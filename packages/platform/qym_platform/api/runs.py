@@ -115,6 +115,7 @@ from qym_platform.services.run_versioning import (
     versioning_conditions,
 )
 from qym_platform.services.run_payloads import (
+    lean_finished_index_rows,
     compact_attempt,
     compact_row,
     detail_item_ids,
@@ -3596,6 +3597,11 @@ def _build_run_batch(
             ),
         )
 
+    if compact:
+        # C084: a finished run's index rows drop the output digests and the zero values of attempt trace stats
+        for state in states.values():
+            if state.run.status not in _LIVE_RUN_STATUSES:
+                lean_finished_index_rows(state.rows)
     return _run_payloads(db, states, metric_specs, principal, access)
 
 
