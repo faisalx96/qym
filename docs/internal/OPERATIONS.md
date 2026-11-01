@@ -31,6 +31,11 @@ sure one process runs a given job.
 | `QYM_ROLE` | `all` | `api`, `worker`, or `all` |
 | `QYM_WEB_WORKERS` | `1` | HTTP processes per API pod. Above 1, see "Several web processes in one pod" |
 | `QYM_MAINTENANCE_MODE` | `false` | Reject ingest with 503 during a window |
+| `QYM_LIVE_RETENTION_DAYS` | `180` | Days of live turns, scores and canary checks to retain; day rows have a separate two-year retention |
+| `QYM_LIVE_STALE_AFTER_SECONDS` | `300` | Seconds since the last received heartbeat before a live evaluation worker is shown as stale |
+| `QYM_LIVE_TURN_BATCH_MAX` | `100` | Maximum number of turns accepted in one live ingest batch |
+| `QYM_LIVE_DETAIL_MAX_BYTES` | `524288` | Maximum serialized bytes of a live turn's detail; larger detail is dropped and flagged in its summary |
+| `QYM_LIVE_TREND_MAX_DAYS` | `90` | Maximum number of days returned by the live overview trend |
 | `QYM_EVENT_LOG_MODE` | `full` | `structural` drops item/metric bodies from `run_events` (bodies live in `run_items`/attempts/scores). Enable after the new image is live |
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
