@@ -78,8 +78,12 @@ export function DetailPane(p: DetailPaneProps) {
                 onPress={p.onApprove}
                 isDisabled={p.busy || Boolean(row.review_block)}
                 data-testid="detail-approve"
+                aria-keyshortcuts="a"
               >
-                Approve <Kbd>a</Kbd>
+                Approve{' '}
+                <span aria-hidden="true">
+                  <Kbd>a</Kbd>
+                </span>
               </Button>
               <Button
                 variant="danger"
@@ -87,8 +91,12 @@ export function DetailPane(p: DetailPaneProps) {
                 onPress={p.onReject}
                 isDisabled={p.busy || Boolean(row.review_block)}
                 data-testid="detail-reject"
+                aria-keyshortcuts="r"
               >
-                Reject <Kbd>r</Kbd>
+                Reject{' '}
+                <span aria-hidden="true">
+                  <Kbd>r</Kbd>
+                </span>
               </Button>
             </>
           ) : (
@@ -108,8 +116,12 @@ export function DetailPane(p: DetailPaneProps) {
             onPress={p.onEdit}
             isDisabled={p.editing}
             data-testid="detail-edit"
+            aria-keyshortcuts="e"
           >
-            Edit <Kbd>e</Kbd>
+            Edit{' '}
+            <span aria-hidden="true">
+              <Kbd>e</Kbd>
+            </span>
           </Button>
           <Button
             variant="ghost"
@@ -117,8 +129,12 @@ export function DetailPane(p: DetailPaneProps) {
             onPress={p.onToggle}
             aria-expanded={p.expanded}
             data-testid="detail-toggle"
+            aria-keyshortcuts="o"
           >
-            {p.expanded ? 'Hide details' : 'Details'} <Kbd>o</Kbd>
+            {p.expanded ? 'Hide details' : 'Details'}{' '}
+            <span aria-hidden="true">
+              <Kbd>o</Kbd>
+            </span>
           </Button>
           <Button variant="ghost" size="sm" onPress={p.onDelete} isDisabled={p.busy}>
             Delete

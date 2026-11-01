@@ -41,6 +41,18 @@ describe('Histogram', () => {
     expect(empty.children[0]!.children[0]!.getAttribute('data-text')).toBe('');
   });
 
+  it("says '1 item', not '1 items', in a bar's name (C203)", () => {
+    const { container } = render(
+      <Histogram buckets={[bucket(0, 1), bucket(1, 2)]} direction="maximize" metric="q" onPick={() => {}} />,
+    );
+    expect(container.querySelector('button[data-bucket="0"]')!.getAttribute('aria-label')).toMatch(
+      /^0%: 1 item \(/,
+    );
+    expect(container.querySelector('button[data-bucket="1"]')!.getAttribute('aria-label')).toMatch(
+      /^10%: 2 items \(/,
+    );
+  });
+
   it('sets --p on each column to count / max', () => {
     const { container } = render(
       <Histogram buckets={buckets} direction="maximize" metric="q" onPick={() => {}} />,

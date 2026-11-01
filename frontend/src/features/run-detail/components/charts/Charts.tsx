@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { MetricDirection } from '@/lib/metrics';
 import { metricBand } from '@/lib/metrics';
+import { plural } from '@/features/shell/plural';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { staggerIndex, useEntrance } from '@/ui/motion';
 import { bucketTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
@@ -270,7 +271,7 @@ export function Histogram({
   const total = buckets.reduce((a, b) => a + b.count, 0);
   const bars: BarSpec[] = buckets.map((b) => {
     const pct = total ? Math.round((b.count / total) * 100) : 0;
-    const title = `${b.label}: ${b.count} items (${pct}%)${b.note}`;
+    const title = `${b.label}: ${plural(b.count, 'item')} (${pct}%)${b.note}`;
     const errors = b.scorerErrors + b.taskErrors;
     return {
       key: b.index,
@@ -809,8 +810,8 @@ export function PassCountBars({
     count: c,
     label: String(i),
     color: i === last ? 'var(--score-5)' : i === 0 ? 'var(--score-1)' : 'var(--score-3)',
-    tip: `${i} of ${total} passes passed: ${c} items`,
-    name: `${c} ${i}/${total}${i === 0 ? ' always fail' : i === last ? ' always pass' : ''}: ${i} of ${total} passes passed, ${c} items, filter the table`,
+    tip: `${i} of ${total} passes passed: ${plural(c, 'item')}`,
+    name: `${c} ${i}/${total}${i === 0 ? ' always fail' : i === last ? ' always pass' : ''}: ${i} of ${total} passes passed, ${plural(c, 'item')}, filter the table`,
     onPick: () => onPick(i),
     selected: selected === i,
     disabled: c === 0,
