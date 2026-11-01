@@ -70,7 +70,7 @@ function PageControls() {
           data-part="items-clear-btn"
           onPress={() => c.setView(clearedView())}
         >
-          Clear <Tag kind="count">{clearCount}</Tag>
+          Clear <span className={styles.clearCount}>{clearCount}</span>
         </Button>
       ) : null}
     </div>

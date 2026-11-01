@@ -217,7 +217,7 @@ test('rule builder: "+ Group" adds a nested group', async ({ page }) => {
     }),
   });
   const builder = page.getByTestId('filter-builder');
-  await builder.getByRole('button', { name: '+ Group' }).click();
+  await builder.getByRole('button', { name: 'Add group' }).click();
   await expect(builder.getByRole('group', { name: 'Rule group' })).toBeVisible();
   await builder.getByRole('button', { name: 'Delete group' }).click();
   await expect(builder.getByRole('group', { name: 'Rule group' })).toHaveCount(0);
