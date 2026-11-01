@@ -55,6 +55,8 @@ export const runKeys = {
   itemTrace: (runId: string, itemId: string, pass: number | null) =>
     ['run', runId, 'item-trace', itemId, pass] as const,
   catalog: (slug: string) => ['project', slug, 'category-catalog'] as const,
+  issueBlocks: (runId: string, itemId: string, pass: number | null) =>
+    ['run', runId, 'issue-blocks', itemId, pass] as const,
 };
 
 /** 200 `{error}` → ApiError with the status the message implies. */
@@ -504,7 +506,9 @@ export interface IssueActionBody {
   run_id: string;
   item_id: string;
   metric_name: string;
-  action: 'add' | 'edit' | 'delete' | 'approve';
+  action: 'add' | 'edit' | 'delete' | 'approve' | 'reject';
+  /** reject: the reviewer's comment, printed under the issue. */
+  comment?: string;
   issue?: Record<string, unknown>;
   issue_id?: string;
   issue_index?: number;
@@ -512,6 +516,25 @@ export interface IssueActionBody {
   client_issue_id?: string;
   pass_number?: number;
   expected_pass_version?: number;
+}
+
+/** Why this viewer may not approve or reject an item's issues (C125): the role rule, and the rule per issue. */
+export interface IssueBlocks {
+  role_block: string | null;
+  blocks: Record<string, Record<string, string>>;
+}
+
+export function useIssueBlocksQuery(runId: string, itemId: string, pass: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: runKeys.issueBlocks(runId, itemId, pass),
+    queryFn: () =>
+      api.get<IssueBlocks>(
+        runUrl(runId, `/items/${encodeURIComponent(itemId)}/issue-blocks`) +
+          (pass ? `?pass_number=${pass}` : ''),
+      ),
+    enabled,
+    staleTime: 60_000,
+  });
 }
 
 export function useIssueAction(runId: string) {
@@ -522,6 +545,7 @@ export function useIssueAction(runId: string) {
     onSuccess: (res) => {
       if (res?.row) applyRowToCache(qc, runId, res.row);
       void qc.invalidateQueries({ queryKey: runKeys.reviewHistory(runId) });
+      void qc.invalidateQueries({ queryKey: ['run', runId, 'issue-blocks'] });
     },
   });
 }

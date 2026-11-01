@@ -94,13 +94,13 @@ test.describe('axe', () => {
     await audit(page, 'retried trace drawer', '[role=dialog]');
   });
 
-  test('issue dialog', async ({ page }) => {
+  test('issue form', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0003');
     const card = page.locator('[data-testid=item-card][data-item-id="item-0003"]');
     await openRootCause(card);
     await card.getByRole('button', { name: '+ Add issue' }).first().click();
-    await expect(page.getByTestId('issue-dialog')).toBeVisible();
-    await audit(page, 'issue dialog', '[role=dialog]');
+    await expect(page.getByTestId('issue-form')).toBeVisible();
+    await audit(page, 'issue form', '[data-testid=issue-form]');
   });
 
   test('repeat run: Repeat tab and heatmap', async ({ page }) => {

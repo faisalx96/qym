@@ -687,3 +687,9 @@
   border-radius: 2px;
   background: var(--err);
 }
+
+/* C067: rejected issues are left out of a category's count; the card says how many */
+.rejectedNote {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

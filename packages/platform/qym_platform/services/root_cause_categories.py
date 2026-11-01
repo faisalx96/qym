@@ -293,7 +293,7 @@ def normalize_root_cause_issues(
         # reconcile review fields against trusted saved state, never form input.
         for key in (
             "issue_id", "solution", "solution_note", "source", "category_reason",
-            "review_status", "reviewed_at", "reviewed_by_user_id",
+            "review_status", "reviewed_at", "reviewed_by_user_id", "reviewed_by_name", "review_comment",
         ):
             if key in raw_issue:
                 issue[key] = str(raw_issue.get(key) or "").strip()
