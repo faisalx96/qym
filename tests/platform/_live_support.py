@@ -114,10 +114,14 @@ def seed_week(db: Session, project_id: str) -> LiveSource:
                 received_at=datetime.combine(day, time(11, index, 1)),
                 user_ref=f"user-{index % 2}",
                 mode="standard",
-                status="evaluated",
-                outcome="success" if index < 3 else "failure",
+                status="completed" if index < 3 else "failed",
+                outcome="ok" if index < 3 else "agent_failed",
                 label=label,
-                question=f"Question {index + 1}",
+                question=(
+                    "Question 1: ما المبيعات؟"
+                    if offset == 6 and index == 0
+                    else f"Question {index + 1}"
+                ),
                 answer=f"Answer {index + 1}",
                 latency_ms=latencies[index],
             )

@@ -1,19 +1,22 @@
-"""Project-scoped UI reads for live evaluation sources and their overview."""
+"""Project-scoped UI reads for live evaluation sources, overview and turns."""
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
-from qym_platform.db.models import LiveSource
+from qym_platform.db.models import LiveMetricSpec, LiveSource
 from qym_platform.deps import get_db
 from qym_platform.log import get_logger
 from qym_platform.permissions import project_for_read_by_slug
-from qym_platform.services import live_overview
+from qym_platform.services import live_overview, live_turns
 from qym_platform.settings import PlatformSettings
 
 logger = get_logger(__name__)
@@ -38,6 +41,41 @@ def _default_source(sources: list[LiveSource]) -> Optional[LiveSource]:
     return next(
         (source for source in sources if source.last_heartbeat_at is not None), None
     )
+
+
+def _selected_source(
+    db: Session, principal: Principal, project_slug: str, source: Optional[str]
+) -> LiveSource:
+    """Resolve a source only after checking the project's read permission."""
+    project = project_for_read_by_slug(db, principal, project_slug)
+    sources = _sources(db, project.id)
+    selected = (
+        next((row for row in sources if row.key == source), None)
+        if source is not None
+        else _default_source(sources)
+    )
+    if selected is None:
+        raise HTTPException(status_code=404, detail="live source not found")
+    return selected
+
+
+def _specs(db: Session, source: LiveSource) -> list[LiveMetricSpec]:
+    """Load the selected source's metric definitions in display order."""
+    return (
+        db.query(LiveMetricSpec)
+        .filter(LiveMetricSpec.source_id == source.id)
+        .order_by(LiveMetricSpec.position, LiveMetricSpec.metric_name)
+        .all()
+    )
+
+
+def _turn_filters(request: Request) -> live_turns.TurnFilters:
+    """Preserve repeated filters and report malformed query values as 422."""
+    params = {key: request.query_params.getlist(key) for key in request.query_params}
+    try:
+        return live_turns.TurnFilters.from_query(params)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @live_router.get("/api/projects/{project_slug}/live")
@@ -71,15 +109,7 @@ def project_live_overview(
     principal: Principal = Depends(require_ui_principal),
 ) -> dict[str, Any]:
     """Return the selected source's overview after checking project read access."""
-    project = project_for_read_by_slug(db, principal, project_slug)
-    sources = _sources(db, project.id)
-    selected = (
-        next((row for row in sources if row.key == source), None)
-        if source is not None
-        else _default_source(sources)
-    )
-    if selected is None:
-        raise HTTPException(status_code=404, detail="live source not found")
+    selected = _selected_source(db, principal, project_slug, source)
     return live_overview.overview_payload(
         db,
         selected,
@@ -89,3 +119,71 @@ def project_live_overview(
         live_overview.utcnow(),
         page=days_page,
     )
+
+
+@live_router.get("/api/projects/{project_slug}/live/turns")
+def project_live_turns(
+    project_slug: str,
+    request: Request,
+    source: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> dict[str, Any]:
+    """Return filtered turns and facets for the selected source."""
+    selected = _selected_source(db, principal, project_slug, source)
+    return live_turns.list_turns(
+        db, selected, _turn_filters(request), _specs(db, selected)
+    )
+
+
+def _csv_chunks(rows: Iterator[list[str]]) -> Iterator[str]:
+    """Encode CSV rows without buffering the complete export."""
+    with io.StringIO(newline="") as buffer:
+        writer = csv.writer(buffer)
+        for row in rows:
+            writer.writerow(row)
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+
+@live_router.get("/api/projects/{project_slug}/live/turns.csv")
+def project_live_turns_csv(
+    project_slug: str,
+    request: Request,
+    source: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> StreamingResponse:
+    """Stream every matching turn with one CSV column per metric spec."""
+    selected = _selected_source(db, principal, project_slug, source)
+    filters = _turn_filters(request)
+    period = "all"
+    if filters.day:
+        period = filters.day.isoformat()
+    elif filters.date_from or filters.date_to:
+        period = f"{filters.date_from or 'all'}_{filters.date_to or 'all'}"
+    rows = live_turns.export_rows(db, selected, filters, _specs(db, selected))
+    return StreamingResponse(
+        _csv_chunks(rows),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="live-turns-{period}.csv"'
+        },
+    )
+
+
+@live_router.get("/api/projects/{project_slug}/live/turns/{turn_id:path}")
+def project_live_turn_detail(
+    project_slug: str,
+    turn_id: str,
+    source: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> dict[str, Any]:
+    """Return turn evidence and conversation context within the selected source."""
+    selected = _selected_source(db, principal, project_slug, source)
+    payload = live_turns.turn_detail(db, selected, turn_id, _specs(db, selected))
+    if payload is None:
+        raise HTTPException(status_code=404, detail="turn not found")
+    return payload
