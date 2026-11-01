@@ -693,3 +693,41 @@
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
+
+/* C167: the correlation matrix's blank diagonal and its |r| key */
+.matrixSelf {
+  display: block;
+  inline-size: 100%;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 4px;
+}
+
+.rampKey {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-block-start: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.rampScale {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  inline-size: 120px;
+}
+
+.rampBar {
+  display: block;
+  block-size: 8px;
+  border-radius: 4px;
+}
+
+.rampTicks {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}

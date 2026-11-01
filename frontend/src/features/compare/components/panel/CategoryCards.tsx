@@ -58,17 +58,13 @@ function RunRow({
       </span>
       <span className={styles.track} data-part="category-track" aria-hidden>
         <span className={styles.fill} style={{ inlineSize: pct(score) }} />
-        {!isBase && marker !== null ? <span className={styles.tick} data-part="category-tick" style={{ insetInlineStart: pct(marker) }} /> : null}
+        {!isBase && marker !== null ? (
+          <span className={styles.tick} data-part="category-tick" style={{ insetInlineStart: pct(marker) }} />
+        ) : null}
       </span>
     </li>
   );
 }
-
-const LEVEL: Record<string, string> = {
-  easy: 'var(--score-4)',
-  medium: 'var(--score-3)',
-  hard: 'var(--score-1)',
-};
 
 export function CategoryCards({
   keyName,
@@ -78,7 +74,7 @@ export function CategoryCards({
 }: {
   keyName: string;
   groups: CategoryGroup[];
-  /** Position of the key among the shown keys (unused: the rail colour follows the value). */
+  /** Position of the key among the shown keys (unused: the rail is neutral, C167). */
   rank?: number;
   active: (value: string) => boolean;
   onPick: (value: string) => void;
@@ -107,7 +103,8 @@ export function CategoryCards({
               data-part="category-card"
               data-testid="category-card"
               data-value={g.value}
-              style={{ '--rail': LEVEL[g.value.toLowerCase()] ?? 'var(--info)' } as CSSProperties}
+              // C167: a neutral rail. A category's name is not a verdict; only the change is coloured, beyond noise.
+              style={{ '--rail': 'var(--border-strong)' } as CSSProperties}
               onClick={press}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -148,7 +145,9 @@ export function CategoryCards({
                       marker={base?.score ?? null}
                       change={d && d.mean !== null ? formatDelta(d.mean, type) : '—'}
                       changeTitle={
-                        d && d.halfWidth !== null ? `95% noise band ${formatBand(d.halfWidth, type)}` : undefined
+                        d && d.halfWidth !== null
+                          ? `95% noise band ${formatBand(d.halfWidth, type)}`
+                          : undefined
                       }
                       tone={
                         i === baseIdx
