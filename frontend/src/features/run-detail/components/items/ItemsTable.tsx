@@ -1,25 +1,31 @@
 /**
  * The item table on the shared DataTable: windowed rows on the shell scroller (virtualized), expandable
  * item cards, sortable headers, the `?item=` deep link landing, pagination that keeps the `page` param.
+ * Review group R2: no Reason column (C017); scores are centred numbers with no bar in 120px columns, plain green or
+ * red where the metric has a pass threshold (C149, C220); Status is a StatusMark with no fill; the open-trace
+ * action is a green tile with the trace glyph in a normal last column (C230); one header line, no group band (C253).
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
 import {
   DataTable,
   DatasetTag,
   IconButton,
-  ScoreBar,
+  ScoreValue,
   Skeleton,
-  Tag,
+  StatusMark,
+  Tooltip,
   type Column,
   type Key,
   type SortState,
+  type StatusShape,
+  type StatusTone,
 } from '@/ui';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs } from '@/lib/text';
-import { useItemReasons, rowReason } from '../../hooks/useItemReasons';
-import type { FilteredItem, FilterContext, SortBy } from '../../lib/filterRules';
-import { latencyLabel, metricCell, rowFailureInput, rowStatus } from '../../lib/rowDisplay';
+import { metricPassesFor, type FilteredItem, type SortBy } from '../../lib/filterRules';
+import { metricHasPassThreshold } from '../../lib/runModel';
+import { latencyLabel, metricCell, rowStatus } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
 import { defaultPageSize } from '../../lib/itemsPaging';
@@ -31,7 +37,15 @@ import styles from './ItemsTable.module.css';
 
 const PAGE_SIZE_KEY = 'qym:run-page-size';
 const PAGE_SIZES = [20, 50, 100, 500];
-const REASON_MIN_WIDTH = 760;
+
+/** The Status column's StatusMark for an item outcome: the pixel figure is the non-colour cue. */
+const STATUS_MARK: Record<string, [StatusTone, StatusShape]> = {
+  pass: ['success', 'check'],
+  fail: ['danger', 'cross'],
+  error: ['danger', 'cross'],
+  not_received: ['warning', 'pause'],
+  running: ['info', 'orbit'],
+};
 
 function usePageSize(total: number): [number, (n: number) => void] {
   const [chosen, setChosen] = useState<number | null>(() => {
@@ -47,65 +61,10 @@ function usePageSize(total: number): [number, (n: number) => void] {
   ];
 }
 
-function useWidth(ref: React.RefObject<HTMLElement | null>): number {
-  const [w, setW] = useState(900);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
-    setW(el.clientWidth);
-    const ro = new ResizeObserver(() => setW(el.clientWidth));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [ref]);
-  return w;
-}
-
 function sortState(sort: SortBy): SortState {
   if (sort === 'index') return { key: 'index', direction: 'asc' };
   const [key, direction] = sort.split('_') as ['score' | 'latency', 'asc' | 'desc'];
   return { key, direction };
-}
-
-function ReasonCell({
-  item,
-  ctx,
-  metric,
-  metricKeys,
-  serverReason,
-  request,
-}: {
-  item: FilteredItem;
-  ctx: FilterContext;
-  metric: string | null;
-  metricKeys: Record<string, string[]>;
-  serverReason: ReturnType<typeof useItemReasons>['serverReasons'];
-  request: (ids: string[]) => void;
-}) {
-  const { row } = item;
-  const status = rowStatus(ctx, row, metric);
-  const failing = status.kind === 'fail' || status.kind === 'error';
-  const failure = metric ? rowFailureInput(ctx, row, metric) : null;
-  const reason =
-    metric && failure && failing
-      ? rowReason({
-          row,
-          metric,
-          scoreText: failure.scoreText,
-          needText: failure.needText,
-          metaKeys: metricKeys[metric] ?? [],
-          serverReason: serverReason.get(row.item_id),
-        })
-      : null;
-  useEffect(() => {
-    if (reason?.askServer) request([row.item_id]);
-  }, [reason?.askServer, request, row.item_id]);
-  if (!reason) return null;
-  return (
-    <span className={styles.reason} title={reason.picked.text}>
-      <span className={styles.reasonText}>{reason.picked.text}</span>
-      <span className={styles.reasonSource}>{reason.picked.source}</span>
-    </span>
-  );
 }
 
 export interface ItemsTableProps {
@@ -118,7 +77,7 @@ export interface ItemsTableProps {
 }
 
 export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: ItemsTableProps) {
-  const { api, model, runId, payload, hasGroup } = useRunPage();
+  const { api, model, payload, hasGroup } = useRunPage();
   const textLoaded = hasGroup('text');
   const ui = useItemsUi();
   const { ctx, selectedMetric } = api;
@@ -131,11 +90,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
   );
   const scroller = useShellScroller();
   const wrapRef = useRef<HTMLDivElement>(null);
-  const width = useWidth(wrapRef);
-  const reasons = useItemReasons(runId, selectedMetric, model.viewPass);
   const stickyOffset = useStickyOffset();
-  const showReason = width >= REASON_MIN_WIDTH;
-  const metricKeys = payload.snapshot.metric_meta_keys ?? {};
 
   // The analysis metric leads, so it is on screen when the sidebar narrows the table.
   const orderedMetrics = [...model.metricNames].sort(
@@ -189,23 +144,14 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       priority: 1,
       cell: ({ row }) => {
         const status = rowStatus(ctx, row, selectedMetric);
+        const [tone, shape] = STATUS_MARK[status.kind] ?? ['neutral', 'ring'];
         return (
-          <Tag
-            tone={
-              status.kind === 'pass'
-                ? 'success'
-                : status.kind === 'fail' || status.kind === 'error'
-                  ? 'danger'
-                  : status.kind === 'not_received'
-                    ? 'warning'
-                    : status.kind === 'running'
-                      ? 'info'
-                      : undefined
-            }
+          <StatusMark
+            tone={tone}
+            shape={shape}
+            label={status.kind === 'error' ? 'Error' : status.label}
             title={status.title || undefined}
-          >
-            {status.kind === 'error' ? '⚠ Error' : status.label}
-          </Tag>
+          />
         );
       },
     },
@@ -228,26 +174,6 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         );
       },
     },
-    ...(showReason
-      ? [
-          {
-            id: 'reason',
-            header: `Reason${selectedMetric ? ` · ${selectedMetric}` : ''}`,
-            width: 260,
-            priority: 3 as const,
-            cell: (it: FilteredItem) => (
-              <ReasonCell
-                item={it}
-                ctx={ctx}
-                metric={selectedMetric}
-                metricKeys={metricKeys}
-                serverReason={reasons.serverReasons}
-                request={reasons.request}
-              />
-            ),
-          } satisfies Column<FilteredItem>,
-        ]
-      : []),
     ...orderedMetrics.map(
       (m, i) =>
         ({
@@ -255,18 +181,25 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
           header: m,
           group: 'Metrics',
           type: 'score' as const,
-          width: 150,
+          align: 'center' as const,
+          width: 120,
           priority: (m === selectedMetric || i === 0 ? 2 : 3) as 2 | 3,
           sort: m === selectedMetric ? { key: 'score', first: 'desc' as const } : undefined,
           cell: ({ row }: FilteredItem) => {
             const cell = metricCell(ctx, row, m);
+            const passes =
+              metricHasPassThreshold(model, m) && cell.value !== null && !cell.error
+                ? metricPassesFor(ctx, m, cell.value)
+                : null;
             return (
-              <ScoreBar
+              <ScoreValue
+                variant="plain"
                 value={cell.value}
                 type={cell.type}
                 direction={cell.direction}
                 error={cell.error}
                 text={cell.text}
+                verdict={passes === null ? null : passes ? 'pass' : 'fail'}
               />
             );
           },
@@ -302,17 +235,20 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
             header: 'Trace',
             hideLabel: true,
             width: 48,
-            pin: 'end',
+            align: 'center',
             resizable: false,
             hideable: false,
             cell: ({ row }) =>
               row.trace_id ? (
-                <IconButton
-                  label={`Open trace of item #${row.index + 1}`}
-                  icon="list"
-                  onPress={() => ui.openTrace(row.item_id, ctx.model.viewPass)}
-                  data-trace-button
-                />
+                <Tooltip content="Open trace">
+                  <IconButton
+                    label={`Open trace of item #${row.index + 1}`}
+                    icon="trace"
+                    tile
+                    onPress={() => ui.openTrace(row.item_id, ctx.model.viewPass)}
+                    data-trace-button
+                  />
+                </Tooltip>
               ) : (
                 <span className={styles.noTrace} aria-hidden="true">
                   –
@@ -327,7 +263,8 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
     <div className={styles.wrap} ref={wrapRef}>
       <DataTable<FilteredItem>
         aria-label="Items"
-        storageKey="run.items.v2"
+        storageKey="run.items.v3"
+        groupBand={false}
         columns={columns}
         rows={pageItems}
         rowKey={(it) => it.row.item_id}

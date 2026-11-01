@@ -19,6 +19,11 @@ export interface ScoreValueProps {
    * compare averages) or 'plain' (the band-coloured number alone: table cells).
    */
   variant?: 'text' | 'pill' | 'plain';
+  /**
+   * Where a pass threshold applies (C220): the value is plain green when it passes and plain red when it fails, in
+   * place of its band. The title names the verdict, so colour is not the only cue.
+   */
+  verdict?: 'pass' | 'fail' | null;
   className?: string;
 }
 
@@ -43,10 +48,12 @@ export function ScoreValue({
   raw,
   text: textOverride,
   variant = 'text',
+  verdict,
   className,
 }: ScoreValueProps) {
   const dir = normalize(direction);
-  const band = error ? null : metricBand(value, type, dir);
+  const judged = !error && value != null && verdict ? verdict : null;
+  const band = error || judged ? null : metricBand(value, type, dir);
   const text = error
     ? 'Error'
     : textOverride !== undefined
@@ -60,7 +67,17 @@ export function ScoreValue({
       data-band={band ?? undefined}
       data-error={error ?? undefined}
       data-variant={variant === 'text' ? undefined : variant}
-      title={band ? `Band ${band} of 5` : undefined}
+      data-tone={judged ? (judged === 'pass' ? 'success' : 'danger') : undefined}
+      data-verdict={judged ?? undefined}
+      title={
+        judged
+          ? judged === 'pass'
+            ? 'Passes the pass threshold'
+            : 'Fails the pass threshold'
+          : band
+            ? `Band ${band} of 5`
+            : undefined
+      }
     >
       {error ? (
         <span

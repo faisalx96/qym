@@ -5,7 +5,6 @@ import {
   describeViolations,
   itemsCount,
   openRun,
-  params,
   seedClassic,
   seedProject,
   type Seeded,
@@ -43,30 +42,37 @@ test.describe('desktop 1280', () => {
     const [shown] = await itemsCount(page);
     await expect(scopeBar(page)).toContainText(`Scope: ${shown} of 240 items`);
     await expect(page.locator('#run-section-overview')).toContainText(`over ${shown} of 240 items`);
-    await sidebar(page).getByRole('button', { name: 'Clear all' }).click();
+    await scopeBar(page).getByRole('button', { name: 'Clear all' }).click();
     await expect(scopeBar(page)).toHaveCount(0);
     await expect(sidebar(page)).toHaveCount(0);
     expect(await itemsCount(page)).toEqual([240, 240]);
   });
 
-  test('sidebar controls write the one filter model (status, category)', async ({ page }) => {
+  test('C154: the sidebar holds only the category and error picks', async ({ page }) => {
     await openRun(page, s.slug, classic, 'show=failed');
     await expect(sidebar(page)).toBeVisible();
-    await sidebar(page).getByRole('group', { name: 'Status' }).getByRole('button', { name: 'Fail' }).click();
-    await expect(sidebar(page)).toHaveCount(0);
-    expect(params(page).get('show')).toBeNull();
-    await openRun(page, s.slug, classic, 'q=item');
+    await expect(sidebar(page).getByRole('group', { name: 'Status' })).toHaveCount(0);
+    await expect(sidebar(page).getByRole('slider')).toHaveCount(0);
+    await expect(sidebar(page).getByText('Order by')).toHaveCount(0);
+    await expect(sidebar(page).getByRole('button', { name: 'Clear all' })).toHaveCount(0);
     const category = sidebar(page)
       .getByRole('group', { name: /^Category/ })
       .first();
     await category.getByRole('button').first().click();
-    await expect(sidebar(page).getByRole('button', { name: /from scope/ })).toHaveCount(2);
+    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(2);
+  });
+
+  test('C154: a search alone does not open the sidebar; its scope-bar button does', async ({ page }) => {
+    await openRun(page, s.slug, classic, 'q=item');
+    await expect(scopeBar(page)).toBeVisible();
+    await expect(sidebar(page)).toHaveCount(0);
+    await scopeBar(page).getByRole('button', { name: 'Show filters' }).click();
+    await expect(sidebar(page)).toBeVisible();
   });
 
   test('removing the last chip closes the scope', async ({ page }) => {
     await openRun(page, s.slug, classic, 'show=failed');
-    await sidebar(page)
-      .getByRole('group', { name: 'Active filters' })
+    await scopeBar(page)
       .getByRole('button', { name: /from scope/ })
       .click();
     await expect(scopeBar(page)).toHaveCount(0);
@@ -134,24 +140,22 @@ test.describe('narrow', () => {
 });
 
 test.describe('scope stays visible', () => {
-  test('wide: the Active group lists the chips once (sidebar), the bar carries the count; Hide moves them to the bar', async ({
+  test('wide: the scope bar lists the chips once (C154: the sidebar has no Active group); the sidebar stays in view', async ({
     page,
   }) => {
     await openRun(page, s.slug, classic, 'show=failed');
-    await expect(sidebar(page).getByRole('group', { name: 'Active filters' })).toBeVisible();
+    await expect(sidebar(page).getByRole('group', { name: 'Active filters' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /from scope/ })).toHaveCount(1);
-    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(0);
+    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(1);
     // still visible after reading far down the report: the sidebar is sticky
     await page
       .getByRole('navigation', { name: 'Run sections' })
       .getByRole('link', { name: /^Errors/ })
       .click();
-    await expect(sidebar(page).getByRole('group', { name: 'Active filters' })).toBeInViewport();
-    await sidebar(page).getByRole('button', { name: 'Hide quick filters' }).click();
-    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(1);
+    await expect(sidebar(page).getByText('Quick filters', { exact: true })).toBeInViewport();
   });
 
-  test('1000px: the scope bar sticks under the nav while a lower section is read; the drawer has the Active group and one title', async ({
+  test('1000px: the scope bar sticks under the nav while a lower section is read; the drawer has one title', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1000, height: 800 });
@@ -167,7 +171,7 @@ test.describe('scope stays visible', () => {
       .toBeLessThan(6);
     await scopeBar(page).getByRole('button', { name: 'Quick filters' }).click();
     const drawer = page.getByRole('dialog', { name: 'Quick filters' });
-    await expect(drawer.getByRole('group', { name: 'Active filters' })).toBeVisible();
+    await expect(drawer.getByRole('group', { name: 'Active filters' })).toHaveCount(0);
     await expect(drawer.getByText('Quick filters', { exact: true })).toHaveCount(1);
   });
 

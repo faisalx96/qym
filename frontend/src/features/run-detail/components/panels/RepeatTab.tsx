@@ -1,8 +1,8 @@
 /**
  * Repeat-run analysis. Round 10 (the first qym's order): the Pass if threshold, the tiles, the By pass table (every
  * metric), then the "Repeat performance" subsection with Performance across attempts and Pass distribution. The page
- * metric (the sticky nav) drives the tiles, the curve and the distribution; the section has no metric picker. The
- * score spread by pass lives in Deep analysis.
+ * metric and its Pass if threshold (both in the sticky nav, C039) drive the tiles, the curve and the distribution;
+ * the section has no metric picker and no slider of its own. The score spread by pass lives in Deep analysis.
  */
 import { useMemo, useState } from 'react';
 import { useGroupMetricsQuery, usePassesQuery } from '@/api/runs';
@@ -13,7 +13,6 @@ import {
   ErrorState,
   SegmentedControl,
   Skeleton,
-  Slider,
   Subsection,
   Tag,
   type Column,
@@ -33,11 +32,8 @@ export function RepeatTab() {
   // The page's analysis metric (?metric=, default the primary metric) is the one that drives this section.
   const metric = api.selectedMetric ?? model.metricNames[0] ?? '';
   const boolean = !!model.metricIsBoolean[metric];
-  const baseThreshold = boolean ? 1 : (model.defaultThresholds[metric] ?? 0.8);
-  const [tState, setTState] = useState<{ metric: string; draft: number; committed: number } | null>(null);
-  const mine = tState?.metric === metric ? tState : null;
-  const threshold = mine?.draft ?? baseThreshold;
-  const committed = mine?.committed ?? baseThreshold;
+  // ?threshold= (the nav slider) applies to the page metric, as on Items and Quality vs latency.
+  const committed = boolean ? 1 : (api.view.threshold ?? model.defaultThresholds[metric] ?? 0.8);
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const [statistic, setStatistic] = useState<RepeatStatistic>('compare');
   const passes = usePassesQuery(runId, true);
@@ -110,21 +106,10 @@ export function RepeatTab() {
           <Tag kind="data">{metric}</Tag>
         </span>
         {!boolean ? (
-          <Slider
-            label="Pass if ≥"
-            unit="%"
-            layout="inline"
-            minValue={0}
-            maxValue={100}
-            step={5}
-            value={Math.round(threshold * 100)}
-            onChange={(v) => setTState({ metric, draft: (v as number) / 100, committed })}
-            onChangeEnd={(v) =>
-              setTState({ metric, draft: (v as number) / 100, committed: (v as number) / 100 })
-            }
-            width="220px"
-            className={styles.passIf}
-          />
+          <span className={styles.metricNow} data-testid="repeat-threshold">
+            <span className={styles.metricNowLabel}>Pass if ≥</span>
+            <Tag kind="data">{Math.round(committed * 100)}%</Tag>
+          </span>
         ) : null}
       </div>
       {group.isPending ? <Skeleton kind="cards" count={1} label="Loading repeat analysis" /> : null}

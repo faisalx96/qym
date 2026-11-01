@@ -21,6 +21,7 @@ export type IconName =
   | 'send'
   | 'file'
   | 'warning'
+  | 'trace'
   | 'retry'
   | 'search'
   | 'plus'
@@ -92,6 +93,8 @@ const PATHS: Record<IconName, string> = {
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8',
   warning: 'M12 3L2 21h20L12 3zM12 10v5M12 18v.5',
+  // a three-bar waterfall: the open-trace action (C230); the list glyph is for filters only
+  trace: 'M3 6h8M7 12h9M12 18h9',
   retry: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',
   search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zM20 20l-4-4',
   plus: 'M12 5v14M5 12h14',

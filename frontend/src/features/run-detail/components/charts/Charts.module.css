@@ -248,7 +248,8 @@
   color: var(--text-primary);
 }
 
-.bandValue[data-band] {
+.bandValue[data-band],
+.bandValue[data-tone] {
   color: var(--tone-text);
 }
 

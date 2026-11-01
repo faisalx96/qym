@@ -485,7 +485,11 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   numeric metrics stay neutral and confidence intervals stay muted. `variant="pill"`
   shows the band as a `--tint-soft` fill (cards, stat strips, compare averages); the
   number and the `Band n of 5` title stay the non-colour cue. `variant="plain"` is the band-coloured number alone,
-  for table cells: the runs table shows a score as that number, centred under its header, with no bar (rounds 8, 9).
+  for table cells: the runs table shows a score as that number, centred under its header, with no bar (rounds 8, 9);
+  the run Items table does the same in 120px columns (C149). **Pass threshold (C220):** where a metric declares a pass
+  threshold, the run Items scores and the Overview ring and mean are plain `--success` when the value passes and
+  `--error-text` when it fails (`ScoreValue verdict`, `BandValue verdict`, the ring's `data-tone`); the title names the
+  verdict. Bands stay everywhere a threshold does not apply.
 
 - **Run name and entities**: a run is written by `RunName` (sans, a link when it has a target, mono only when the label is a
   bare id) and the task, dataset and model by `TaskTag`, `DatasetTag` and `ModelTag`, on every surface (runs list,
@@ -515,8 +519,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned (`align: 'center'`
   centres a column, header and values; the runs and charts tables centre every number column, round 9); a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
-  `--table-group-height` band above the header unless the table passes `groupBand={false}` (the runs table: one
-  header line, the groups still label the Columns menu). Sort glyph, header menu and resize divider show on hover/focus only;
+  `--table-group-height` band above the header unless the table passes `groupBand={false}` (the runs, run Items,
+  Charts and dataset Items tables: one header line, the groups still label the Columns menu; C253). Sort glyph, header menu and resize divider show on hover/focus only;
   pinned columns (start/end) are opaque. The boundary has **no line** (round 9): while content is scrolled under a
   frozen edge, the pinned cells on that edge (the last start cell and the first end cell of the header, the group band
   and every body row) darken toward it with an 8px `--pin-shade` gradient inside their own box, in the cell padding.
@@ -662,8 +666,12 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 Recipes that exist only on the run report. They compose the primitives above and follow the same rules.
 
-- **Run header** (round 3 P6, round 10): three bands, nothing behind a chevron. Band 1 identity (name, passes tag, Copy run
-  id, the status mark beside them) and actions (Export, pager, both 24px; a stop reason is one muted line under it). Band 2
+- **Run header** (round 3 P6, round 10, review group R4): three bands, nothing behind a chevron. Band 1 identity (name,
+  passes tag, Copy run id, the status mark beside them, then a neutral "History N" button that opens the review log in
+  a popover, C027; there is no Review history card and no Reviews nav link) and actions ("Compare with reference" in
+  accent when the run has a reference, C034; one neutral "Actions" menu that holds the review action for the viewer's
+  role first, Export HTML, Transfer ownership and Delete in red, each item with its `ActionTile`; the pager; all 24px).
+  A stop reason, or a rejected run's reject comment (C047), is one muted line under it. Band 2
   seven labelled facts (`dl`, 7 / 4 / 2 columns by column width), every value at the tag height and 600 so plain values sit
   level with tagged ones; the model tag carries the model recipe (series dot and tint). Band 3 `KeyValueTag` chips (24px
   passive key / value, key at most 20 characters, value at most 30) in the groups Versioning, Config, Metadata, clamped to
@@ -671,9 +679,11 @@ Recipes that exist only on the run report. They compose the primitives above and
   accent gradient along the top edge (accent, secondary, tertiary, fading out) and a faint accent wash from the top-left
   corner; no status rail.
 
-- **Overview cards** (round 10, the first qym's card): a 40px score ring in the band colour and the mean, the metric name
-  and the error note under them (a warning glyph, the counts, and the key of the hatch the bars draw for errored items),
-  the scored count at the top end, then the plot. No header band, no side rail. Three cards to a row at 1440. A plain
+- **Overview cards** (round 10, the first qym's card; C012): a 40px score ring in the band colour (or plain pass/fail
+  where a threshold applies, C220) and the mean, the metric name under them, the scored count ("N scored", no error
+  count) at the top end, then one full-width line with the error note (a warning glyph and "3 task errors counted as
+  0%") and the key of the hatch the bars draw for errored items, then the plot. Task-errored items count as 0, as
+  declared: an empty `pass_scores` is a plain item row, not a repeat aggregate. No header band, no side rail. Three cards to a row at 1440. A plain
   number (a numeric metric, tokens per item when the traces carry tokens) is the same frame with the mean, "mean per
   item", a Total · Min · Median · Max line and the box plot. Cost per item is not shown (a default every attempt reports).
 
@@ -705,6 +715,12 @@ Recipes that exist only on the run report. They compose the primitives above and
   takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky;
   the hook writes `--head-shift` on the bar itself (a custom property is inherited: written on the item it restyled every descendant on every
   scroll event), and the bar is its own layer only while it is shifted (round 7, D1).
+
+- **Items table columns** (review group R2): #, Status (a `StatusMark`, no tinted pill), Input, one 120px centred score
+  column per metric (page metric first), Latency, then the open-trace action: a green action tile (`IconButton tile`) with
+  the `trace` glyph and the tooltip "Open trace", in a normal last column that scrolls with the table (not pinned, C230).
+  There is no Reason column (C017). The `list` glyph is for filters only; the compare output cards' Trace button uses
+  the `trace` glyph too.
 
 - **Item details** (round 3 P5): the expanded item is `direction: ltr` and left anchored: Input, Expected and Tags are
   `FieldRow labelAnchor="start"` (label column `--field-label-width`, the value block as wide as its text up to

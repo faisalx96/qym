@@ -134,6 +134,12 @@
   color: var(--text-muted);
 }
 
+/* The page-wide Pass if threshold (C039): one inline slider beside the metric. */
+.threshold {
+  flex: none;
+  margin-inline-end: var(--space-sm);
+}
+
 @media (max-width: 767px) {
   .actions {
     display: none;

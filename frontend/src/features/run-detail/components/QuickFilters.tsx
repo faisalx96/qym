@@ -1,29 +1,18 @@
-/** Quick-filter sidebar body: shown while a scope is active; every control writes the one filter model. */
-import { useMemo, useState } from 'react';
-import { Button, IconButton, QuickFilterGroup, ScopeChips, Select, Slider, Text } from '@/ui';
+/**
+ * Quick-filter sidebar body: shown while a scope is active; every control writes the one filter model. It holds only
+ * the category and error picks (C154): status is the Items bar's Show, the metric, its threshold, the rules and Clear
+ * live in the sticky nav, Sort is the Items bar's, and the scope bar lists the active chips.
+ */
+import { useMemo } from 'react';
+import { Button, IconButton, QuickFilterGroup, Text } from '@/ui';
 import { useScope } from '../hooks/useScope';
 import { latencyFilterLabel } from '../lib/latencyModel';
-import { SORT_VALUES, type ItemShow, type SortBy } from '../lib/filterRules';
 import { categoryBreakdown } from '../lib/overviewModel';
 import { collectErrors, slotOfKind, type ErrorKind } from '../lib/rowErrors';
 import { categoryTogglePatch, errorTogglePatch, selectedCategoryValues } from '../lib/scopeFilters';
-import { metricHasPassThreshold } from '../lib/runModel';
 import { useRunPage } from '../RunContext';
 import styles from './QuickFilters.module.css';
 
-const SORT_LABELS: Record<SortBy, string> = {
-  index: 'Index',
-  score_asc: 'Score ↑',
-  score_desc: 'Score ↓',
-  latency_asc: 'Latency ↑',
-  latency_desc: 'Latency ↓',
-};
-
-const STATUS: Array<{ id: ItemShow; label: string }> = [
-  { id: 'passed', label: 'Pass' },
-  { id: 'failed', label: 'Fail' },
-  { id: 'errors', label: 'Errors' },
-];
 const KINDS: ErrorKind[] = ['Task error', 'Metric error', 'Trace error'];
 const MAX_ERRORS = 4;
 
@@ -32,16 +21,6 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
   const scope = useScope();
   const { view, selectedMetric: metric } = api;
   const filters = view.filters;
-  const hasThreshold = metricHasPassThreshold(model, metric);
-  const threshold = metric
-    ? Math.round((view.threshold ?? model.defaultThresholds[metric] ?? 0.8) * 100)
-    : 80;
-  const [thr, setThr] = useState(threshold);
-  const [seenThr, setSeenThr] = useState(threshold);
-  if (seenThr !== threshold) {
-    setSeenThr(threshold);
-    setThr(threshold);
-  }
   const repeatAggregate = model.isRepeat && !model.viewPass;
 
   // Counts describe the whole run, so a value stays reachable after it has been chosen.
@@ -65,7 +44,6 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
     })).filter((g) => g.buckets.length);
   }, [model.rows, repeatAggregate]);
 
-  const status = STATUS.some((s) => s.id === view.show) ? [view.show] : [];
   return (
     <div className={styles.root} data-testid="quick-filters">
       {onHide ? (
@@ -79,49 +57,6 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
       <Text variant="sm" tone="muted">
         {scope.shown.toLocaleString('en-US')} of {scope.total.toLocaleString('en-US')} items
       </Text>
-      <Button size="sm" variant="ghost" onPress={scope.clearAll} className={styles.clear}>
-        Clear all
-      </Button>
-
-      <div className={styles.active} role="group" aria-label="Active filters">
-        <Text variant="sm" tone="muted" weight={650}>
-          ACTIVE
-        </Text>
-        <div className={styles.chips}>
-          <ScopeChips chips={scope.chips} maxChips={20} />
-        </div>
-      </div>
-      <QuickFilterGroup
-        label="Status"
-        mode="single"
-        options={STATUS}
-        selected={status}
-        onToggle={(id) => api.setView({ show: view.show === id ? 'all' : (id as ItemShow) })}
-      />
-      {model.metricNames.length > 1 ? (
-        <Select
-          label="Metric"
-          items={model.metricNames.map((n) => ({ key: n, label: n }))}
-          value={metric}
-          onChange={(k) =>
-            k &&
-            api.setView({ metric: String(k) === model.defaultMetric ? null : String(k), threshold: null })
-          }
-        />
-      ) : null}
-      {hasThreshold ? (
-        <Slider
-          label="Pass if at least"
-          unit="%"
-          minValue={0}
-          maxValue={100}
-          step={5}
-          value={thr}
-          onChange={(v) => setThr(v as number)}
-          onChangeEnd={(v) => api.setView({ threshold: (v as number) / 100 })}
-        />
-      ) : null}
-
       {categories.map((b) => (
         <QuickFilterGroup
           key={b.key}
@@ -165,12 +100,6 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
         />
       ) : null}
 
-      <Select
-        label="Order by"
-        items={(['index', ...SORT_VALUES] as SortBy[]).map((v) => ({ key: v, label: SORT_LABELS[v] }))}
-        value={view.sort}
-        onChange={(k) => k && api.setView({ sort: String(k) as SortBy })}
-      />
       <Button variant="accent" size="sm" onPress={onJump} data-testid="quick-view-items">
         View {scope.shown.toLocaleString('en-US')} items
       </Button>

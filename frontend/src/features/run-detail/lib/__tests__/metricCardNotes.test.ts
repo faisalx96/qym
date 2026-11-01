@@ -43,10 +43,27 @@ describe('metric cards say what an error did to the mean', () => {
       rows,
     );
     const accuracy = metricCardModel(ctx, rows, 'accuracy')!;
-    expect(accuracy.errorNote!.text.endsWith('1 task error · counted as 0%')).toBe(true);
+    expect(accuracy.errorNote!.text.endsWith('1 task error counted as 0%')).toBe(true);
     const count = metricCardModel(ctx, rows, 'count')!;
-    expect(count.errorNote!.text.endsWith('1 task error · counted as 0')).toBe(true);
+    expect(count.errorNote!.text.endsWith('1 task error counted as 0')).toBe(true);
     expect(count.errorNote!.title).toContain('in Min');
+  });
+
+  it('C012: an item row with an empty pass_scores is not a repeat aggregate, so its task error counts as 0', () => {
+    const rows = Array.from({ length: 10 }, (_, i) =>
+      i < 3
+        ? row(i, [''], { status: 'error', error: 'task boom', pass_scores: {} } as Partial<Row>)
+        : row(i, [0.8], { pass_scores: {} } as Partial<Row>),
+    );
+    const ctx = contextOf(
+      { accuracy: { score_type: 'percentage', direction: 'maximize', schema_version: 2 } },
+      rows,
+    );
+    const card = metricCardModel(ctx, rows, 'accuracy')!;
+    // 7 items at 80% and 3 task errors at 0%: the same 56.0% Compare reads
+    expect(card.avg).toBeCloseTo(0.56);
+    expect(card.errorNote!.text).toBe('3 task errors counted as 0%');
+    expect(card.badge).toBe('7 scored');
   });
 
   it('a lower-is-better scorer error is left out of the mean, never shown as the best score', () => {

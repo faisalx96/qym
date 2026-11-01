@@ -472,6 +472,7 @@ export function ItemsTab({
       <DataTable<DatasetItem>
         aria-label={`Items in ${version.version}`}
         storageKey="datasets.items.v3"
+        groupBand={false}
         density="compact"
         rows={items}
         rowKey={(i) => i.item_id}

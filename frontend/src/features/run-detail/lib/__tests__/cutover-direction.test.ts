@@ -68,7 +68,7 @@ describe('a lower-is-better boolean metric with errors (C008 x C015)', () => {
     expect(card.errorLegend!.label).toBe('not counted in the mean');
     // 2 True of the 7 items without an error
     expect(card.avgText).toBe('28.6%');
-    expect(card.errorNote!.text.endsWith('3 errors · not counted in the mean')).toBe(true);
+    expect(card.errorNote!.text.endsWith('3 errors not counted in the mean')).toBe(true);
     expect(card.errorNote!.title).toContain('2 scorer errors and 1 task error are not counted');
   });
 
@@ -115,11 +115,11 @@ describe('a lower-is-better score histogram', () => {
     );
     const card = metricCardModel(ctx, ctx.model.rows, 'accuracy')!;
     expect(card.avgText).toBe('55.0%');
-    expect(card.errorNote!.text.endsWith('3 errors · not counted in the mean')).toBe(true);
+    expect(card.errorNote!.text.endsWith('3 errors not counted in the mean')).toBe(true);
     // the 0% bucket (the best for this metric) holds no errored item, so it is empty and no filter
     expect(card.buckets![0]!.count).toBe(0);
     expect(card.buckets!.every((b) => b.scorerErrors === 0)).toBe(true);
-    expect(card.badge).toBe('7 scored · 3 err');
+    expect(card.badge).toBe('7 scored');
   });
 
   it('keeps the card when every item errored, with no mean (0 would read as best)', () => {
@@ -129,7 +129,7 @@ describe('a lower-is-better score histogram', () => {
     );
     const card = metricCardModel(ctx, ctx.model.rows, 'accuracy')!;
     expect(card.avgText).toBe('—');
-    expect(card.errorNote!.text.endsWith('4 errors · not counted in the mean')).toBe(true);
+    expect(card.errorNote!.text.endsWith('4 errors not counted in the mean')).toBe(true);
   });
 });
 

@@ -13,7 +13,7 @@
   gap: var(--space-sm) var(--space-md);
 }
 
-/* The page metric this section shows (picked in the sticky nav), then the Pass if threshold (the first qym's row). */
+/* The page metric and the Pass if threshold this section shows (both set in the sticky nav, C039). */
 .metricNow {
   display: inline-flex;
   align-items: center;
@@ -24,10 +24,6 @@
   font-size: var(--font-sm);
   font-weight: 600;
   color: var(--text-muted);
-}
-
-.passIf {
-  margin-inline-start: auto;
 }
 
 .curveIntro {

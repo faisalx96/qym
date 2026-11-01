@@ -423,6 +423,7 @@ export function ChartsTable(p: ChartsTableProps) {
         variant="embedded"
         zebra={false}
         columnMenu={false}
+        groupBand={false}
         columns={columns}
         rows={rows}
         rowKey={(row) => row.id}

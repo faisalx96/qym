@@ -9,7 +9,6 @@ import {
   loadRepeatTab,
   loadRootCauseTab,
 } from '../chunks';
-import { useReviewHistoryQuery } from '@/api/runs';
 import { metricDirectionLabel } from '@/lib/metrics';
 import { Icon, ReportSection, SectionBoundary, StatStrip } from '@/ui';
 import { runCounts } from '../lib/overviewModel';
@@ -108,18 +107,13 @@ export function useHasRootCause(): boolean {
 
 /** The sections this run shows, in page order, with the counts the nav displays. */
 export function useSectionEntries(): SectionEntry[] {
-  const { runId, model, items, payload, rowsPending, reviewEventCount, summaryPending } = useRunPage();
-  const reviews = useReviewHistoryQuery(
-    runId,
-    reviewEventCount === undefined ? !summaryPending : reviewEventCount !== 0,
-  );
-  const reviewCount = reviews.data?.events.length ?? 0;
+  const { model, items, payload, rowsPending } = useRunPage();
   // Until the rows arrive the nav shows the sections the summary knows about, without counts.
   const errorCount = rowsPending ? 0 : errorBucketCount(model.rows, model.isRepeat && !model.viewPass);
   const hasRootCause = useHasRootCause();
   const total = payload.snapshot.rows_total ?? payload.snapshot.rows.length;
   return [
-    ...(reviewCount ? [{ id: 'reviews' as const, label: 'Reviews', count: reviewCount }] : []),
+    // C027: the review log opens from the hero's History button, so the nav has no Reviews link
     { id: 'overview', label: 'Overview' },
     ...((payload.run.dataset_count ?? 1) > 1
       ? [{ id: 'datasets' as const, label: 'Datasets', count: payload.run.dataset_count }]

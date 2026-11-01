@@ -70,12 +70,10 @@ test('R4-2: every control of the items toolbar shares one vertical centre at 144
           (b.getAttribute('aria-label') ?? b.parentElement?.textContent ?? '').includes(name),
         );
       const controls = [
+        // C154: the metric, its slider and Filters moved to the sticky nav; the bar keeps search, show, sort, Display
         pick('search', 'input[type=search], input'),
-        { label: 'metric', r: fieldOf('Analysis metric')?.getBoundingClientRect() },
-        pick('slider', '[role=group][class*=track], [class*=Slider] [class*=track]'),
         pick('show', '[role=radiogroup]'),
         { label: 'show-select', r: fieldOf('Show')?.getBoundingClientRect() },
-        pick('filters', '[data-testid=open-filters]'),
         { label: 'sort', r: fieldOf('Sort')?.getBoundingClientRect() },
         {
           label: 'display',
@@ -101,7 +99,7 @@ test('R4-2: every control of the items toolbar shares one vertical centre at 144
     // round 5 review: at 1440 and 1024 every control fits ONE row
     expect.soft(rows.length).toBe(1);
     for (const r of rows) expect.soft(Math.max(...r) - Math.min(...r)).toBeLessThanOrEqual(1);
-    expect(m.controls.length).toBeGreaterThanOrEqual(6);
+    expect(m.controls.length).toBeGreaterThanOrEqual(4);
     await bar.screenshot({
       path: `../docs/internal/ui-migration/redesign5/shots/${process.env.R4_SHOT ?? 'after'}-r4-toolbar-${w}.png`,
     });

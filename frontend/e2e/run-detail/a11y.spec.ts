@@ -76,7 +76,7 @@ test.describe('axe', () => {
           }),
         ),
     );
-    await page.getByTestId('open-filters').click();
+    await page.getByTestId('nav-open-filters').click();
     await expect(page.getByRole('dialog', { name: 'Filter rules' })).toBeVisible();
     await audit(page, 'rule builder', '[role=dialog]');
   });

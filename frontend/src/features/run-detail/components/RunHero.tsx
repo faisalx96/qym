@@ -6,8 +6,6 @@
  */
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { exportHtmlUrl } from '@/api/runs';
-import { platformUrl } from '@/lib/runtime';
 import {
   Button,
   Card,
@@ -18,7 +16,6 @@ import {
   isBareRunId,
   JsonPreview,
   KeyValueTag,
-  LinkButton,
   ModelTag,
   RunStatusBadge,
   Tag,
@@ -43,6 +40,8 @@ import type { RunModel } from '../lib/runModel';
 import { DatasetChip, DatasetCountTag, datasetChipStyles } from './DatasetChip';
 import type { PassSummary, Run } from '../types';
 import { RunPager } from './RunPager';
+import { RejectNote, ReviewLog, RunHeaderActions } from './RunActions';
+import { useRunPage } from '../RunContext';
 import styles from './RunHero.module.css';
 
 /** A model's series colour (1..8) from its name, so the hero's model tag carries the model recipe (dot and tint). */
@@ -255,6 +254,9 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
       : '';
   const ownerLabel = run.owner?.display_name || run.owner?.email || run.owner?.id || '';
   const projectName = run.project?.name ?? '';
+  const { reviewEventCount, summaryPending } = useRunPage();
+  // the summary says whether the run has review events; until it answers, ask only once it is known
+  const reviewsKnown = reviewEventCount !== undefined ? reviewEventCount !== 0 : !summaryPending;
 
   return (
     <Card as="section" aria-label="Run summary" className={styles.hero} data-testid="run-hero">
@@ -296,6 +298,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
             >
               <RunStatusBadge status={statusKey} label={statusText + runningPass} />
             </span>
+            {viewPass ? null : <ReviewLog runId={run.run_id} enabled={reviewsKnown} />}
           </div>
           <div className={styles.right}>
             <LiveIndicator live={live} run={run} />
@@ -304,20 +307,11 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
                 Runtime <span className={styles.mono}>{formatDurationMs(runtimeMs)}</span>
               </span>
             ) : null}
-            <LinkButton
-              variant="accent"
-              size="sm"
-              href={platformUrl(exportHtmlUrl(run.run_id))}
-              target="_blank"
-              rel="noopener noreferrer"
-              icon={<Icon name="external" size={14} />}
-              title="Download this run as a standalone HTML file (opens the classic export)"
-            >
-              Export HTML
-            </LinkButton>
+            <RunHeaderActions run={run} slug={slug} />
             <RunPager runId={run.run_id} slug={slug} listParam={listParam} />
           </div>
         </div>
+        {viewPass ? null : <RejectNote runId={run.run_id} status={run.status} enabled={reviewsKnown} />}
         {stop ? (
           <p
             className={styles.stop}

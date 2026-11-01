@@ -345,7 +345,7 @@ export function OutputCard({
               <Button
                 size="sm"
                 variant="neutral"
-                icon={<Icon name="list" size={12} />}
+                icon={<Icon name="trace" size={12} />}
                 onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}
               >
                 Trace
