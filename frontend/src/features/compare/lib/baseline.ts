@@ -40,7 +40,9 @@ export function metricColumns(model: CompareModel, mode: PassColumns): MetricCol
           base: run.base,
           runIdxs: [],
           pass: null,
-          label: baseLabel(run.label),
+          label: run.run.pass_only
+            ? String(run.run.base_run_name || baseLabel(run.title))
+            : baseLabel(run.label),
           title: baseLabel(run.title),
         };
         byBase.set(run.base, col);

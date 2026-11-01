@@ -140,9 +140,6 @@ function RunCard({
     ],
     ['Started', started.date === '—' ? '' : `${started.date}, ${started.time}`, false],
     ['Runtime', runtime === '—' ? '' : runtime, true],
-    ...(run.samples && run.samples > 1
-      ? ([['Samples', String(run.samples), true]] as Array<[string, string, boolean]>)
-      : []),
   ];
   return (
     <li
@@ -182,11 +179,24 @@ function RunCard({
             </button>
           ) : null}
         </div>
-        <dl className={styles.strip} data-part="run-stat-strip">
-          <Stat label="Items" value={counts.items} />
-          <Stat label="Completed" value={counts.completed} />
-          <Stat label="Errors" value={counts.errors} danger={counts.errors > 0} />
-        </dl>
+        {counts.executions ? (
+          <div>
+            <dl className={styles.strip} data-part="run-stat-strip">
+              <Stat label="Executions" value={counts.executions.total} />
+              <Stat label="Succeeded" value={counts.executions.succeeded} />
+              <Stat label="Errors" value={counts.executions.errors} danger={counts.executions.errors > 0} />
+            </dl>
+            <p className={styles.passes} data-part="run-passes">
+              {counts.items} items × {counts.executions.passes} passes
+            </p>
+          </div>
+        ) : (
+          <dl className={styles.strip} data-part="run-stat-strip">
+            <Stat label="Items" value={counts.items} />
+            <Stat label="Completed" value={counts.completed} />
+            <Stat label="Errors" value={counts.errors} danger={counts.errors > 0} />
+          </dl>
+        )}
         <dl className={styles.facts} data-part="run-meta">
           {facts.map(([k, v, mono]) => (
             <div key={k}>

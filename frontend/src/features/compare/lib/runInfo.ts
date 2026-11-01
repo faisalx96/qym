@@ -7,6 +7,8 @@ export interface RunCounts {
   items: number;
   completed: number;
   errors: number;
+  /** A repeat run counts executions (C062): every pass of every item. Null for a single-pass run. */
+  executions: { total: number; succeeded: number; errors: number; passes: number } | null;
 }
 
 /** Items / completed from the snapshot stats; errors = items with a task or scorer error (as the Metrics tab counts them). */
@@ -17,7 +19,24 @@ export function runCounts(p: RunPayload): RunCounts {
   const completed = stats?.completed ?? rows.filter((r) => r.status === 'completed').length;
   // Items with a task or scorer error: the count the Errors column and Metrics tab show.
   const errors = rows.filter((r) => isErrorRow(r)).length;
-  return { items, completed, errors };
+  const passes = Number(p.run.samples) || 1;
+  if (passes <= 1) return { items, completed, errors, executions: null };
+  // Each execution counts once, so 'Executions 375, Succeeded 366, Errors 9' adds up (no item counts twice).
+  let total = 0;
+  let failed = 0;
+  for (const r of rows) {
+    const attempts =
+      Array.isArray(r.pass_attempts) && r.pass_attempts.length ? r.pass_attempts.length : passes;
+    total += attempts;
+    const n = Number(r.execution_error_count);
+    failed += Number.isFinite(n) ? Math.max(0, Math.min(attempts, n)) : isErrorRow(r) ? 1 : 0;
+  }
+  return {
+    items,
+    completed,
+    errors,
+    executions: { total, succeeded: total - failed, errors: failed, passes },
+  };
 }
 
 export function ownerLabel(run: Run): string {

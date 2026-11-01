@@ -96,6 +96,13 @@
   margin: 0;
 }
 
+.passes {
+  margin: var(--space-xs) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-align: center;
+}
+
 .stat {
   display: flex;
   flex-direction: column;

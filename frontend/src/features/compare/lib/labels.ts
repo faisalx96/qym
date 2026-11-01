@@ -86,8 +86,9 @@ export function computeRunLabels(inputs: LabelInput[], now?: Date): Record<strin
 export function runShortName(run: {
   label: string;
   pass?: number | null;
-  run?: { run_name?: string | null; pass_count?: number } | null;
+  run?: { run_name?: string | null; pass_count?: number; pass_only?: boolean } | null;
 }): string {
+  if (run.pass && run.run?.pass_only) return `Pass ${run.pass}`;
   const own = (run.run?.run_name ?? '').trim().replace(/ · pass \d+$/, '');
   const label = run.label.replace(/ · pass \d+$/, '');
   const base = own && own !== label ? own : label;

@@ -18,7 +18,7 @@ import {
   readSelection,
   selectionParams,
 } from '../lib/refs';
-import { readView, writeView, type CompareView } from '../lib/filters';
+import { defaultColumns, readView, writeView, type CompareView } from '../lib/filters';
 import { resolveCohorts, type CohortGroups } from '../lib/cohort';
 import { metricCtx, type MetricCtx } from '../lib/scoring';
 import { useQueryClient } from '@tanstack/react-query';
@@ -113,6 +113,7 @@ export function useCompareController(): CompareController {
         metadataKeys: model?.metadataKeys ?? [],
         runCount: model?.runs.length ?? 0,
         rows: model ? model.runs.flatMap((r) => r.rows) : [],
+        baseCount: model?.bases.length ?? 2,
       }),
     [params, model],
   );
@@ -123,9 +124,11 @@ export function useCompareController(): CompareController {
     [model, metric, thresholds],
   );
 
+  const baseCount = model?.bases.length ?? 2;
   const write = useCallback(
-    (next: CompareView) => replaceUrlQuery(writeView(next, model?.defaultMetric ?? null)),
-    [replaceUrlQuery, model?.defaultMetric],
+    (next: CompareView) =>
+      replaceUrlQuery(writeView(next, model?.defaultMetric ?? null, defaultColumns(baseCount))),
+    [replaceUrlQuery, model?.defaultMetric, baseCount],
   );
   const setView = useCallback<CompareController['setView']>(
     (patch, opts) => {

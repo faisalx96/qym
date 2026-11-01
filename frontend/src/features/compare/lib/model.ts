@@ -39,6 +39,8 @@ export type PassRun = Run & {
   pass_number?: number;
   /** Passes of the run this slice comes from; a '· pass N' suffix shows only when it is more than 1 (C162). */
   pass_count?: number;
+  /** Every compared column is a pass of this one run: the pass goes by 'Pass N' and the title names the run (C215). */
+  pass_only?: boolean;
   base_run_name?: string;
   compare_alignment_status?: string;
   compare_alignment_issues?: string[];
@@ -200,6 +202,14 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
       r.label = r.label.replace(base, shown[i]!);
     }
   });
+
+  // C215: the passes of one repeat run, alone, go by 'Pass 1' to 'Pass N'
+  if (new Set(runs.map((r) => r.base)).size === 1 && runs.length > 1)
+    runs.forEach((r) => {
+      if (!r.pass) return;
+      r.run = { ...r.run, pass_only: true } as PassRun;
+      r.label = `Pass ${r.pass}`;
+    });
 
   const metrics = mergeMetricNames(metricLists);
   const specs: Record<string, MetricSpec> = {};

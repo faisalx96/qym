@@ -46,6 +46,6 @@ describe('runCounts', () => {
       run: run({ error_count: 2, execution_error_count: 3 }),
       snapshot: { rows, stats: { total: 40, completed: 37, failed: 3 } },
     } as unknown as RunPayload;
-    expect(runCounts(p)).toEqual({ items: 40, completed: 37, errors: 3 });
+    expect(runCounts(p)).toEqual({ items: 40, completed: 37, errors: 3, executions: null });
   });
 });
