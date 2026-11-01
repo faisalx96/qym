@@ -34,6 +34,10 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+class _NonFiniteJSONError(ValueError):
+    """A turn contains a non-finite number in a producer JSON value."""
+
+
 def utcnow() -> datetime:
     """Return qym's receive time as naive UTC."""
     return utc_now_naive()
@@ -134,6 +138,13 @@ def _clean_text(value: Optional[str], limit: int) -> tuple[Optional[str], bool]:
 
 def _turn_values(body: TurnBody, settings: PlatformSettings) -> tuple[dict, list[str]]:
     """Prepare turn columns with bounded text and producer detail."""
+    json_values = [body.summary, body.detail, body.sql]
+    for score in body.scores:
+        json_values.extend((score.score_raw, score.meta))
+    try:
+        json.dumps(json_values, allow_nan=False)
+    except ValueError:
+        raise _NonFiniteJSONError("non-finite number in JSON") from None
     values = body.model_dump(exclude={"scores"})
     values["day"] = body.day or body.turn_at.date()
     for name in ("turn_at", "evaluated_at"):
@@ -144,7 +155,11 @@ def _turn_values(body: TurnBody, settings: PlatformSettings) -> tuple[dict, list
             values["summary"]["text_truncated"] = True
     notes = []
     if body.detail is not None:
-        size = len(json.dumps(body.detail).encode("utf-8"))
+        size = len(
+            json.dumps(body.detail, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        )
         if size > settings.live_detail_max_bytes:
             values["detail"] = None
             values["summary"]["detail_truncated"] = True
@@ -219,9 +234,13 @@ def upsert_turns(
                 exc, (DataError, IntegrityError)
             ):
                 raise
-            error = "Database refused turn values"
+            error = (
+                str(exc)
+                if isinstance(exc, _NonFiniteJSONError)
+                else "Database refused turn values"
+            )
             logger.warning(
-                "live turn %s rejected by the database: %s",
+                "live turn %s rejected: %s",
                 body.turn_id,
                 type(exc).__name__,
             )

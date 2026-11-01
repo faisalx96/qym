@@ -41,6 +41,7 @@ _CSV_FIELDS = (
     "turn_at",
     "day",
     "turn_id",
+    "question",
     "conversation_id",
     "user_ref",
     "mode",
@@ -117,8 +118,8 @@ class TurnFilters:
 
     def _validate(self) -> None:
         """Reject invalid ranges, choices and incomplete filter pairs."""
-        if self.page < 1 or not 1 <= self.page_size <= 200:
-            raise ValueError("page must be positive; page_size must be 1 to 200")
+        if not 1 <= self.page <= 1_000_000 or not 1 <= self.page_size <= 200:
+            raise ValueError("page must be 1 to 1000000; page_size must be 1 to 200")
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError("from must not be after to")
         if self.min_score is not None or self.max_score is not None:
@@ -389,7 +390,8 @@ def _turn_row(turn: LiveTurn, scores: dict[str, LiveTurnScore]) -> dict[str, Any
         "services_not_ok": [
             {"name": name, "fault": service.get("fault")}
             for name, service in services.items()
-            if isinstance(service, dict) and service.get("status") != "ok"
+            if isinstance(service, dict)
+            and service.get("status") not in ("ok", "skipped")
         ],
         "scores": {
             name: _columns(score, ("score_numeric", "label", "skipped"))

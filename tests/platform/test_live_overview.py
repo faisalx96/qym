@@ -320,6 +320,26 @@ def test_days_page_param_pages_older_days(client, session_factory):
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "days_page", [1_000_001, 99999999999999999999, 9223372036854775807]
+)
+def test_days_page_upper_bound_returns_validation_error(
+    client, session_factory, days_page
+):
+    response = client.get(
+        f"{BASE}/overview", headers=ADMIN, params={"days_page": days_page}
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"][0]["loc"] == ["query", "days_page"]
+
+
+def test_maximum_days_page_returns_empty_rows(client, session_factory):
+    days = _overview(client, days_page=1_000_000)["days"]
+    assert days["rows"] == []
+    assert days["total"] == 7
+    assert days["page"] == 1_000_000
+
+
 def test_primary_rate_uses_the_selected_primary_metric(client, session_factory):
     with session_factory() as db:
         db.query(LiveMetricSpec).filter_by(

@@ -67,6 +67,32 @@ def test_list_default_is_newest_first_and_paginated(client, session_factory):
         assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"page": 0},
+        {"page": 1_000_001},
+        {"page": 99999999999999999999},
+        {"page": 9223372036854775807},
+        {"page_size": 201},
+        {"page_size": 99999999999999999999},
+        {"page_size": 9223372036854775807},
+    ],
+)
+def test_pagination_bounds_return_validation_error(client, session_factory, params):
+    response = client.get(f"{BASE}/turns", headers=ADMIN, params=params)
+    assert response.status_code == 422, response.text
+    assert response.json() == {
+        "detail": "page must be 1 to 1000000; page_size must be 1 to 200"
+    }
+
+
+def test_maximum_page_returns_empty_rows(client, session_factory):
+    body = _turns(client, page=1_000_000, page_size=200)
+    assert body["rows"] == []
+    assert body["total"] == 40
+
+
 def test_filter_by_day_label_and_status(client, session_factory):
     body = _turns(client, day=DAY, label=["ok", "suboptimal"], status="completed")
     assert body["total"] == 3
@@ -131,6 +157,24 @@ def test_filter_service_not_ok(client, session_factory):
         _turns(client, day=DAY, service="sql_generation", service_status="ok")["total"]
         == 5
     )
+
+
+def test_services_not_ok_excludes_ok_and_skipped(client, session_factory):
+    with session_factory() as db:
+        turn = db.query(LiveTurn).filter_by(turn_id=f"turn-{DAY}-0").one()
+        turn.summary = {
+            "services": {
+                "retrieval": {"status": "ok"},
+                "visualization": {"status": "skipped"},
+                "sql_generation": {"status": "failed", "fault": "infra"},
+            }
+        }
+        db.commit()
+    body = _turns(client, q="المبيعات")
+    assert body["total"] == 1
+    assert body["rows"][0]["services_not_ok"] == [
+        {"name": "sql_generation", "fault": "infra"}
+    ]
 
 
 def test_search_matches_question_and_answer_case_insensitive(client, session_factory):
@@ -354,11 +398,13 @@ def test_csv_export_has_one_column_per_spec(client, session_factory):
         response.headers["content-disposition"]
         == f'attachment; filename="live-turns-{DAY}.csv"'
     )
-    rows = list(csv.reader(io.StringIO(response.text)))
+    assert response.content.startswith(b"\xef\xbb\xbf")
+    rows = list(csv.reader(io.StringIO(response.content.decode("utf-8-sig"))))
     assert rows[0] == [
         "time",
         "day",
         "turn_id",
+        "question",
         "conversation_id",
         "user_ref",
         "mode",
@@ -378,13 +424,23 @@ def test_csv_export_has_one_column_per_spec(client, session_factory):
     assert len(rows) == 7
     assert all(len(row) == len(rows[0]) for row in rows)
     assert [row[2] for row in rows[1:]] == [f"turn-{DAY}-{index}" for index in range(6)]
-    assert rows[1][12:15] == ["1.0", "ok", "1.0"]
-    assert rows[-1][12] == rows[-1][-1] == ""
+    assert [row[3] for row in rows[1:]] == [
+        "Question 1: ما المبيعات؟",
+        "Question 2",
+        "Question 3",
+        "Question 4",
+        "Question 5",
+        "Question 6",
+    ]
+    assert rows[1][13:16] == ["1.0", "ok", "1.0"]
+    assert rows[-1][13] == rows[-1][-1] == ""
 
 
-def test_csv_neutralises_formula_cells(client, session_factory):
+@pytest.mark.parametrize("prefix", ["=", "+", "-", "@", "\t"])
+def test_csv_neutralises_formula_cells(client, session_factory, prefix):
     with session_factory() as db:
         turn = db.query(LiveTurn).filter_by(turn_id=f"turn-{DAY}-0").one()
+        turn.question = prefix + "ما المبيعات؟"
         turn.label_reason = "=1+1"
         turn.mode = "+mode"
         turn.label = "-label"
@@ -412,9 +468,10 @@ def test_csv_neutralises_formula_cells(client, session_factory):
         db.commit()
     response = client.get(f"{BASE}/turns.csv", headers=ADMIN, params={"q": "المبيعات"})
     assert response.status_code == 200, response.text
-    rows = list(csv.DictReader(io.StringIO(response.text)))
+    rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
     assert len(rows) == 1
     row = rows[0]
+    assert row["question"] == "'" + prefix + "ما المبيعات؟"
     assert row["label_reason"] == "'=1+1"
     assert row["diagnosis"] == "'@cmd"
     assert row["mode"] == "'+mode"
@@ -467,10 +524,13 @@ def test_csv_export_runs_one_turn_query(client, session_factory):
     finally:
         event.remove(engine, "before_cursor_execute", count_queries)
     assert response.status_code == 200, response.text
-    rows = list(csv.DictReader(io.StringIO(response.text)))
+    rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
     assert len(rows) == 540
     assert [row["turn_id"] for row in rows[:500]] == [
         f"export-{index}" for index in reversed(range(500))
+    ]
+    assert [row["question"] for row in rows[:500]] == [
+        f"Export {index}" for index in reversed(range(500))
     ]
     assert [row["agent_success"] for row in rows[:500]] == [
         str(float(index)) for index in reversed(range(500))

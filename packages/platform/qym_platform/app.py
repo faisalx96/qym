@@ -25,7 +25,7 @@ from qym_platform.api.run_datasets import router as run_datasets_router
 from qym_platform.api.runs import router as runs_router
 from qym_platform.api.step_latency import router as step_latency_router
 from qym_platform.api.ingest import router as ingest_router
-from qym_platform.api.live_ingest import live_ingest_router
+from qym_platform.api.live_ingest import install_live_ingest_openapi, live_ingest_router
 from qym_platform.api.live import live_router
 from qym_platform.api.analysis import router as analysis_router
 from qym_platform.api.root_cause_dashboard import router as root_cause_dashboard_router
@@ -288,6 +288,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     if serves_ingest:
         app.include_router(ingest_router)
         app.include_router(live_ingest_router)
+        install_live_ingest_openapi(app)
         if layout.ingestion_prefix:
             # The ingestion service's paths, so a client or ingress configured
             # for /ingestion also works against this server.
@@ -391,6 +392,7 @@ def create_ingestion_app(settings: PlatformSettings | None = None) -> FastAPI:
     if layout.ingestion_legacy_paths or not layout.ingestion_prefix:
         app.include_router(ingest_router)
         app.include_router(live_ingest_router)
+    install_live_ingest_openapi(app)
     install_request_context(app)
     logger.info("ingestion app created (prefix=%s)", layout.ingestion_prefix or "-")
     return app

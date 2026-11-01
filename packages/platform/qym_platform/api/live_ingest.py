@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import json
 import math
+from copy import deepcopy
 from datetime import date, datetime
-from typing import Any, Literal, Optional
+from typing import Any, Awaitable, Callable, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request, Response
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
-from qym_platform.api.ingest import ingest_settings, require_ingest_open
+from qym_platform.api.ingest import (
+    _read_ingest_body,
+    ingest_settings,
+    require_ingest_open,
+)
 from qym_platform.auth import Principal, require_api_key_principal
 from qym_platform.datetime_utils import to_api_timestamp
 from qym_platform.db.models import LiveDay, LiveSource, Project
@@ -29,6 +36,7 @@ live_ingest_router = APIRouter(
     dependencies=[Depends(require_ingest_open)],
 )
 _SOURCE_KEY_PATTERN = r"^[A-Za-z0-9_.:-]{1,100}$"
+_BODY_SCHEMAS: dict[str, Any] = {}
 
 
 class SourceBody(BaseModel):
@@ -66,6 +74,14 @@ class MetricSpecBody(BaseModel):
     description: Optional[str] = None
     values: Optional[list[dict[str, Any]]] = None
 
+    @field_validator("pass_threshold")
+    @classmethod
+    def _finite_threshold(cls, value: Optional[float]) -> Optional[float]:
+        """Reject non-finite pass thresholds."""
+        if value is not None and not math.isfinite(value):
+            raise ValueError("pass_threshold must be finite")
+        return value
+
 
 class MetricSpecsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -86,11 +102,11 @@ class DayBody(BaseModel):
 
     run_ref: Optional[str] = Field(default=None, max_length=100)
     status: Literal["running", "closed"] = "running"
-    turns_seen: int = Field(default=0, ge=0)
-    evaluated: int = Field(default=0, ge=0)
-    failed: int = Field(default=0, ge=0)
-    incomplete: int = Field(default=0, ge=0)
-    excluded: int = Field(default=0, ge=0)
+    turns_seen: int = Field(default=0, ge=0, le=2147483647)
+    evaluated: int = Field(default=0, ge=0, le=2147483647)
+    failed: int = Field(default=0, ge=0, le=2147483647)
+    incomplete: int = Field(default=0, ge=0, le=2147483647)
+    excluded: int = Field(default=0, ge=0, le=2147483647)
     first_poll_at: Optional[datetime] = None
     last_poll_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
@@ -145,6 +161,14 @@ class TurnBody(BaseModel):
     detail: Optional[dict[str, Any]] = None
     scores: list[ScoreBody] = Field(default_factory=list)
 
+    @field_validator("latency_ms")
+    @classmethod
+    def _finite_latency(cls, value: Optional[float]) -> Optional[float]:
+        """Reject non-finite turn latencies."""
+        if value is not None and not math.isfinite(value):
+            raise ValueError("latency_ms must be finite")
+        return value
+
 
 class TurnsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -163,11 +187,107 @@ class CanaryBody(BaseModel):
     detail: dict[str, Any] = Field(default_factory=dict)
     eval_code_version: Optional[str] = Field(default=None, max_length=100)
 
+    @field_validator("latency_ms")
+    @classmethod
+    def _finite_latency(cls, value: Optional[float]) -> Optional[float]:
+        """Reject non-finite canary latencies."""
+        if value is not None and not math.isfinite(value):
+            raise ValueError("latency_ms must be finite")
+        return value
+
 
 class CanariesBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     results: list[CanaryBody]
+
+
+def _body_openapi(model: type[BaseModel]) -> dict[str, Any]:
+    """Document a custom-parsed body and collect its reusable component schemas."""
+    schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
+    _BODY_SCHEMAS.update(schema.pop("$defs", {}))
+    _BODY_SCHEMAS[model.__name__] = schema
+    return {
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {"$ref": f"#/components/schemas/{model.__name__}"}
+                }
+            },
+        }
+    }
+
+
+def install_live_ingest_openapi(app: FastAPI) -> None:
+    """Include custom-parsed body models in each ingest app's OpenAPI components."""
+    original_openapi = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        document = original_openapi()
+        document.setdefault("components", {}).setdefault("schemas", {}).update(
+            deepcopy(_BODY_SCHEMAS)
+        )
+        return document
+
+    app.openapi = openapi
+
+
+def _validated_body(
+    model: type[BaseModel],
+) -> Callable[[Request], Awaitable[BaseModel]]:
+    """Cap and validate JSON before dispatching a synchronous ingest handler."""
+
+    async def read_body(request: Request) -> BaseModel:
+        raw = await _read_ingest_body(
+            request, ingest_settings().live_ingest_max_body_bytes
+        )
+        content_type = (
+            request.headers.get("content-type", "application/json")
+            .split(";", 1)[0]
+            .strip()
+            .lower()
+        )
+        payload = raw
+        if content_type == "application/json" or (
+            content_type.startswith("application/") and content_type.endswith("+json")
+        ):
+            try:
+                payload = json.loads(raw)
+            except RecursionError:
+                raise RequestValidationError(
+                    [
+                        {
+                            "type": "json_invalid",
+                            "loc": ("body",),
+                            "msg": "JSON nesting too deep",
+                        }
+                    ]
+                ) from None
+            except (ValueError, UnicodeError) as exc:
+                raise RequestValidationError(
+                    [
+                        {
+                            "type": "json_invalid",
+                            "loc": ("body", getattr(exc, "pos", 0)),
+                            "msg": "JSON decode error",
+                            "ctx": {"error": str(exc)},
+                        }
+                    ]
+                ) from None
+        try:
+            return model.model_validate(payload)
+        except ValidationError as exc:
+            # Raw inputs can contain NaN/Infinity, which cannot appear in a JSON
+            # error response. Keep the field locations and validation messages.
+            raise RequestValidationError(
+                [
+                    {**error, "loc": ("body", *error["loc"])}
+                    for error in exc.errors(include_input=False, include_context=False)
+                ]
+            ) from None
+
+    return read_body
 
 
 def _source_scope(
@@ -204,7 +324,7 @@ def _commit(db: Session) -> None:
     """Commit an ingest write or report a conflicting request."""
     try:
         db.commit()
-    except IntegrityError:
+    except (DataError, IntegrityError):
         db.rollback()
         raise HTTPException(
             status_code=409, detail="Live ingest conflicts with existing data"
@@ -246,9 +366,13 @@ def _day_payload(row: LiveDay) -> dict[str, Any]:
     }
 
 
-@live_ingest_router.post("/sources/{key:path}/heartbeat", status_code=204)
+@live_ingest_router.post(
+    "/sources/{key:path}/heartbeat",
+    status_code=204,
+    openapi_extra=_body_openapi(HeartbeatBody),
+)
 def heartbeat(
-    body: HeartbeatBody,
+    body: HeartbeatBody = Depends(_validated_body(HeartbeatBody)),
     key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
     scope: tuple[Project, Principal] = Depends(_source_scope),
     db: Session = Depends(get_db),
@@ -267,9 +391,11 @@ def heartbeat(
     return Response(status_code=204)
 
 
-@live_ingest_router.put("/sources/{key:path}/metric-specs")
+@live_ingest_router.put(
+    "/sources/{key:path}/metric-specs", openapi_extra=_body_openapi(MetricSpecsBody)
+)
 def put_metric_specs(
-    body: MetricSpecsBody,
+    body: MetricSpecsBody = Depends(_validated_body(MetricSpecsBody)),
     key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
     scope: tuple[Project, Principal] = Depends(_source_scope),
     db: Session = Depends(get_db),
@@ -280,10 +406,12 @@ def put_metric_specs(
     return {"count": count}
 
 
-@live_ingest_router.put("/sources/{key:path}/days/{day}")
+@live_ingest_router.put(
+    "/sources/{key:path}/days/{day}", openapi_extra=_body_openapi(DayBody)
+)
 def put_day(
     day: date,
-    body: DayBody,
+    body: DayBody = Depends(_validated_body(DayBody)),
     key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
     scope: tuple[Project, Principal] = Depends(_source_scope),
     db: Session = Depends(get_db),
@@ -294,9 +422,11 @@ def put_day(
     return _day_payload(row)
 
 
-@live_ingest_router.post("/sources/{key:path}/turns")
+@live_ingest_router.post(
+    "/sources/{key:path}/turns", openapi_extra=_body_openapi(TurnsBody)
+)
 def post_turns(
-    body: TurnsBody,
+    body: TurnsBody = Depends(_validated_body(TurnsBody)),
     key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
     scope: tuple[Project, Principal] = Depends(_source_scope),
     db: Session = Depends(get_db),
@@ -349,9 +479,11 @@ def post_turns(
     return report
 
 
-@live_ingest_router.post("/sources/{key:path}/canaries")
+@live_ingest_router.post(
+    "/sources/{key:path}/canaries", openapi_extra=_body_openapi(CanariesBody)
+)
 def post_canaries(
-    body: CanariesBody,
+    body: CanariesBody = Depends(_validated_body(CanariesBody)),
     key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
     scope: tuple[Project, Principal] = Depends(_source_scope),
     db: Session = Depends(get_db),
@@ -374,10 +506,10 @@ def get_turn_ids(
 
 
 # Match slashes too so invalid keys receive 422; keep this after the child routes.
-@live_ingest_router.put("/sources/{key:path}")
+@live_ingest_router.put("/sources/{key:path}", openapi_extra=_body_openapi(SourceBody))
 def put_source(
-    body: SourceBody,
     response: Response,
+    body: SourceBody = Depends(_validated_body(SourceBody)),
     key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
     scope: tuple[Project, Principal] = Depends(_source_scope),
     db: Session = Depends(get_db),

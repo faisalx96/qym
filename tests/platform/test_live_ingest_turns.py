@@ -5,8 +5,14 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 
-from test_live_ingest_sources import BASE, SOURCE, _auth_headers
-from test_live_ingest_sources import _auth_mode, session_factory  # noqa: F401
+import pytest
+from test_live_ingest_sources import (  # noqa: F401
+    BASE,
+    SOURCE,
+    _auth_headers,
+    _auth_mode,
+    session_factory,
+)
 
 from qym_platform.db.models import LiveCanaryResult, LiveSource, LiveTurn, LiveTurnScore
 from qym_platform.settings import PlatformSettings
@@ -420,3 +426,134 @@ def test_out_of_range_or_nonfinite_values_are_rejected_not_500(client, session_f
     assert "score_numeric" in report["results"][2]["error"]
     with session_factory() as session:
         assert session.query(LiveTurn).one().turn_id == "turn-1"
+
+
+@pytest.mark.parametrize("field", ["latency_ms", "score_numeric"])
+def test_nonfinite_turn_numbers_are_rejected_individually(
+    client, session_factory, field
+):
+    _create_source(client)
+    turns = [_turn(latency_ms=125.5)]
+    for number in ("nan", "inf", "-inf"):
+        values = {field: float(number)}
+        if field == "score_numeric":
+            values = {"scores": [{"metric_name": "accuracy", **values}]}
+        turns.append(_turn(number, **values))
+    response = client.post(
+        BASE + "/turns",
+        headers={**_auth_headers(), "Content-Type": "application/json"},
+        content=json.dumps({"turns": turns}),
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert (report["accepted"], report["updated"], report["rejected"]) == (1, 0, 3)
+    for result in report["results"][1:]:
+        assert result["status"] == "rejected"
+        assert f"{field} must be finite" in result["error"]
+    with session_factory() as session:
+        row = session.query(LiveTurn).one()
+        assert row.turn_id == "turn-1" and row.latency_ms == 125.5
+
+
+@pytest.mark.parametrize("field", ["summary", "detail", "sql", "score_raw", "meta"])
+def test_nested_nonfinite_json_rejects_only_its_turn(client, session_factory, field):
+    _create_source(client)
+    _push(client, [_turn("existing")])
+    turns = []
+    for index, number in enumerate(("nan", "inf", "-inf")):
+        nested = {"nested": [None, {"value": float(number)}]}
+        values = {field: [nested] if field == "sql" else nested}
+        if field in {"score_raw", "meta"}:
+            values = {"scores": [{"metric_name": "accuracy", **values}]}
+        turns.append(
+            _turn("existing" if index == 0 else number, question="Invalid", **values)
+        )
+    turns.append(_turn())
+    response = client.post(
+        BASE + "/turns",
+        headers={**_auth_headers(), "Content-Type": "application/json"},
+        content=json.dumps({"turns": turns}),
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert (report["accepted"], report["updated"], report["rejected"]) == (1, 0, 3)
+    for result in report["results"][:3]:
+        assert result["status"] == "rejected"
+        assert result["error"] == "non-finite number in JSON"
+        assert result["notes"] == []
+    with session_factory() as session:
+        rows = session.query(LiveTurn).order_by(LiveTurn.turn_id).all()
+        assert [row.turn_id for row in rows] == ["existing", "turn-1"]
+        assert rows[0].question == "How many orders were placed?"
+        assert "replaced_at" not in rows[0].summary
+        assert session.query(LiveTurnScore).count() == 6
+
+
+def test_canary_latency_must_be_finite(client, session_factory):
+    _create_source(client)
+    for number in ("nan", "inf", "-inf"):
+        response = client.post(
+            BASE + "/canaries",
+            headers={**_auth_headers(), "Content-Type": "application/json"},
+            content=json.dumps(
+                {
+                    "results": [
+                        {
+                            "canary": "database",
+                            "checked_at": "2026-11-01T10:00:00Z",
+                            "status": "ok",
+                            "latency_ms": float(number),
+                        }
+                    ]
+                }
+            ),
+        )
+        assert response.status_code == 422, response.text
+        assert any(
+            error["loc"] == ["body", "results", 0, "latency_ms"]
+            and "latency_ms must be finite" in error["msg"]
+            for error in response.json()["detail"]
+        )
+    with session_factory() as session:
+        assert session.query(LiveCanaryResult).count() == 0
+
+
+def test_detail_cap_uses_compact_utf8_bytes(client, session_factory, monkeypatch):
+    _create_source(client)
+    monkeypatch.setattr(
+        "qym_platform.api.live_ingest.ingest_settings",
+        lambda: PlatformSettings(live_detail_max_bytes=4096),
+    )
+    # Compact JSON adds 14 bytes; each Arabic character adds two UTF-8 bytes.
+    detail = {"payload": "ع" * 2041}
+    report = _push(
+        client,
+        [
+            _turn("at-limit", detail=detail),
+            _turn("over-limit", detail={"payload": detail["payload"] + "x"}),
+        ],
+    )
+    assert (report["accepted"], report["rejected"]) == (2, 0)
+    assert report["results"][0]["notes"] == []
+    assert report["results"][1]["notes"] == ["detail truncated"]
+    with session_factory() as session:
+        rows = session.query(LiveTurn).order_by(LiveTurn.turn_id).all()
+        assert rows[0].detail == detail
+        assert "detail_truncated" not in rows[0].summary
+        assert rows[0].rejected is None
+        assert rows[1].detail is None
+        assert rows[1].summary["detail_truncated"] is True
+        assert rows[1].rejected == ["detail truncated"]
+
+
+def test_default_batch_cap_rejects_101_turns(client, session_factory):
+    _create_source(client)
+    response = client.post(
+        BASE + "/turns",
+        headers=_auth_headers(),
+        json={"turns": [_turn(str(index)) for index in range(101)]},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json() == {"detail": "Turn batch exceeds the configured limit"}
+    with session_factory() as session:
+        assert session.query(LiveTurn).count() == 0

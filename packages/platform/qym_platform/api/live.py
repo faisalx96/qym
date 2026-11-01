@@ -104,7 +104,7 @@ def project_live_overview(
     source: Optional[str] = Query(default=None),
     day: Optional[date] = Query(default=None),
     trend_days: int = Query(default=14),
-    days_page: int = Query(default=1, ge=1),
+    days_page: int = Query(default=1, ge=1, le=1_000_000),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> dict[str, Any]:
@@ -138,6 +138,7 @@ def project_live_turns(
 
 def _csv_chunks(rows: Iterator[list[str]]) -> Iterator[str]:
     """Encode CSV rows without buffering the complete export."""
+    yield "\ufeff"
     with io.StringIO(newline="") as buffer:
         writer = csv.writer(buffer)
         for row in rows:

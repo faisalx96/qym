@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import date, datetime, timedelta
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from qym_platform.db.models import (
     ApiKey,
+    LiveCanaryResult,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
+    LiveTurn,
     Project,
     ProjectMembership,
     ProjectRole,
@@ -19,6 +25,7 @@ from qym_platform.db.models import (
     UserRole,
 )
 from qym_platform.security import api_key_prefix, hash_api_key
+from qym_platform.settings import PlatformSettings
 
 TOKEN = "live-test-token"
 BASE = "/v1/projects/live-project-1/live/sources/worker-1"
@@ -322,8 +329,246 @@ def test_maintenance_mode_closes_live_ingest(client, session_factory, monkeypatc
     response = client.put(BASE, headers=_auth_headers(), json=SOURCE)
     assert response.status_code == 503 and response.headers["Retry-After"] == "60"
     heartbeat = client.post(
-        f"{BASE}/heartbeat", headers=_auth_headers(), json={"at": "2026-11-01T09:00:00Z"}
+        f"{BASE}/heartbeat",
+        headers=_auth_headers(),
+        json={"at": "2026-11-01T09:00:00Z"},
     )
     assert heartbeat.status_code == 503
     with session_factory() as session:
         assert session.query(LiveSource).count() == 0
+
+
+def test_metric_threshold_must_be_finite(client, session_factory):
+    _create_source(client)
+    for number in ("nan", "inf", "-inf"):
+        response = client.put(
+            BASE + "/metric-specs",
+            headers={**_auth_headers(), "Content-Type": "application/json"},
+            content=json.dumps(
+                {
+                    "specs": [
+                        {
+                            "metric_name": "accuracy",
+                            "group": "quality",
+                            "label": "Accuracy",
+                            "score_type": "percentage",
+                            "pass_threshold": float(number),
+                        }
+                    ]
+                }
+            ),
+        )
+        assert response.status_code == 422, response.text
+        assert any(
+            error["loc"] == ["body", "specs", 0, "pass_threshold"]
+            and "pass_threshold must be finite" in error["msg"]
+            for error in response.json()["detail"]
+        )
+    with session_factory() as session:
+        assert session.query(LiveMetricSpec).count() == 0
+
+
+@pytest.mark.parametrize(
+    "field", ["turns_seen", "evaluated", "failed", "incomplete", "excluded"]
+)
+def test_day_counters_are_bounded_to_int32(client, session_factory, field):
+    _create_source(client)
+    response = client.put(
+        BASE + "/days/2026-11-01", headers=_auth_headers(), json={field: 2147483647}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()[field] == 2147483647
+    response = client.put(
+        BASE + "/days/2026-11-01", headers=_auth_headers(), json={field: 2147483648}
+    )
+    assert response.status_code == 422, response.text
+    assert any(
+        error["loc"] == ["body", field] and error["type"] == "less_than_equal"
+        for error in response.json()["detail"]
+    )
+    with session_factory() as session:
+        assert getattr(session.query(LiveDay).one(), field) == 2147483647
+
+
+@pytest.mark.parametrize("error_type", [DataError, IntegrityError])
+def test_commit_value_errors_are_conflicts_and_roll_back(
+    client, session_factory, error_type
+):
+    _create_source(client)
+
+    def refuse_commit(session):
+        session.flush()
+        raise error_type("UPDATE live_sources", {}, ValueError("out of range"))
+
+    event.listen(session_factory, "before_commit", refuse_commit)
+    try:
+        response = client.put(
+            BASE, headers=_auth_headers(), json={**SOURCE, "name": "Rejected"}
+        )
+    finally:
+        event.remove(session_factory, "before_commit", refuse_commit)
+    assert response.status_code == 409, response.text
+    assert response.json() == {"detail": "Live ingest conflicts with existing data"}
+    with session_factory() as session:
+        assert session.query(LiveSource).one().name == SOURCE["name"]
+
+
+@pytest.mark.parametrize("length", ["declared", "missing", "understated"])
+@pytest.mark.parametrize(
+    "method,path,body,status",
+    [
+        ("PUT", "", {**SOURCE, "name": "Updated"}, 200),
+        ("POST", "/heartbeat", {"at": "2026-11-01T10:00:00Z"}, 204),
+        ("PUT", "/metric-specs", {"specs": []}, 200),
+        ("PUT", "/days/2026-11-01", {"turns_seen": 1}, 200),
+        (
+            "POST",
+            "/turns",
+            {
+                "turns": [
+                    {
+                        "turn_id": "turn-1",
+                        "turn_at": "2026-11-01T10:00:00Z",
+                        "status": "completed",
+                        "question": "Question",
+                    }
+                ]
+            },
+            200,
+        ),
+        (
+            "POST",
+            "/canaries",
+            {
+                "results": [
+                    {
+                        "canary": "database",
+                        "checked_at": "2026-11-01T10:00:00Z",
+                        "status": "ok",
+                    }
+                ]
+            },
+            200,
+        ),
+    ],
+)
+def test_live_body_limit_covers_every_write(
+    client, session_factory, monkeypatch, method, path, body, status, length
+):
+    _create_source(client)
+    limit = 1_048_576
+    monkeypatch.setattr(
+        "qym_platform.api.live_ingest.ingest_settings",
+        lambda: PlatformSettings(live_ingest_max_body_bytes=limit),
+    )
+    raw = json.dumps(body).encode("utf-8")
+    at_limit = raw + b" " * (limit - len(raw))
+    headers = {**_auth_headers(), "Content-Type": "application/json"}
+    if length == "understated":
+        headers["Content-Length"] = "1"
+    content = at_limit + b" "
+    if length != "declared":
+        content = iter([content[:limit], content[limit:]])
+    response = client.request(method, BASE + path, headers=headers, content=content)
+    assert response.status_code == 413, response.text
+    assert f"{limit} byte limit" in response.json()["detail"]
+    assert "send smaller batches" in response.json()["detail"]
+    with session_factory() as session:
+        source = session.query(LiveSource).one()
+        assert source.name == SOURCE["name"] and source.last_heartbeat_at is None
+        for model in (LiveDay, LiveMetricSpec, LiveTurn, LiveCanaryResult):
+            assert session.query(model).count() == 0
+    response = client.request(method, BASE + path, headers=headers, content=at_limit)
+    assert response.status_code == status, response.text
+
+
+@pytest.mark.parametrize(
+    "content,content_type",
+    [
+        (b"{", "application/json"),
+        (b"", "application/json"),
+        (b"[]", "application/json"),
+        (b"{}", "application/json"),
+        (json.dumps({**SOURCE, "extra": True}).encode(), "application/json"),
+        (json.dumps(SOURCE).encode(), "text/plain"),
+    ],
+)
+def test_capped_body_preserves_validation_errors(
+    client, session_factory, content, content_type
+):
+    response = client.put(
+        BASE, headers={**_auth_headers(), "Content-Type": content_type}, content=content
+    )
+    assert response.status_code == 422, response.text
+    assert isinstance(response.json()["detail"], list)
+    assert all(error["loc"][0] == "body" for error in response.json()["detail"])
+    with session_factory() as session:
+        assert session.query(LiveSource).count() == 0
+
+
+@pytest.mark.parametrize("service", ["main", "ingestion"])
+def test_live_write_openapi_keeps_body_schemas(service):
+    from qym_platform.app import create_app, create_ingestion_app
+
+    factory = create_ingestion_app if service == "ingestion" else create_app
+    app = factory(PlatformSettings(service=service, database_url="sqlite://"))
+    document = app.openapi()
+    schemas = document["components"]["schemas"]
+    base = "/v1/projects/{project_id}/live/sources/{key}"
+    prefixes = ("", "/ingestion") if service == "ingestion" else ("",)
+    for prefix in prefixes:
+        for method, suffix, model, required in (
+            ("put", "", "SourceBody", ["name", "environment"]),
+            ("post", "/heartbeat", "HeartbeatBody", ["at"]),
+            ("put", "/metric-specs", "MetricSpecsBody", ["specs"]),
+            ("put", "/days/{day}", "DayBody", []),
+            ("post", "/turns", "TurnsBody", ["turns"]),
+            ("post", "/canaries", "CanariesBody", ["results"]),
+        ):
+            operation = document["paths"][prefix + base + suffix][method]
+            assert "requestBody" in operation, (service, method, suffix)
+            body = operation["requestBody"]
+            assert body["required"] is True
+            assert body["content"]["application/json"]["schema"] == {
+                "$ref": f"#/components/schemas/{model}"
+            }
+            assert schemas[model]["title"] == model
+            assert schemas[model].get("required", []) == required
+            assert schemas[model]["additionalProperties"] is False
+    for model, field, item_model, required in (
+        ("MetricSpecsBody", "specs", "MetricSpecBody", "metric_name"),
+        ("CanariesBody", "results", "CanaryBody", "checked_at"),
+    ):
+        assert schemas[model]["properties"][field]["items"] == {
+            "$ref": f"#/components/schemas/{item_model}"
+        }
+        assert required in schemas[item_model]["required"]
+        assert schemas[item_model]["additionalProperties"] is False
+
+
+def test_deeply_nested_json_returns_422_without_server_error(
+    client, session_factory, caplog
+):
+    _create_source(client)
+    with caplog.at_level(
+        logging.ERROR, logger="qym_platform.middleware.request_context"
+    ):
+        response = client.post(
+            BASE + "/turns",
+            headers={**_auth_headers(), "Content-Type": "application/json"},
+            content="[" * 1200 + "]" * 1200,
+        )
+    assert response.status_code == 422, response.text
+    assert response.json() == {
+        "detail": [
+            {"type": "json_invalid", "loc": ["body"], "msg": "JSON nesting too deep"}
+        ]
+    }
+    assert not [
+        record
+        for record in caplog.records
+        if record.name == "qym_platform.middleware.request_context"
+        and record.levelno >= logging.ERROR
+    ]
+    with session_factory() as session:
+        assert session.query(LiveTurn).count() == 0

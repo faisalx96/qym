@@ -90,6 +90,11 @@ batches. Explicit JSON dictionaries such as `summary`, `detail`, `worker`,
 `parameters`, `meta`, SQL entries and categorical value entries preserve extra
 keys. Section 6 gives the exact shared error texts.
 
+Models allow lax scalar coercion, including numeric strings, integral floats for
+integers, epoch seconds for datetimes, and a full midnight timestamp for the
+`{day}` path. Producers should send the documented types rather than rely on
+these conversions.
+
 ### 3.1 `PUT /sources/{key}` — register or update the source
 
 ```bash
@@ -122,8 +127,8 @@ preserves the source ID and creation time, and replaces the reported configurati
 omitted optional fields take their defaults.
 
 **Status codes:** `201` created; `200` replaced; `401` missing/invalid key; `403`
-project or owner access denied; `404` project absent; `409` archived project or
-database conflict; `422` invalid body/key; `503` maintenance.
+project or owner access denied; `409` archived project or database conflict;
+`422` invalid body/key; `503` maintenance.
 
 ### 3.2 `POST /sources/{key}/heartbeat` — report a poll
 
@@ -166,7 +171,7 @@ duplicate names cause a database conflict. At most one spec may be primary.
 | `label` | string | yes | 1–120 characters; plain display text |
 | `score_type` | string | yes | `percentage`, `boolean`, `numeric`, `categorical`, `duration` |
 | `direction` | string or null | no | `maximize`, `minimize`, or null (default) |
-| `pass_threshold` | number or null | no | Default null |
+| `pass_threshold` | number or null | no | Default null; must be finite if supplied |
 | `unit` | string or null | no | Up to 80 characters; default null |
 | `precision` | integer or null | no | Nonnegative; default null |
 | `is_primary` | boolean | no | Default false; at most one true in the set |
@@ -210,11 +215,11 @@ All fields are optional; `{}` creates or resets a running day with defaults.
 |---|---|---|---|
 | `run_ref` | string or null | no | Up to 100 characters; default null |
 | `status` | string | no | `running` (default) or `closed` |
-| `turns_seen` | integer | no | Nonnegative; default 0 |
-| `evaluated` | integer | no | Nonnegative; default 0 |
-| `failed` | integer | no | Nonnegative; default 0 |
-| `incomplete` | integer | no | Nonnegative; default 0 |
-| `excluded` | integer | no | Nonnegative; default 0 |
+| `turns_seen` | integer | no | 0–2,147,483,647; default 0 |
+| `evaluated` | integer | no | 0–2,147,483,647; default 0 |
+| `failed` | integer | no | 0–2,147,483,647; default 0 |
+| `incomplete` | integer | no | 0–2,147,483,647; default 0 |
+| `excluded` | integer | no | 0–2,147,483,647; default 0 |
 | `first_poll_at` | datetime or null | no | Default null |
 | `last_poll_at` | datetime or null | no | Default null |
 | `closed_at` | datetime or null | no | Default null; send explicitly when closing |
@@ -290,7 +295,7 @@ with `422`; canaries do not use per-entry rejection reports.
 | `checked_at` | datetime | yes | Original probe check time |
 | `status` | string | yes | `ok`, `failed`, or `skipped` |
 | `fault` | string or null | no | Up to 20 characters; default null; free text |
-| `latency_ms` | number or null | no | Default null; milliseconds |
+| `latency_ms` | number or null | no | Default null; milliseconds; must be finite if supplied |
 | `detail` | object | no | Default `{}`; no live-turn detail cap applied here |
 | `eval_code_version` | string or null | no | Up to 100 characters; default null |
 
@@ -357,7 +362,7 @@ are character limits unless explicitly stated otherwise.
 | `label_reason` | string or null | no | Default null; plain explanation; no explicit text cap |
 | `answer` | string or null | no | Default null; strip NUL, keep first 200,000 characters |
 | `sql` | array of objects | no | Default `[]`; entries conventionally `{text, executed, rows, error}` |
-| `latency_ms` | number or null | no | Default null; milliseconds; no explicit range validator |
+| `latency_ms` | number or null | no | Default null; milliseconds; must be finite if supplied |
 | `result_rows` | integer or null | no | 0–2,147,483,647; default null |
 | `tool_calls` | integer or null | no | 0–2,147,483,647; default null |
 | `trace_url` | string or null | no | Up to 2,000 characters; default null; no URL-format validator |
@@ -375,9 +380,10 @@ fields and must not be sent as Turn fields.
 
 `summary` carries the facts used by the overview and turn views. All fields are
 optional; omit unavailable facts rather than inventing a score. The ingest API
-validates only that `summary` is an object: the shapes below are the producer
-presentation contract, not additional server-side field validation. Unknown
-extra keys are retained and ignored by consumers that do not recognize them.
+validates that `summary` is an object with no nested non-finite numbers: the
+shapes below are the producer presentation contract, not additional server-side
+field validation. Unknown extra keys are retained and ignored by consumers that
+do not recognize them.
 
 | Field | Shape | Meaning |
 |---|---|---|
@@ -508,14 +514,22 @@ null numeric score.
   is limited to **200,000 characters**, not bytes. Longer text is shortened and
   sets `summary.text_truncated: true`. Stripping NUL alone does not set the flag.
   Other text fields do not receive this cleaning/truncation rule.
-- Detail size is measured as `len(json.dumps(detail).encode("utf-8"))` with the
-  standard serializer defaults (including ASCII escaping). Above
-  `QYM_LIVE_DETAIL_MAX_BYTES` (default **524288**), the **entire detail is dropped
+- Detail size is the UTF-8 size of the compact JSON, measured as
+  `len(json.dumps(detail, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))`.
+  Above `QYM_LIVE_DETAIL_MAX_BYTES` (default **524288**), the **entire detail is dropped
   to null**, not sliced into invalid JSON. The turn is accepted with
   `summary.detail_truncated: true`, a `detail truncated` note, and that note in
   stored `rejected`. This cap does not apply to `summary` or canary `detail`.
 - Turn batches must contain 1–`QYM_LIVE_TURN_BATCH_MAX` entries (default **100**).
-  This is a turn-count cap, not a byte limit. There is no API rate limit in v1.0.
+  This is a turn-count cap, independent of the byte limit below.
+- All six JSON-body POST/PUT routes enforce `QYM_LIVE_INGEST_MAX_BODY_BYTES`
+  (default **67108864**, 64 MiB; minimum **1048576**). Both `Content-Length`
+  and streamed bytes are checked before parsing JSON; oversized bodies return
+  `413`. There is no API rate limit in v1.0.
+- Non-finite numbers (`NaN`, `Infinity`, `-Infinity`) are rejected in numeric
+  scores, turn/canary latency, and metric thresholds. A turn is also rejected
+  with `non-finite number in JSON` if any nested value in its `summary`, `detail`,
+  `sql`, or any score's `score_raw` or `meta` is non-finite.
 - Canary identity is `(source_id, canary, checked_at)` after UTC normalization.
   Re-pushes are ignored, even if their result changed. Heartbeats are not
   idempotent: a retry adds another poll when `current_day` is supplied.
@@ -540,13 +554,15 @@ fields. Successful turn-batch responses can still contain individual errors.
 | `404` | `live source not found` | Register this source before sending child requests |
 | `409` | `Project is archived; its API keys stop working until an admin unarchives it` | Authentication blocks archived projects; `X-Qym-Key-State: project_archived` |
 | `409` | `Project is archived; unarchive it to make changes` | Additional route-level archive guard; `X-Qym-Project-State: archived` |
-| `409` | `Live ingest conflicts with existing data` | Commit integrity conflict; check duplicate specs or concurrent writes |
+| `409` | `Live ingest conflicts with existing data` | Commit constraint/value conflict; check payload values, duplicate specs or concurrent writes |
+| `413` | `The event batch exceeds ...; send smaller batches.` | Body exceeds `QYM_LIVE_INGEST_MAX_BODY_BYTES`; reduce the payload size |
 | `422` | `Turn batch exceeds the configured limit` | Split into smaller batches |
 | `422` | Validation detail array | Invalid JSON, missing field, wrong type, extra field, invalid literal, key/date, or multiple primary metrics |
 | `503` | `Platform is in maintenance mode; retry later` | Buffer and retry; `Retry-After: 60` |
 | `200`, rejected turn | `turn must be a JSON object` | An entry is not an object; returned `turn_id` is null |
 | `200`, rejected turn | `<field.path>: <validation message>` | Fix this turn or score; multiple messages joined with `; ` |
 | `200`, rejected turn | `Database refused turn values` | Per-turn storage constraint/value failure; fix the payload |
+| `200`, rejected turn | `non-finite number in JSON` | Replace non-finite numbers in nested turn or score JSON |
 
 Unhandled infrastructure failures may return `500`; retain the payload, investigate,
 and reconcile before retrying. Retrying turn uploads is safe by turn identity, but

@@ -222,6 +222,7 @@ class PlatformSettings(BaseSettings):
     live_turn_batch_max: int = Field(default=100, ge=1, le=1000)
     live_detail_max_bytes: int = Field(default=524288, ge=4096)
     live_trend_max_days: int = Field(default=90, ge=7, le=365)
+    live_ingest_max_body_bytes: int = Field(default=64 * 1024 * 1024, ge=1_048_576)
 
     # Evaluation Service experiments: launches per user per window (0 disables).
     # Dry-run previews are not counted.
