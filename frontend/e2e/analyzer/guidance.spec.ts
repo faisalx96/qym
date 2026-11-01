@@ -117,7 +117,7 @@ test.describe('Rules tab as manager (10)', () => {
     await expect(page.getByRole('button', { name: 'Generate rules' })).toBeDisabled();
     await expect(
       page.getByText(
-        /Rules cannot be generated yet\. This project has neither an enabled project document nor an approved example/,
+        /Nothing to generate from yet: enable a project document in Documents, or approve a diagnosis in Reviews/,
       ),
     ).toBeVisible();
 
@@ -128,7 +128,7 @@ test.describe('Rules tab as manager (10)', () => {
       buffer: Buffer.from('Answers must cite the supplied context. Never invent table names.'),
     });
     await expect(page.getByRole('list', { name: 'Document library' })).toContainText('policy.txt');
-    await page.getByRole('tab', { name: /^Production rules/ }).click();
+    await page.getByRole('tab', { name: /^Rules/ }).click();
     await expect(page.getByText('Add documents (1 enabled)')).toBeVisible();
     const generate = page.getByRole('button', { name: 'Generate rules' });
     await expect(generate).toBeEnabled();
@@ -225,17 +225,19 @@ test.describe('Documents (11)', () => {
 });
 
 test.describe('Diagnosis (12)', () => {
-  test('a category needs a taxonomy; saving sends base_revision; new categories are marked Needs examples', async ({
+  test('a category needs a taxonomy; saving sends base_revision; no Needs examples flag before any example exists', async ({
     page,
     request,
   }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, guidanceUrl(seed.slug, 'categories'));
-    await expect(page.getByRole('tab', { name: /^Hallucination Needs examples/ })).toBeVisible();
+    // C213: a project with no approved example anywhere shows no Needs examples flags
+    await expect(page.getByRole('tab', { name: /^Hallucination/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Hallucination/ })).not.toContainText('Needs examples');
     await page.getByRole('button', { name: 'Add category' }).click();
     await page.getByRole('textbox', { name: 'New category name' }).fill('Brand Voice');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
-    await expect(page.getByRole('tab', { name: /^Brand Voice Needs examples/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Brand Voice/ })).toBeVisible();
     await expect(page.getByTestId('catalog-save-state')).toHaveText('Unsaved changes');
 
     let puts = 0;
@@ -264,7 +266,7 @@ test.describe('Diagnosis (12)', () => {
     expect(JSON.stringify(body)).toContain('Brand Voice');
     await expect(page.getByText('Categories saved').first()).toBeVisible();
     await expect(page.getByTestId('catalog-save-state')).toHaveText('Saved');
-    await expect(page.getByRole('tab', { name: /^Brand Voice Needs examples/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Brand Voice/ })).toBeVisible();
   });
 
   test('409 catalog_version_conflict keeps the edits; Overwrite resends with the new revision; Reload latest drops them', async ({
@@ -355,7 +357,7 @@ test.describe('read-only view (13)', () => {
     await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveAttribute('readonly', '');
     await expect(page.getByRole('textbox', { name: /^Use when/ })).toHaveAttribute('readonly', '');
 
-    await page.getByRole('tab', { name: /^Production rules/ }).click();
+    await page.getByRole('tab', { name: /^Rules/ }).click();
     await expect(page.getByText('Draft (read-only)')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create draft', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Publish' })).toHaveCount(0);
@@ -374,7 +376,7 @@ test.describe('read-only view (13)', () => {
       'View only: project managers and the run’s owner can run analysis.',
     );
     await expect(analyzeButton(page)).toBeDisabled();
-    await expect(rail(page).getByRole('button', { name: /^Test selected/ })).toBeDisabled();
+    await expect(rail(page).getByRole('button', { name: /^Test (selected|the first target)/ })).toBeDisabled();
   });
 
   test('no LLM connection: the rail says so and disables Test / Analyze; Preview still works', async ({
@@ -407,7 +409,7 @@ test.describe('project scope (15)', () => {
       'aria-selected',
       'true',
     );
-    await tabs.getByRole('tab', { name: /^Production rules/ }).click();
+    await tabs.getByRole('tab', { name: /^Rules/ }).click();
     await expect(page).toHaveURL(/scope=rules/);
     await expect(page.getByRole('heading', { name: 'Rules in v1' })).toBeVisible();
     await tabs.getByRole('tab', { name: /^Documents/ }).click();
@@ -422,10 +424,7 @@ test.describe('project scope (15)', () => {
       'true',
     );
     await gotoApp(page, `/projects/${seed.slug}/analysis?scope=project`);
-    await expect(page.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(page.getByRole('tab', { name: /^Rules/ })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('the guidance area is reachable from a run workspace and keeps the run in the URL', async ({
@@ -440,7 +439,7 @@ test.describe('project scope (15)', () => {
       .click();
     await expect(page).toHaveURL(new RegExp(`run=${seed.runId}`));
     await expect(page).toHaveURL(/scope=categories/);
-    await expect(page.getByRole('tab', { name: /^Production rules/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Rules/ })).toBeVisible();
     await viewTabs(page)
       .getByRole('tab', { name: /^Analyze run/ })
       .click();

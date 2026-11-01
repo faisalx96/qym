@@ -94,3 +94,9 @@
   display: inline-flex;
   gap: var(--space-xs);
 }
+
+/* C213: a 24px target around the 14px box (WCAG 2.5.8 without the spacing exception) */
+.check {
+  padding: 5px;
+  margin: -5px;
+}

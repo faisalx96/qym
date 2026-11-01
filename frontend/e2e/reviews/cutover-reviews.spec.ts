@@ -210,10 +210,8 @@ test.describe('All-tab bulk actions act only on the rows they fit', () => {
       if (r.method() === 'POST' && new URL(r.url()).pathname === '/api/corrections/bulk')
         sent.push(r.postDataJSON());
     });
+    // bulk approve applies at once, as a single approve does (C213)
     await page.getByTestId('bulk-approve').click();
-    const dialog = page.getByRole('dialog', { name: 'Approve 2 diagnoses' });
-    await expect(dialog).toBeVisible();
-    await dialog.getByTestId('comment-confirm').click();
     await expect(page.getByText('2 diagnoses approved')).toBeVisible();
     expect(sent).toHaveLength(1);
     expect([...sent[0]!.ids].sort()).toEqual(pending.map((c) => c.id).sort());

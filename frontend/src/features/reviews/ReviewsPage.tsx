@@ -111,6 +111,16 @@ export function ReviewsPage() {
     fetchCorrection(linkedId)
       .then((row) => {
         if (cancelled) return;
+        // an edited diagnosis has a new id: the link follows it to its current revision (C213)
+        if (row.id !== linkedId)
+          setParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.set('id', String(row.id));
+              return next;
+            },
+            { replace: true },
+          );
         setLinked(row);
         if (filters.status !== 'all' && filters.status !== row.status) setFilters({ status: row.status });
       })
@@ -295,7 +305,9 @@ export function ReviewsPage() {
       toast.show(BULK_FITS[action].rule, { tone: 'error' });
       return;
     }
-    setDialog({ kind: 'bulk', action });
+    // C213: approve applies at once, as a single approve does; reject asks for its comment
+    if (action === 'approve') void runBulk('approve');
+    else setDialog({ kind: 'bulk', action });
   }
 
   async function runBulk(action: BulkAction, comment = '') {
@@ -517,15 +529,16 @@ export function ReviewsPage() {
                 >
                   Reject{approveFit.skipped ? ` (${approveFit.ids.length} of ${approveFit.selected})` : ''}
                 </Button>
-                <Button
-                  variant="neutral"
-                  size="sm"
-                  onPress={() => void runBulk('reset')}
-                  isDisabled={!resetFit.ids.length}
-                  data-testid="bulk-reset"
-                >
-                  Reset{resetFit.skipped ? ` (${resetFit.ids.length} of ${resetFit.selected})` : ''}
-                </Button>
+                {resetFit.ids.length ? (
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onPress={() => void runBulk('reset')}
+                    data-testid="bulk-reset"
+                  >
+                    Reset{resetFit.skipped ? ` (${resetFit.ids.length} of ${resetFit.selected})` : ''}
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   size="sm"

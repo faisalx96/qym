@@ -756,6 +756,17 @@ def test_editing_an_approved_correction_returns_it_to_pending(client, session_fa
         assert (old.reviewed_by_user_id, old.review_comment) == ("manager-1", "Checked the trace, correct")
 
 
+def test_a_link_to_an_edited_correction_opens_its_current_revision(client, session_factory):
+    """C213: every edit stores a new id; an old ?id= link follows it."""
+    with session_factory() as db:
+        _run(db, "r1")
+        old = _correction(db, author="member-1")
+    edited = _ok(client.put(f"/api/corrections/{old}", json={"human_root_cause": "Metric bug"}, headers=_ui(MEMBER)))
+    assert edited["id"] != old
+    opened = _ok(client.get(f"/api/corrections/{old}", headers=_ui(MEMBER)))
+    assert opened["id"] == edited["id"]
+
+
 def test_editing_a_decided_diagnosis_needs_the_decision_right(client, session_factory):
     """C054: an edit withdraws the decision, so the managers-only rule covers it too (Reviews and run page)."""
     with session_factory() as db:

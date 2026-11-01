@@ -160,7 +160,19 @@ export function RuleEditor({
                     </Button>
                   ) : null}
                 </div>
-                {isOpen ? (
+                {isOpen && !editable ? (
+                  // C213: a read-only rule reads as text, not as inputs that refuse typing
+                  <div className={s.ruleBody} data-testid="rule-readonly">
+                    <Text variant="base" as="p" dir="auto" className={s.ruleText}>
+                      {r.instruction || '—'}
+                    </Text>
+                    {r.explanation ? (
+                      <Text variant="sm" tone="muted" as="p">
+                        {`Why this rule helps: ${r.explanation}`}
+                      </Text>
+                    ) : null}
+                  </div>
+                ) : isOpen ? (
                   <div className={s.ruleBody}>
                     <TextField
                       label="Title"

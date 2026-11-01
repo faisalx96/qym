@@ -55,6 +55,7 @@ export function ReviewRow({
         onChange={onToggleSelected}
         aria-label={`Select diagnosis ${row.id}`}
         hideLabel
+        className={styles.check}
       />
       <button
         type="button"

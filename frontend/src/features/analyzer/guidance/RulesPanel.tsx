@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { projectPath } from '@/app/routes';
 import { useState } from 'react';
 import {
   useAnalysisConfig,
@@ -356,7 +358,8 @@ function RulesView({
             ) : null}
             {config.llm_configured ? null : (
               <Text variant="sm" tone="muted" as="p">
-                Add an LLM connection in project settings to generate rules.
+                Add an LLM connection to generate rules:{' '}
+                <Link to={`${projectPath(scope.slug, 'settings')}?tab=llm`}>open LLM connections</Link>.
               </Text>
             )}
           </div>

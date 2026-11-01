@@ -192,11 +192,8 @@ test.describe('reviews: keyboard triage', () => {
     await page.keyboard.press('x');
     const bulk = page.getByRole('region', { name: 'Bulk actions' });
     await expect(bulk).toContainText('2 selected');
+    // bulk approve applies at once, as a single approve does (C213)
     await page.keyboard.press('Shift+A');
-    const dialog = page.getByRole('dialog', { name: 'Approve 2 diagnoses' });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole('textbox', { name: /Comment/ }).fill('looks right');
-    await dialog.getByTestId('comment-confirm').click();
     await expect(page.getByText('2 diagnoses approved')).toBeVisible();
     await expect(row(page, c0!.id)).toHaveCount(0);
     await expect(row(page, c1!.id)).toHaveCount(0);
@@ -360,7 +357,6 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     // another reviewer approves one of the selected rows in the meantime
     await decideViaApi(request, c0!.id, 'approve');
     await page.getByTestId('bulk-approve').click();
-    await page.getByTestId('comment-confirm').click();
     const conflict = page.getByRole('alertdialog', { name: 'The list changed' });
     await expect(conflict).toBeVisible();
     await expect(conflict).toContainText('Nothing was changed');

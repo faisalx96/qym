@@ -29,7 +29,7 @@ test.describe('Test Selected (6)', () => {
     const seed = await seedAnalyzer(request);
     const t = trackErrors(page);
     await openRun(page, seed.slug, seed.runId);
-    await rail(page).getByRole('button', { name: 'Test selected (1)' }).click();
+    await rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }).click();
     const card = page.getByRole('article', { name: 'Test result for item item-1' });
     await expect(card).toBeVisible();
     await expect(card).toContainText('82% confidence');
@@ -67,11 +67,11 @@ test.describe('Test Selected (6)', () => {
   test('Cancel test aborts a slow connection', async ({ page, request }) => {
     const seed = await seedAnalyzer(request, { model: 'slow-model' });
     await openRun(page, seed.slug, seed.runId);
-    await rail(page).getByRole('button', { name: 'Test selected (1)' }).click();
+    await rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }).click();
     await expect(page.getByText('Testing against the connection')).toBeVisible();
     await rail(page).getByRole('button', { name: 'Cancel test' }).click();
     await expect(page.getByText('Test cancelled.')).toBeVisible();
-    await expect(rail(page).getByRole('button', { name: 'Test selected (1)' })).toBeEnabled();
+    await expect(rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })).toBeEnabled();
   });
 });
 
@@ -303,10 +303,10 @@ test.describe('cancel, resume and the sample guard (8)', () => {
     await waitWorkspace(page);
     await analyzeButton(page).click();
     await expect(rail(page).getByRole('button', { name: 'Cancel analysis' })).toBeVisible();
-    // the Sample select is disabled with the reason
-    const sample = page.getByRole('button', { name: /Sample 1 \(4\/4\)/ });
+    // the Pass select is disabled with the reason
+    const sample = page.getByRole('button', { name: /Pass 1 \(4\/4\)/ });
     await expect(sample).toBeDisabled();
-    await expect(page.getByText('Wait for the running job, or cancel it, to switch samples.')).toBeVisible();
+    await expect(page.getByText('Wait for the running job, or cancel it, to switch passes.')).toBeVisible();
 
     // reload: the job is still running on the server and the rail resumes
     const active = page.waitForResponse((r) => /analysis-jobs\/active/.test(r.url()));
@@ -315,7 +315,7 @@ test.describe('cancel, resume and the sample guard (8)', () => {
     expect((await active).ok()).toBeTruthy();
     await expect(jobRegion(page)).toBeVisible();
     await expect(rail(page).getByRole('button', { name: 'Cancel analysis' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Sample 1 \(4\/4\)/ })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /Pass 1 \(4\/4\)/ })).toBeDisabled();
     // tidy up: cancel and wait for the server to finish the job
     await rail(page).getByRole('button', { name: 'Cancel analysis' }).click();
     await expect(jobRegion(page).getByText('Cancelled', { exact: true })).toBeVisible({ timeout: 40_000 });

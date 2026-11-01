@@ -155,6 +155,7 @@ function DiagnosisEditor({
   const newApprovals = dirty && draft !== null && draft.approvals !== approvals;
 
   const categories = current.categories;
+  const anyExamples = categories.some((c) => c.exampleCount > 0);
   const visible = categories.filter((c) =>
     c.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
@@ -433,7 +434,8 @@ function DiagnosisEditor({
             label: (
               <span className={d.catLabel}>
                 <span>{c.name}</span>
-                {c.exampleCount === 0 ? <Flag tone="warning">Needs examples</Flag> : null}
+                {/* C213: a new project has no examples anywhere; the flag means something once some exist */}
+                {c.exampleCount === 0 && anyExamples ? <Flag tone="warning">Needs examples</Flag> : null}
                 {incomplete.has(c.name) ? <Flag tone="danger">Incomplete</Flag> : null}
               </span>
             ),

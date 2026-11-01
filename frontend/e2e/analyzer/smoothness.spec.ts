@@ -107,7 +107,7 @@ test('a test run fills the reserved Results section without moving the page abov
   await waitWorkspace(page);
   await installProbe(page);
   await rail(page)
-    .getByRole('button', { name: /^Test selected/ })
+    .getByRole('button', { name: /^Test (selected|the first target)/ })
     .click();
   await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
   await page.waitForTimeout(300);
@@ -177,7 +177,7 @@ test('Test then Analyze on a 20-item run stays under the layout-shift budget', a
   await page.waitForTimeout(500);
   const start = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
   await rail(page)
-    .getByRole('button', { name: /^Test selected/ })
+    .getByRole('button', { name: /^Test (selected|the first target)/ })
     .click();
   await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
   await analyzeButton(page).click();

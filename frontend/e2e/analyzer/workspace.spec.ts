@@ -33,7 +33,7 @@ test.describe('open the workspace (1)', () => {
     // the one accent button of the idle state carries the target count; the URL keeps the run
     await expect(analyzeButton(page)).toHaveText('Analyze 4 items');
     await expect(analyzeButton(page)).toBeEnabled();
-    await expect(rail(page).getByRole('button', { name: /^Test selected/ })).toBeVisible();
+    await expect(rail(page).getByRole('button', { name: /^Test (selected|the first target)/ })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`run=${seed.runId}`));
     expect(t.errors, t.errors.join('\n')).toEqual([]);
   });
@@ -102,7 +102,7 @@ test.describe('sample picker (2)', () => {
     const seed = await seedAnalyzer(request, { withRepeat: true });
     await gotoApp(page, analysisUrl(seed.slug, seed.repeatId!, '&pass=1'));
     await waitWorkspace(page);
-    await expect(page.getByRole('button', { name: /Sample 1 \(4\/4\)/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Pass 1 \(4\/4\)/ })).toBeVisible();
   });
 });
 
@@ -195,7 +195,7 @@ test.describe('prompt preview (4)', () => {
     const drawer = previewDrawer(page);
     await expect(drawer).toBeVisible();
     await expect(drawer.getByRole('region', { name: 'Prompt messages' })).toContainText('q 3');
-    await expect(drawer.getByRole('switch', { name: 'Production rules' })).toBeVisible();
+    await expect(drawer.getByRole('switch', { name: 'Rules' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(rail(page).getByRole('button', { name: /^Prompt preview · [\d,]+ chars$/ })).toBeVisible();
   });

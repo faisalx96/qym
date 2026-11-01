@@ -30,7 +30,7 @@ const WORKFLOW_COPY = {
     confirm: 'Approve',
     tone: 'primary' as const,
     done: 'approved',
-    help: 'Approved runs are locked and count as reference results.',
+    help: 'Its scores lock and it counts as a reference result. Root causes stay editable.',
   },
   reject: {
     title: 'Reject run',
