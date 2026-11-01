@@ -2056,6 +2056,16 @@ class RunTraceContribution(Base):
     __table_args__ = (Index("ix_trace_contribution_run_trace", "run_id", "trace_id"),)
 
 
+class RunCreateKey(Base):
+    """An Idempotency-Key of ``POST /v1/runs`` and the run it created, kept 24 hours (C190, migration 0093)."""
+
+    __tablename__ = "run_create_keys"
+    project_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
 class RunStepLatencySummary(Base):
     """The run page's step-latency summary of a run or one pass, stored on first read (C022, migration 0092)."""
 

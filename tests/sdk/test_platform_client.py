@@ -90,7 +90,7 @@ def test_platform_client_create_run_uses_bounded_timeout(monkeypatch):
     calls = []
 
     def fake_post_json(
-        url: str, payload: dict, api_key: str, *, timeout: float = 30
+        url: str, payload: dict, api_key: str, *, timeout: float = 30, headers=None
     ) -> dict:
         calls.append((url, payload, api_key, timeout))
         return {
@@ -473,3 +473,31 @@ def test_platform_event_stream_emits_heartbeat_while_idle(monkeypatch):
         stream.close()
 
     assert any(evt["type"] == "run_heartbeat" for evt in sent_events)
+
+
+def test_create_run_sends_one_idempotency_key_and_retries_a_timeout_once(monkeypatch):
+    """C190: a create that times out is sent again with the same key, so the platform returns the first run."""
+    import socket
+
+    keys = []
+
+    def flaky_post_json(url, payload, api_key, *, timeout=30, headers=None):
+        keys.append((headers or {}).get("Idempotency-Key"))
+        if len(keys) == 1:
+            raise socket.timeout("timed out")
+        return {"run_id": "run-1", "live_url": "https://platform.example/runs/run-1"}
+
+    monkeypatch.setattr(client_module, "_post_json", flaky_post_json)
+    handle = client_module.PlatformClient(
+        platform_url="https://platform.example", api_key="k"
+    ).create_run(
+        external_run_id=None,
+        task="t",
+        dataset="d",
+        model=None,
+        metrics=[],
+        run_metadata={},
+        run_config={},
+    )
+    assert handle.run_id == "run-1"
+    assert len(keys) == 2 and keys[0] and keys[0] == keys[1]

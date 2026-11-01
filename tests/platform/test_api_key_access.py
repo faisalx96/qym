@@ -251,3 +251,21 @@ def test_current_owner_keeps_run_owner_rights(client):
         == 200
     )
     assert client.post("/v1/runs/r-former/submit", headers=headers).status_code == 200
+
+
+def test_a_repeated_idempotency_key_returns_the_first_run(client, session_factory):
+    """C190: two POST /v1/runs with the same Idempotency-Key make one run; another key makes another."""
+    token = client.post(
+        "/v1/projects/pa/api-keys", json={"name": "ci-key"}, headers=_ui("former@x.com")
+    ).json()["token"]
+    headers = {**_key(token), "Idempotency-Key": "4f0c8e1a-retry"}
+    first = client.post("/v1/runs", json=RUN_BODY, headers=headers)
+    again = client.post("/v1/runs", json=RUN_BODY, headers=headers)
+    other = client.post("/v1/runs", json=RUN_BODY, headers={**_key(token), "Idempotency-Key": "another"})
+    plain = client.post("/v1/runs", json=RUN_BODY, headers=_key(token))
+    assert first.status_code == again.status_code == other.status_code == plain.status_code == 200
+    assert again.json()["run_id"] == first.json()["run_id"]
+    assert other.json()["run_id"] != first.json()["run_id"]
+    assert plain.json()["run_id"] not in {first.json()["run_id"], other.json()["run_id"]}
+    too_long = client.post("/v1/runs", json=RUN_BODY, headers={**_key(token), "Idempotency-Key": "x" * 201})
+    assert too_long.status_code == 422

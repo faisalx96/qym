@@ -8,6 +8,7 @@ import sys
 from collections import defaultdict
 
 csv.field_size_limit(sys.maxsize)
+from datetime import timedelta
 from typing import Any, Dict, List, Optional
 from qym_platform.log import get_logger
 
@@ -25,7 +26,7 @@ def _sanitize_for_json(obj: Any) -> Any:
 
 logger = get_logger(__name__)
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 
 from qym_platform.uploads import read_upload
 from fastapi.responses import JSONResponse
@@ -44,6 +45,7 @@ from qym_platform.datetime_utils import to_storage_utc, utc_now_naive
 from qym_platform.db.models import (
     Project,
     Run,
+    RunCreateKey,
     Dataset,
     DatasetAlias,
     DatasetItem,
@@ -1013,10 +1015,19 @@ def create_run(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_api_key_principal),
     _open: None = Depends(require_ingest_open),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
 ) -> Dict[str, Any]:
     require_api_key_scope(principal, "runs:write")
     if not principal.project_id:
         raise HTTPException(status_code=403, detail="API key is not bound to a project")
+    key = (idempotency_key or "").strip() or None
+    if key is not None and len(key) > 200:
+        raise HTTPException(status_code=422, detail="Idempotency-Key must be at most 200 characters")
+    if key is not None:
+        # C190: a retried create (same key) gets the run the first call made, not a second run.
+        earlier = _run_for_create_key(db, principal.project_id, key)
+        if earlier is not None:
+            return _create_run_response(db, earlier)
     try:
         versioning_details = normalize_versioning_details(
             strip_launch_token(req.versioning_details)
@@ -1089,7 +1100,27 @@ def create_run(
     # Plan §11: official only when the launch token verifies; same transaction.
     link_official_run(db, run, req.run_metadata)
     _store_metric_specs(db, run, req.metric_specs)
-    db.commit()
+    if key is not None:
+        # Same transaction as the run: of two concurrent creates with one key, only one commits.
+        db.query(RunCreateKey).filter(
+            RunCreateKey.created_at < utc_now_naive() - CREATE_KEY_TTL
+        ).delete(synchronize_session=False)
+        db.add(
+            RunCreateKey(
+                project_id=principal.project_id,
+                idempotency_key=key,
+                run_id=run.id,
+                created_at=utc_now_naive(),
+            )
+        )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        earlier = _run_for_create_key(db, principal.project_id, key) if key is not None else None
+        if earlier is None:
+            raise
+        return _create_run_response(db, earlier)
     db.refresh(run)
     logger.info(
         "Run %s created (project=%s, origin=%s)",
@@ -1098,12 +1129,26 @@ def create_run(
         getattr(run, "origin", None) or "-",
     )
 
-    live_url = _run_live_url(db, run)
+    return _create_run_response(db, run)
+
+
+CREATE_KEY_TTL = timedelta(hours=24)
+
+
+def _run_for_create_key(db: Session, project_id: str, key: str) -> Optional[Run]:
+    """The run an Idempotency-Key created in the last 24 hours, if it still exists."""
+    row = db.get(RunCreateKey, (project_id, key))
+    if row is None or row.created_at < utc_now_naive() - CREATE_KEY_TTL:
+        return None
+    return Run.active(db).filter(Run.id == row.run_id).first()
+
+
+def _create_run_response(db: Session, run: Run) -> Dict[str, Any]:
     # supports_pass_events: capability flag for repeat runs (samples=k) — new
     # SDKs check it before streaming pass-aware events to old platforms.
     return {
         "run_id": run.id,
-        "live_url": live_url,
+        "live_url": _run_live_url(db, run),
         "supports_pass_events": True,
         "supports_metric_specs": True,
     }
