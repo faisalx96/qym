@@ -27,7 +27,6 @@ import { constrained, useDocumentTitle, useProjectContext } from '@/features/she
 import { projectPath, runPath } from '@/app/routes';
 import { kpiEntries, kpiScope } from '@/lib/kpis';
 import { formatPercentValue, formatRelative } from '@/lib/format';
-import { useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
 import { ModelCell, Mono, OwnerCell, StatusCell } from './cells';
@@ -117,7 +116,6 @@ export function OverviewPage() {
   const scope = kpiScope(kpis);
   const approvedCount = approved.data?.total_runs;
   const entries = kpiEntries(kpis);
-  const showSkeleton = useDelayedPending(kpisQ.isPending);
   const s = trend?.summary;
   const rate = trendIsRate(trend?.points.map((p) => p.metric_mean) ?? []);
   const deltaPts = s?.delta == null ? null : s.delta;
@@ -180,8 +178,8 @@ export function OverviewPage() {
                 help: e.title,
               }))}
             />
-          ) : showSkeleton ? (
-            <Skeleton kind="cards" count={5} label="Loading KPIs" />
+          ) : kpisQ.isPending ? (
+            <Skeleton kind="cards" count={5} label="Loading KPIs" reserve />
           ) : null}
           <Card
             title="Trend"

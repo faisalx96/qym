@@ -103,3 +103,18 @@
     animation: none;
   }
 }
+
+/* C070: a reserved skeleton holds its height at once and fades in after 300 ms (nothing flashes on a quick load) */
+.reserve {
+  animation: skeletonReveal 0s linear 300ms both;
+}
+
+@keyframes skeletonReveal {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
