@@ -829,17 +829,18 @@ test.describe('version header, download, publish note, history and compare (A2-3
     await expect(page.getByTestId('rev-enabled')).toContainText('No reason given');
   });
 
-  test('compare: summary tiles and the state diff (A2-45, A2-46, A2-48)', async ({ page, request }) => {
+  test('compare: the disabled line and the state diff (A2-45, A2-46, A2-48, C240)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'cmp');
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoApp(page, `/projects/${s.slug}/datasets/${s.ds}/compare?base=${s.v1}&head=${s.v2}`);
-    const summary = page.getByLabel('Comparison summary');
-    await expect(summary).toContainText('Disabled');
-    await expect(summary).toContainText('6');
-    await expect(summary).not.toContainText('Enabled');
+    const line = page.getByTestId('compare-state-line');
+    await expect(line).toHaveText(`6 items disabled in ${s.v2}`);
     const row = page.locator('[data-compare-row="faq-003"]');
     await expect(row).toBeVisible();
-    await expect(row).toContainText('fields: state');
+    await expect(row).toContainText('fields: State');
     const diff = row.getByTestId('compare-state-row');
     await expect(diff).toHaveAttribute('aria-label', 'state changed from Active to Disabled');
     await expect(diff).toContainText('Active');

@@ -29,3 +29,13 @@ describe('orderItemHistory (C189)', () => {
     expect(showsTypeChange(rev('x', '', 'updated'))).toBe(true);
   });
 });
+
+describe('fieldLabel (C246)', () => {
+  it('names a field in words', async () => {
+    const { fieldLabel } = await import('../itemValue');
+    expect(fieldLabel('expected_output')).toBe('Expected output');
+    expect(fieldLabel('EXPECTED_OUTPUT')).toBe('Expected output');
+    expect(fieldLabel('state')).toBe('State');
+    expect(fieldLabel('custom_key')).toBe('Custom key');
+  });
+});
