@@ -46,6 +46,11 @@ export interface SelectProps<T extends SelectItem> {
   className?: string;
   width?: string | number;
   name?: string;
+  /** Opens at mount (an inline edit that starts open, C186). */
+  defaultOpen?: boolean;
+  autoFocus?: boolean;
+  /** Told when the popover opens or closes, e.g. to end an inline edit on Escape. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** Single select on the 24px control, listbox popover, optional search. */
@@ -67,10 +72,17 @@ export function Select<T extends SelectItem>({
   className,
   width,
   name,
+  defaultOpen = false,
+  autoFocus,
+  onOpenChange,
 }: SelectProps<T>) {
   const search = searchable === 'auto' ? items.length > 8 : Boolean(searchable);
   const { contains } = useFilter({ sensitivity: 'base' });
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(defaultOpen);
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const disabledKeys = useMemo(() => items.filter((i) => i.disabled).map((i) => i.key), [items]);
   const list = (
     <ListBox
@@ -106,6 +118,7 @@ export function Select<T extends SelectItem>({
       name={name}
       isOpen={open}
       onOpenChange={setOpen}
+      autoFocus={autoFocus}
       style={{ width, maxWidth: '100%' }}
     >
       <Label className={fieldStyles.label} data-hidden={hideLabel ? '' : undefined}>
