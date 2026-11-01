@@ -4,3 +4,16 @@
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
+
+/* Add item (C063): the item pane's field editors, stacked */
+.addItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.addItemError {
+  margin: 0;
+  color: var(--error);
+  font-size: var(--font-sm);
+}

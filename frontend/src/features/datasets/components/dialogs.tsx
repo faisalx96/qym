@@ -12,9 +12,9 @@ import {
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useRef, useState } from 'react';
-import { Button, Dialog, FormDialog, Textarea, useToast, type FormValue } from '@/ui';
+import { Button, Dialog, FormDialog, Textarea, TextField, useToast } from '@/ui';
+import { FieldEditor, fieldStatus, initialFieldState, type FieldState } from './FieldEditor';
 import { Note } from './Note';
-import { sniffJson } from '../lib/itemValue';
 import { publishDisabledNote } from '../lib/itemState';
 import { datasetPath } from '../lib/route';
 import { slugifyDatasetName } from '../lib/slugify';
@@ -252,7 +252,24 @@ export function NameVersionDialog({
   );
 }
 
-export function AddItemDialog({
+/**
+ * Add item (C063): Input and Expected output use the item pane's editor, with its stored-type tag and its Text / JSON
+ * switch, Text by default. A value changes type only when the user picks JSON, so a typed "30" stays the text "30" and
+ * "null" stays the text "null".
+ */
+export function AddItemDialog(props: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  slug: string;
+  dataset: Dataset;
+  version: DatasetVersion;
+  onCreated?: (item: DatasetItem) => void;
+}) {
+  // Remount on every open so the fields reset.
+  return props.open ? <AddItemDialogInner {...props} /> : null;
+}
+
+function AddItemDialogInner({
   open,
   onOpenChange,
   slug,
@@ -269,63 +286,92 @@ export function AddItemDialog({
 }) {
   const create = useCreateItem(slug, dataset.slug, version.version);
   const toast = useToast();
+  const [itemId, setItemId] = useState('');
+  const [input, setInput] = useState<FieldState>(() => initialFieldState(''));
+  const [expected, setExpected] = useState<FieldState>(() => initialFieldState(''));
+  const [meta, setMeta] = useState<FieldState>({ mode: 'json', text: '' });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    if (busy) return;
+    const inputStatus = fieldStatus('', input);
+    const expectedStatus = fieldStatus('', expected);
+    const metaStatus = meta.text.trim() ? fieldStatus({}, meta, true) : null;
+    const problem = !input.text.trim()
+      ? 'Input is required.'
+      : !inputStatus.ok
+        ? 'Input is not valid JSON. Switch it to Text to save it as text.'
+        : expected.text.trim() && !expectedStatus.ok
+          ? 'Expected output is not valid JSON. Switch it to Text to save it as text.'
+          : metaStatus && !metaStatus.ok
+            ? metaStatus.error === 'Metadata must be a JSON object.'
+              ? metaStatus.error
+              : 'Metadata is not valid JSON.'
+            : null;
+    setError(problem);
+    if (problem) return;
+    setBusy(true);
+    try {
+      const r = await create.mutateAsync({
+        item_id: itemId.trim() || undefined,
+        input: inputStatus.value,
+        expected_output: expected.text.trim() ? expectedStatus.value : undefined,
+        metadata: metaStatus ? (metaStatus.value as Record<string, unknown>) : undefined,
+      });
+      toast.show(`Item ${r.item.item_id} added`, { tone: 'success' });
+      onCreated?.(r.item);
+      onOpenChange(false);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <FormDialog
+    <Dialog
       open={open}
       onOpenChange={onOpenChange}
       title="Add item"
-      description={`Added to draft ${version.version}. Input and Expected output are stored as JSON when they look like JSON ({ [ " numbers true false null), otherwise as text.`}
+      description={`Added to draft ${version.version}.`}
       size="lg"
-      confirmLabel="Add item"
-      submittingLabel="Adding…"
-      fields={[
-        {
-          name: 'item_id',
-          label: 'Item ID',
-          mono: true,
-          placeholder: `auto: item-${version.item_count + 1}`,
-        },
-        { name: 'input', label: 'Input', type: 'textarea', required: true, rows: 4, autoFocus: true },
-        { name: 'expected', label: 'Expected output', type: 'textarea', rows: 3 },
-        {
-          name: 'metadata',
-          label: 'Metadata (JSON object)',
-          type: 'textarea',
-          rows: 2,
-          mono: true,
-          placeholder: '{}',
-          validate: (v: FormValue) => {
-            const t = String(v ?? '').trim();
-            if (!t) return null;
-            try {
-              const parsed: unknown = JSON.parse(t);
-              return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-                ? null
-                : 'Metadata must be a JSON object.';
-            } catch {
-              return 'Metadata is not valid JSON.';
-            }
-          },
-        },
-      ]}
-      onSubmit={async (values) => {
-        try {
-          const metaText = String(values.metadata ?? '').trim();
-          const r = await create.mutateAsync({
-            item_id: String(values.item_id ?? '').trim() || undefined,
-            input: sniffJson(String(values.input ?? '')),
-            expected_output: String(values.expected ?? '').trim()
-              ? sniffJson(String(values.expected))
-              : undefined,
-            metadata: metaText ? (JSON.parse(metaText) as Record<string, unknown>) : undefined,
-          });
-          toast.show(`Item ${r.item.item_id} added`, { tone: 'success' });
-          onCreated?.(r.item);
-        } catch (e) {
-          return errorText(e);
-        }
-      }}
-    />
+      footer={
+        <>
+          <Button variant="neutral" size="md" onPress={() => onOpenChange(false)} isDisabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="md" onPress={() => void submit()} loading={busy}>
+            {busy ? 'Adding…' : 'Add item'}
+          </Button>
+        </>
+      }
+    >
+      <div className={styles.addItem}>
+        <TextField
+          label="Item ID"
+          mono
+          value={itemId}
+          onChange={setItemId}
+          placeholder={`auto: item-${version.item_count + 1}`}
+        />
+        <FieldEditor label="Input" value="" editable state={input} onChange={setInput} compact />
+        <FieldEditor
+          label="Expected output"
+          value=""
+          editable
+          state={expected}
+          onChange={setExpected}
+          compact
+        />
+        <FieldEditor label="Metadata" value={{}} editable jsonOnly state={meta} onChange={setMeta} compact />
+        {error ? (
+          <p className={styles.addItemError} role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </Dialog>
   );
 }
 
