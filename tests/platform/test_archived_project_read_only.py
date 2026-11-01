@@ -698,6 +698,7 @@ ALLOWED = {
     # Dry runs that store nothing.
     ("POST", "/api/runs/{run_id:path}/analyze-test"): "dry run, stores nothing",
     ("POST", "/v1/projects/{project_id}/llm-connections/{connection_id}/test"): "dry run, stores nothing",
+    ("POST", "/v1/projects/{project_id}/llm-connections/test"): "dry run of unsaved values, stores nothing",
     ("POST", "/v1/projects/{project_id}/eval-environments/{env_id}/test"): "health probe, stores only its result",
     ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/clone"): "launch-form prefill, stores nothing",
     # Taking access or work away stays possible without unarchiving (which
