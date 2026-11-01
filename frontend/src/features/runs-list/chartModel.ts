@@ -5,7 +5,7 @@
  * group-statistics rule and model colour index.
  */
 import type { Combo, ComboModel, MetricType, RunRow } from '@/api/dashboardTypes';
-import { metricDirection, type MetricDirection, type MetricSpec } from '@/lib/metrics';
+import { defaultMetricName, metricDirection, type MetricDirection, type MetricSpec } from '@/lib/metrics';
 import { compareModelKeys, parseModelKey, stripProvider } from '@/lib/runs-order';
 
 export type GroupMode = 'run' | 'version' | 'model' | 'version-model' | 'model-version';
@@ -114,10 +114,8 @@ export function effectiveGroupMode(mode: GroupMode, hasVersions: boolean): Group
   return mode;
 }
 
-export function defaultMetricName(names: string[], specs: Record<string, MetricSpec>): string | null {
-  const list = names.filter(Boolean);
-  return list.find((n) => specs[n]?.primary === true) ?? list[0] ?? null;
-}
+/** The one lead-metric rule (C155) lives in lib/metrics. */
+export { defaultMetricName };
 
 export function runsMetricDirection(runs: Pick<ChartRun, 'metric_specs'>[], metric: string): MetricDirection {
   const dirs = new Set<MetricDirection>();

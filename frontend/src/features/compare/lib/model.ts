@@ -16,7 +16,13 @@ import {
 } from '@/lib/metrics';
 import type { Row, Run, RunPayload } from '@/features/run-detail/types';
 import { scopeRowToPass } from '@/features/run-detail/lib/passScope';
-import { computeRunLabels, disambiguateRunNames, modelShortName, runShortName, type RunLabel } from './labels';
+import {
+  computeRunLabels,
+  disambiguateRunNames,
+  modelShortName,
+  runShortName,
+  type RunLabel,
+} from './labels';
 import { SKIPPED_METADATA } from './skipMetadata';
 import { expandRefs, makePassRef, passRefBase, passRefNumber } from './refs';
 
@@ -247,7 +253,12 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
     isBoolean,
     directions,
     defaultThresholds,
-    defaultMetric: defaultMetricName(metrics, defaultSpecs),
+    // C155: open on a metric every compared run has, so the first view is never empty for some runs
+    defaultMetric: defaultMetricName(
+      metrics,
+      defaultSpecs,
+      metricLists.length ? metrics.filter((m) => metricLists.every((l) => l.includes(m))) : undefined,
+    ),
     metadataKeys: Array.from(metaKeys).sort(),
     alignment: { status: dedupedUnalignable.length ? 'unalignable' : 'aligned', runs: dedupedUnalignable },
     langfuseHost: payload.langfuse_host || first?.langfuse_host || '',
