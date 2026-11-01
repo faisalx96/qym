@@ -32,7 +32,7 @@ const ANALYSIS_KEYS = [
  */
 export function fullTraceStats<T extends object>(stats: T, template: object | null | undefined): T {
   if (!template) return stats;
-  const out: Record<string, unknown> = { ...stats };
+  const out = { ...stats } as Record<string, unknown>;
   for (const [key, value] of Object.entries(template)) {
     if (key in out) continue;
     if (typeof value === 'number') out[key] = 0;
