@@ -4,7 +4,7 @@
  *   dataset database glyph, name, version suffix (and alias tags)
  *   model   tag tinted with the model's series colour and its dot
  * and the run's own name (RunName): sans, a link when it has a target, mono only when the label is a bare id.
- * Long names truncate with an ellipsis and show in full as a tooltip.
+ * Long names wrap inside their column (C218); the full name is also the tooltip.
  */
 import type { FocusEventHandler, MouseEventHandler, PointerEventHandler, ReactNode } from 'react';
 import { Link } from 'react-router-dom';

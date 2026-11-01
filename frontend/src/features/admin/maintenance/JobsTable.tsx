@@ -22,7 +22,8 @@ const FIGURE: Record<JobStatus, [StatusTone, StatusShape]> = {
   paused: ['warning', 'hourglass'],
   cancel_requested: ['warning', 'orbit'],
   cancelled: ['warning', 'pause'],
-  succeeded: ['success', 'full'],
+  // C218: success is the normal case, so it is quiet; only failures and waits take a colour
+  succeeded: ['neutral', 'full'],
   failed: ['danger', 'cross'],
 };
 
