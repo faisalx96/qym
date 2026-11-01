@@ -107,13 +107,13 @@ test('C-items-5/6: Filters opens an inline panel under the toolbar; Escape close
   await expect(panel).toContainText(/Filters/);
   await expect(panel).toContainText(/no rules yet/i);
   await expect(panel.getByRole('radiogroup', { name: 'Match mode' })).toBeVisible();
-  await expect(panel.getByRole('button', { name: '+ Condition' })).toBeVisible();
-  await expect(panel.getByRole('button', { name: '+ Group' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Add condition' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Add group' })).toBeVisible();
   // inline: nothing painted over content, the list moved down by the panel height
   expect(await gap()).toBeGreaterThan(gapBefore + 90);
   expect((await box(panel)).bottom).toBeLessThanOrEqual((await box(part(page, 'run-key'))).y);
   // fields: Outcome, Winner with run names, Passing runs, metadata, Approval, Has error, Output text, Max latency
-  await panel.getByRole('button', { name: '+ Condition' }).click();
+  await panel.getByRole('button', { name: 'Add condition' }).click();
   await panel
     .getByTestId('filter-condition')
     .first()
@@ -142,7 +142,7 @@ test('C-items-6: the Winner values say "<run name> won" and "Only <run name> sol
   await openCompare(page, s.four, 1440);
   await part(page, 'items-filters-btn').click();
   const panel = part(page, 'filter-builder');
-  await panel.getByRole('button', { name: '+ Condition' }).click();
+  await panel.getByRole('button', { name: 'Add condition' }).click();
   await panel
     .getByTestId('filter-condition')
     .first()
@@ -378,7 +378,7 @@ test('C-items-6 (fix F2): "+ Condition" offers Change vs baseline per run and me
   await openCompare(page, s.four, 1440);
   await part(page, 'items-filters-btn').click();
   const panel = part(page, 'filter-builder');
-  await panel.getByRole('button', { name: '+ Condition' }).click();
+  await panel.getByRole('button', { name: 'Add condition' }).click();
   await panel
     .getByTestId('filter-condition')
     .first()

@@ -7,7 +7,10 @@ import { wordDiff } from '../settings/PromptsTab';
 describe('parseRoute', () => {
   it('reads project pages and run ids with slashes', () => {
     expect(parseRoute('/projects/demo')).toMatchObject({ page: 'runs', projectSlug: 'demo' });
-    expect(parseRoute('/projects/demo/settings')).toMatchObject({ page: 'settings', label: 'Settings' });
+    expect(parseRoute('/projects/demo/settings')).toMatchObject({
+      page: 'settings',
+      label: 'Project settings',
+    });
     expect(parseRoute('/projects/demo/runs/a/b/c')).toMatchObject({ page: 'run-detail', runId: 'a/b/c' });
     expect(parseRoute('/projects/demo/runs/a%2Fb/analyzer')).toMatchObject({
       page: 'analyzer',

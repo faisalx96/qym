@@ -7,6 +7,7 @@ import { Select } from '../Select';
 import { TextField } from '../TextField';
 import { Textarea } from '../Textarea';
 import styles from './FormDialog.module.css';
+import { errorSentence, fieldErrorsOf } from '@/lib/http';
 
 export type FormValue = string | boolean;
 
@@ -114,7 +115,13 @@ function FormDialogInner({
       }
       onOpenChange(false);
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : String(e));
+      // C181: a 422 lands on the field it concerns; anything else is one plain sentence
+      const byField = fieldErrorsOf(e);
+      const known = Object.fromEntries(
+        Object.entries(byField).filter(([k]) => fields.some((f) => f.name === k)),
+      );
+      if (Object.keys(known).length) setErrors(known);
+      else setFormError(errorSentence(e));
     } finally {
       inflight.current = false;
       setBusy(false);

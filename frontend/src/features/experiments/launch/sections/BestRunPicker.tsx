@@ -58,7 +58,7 @@ function Picker({ envId }: { envId: string }) {
       {scopeQuery.isError ? (
         <ErrorState
           error={scopeQuery.error}
-          title="Could not load what can be ranked"
+          title="Couldn’t load what can be ranked"
           onRetry={() => void scopeQuery.refetch()}
           compact
         />
@@ -118,7 +118,7 @@ function Picker({ envId }: { envId: string }) {
           {runs.isError ? (
             <ErrorState
               error={runs.error}
-              title="Could not load the best runs"
+              title="Couldn’t load the best runs"
               onRetry={() => void runs.refetch()}
               compact
             />

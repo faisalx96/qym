@@ -16,6 +16,7 @@ import {
   SegmentedControl,
   Text,
   useMarkTip,
+  Tag,
 } from '@/ui';
 import {
   buildStepsTree,
@@ -345,7 +346,9 @@ export const StepTimings = forwardRef<
                       </div>
                       <div role="cell" className={styles.num}>
                         {st.err ? (
-                          <span className={styles.errPill}>{fmtInt(st.err)}</span>
+                          <Tag kind="count" tone="danger">
+                            {fmtInt(st.err)}
+                          </Tag>
                         ) : (
                           <span className={styles.none}>–</span>
                         )}

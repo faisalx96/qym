@@ -12,13 +12,7 @@ import {
   stripBoundFields,
   unconfirmedEndpoints,
 } from './bindings';
-import {
-  changedTasks,
-  copySelection,
-  datasetsListChanged,
-  pairCount,
-  runShapeChanged,
-} from './datasets';
+import { changedTasks, copySelection, datasetsListChanged, pairCount, runShapeChanged } from './datasets';
 import { datasetValue, emptyBaseInfo, emptySelection } from './document';
 import { evaluatorChangedCount, resetInputs, syncMetaSeed } from './evaluator';
 import { bestRunHeader } from './bestRun';
@@ -262,7 +256,9 @@ export function resetRoles(doc: LaunchDocument, rowPointers: readonly string[]):
 /** The baseline's list, shape and tasks; tasks of environments that are not ticked are not carried. */
 function restoreSelection(doc: LaunchDocument): LaunchDocument['selection'] {
   const base = copySelection(doc.baseline.selection ?? emptySelection());
-  base.tasks = Object.fromEntries(Object.entries(base.tasks).filter(([id]) => doc.environmentIds.includes(id)));
+  base.tasks = Object.fromEntries(
+    Object.entries(base.tasks).filter(([id]) => doc.environmentIds.includes(id)),
+  );
   return base;
 }
 
@@ -348,7 +344,9 @@ function selectionFrom(
       if (typeof value !== 'string' || !value) continue;
       const env = ctx.envs.find((e) => e.id === envId);
       if (!env) {
-        notes.push(`Task for ${ctx.envNames?.[envId] ?? 'an environment'} was not carried (environment not selected)`);
+        notes.push(
+          `Task for ${ctx.envNames?.[envId] ?? 'an environment'} was not carried (environment not selected)`,
+        );
       } else if (!env.capabilities?.task) {
         notes.push(`Task for ${env.name} was not carried (it does not offer task selection)`);
       } else if (!listed(env, value)) {
@@ -434,7 +432,14 @@ export function baselineFrom(
   delete evaluator['dataset'];
   if (isPlainObject(evaluator['config']) && !Object.keys(evaluator['config']).length)
     delete evaluator['config'];
-  return { values: stripped, bindings, dataset, selection: multi.selection, evaluatorExtra: evaluator, notes };
+  return {
+    values: stripped,
+    bindings,
+    dataset,
+    selection: multi.selection,
+    evaluatorExtra: evaluator,
+    notes,
+  };
 }
 
 export interface LoadedBase {
@@ -555,7 +560,11 @@ export function replayEdits(
     bindings,
   };
   if (edits.dataset) next = { ...next, dataset: { ...edits.dataset } };
-  if (edits.list) next = { ...next, selection: { ...next.selection, ...copySelection({ ...next.selection, ...edits.list }) } };
+  if (edits.list)
+    next = {
+      ...next,
+      selection: { ...next.selection, ...copySelection({ ...next.selection, ...edits.list }) },
+    };
   if (edits.runShape) next = { ...next, selection: { ...next.selection, runShape: edits.runShape } };
   for (const id of Object.keys(edits.tasks)) {
     if (!next.environmentIds.includes(id)) continue;
@@ -647,7 +656,7 @@ export function loadedBaseFromPreset(
   if (!res.remap) {
     return {
       base: baselineFrom({}, ctx),
-      info: { ...info, loaded: false, error: 'Failed to load the preset' },
+      info: { ...info, loaded: false, error: 'Couldn’t load the preset' },
     };
   }
   const version = res.version;
@@ -744,13 +753,7 @@ export interface ClonePrefill {
   /** Merge into the document with Object.assign / spread. */
   patch: Pick<
     LaunchDocument,
-    | 'name'
-    | 'description'
-    | 'environmentIds'
-    | 'priority'
-    | 'latencySensitive'
-    | 'clone'
-    | 'base'
+    'name' | 'description' | 'environmentIds' | 'priority' | 'latencySensitive' | 'clone' | 'base'
   >;
   notes: string[];
   /** Slot keys of temporary models that lose their key (re-enter under Models). */

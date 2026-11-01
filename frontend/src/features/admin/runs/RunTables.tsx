@@ -9,6 +9,7 @@ import {
   type Column,
   type PaginationProps,
   type RunStatus,
+  UserName,
 } from '@/ui';
 import { ownerLabel, progressLabel, projectLabel, relativeTime, runName } from '../format';
 import styles from './runs.module.css';
@@ -73,7 +74,14 @@ export function RunTable({
         priority: 1,
         cell: (r) => <RunCell run={r} />,
       },
-      { id: 'owner', header: 'Owner', width: 140, priority: 3, cell: (r) => ownerLabel(r) },
+      {
+        id: 'owner',
+        header: 'Owner',
+        width: 140,
+        priority: 3,
+        cell: (r) =>
+          r.owner ? <UserName id={r.owner.id} name={ownerLabel(r)} email={r.owner.email} /> : '—',
+      },
       {
         id: 'status',
         header: 'Status',

@@ -166,7 +166,7 @@
   font-family: var(--font-mono);
 }
 
-.promptFooter {
+.saveFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -174,7 +174,7 @@
   flex-wrap: wrap;
 }
 
-.promptMeta {
+.saveState {
   display: flex;
   align-items: center;
   gap: var(--space-md);
@@ -182,7 +182,7 @@
   color: var(--text-muted);
 }
 
-.unsaved {
+.saveState [data-dirty] {
   color: var(--warning);
 }
 

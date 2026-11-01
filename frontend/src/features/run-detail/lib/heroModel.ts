@@ -1,8 +1,10 @@
 /** Hero derivations (run.html renderSummary / runEntityLinks / buildExecutionContextSectionHtml). */
 import { projectPath } from '@/app/routes';
+import { formatDuration } from '@/lib/format';
 import type { RunErrorTally } from './overviewModel';
 import { stringify } from './rowErrors';
 import type { IngestIncomplete, PassSummary, Run, RunDatasetEntry } from '../types';
+import { formatHeaderDate, toDate } from '@/lib/dates';
 
 const HIDDEN_CONFIG_KEYS = new Set([
   'run_name',
@@ -150,30 +152,15 @@ export function runEntityLinks(run: Run, slug: string | undefined): EntityLinks 
   };
 }
 
+/** The one duration format (C164): lib/format. */
 export function formatDurationMs(ms: number | null | undefined): string {
-  if (ms == null || !Number.isFinite(ms) || ms < 0) return '—';
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  if (m < 60) return rs ? `${m}m ${rs}s` : `${m}m`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return rm ? `${h}h ${rm}m` : `${h}h`;
+  return formatDuration(ms);
 }
 
+/** Header form 'Sep 14, 2026, 19:05' (lib/dates, C048). */
 export function formatIsoDateTime(iso: string | null | undefined): string {
   if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return toDate(iso) ? formatHeaderDate(iso) : String(iso);
 }
 
 export function isLiveStatus(status: string | null | undefined): boolean {

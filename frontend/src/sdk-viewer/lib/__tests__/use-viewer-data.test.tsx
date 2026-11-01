@@ -85,7 +85,7 @@ describe('useViewerData (live)', () => {
     );
     const { result } = renderHook(() => useViewerData('/'));
     await waitFor(() => expect(result.current.error).not.toBeNull());
-    expect(result.current.error?.message).toMatch(/Could not reach/);
+    expect(result.current.error?.message).toMatch(/Couldn’t reach/);
     expect(FakeEventSource.instances).toHaveLength(0);
   });
 });

@@ -36,7 +36,6 @@ import {
   SearchField,
   Select,
   Skeleton,
-  Tag,
   RowMenu,
   Text,
   useToast,
@@ -44,9 +43,14 @@ import {
   type Column,
   Flag,
   StatusMark,
+  ModelTag,
+  TaskTag,
+  DatasetTag,
+  UserName,
 } from '@/ui';
 import styles from './TrashPage.module.css';
 import { retentionLabel } from '@/lib/retention';
+import { APP_LOCALE, formatDay } from '@/lib/dates';
 
 const DAY = 86_400_000;
 
@@ -65,7 +69,7 @@ export function purgeInfo(
     text: `in ${n} day${n === 1 ? '' : 's'}`,
     tone: n < 3 ? 'warning' : undefined,
     soon: n < 3,
-    sub: new Date(row.purge_at).toLocaleDateString(),
+    sub: formatDay(row.purge_at),
   };
 }
 
@@ -74,7 +78,7 @@ function plural(n: number) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return formatDay(iso);
 }
 
 export function TrashPage() {
@@ -234,7 +238,10 @@ export function TrashPage() {
           <Text as="span" variant="md" weight={600} truncate>
             {r.run_name}
           </Text>
-          <span className={styles.runId} title={`Created ${new Date(r.created_at).toLocaleString()}`}>
+          <span
+            className={styles.runId}
+            title={`Created ${new Date(r.created_at).toLocaleString(APP_LOCALE)}`}
+          >
             {r.id}
           </span>
         </span>
@@ -265,7 +272,7 @@ export function TrashPage() {
       cell: (r) => (
         <span className={styles.stack}>
           <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
-          {r.deleted_by_name ? <span className={styles.sub}>by {r.deleted_by_name}</span> : null}
+          {r.deleted_by_name ? <UserName name={r.deleted_by_name} /> : null}
         </span>
       ),
     },
@@ -282,15 +289,16 @@ export function TrashPage() {
       priority: 3,
       header: 'Model',
       width: 130,
-      cell: (r) => (
-        <span className={styles.stack}>
-          <span>{r.model ?? '—'}</span>
-          {r.trace_stats?.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
-        </span>
-      ),
+      cell: (r) => (r.model ? <ModelTag name={r.model} reasoning={!!r.trace_stats?.has_reasoning} /> : '—'),
     },
-    { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => r.task ?? '—' },
-    { id: 'dataset', header: 'Dataset', priority: 3, width: 120, cell: (r) => r.dataset ?? '—' },
+    { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => <TaskTag name={r.task} /> },
+    {
+      id: 'dataset',
+      header: 'Dataset',
+      priority: 3,
+      width: 120,
+      cell: (r) => <DatasetTag name={r.dataset} />,
+    },
     {
       id: 'actions',
       header: 'Actions',
@@ -341,7 +349,11 @@ export function TrashPage() {
         meta={[
           <span key="r">Retention {retentionLabel(grace)}</span>,
           <span key="n">
-            {filtered ? `${total} matching` : `${total} deleted run${total === 1 ? '' : 's'}`}
+            {list.data
+              ? filtered
+                ? `${total} matching`
+                : `${total} deleted run${total === 1 ? '' : 's'}`
+              : '–'}
           </span>,
           <span key="a">Only admins can restore runs</span>,
         ]}
@@ -352,7 +364,7 @@ export function TrashPage() {
           placeholder="Search run name or ID"
           value={search}
           onChange={setSearch}
-          width={280}
+          width={260}
         />
         <Select
           label="Project"

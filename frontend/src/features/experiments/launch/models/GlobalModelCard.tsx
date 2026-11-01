@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { TemporaryModelForm } from '@/features/environments/TemporaryModelForm';
-import { Button, Select, Tag, Card } from '@/ui';
+import { Button, Select, Tag, Card, Icon } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import {
   bindingFromSweepItem,
@@ -145,11 +145,19 @@ export function GlobalModelCard() {
               <div className={styles.row}>
                 {mode === 'launch' ? (
                   <>
-                    <Button variant="neutral" onPress={() => setFormOpen(true)}>
-                      + Temporary model
+                    <Button
+                      icon={<Icon name="plus" size={12} />}
+                      variant="neutral"
+                      onPress={() => setFormOpen(true)}
+                    >
+                      Add temporary model
                     </Button>
-                    <Button variant="neutral" onPress={() => void apply(startModelSweep(g))}>
-                      + models
+                    <Button
+                      variant="neutral"
+                      icon={<Icon name="plus" size={12} />}
+                      onPress={() => void apply(startModelSweep(g))}
+                    >
+                      Add models
                     </Button>
                   </>
                 ) : null}

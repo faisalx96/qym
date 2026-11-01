@@ -154,7 +154,7 @@ test('Edit LLM groups: moving keys into another group makes a second key set, an
   await expect(primary.getByText(/^Keys \d/)).toHaveCount(1);
 
   // an empty extra set is refused with its reason, and nothing is saved
-  await primary.getByRole('button', { name: '+ Add another set of keys' }).click();
+  await primary.getByRole('button', { name: 'Add another set of keys' }).click();
   await expect(primary.getByText(/^Keys \d/)).toHaveCount(2);
   const saves: string[] = [];
   page.on('request', (r) => {

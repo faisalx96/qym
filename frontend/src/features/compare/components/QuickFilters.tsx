@@ -153,7 +153,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
       <SearchField
         label="Filter by text"
         hideLabel
-        placeholder="Search id, input, outputs…"
+        placeholder="Search id, input, outputs"
         value={c.view.q}
         onChange={(q) => c.setView({ q })}
         onClear={() => c.setView({ q: '' })}

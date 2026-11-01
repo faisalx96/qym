@@ -2,7 +2,7 @@ import { Component, type ReactNode } from 'react';
 import { ErrorState } from '../ErrorState';
 
 export interface SectionBoundaryProps {
-  /** Names the part that failed ("Could not show Repeat run analysis"). */
+  /** Names the part that failed ("Couldn’t show Repeat run analysis"). */
   name: string;
   children: ReactNode;
 }
@@ -32,7 +32,7 @@ export class SectionBoundary extends Component<SectionBoundaryProps, State> {
         <ErrorState
           compact
           error={this.state.error}
-          title={`Could not show ${this.props.name}`}
+          title={`Couldn’t show ${this.props.name}`}
           onRetry={() => this.setState({ error: null })}
         />
       );

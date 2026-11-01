@@ -96,7 +96,7 @@ function AddEnvironmentDialogInner({
       setErrors(mapped.fields);
       setError(
         mapped.general ||
-          (Object.keys(mapped.fields).length ? '' : 'Could not connect to the Evaluation Service.'),
+          (Object.keys(mapped.fields).length ? '' : 'Couldn’t connect to the Evaluation Service.'),
       );
       const first = (['name', 'base_url', 'api_key'] as const).find((k) => mapped.fields[k]);
       if (first) setTimeout(() => inputs.current[first]?.focus(), 0);
@@ -261,7 +261,7 @@ function AddEnvironmentDialogInner({
         form.isError ? (
           <ErrorState
             error={form.error}
-            title="Could not load the generated form"
+            title="Couldn’t load the generated form"
             onRetry={() => void form.refetch()}
             compact
           />

@@ -206,8 +206,8 @@ function DiagnosisEditor({
       } else {
         setFailure(
           e instanceof ApiError
-            ? e.detail || 'Could not save diagnosis categories.'
-            : 'Could not save diagnosis categories.',
+            ? e.detail || 'Couldn’t save diagnosis categories.'
+            : 'Couldn’t save diagnosis categories.',
         );
       }
     }
@@ -397,7 +397,13 @@ function DiagnosisEditor({
                 onChange={setNewName}
                 autoFocus
               />
-              <Button size="sm" variant="accent" type="submit" isDisabled={!newName.trim()}>
+              <Button
+                size="sm"
+                variant="accent"
+                type="submit"
+                isDisabled={!newName.trim()}
+                disabledReason="Enter a category name"
+              >
                 Add
               </Button>
               <Button size="sm" variant="ghost" onPress={() => setAdding(false)}>

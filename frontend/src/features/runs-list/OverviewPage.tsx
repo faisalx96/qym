@@ -27,7 +27,6 @@ import { constrained, useDocumentTitle, useProjectContext } from '@/features/she
 import { projectPath, runPath } from '@/app/routes';
 import { kpiEntries, kpiScope } from '@/lib/kpis';
 import { formatPercentValue, formatRelative } from '@/lib/format';
-import { useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
 import { ModelCell, Mono, OwnerCell, StatusCell } from './cells';
@@ -36,7 +35,6 @@ import { TrendChart } from './TrendChart';
 import { pendingIssue } from './pendingReview';
 import { isActiveRun } from './polling';
 import { RunsCtx, type RunsCtxValue } from './context';
-import { useKpiTopbar } from './kpiTopbar';
 import { trendFormat, trendFormatDelta, trendIsRate } from './trendModel';
 // Recharts is ~100 kB: load it only with the Overview page.
 import styles from './OverviewPage.module.css';
@@ -48,7 +46,7 @@ type Days = '7' | '30' | '90';
 
 export function OverviewPage() {
   const { slug, project, readOnly } = useProjectContext();
-  useDocumentTitle(project.name);
+  useDocumentTitle('Dashboard');
   const { params, replaceUrlQuery } = useSearchParamsState();
   const origin = (
     ['official', 'local'].includes(params.get('origin') ?? '') ? params.get('origin') : 'all'
@@ -62,7 +60,6 @@ export function OverviewPage() {
   const kpisQ = useKpis(slug, filters, { refetchInterval: 30_000 });
   const kpis = kpisQ.data?.kpis;
   const updating = Boolean(kpisQ.data?.freshness.updating);
-  useKpiTopbar(kpis);
 
   const live = useRunsPage(
     {
@@ -120,7 +117,6 @@ export function OverviewPage() {
   const scope = kpiScope(kpis);
   const approvedCount = approved.data?.total_runs;
   const entries = kpiEntries(kpis);
-  const showSkeleton = useDelayedPending(kpisQ.isPending);
   const s = trend?.summary;
   const rate = trendIsRate(trend?.points.map((p) => p.metric_mean) ?? []);
   const deltaPts = s?.delta == null ? null : s.delta;
@@ -157,7 +153,7 @@ export function OverviewPage() {
           {kpisQ.isError && !kpis ? (
             <ErrorState
               error={kpisQ.error}
-              title="Could not load project KPIs"
+              title="Couldn’t load project KPIs"
               onRetry={() => kpisQ.refetch()}
               compact
             />
@@ -183,8 +179,8 @@ export function OverviewPage() {
                 help: e.title,
               }))}
             />
-          ) : showSkeleton ? (
-            <Skeleton kind="cards" count={5} label="Loading KPIs" />
+          ) : kpisQ.isPending ? (
+            <Skeleton kind="cards" count={5} label="Loading KPIs" reserve />
           ) : null}
           <Card
             title="Trend"
@@ -543,7 +539,7 @@ function Part({
         <ErrorState
           compact
           error={query.error}
-          title={`Could not load ${title.toLowerCase()}`}
+          title={`Couldn’t load ${title.toLowerCase()}`}
           onRetry={() => query.refetch()}
         />
       ) : loading ? (
@@ -603,7 +599,7 @@ function Card({
           <ErrorState
             compact
             error={query.error}
-            title={`Could not load ${title.toLowerCase()}`}
+            title={`Couldn’t load ${title.toLowerCase()}`}
             onRetry={() => query.refetch()}
           />
         ) : query?.isPending && !query.data ? (

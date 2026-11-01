@@ -9,10 +9,11 @@ import {
   useUpdateMemberRole,
 } from '@/api/projectSettings';
 import type { Member, MemberCandidate, RemovalPreview } from '@/api/types';
-import { ApiError } from '@/lib/http';
+import { ApiError, actionErrorMessage } from '@/lib/http';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
+  Icon,
   ConfirmDialog,
   DataTable,
   ErrorState,
@@ -102,7 +103,7 @@ export function MembersTab() {
                 .then(() => toast.show('Role saved', { tone: 'success' }))
                 .catch((e: unknown) =>
                   toast.show(
-                    e instanceof ApiError ? e.detail || 'Could not save the role' : 'Could not save the role',
+                    e instanceof ApiError ? e.detail || 'Couldn’t save the role' : 'Couldn’t save the role',
                     { tone: 'error' },
                   ),
                 );
@@ -263,7 +264,7 @@ export function MembersTab() {
                 { tone: 'info' },
               );
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not remove' : String(e));
+              throw new Error(actionErrorMessage('remove the member', e));
             }
           }}
         />
@@ -313,10 +314,7 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
             setPicked(null);
             setQuery('');
           } catch (err) {
-            toast.show(
-              err instanceof ApiError ? err.detail || 'Could not add member' : 'Could not add member',
-              { tone: 'error' },
-            );
+            toast.show(actionErrorMessage('add the member', err), { tone: 'error' });
           }
         });
       }}
@@ -365,7 +363,7 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
         {open && options.length === 0 && !candidates.isFetching ? (
           <div className={styles.comboHint} role="status">
             {candidates.isError
-              ? `Could not search people: ${candidates.error instanceof ApiError ? candidates.error.detail || candidates.error.message : 'try again'}`
+              ? `Couldn’t search people: ${candidates.error instanceof ApiError ? candidates.error.detail || candidates.error.message : 'try again'}`
               : debounced
                 ? `No one outside the project matches “${debounced}”.`
                 : 'Everyone is already a member.'}
@@ -402,8 +400,15 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
         onChange={(k) => setRole((k as Role) ?? 'MEMBER')}
         width={130}
       />
-      <Button type="submit" variant="primary" isDisabled={!picked} loading={add.isPending}>
-        Add
+      <Button
+        type="submit"
+        variant="primary"
+        icon={<Icon name="plus" size={12} />}
+        isDisabled={!picked}
+        disabledReason="Pick a user first"
+        loading={add.isPending}
+      >
+        Add member
       </Button>
     </form>
   );

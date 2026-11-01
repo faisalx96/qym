@@ -11,6 +11,7 @@
 }
 
 .box {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -52,4 +53,11 @@
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
+}
+
+/* C202: a 24x24 hit area around the 14px box (a table's selection checkbox has no label to click), drawn size unchanged */
+.box::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
 }

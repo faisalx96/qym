@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useResetPassword, useUpdateUser, type AdminUser, type UpdateUserBody } from '@/api/admin';
-import { ApiError } from '@/lib/http';
+import { errorSentence } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
 import { Button, ConfirmDialog, CopyButton, Dialog, Select, Text, TextField, useToast } from '@/ui';
 import { isValidEmail } from '../format';
@@ -16,8 +16,9 @@ export interface EditUserDialogProps {
   localAuth: boolean;
 }
 
+/** One plain sentence (C181). */
 function errorText(e: unknown): string {
-  return e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e);
+  return errorSentence(e);
 }
 
 /**
@@ -212,7 +213,7 @@ function EditUserDialogInner({
       <ConfirmDialog
         open={confirmReset}
         onOpenChange={setConfirmReset}
-        title="Reset password"
+        title="Reset this user’s password?"
         tone="danger"
         description={[
           `Reset the password for ${user.email}? The current password stops working now. They are signed out of every browser.`,

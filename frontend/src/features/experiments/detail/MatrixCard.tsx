@@ -7,7 +7,16 @@
 import { Link, useNavigate } from 'react-router-dom';
 import type { ExperimentJob } from '@/api/experiments';
 import { runPath } from '@/app/routes';
-import { ActionTile, Button, Checkbox, RowMenu, SectionHeader, Card, type MenuItemSpec } from '@/ui';
+import {
+  ActionTile,
+  Button,
+  Checkbox,
+  RowMenu,
+  SectionHeader,
+  Card,
+  ScoreValue,
+  type MenuItemSpec,
+} from '@/ui';
 import { JobStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { formatMetric, plural } from '../lib/format';
@@ -225,6 +234,21 @@ function MatrixCell({
     else if (id === 'promote') onPromote(job);
   };
   const value = headline && typeof headline.mean === 'number' ? formatMetric(headline.mean) : null;
+  // A 0-1 score reads as a percent in its band colour (C048); the score opens the run (E2).
+  const score =
+    value && headline ? (
+      headline.mean >= 0 && headline.mean <= 1 ? (
+        <ScoreValue
+          value={headline.mean}
+          direction={headline.direction === 'minimize' ? 'minimize' : 'maximize'}
+          digits={1}
+          variant="plain"
+          className={styles.metricValue}
+        />
+      ) : (
+        <span className={styles.metricValue}>{value}</span>
+      )
+    ) : null;
   return (
     <div className={styles.cell} data-exp-cell={job.id}>
       <div className={styles.cellTop}>
@@ -256,10 +280,10 @@ function MatrixCell({
               to={runPath(slug, runId)}
               title={`Open ${job.run_name || runId}`}
             >
-              {value}
+              {score}
             </Link>
           ) : (
-            <span className={styles.metricValue}>{value}</span>
+            score
           )}
           <span
             className={styles.metricName}

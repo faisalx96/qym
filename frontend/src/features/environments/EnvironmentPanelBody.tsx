@@ -31,7 +31,8 @@ export function EnvironmentPanelBody({ environmentId, onClose, onDeleted }: Envi
     return (
       <ErrorState
         error={query.error}
-        title="Could not load the environment"
+        title="Couldn’t load the environment"
+        notFoundTitle="Environment not found"
         notFoundMessage="This environment does not exist in this project, or it was deleted."
         onRetry={() => void query.refetch()}
       />

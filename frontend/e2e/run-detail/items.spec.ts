@@ -304,7 +304,7 @@ test.describe('read-only (archived) project', () => {
     await itemButton(page, 2).click();
     await expect(card(page, 'item-0002')).toBeVisible();
     await expect(card(page, 'item-0002').getByRole('button', { name: /^Edit score$/ })).toHaveCount(0);
-    await expect(card(page, 'item-0002').getByRole('button', { name: '+ Add issue' })).toHaveCount(0);
+    await expect(card(page, 'item-0002').getByRole('button', { name: 'Add issue' })).toHaveCount(0);
   });
 });
 
@@ -317,7 +317,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     const rc = c.locator('[data-testid=metric-analysis-card][data-metric=quality]');
     await expect(rc).toBeVisible();
     await expect(rc).toContainText('No issues recorded');
-    await rc.getByRole('button', { name: '+ Add issue' }).click();
+    await rc.getByRole('button', { name: 'Add issue' }).click();
     const dlg = page.getByTestId('issue-form');
     await expect(dlg).toBeVisible();
     await dlg.getByRole('button', { name: /Category/ }).click();
@@ -352,12 +352,12 @@ test.describe('root-cause issues (scenario 9)', () => {
     await itemButton(page, 4).click();
     await openRootCause(card(page, 'item-0004'));
     const rc = card(page, 'item-0004').locator('[data-testid=metric-analysis-card][data-metric=exact_match]');
-    await rc.getByRole('button', { name: '+ Add issue' }).click();
+    await rc.getByRole('button', { name: 'Add issue' }).click();
     const dlg = page.getByTestId('issue-form');
     await dlg.getByRole('button', { name: /Category/ }).click();
     await page
       .getByRole('listbox', { name: /Category/ })
-      .getByRole('option', { name: 'New category…' })
+      .getByRole('option', { name: 'New category' })
       .click();
     await dlg.getByRole('textbox', { name: 'New category' }).fill('Scoring quirk');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('Verbatim match too strict.');
@@ -384,7 +384,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await itemButton(page, 9).click();
     await openRootCause(card(page, 'item-0009'));
     const rc = card(page, 'item-0009').locator('[data-testid=metric-analysis-card][data-metric=quality]');
-    await rc.getByRole('button', { name: '+ Add issue' }).click();
+    await rc.getByRole('button', { name: 'Add issue' }).click();
     const dlg = page.getByTestId('issue-form');
     await dlg.getByTestId('issue-save').click();
     await expect(dlg).toContainText('Choose or type a category.');
@@ -423,12 +423,12 @@ test.describe('root-cause issues (scenario 9)', () => {
     await openRootCause(c3);
     const rc = c3.locator('[data-testid=metric-analysis-card]').first();
     await expect(rc).toBeVisible();
-    await rc.getByRole('button', { name: '+ Add issue' }).click();
+    await rc.getByRole('button', { name: 'Add issue' }).click();
     const dlg = page.getByTestId('issue-form');
     await dlg.getByRole('button', { name: /Category/ }).click();
     await page
       .getByRole('listbox', { name: /Category/ })
-      .getByRole('option', { name: 'New category…' })
+      .getByRole('option', { name: 'New category' })
       .click();
     await dlg.getByRole('textbox', { name: 'New category' }).fill('SQL schema');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('Relation does not exist.');

@@ -18,10 +18,11 @@ import {
   useCreateVersion,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
+import { projectPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
 import { useCrumbLabel } from '@/lib/crumb-label';
-import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
@@ -120,21 +121,6 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
     datasetRef,
   ]);
 
-  const runCount = dataset?.run_count;
-  const itemCount = active?.item_count ?? 0;
-  const stats = useMemo(
-    () =>
-      runCount === undefined
-        ? null
-        : [
-            { value: versions.length, label: 'versions' },
-            { value: runCount, label: 'runs' },
-            { value: itemCount, label: 'items' },
-          ],
-    [runCount, versions.length, itemCount],
-  );
-  useTopbarStats(stats);
-
   if (showSkeleton && !dataset)
     return (
       <div className={fullWidth}>
@@ -163,8 +149,10 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
         <ErrorState
           error={dsQuery.error}
           title="Couldn’t load this dataset"
-          notFoundMessage="No dataset with this name or slug exists in the project (it may have been deleted)."
+          notFoundTitle="Dataset not found"
+          notFoundMessage="No dataset with this name or slug exists in the project. It may have been deleted."
           onRetry={() => void dsQuery.refetch()}
+          parent={{ to: projectPath(slug, 'datasets'), label: 'Datasets' }}
         />
       </div>
     );
@@ -274,7 +262,7 @@ function DetailBody({
       await setProduction.mutateAsync(active.version);
       toast.show(`${active.version} is now production`, { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Could not set production', {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t set production', {
         tone: 'error',
       });
     }
@@ -288,7 +276,7 @@ function DetailBody({
       navigate(datasetPath(slug, ref, { tab: 'items', v: r.version.version }));
       setAddItemOpen(true);
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Could not create the draft', {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t create the draft', {
         tone: 'error',
       });
     }
@@ -434,8 +422,8 @@ function DetailBody({
                 label="More actions"
                 trigger={<IconButton label="More actions" icon="more" data-testid="hero-more" />}
                 items={[
-                  ...(canWrite ? [{ id: 'name', label: 'Name version…' }] : []),
-                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare…' }] : []),
+                  ...(canWrite ? [{ id: 'name', label: 'Name version' }] : []),
+                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare versions' }] : []),
                   ...(dataset.items_visible
                     ? [
                         {
@@ -455,7 +443,14 @@ function DetailBody({
                       ]
                     : []),
                   ...(canWrite
-                    ? [{ id: 'upload', label: '↑ Upload file as new version…', separatorBefore: true }]
+                    ? [
+                        {
+                          id: 'upload',
+                          label: 'Upload file as new version',
+                          icon: <Icon name="upload" size={12} />,
+                          separatorBefore: true,
+                        },
+                      ]
                     : []),
                 ]}
                 onAction={(id) => {
@@ -637,8 +632,8 @@ function NoVersions({
       </Text>
       {canWrite ? (
         <div className={styles.noVersionsActions}>
-          <Button variant="primary" onPress={onCreate}>
-            + Create first draft
+          <Button icon={<Icon name="plus" size={12} />} variant="primary" onPress={onCreate}>
+            Create first draft
           </Button>
           <Button variant="neutral" onPress={onImport}>
             Import a file

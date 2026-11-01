@@ -5,26 +5,6 @@
   gap: var(--space-lg);
 }
 
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  align-self: flex-start;
-  color: var(--text-secondary);
-  font-size: var(--font-base);
-  text-decoration: none;
-}
-
-.back:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
-}
-
-.back:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
-}
-
 .titleRow {
   display: inline-flex;
   flex-wrap: wrap;

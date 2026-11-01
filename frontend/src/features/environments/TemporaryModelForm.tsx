@@ -89,7 +89,7 @@ export function TemporaryModelForm({
         mono
         type="password"
         autoComplete="off"
-        placeholder={keysAllowed ? 'sk-…' : 'Not accepted by this environment'}
+        placeholder={keysAllowed ? 'API key' : 'Not accepted by this environment'}
         value={apiKey}
         onChange={setApiKey}
         isDisabled={!keysAllowed}

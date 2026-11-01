@@ -52,7 +52,7 @@ export function StatusSection({ projectId, env, canEdit }: BaseProps) {
       await update.mutateAsync({ is_active: true });
       toast.show(`“${env.name}” re-enabled`, { tone: 'success' });
     } catch (e) {
-      toast.show(errorMessage(e) || 'Could not re-enable the environment.', { tone: 'error' });
+      toast.show(errorMessage(e) || 'Couldn’t re-enable the environment.', { tone: 'error' });
     }
   }
 
@@ -240,7 +240,7 @@ export function SlotsSection({
       {slots.isError ? (
         <ErrorState
           error={slots.error}
-          title="Could not load the LLM groups"
+          title="Couldn’t load the LLM groups"
           onRetry={() => void slots.refetch()}
           compact
         />

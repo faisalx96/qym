@@ -5,7 +5,7 @@
  * Retry failed and Cancel experiment, each with its action tile. Normal states stay out of the header (C137).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useMe } from '@/api/me';
 import { hasLiveJobs, useExperiment, type ExperimentDetail, type ExperimentJob } from '@/api/experiments';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
@@ -46,20 +46,16 @@ export function ExperimentDetailPage({ experimentId }: { experimentId: string })
   const showSkeleton = useDelayedPending(query.isPending);
   useDocumentTitle(`${query.data?.name ?? 'Experiment'} · ${project.name}`);
   useCrumbLabel(query.data?.name);
-  const back = (
-    <Link to={experimentsPath(slug)} className={styles.back}>
-      ← All experiments
-    </Link>
-  );
   if (query.data) return <Loaded detail={query.data} />;
   return (
     <div className={`${fullWidth} ${styles.page}`}>
-      {back}
       {query.isError ? (
         <ErrorState
           error={query.error}
           title="Couldn’t load this experiment"
+          notFoundTitle="Experiment not found"
           notFoundMessage="This experiment doesn’t exist in this project, or it was deleted."
+          parent={{ to: experimentsPath(slug), label: 'Experiments' }}
           onRetry={() => void query.refetch()}
         />
       ) : showSkeleton ? (
@@ -112,7 +108,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
     } catch {
       /* the URL carries the runs */
     }
-    navigate(compareHref(selectedRuns));
+    navigate(compareHref(slug, selectedRuns));
   }
 
   function showAttempts(job: ExperimentJob) {
@@ -170,9 +166,6 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
 
   return (
     <div className={`${fullWidth} ${styles.page}`} data-exp-detail={x.id}>
-      <Link to={experimentsPath(slug)} className={styles.back}>
-        ← All experiments
-      </Link>
       <PageHeader
         title={
           <span className={styles.titleRow}>

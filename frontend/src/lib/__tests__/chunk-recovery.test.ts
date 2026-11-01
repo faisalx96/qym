@@ -9,7 +9,10 @@ function deps(now = 1_000_000) {
     deps: {
       now: () => now,
       reload,
-      storage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) },
+      storage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => void store.set(k, v),
+      },
     },
     store,
   };
@@ -17,9 +20,15 @@ function deps(now = 1_000_000) {
 
 describe('isChunkLoadError', () => {
   it('matches the browser and Vite wordings for a missing chunk', () => {
-    expect(isChunkLoadError(new Error('Unable to preload CSS for ./assets/DatasetComparePage-i_KEChzG.css'))).toBe(true);
-    expect(isChunkLoadError(new TypeError('Failed to fetch dynamically imported module: http://x/a.js'))).toBe(true);
-    expect(isChunkLoadError(new TypeError('error loading dynamically imported module: http://x/a.js'))).toBe(true);
+    expect(
+      isChunkLoadError(new Error('Couldn’t preload CSS for ./assets/DatasetComparePage-i_KEChzG.css')),
+    ).toBe(true);
+    expect(
+      isChunkLoadError(new TypeError('Failed to fetch dynamically imported module: http://x/a.js')),
+    ).toBe(true);
+    expect(isChunkLoadError(new TypeError('error loading dynamically imported module: http://x/a.js'))).toBe(
+      true,
+    );
     expect(isChunkLoadError(new TypeError('Importing a module script failed.'))).toBe(true);
     expect(isChunkLoadError('Loading chunk 42 failed')).toBe(true);
   });
@@ -70,7 +79,7 @@ describe('recoverFromChunkError', () => {
     const d = deps();
     expect(recoverFromChunkError(new Error('Request failed'), d.deps)).toBe(false);
     expect(d.reload).not.toHaveBeenCalled();
-    expect(recoverFromChunkError(new Error('Unable to preload CSS for ./assets/x.css'), d.deps)).toBe(true);
+    expect(recoverFromChunkError(new Error('Couldn’t preload CSS for ./assets/x.css'), d.deps)).toBe(true);
     expect(d.reload).toHaveBeenCalledTimes(1);
   });
 });

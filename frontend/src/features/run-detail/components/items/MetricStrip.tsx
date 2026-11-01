@@ -12,6 +12,7 @@ import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
 import { messageFor } from './ScoreEditor';
 import styles from './MetricStrip.module.css';
+import { formatHeaderDate, toDate } from '@/lib/dates';
 
 export function useCanEdit(row: Row): boolean {
   const { readOnly, scoresLocked, payload } = useRunPage();
@@ -170,17 +171,7 @@ export function editTooltip(meta: Record<string, unknown>): string {
     meta.last_edit && typeof meta.last_edit === 'object' ? (meta.last_edit as Record<string, unknown>) : null;
   const lines: string[] = [];
   if (record) {
-    const when = record.at ? new Date(String(record.at)) : null;
-    const whenText =
-      when && !Number.isNaN(when.getTime())
-        ? when.toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        : '';
+    const whenText = record.at && toDate(String(record.at)) ? formatHeaderDate(String(record.at)) : '';
     lines.push(
       `${record.action === 'reset' ? 'Reset by ' : 'Edited by '}${String(record.by || 'a reviewer')}${whenText ? ` on ${whenText}` : ''}`,
     );

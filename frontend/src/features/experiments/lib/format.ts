@@ -1,5 +1,7 @@
 /** Small display helpers for experiments and jobs (pure, no React). */
 import type { BaseSource, Experiment, ExperimentJob } from '@/api/experiments';
+import { formatAgo, formatHeaderDate } from '@/lib/dates';
+import { formatPercentValue } from '@/lib/format';
 
 export function titleCase(status: string | null | undefined): string {
   const text = String(status ?? '')
@@ -8,22 +10,14 @@ export function titleCase(status: string | null | undefined): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** Freshness, then the day (lib/dates, C048). */
 export function relTime(value: string | null | undefined, now = Date.now()): string {
-  if (!value) return '—';
-  const stamp = Date.parse(value);
-  if (Number.isNaN(stamp)) return '—';
-  const seconds = Math.max(0, Math.floor((now - stamp) / 1000));
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
-  return new Date(stamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatAgo(value, now);
 }
 
+/** Header form (lib/dates, C048). */
 export function absTime(value: string | null | undefined): string {
-  if (!value) return '';
-  const stamp = new Date(value);
-  return Number.isNaN(stamp.getTime()) ? '' : stamp.toLocaleString();
+  return value ? formatHeaderDate(value) : '';
 }
 
 const BASE_LABELS: Record<string, string> = {
@@ -44,8 +38,10 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 /** Headline metric / tick value: 3 decimals, fewer digits for large numbers. */
+/** A metric value: a 0–1 score reads as a percent with one decimal, as ScoreValue shows it (C164); else the number. */
 export function formatMetric(value: unknown): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  if (value >= 0 && value <= 1) return formatPercentValue(value, 1);
   const abs = Math.abs(value);
   if (abs >= 1000) return value.toFixed(0);
   if (abs >= 100) return value.toFixed(1);

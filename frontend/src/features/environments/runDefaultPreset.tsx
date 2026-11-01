@@ -101,7 +101,7 @@ export function useRunDefaultPreset({ projectId, slug, canManage, onLaunched }: 
             true,
           );
         } catch (error) {
-          toast.show(errorMessage(error) || 'Could not load the default preset', { tone: 'error' });
+          toast.show(errorMessage(error) || 'Couldn’t load the default preset', { tone: 'error' });
           return;
         }
         const { version, remap } = view;
@@ -172,7 +172,7 @@ export function useRunDefaultPreset({ projectId, slug, canManage, onLaunched }: 
           return review(
             `Default preset v${version.version} does not validate: ${errors[0]!.message || 'invalid value'}.`,
           );
-        toast.show(errorMessage(failure) || 'Failed to launch the default preset', { tone: 'error' });
+        toast.show(errorMessage(failure) || 'Couldn’t launch the default preset', { tone: 'error' });
       } finally {
         setBusyId(null);
       }

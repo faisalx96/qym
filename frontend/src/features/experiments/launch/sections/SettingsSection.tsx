@@ -161,7 +161,12 @@ export function SettingsSection() {
             {`${view.changedCount} changed`}
           </Tag>
           <span className={styles.spacer} />
-          <Button size="sm" isDisabled={!view.changedCount} onPress={() => void resetAll()}>
+          <Button
+            size="sm"
+            isDisabled={!view.changedCount}
+            disabledReason="No settings changed"
+            onPress={() => void resetAll()}
+          >
             Reset all
           </Button>
         </div>

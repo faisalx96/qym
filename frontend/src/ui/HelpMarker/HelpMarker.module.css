@@ -1,5 +1,6 @@
 /* .qym-help-marker / .qym-help-tooltip: a filled 12px disc (round 10), 240px tooltip. */
 .marker {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -27,6 +28,13 @@
 
 .letter {
   fill: var(--bg-void);
+}
+
+/* C202: a 24x24 hit area around the 12px disc, drawn size unchanged */
+.marker::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--info-marker-size) - 24px) / 2);
 }
 
 .marker[data-focus-visible] {

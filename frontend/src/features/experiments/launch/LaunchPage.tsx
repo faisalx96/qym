@@ -13,7 +13,7 @@ import { useBlocker, useLocation, useNavigate, useSearchParams } from 'react-rou
 import { useEvalEnvironments } from '@/api/evalCommon';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Button, ConfirmDialog, ErrorState, LinkButton, PageHeader, Skeleton, Tag } from '@/ui';
+import { Button, ConfirmDialog, ErrorState, Icon, LinkButton, PageHeader, Skeleton, Tag } from '@/ui';
 import { experimentPath, experimentsPath, launchPath } from '../paths';
 import { ConnectFirst } from '../components/ConnectFirst';
 import { LaunchHome } from './home/LaunchHome';
@@ -72,8 +72,12 @@ function LaunchBody({
       ]}
       actions={
         <>
-          <Button variant="ghost" onPress={() => goToStep(null)}>
-            ← Start
+          <Button
+            variant="ghost"
+            icon={<Icon name="chevron-left" size={12} />}
+            onPress={() => goToStep(null)}
+          >
+            Start
           </Button>
           {narrow ? null : (
             <LinkButton to={experimentsPath(slug)} variant="ghost">
@@ -171,7 +175,7 @@ export function LaunchPage() {
     body = (
       <ErrorState
         error={envs.error}
-        title="Could not load the environments"
+        title="Couldn’t load the environments"
         onRetry={() => void envs.refetch()}
       />
     );

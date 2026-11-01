@@ -170,8 +170,8 @@ function EditorBody({
   if (flags.initState === 'error' || editor.state === 'error')
     return (
       <ErrorState
-        error={new Error(editor?.error || 'Could not load the environment')}
-        title="Could not open the editor"
+        error={new Error(editor?.error || 'Couldn’t load the environment')}
+        title="Couldn’t open the editor"
         onRetry={reload}
       />
     );
@@ -291,7 +291,7 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
     body = (
       <ErrorState
         error={envs.error}
-        title="Could not load the environment"
+        title="Couldn’t load the environment"
         onRetry={() => void envs.refetch()}
       />
     );

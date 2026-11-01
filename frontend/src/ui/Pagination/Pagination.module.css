@@ -9,7 +9,8 @@
 
 .summary {
   min-width: 160px;
-  font-family: var(--font-mono);
+  /* C218: '1–50 of 271 runs' is a sentence: sans with tabular figures (mono is for data) */
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-sm);
   color: var(--text-muted);

@@ -148,7 +148,7 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
       });
       onDeleted();
     } catch (e) {
-      setGeneral(mapEnvironmentError(e).general || 'Could not delete the environment.');
+      setGeneral(mapEnvironmentError(e).general || 'Couldn’t delete the environment.');
       throw e;
     }
   }
@@ -304,7 +304,7 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete environment?"
+        title={`Delete the environment “${env.name}”?`}
         description={[
           `Delete “${env.name}” and its stored schemas and LLM slots.`,
           'If experiments or presets use it, it is disabled instead so their history stays intact.',

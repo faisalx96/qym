@@ -174,7 +174,7 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
     if (id === 'status')
       return (
         <span className={styles.childError}>
-          Could not load passes <ErrorRetry onRetry={tr.retry} />
+          Couldn’t load passes <ErrorRetry onRetry={tr.retry} />
         </span>
       );
     return null;
@@ -454,7 +454,7 @@ export function RunsTable(p: RunsTableProps) {
         onSortChange={(s) => (s ? p.onSort(s.key, s.direction) : p.onSort(null))}
         error={p.error}
         onRetry={p.onRetry}
-        errorTitle="Could not load runs"
+        errorTitle="Couldn’t load runs"
         bulkActions={p.selectMode ? p.bulk : undefined}
         bulkOwnSummary
         bulkAlways={p.selectMode}

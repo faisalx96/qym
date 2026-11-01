@@ -21,6 +21,7 @@ import {
   Tag,
   type Column,
   type RowAction,
+  UserName,
 } from '@/ui';
 import { defaultPresetEditPath, launchPath } from '@/features/experiments/paths';
 import { absTime, relTime, shortHash } from './format';
@@ -233,7 +234,7 @@ export function PresetsSection({
       <Section id="env-presets" title="Presets">
         <ErrorState
           error={presets.error}
-          title="Failed to load presets"
+          title="Couldn’t load presets"
           onRetry={() => void presets.refetch()}
           compact
         />
@@ -263,7 +264,13 @@ export function PresetsSection({
         </span>
       ),
     },
-    { id: 'author', header: 'Author', width: 140, priority: 2, cell: (p) => p.created_by?.name || 'Unknown' },
+    {
+      id: 'author',
+      header: 'Author',
+      width: 140,
+      priority: 2,
+      cell: (p) => <UserName id={p.created_by?.id} name={p.created_by?.name || 'Unknown'} />,
+    },
     {
       id: 'updated',
       header: 'Updated',
@@ -336,7 +343,7 @@ export function PresetsSection({
             {versions.isError ? (
               <ErrorState
                 error={versions.error}
-                title="Failed to load the version history"
+                title="Couldn’t load the version history"
                 onRetry={() => void versions.refetch()}
                 compact
               />

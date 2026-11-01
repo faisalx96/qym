@@ -39,7 +39,7 @@ async function openMore(page: Page, name: string, how: 'mouse' | 'keyboard' = 'm
 /** Submit is an item of the row menu, on its paper-plane tile (no check icon). */
 async function submitRow(page: Page, name: string) {
   await pickRowAction(page, rowOf(page, name), 'Submit');
-  const dlg = page.getByRole('dialog', { name: `Submit ${name} for review` });
+  const dlg = page.getByRole('dialog', { name: `Submit ${name} for review?` });
   await dlg.getByRole('button', { name: 'Submit', exact: true }).click();
   await expect(dlg).toHaveCount(0);
 }
@@ -91,7 +91,7 @@ test.describe('runs list: row actions (J5)', () => {
     // Approve
     menu = await openMore(page, NAME);
     await menu.getByRole('menuitem', { name: 'Approve' }).click();
-    let dlg = page.getByRole('dialog', { name: `Approve run: ${NAME}` });
+    let dlg = page.getByRole('dialog', { name: `Approve ${NAME}?` });
     await dlg.getByRole('button', { name: 'Approve', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: `${NAME} approved` })).toBeVisible();
     await expect.poll(async () => statusText(rowOf(page, NAME))).toMatch(/approved/i);
@@ -110,7 +110,7 @@ test.describe('runs list: row actions (J5)', () => {
     await expect(menu.getByRole('menuitem').nth(1)).toHaveText('Unapprove');
     await menu.getByRole('menuitem', { name: 'Unapprove' }).click();
     await page
-      .getByRole('dialog', { name: `Withdraw approval: ${NAME}` })
+      .getByRole('dialog', { name: `Withdraw the approval of ${NAME}?` })
       .getByRole('button', { name: 'Unapprove' })
       .click();
     // the platform returns a withdrawn run to its execution result
@@ -121,7 +121,7 @@ test.describe('runs list: row actions (J5)', () => {
     // Reject needs a comment
     menu = await openMore(page, NAME);
     await menu.getByRole('menuitem', { name: 'Reject' }).click();
-    dlg = page.getByRole('dialog', { name: `Reject run: ${NAME}` });
+    dlg = page.getByRole('dialog', { name: `Reject ${NAME}?` });
     await dlg.getByRole('button', { name: 'Reject', exact: true }).click();
     await expect(dlg).toBeVisible(); // not accepted without a comment
     expect(await statusText(rowOf(page, NAME))).toMatch(/submitted/i);
@@ -134,7 +134,7 @@ test.describe('runs list: row actions (J5)', () => {
     menu = await openMore(page, NAME);
     await menu.getByRole('menuitem', { name: 'Unreject' }).click();
     await page
-      .getByRole('dialog', { name: `Withdraw rejection: ${NAME}` })
+      .getByRole('dialog', { name: `Withdraw the rejection of ${NAME}?` })
       .getByRole('button', { name: 'Unreject' })
       .click();
     await expect.poll(async () => statusText(rowOf(page, NAME))).toMatch(/completed/i);
@@ -149,7 +149,7 @@ test.describe('runs list: row actions (J5)', () => {
     await openRuns(page, s.project.slug);
     const menu = await openMore(page, 'text2sql-claude-sonnet-4-006'); // APPROVED
     await menu.getByRole('menuitem', { name: 'Unapprove' }).click();
-    const dlg = page.getByRole('dialog', { name: /Withdraw approval/ });
+    const dlg = page.getByRole('dialog', { name: /Withdraw the approval of/ });
     await expect(dlg).toBeVisible();
     expect(await dlg.innerText()).not.toMatch(/returns to Submitted/i);
   });

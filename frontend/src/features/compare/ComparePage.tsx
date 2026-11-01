@@ -59,10 +59,9 @@ export function ComparePage() {
   const slug = project?.slug ?? readLocal(KEYS.lastProjectSlug) ?? undefined;
   const store = useNewDetailsStore();
   const titleInfo = useColumns(c.model, c.view);
+  // The tab names what is compared (C245); 'Compare' is the page's one name until the runs load (C147).
   useDocumentTitle(
-    c.model && c.model.runs.length >= 2 && titleInfo
-      ? compareTitle(c.model, titleInfo.baseline)
-      : 'Compare runs',
+    c.model && c.model.runs.length >= 2 && titleInfo ? compareTitle(c.model, titleInfo.baseline) : 'Compare',
   );
   // A run removed from the comparison unmounts the body while the new set loads; put the reader back where they were.
   useLayoutEffect(() => {

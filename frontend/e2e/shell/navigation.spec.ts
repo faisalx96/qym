@@ -372,6 +372,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: `/projects/${p.slug}`, expect: 'runs' },
       { path: `/projects/${p.slug}/overview`, expect: 'overview' },
       { path: `/projects/${p.slug}/charts`, expect: 'charts' },
+      { path: `/projects/${p.slug}/models`, expect: 'charts' },
       { path: `/projects/${p.slug}/experiments`, expect: 'page' },
       { path: `/projects/${p.slug}/experiments/queue`, expect: 'page' },
       { path: `/projects/${p.slug}/experiments/exp-1`, expect: 'page' },

@@ -75,7 +75,7 @@ export function RunScatterCard({
       <ErrorState
         compact
         error={q.error}
-        title="Could not load the runs for the scatter"
+        title="Couldn’t load the runs for the scatter"
         onRetry={() => q.refetch()}
       />
     );

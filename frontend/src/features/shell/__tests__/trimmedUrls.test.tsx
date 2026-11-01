@@ -34,16 +34,16 @@ describe('trimmed URLs (C209)', () => {
         <NotFound />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'Back to runs' })).toHaveAttribute('href', '/projects/demo');
+    expect(screen.getByRole('link', { name: 'Runs' })).toHaveAttribute('href', '/projects/demo');
   });
 
-  it('keeps "Back to projects" outside a project', () => {
+  it('links to "Projects" outside a project', () => {
     render(
       <MemoryRouter initialEntries={['/nope']}>
         <NotFound />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'Back to projects' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute('href', '/');
   });
 
   it('shows "Projects / <slug>" when no project loads for the slug', () => {

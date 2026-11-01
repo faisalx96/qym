@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button as AriaButton, ListBox, ListBoxItem } from 'react-aria-components';
 import type { DatasetVersion } from '@/api/datasets';
-import { Icon, Popover, SearchField, Tag, StatusMark } from '@/ui';
+import { Icon, Popover, SearchField, Tag, StatusMark, Flag } from '@/ui';
 import { versionItemsText } from '../lib/itemState';
 import { pluralize, relativeTime } from '../lib/itemValue';
 import { isProduction } from '../lib/versions';
@@ -43,7 +43,7 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
         if (!o) setQuery('');
       }}
       trigger={
-        <AriaButton className={styles.pill} aria-haspopup="listbox" data-testid="version-switcher">
+        <AriaButton className={styles.trigger} aria-haspopup="listbox" data-testid="version-switcher">
           <span className={styles.pillVersion}>{active.version}</span>
           {active.name ? <span className={styles.pillName}>{active.name}</span> : null}
           <VersionBadge version={active} />
@@ -59,7 +59,7 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
               hideLabel
               value={query}
               onChange={setQuery}
-              placeholder="Search versions…"
+              placeholder="Search versions"
               autoFocus
             />
           ) : null}
@@ -101,7 +101,12 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
 }
 
 export function VersionBadge({ version }: { version: DatasetVersion }) {
-  if (isProduction(version)) return <StatusMark tone="success" shape="full" label="Production" />;
+  if (isProduction(version))
+    return (
+      <Flag tone="info" icon="star">
+        Production
+      </Flag>
+    );
   if (version.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
   return <StatusMark tone="neutral" shape="full" label="Published" />;
 }

@@ -71,10 +71,10 @@ test.describe('project and run errors (7, 8)', () => {
     await waitWorkspace(page);
   });
 
-  test('unknown run: "Unable to load auto-analysis" with an Open Runs link', async ({ page, request }) => {
+  test('unknown run: "Couldn’t load auto-analysis" with an Open Runs link', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, 'nope'));
-    await expect(page.getByRole('heading', { name: 'Unable to load auto-analysis' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Couldn’t load auto-analysis' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute(
       'href',
       `/projects/${seed.slug}`,

@@ -433,7 +433,7 @@ describe('launch failure', () => {
     });
     expect(parseLaunchFailure(500, null)).toEqual({
       kind: 'other',
-      message: 'Failed to launch the experiment',
+      message: 'Couldn’t launch the experiment',
     });
     expect(parseLaunchFailure(409, { detail: { message: 'conflict' } })).toEqual({
       kind: 'other',

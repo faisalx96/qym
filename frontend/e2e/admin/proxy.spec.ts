@@ -83,7 +83,7 @@ test.describe('session auth admin', () => {
     const dialog = page.getByRole('dialog', { name: /^Edit / });
     await expect(dialog.locator('[data-password-section]')).toBeVisible();
     await dialog.locator('[data-reset-password]').click();
-    const confirm = page.getByRole('alertdialog', { name: 'Reset password' });
+    const confirm = page.getByRole('alertdialog', { name: 'Reset this user’s password?' });
     await confirm.getByRole('button', { name: 'Reset password' }).click();
     // pending: save/cancel are locked
     await expect(dialog.locator('[data-edit-user-save]')).toBeDisabled();

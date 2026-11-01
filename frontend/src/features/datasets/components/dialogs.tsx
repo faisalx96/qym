@@ -10,7 +10,7 @@ import {
   type DatasetItem,
   type DatasetVersion,
 } from '@/api/datasets';
-import { ApiError } from '@/lib/http';
+import { errorSentence, fieldErrorsOf } from '@/lib/http';
 import { useRef, useState } from 'react';
 import { Button, Dialog, FormDialog, Textarea, TextField, useToast } from '@/ui';
 import { FieldEditor, fieldStatus, initialFieldState, type FieldState } from './FieldEditor';
@@ -21,10 +21,11 @@ import { slugifyDatasetName } from '../lib/slugify';
 import { PRODUCTION_RULE } from '../lib/versions';
 
 import styles from './dialogs.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
+/** One plain sentence (C181). */
 function errorText(e: unknown): string {
-  if (e instanceof ApiError) return e.detail || e.message;
-  return e instanceof Error ? e.message : String(e);
+  return errorSentence(e);
 }
 
 export function NewDatasetDialog({
@@ -85,6 +86,7 @@ export function NewDatasetDialog({
           toast.show(`Dataset "${r.dataset.name}" created`, { tone: 'success' });
           navigate(datasetPath(slug, r.dataset.slug));
         } catch (e) {
+          if (Object.keys(fieldErrorsOf(e)).length) throw e;
           return errorText(e);
         }
       }}
@@ -173,7 +175,7 @@ export function PublishDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={`Publish ${version.version}`}
-      description={`Publishing freezes ${version.version} (${version.item_count.toLocaleString()} items) as a snapshot; runs can target it and it can no longer be edited.`}
+      description={`Publishing freezes ${version.version} (${version.item_count.toLocaleString(APP_LOCALE)} items) as a snapshot; runs can target it and it can no longer be edited.`}
       notice={
         version.disabled_count > 0 ? (
           <Note tone="info" data-testid="publish-disabled-note">

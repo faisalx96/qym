@@ -2,6 +2,7 @@
  * "Used by runs, not registered" (C030): the dataset names the project's runs used that no dataset registers, each
  * with its run count and a Register action that opens New dataset with that name.
  */
+import { APP_LOCALE } from '@/lib/dates';
 import { useUnregisteredDatasetNames } from '@/api/datasets';
 import { Button, Card, Text } from '@/ui';
 import styles from './CatalogPage.module.css';
@@ -42,7 +43,7 @@ export function UnregisteredNames({
               {n.name}
             </span>
             <Text variant="sm" tone="muted" as="span" mono>
-              {n.runs.toLocaleString()} {n.runs === 1 ? 'run' : 'runs'}
+              {n.runs.toLocaleString(APP_LOCALE)} {n.runs === 1 ? 'run' : 'runs'}
             </Text>
             {canRegister ? (
               <Button variant="neutral" size="sm" onPress={() => onRegister(n.name)}>
@@ -54,7 +55,7 @@ export function UnregisteredNames({
       </ul>
       {more > 0 ? (
         <Text variant="sm" tone="muted" as="p">
-          and {more.toLocaleString()} more
+          and {more.toLocaleString(APP_LOCALE)} more
         </Text>
       ) : null}
     </Card>

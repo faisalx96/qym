@@ -32,7 +32,7 @@ export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> 
     res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
   } catch (err) {
     if ((err as Error).name === 'AbortError') throw err;
-    throw new ApiFailure('Could not reach the qym server. Is the evaluation still running?', 0, url);
+    throw new ApiFailure('Couldn’t reach the qym server. Is the evaluation still running?', 0, url);
   }
   let body: unknown = null;
   try {

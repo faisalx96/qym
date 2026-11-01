@@ -16,7 +16,7 @@ import {
   type DatasetVersion,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
 import {
@@ -281,8 +281,8 @@ export function ItemsTab({
             action={
               canEdit ? (
                 <div className={styles.emptyActions}>
-                  <Button variant="primary" onPress={onAddItem}>
-                    + Add item
+                  <Button icon={<Icon name="plus" size={12} />} variant="primary" onPress={onAddItem}>
+                    Add item
                   </Button>
                   <Button variant="neutral" onPress={onImport}>
                     Import file
@@ -495,7 +495,7 @@ export function ItemsTab({
             : undefined
         }
         bulkActions={bulkActions}
-        loading={showSkeleton}
+        loading={tableLoading(query.isPending && visible, showSkeleton)}
         refreshing={query.isFetching && query.isPlaceholderData}
         error={query.isError ? query.error : undefined}
         onRetry={() => void query.refetch()}
@@ -532,7 +532,7 @@ export function ItemsTab({
             <SearchField
               label="Search items"
               hideLabel
-              placeholder="Search items…"
+              placeholder="Search items"
               value={search}
               onChange={setSearch}
               width={260}

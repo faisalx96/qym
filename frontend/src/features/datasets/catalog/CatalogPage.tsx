@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDatasetCatalog, type Dataset } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
@@ -43,6 +43,7 @@ import {
 } from '../lib/versions';
 import { UploadWizard } from '../wizard/UploadWizard';
 import styles from './CatalogPage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export function CatalogPage() {
   const { slug, project, readOnly } = useProjectContext();
@@ -67,18 +68,6 @@ export function CatalogPage() {
   const datasets = useMemo(() => query.data?.datasets ?? [], [query.data]);
   const visible = useMemo(() => sortCatalog(filterCatalog(datasets, search), sort), [datasets, search, sort]);
   const runTotal = datasets.reduce((n, d) => n + d.run_count, 0);
-  const hasData = Boolean(query.data);
-  const stats = useMemo(
-    () =>
-      hasData
-        ? [
-            { value: datasets.length, label: 'datasets' },
-            { value: runTotal, label: 'runs' },
-          ]
-        : null,
-    [hasData, datasets.length, runTotal],
-  );
-  useTopbarStats(stats);
 
   const canCreate = !readOnly;
   const header = (
@@ -95,7 +84,7 @@ export function CatalogPage() {
             <>
               <SearchField
                 label="Search datasets"
-                placeholder="Search datasets…"
+                placeholder="Search datasets"
                 value={search}
                 onChange={setSearch}
                 width={240}
@@ -154,6 +143,7 @@ export function CatalogPage() {
         <EmptyState
           icon={<Icon name="folder" />}
           title="No datasets yet"
+          guide="/docs/get-started/datasets"
           body={
             canCreate
               ? 'Create a dataset to version your test items and track which runs used them.'
@@ -162,8 +152,12 @@ export function CatalogPage() {
           action={
             canCreate ? (
               <div className={styles.emptyActions}>
-                <Button variant="primary" onPress={() => setCreating(true)}>
-                  + Create your first dataset
+                <Button
+                  icon={<Icon name="plus" size={12} />}
+                  variant="primary"
+                  onPress={() => setCreating(true)}
+                >
+                  Create your first dataset
                 </Button>
                 <Button variant="neutral" onPress={() => setImporting(true)}>
                   Import a file
@@ -271,13 +265,13 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
         </p>
         <div className={styles.stats}>
           <span>
-            <strong>{catalogItemCount(d).toLocaleString()}</strong> items
+            <strong>{catalogItemCount(d).toLocaleString(APP_LOCALE)}</strong> items
           </span>
           <span>
             <strong>{catalogVersionCount(d)}</strong> {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
           </span>
           <span>
-            <strong>{d.run_count.toLocaleString()}</strong> {d.run_count === 1 ? 'run' : 'runs'}
+            <strong>{d.run_count.toLocaleString(APP_LOCALE)}</strong> {d.run_count === 1 ? 'run' : 'runs'}
           </span>
         </div>
         <div className={styles.cardFoot}>

@@ -21,6 +21,7 @@ import {
   RunStatusBadge,
   Tag,
   TaskTag,
+  UserName,
 } from '@/ui';
 import { readJson, writeJson } from '@/lib/storage';
 import type { LiveRunState } from '../hooks/useLiveRun';
@@ -44,13 +45,25 @@ import type { PassSummary, Run } from '../types';
 import { RunPager } from './RunPager';
 import { RejectNote, ReviewLog, RunHeaderActions } from './RunActions';
 import { useRunPage } from '../RunContext';
+import { useModelIndex } from '@/api/dashboard';
+import { modelSlot } from '@/features/runs-list/model';
 import styles from './RunHero.module.css';
 
-/** A model's series colour (1..8) from its name, so the hero's model tag carries the model recipe (dot and tint). */
-function modelSeries(name: string): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return ((h % 8) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+type Series = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+/** The model's series slot from the project's model index; neutral until the index loads or when the model is absent. */
+function modelSeriesOf(
+  index: Record<string, number> | null,
+  name: string,
+  reasoning: boolean,
+): Series | undefined {
+  if (!index) return undefined;
+  const key = [
+    `${name}|||${reasoning ? 'reasoning' : 'plain'}`,
+    `${name}|||plain`,
+    `${name}|||reasoning`,
+  ].find((k) => k in index);
+  return key ? (modelSlot(key, index) as Series) : undefined;
 }
 
 export interface RunHeroProps {
@@ -254,6 +267,9 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
       ? ` • pass ${Math.min((run.last_completed_pass ?? 0) + 1, samples)}/${samples}`
       : '';
   const ownerLabel = run.owner?.display_name || run.owner?.email || run.owner?.id || '';
+  // C051: the model's colour is its slot in the project's model index, as on the runs list and charts.
+  const modelIndex = useModelIndex(run.project?.slug);
+  const reasoning = !!(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning;
   const projectName = run.project?.name ?? '';
   const { reviewEventCount, summaryPending, rowsPending, payload } = useRunPage();
   // RF2 (C097): why a failed or stopped run ended, how many items had a task error, how much of the dataset it covers
@@ -439,15 +455,15 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
                 <ModelTag
                   name={modelName}
                   title={modelName}
-                  series={modelSeries(modelName)}
-                  reasoning={!!(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning}
+                  series={modelSeriesOf(modelIndex, modelName, reasoning)}
+                  reasoning={reasoning}
                 />
               </MetaLink>
             ) : null}
           </Fact>
           <Fact label="Owner" title={ownerLabel}>
             <MetaLink to={links.owner} title={`Runs owned by ${ownerLabel}`}>
-              {ownerLabel}
+              <UserName id={run.owner?.id} name={run.owner?.display_name} email={run.owner?.email} />
             </MetaLink>
           </Fact>
           <Fact label="Project" title={projectName}>

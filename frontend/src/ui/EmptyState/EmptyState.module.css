@@ -39,3 +39,10 @@
 .action {
   margin-top: var(--space-sm);
 }
+
+/* C182: the docs link of an empty state, a plain text link under the action */
+.guide {
+  margin-top: var(--space-sm);
+  color: var(--accent-primary);
+  font-size: var(--font-md);
+}

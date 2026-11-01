@@ -4,6 +4,7 @@
  * family, the kind panels and the steps interval plot rows.
  */
 import type { StepLatencyGroup, StepLatencyPayload } from '../types';
+import { formatDuration } from '@/lib/format';
 
 export type Family = 'LLM' | 'RETRIEVAL' | 'TOOL' | 'GUARD' | 'OTHER' | 'EVAL';
 export const FAMILY_ORDER: Family[] = ['LLM', 'RETRIEVAL', 'TOOL', 'GUARD', 'OTHER'];
@@ -57,20 +58,18 @@ export function niceStep(range: number, count: number): number {
   return [1, 2, 2.5, 5, 10].map((f) => f * mag).find((s) => s >= raw - 1e-12) ?? 10 * mag;
 }
 
+/** A duration as [value, unit] for a large number with a small unit; past a minute the whole '4m 5s' is the value. */
 export function durParts(ms: number): [string, string] {
   if (!Number.isFinite(ms)) return ['—', ''];
-  if (ms >= 60_000) return [(ms / 60_000).toFixed(1), 'min'];
+  if (ms >= 60_000) return [formatDuration(ms), ''];
   if (ms >= 1000) return [(ms / 1000).toFixed(1), 's'];
   return [String(Math.round(ms)), 'ms'];
 }
-export const durText = (ms: number): string => durParts(ms).join(' ');
-/** Compact duration for table cells and tooltips: `627ms`, `1.94s`, `18.5s`, `1.2m`. */
+/** The one duration format (C164): lib/format. */
+export const durText = (ms: number): string => (Number.isFinite(ms) ? formatDuration(ms) : '—');
+/** Duration for table cells and tooltips: the one format (C164). */
 export function fmtMs(ms: number): string {
-  if (!Number.isFinite(ms)) return '—';
-  if (ms >= 60_000) return (ms / 60_000).toFixed(1) + 'm';
-  if (ms >= 10_000) return (ms / 1000).toFixed(1) + 's';
-  if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
-  return Math.round(ms) + 'ms';
+  return Number.isFinite(ms) ? formatDuration(ms) : '—';
 }
 export const fmtK = (n: number): string =>
   n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));

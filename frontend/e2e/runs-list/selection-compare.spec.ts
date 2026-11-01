@@ -214,7 +214,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await tick(page, 'text2sql-gpt-4o-000');
     await tick(page, 'summarize-gpt-4o-001');
     await page.getByTestId('selection-bar').getByRole('button', { name: 'Submit', exact: true }).click();
-    const dlg = page.getByRole('dialog', { name: 'Submit 2 runs for review' });
+    const dlg = page.getByRole('dialog', { name: 'Submit 2 runs for review?' });
     await expect(dlg).toBeVisible();
     const post = page.waitForRequest(
       (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/v1/runs/submit',

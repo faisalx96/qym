@@ -178,7 +178,12 @@ export function SweepsSection() {
         })}
       </ul>
       <div className={styles.addRow}>
-        <Button size="sm" isDisabled={selectable.length < 2} onPress={link}>
+        <Button
+          size="sm"
+          isDisabled={selectable.length < 2}
+          disabledReason="Select two sweeps to link"
+          onPress={link}
+        >
           Link selected
         </Button>
         <span className={styles.hint}>

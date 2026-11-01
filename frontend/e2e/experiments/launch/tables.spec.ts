@@ -151,7 +151,7 @@ test.describe('list settings (the fake service serves STOP_WORDS, ALLOWED_REGION
     const stop = page.getByRole('group', { name: /Stop Words/ }).first();
     // an unset list opened as fields changes nothing yet
     await expect(page.getByRole('button', { name: /Reset .*Stop Words/ })).toHaveCount(0);
-    for (let i = 0; i < 3; i++) await stop.getByRole('button', { name: '+ Add item' }).click();
+    for (let i = 0; i < 3; i++) await stop.getByRole('button', { name: 'Add item' }).click();
     const table = stop.getByRole('table');
     await expect(table.getByRole('textbox')).toHaveCount(4); // the All row plus three items
     await expect(review(page)).not.toContainText(/None is not of type|Every item must be/);
@@ -160,7 +160,7 @@ test.describe('list settings (the fake service serves STOP_WORDS, ALLOWED_REGION
     await expect(table.getByRole('textbox').nth(1)).toHaveValue('x');
     await page.getByRole('button', { name: /Edit .*Allowed Regions.* as fields/ }).click();
     const regions = page.getByRole('group', { name: /Allowed Regions/ }).first();
-    await regions.getByRole('button', { name: '+ Add item' }).click();
+    await regions.getByRole('button', { name: 'Add item' }).click();
     await expect(regions.getByRole('table').getByRole('textbox').first()).toHaveValue('0');
   });
 

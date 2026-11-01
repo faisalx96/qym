@@ -7,7 +7,7 @@ import {
   type LlmConnectionBody,
 } from '@/api/projectSettings';
 import type { LlmConnection } from '@/api/types';
-import { ApiError } from '@/lib/http';
+import { ApiError, actionErrorMessage } from '@/lib/http';
 import { keyHostChanged } from '@/lib/keyHost';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
@@ -69,7 +69,7 @@ export function LlmConnectionsTab() {
       const r = (await action.mutateAsync({ id: c.id, action: 'test' })) as { model?: string };
       toast.show(`“${c.name}” connected · ${r.model ?? c.llm_model}`, { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || 'Connection failed' : 'Connection failed', {
+      toast.show(actionErrorMessage('test the connection', e), {
         tone: 'error',
         timeout: 8000,
       });
@@ -143,8 +143,8 @@ export function LlmConnectionsTab() {
                       .catch((e) =>
                         toast.show(
                           e instanceof ApiError
-                            ? e.detail || 'Could not set the default'
-                            : 'Could not set the default',
+                            ? e.detail || 'Couldn’t set the default'
+                            : 'Couldn’t set the default',
                           { tone: 'error' },
                         ),
                       ),
@@ -249,7 +249,7 @@ export function LlmConnectionsTab() {
               await action.mutateAsync({ id: deleting.id, action: 'delete' });
               toast.show('Connection deleted', { tone: 'info' });
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not delete' : String(e));
+              throw new Error(actionErrorMessage('delete the connection', e));
             }
           }}
         />
@@ -304,11 +304,12 @@ export function ConnectionForm({
     setFormError('');
     return !https;
   }
-  function place(e: unknown, fallback: string) {
-    const message = e instanceof ApiError ? e.detail || fallback : e instanceof Error ? e.message : fallback;
+  /** A message about one field goes under that field (C157); anything else is one plain sentence (C181). */
+  function place(e: unknown, action: string) {
+    const message = e instanceof ApiError ? e.detail : e instanceof Error ? e.message : '';
     const placed = placeConnectionError(message);
     setErrors(placed.errors);
-    setFormError(placed.formError);
+    setFormError(Object.keys(placed.errors).length ? '' : actionErrorMessage(action, e));
   }
   const complete = Boolean(name.trim() && baseUrl.trim() && model.trim() && !(needsKey && !key));
   return (
@@ -318,7 +319,7 @@ export function ConnectionForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!complete || !checked()) return;
-        void Promise.resolve(onSubmit(body())).catch((err: unknown) => place(err, 'Could not save'));
+        void Promise.resolve(onSubmit(body())).catch((err: unknown) => place(err, 'save the connection'));
       }}
     >
       <Card
@@ -347,7 +348,7 @@ export function ConnectionForm({
                     const answered = await onTest({ ...body(), connection_id: initial?.id });
                     setTested(`Connected: ${answered} answered. Nothing is saved yet.`);
                   } catch (err) {
-                    place(err, 'The connection test failed');
+                    place(err, 'test the connection');
                   } finally {
                     setTesting(false);
                   }

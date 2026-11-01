@@ -14,7 +14,7 @@ import {
 import { useEvalEnvironments, type EvalEnvironment } from '@/api/evalCommon';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { useDelayedPending } from '@/lib/pending';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import {
   Checkbox,
   DataTable,
@@ -28,6 +28,7 @@ import {
   TwoLine,
   UserCell,
   type Column,
+  SearchField,
 } from '@/ui';
 import { LATENCY_FILTER_LABEL } from '../copy';
 import { ExperimentsTabs } from '../ExperimentsTabs';
@@ -79,7 +80,13 @@ export function ExperimentsPage() {
   const [created, setCreated] = useState<EvalEnvironment | null>(null);
   const noActiveEnv = Boolean(envs.data) && !(envs.data ?? []).some((e) => e.is_active);
   const envById = useMemo(() => new Map((envs.data ?? []).map((e) => [e.id, e])), [envs.data]);
-  const experiments = query.data?.experiments ?? [];
+  const [search, setSearch] = useState('');
+  const loaded = query.data?.experiments ?? [];
+  // C152: the toolbar starts with a 260px search over the listed experiments
+  const needle = search.trim().toLowerCase();
+  const experiments = needle
+    ? loaded.filter((x) => `${x.name} ${x.id} ${x.description}`.toLowerCase().includes(needle))
+    : loaded;
   const total = query.data?.total ?? 0;
   const live = experiments.some((x) => LIVE_EXPERIMENT_STATUSES.includes(x.status));
   const facets = query.data?.versioning_facets ?? {};
@@ -87,7 +94,7 @@ export function ExperimentsPage() {
   const versioningKeys = [...new Set([...Object.keys(facets), ...Object.keys(versioning)])].sort((a, b) =>
     a.localeCompare(b),
   );
-  const filtered = Boolean(status || mine || latency || Object.keys(versioning).length);
+  const filtered = Boolean(status || mine || latency || needle || Object.keys(versioning).length);
 
   function update(mutate: (next: URLSearchParams) => void) {
     setParams(
@@ -190,6 +197,13 @@ export function ExperimentsPage() {
   const emptyAll = Boolean(query.data) && !filtered && total === 0;
   const filters = (
     <div className={styles.filters} role="group" aria-label="Filter experiments">
+      <SearchField
+        label="Search experiments"
+        placeholder="Search experiments"
+        value={search}
+        onChange={setSearch}
+        width={260}
+      />
       <Select
         label="Status"
         items={[
@@ -288,7 +302,7 @@ export function ExperimentsPage() {
           rowState={(x) => (LIVE_EXPERIMENT_STATUSES.includes(x.status) ? 'live' : undefined)}
           minWidth={1000}
           density="regular"
-          loading={showSkeleton}
+          loading={tableLoading(query.isPending, showSkeleton)}
           refreshing={query.isFetching && !showSkeleton && live}
           error={query.isError && !query.data ? query.error : undefined}
           onRetry={() => void query.refetch()}
@@ -301,6 +315,7 @@ export function ExperimentsPage() {
                 <EmptyState
                   icon={<Icon name="flask" />}
                   title="No experiments yet"
+                  guide="/docs/platform-guide/projects-data-review"
                   body="An experiment launches the same evaluation across settings and environments so you can compare the results."
                   action={
                     created && !readOnly ? (

@@ -12,8 +12,16 @@
   font-family: var(--font-sans);
   font-size: var(--font-xs);
   font-weight: 650;
-  line-height: 1.3;
+  /* C140: room for the dots under Arabic letters (1.3 clipped them) */
+  line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+/* C140: Arabic in a tag (task names are mono) reads in the sans face at 11px */
+.tag :dir(rtl),
+.tag:dir(rtl) {
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
 }
 
 .tag[data-kind='role'],
@@ -57,9 +65,11 @@
   background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
 }
 
-/* Task, dataset and model names read as plain text inside their tint: 500, not the 650 of a role or count tag. */
+/* Task, dataset and model names read as plain text inside their tint: 500, not the 650 of a role or count tag, and at
+   11px (--font-sm), while count and role tags stay at 10px (C165). */
 .tag[data-kind='task'],
 .tag[data-kind='dataset'],
 .tag[data-kind='model'] {
+  font-size: var(--font-sm);
   font-weight: 500;
 }

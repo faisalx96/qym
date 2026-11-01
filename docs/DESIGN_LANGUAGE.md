@@ -200,6 +200,16 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 ### 3.1 Controls, navigation and overlays
 
+**Focus and hit targets (C087, C202).** Only a focused control draws a ring: a tab button, a field, a button; a tab
+area, a list or a panel never outlines as a whole. Every small control has a 24x24 hit area without changing its drawn
+size (a checkbox box, an info marker, the pager arrows, the row `>` handle, which is 32px on a touch screen). Delete sits
+in the row menu, apart from the other row actions.
+
+**Ctrl K (C043).** The palette lists projects, pages (with aliases: "trash" finds Deleted runs, "overview" the
+Dashboard; Queue, Environments and Deleted datasets included) and actions; from 2 characters it also shows the current
+project's Runs, Datasets and Experiments that match, 5 of each. With no query the current project's first page is
+preselected.
+
 - **Control** (`TextField`, `Select`, `MultiSelect`, `SearchField`, `NumberField`,
   `Textarea`, `Button`, `LinkButton`, `SegmentedControl`): one aligned density,
   `--control-height` (24px) and `--control-radius`, `--font-sm`, sans. There are
@@ -217,6 +227,13 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   `danger` (red tint) deletes or replaces: Delete, Archive, Revoke, Restore default. A disabled primary, accent or
   danger button keeps its own colour at 45% opacity, so a locked Save is still the green Save and a locked Restore
   default is still red. A creating action carries the plus glyph (New project, Add connection, Add environment).
+  **Button rules (C049, C234, C136, C166, C232; enforced in `design-language.test.ts`):** Delete, Archive, Disable and
+  Revoke are `danger` everywhere; Cancel is neutral; the red `× Clear n` of a filter bar stays red (owner, Oct 26 and
+  Nov 1). Every button is 24px: `size="md"` draws 32px only inside a dialog footer (`[data-dialog-footer]`, set by
+  `Dialog`), so a page that asks for `md` still gets 24px. A page's main action is `primary`, 24px, with the `plus`
+  `Icon`, named "New <object>" or "Add <part>". A disabled button says why on hover through `disabledReason` ("No
+  changes to save", "Select two runs"). Labels and placeholders carry no "…" (progress words such as "Saving…" stay),
+  and a glyph is always an `Icon`: no typed "+", "×", "←" or "→" in a button.
   Brand colour
   belongs to an integration action only (e.g. Langfuse), never to generic
   controls. The 42px authentication fields (`TextField`),
@@ -238,7 +255,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   list's baseline is an inset 1px shadow, so the underline sits inside the list and is never clipped, and the list never
   shows a scrollbar unless the tabs really overflow (round 10). In-place view/metric/repeat/time
   switching uses `SegmentedControl`: 24px high, only the selected option has the
-  Qym-green fill, one sliding indicator, no motion under
+  accent wash with accent text at 600 (C136: the solid green fill is for primary buttons only), one sliding indicator,
+  no motion under
   `prefers-reduced-motion`. Pages never add their own selection animation. The
   run detail page's sticky section nav (jump links at `--font-md` / 600 with the section in view in the accent and a 2px
   accent underline on the bar's edge, the page metric, page-wide Filters + Clear, back-to-top) is
@@ -373,6 +391,11 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   (round 11). Members show the person, a role tag and an Edit action that changes the role in a dialog, as admin users
   do (round 11). The AI prompt editor is a `Textarea` with `quietFocus` (a click in brightens the border to
   `--border-strong` instead of the green ring; keyboard focus keeps the ring) and spell check off (round 11).
+  **One footer and two title recipes (C145, C235):** a card that saves settings ends with `SaveFooter` (pass `save` to
+  `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "All changes saved"), the 24px
+  primary Save at the end, disabled with the reason "No changes to save" until something changed; Discard or Test sit
+  before Save. Titles come in two recipes only: `SettingsCard` (13px, `--font-md`) for blocks that edit settings and
+  `Section` (18px) for read-mostly blocks. The run page title is the page title at 22px (`--font-title`).
 - **Person** (`UserName`; round 11): a user is an initials disc in the person's series colour (the same person is the
   same colour everywhere), then the name; lists that must tell two people apart add the email after the name, muted
   and mono. The runs Owner cell, admin users, project members and the add-member search all use it, and every user
@@ -402,6 +425,18 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   `tone` adds a 3px start rail on a tile, `icon` a leading glyph.
 
 ### 3.3 Labels, statistics and identity
+
+**Arabic text (C056, C140, C050).** User and model text carries `dir="auto"` (entity tags, people, and
+`textDirAttrs` for longer text), so mixed Arabic and Latin reads in the right order. Tag text has a 1.5 line height so
+the dots under Arabic letters show, and Arabic inside a tag reads in the sans face at 11px. Every number and date is
+formatted in the one app locale (`APP_LOCALE`); ESLint rejects a `toLocale*` call without a locale.
+
+**People, models and tags (C144, C165, C051, C238).** A person is always `UserName` (an initials disc in the person's
+series colour, then the name): the runs Owner, the run header, admin, API keys, datasets, presets, Reviews and Deleted
+runs. Task, dataset and model names are `TaskTag`, `DatasetTag` and `ModelTag` at 11px (`--font-sm`); count and role
+tags stay at 10px. A model's colour comes from one source, the project's model index (`useModelIndex` and `modelSlot`),
+on every page. A count is `Tag kind="count"` (a failure count is `tone="danger"`), a fact such as Baseline,
+Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill.
 
 - **Status mark** (`StatusMark`, `RunStatusBadge`): the one status component. Every lifecycle or state of a
   run, pass, job, experiment, review, request, version, credential, environment or save is a `StatusMark`. No pill,
@@ -507,6 +542,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 ### 3.4 Data tables
 
+**List toolbars (C152).** Every list toolbar starts with a 260px search (runs, experiments, queue, deleted runs,
+reviews), then its filters.
+
 - **Data table** (`DataTable`, own `<table>` markup, `role="grid"`; `treegrid` when rows expand): sticky header
   `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650;
   body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
@@ -516,8 +554,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   last row, where the frame closes the table (round 10: a full-strength line on every row read as a grid of boxes);
   admin tables are locked to comfortable rows with no density menu (round 10);
   hover `--bg-hover`; selected `--bg-selected` plus a 2px accent bar; `rowState` draws a 3px rail (error, warn, live,
-  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned (`align: 'center'`
-  centres a column, header and values; the runs and charts tables centre every number column, round 9); a column
+  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are centred, header and values, in every
+  table (C236: the default for numeric column types in `ui/DataTable/model.ts`; `align` overrides it); a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
   `--table-group-height` band above the header unless the table passes `groupBand={false}` (the runs, run Items,
   Charts and dataset Items tables: one header line, the groups still label the Columns menu; C253). Sort glyph, header menu and resize divider show on hover/focus only;
@@ -756,6 +794,20 @@ Recipes that exist only on the run report. They compose the primitives above and
   content tab (messages, response, input / output, documents), never on Metrics, Scores or Raw; only a content pick is remembered.
 
 ### 3.7 Loading, empty and failed states
+
+**Confirm dialogs (C146).** One rule by risk: type the name for a permanent loss (delete a project or a dataset);
+one click for a change that can be undone (a deleted run goes to Deleted runs); a named confirm for a change that
+others use ("Delete the environment “prod”?"). Every confirm title is a question. There is no Undo toast (the owner
+rejected it for runs, C099).
+
+**One pattern per state (C018, C156, C059, C182, C181).** A failure names its cause (`ErrorState` shows the cause for
+every kind). A missing thing reads "<Thing> not found" (`notFoundTitle`), one sentence of cause and one link to its
+parent list (`parent`), with no HTTP line and no Retry; a load failure is titled "Couldn’t load <thing>". Error titles
+use "Couldn’t", never "Could not", "Unable to" or "Failed to". A table never shows its empty state while its query is
+pending (`tableLoading`), and an unknown count is not zero: no tab count, '–' in a line. An empty state or a settings card
+with a docs page carries a "Read the guide" link (`guide`). A failed write is one plain sentence
+(`actionErrorMessage`, `errorSentence`: "Couldn’t save the rules. The server had a problem. Try again."), never the
+browser or server text as is, and a 422 lands on its field (`fieldErrorsOf`; `FormDialog` does it).
 
 - **Loading and empty** (`Skeleton`, `EmptyState`): a skeleton appears only
   after the pending delay (`useDelayedPending`, 300 ms) and respects

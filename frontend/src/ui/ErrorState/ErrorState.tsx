@@ -10,10 +10,14 @@ export interface ErrorStateProps {
   title?: string;
   message?: string;
   notFoundMessage?: string;
+  /** C156: the title when the thing is missing: '<Thing> not found' (the default title names a load failure). */
+  notFoundTitle?: string;
   onRetry?: () => void;
   compact?: boolean;
-  /** Extra action beside Retry / Sign in, e.g. a Back link. */
+  /** Extra action beside Retry / Sign in. */
   action?: ReactNode;
+  /** C156: a not-found links to its parent list ('Runs', 'Datasets'); no HTTP line, no Retry. */
+  parent?: { to: string; label: string };
 }
 
 /** A failed load is never an empty state (DESIGN_LANGUAGE §3 "Failed requests"). */
@@ -22,19 +26,25 @@ export function ErrorState({
   title = 'Couldn’t load this',
   message,
   notFoundMessage,
+  notFoundTitle,
   onRetry,
   compact,
   action,
+  parent,
 }: ErrorStateProps) {
   const info = classifyError(error);
-  const body = message ?? (info.kind === 'not_found' && notFoundMessage) ?? info.message;
+  const notFound = info.kind === 'not_found';
+  const heading = notFound && notFoundTitle ? notFoundTitle : title;
+  // C018: `false && x` is not nullish, so the old `a ?? (cond && b) ?? c` hid every cause but a not-found one.
+  const body = message ?? (notFound ? notFoundMessage : undefined) ?? info.message;
   const meta: string[] = [];
-  if (info.status) meta.push(`HTTP ${info.status}`);
+  if (info.status && !notFound) meta.push(`HTTP ${info.status}`);
   if (
+    !notFound &&
     info.detail &&
     info.detail !== `HTTP ${info.status}` &&
     info.kind !== 'network' &&
-    info.detail.toLowerCase() !== title.toLowerCase()
+    info.detail.toLowerCase() !== heading.toLowerCase()
   ) {
     meta.push(info.detail);
   }
@@ -47,7 +57,7 @@ export function ErrorState({
       data-compact={compact ? '' : undefined}
     >
       <Text variant={compact ? 'md' : 'xl'} as="h2" className={styles.title}>
-        {title}
+        {heading}
       </Text>
       <Text variant="md" tone="muted" weight={400} as="p" className={styles.body}>
         {body}
@@ -66,6 +76,11 @@ export function ErrorState({
           <Button variant="accent" onPress={onRetry}>
             Retry
           </Button>
+        ) : null}
+        {notFound && parent ? (
+          <LinkButton to={parent.to} variant="neutral">
+            {parent.label}
+          </LinkButton>
         ) : null}
         {action}
       </div>

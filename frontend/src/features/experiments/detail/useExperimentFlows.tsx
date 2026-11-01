@@ -134,7 +134,7 @@ export function useExperimentFlows(
               fail(c);
               return;
             }
-            throw new Error(c.message || 'Failed to cancel the experiment');
+            throw new Error(c.message || 'Couldn’t cancel the experiment');
           } finally {
             mark(['all'], false);
           }
@@ -167,7 +167,7 @@ export function useExperimentFlows(
                 fail(c);
                 return;
               }
-              throw new Error(c.message || 'Failed to cancel the job');
+              throw new Error(c.message || 'Couldn’t cancel the job');
             } finally {
               mark([job.id], false);
             }
@@ -340,7 +340,7 @@ export function useExperimentFlows(
           } catch (e) {
             const detailList = (e as { body?: { detail?: { errors?: { message?: string }[] } } }).body?.detail
               ?.errors;
-            return detailList?.[0]?.message || classifyActionError(e).message || 'Failed to save the preset';
+            return detailList?.[0]?.message || classifyActionError(e).message || 'Couldn’t save the preset';
           }
         }}
       />

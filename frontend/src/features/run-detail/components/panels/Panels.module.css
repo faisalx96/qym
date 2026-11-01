@@ -591,16 +591,6 @@
   color: var(--err);
 }
 
-.errTotal {
-  padding: 0 var(--space-xs);
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--err) var(--tint-soft), transparent);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  font-weight: 650;
-  color: var(--err);
-}
-
 .errMeaning {
   flex: 1 1 24rem;
   margin: 0;

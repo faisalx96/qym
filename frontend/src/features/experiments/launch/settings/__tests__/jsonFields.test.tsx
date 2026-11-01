@@ -93,7 +93,7 @@ describe('JsonFields', () => {
 
   it('adds rows shaped like the last one with blank values (never null) and removes rows', async () => {
     const user = setup(ROUTES);
-    await user.click(screen.getByRole('button', { name: '+ Add item' }));
+    await user.click(screen.getByRole('button', { name: 'Add item' }));
     const blank = { name: '', weight: 0, enabled: false };
     expect(latest).toEqual([...(ROUTES as Json[]), blank]);
     expect(screen.getAllByRole('row')).toHaveLength(5); // header + "All items" + 3
@@ -118,7 +118,7 @@ describe('JsonFields', () => {
           onEdit={(fn) => (latest = fn([]))}
         />,
       );
-      await userEvent.click(screen.getByRole('button', { name: '+ Add item' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add item' }));
       expect(latest).toEqual([expected]);
       unmount();
     }
@@ -148,9 +148,9 @@ describe('JsonFields', () => {
     await user.selectOptions(field('SETTING · nested · on'), 'true');
     expect((latest as { nested: unknown }).nested).toEqual({ on: true });
 
-    // The top-level "+ Add key" comes last (after the nested object's own).
+    // The top-level "Add key" comes last (after the nested object's own).
     await user.type(screen.getAllByPlaceholderText('new key').at(-1)!, 'limit');
-    await user.click(screen.getAllByRole('button', { name: '+ Add key' }).at(-1)!);
+    await user.click(screen.getAllByRole('button', { name: 'Add key' }).at(-1)!);
     expect((latest as { limit: unknown }).limit).toBeNull();
     // typed text that parses as JSON is stored as that JSON value (one input event, like a paste)
     fireEvent.change(field('SETTING · limit'), { target: { value: '[1, 2]' } });
@@ -160,7 +160,7 @@ describe('JsonFields', () => {
 
     // text that is not JSON is kept as a string
     await user.type(screen.getAllByPlaceholderText('new key').at(-1)!, 'note');
-    await user.click(screen.getAllByRole('button', { name: '+ Add key' }).at(-1)!);
+    await user.click(screen.getAllByRole('button', { name: 'Add key' }).at(-1)!);
     fireEvent.change(field('SETTING · note'), { target: { value: 'hello' } });
     expect((latest as { note: unknown }).note).toBe('hello');
   });

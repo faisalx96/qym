@@ -389,17 +389,8 @@ export function formatPercent(value: number | null | undefined, decimals = 1): s
   return (value * 100).toFixed(decimals) + '%';
 }
 
-export function formatLatency(ms: number | null | undefined): string {
-  if (!ms || ms <= 0) return '—';
-  if (ms >= 60000) {
-    const totalSeconds = Math.round(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  }
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${ms.toFixed(0)}ms`;
-}
+/** One duration format (C164): lib/format. */
+export { formatLatency } from './format';
 
 export function scoreBand(score: number): ScoreBand {
   if (score >= 0.9) return 5;
@@ -523,10 +514,19 @@ export function metricDirectionLabel(direction: MetricDirection): string {
   return 'No direction declared: shown without good/bad colors or verdicts';
 }
 
+/**
+ * The lead metric (C155): the declared primary first, else the first metric. The one rule for Runs, Dashboard, Charts
+ * and Compare. `among` narrows the choice (Compare passes the metrics every compared run has).
+ */
 export function defaultMetricName(
   metricNames: string[] | null | undefined,
   specs: Record<string, MetricSpec> | null | undefined,
+  among?: readonly string[],
 ): string | null {
+  if (among?.length) {
+    const inside = (Array.isArray(metricNames) ? metricNames : []).filter((n) => among.includes(n));
+    if (inside.length) return defaultMetricName(inside, specs);
+  }
   const names = Array.isArray(metricNames) ? metricNames.filter(Boolean) : [];
   const declared = names.find((name) => specs?.[name]?.primary === true);
   return declared ?? names[0] ?? null;

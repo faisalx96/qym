@@ -128,13 +128,13 @@ test.describe('rule builder (scenario 5)', () => {
     await openRun(page, s.slug, classic);
     await page.getByTestId('nav-open-filters').click();
     const dlg = page.getByRole('dialog', { name: 'Filter rules' });
-    await dlg.getByRole('button', { name: '+ Condition' }).click();
+    await dlg.getByRole('button', { name: 'Add condition' }).click();
     await expect(dlg.getByTestId('rule-condition')).toHaveCount(1);
     await dlg.getByRole('button', { name: 'Field' }).click();
     await page.getByRole('option', { name: /^exact_match/ }).click();
     await dlg.getByRole('button', { name: 'Verdict' }).click();
     await page.getByRole('option', { name: 'failed' }).click();
-    await dlg.getByRole('button', { name: '+ Condition' }).click();
+    await dlg.getByRole('button', { name: 'Add condition' }).click();
     await expect(dlg.getByTestId('rule-condition')).toHaveCount(2);
     await dlg.getByTestId('rule-condition').nth(1).getByRole('button', { name: 'Field' }).click();
     await page.getByRole('option', { name: /^Latency/ }).click();

@@ -58,7 +58,7 @@ export function DocsSearch() {
         ref={input}
         label="Search docs"
         hideLabel
-        placeholder="Search docs…"
+        placeholder="Search docs"
         hint="/"
         value={query}
         onChange={(v) => {

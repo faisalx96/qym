@@ -184,7 +184,7 @@ test.describe('detail: draft lifecycle', () => {
     await draftWithItems(request, p.slug, d, 2);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
     await page.getByTestId('hero-more').click();
-    await page.getByRole('menuitem', { name: 'Name version…' }).click();
+    await page.getByRole('menuitem', { name: 'Name version' }).click();
     const dlg = page.getByRole('dialog', { name: 'Name v1' });
     await dlg.getByRole('textbox', { name: 'Name' }).fill('Q3 refresh');
     await dlg.getByRole('button', { name: 'Save' }).click();
@@ -305,8 +305,8 @@ test.describe('detail: items table', () => {
     await expect(pane).toContainText('Unsaved changes');
     await box.press('Escape');
     const guard = page
-      .getByRole('dialog', { name: 'Unsaved changes' })
-      .or(page.getByRole('alertdialog', { name: 'Unsaved changes' }));
+      .getByRole('dialog', { name: 'Discard the unsaved changes?' })
+      .or(page.getByRole('alertdialog', { name: 'Discard the unsaved changes?' }));
     await expect(guard).toBeVisible();
     await guard.getByRole('button', { name: 'Keep editing' }).click();
     await expect(pane).toBeVisible();

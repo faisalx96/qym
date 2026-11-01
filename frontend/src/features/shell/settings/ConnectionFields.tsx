@@ -88,7 +88,11 @@ export function ConnectionFields({
         mono
         isRequired={needsKey}
         placeholder={
-          needsKey ? KEY_FOR_NEW_HOST_PLACEHOLDER : storedKeyHint ? `Keep current (${storedKeyHint})` : 'sk-…'
+          needsKey
+            ? KEY_FOR_NEW_HOST_PLACEHOLDER
+            : storedKeyHint
+              ? `Keep current (${storedKeyHint})`
+              : 'API key'
         }
         autoComplete="new-password"
         errorMessage={errors.key}

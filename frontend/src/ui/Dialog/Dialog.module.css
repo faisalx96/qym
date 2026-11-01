@@ -62,15 +62,10 @@
 
 .title {
   margin: 0;
-  font-size: var(--font-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.modal[data-size='data'] .title,
-.modal[data-size='lg'] .title {
+  /* C218: every modal title is 18px (small dialogs were 13px) */
   font-size: var(--font-xl);
   font-weight: 650;
+  color: var(--text-primary);
 }
 
 .description {

@@ -2,22 +2,37 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useLocation, useNavigationType } from 'react-router-dom';
 import { KEYS, readLocal, writeLocal } from '@/lib/storage';
 
+import { useOptionalProject } from './ProjectContext';
+
 const TITLE_SUFFIX = 'قيِّم';
 
 /** `document.title = "<title> · قيِّم"` while mounted. */
+/**
+ * C147: the tab title is '<entity or page> · <project> · قيِّم' (the project only on a project page). A caller may still
+ * pass the project name in its title; it is taken out so it shows once, in its place.
+ */
 export function useDocumentTitle(title: string | null | undefined): void {
+  const projectName = useOptionalProject()?.project.name ?? null;
   useEffect(() => {
     const previous = document.title;
-    document.title = title ? `${title} · ${TITLE_SUFFIX}` : TITLE_SUFFIX;
+    document.title = documentTitle(title, projectName);
     return () => {
       document.title = previous;
     };
-  }, [title]);
+  }, [title, projectName]);
 }
 
-export const COLLAPSE_BREAKPOINT = 760;
+export function documentTitle(title: string | null | undefined, projectName: string | null): string {
+  const parts = (title ?? '')
+    .split(' · ')
+    .map((p) => p.trim())
+    .filter((p) => p && p !== projectName);
+  return [...parts, ...(projectName ? [projectName] : []), TITLE_SUFFIX].join(' · ');
+}
 
-/** Sidebar collapse persisted in localStorage['qym:sidebar-collapsed']; auto-collapse ≤760px. */
+export const COLLAPSE_BREAKPOINT = 1023;
+
+/** Sidebar collapse persisted in localStorage['qym:sidebar-collapsed']; auto-collapse ≤1023px. */
 export function useSidebarCollapsed(): [boolean, () => void, boolean] {
   const narrow = useMediaQuery(`(max-width: ${COLLAPSE_BREAKPOINT}px)`);
   const [stored, setStored] = useState(() => readLocal(KEYS.sidebarCollapsed) === '1');

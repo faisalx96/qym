@@ -5,6 +5,16 @@
   min-width: 0;
 }
 
+/* C087: the tab area never draws a ring of its own: only a focused tab button (and a focused field inside the panel)
+   shows one. React Aria marks the list and the panel focusable or focus-visible; neither may outline. */
+.tabs,
+.list,
+.list[data-focus-visible],
+.list[data-focused],
+.panel[data-focus-visible] {
+  outline: none;
+}
+
 .tabs[data-orientation='vertical'] {
   flex-direction: row;
 }

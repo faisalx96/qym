@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useJobAction, ACTIVE_JOB_STATUSES, type JobStatus, type MaintenanceJob } from '@/api/admin';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import {
   DataTable,
   Drawer,
@@ -22,7 +22,8 @@ const FIGURE: Record<JobStatus, [StatusTone, StatusShape]> = {
   paused: ['warning', 'hourglass'],
   cancel_requested: ['warning', 'orbit'],
   cancelled: ['warning', 'pause'],
-  succeeded: ['success', 'full'],
+  // C218: success is the normal case, so it is quiet; only failures and waits take a colour
+  succeeded: ['neutral', 'full'],
   failed: ['danger', 'cross'],
 };
 
@@ -48,7 +49,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
       await act.mutateAsync({ id: job.id, action });
       toast.show(`${action === 'start' ? 'Started' : 'Cancel requested for'} ${job.kind}`, { tone: 'info' });
     } catch (e) {
-      toast.show(`${action} failed: ${e instanceof ApiError ? e.detail || `HTTP ${e.status}` : String(e)}`, {
+      toast.show(actionErrorMessage(`${action.toLowerCase()} the job`, e), {
         tone: 'error',
       });
     }

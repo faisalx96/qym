@@ -4,13 +4,11 @@ import { ROUTES } from './routes';
 import { AppShell } from '@/features/shell/AppShell';
 import { RequireAuth } from '@/features/shell/RequireAuth';
 import { ProjectLayout } from '@/features/shell/ProjectLayout';
-import { LoginPage } from '@/features/shell/login/LoginPage';
 import { ProjectsPage } from '@/features/shell/projects/ProjectsPage';
-import { ProfilePage } from '@/features/shell/profile/ProfilePage';
-import { ProjectSettingsPage } from '@/features/shell/settings/ProjectSettingsPage';
 import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { RunsIndexRedirect } from '@/features/shell/RunsIndexRedirect';
+import { ProjectRedirect } from '@/features/shell/ProjectRedirect';
 import { RouteError } from '@/features/shell/RouteError';
 import { AdminGuard } from '@/features/admin/AdminGuard';
 import { DocsRedirect } from '@/features/docs/DocsRedirect';
@@ -19,7 +17,14 @@ import { RunAnalyzerRedirect } from '@/features/analyzer/RunAnalyzerRedirect';
 import { lazyPage } from './lazyPage';
 import { loadRunDetailPage, runRouteLoader } from './prefetch';
 
-// Heavy pages are fetched on first visit so the entry chunk stays small (see frontend/README.md).
+// Heavy pages are fetched on first visit so the entry chunk stays small (see frontend/README.md). C079: settings (with
+// its environment editors), profile and login load only when opened.
+const LoginPage = lazyPage(() => import('@/features/shell/login/LoginPage'), 'LoginPage');
+const ProfilePage = lazyPage(() => import('@/features/shell/profile/ProfilePage'), 'ProfilePage');
+const ProjectSettingsPage = lazyPage(
+  () => import('@/features/shell/settings/ProjectSettingsPage'),
+  'ProjectSettingsPage',
+);
 const OverviewPage = lazyPage(() => import('@/features/runs-list/OverviewPage'), 'OverviewPage');
 const ChartsPage = lazyPage(() => import('@/features/runs-list/ChartsPage'), 'ChartsPage');
 const RunDetailPage = lazyPage(loadRunDetailPage, 'RunDetailPage');
@@ -55,7 +60,7 @@ const projectChildren: RouteObject[] = [
   { index: true, element: <RunsPage /> },
   { path: C.overview, element: <OverviewPage /> },
   { path: C.charts, element: <ChartsPage /> },
-  // The Models page is gone (C052): Charts compares models; old links land there.
+  // The Models page was removed (C052): old links land on Charts.
   { path: C.models, element: <Navigate to="../charts" replace /> },
   { path: C.experimentsQueue, element: <QueuePage /> },
   { path: C.experiments, element: <ExperimentsIndexRoute /> },
@@ -122,8 +127,22 @@ export const routes: RouteObject[] = [
           { path: ROUTES.feedback, element: <FeedbackIndexRoute /> },
           { path: ROUTES.feedbackNew, element: <FeedbackNewRoute /> },
           { path: ROUTES.feedbackItem, element: <FeedbackItemRoute /> },
-          { path: ROUTES.compare, element: <ComparePage /> },
-          { path: ROUTES.reviews, element: <ReviewsPage /> },
+          {
+            path: ROUTES.compare,
+            element: (
+              <ProjectRedirect page="compare">
+                <ComparePage />
+              </ProjectRedirect>
+            ),
+          },
+          {
+            path: ROUTES.reviews,
+            element: (
+              <ProjectRedirect page="reviews">
+                <ReviewsPage />
+              </ProjectRedirect>
+            ),
+          },
           { path: ROUTES.docs, element: <DocsRedirect /> },
           { path: ROUTES.docsIndex, element: <DocsRedirect /> },
           { path: ROUTES.docsPage, element: <DocsPage /> },

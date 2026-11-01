@@ -68,7 +68,7 @@ export function IssueForm({ onClose, row, metric, issue, passNumber }: IssueForm
   const items = [
     ...known.map((c) => ({ key: c, label: c })),
     ...(!inCatalog && category && category !== NEW ? [{ key: category, label: category }] : []),
-    { key: NEW, label: 'New category…' },
+    { key: NEW, label: 'New category' },
   ];
 
   const body = (action: 'add' | 'edit' | 'delete') => ({

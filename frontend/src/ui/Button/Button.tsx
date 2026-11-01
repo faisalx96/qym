@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { forwardRef, useId, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import styles from './Button.module.css';
 
@@ -7,11 +7,13 @@ export type ButtonSize = 'sm' | 'md';
 
 export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style' | 'children'> {
   variant?: ButtonVariant;
-  /** sm = 24px (toolbars, tables); md = 32px (dialog footers, page actions). */
+  /** sm = 24px, every button by default; md = 32px, and only in a dialog footer (C049: one size per role). */
   size?: ButtonSize;
   icon?: ReactNode;
   iconEnd?: ReactNode;
   loading?: boolean;
+  /** Why the button is disabled: shown on hover and read with the button (C166), e.g. 'No changes to save'. */
+  disabledReason?: string;
   className?: string;
   children?: ReactNode;
   /** The keys that press the button. React Aria does not pass this attribute through, so the button sets it. */
@@ -29,6 +31,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     icon,
     iconEnd,
     loading,
+    disabledReason,
     className,
     children,
     isDisabled,
@@ -39,13 +42,17 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 ) {
   const inner = useRef<HTMLButtonElement>(null);
   useImperativeHandle(ref, () => inner.current as HTMLButtonElement);
+  // A disabled reason wraps the button in a span, so the button can get a new DOM node: set the attribute again then.
+  const wrapped = Boolean(disabledReason);
   useLayoutEffect(() => {
     const el = inner.current;
     if (!el) return;
     if (keyShortcuts) el.setAttribute('aria-keyshortcuts', keyShortcuts);
     else el.removeAttribute('aria-keyshortcuts');
-  }, [keyShortcuts]);
-  return (
+  }, [keyShortcuts, wrapped]);
+  const reasonId = useId();
+  const reason = isDisabled && !loading && disabledReason ? disabledReason : null;
+  const button = (
     <AriaButton
       ref={inner}
       className={[styles.button, className].filter(Boolean).join(' ')}
@@ -54,6 +61,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       data-loading={loading ? '' : undefined}
       data-icon-only={!children && (icon || iconEnd) ? '' : undefined}
       isDisabled={isDisabled || loading}
+      aria-describedby={reason ? reasonId : undefined}
       {...rest}
     >
       {loading ? (
@@ -67,5 +75,22 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {children ? <span className={styles.label}>{children}</span> : null}
       {iconEnd ? <span className={styles.icon}>{iconEnd}</span> : null}
     </AriaButton>
+  );
+  if (!disabledReason) return button;
+  // A disabled button gets no hover or focus events, so a wrapper carries the reason (shown on hover). The wrapper stays
+  // while the button is enabled too, so the button keeps its DOM node (and focus) when it locks or unlocks.
+  return (
+    <span
+      className={styles.reasonWrap}
+      data-reason={reason ?? undefined}
+      data-disabled-reason={reason ? '' : undefined}
+    >
+      {button}
+      {reason ? (
+        <span id={reasonId} className={styles.srOnly}>
+          {reason}
+        </span>
+      ) : null}
+    </span>
   );
 });

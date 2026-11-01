@@ -275,7 +275,7 @@ export function trackErrors(page: Page): { errors: string[] } {
     if (m.type() !== 'error') return;
     const text = m.text();
     // network 4xx/5xx the specs provoke on purpose are logged by the browser as console errors
-    if (/Failed to load resource/.test(text)) return;
+    if (/Couldn’t load resource/.test(text)) return;
     errors.push(`console: ${text}`);
   });
   return { errors };

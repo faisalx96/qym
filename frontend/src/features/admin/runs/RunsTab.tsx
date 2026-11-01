@@ -50,7 +50,7 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
         {live.isError ? (
           <ErrorState
             error={live.error}
-            title="Failed to load live runs"
+            title="Couldn’t load live runs"
             onRetry={() => live.refetch()}
             compact
           />
@@ -82,7 +82,7 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
         {recent.isError ? (
           <ErrorState
             error={recent.error}
-            title="Failed to load recent runs"
+            title="Couldn’t load recent runs"
             onRetry={() => recent.refetch()}
             compact
           />
@@ -153,7 +153,7 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
           announce(`${label} ${msg}`);
         }}
         onFailed={(_run, message) => {
-          announce(`Could not force stop run: ${message}`);
+          announce(`Couldn’t force stop run: ${message}`);
         }}
       />
     </>

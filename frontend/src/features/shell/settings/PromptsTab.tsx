@@ -19,7 +19,7 @@ import {
 import { wordDiff as boundedWordDiff, type DiffOp } from '@/features/datasets/lib/wordDiff';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
-import { SettingsCard } from './SettingsCard';
+import { SaveFooter, SettingsCard } from './SettingsCard';
 
 /** Each prompt type: its name, one line on what it does, and an icon (the old settings page's list, round 10). */
 const PROMPT_TYPES: Record<string, { label: string; description: string; icon: IconName }> = {
@@ -134,7 +134,7 @@ export function PromptsTab() {
       });
       toast.show('Prompt saved', { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', { tone: 'error' });
+      toast.show(e instanceof ApiError ? e.detail || 'Couldn’t save' : 'Couldn’t save', { tone: 'error' });
     }
   }
 
@@ -227,32 +227,28 @@ export function PromptsTab() {
             className={styles.promptEditor}
             isReadOnly={readOnly}
           />
-          <div className={styles.promptFooter}>
-            <div className={styles.promptMeta}>
-              <span>{draft.length.toLocaleString()} characters</span>
-              <span>edited {relative(prompts.data.updated_at, now)}</span>
-              {dirty ? <span className={styles.unsaved}>● Unsaved changes</span> : null}
-            </div>
-            {!readOnly ? (
-              <div className={styles.cardAction}>
-                <Button
-                  variant="neutral"
-                  isDisabled={!dirty}
-                  onPress={() => setDrafts((d) => ({ ...d, [key]: current }))}
-                >
-                  Discard
-                </Button>
-                <Button
-                  variant="primary"
-                  isDisabled={!dirty}
-                  loading={save.isPending}
-                  onPress={() => persist(draft)}
-                >
-                  Save
-                </Button>
-              </div>
-            ) : null}
-          </div>
+          <SaveFooter
+            dirty={dirty}
+            saving={save.isPending}
+            onSave={() => persist(draft)}
+            hideSave={readOnly}
+            meta={
+              <>
+                <span>{draft.length.toLocaleString('en-US')} characters</span>
+                <span>edited {relative(prompts.data.updated_at, now)}</span>
+              </>
+            }
+            secondary={
+              <Button
+                variant="neutral"
+                isDisabled={!dirty}
+                disabledReason="No changes to discard"
+                onPress={() => setDrafts((d) => ({ ...d, [key]: current }))}
+              >
+                Discard
+              </Button>
+            }
+          />
         </div>
       </div>
       <Dialog

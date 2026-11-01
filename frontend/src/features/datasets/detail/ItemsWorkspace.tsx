@@ -16,7 +16,7 @@ import {
   type DatasetVersion,
 } from '@/api/datasets';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import { Button, ConfirmDialog, useToast } from '@/ui';
 import { DisableItemDialog } from '../components/dialogs';
 import type { BatchCriteria } from '../lib/batchCopy';
@@ -171,7 +171,7 @@ export function ItemsWorkspace({
         tone: 'success',
       });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
+      toast.show(actionErrorMessage('delete the items', e), { tone: 'error' });
       throw e;
     }
   }
@@ -202,7 +202,7 @@ export function ItemsWorkspace({
     try {
       await applySelected('enable');
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t enable the items', {
+      toast.show(actionErrorMessage('enable the items', e), {
         tone: 'error',
       });
     }
@@ -225,12 +225,12 @@ export function ItemsWorkspace({
           bulkActions={
             <>
               <Button
-                variant="neutral"
+                variant="danger"
                 size="sm"
                 onPress={() => setDisableSelected(true)}
                 data-testid="bulk-disable-selected"
               >
-                Disable {selected.size}…
+                Disable {selected.size}
               </Button>
               {/* Enable only when a selected row is disabled (or not loaded on this page) (C228) */}
               {selectedMayBeDisabled ? (
@@ -331,7 +331,7 @@ export function ItemsWorkspace({
       <ConfirmDialog
         open={guard !== null}
         onOpenChange={(o) => !o && setGuard(null)}
-        title="Unsaved changes"
+        title="Discard the unsaved changes?"
         description="This item has edits that are not saved."
         cancelLabel="Keep editing"
         altLabel="Discard"
@@ -342,7 +342,7 @@ export function ItemsWorkspace({
             const g = guard;
             setGuard(null);
             g?.proceed();
-          } else throw new Error('Could not save; fix the item first.');
+          } else throw new Error('Couldn’t save; fix the item first.');
         }}
         onAlternative={() => {
           dirty.current.reset();

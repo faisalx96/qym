@@ -81,7 +81,9 @@ test.describe('members (§8.7 scenario 8)', () => {
     await expect(table.getByRole('gridcell', { name: 'dev@local', exact: true })).toBeVisible();
 
     const combo = page.locator('[data-add-member]').getByRole('combobox', { name: 'Add member' });
-    await expect(page.locator('[data-add-member]').getByRole('button', { name: 'Add' })).toBeDisabled();
+    await expect(
+      page.locator('[data-add-member]').getByRole('button', { name: 'Add member' }),
+    ).toBeDisabled();
     await combo.fill(tag);
     const listbox = page.getByRole('listbox', { name: 'Matching users' });
     await expect(listbox.getByRole('option')).toHaveCount(1);
@@ -91,7 +93,7 @@ test.describe('members (§8.7 scenario 8)', () => {
     await combo.press('Enter');
     await expect(listbox).toBeHidden();
     await expect(combo).toHaveValue(`Member ${tag} <${user.email}>`);
-    await page.locator('[data-add-member]').getByRole('button', { name: 'Add' }).click();
+    await page.locator('[data-add-member]').getByRole('button', { name: 'Add member' }).click();
     await expect(page.getByRole('status').filter({ hasText: `Member ${tag} added` })).toBeVisible();
     const row = table.getByRole('row').filter({ hasText: user.email });
     await expect(row).toBeVisible();

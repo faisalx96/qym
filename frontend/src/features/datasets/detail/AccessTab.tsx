@@ -37,6 +37,7 @@ import { Note } from '../components/Note';
 import { UserPill } from '../components/UserPill';
 import { CardHead } from './SettingsTab';
 import styles from './AccessTab.module.css';
+import { formatDay, toDate } from '@/lib/dates';
 
 interface Row {
   person: AccessPerson;
@@ -64,12 +65,10 @@ function asUser(person: AccessPerson) {
   return { id: person.id, email: person.email, display_name: person.name };
 }
 
-/** `Oct 14, 2026`, in the reader's time zone but always English month names (QA5-41). */
+/** `Oct 14, 2026`, in the reader's time zone but always English month names (QA5-41; lib/dates, C048). */
 export function grantDate(iso: string | null | undefined): string {
   if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return toDate(iso) ? formatDay(iso) : String(iso);
 }
 
 /** The signature of mode and `{user_id: level}`; equal signatures mean no unsaved change (QA5-47). */
@@ -452,7 +451,12 @@ function AccessBody({
                     value={newLevel}
                     onChange={setNewLevel}
                   />
-                  <Button variant="neutral" isDisabled={who === null} onPress={addPerson}>
+                  <Button
+                    variant="neutral"
+                    isDisabled={who === null}
+                    disabledReason="Pick a person first"
+                    onPress={addPerson}
+                  >
                     Add person
                   </Button>
                 </div>
@@ -494,12 +498,18 @@ function AccessBody({
                   : 'No changes'}
           </span>
           <div className={styles.saveActions}>
-            <Button variant="neutral" isDisabled={!dirty || save.isPending} onPress={discard}>
+            <Button
+              variant="neutral"
+              isDisabled={!dirty || save.isPending}
+              disabledReason="No changes to discard"
+              onPress={discard}
+            >
               Discard
             </Button>
             <Button
               variant="primary"
               isDisabled={!dirty}
+              disabledReason="No changes to save"
               loading={save.isPending}
               onPress={() => void onSave()}
             >

@@ -10,7 +10,7 @@
  * table cell, a container is edited as JSON text.
  */
 import { useId, useState } from 'react';
-import { Button } from '@/ui';
+import { Button, Icon } from '@/ui';
 import { plural } from '../../lib/format';
 import { listTableModel, newListItem, uniformKeys, type JsonObject, type JsonValue } from '../model';
 import { AddRow } from './AddRow';
@@ -334,7 +334,7 @@ function ObjectView({ ed, path, obj, depth }: { ed: Editor; path: Path; obj: Jso
       ))}
       <AddRow
         placeholder="new key"
-        buttonText="+ Add key"
+        buttonText="Add key"
         onAdd={(raw) => {
           const key = raw.trim();
           if (!key) return 'Enter a key.';
@@ -456,6 +456,7 @@ function ListView({ ed, path, list, depth }: { ed: Editor; path: Path; list: Jso
       {body}
       <div className={styles.addRow}>
         <Button
+          icon={<Icon name="plus" size={12} />}
           size="sm"
           onPress={() =>
             ed.edit((d) => {
@@ -465,7 +466,7 @@ function ListView({ ed, path, list, depth }: { ed: Editor; path: Path; list: Jso
             })
           }
         >
-          + Add item
+          Add item
         </Button>
       </div>
     </div>

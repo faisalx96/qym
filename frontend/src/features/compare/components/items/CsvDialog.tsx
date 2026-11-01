@@ -80,6 +80,7 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           <Button
             variant="accent"
             isDisabled={!ready || !selected.length}
+            disabledReason={!ready ? 'Loading the items' : 'Select at least one column'}
             onPress={() => {
               download('compare_export.csv', buildCompareCsv(model, exportItems, selected));
               onOpenChange(false);

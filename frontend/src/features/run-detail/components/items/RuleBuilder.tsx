@@ -1,6 +1,6 @@
 /** Nested AND/OR rule builder over the item field defs (brief 04 J7). Typed values commit after 150 ms. */
 import { useSyncedInput } from '../../hooks/useSynced';
-import { Button, IconButton, MultiSelect, SegmentedControl, Select, TextField } from '@/ui';
+import { Button, IconButton, MultiSelect, SegmentedControl, Select, TextField, Icon } from '@/ui';
 import {
   defaultConditionFor,
   isFilterGroup,
@@ -138,7 +138,7 @@ function ConditionRow({
         searchable="auto"
         items={defs.map((d) => ({ key: d.id, label: d.label, description: d.group }))}
         value={field ? field.id : null}
-        placeholder="Choose field…"
+        placeholder="Choose field"
         onChange={(k) => {
           const next = defs.find((d) => d.id === k);
           if (next) onChange(defaultConditionFor(next));
@@ -231,19 +231,21 @@ function GroupView({
       )}
       <div className={styles.addRow}>
         <Button
+          icon={<Icon name="plus" size={12} />}
           size="sm"
           variant="neutral"
           onPress={() => onChange({ ...group, children: [...group.children, defaultConditionFor(null)] })}
         >
-          + Condition
+          Add condition
         </Button>
         {depth < 5 ? (
           <Button
+            icon={<Icon name="plus" size={12} />}
             size="sm"
             variant="neutral"
             onPress={() => onChange({ ...group, children: [...group.children, { op: 'and', children: [] }] })}
           >
-            + Group
+            Add group
           </Button>
         ) : null}
       </div>

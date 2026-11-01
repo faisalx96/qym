@@ -123,9 +123,8 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* C177: a long project name wraps instead of ending in an ellipsis */
+  overflow-wrap: anywhere;
 }
 
 .navItem {
@@ -173,9 +172,10 @@
 }
 
 .navLabel {
-  overflow: hidden;
-  text-overflow: ellipsis;
   flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .navItem[data-collapsed] {
@@ -271,7 +271,7 @@
   outline: none;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1023px) {
   .shell[data-narrow] {
     position: relative;
   }
@@ -287,14 +287,30 @@
     padding-inline-start: var(--sidebar-collapsed-w);
   }
 
-  .topbarEnd [data-topbar-stats] {
-    display: none;
-  }
   /* The palette button is nowrap: never squeeze its container, let the breadcrumbs give way. */
   .topbarEnd {
     flex: none;
   }
   .paletteLabel {
+    display: none;
+  }
+}
+
+/* C134: on a phone (below 600px) the collapsed rail goes too; the toggle opens the overlay. */
+@media (max-width: 599px) {
+  .shell[data-narrow][data-collapsed] .sidebar {
+    display: none;
+  }
+
+  .shell[data-narrow]:not([data-collapsed]) .main {
+    padding-inline-start: 0;
+  }
+}
+
+/* C134: on a touch screen the palette trigger is a search icon (no 'Go to' and no shortcut to read). */
+@media (pointer: coarse) {
+  .paletteLabel,
+  .paletteButton kbd {
     display: none;
   }
 }

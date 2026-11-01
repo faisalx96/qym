@@ -193,10 +193,9 @@ function RulesView({
         { tone: 'success' },
       );
     } catch (e) {
-      toast.show(
-        e instanceof ApiError ? e.detail || 'Could not create a draft' : 'Could not create a draft',
-        { tone: 'error' },
-      );
+      toast.show(e instanceof ApiError ? e.detail || 'Couldn’t create a draft' : 'Couldn’t create a draft', {
+        tone: 'error',
+      });
     }
   }
 
@@ -268,8 +267,8 @@ function RulesView({
                 items={[
                   ...(canManage ? [{ id: 'draft', label: 'Create draft from this version' }] : []),
                   { id: 'download', label: 'Download JSON' },
-                  { id: 'compare', label: 'Compare with…' },
-                  ...(canManage ? [{ id: 'merge', label: 'Merge with…' }] : []),
+                  { id: 'compare', label: 'Compare versions' },
+                  ...(canManage ? [{ id: 'merge', label: 'Merge versions' }] : []),
                   ...(data.can_delete && v.id !== productionId && !v.is_active
                     ? [
                         {
@@ -302,8 +301,8 @@ function RulesView({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not make this version live'
-                : 'Could not make this version live',
+                ? e.detail || 'Couldn’t make this version live'
+                : 'Couldn’t make this version live',
               { tone: 'error' },
             );
           }
@@ -501,8 +500,8 @@ function RulesView({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not delete this version'
-                : 'Could not delete this version',
+                ? e.detail || 'Couldn’t delete this version'
+                : 'Couldn’t delete this version',
               { tone: 'error' },
             );
           }

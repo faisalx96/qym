@@ -11,6 +11,7 @@ import { ApiKeysTab } from './ApiKeysTab';
 import { LlmConnectionsTab } from './LlmConnectionsTab';
 import { EnvironmentsTab } from './EnvironmentsTab';
 import { PromptsTab } from './PromptsTab';
+import { formatDay } from '@/lib/dates';
 
 export const SETTINGS_TABS = ['general', 'members', 'apikeys', 'llm', 'environments', 'prompts'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -18,8 +19,8 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number];
 /** /projects/:slug/settings?tab=… — the tab is persistent URL state (brief 01 §9.6). */
 export function ProjectSettingsPage() {
   const { project, readOnly, canManage, isAdmin } = useProjectContext();
-  const { params, replaceUrlQuery } = useSearchParamsState();
-  useDocumentTitle(`${project.name} · Settings`);
+  const { params, replaceUrlQuery, pushUrlQuery } = useSearchParamsState();
+  useDocumentTitle('Project settings');
 
   const items = useMemo(
     () =>
@@ -58,7 +59,7 @@ export function ProjectSettingsPage() {
           </Tag>,
           plural(project.member_count, 'member'),
           plural(project.run_count, 'run'),
-          `Created ${new Date(project.created_at).toLocaleDateString()}`,
+          `Created ${formatDay(project.created_at)}`,
           // on/off state: only the exception shows
           ...(readOnly
             ? [
@@ -86,7 +87,8 @@ export function ProjectSettingsPage() {
         label="Settings sections"
         items={items}
         selected={selected}
-        onSelect={(id) => replaceUrlQuery({ tab: id === 'general' ? null : id })}
+        // C117: a view tab is a place, so Back returns to the previous tab
+        onSelect={(id) => pushUrlQuery({ tab: id === 'general' ? null : id })}
       >
         <TabPanel id="general">
           <GeneralTab />

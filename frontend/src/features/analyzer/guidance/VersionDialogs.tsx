@@ -9,7 +9,7 @@ import {
   type RuleItem,
   type RuleVersion,
 } from '@/api/analysis';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import {
   Button,
   Dialog,
@@ -57,7 +57,7 @@ export function PublishDialog({
       });
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail || e.message : 'Publishing failed.');
+      setError(actionErrorMessage('publish the version', e));
     }
   }
 
@@ -238,7 +238,7 @@ export function MergeDialog({
       setChoices({});
     } catch (e) {
       setPreview(null);
-      setError(e instanceof ApiError ? e.detail || e.message : 'The merge preview failed.');
+      setError(actionErrorMessage('preview the merge', e));
     }
   }
 
@@ -266,7 +266,7 @@ export function MergeDialog({
       onMerged(res.version);
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail || e.message : 'The merge failed.');
+      setError(actionErrorMessage('merge the versions', e));
     }
   }
 

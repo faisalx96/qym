@@ -5,7 +5,7 @@ import { Button, EmptyState, StaleBanner, Text, useToast } from '@/ui';
 import { useAnalyzingRuns } from '@/api/analysis';
 import { readPersisted } from '@/ui/DataTable/model';
 import { useAuth, useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
-import { ROUTES, runPath } from '@/app/routes';
+import { ROUTES, runPath, projectPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { KEYS, readLocal, writeLocal } from '@/lib/storage';
 import { runHref } from '@/lib/runs-order';
@@ -17,7 +17,6 @@ import { useRunsToolbarParts } from './RunsToolbar';
 import { SelectionBar } from './SelectionBar';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { FooterTrailing } from './StatusBar';
-import { useKpiTopbar } from './kpiTopbar';
 import { useRunsData } from './useRunsData';
 import { useRunsKeyboard, type RunsKeyboardHandlers } from './useRunsKeyboard';
 import { useRunsView } from './useRunsView';
@@ -86,7 +85,6 @@ export function RunsPage() {
   // Open pass groups are kept for the tab, so Back from a pass returns to the same groups.
   useEffect(() => writeExpanded(slug, pruneExpanded(expanded, rows)), [slug, expanded, rows]);
   const analyzingRuns = useAnalyzingRuns(rows.map((r) => r.run_id));
-  useKpiTopbar(d.overview?.kpis);
 
   const known = useMemo(
     () => new Map([...d.pinnedRows, ...rows].map((r) => [r.run_id, r])),
@@ -189,8 +187,8 @@ export function RunsPage() {
     const units = cohortUnitCount(refs, samplesOf);
     if (units < 2) return toast.show('Select at least 2 runs to compare', { tone: 'error' });
     const qs = handoffCompare(refs, samplesOf);
-    navigate(`${ROUTES.compare}?${qs}`);
-  }, [refs, samplesOf, toast, navigate]);
+    navigate(`${projectPath(slug, 'compare')}?${qs}`);
+  }, [refs, samplesOf, toast, navigate, slug]);
   const cohort = useCallback(() => {
     if (!selection.cohortA.length) {
       if (!refs.length) return;
@@ -213,8 +211,8 @@ export function RunsPage() {
         tone: 'error',
       });
     const qs = handoffCohorts(a, refs, samplesOf, nameOf);
-    navigate(`${ROUTES.compare}?${qs}`);
-  }, [selection, refs, samplesOf, nameOf, toast, navigate]);
+    navigate(`${projectPath(slug, 'compare')}?${qs}`);
+  }, [selection, refs, samplesOf, nameOf, toast, navigate, slug]);
 
   const selectedRows = (): typeof rows =>
     [...new Set(refs.map(passRefBase))]
@@ -339,6 +337,7 @@ export function RunsPage() {
     d.projectTotal === 0 && !filtered ? (
       <EmptyState
         title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No evaluation runs found'}
+        guide={d.data?.freshness.unpublished_runs ? undefined : '/docs/get-started/first-run'}
         body={
           d.data?.freshness.unpublished_runs ? (
             'Available runs will appear automatically.'

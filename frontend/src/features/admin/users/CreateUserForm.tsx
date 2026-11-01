@@ -128,6 +128,7 @@ export function CreateUserForm({ onCreated, localAuth = false, providers = [] }:
           variant="primary"
           loading={create.isPending}
           isDisabled={!email.trim() || create.isPending}
+          disabledReason="Enter an email address first"
         >
           Create user
         </Button>

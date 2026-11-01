@@ -43,6 +43,7 @@ import { ITEM_TABS, datasetPath, parseDatasetRoute, type ItemTab } from '../lib/
 import { ItemHistoryTab } from './ItemHistoryTab';
 import { ItemRunsTab } from './ItemRunsTab';
 import styles from './ItemPage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export interface ItemPageProps {
   slug: string;
@@ -178,12 +179,11 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         <ErrorState
           error={itemQuery.error}
           title="Couldn’t load this item"
+          notFoundTitle="Item not found"
           notFoundMessage={`No item “${itemId}” in ${version.version}.`}
           onRetry={() => void itemQuery.refetch()}
+          parent={{ to: linkTo({ item: null, tab: 'items' }), label: 'Items' }}
         />
-        <LinkButton to={linkTo({ item: null, tab: 'items' })} variant="ghost">
-          ← Back to items
-        </LinkButton>
       </div>
     );
   }
@@ -214,7 +214,9 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
             <VersionBadge version={version} />
           </span>,
           ...(neighbors.data
-            ? [`${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString()} in this view`]
+            ? [
+                `${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString(APP_LOCALE)} in this view`,
+              ]
             : []),
         ]}
         actions={
@@ -232,12 +234,12 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
             ) : null}
             {editable && item.state !== 'disabled' ? (
               <Button
-                variant="neutral"
+                variant="danger"
                 size="md"
                 onPress={() => setDisableOpen(true)}
                 data-testid="item-state-action"
               >
-                Disable item…
+                Disable item
               </Button>
             ) : null}
             {editable ? (

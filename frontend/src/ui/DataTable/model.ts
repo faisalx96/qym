@@ -30,7 +30,8 @@ export function sortKeyOf<R>(col: Column<R>): string | undefined {
 
 export function alignOf<R>(col: Column<R>): 'start' | 'center' | 'end' {
   if (col.align) return col.align;
-  return col.type && NUMERIC_TYPES.has(col.type) ? 'end' : 'start';
+  // C236: numeric columns are centred, header and values, in every table.
+  return col.type && NUMERIC_TYPES.has(col.type) ? 'center' : 'start';
 }
 
 export function isMono<R>(col: Column<R>): boolean {

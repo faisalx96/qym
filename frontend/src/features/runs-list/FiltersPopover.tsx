@@ -4,21 +4,25 @@
  * action (UX_DECISION: inline lists, not nested portalled selects, which closed
  * the popover). One disclosure is open at a time so the Tab order stays short.
  */
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
 import type { Facets } from '@/api/dashboardTypes';
 import {
   Button,
   Checkbox,
-  DateTimeField,
   Icon,
   IconButton,
   Popover,
   SearchField,
   SegmentedControl,
   Text,
+  Skeleton,
 } from '@/ui';
 import { parseLocalDate, type QuickRange } from '@/lib/runs-order';
+
+// C080: the date and time fields (react-aria date pickers and their calendar) load when the custom range opens, not with
+// every page.
+const DateTimeField = lazy(() => import('@/ui/DateTimeField').then((m) => ({ default: m.DateTimeField })));
 import {
   countActiveFilters,
   DEFAULT_VIEW,
@@ -423,11 +427,13 @@ function RangeFields({
       aria-label="Custom date range"
       data-testid="custom-range"
     >
-      <DateTimeField label="From" value={a} onChange={setA} onKeyDown={onKey} autoFocus={autoFocus} />
-      <span className={styles.rangeDash} aria-hidden="true">
-        –
-      </span>
-      <DateTimeField label="To" value={b} onChange={setB} onKeyDown={onKey} dayTime="end" />
+      <Suspense fallback={<Skeleton kind="value" width={320} label="Loading the date fields" />}>
+        <DateTimeField label="From" value={a} onChange={setA} onKeyDown={onKey} autoFocus={autoFocus} />
+        <span className={styles.rangeDash} aria-hidden="true">
+          –
+        </span>
+        <DateTimeField label="To" value={b} onChange={setB} onKeyDown={onKey} dayTime="end" />
+      </Suspense>
       {!applied || changed ? (
         <Button variant="accent" onPress={apply}>
           Apply

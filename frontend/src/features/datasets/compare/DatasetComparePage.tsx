@@ -42,6 +42,7 @@ import { fieldLabel, formatDate, itemIdentity } from '../lib/itemValue';
 import { comparePath, datasetPath, parseDatasetRoute } from '../lib/route';
 import { resolveActiveVersion, versionStatusLabel } from '../lib/versions';
 import styles from './DatasetComparePage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 const KINDS: { id: CompareKind; label: string }[] = [
   { id: 'changed', label: 'Changed' },
@@ -128,8 +129,12 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
           title="Nothing to compare yet"
           body="Create a second version to compare items between versions."
           action={
-            <LinkButton to={datasetPath(slug, dataset.slug)} variant="neutral">
-              ← Back to the dataset
+            <LinkButton
+              to={datasetPath(slug, dataset.slug)}
+              variant="neutral"
+              icon={<Icon name="chevron-left" size={12} />}
+            >
+              Back to the dataset
             </LinkButton>
           }
         />
@@ -274,7 +279,7 @@ function DownloadDiff({
           a.remove();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch {
-          toast.show('Could not download the diff', { tone: 'error' });
+          toast.show('Couldn’t download the diff', { tone: 'error' });
         } finally {
           setBusy(false);
         }
@@ -372,7 +377,7 @@ function CompareBody({
           )}
           <div className={styles.footer}>
             <Text variant="sm" tone="muted">
-              Showing {rows.length.toLocaleString()} of {total.toLocaleString()}
+              Showing {rows.length.toLocaleString(APP_LOCALE)} of {total.toLocaleString(APP_LOCALE)}
             </Text>
             {query.hasNextPage ? (
               <Button

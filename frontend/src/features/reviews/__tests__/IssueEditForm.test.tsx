@@ -103,7 +103,7 @@ describe('Reviews edit form', () => {
 
   it('a one-issue correction offers no second issue and links to the run page instead', () => {
     form();
-    expect(screen.queryByRole('button', { name: '+ Add issue' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add issue' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Remove issue/ })).toBeNull();
     expect(screen.getAllByRole('group')).toHaveLength(1);
     expect(screen.getByRole('link', { name: 'Add another issue on the run page' })).toHaveAttribute(
@@ -130,7 +130,7 @@ describe('Reviews edit form', () => {
 
   it('a legacy grouped correction still edits its list of issues', () => {
     form({ single: false, initial: [ai, { ...ai, issue_id: 'issue-2', finding: 'Second' }] });
-    expect(screen.getByRole('button', { name: '+ Add issue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add issue' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /Remove issue/ })).toHaveLength(2);
     expect(screen.queryByRole('link', { name: 'Add another issue on the run page' })).toBeNull();
   });

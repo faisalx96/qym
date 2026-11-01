@@ -37,7 +37,6 @@ import {
 import { plainModelName } from './model';
 import { RunsToolbar } from './RunsToolbar';
 import { RunScatterCard } from './RunScatterCard';
-import { useKpiTopbar } from './kpiTopbar';
 import { readVisibleColumns, writeVisibleColumns } from './selection';
 import { contextForView, countActiveFilters, DEFAULT_VIEW, type RunsView } from './urlState';
 import { useRefetchOnVisible, useRunsCadence } from './polling';
@@ -102,7 +101,6 @@ export function ChartsPage() {
   const [visibleKeys, setVisibleKeys] = useState<Set<string> | null>(readVisibleColumns);
   const d = useRunsDataLite(slug, view, visibleKeys);
   const overview = d.overview;
-  useKpiTopbar(overview?.kpis);
   const showSkeleton = useDelayedPending(d.overviewQ.isPending);
   const owners = useMemo(
     () =>
@@ -205,7 +203,7 @@ export function ChartsPage() {
         {d.overviewQ.isError && !overview ? (
           <ErrorState
             error={d.overviewQ.error}
-            title="Could not load charts"
+            title="Couldn’t load charts"
             onRetry={() => d.overviewQ.refetch()}
           />
         ) : !overview ? (
@@ -555,7 +553,7 @@ function TaskCard({
               <ErrorState
                 compact
                 error={q.error}
-                title={`Could not load ${activeDataset} runs`}
+                title={`Couldn’t load ${activeDataset} runs`}
                 onRetry={() => q.refetch()}
               />
             ) : !seen || !loaded ? (

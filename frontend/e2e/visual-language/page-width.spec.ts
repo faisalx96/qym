@@ -10,7 +10,7 @@ test.beforeAll(async () => {
 });
 test.use({ viewport: { width: 1440, height: 900 } });
 
-test('overview, models, settings and projects are as wide as the runs page at 1440px', async ({ page }) => {
+test('overview, settings and projects are as wide as the runs page at 1440px', async ({ page }) => {
   const width = async (path: string, selector: string) => {
     await gotoApp(page, path);
     const el = page.locator(selector).first();

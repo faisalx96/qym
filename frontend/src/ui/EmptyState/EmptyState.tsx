@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Text } from '../Text';
 import styles from './EmptyState.module.css';
 
@@ -7,11 +8,13 @@ export interface EmptyStateProps {
   title: ReactNode;
   body?: ReactNode;
   action?: ReactNode;
+  /** C182: the docs page that explains this ('/docs/get-started/datasets'); shows a 'Read the guide' link. */
+  guide?: string;
   compact?: boolean;
 }
 
 /** Empty state: dim 48px glyph, --font-xl title, --font-md muted body (DESIGN_LANGUAGE §3). */
-export function EmptyState({ icon, title, body, action, compact }: EmptyStateProps) {
+export function EmptyState({ icon, title, body, action, guide, compact }: EmptyStateProps) {
   return (
     <div className={styles.empty} data-compact={compact ? '' : undefined} data-empty-state>
       {icon ? (
@@ -28,6 +31,11 @@ export function EmptyState({ icon, title, body, action, compact }: EmptyStatePro
         </Text>
       ) : null}
       {action ? <div className={styles.action}>{action}</div> : null}
+      {guide ? (
+        <Link to={guide} className={styles.guide}>
+          Read the guide
+        </Link>
+      ) : null}
     </div>
   );
 }

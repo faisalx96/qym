@@ -166,7 +166,7 @@ test.describe('failed rows', () => {
     await expect(c.locator('[data-kind=output]')).toContainText(/error/i);
     await expect(c.locator('tr[data-metric]')).toHaveCount(0);
     await expect(c.getByTestId('metric-analysis-card')).toHaveCount(0);
-    await expect(c.getByRole('button', { name: '+ Add issue' })).toHaveCount(0);
+    await expect(c.getByRole('button', { name: 'Add issue' })).toHaveCount(0);
   });
 
   test('a not-received item says so and has no chips or cards', async ({ page }) => {

@@ -1,7 +1,7 @@
 /** Docked (non-modal) item editor beside the items table: Text/JSON fields, sticky footer, Prev/Next. */
 import { useState } from 'react';
 import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import {
   Button,
   ConfirmDialog,
@@ -20,6 +20,7 @@ import { DisabledBanner, EnableButton, useItemStateActions } from '../components
 import { useItemEditor } from '../item/useItemEditor';
 import { datasetPath } from '../lib/route';
 import styles from './ItemPane.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export interface ItemPaneProps {
   slug: string;
@@ -85,7 +86,7 @@ export function ItemPane({
       // null: someone saved first, and the conflict notice asks what to keep
       return Boolean(saved);
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
+      toast.show(actionErrorMessage('save the item', e), { tone: 'error' });
       return false;
     }
   };
@@ -99,7 +100,7 @@ export function ItemPane({
             {itemId}
           </Text>
           <span className={styles.pos}>
-            {position.index + 1} / {position.total.toLocaleString()}
+            {position.index + 1} / {position.total.toLocaleString(APP_LOCALE)}
           </span>
           {disabled ? (
             <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
@@ -148,11 +149,7 @@ export function ItemPane({
               void editor
                 .keepMine()
                 .then((saved) => saved && toast.show(`Item ${saved.item_id} saved`, { tone: 'success' }))
-                .catch((e: unknown) =>
-                  toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', {
-                    tone: 'error',
-                  }),
-                )
+                .catch((e: unknown) => toast.show(actionErrorMessage('save the item', e), { tone: 'error' }))
             }
           />
         ) : null}
@@ -189,8 +186,8 @@ export function ItemPane({
       {editable ? (
         <footer className={styles.foot}>
           {item && !disabled ? (
-            <Button variant="neutral" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
-              Disable item…
+            <Button variant="danger" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
+              Disable item
             </Button>
           ) : null}
           <Text as="span" variant="sm" tone="muted" aria-live="polite" className={styles.status}>
