@@ -28,7 +28,7 @@ describe('EditUserDialog password reset', () => {
   it('warns that the user is signed out of every browser before resetting', async () => {
     open(true);
     await userEvent.click(screen.getByRole('button', { name: 'Reset password' }));
-    const confirm = await screen.findByRole('alertdialog', { name: 'Reset password' });
+    const confirm = await screen.findByRole('alertdialog', { name: 'Reset this user’s password?' });
     expect(confirm).toHaveTextContent('They are signed out of every browser.');
     expect(confirm).toHaveTextContent('reset@example.test');
     expect(screen.getByText(/Signs them out everywhere/)).toBeInTheDocument();

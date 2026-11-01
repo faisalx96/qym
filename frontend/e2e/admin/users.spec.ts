@@ -43,7 +43,7 @@ test.describe('disable / enable', () => {
     await openUsers(page);
     const row = page.getByRole('grid', { name: 'Users' }).getByRole('row').filter({ hasText: u.email });
     await row.getByRole('button', { name: /^Disable / }).click();
-    const dialog = page.getByRole('alertdialog', { name: 'Disable user' });
+    const dialog = page.getByRole('alertdialog', { name: /^Disable .+\?$/ });
     await expect(dialog).toContainText(u.email);
     await dialog.getByRole('button', { name: 'Disable user' }).click();
     await expect(row).toContainText('Disabled');

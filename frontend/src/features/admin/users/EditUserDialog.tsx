@@ -217,7 +217,7 @@ function EditUserDialogInner({
       <ConfirmDialog
         open={confirmReset}
         onOpenChange={setConfirmReset}
-        title="Reset password"
+        title="Reset this user’s password?"
         tone="danger"
         description={[
           `Reset the password for ${user.email}? The current password stops working now. They are signed out of every browser.`,

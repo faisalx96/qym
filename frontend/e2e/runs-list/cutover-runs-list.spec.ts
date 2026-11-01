@@ -116,7 +116,7 @@ test('a failed submit says why and leaves the row as it was', async ({ page, req
   );
   await openRuns(page, s.project.slug);
   await pickRowAction(page, rowOf(page, NAME), 'Submit');
-  const dlg = page.getByRole('dialog', { name: `Submit ${NAME} for review` });
+  const dlg = page.getByRole('dialog', { name: `Submit ${NAME} for review?` });
   await dlg.getByRole('button', { name: 'Submit', exact: true }).click();
   await expect(dlg).toContainText('Only a completed, failed or rejected run can be submitted');
   await dlg.getByRole('button', { name: 'Cancel' }).click();

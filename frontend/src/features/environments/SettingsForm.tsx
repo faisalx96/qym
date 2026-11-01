@@ -304,7 +304,7 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete environment?"
+        title={`Delete the environment “${env.name}”?`}
         description={[
           `Delete “${env.name}” and its stored schemas and LLM slots.`,
           'If experiments or presets use it, it is disabled instead so their history stays intact.',

@@ -777,6 +777,11 @@ Recipes that exist only on the run report. They compose the primitives above and
 
 ### 3.7 Loading, empty and failed states
 
+**Confirm dialogs (C146).** One rule by risk: type the name for a permanent loss (delete a project or a dataset);
+one click for a change that can be undone (a deleted run goes to Deleted runs); a named confirm for a change that
+others use ("Delete the environment “prod”?"). Every confirm title is a question. There is no Undo toast (the owner
+rejected it for runs, C099).
+
 **One pattern per state (C018, C156, C059, C182, C181).** A failure names its cause (`ErrorState` shows the cause for
 every kind). A missing thing reads "<Thing> not found" (`notFoundTitle`), one sentence of cause and one link to its
 parent list (`parent`), with no HTTP line and no Retry; a load failure is titled "Couldn’t load <thing>". Error titles

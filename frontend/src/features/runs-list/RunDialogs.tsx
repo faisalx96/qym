@@ -27,6 +27,7 @@ export type DialogState =
 const WORKFLOW_COPY = {
   approve: {
     title: 'Approve run',
+    question: 'Approve',
     confirm: 'Approve',
     tone: 'primary' as const,
     done: 'approved',
@@ -34,6 +35,7 @@ const WORKFLOW_COPY = {
   },
   reject: {
     title: 'Reject run',
+    question: 'Reject',
     confirm: 'Reject',
     tone: 'danger' as const,
     done: 'rejected',
@@ -41,6 +43,7 @@ const WORKFLOW_COPY = {
   },
   unapprove: {
     title: 'Withdraw approval',
+    question: 'Withdraw the approval of',
     confirm: 'Unapprove',
     tone: 'primary' as const,
     done: 'unapproved',
@@ -48,6 +51,7 @@ const WORKFLOW_COPY = {
   },
   unreject: {
     title: 'Withdraw rejection',
+    question: 'Withdraw the rejection of',
     confirm: 'Unreject',
     tone: 'primary' as const,
     done: 'unrejected',
@@ -108,7 +112,7 @@ export function RunDialogs({
       <FormDialog
         open={Boolean(wf)}
         onOpenChange={close}
-        title={wf ? `${copy.title}: ${name(wf.row)}` : copy.title}
+        title={wf ? `${copy.question} ${name(wf.row)}?` : `${copy.title}?`}
         description={copy.help}
         confirmLabel={copy.confirm}
         submittingLabel="Saving…"
@@ -143,8 +147,8 @@ export function RunDialogs({
         onOpenChange={close}
         title={
           sub && sub.rows.length === 1
-            ? `Submit ${name(sub.rows[0]!)} for review`
-            : `Submit ${sub?.rows.length ?? 0} runs for review`
+            ? `Submit ${name(sub.rows[0]!)} for review?`
+            : `Submit ${sub?.rows.length ?? 0} runs for review?`
         }
         description={[
           'Reviewers are asked to approve or reject. Runs stay read-only while submitted.',
@@ -229,7 +233,7 @@ export function RunDialogs({
       <FormDialog
         open={Boolean(tr)}
         onOpenChange={close}
-        title={tr ? `Transfer ${name(tr.row)}` : 'Transfer ownership'}
+        title={tr ? `Transfer ${name(tr.row)}?` : 'Transfer ownership?'}
         description="The new owner can submit and delete this run."
         confirmLabel="Transfer"
         fields={[

@@ -199,10 +199,10 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
       <ConfirmDialog
         open={disabling !== null}
         onOpenChange={(o) => !o && setDisabling(null)}
-        title="Disable user"
+        title={`Disable ${disabling?.email ?? 'this user'}?`}
         tone="danger"
         description={[
-          `Disable ${disabling?.email ?? 'this user'}? They are signed out everywhere at once and cannot sign in until an admin enables them again.`,
+          'They are signed out everywhere at once and cannot sign in until an admin enables them again.',
           'Their API keys stop working while they are disabled.',
         ]}
         confirmLabel="Disable user"

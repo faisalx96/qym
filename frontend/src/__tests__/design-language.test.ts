@@ -798,6 +798,26 @@ describe('people, models and tags (C144, C165, C051, C238)', () => {
   });
 });
 
+describe('confirm dialogs (C146)', () => {
+  it('ask a question: every ConfirmDialog title ends with "?"', () => {
+    // A blocking notice ("cannot be deleted yet") is not a question.
+    const NOTICE = /cannot be deleted yet/;
+    const problems: string[] = [];
+    const shipped = tsxFiles.filter((f) => f.endsWith('.tsx') && !/\.test\.tsx$|\/features\/dev\//.test(f));
+    for (const file of shipped) {
+      const src = read(file);
+      for (const m of src.matchAll(
+        /<ConfirmDialog\b(?:(?!<[A-Z])[\s\S])*?\btitle=(\{`[^`]*`\}|"[^"]*"|\{'[^']*'\})/g,
+      )) {
+        const title = m[1]!;
+        if (NOTICE.test(title)) continue;
+        if (!/\?["'`]\}?$/.test(title)) problems.push(`${rel(file)}: ${title}`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+});
+
 describe('documentation wiring', () => {
   it('README points at the design language', () => {
     const readme = read(join(FRONTEND, 'README.md'));

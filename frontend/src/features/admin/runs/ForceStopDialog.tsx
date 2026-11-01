@@ -20,7 +20,7 @@ export function ForceStopDialog({ run, open, onOpenChange, onStopped, onFailed }
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Force stop run"
+      title="Force stop this run?"
       tone="danger"
       description={[
         `Permanently stop recording “${name}”? Existing results stay available.`,

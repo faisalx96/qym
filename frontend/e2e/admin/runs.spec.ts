@@ -65,7 +65,7 @@ test.describe('force stop', () => {
 
     // Cancel first: no request.
     await stopBtn.click();
-    const dialog = page.getByRole('alertdialog', { name: 'Force stop run' });
+    const dialog = page.getByRole('alertdialog', { name: 'Force stop this run?' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);

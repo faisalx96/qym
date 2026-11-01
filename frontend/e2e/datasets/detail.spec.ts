@@ -289,8 +289,8 @@ test.describe('detail: items table', () => {
     await expect(pane).toContainText('Unsaved changes');
     await box.press('Escape');
     const guard = page
-      .getByRole('dialog', { name: 'Unsaved changes' })
-      .or(page.getByRole('alertdialog', { name: 'Unsaved changes' }));
+      .getByRole('dialog', { name: 'Discard the unsaved changes?' })
+      .or(page.getByRole('alertdialog', { name: 'Discard the unsaved changes?' }));
     await expect(guard).toBeVisible();
     await guard.getByRole('button', { name: 'Keep editing' }).click();
     await expect(pane).toBeVisible();
