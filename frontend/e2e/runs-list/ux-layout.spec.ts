@@ -117,12 +117,10 @@ test.describe('runs list: UX layout regressions', () => {
       const fig = page.getByTestId('trend-chart');
       await expect(fig).toBeVisible({ timeout: 15_000 });
       await expect(
-        fig
-          .locator('text.recharts-cartesian-axis-tick-value', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ })
-          .first(),
+        fig.locator('text[data-x-label]', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ }).first(),
       ).toBeVisible();
       const boxes = await fig
-        .locator('text.recharts-cartesian-axis-tick-value', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ })
+        .locator('text[data-x-label]', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ })
         .evaluateAll((els) =>
           els.map((e) => {
             const r = e.getBoundingClientRect();

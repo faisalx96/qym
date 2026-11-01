@@ -2,7 +2,7 @@
  * /projects/:slug/overview — KPI band, Trend, then two panels (round 10): Live and Recent runs together, and Pending
  * reviews beside Approved runs (brief 03 J8).
  */
-import { lazy, Suspense, useMemo, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useKpis, usePendingCorrections, useRunsPage, useTrend } from '@/api/dashboard';
 import type { DashboardFilters, PendingCorrection, RunRow } from '@/api/dashboardTypes';
@@ -32,13 +32,13 @@ import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
 import { ModelCell, Mono, OwnerCell, StatusCell } from './cells';
 import { modelKeyOf } from './model';
+import { TrendChart } from './TrendChart';
 import { pendingIssue } from './pendingReview';
 import { isActiveRun } from './polling';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { useKpiTopbar } from './kpiTopbar';
 import { trendFormat, trendFormatDelta, trendIsRate } from './trendModel';
 // Recharts is ~100 kB: load it only with the Overview page.
-const TrendChart = lazy(() => import('./TrendChart').then((m) => ({ default: m.TrendChart })));
 import styles from './OverviewPage.module.css';
 
 const LIVE = ['RUNNING', 'PENDING'];
@@ -270,9 +270,7 @@ export function OverviewPage() {
                       {formatPercentValue(s?.execution_success ?? null)}
                     </Text>
                   </div>
-                  <Suspense fallback={<Skeleton kind="chart" label="Loading chart" />}>
-                    <TrendChart trend={trend} />
-                  </Suspense>
+                  <TrendChart trend={trend} />
                 </>
               )
             ) : trendQ.isPending ? (
