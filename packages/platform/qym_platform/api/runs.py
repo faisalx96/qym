@@ -1975,7 +1975,7 @@ def _published_run_rows(db: Session, run_ids: List[str]) -> Dict[str, Dict[str, 
 
 @router.get("/api/runs")
 def legacy_list_runs(
-    limit: int = Query(default=100, le=500),
+    limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     project_slug: Optional[str] = Query(default=None),
     status: Optional[str] = Query(
