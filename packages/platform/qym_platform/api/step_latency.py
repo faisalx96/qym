@@ -745,7 +745,7 @@ def multi_run_step_latency(
     ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+) -> Dict[str, Any]:
     ids = [rid.strip() for rid in run_ids.split(",") if rid.strip()]
     spans, passes = _load_spans(db, principal, ids, pass_number=pass_number)
     trace_count = len(
@@ -799,7 +799,7 @@ def single_run_step_latency(
     pass_number: Optional[int] = Query(None, ge=1, description="Restrict to one repeat pass"),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+) -> Dict[str, Any]:
     return multi_run_step_latency(
         run_ids=run_id,
         format=format,

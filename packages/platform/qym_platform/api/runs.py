@@ -7440,7 +7440,7 @@ def get_run_spans(
     limit: int = Query(default=SPANS_PAGE_DEFAULT, ge=1, le=SPANS_PAGE_MAX),
     offset: int = Query(default=0, ge=0),
     trace_id: Optional[str] = Query(default=None, max_length=200),
-):
+) -> Dict[str, Any]:
     """Return a page of a run's OTEL spans, ordered by start time.
 
     At most ``limit`` spans (default 1000, max 5000) from ``offset``,
@@ -7482,7 +7482,7 @@ def get_item_spans(
     item_id: str,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+) -> Dict[str, Any]:
     """Return OTEL spans for a specific run item, looked up via trace_id."""
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
