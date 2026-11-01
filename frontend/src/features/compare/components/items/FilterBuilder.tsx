@@ -1,5 +1,15 @@
 /** Composable rule builder (AND / OR groups) over aligned items; fields are evaluated across every compared run. */
-import { Button, IconButton, MultiSelect, ScopeChips, SegmentedControl, Select, Text, TextField } from '@/ui';
+import {
+  Button,
+  IconButton,
+  MultiSelect,
+  ScopeChips,
+  SegmentedControl,
+  Select,
+  Text,
+  TextField,
+  Icon,
+} from '@/ui';
 import { useScope } from '../../hooks/useScope';
 import { useCompare } from '../../CompareContext';
 import { columnName } from '../../lib/columnName';
@@ -82,7 +92,7 @@ function Condition({
         label="Field"
         hideLabel
         value={field?.id ?? null}
-        placeholder="Choose field…"
+        placeholder="Choose field"
         searchable="auto"
         onChange={(k) => {
           if (!k) return;
@@ -152,7 +162,7 @@ function Condition({
               label="State"
               hideLabel
               value={String(node.value) || null}
-              placeholder="Choose state…"
+              placeholder="Choose state"
               onChange={(k) => k && set({ value: String(k) })}
               items={[
                 { key: 'true', label: 'true' },
@@ -179,7 +189,7 @@ function Condition({
                 hideLabel
                 value={String(node.value ?? '')}
                 onChange={(v) => set({ value: v })}
-                placeholder="text…"
+                placeholder="Text"
                 width="20ch"
               />
             </>
@@ -240,13 +250,28 @@ function Group({
       </div>
       {node.children.map((child, i) =>
         isFilterGroup(child) ? (
-          <Group key={i} node={child} path={[...path, i]} defs={defs} onChange={onChange} onPickChange={onPickChange} />
+          <Group
+            key={i}
+            node={child}
+            path={[...path, i]}
+            defs={defs}
+            onChange={onChange}
+            onPickChange={onPickChange}
+          />
         ) : (
-          <Condition key={i} node={child} path={[...path, i]} defs={defs} onChange={onChange} onPickChange={onPickChange} />
+          <Condition
+            key={i}
+            node={child}
+            path={[...path, i]}
+            defs={defs}
+            onChange={onChange}
+            onPickChange={onPickChange}
+          />
         ),
       )}
       <div className={styles.add}>
         <Button
+          icon={<Icon name="plus" size={12} />}
           size="sm"
           variant="neutral"
           onPress={() =>
@@ -256,9 +281,10 @@ function Group({
             }))
           }
         >
-          + Condition
+          Add condition
         </Button>
         <Button
+          icon={<Icon name="plus" size={12} />}
           size="sm"
           variant="ghost"
           onPress={() =>
@@ -268,7 +294,7 @@ function Group({
             }))
           }
         >
-          + Group
+          Add group
         </Button>
       </div>
     </div>
@@ -284,7 +310,12 @@ function ChangeRow() {
   const set = (patch: Partial<NonNullable<typeof f>>) =>
     c.setView({ filters: { ...c.view.filters, baseline: { ...f, baselineKey: baseline.key, ...patch } } });
   return (
-    <div className={styles.cond} data-testid="filter-change-rule" role="group" aria-label="Change vs baseline">
+    <div
+      className={styles.cond}
+      data-testid="filter-change-rule"
+      role="group"
+      aria-label="Change vs baseline"
+    >
       <Text variant="sm" tone="muted">
         Change vs baseline
       </Text>

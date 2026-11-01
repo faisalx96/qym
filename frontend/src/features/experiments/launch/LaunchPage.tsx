@@ -13,7 +13,17 @@ import { useBlocker, useLocation, useNavigate, useSearchParams } from 'react-rou
 import { useEvalEnvironments } from '@/api/evalCommon';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Button, ConfirmDialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, Tag } from '@/ui';
+import {
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  LinkButton,
+  PageHeader,
+  Skeleton,
+  Tag,
+  Icon,
+} from '@/ui';
 import { environmentsPath, experimentPath, experimentsPath } from '../paths';
 import { LaunchHome } from './home/LaunchHome';
 import { useLaunch } from './LaunchContext';
@@ -71,8 +81,12 @@ function LaunchBody({
       ]}
       actions={
         <>
-          <Button variant="ghost" onPress={() => goToStep(null)}>
-            ← Start
+          <Button
+            variant="ghost"
+            icon={<Icon name="chevron-left" size={12} />}
+            onPress={() => goToStep(null)}
+          >
+            Start
           </Button>
           {narrow ? null : (
             <LinkButton to={experimentsPath(slug)} variant="ghost">

@@ -251,7 +251,7 @@ function readBinding(
       if (!valid) {
         errors.push({
           pointer: pointer + '/temporary/api_key',
-          message: 'Keys are never typed into JSON: use "+ Temporary model" on the model card',
+          message: 'Keys are never typed into JSON: use "Add temporary model" on the model card',
         });
         return null;
       }
@@ -369,7 +369,8 @@ function readDatasets(
   const raw = ev['datasets'];
   const shape = ev['run_shape'];
   if (shape != null) {
-    if (isSweepValue(shape)) errors.push({ pointer: '/evaluator/run_shape', message: DATASETS_SWEEP_MESSAGE });
+    if (isSweepValue(shape))
+      errors.push({ pointer: '/evaluator/run_shape', message: DATASETS_SWEEP_MESSAGE });
     else if (shape !== 'combined' && shape !== 'one_each')
       errors.push({ pointer: '/evaluator/run_shape', message: 'Must be “combined” or “one_each”' });
     else out.run_shape = shape;
@@ -428,7 +429,10 @@ function readDatasets(
     pairs.push(pair);
   });
   if (pairs.length > DATASETS_MAX)
-    errors.push({ pointer: '/evaluator/datasets', message: `At most ${DATASETS_MAX} dataset versions per experiment.` });
+    errors.push({
+      pointer: '/evaluator/datasets',
+      message: `At most ${DATASETS_MAX} dataset versions per experiment.`,
+    });
   const first = pairs[0];
   if (first && pairs.length === raw.length) {
     if (out.dataset != null && out.dataset !== first.dataset)
@@ -671,7 +675,10 @@ function listFrom(
     if (known) known.refs.push(ref);
     else entries.push({ name: p.dataset, refs: [ref] });
   }
-  const [first, ...rest] = entries as [{ name: string; refs: string[] }, ...Array<{ name: string; refs: string[] }>];
+  const [first, ...rest] = entries as [
+    { name: string; refs: string[] },
+    ...Array<{ name: string; refs: string[] }>,
+  ];
   const [ref = '', ...extraRefs] = first.refs;
   return { dataset: { mode: 'project', name: first.name, ref, custom: '' }, extraRefs, more: rest };
 }

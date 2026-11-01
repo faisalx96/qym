@@ -385,7 +385,7 @@ function DetailBody({
             </button>
           ) : canWrite ? (
             <button type="button" className={styles.descButton} onClick={() => setDialog('describe')}>
-              + Add a description
+              <Icon name="plus" size={12} /> Add a description
             </button>
           ) : undefined
         }
@@ -437,8 +437,8 @@ function DetailBody({
                 label="More actions"
                 trigger={<IconButton label="More actions" icon="more" data-testid="hero-more" />}
                 items={[
-                  ...(canWrite ? [{ id: 'name', label: 'Name version…' }] : []),
-                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare…' }] : []),
+                  ...(canWrite ? [{ id: 'name', label: 'Name version' }] : []),
+                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare versions' }] : []),
                   ...(dataset.items_visible
                     ? [
                         {
@@ -458,7 +458,14 @@ function DetailBody({
                       ]
                     : []),
                   ...(canWrite
-                    ? [{ id: 'upload', label: '↑ Upload file as new version…', separatorBefore: true }]
+                    ? [
+                        {
+                          id: 'upload',
+                          label: 'Upload file as new version',
+                          icon: <Icon name="upload" size={12} />,
+                          separatorBefore: true,
+                        },
+                      ]
                     : []),
                 ]}
                 onAction={(id) => {
@@ -643,8 +650,8 @@ function NoVersions({
       </Text>
       {canWrite ? (
         <div className={styles.noVersionsActions}>
-          <Button variant="primary" onPress={onCreate}>
-            + Create first draft
+          <Button icon={<Icon name="plus" size={12} />} variant="primary" onPress={onCreate}>
+            Create first draft
           </Button>
           <Button variant="neutral" onPress={onImport}>
             Import a file

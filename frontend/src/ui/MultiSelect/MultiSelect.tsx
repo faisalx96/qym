@@ -154,7 +154,7 @@ export function MultiSelect<T extends MultiSelectItem>({
           <Icon name="search" size={12} />
           <input
             className={styles.search}
-            placeholder="Search…"
+            placeholder="Search"
             aria-label={`Search ${label}`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}

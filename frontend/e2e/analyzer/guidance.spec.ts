@@ -77,7 +77,7 @@ test.describe('Rules tab as manager (10)', () => {
 
     // compare v2 with v1
     await page.getByRole('button', { name: 'Actions for v2' }).click();
-    await page.getByRole('menuitem', { name: 'Compare with…' }).click();
+    await page.getByRole('menuitem', { name: 'Compare versions' }).click();
     const compare = page.getByRole('dialog', { name: 'Compare v2' });
     await expect(compare.getByTestId('compare-summary')).toContainText('1 changed');
     await compare.getByText(/Changed: /).click();
@@ -87,7 +87,7 @@ test.describe('Rules tab as manager (10)', () => {
 
     // merge preview
     await page.getByRole('button', { name: 'Actions for v2' }).click();
-    await page.getByRole('menuitem', { name: 'Merge with…' }).click();
+    await page.getByRole('menuitem', { name: 'Merge versions' }).click();
     const merge = page.getByRole('dialog', { name: 'Merge into v2' });
     await merge.getByRole('button', { name: 'Preview merge' }).click();
     await expect(merge.getByTestId('merge-preview')).toBeVisible();

@@ -120,7 +120,7 @@ export function DetailPane(p: DetailPaneProps) {
           >
             {p.expanded ? 'Hide details' : 'Details'} <Kbd>o</Kbd>
           </Button>
-          <Button variant="ghost" size="sm" onPress={p.onDelete} isDisabled={p.busy}>
+          <Button variant="danger" size="sm" onPress={p.onDelete} isDisabled={p.busy}>
             Delete
           </Button>
         </div>

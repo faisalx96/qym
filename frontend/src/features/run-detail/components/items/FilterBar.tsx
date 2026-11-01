@@ -69,7 +69,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
         <SearchField
           label="Search inputs and outputs"
           hideLabel
-          placeholder="Search inputs / outputs…"
+          placeholder="Search inputs / outputs"
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}

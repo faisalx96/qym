@@ -241,7 +241,7 @@ describe('deciding an issue on the run page (C125, C128, C174)', () => {
     blocks = undefined;
     show(withIssue());
     fireEvent.click(screen.getByRole('button', { name: /Root cause/ }));
-    fireEvent.click(screen.getByRole('button', { name: '+ Add issue' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add issue' }));
     const card = screen.getByTestId('metric-analysis-card');
     expect(card.querySelector('[data-testid=issue-form]')).not.toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();

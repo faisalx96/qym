@@ -340,7 +340,7 @@ export function ConnectionForm({
                   ? KEY_FOR_NEW_HOST_PLACEHOLDER
                   : initial?.llm_api_key_set
                     ? `Keep current (${initial.llm_api_key_hint})`
-                    : 'sk-…'
+                    : 'API key'
               }
               autoComplete="new-password"
             />

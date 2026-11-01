@@ -82,7 +82,11 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
   const winnerOptions: QuickFilterOption[] = dir
     ? [
         ...model.runs.map((r, i) => ({ id: `win_${i}`, label: `${runShortName(r)} won`, title: r.label })),
-        ...model.runs.map((r, i) => ({ id: `only_${i}`, label: `Only ${runShortName(r)} solved`, title: r.label })),
+        ...model.runs.map((r, i) => ({
+          id: `only_${i}`,
+          label: `Only ${runShortName(r)} solved`,
+          title: r.label,
+        })),
         { id: 'tie', label: 'Ties' },
       ].map(({ id, label }) => ({ id, label }))
     : [];
@@ -161,7 +165,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
       <SearchField
         label="Filter by text"
         hideLabel
-        placeholder="Search id, input, outputs…"
+        placeholder="Search id, input, outputs"
         value={c.view.q}
         onChange={(q) => c.setView({ q })}
         onClear={() => c.setView({ q: '' })}

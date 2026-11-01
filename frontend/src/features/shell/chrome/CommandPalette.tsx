@@ -156,7 +156,7 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
                 aria-autocomplete="list"
                 aria-activedescendant={current ? `qym-palette-${current.id}` : undefined}
                 aria-label="Search projects, pages and actions"
-                placeholder="Search projects, pages, actions…"
+                placeholder="Search projects, pages, actions"
                 value={query}
                 autoComplete="off"
                 autoFocus

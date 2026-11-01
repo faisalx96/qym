@@ -97,6 +97,7 @@ export function CsvExport() {
               variant="accent"
               onPress={download}
               isDisabled={selected.size === 0}
+              disabledReason="Select at least one column"
               data-testid="csv-download"
             >
               Download {selected.size} columns

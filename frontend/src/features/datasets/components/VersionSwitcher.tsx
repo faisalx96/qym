@@ -59,7 +59,7 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
               hideLabel
               value={query}
               onChange={setQuery}
-              placeholder="Search versions…"
+              placeholder="Search versions"
               autoFocus
             />
           ) : null}

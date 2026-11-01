@@ -163,7 +163,13 @@ function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
           mono
           width={320}
         />
-        <Button type="submit" variant="primary" isDisabled={!token.trim()} loading={grant.isPending}>
+        <Button
+          type="submit"
+          variant="primary"
+          isDisabled={!token.trim()}
+          disabledReason="Enter the admin token first"
+          loading={grant.isPending}
+        >
           Grant admin
         </Button>
       </form>

@@ -220,12 +220,12 @@ export function ItemsWorkspace({
           bulkActions={
             <>
               <Button
-                variant="neutral"
+                variant="danger"
                 size="sm"
                 onPress={() => setDisableSelected(true)}
                 data-testid="bulk-disable-selected"
               >
-                Disable {selected.size}…
+                Disable {selected.size}
               </Button>
               <Button
                 variant="neutral"

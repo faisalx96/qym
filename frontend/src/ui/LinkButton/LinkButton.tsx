@@ -11,6 +11,7 @@ export interface LinkButtonProps extends Omit<AnchorHTMLAttributes<HTMLAnchorEle
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: ReactNode;
+  iconEnd?: ReactNode;
   /** Renders an inert aria-disabled link (focusable, no href, so nothing navigates). */
   isDisabled?: boolean;
   children?: ReactNode;
@@ -18,7 +19,7 @@ export interface LinkButtonProps extends Omit<AnchorHTMLAttributes<HTMLAnchorEle
 
 /** An anchor styled as Button (Sign in link, hrefs). */
 export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(function LinkButton(
-  { to, href, variant = 'neutral', size = 'sm', icon, isDisabled, className, children, ...rest },
+  { to, href, variant = 'neutral', size = 'sm', icon, iconEnd, isDisabled, className, children, ...rest },
   ref,
 ) {
   const cls = [buttonStyles.button, className].filter(Boolean).join(' ');
@@ -26,6 +27,7 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(functio
     <>
       {icon ? <span className={buttonStyles.icon}>{icon}</span> : null}
       {children ? <span className={buttonStyles.label}>{children}</span> : null}
+      {iconEnd ? <span className={buttonStyles.icon}>{iconEnd}</span> : null}
     </>
   );
   if (isDisabled) {

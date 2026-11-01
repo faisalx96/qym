@@ -59,7 +59,7 @@ export function ColumnsMenu({
       <div className={styles.tools}>
         <SearchField
           label="Search columns"
-          placeholder="Search columns…"
+          placeholder="Search columns"
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}

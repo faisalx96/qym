@@ -100,6 +100,7 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
         variant="primary"
         loading={create.isPending}
         isDisabled={!email.trim() || create.isPending}
+        disabledReason="Enter an email address first"
       >
         Create user
       </Button>

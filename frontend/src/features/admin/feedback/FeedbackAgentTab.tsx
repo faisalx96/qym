@@ -148,7 +148,7 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
                 ? KEY_FOR_NEW_HOST_PLACEHOLDER
                 : stored.llm_api_key_set
                   ? `Keep current (${stored.llm_api_key_hint})`
-                  : 'sk-…'
+                  : 'API key'
             }
             autoComplete="new-password"
           />

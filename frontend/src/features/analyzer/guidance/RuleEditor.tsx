@@ -80,6 +80,7 @@ export function RuleEditor({
               size="sm"
               variant="danger"
               isDisabled={checked.size === 0}
+              disabledReason="Select the rules to delete"
               onPress={() => setDeleting([...checked])}
             >
               {`Delete selected${checked.size ? ` (${checked.size})` : ''}`}

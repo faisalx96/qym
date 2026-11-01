@@ -24,7 +24,8 @@
   text-decoration: none;
 }
 
-.button[data-size='md'] {
+/* One size per role (C049): every button is 24px; 32px only in a dialog footer, even when a page asks for size md. */
+:global([data-dialog-footer]) .button[data-size='md'] {
   height: 32px;
   min-height: 32px;
   padding: 0 var(--space-md);
@@ -36,8 +37,35 @@
   width: var(--control-height);
 }
 
-.button[data-icon-only][data-size='md'] {
+:global([data-dialog-footer]) .button[data-icon-only][data-size='md'] {
   width: 32px;
+}
+
+/* C166: a disabled button with a reason shows it on hover, in the tooltip look. */
+.reasonWrap {
+  position: relative;
+  display: inline-flex;
+}
+.reasonWrap[data-reason]:hover::after {
+  content: attr(data-reason);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: var(--z-tooltip);
+  width: max-content;
+  max-width: 280px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+  pointer-events: none;
 }
 
 .button[data-hovered],

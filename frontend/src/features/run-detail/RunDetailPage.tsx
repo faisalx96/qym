@@ -7,7 +7,7 @@ import { useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { useRunQuery, useRunSummaryQuery } from '@/api/runs';
 import { useDelayedPending } from '@/lib/pending';
-import { ErrorState, LinkButton, Skeleton } from '@/ui';
+import { ErrorState, LinkButton, Skeleton, Icon } from '@/ui';
 import { loadItemsSection, loadOverviewTab } from './chunks';
 import { RunBody } from './RunBody';
 
@@ -64,8 +64,12 @@ function RunLoader({ runId }: { runId: string }) {
             void rows.refetch();
           }}
           action={
-            <LinkButton to={projectPath(slug)} variant="neutral">
-              ← Back to runs
+            <LinkButton
+              to={projectPath(slug)}
+              variant="neutral"
+              icon={<Icon name="chevron-left" size={12} />}
+            >
+              Back to runs
             </LinkButton>
           }
         />

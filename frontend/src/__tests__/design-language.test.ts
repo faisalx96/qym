@@ -224,7 +224,12 @@ describe('primitive module contracts', () => {
     Select: ['height: var(--control-height)', 'min-height: var(--dropdown-option-height)'],
     MultiSelect: ['min-height: var(--dropdown-option-height)', 'width: var(--dropdown-width)'],
     RadioGroup: ['min-block-size: var(--row-comfortable)', 'var(--accent-primary)', '[data-selected]'],
-    SegmentedControl: ['height: var(--control-height)', 'background: var(--accent-primary)', 'height: 100%'],
+    SegmentedControl: [
+      'height: var(--control-height)',
+      'color: var(--accent-primary)',
+      'color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent)',
+      'height: 100%',
+    ],
     Pagination: ['height: var(--control-height)', 'min-width: 160px', 'font-family: var(--font-mono)'],
     Badge: [
       'min-height: var(--badge-height)',
@@ -543,7 +548,9 @@ describe('visual language (redesign round 2)', () => {
     expect(tokens).toMatch(/--bar-action-h:\s*56px/);
     // Round 8 (owner decision H5): the compare page's links-only jump nav is --bar-link-h (36 px).
     expect(tokens).toMatch(/--bar-link-h:\s*36px/);
-    expect(read(join(SRC, 'features/compare/components/CompareBar.module.css'))).toContain('var(--bar-link-h)');
+    expect(read(join(SRC, 'features/compare/components/CompareBar.module.css'))).toContain(
+      'var(--bar-link-h)',
+    );
     const nav = ['features/run-detail/components/SectionNav.module.css'];
     const action = [
       'features/experiments/launch/entry/entry.module.css',
@@ -696,6 +703,71 @@ describe('visual language (redesign round 2)', () => {
     expect(cells).toContain('var(--motion-fill)');
     expect(cells).toContain('var(--motion-stagger)');
     expect(read(join(SRC, 'styles/base.css'))).toContain('animation-delay: 0s !important');
+  });
+});
+
+describe('buttons (C049, C136, C166, C232)', () => {
+  // Product source only: tests, stories and the dev mock gallery are not shipped UI.
+  const shipped = tsxFiles.filter((f) => f.endsWith('.tsx') && !/\.test\.tsx$|\/features\/dev\//.test(f));
+  const buttons = (src: string) =>
+    [...src.matchAll(/<(Button|LinkButton)\b((?:=>|[^>])*?)>([\s\S]*?)<\/\1>/g)].map((m) => ({
+      attrs: m[2]!,
+      text: m[3]!
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\{[^}]*\}/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    }));
+
+  it('draws Delete, Archive, Disable and Revoke as danger buttons', () => {
+    const problems: string[] = [];
+    for (const file of shipped)
+      for (const b of buttons(read(file)))
+        if (/^(Delete|Archive|Disable|Revoke)\b/.test(b.text) && !/variant="danger"/.test(b.attrs))
+          problems.push(`${rel(file)}: '${b.text}'`);
+    expect(problems).toEqual([]);
+  });
+
+  it('is 24px everywhere and 32px only in a dialog footer', () => {
+    const css = read(join(SRC, 'ui/Button/Button.module.css'));
+    expect(css).toContain(":global([data-dialog-footer]) .button[data-size='md']");
+    expect(css).not.toMatch(/^\.button\[data-size='md'\]/m);
+    expect(read(join(SRC, 'ui/Dialog/Dialog.tsx'))).toContain('data-dialog-footer');
+  });
+
+  it('gives a disabled button a hover reason through disabledReason', () => {
+    const tsx = read(join(SRC, 'ui/Button/Button.tsx'));
+    expect(tsx).toContain('disabledReason');
+    expect(read(join(SRC, 'ui/Button/Button.module.css'))).toContain('content: attr(data-reason)');
+  });
+
+  it('keeps the solid accent fill for primary buttons; a selected segment is an accent wash', () => {
+    const css = read(join(SRC, 'ui/SegmentedControl/SegmentedControl.module.css'));
+    expect(css).not.toMatch(/background:\s*var\(--accent-primary\)\s*;/);
+  });
+
+  it('carries no ellipsis in a label or placeholder (progress words such as Saving… excepted)', () => {
+    const problems: string[] = [];
+    const progress = /ing\b[^…]*…$/;
+    for (const file of shipped) {
+      const src = read(file);
+      for (const m of src.matchAll(/placeholder=(?:"([^"]*…)"|\{?'([^']*…)'\}?)/g))
+        problems.push(`${rel(file)}: placeholder '${m[1] ?? m[2]}'`);
+      for (const m of src.matchAll(/\blabel: '([^']*…)'/g))
+        if (!progress.test(m[1]!)) problems.push(`${rel(file)}: label '${m[1]}'`);
+      for (const b of buttons(src))
+        if (b.text.endsWith('…') && !progress.test(b.text)) problems.push(`${rel(file)}: button '${b.text}'`);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('uses an Icon in a button, never a typed glyph', () => {
+    const problems: string[] = [];
+    for (const file of shipped)
+      for (const b of buttons(read(file)))
+        if (/^(\+ |× ?|↑ |← ?|→ ?)\S/.test(b.text) || /\s(→|←)$/.test(b.text))
+          problems.push(`${rel(file)}: '${b.text}'`);
+    expect(problems).toEqual([]);
   });
 });
 

@@ -13,6 +13,7 @@ import { ApiError } from '@/lib/http';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
+  Icon,
   ConfirmDialog,
   DataTable,
   ErrorState,
@@ -402,8 +403,15 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
         onChange={(k) => setRole((k as Role) ?? 'MEMBER')}
         width={130}
       />
-      <Button type="submit" variant="primary" isDisabled={!picked} loading={add.isPending}>
-        Add
+      <Button
+        type="submit"
+        variant="primary"
+        icon={<Icon name="plus" size={12} />}
+        isDisabled={!picked}
+        disabledReason="Pick a user first"
+        loading={add.isPending}
+      >
+        Add member
       </Button>
     </form>
   );

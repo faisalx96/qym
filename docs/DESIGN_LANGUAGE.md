@@ -217,6 +217,13 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   `danger` (red tint) deletes or replaces: Delete, Archive, Revoke, Restore default. A disabled primary, accent or
   danger button keeps its own colour at 45% opacity, so a locked Save is still the green Save and a locked Restore
   default is still red. A creating action carries the plus glyph (New project, Add connection, Add environment).
+  **Button rules (C049, C234, C136, C166, C232; enforced in `design-language.test.ts`):** Delete, Archive, Disable and
+  Revoke are `danger` everywhere; Cancel is neutral; the red `× Clear n` of a filter bar stays red (owner, Oct 26 and
+  Nov 1). Every button is 24px: `size="md"` draws 32px only inside a dialog footer (`[data-dialog-footer]`, set by
+  `Dialog`), so a page that asks for `md` still gets 24px. A page's main action is `primary`, 24px, with the `plus`
+  `Icon`, named "New <object>" or "Add <part>". A disabled button says why on hover through `disabledReason` ("No
+  changes to save", "Select two runs"). Labels and placeholders carry no "…" (progress words such as "Saving…" stay),
+  and a glyph is always an `Icon`: no typed "+", "×", "←" or "→" in a button.
   Brand colour
   belongs to an integration action only (e.g. Langfuse), never to generic
   controls. The 42px authentication fields (`TextField`),
@@ -238,7 +245,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   list's baseline is an inset 1px shadow, so the underline sits inside the list and is never clipped, and the list never
   shows a scrollbar unless the tabs really overflow (round 10). In-place view/metric/repeat/time
   switching uses `SegmentedControl`: 24px high, only the selected option has the
-  Qym-green fill, one sliding indicator, no motion under
+  accent wash with accent text at 600 (C136: the solid green fill is for primary buttons only), one sliding indicator,
+  no motion under
   `prefers-reduced-motion`. Pages never add their own selection animation. The
   run detail page's sticky section nav (jump links at `--font-md` / 600 with the section in view in the accent and a 2px
   accent underline on the bar's edge, the page metric, page-wide Filters + Clear, back-to-top) is

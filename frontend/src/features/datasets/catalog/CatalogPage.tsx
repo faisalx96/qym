@@ -79,7 +79,7 @@ export function CatalogPage() {
             <>
               <SearchField
                 label="Search datasets"
-                placeholder="Search datasets…"
+                placeholder="Search datasets"
                 value={search}
                 onChange={setSearch}
                 width={240}
@@ -146,8 +146,12 @@ export function CatalogPage() {
           action={
             canCreate ? (
               <div className={styles.emptyActions}>
-                <Button variant="primary" onPress={() => setCreating(true)}>
-                  + Create your first dataset
+                <Button
+                  icon={<Icon name="plus" size={12} />}
+                  variant="primary"
+                  onPress={() => setCreating(true)}
+                >
+                  Create your first dataset
                 </Button>
                 <Button variant="neutral" onPress={() => setImporting(true)}>
                   Import a file

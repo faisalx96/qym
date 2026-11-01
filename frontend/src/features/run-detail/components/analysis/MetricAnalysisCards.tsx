@@ -114,8 +114,13 @@ function Card({
           <h5 className={styles.title}>{metric}</h5>
           {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
           {canEdit && !form ? (
-            <Button size="sm" variant="neutral" onPress={() => setForm({ key: '', issue: null })}>
-              + Add issue
+            <Button
+              icon={<Icon name="plus" size={12} />}
+              size="sm"
+              variant="neutral"
+              onPress={() => setForm({ key: '', issue: null })}
+            >
+              Add issue
             </Button>
           ) : null}
         </header>

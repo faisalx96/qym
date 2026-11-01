@@ -130,7 +130,7 @@ test('rule builder: "+ Condition" adds an editable condition row', async ({ page
   await page.getByRole('button', { name: /^Filters/ }).click();
   const builder = page.getByTestId('filter-builder');
   await expect(builder).toContainText(/no rules yet/i);
-  await builder.getByRole('button', { name: '+ Condition' }).click();
+  await builder.getByRole('button', { name: 'Add condition' }).click();
   await expect(builder.getByTestId('filter-condition')).toHaveCount(1);
   const cond = builder.getByTestId('filter-condition').first();
   await cond

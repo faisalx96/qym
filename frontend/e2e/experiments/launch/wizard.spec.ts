@@ -117,7 +117,7 @@ test.describe('wizard', () => {
       .getByRole('button', { name: /Edit: Environment configurations/ })
       .click();
     await expect(page).toHaveURL(/step=settings/);
-    await page.getByRole('button', { name: '← Start' }).click();
+    await page.getByRole('button', { name: 'Start' }).click();
     await expect(page).not.toHaveURL(/step=/);
     await expect(nameBox(page)).toHaveValue('edit run');
   });

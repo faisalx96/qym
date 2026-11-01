@@ -98,7 +98,7 @@ test.describe('axe', () => {
     await openRun(page, s.slug, classic, 'item=item-0003');
     const card = page.locator('[data-testid=item-card][data-item-id="item-0003"]');
     await openRootCause(card);
-    await card.getByRole('button', { name: '+ Add issue' }).first().click();
+    await card.getByRole('button', { name: 'Add issue' }).first().click();
     await expect(page.getByTestId('issue-form')).toBeVisible();
     await audit(page, 'issue form', '[data-testid=issue-form]');
   });

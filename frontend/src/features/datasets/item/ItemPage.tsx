@@ -170,8 +170,12 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
           notFoundMessage={`No item “${itemId}” in ${version.version}.`}
           onRetry={() => void itemQuery.refetch()}
         />
-        <LinkButton to={linkTo({ item: null, tab: 'items' })} variant="ghost">
-          ← Back to items
+        <LinkButton
+          to={linkTo({ item: null, tab: 'items' })}
+          variant="ghost"
+          icon={<Icon name="chevron-left" size={12} />}
+        >
+          Back to items
         </LinkButton>
       </div>
     );
@@ -229,12 +233,12 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
             ) : null}
             {editable && item.state !== 'disabled' ? (
               <Button
-                variant="neutral"
+                variant="danger"
                 size="md"
                 onPress={() => setDisableOpen(true)}
                 data-testid="item-state-action"
               >
-                Disable item…
+                Disable item
               </Button>
             ) : null}
             {editable ? (

@@ -146,6 +146,7 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
           <Button
             variant="accent"
             isDisabled={!changes.length}
+            disabledReason="No changes to save"
             loading={triage.isPending}
             onPress={() => void save()}
           >

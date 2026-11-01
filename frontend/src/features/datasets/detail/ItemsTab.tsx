@@ -281,8 +281,8 @@ export function ItemsTab({
             action={
               canEdit ? (
                 <div className={styles.emptyActions}>
-                  <Button variant="primary" onPress={onAddItem}>
-                    + Add item
+                  <Button icon={<Icon name="plus" size={12} />} variant="primary" onPress={onAddItem}>
+                    Add item
                   </Button>
                   <Button variant="neutral" onPress={onImport}>
                     Import file
@@ -530,7 +530,7 @@ export function ItemsTab({
             <SearchField
               label="Search items"
               hideLabel
-              placeholder="Search items…"
+              placeholder="Search items"
               value={search}
               onChange={setSearch}
               width={260}

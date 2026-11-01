@@ -253,8 +253,8 @@ function RulesView({
                 items={[
                   ...(canManage ? [{ id: 'draft', label: 'Create draft from this version' }] : []),
                   { id: 'download', label: 'Download JSON' },
-                  { id: 'compare', label: 'Compare with…' },
-                  ...(canManage ? [{ id: 'merge', label: 'Merge with…' }] : []),
+                  { id: 'compare', label: 'Compare versions' },
+                  ...(canManage ? [{ id: 'merge', label: 'Merge versions' }] : []),
                   ...(data.can_delete && v.id !== productionId && !v.is_active
                     ? [
                         {

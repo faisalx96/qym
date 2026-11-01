@@ -32,6 +32,7 @@ import {
   TextField,
   Textarea,
   useToast,
+  Icon,
 } from '@/ui';
 import { CSV_ENCODINGS, encodingLabel } from '../lib/encoding';
 import {
@@ -408,8 +409,13 @@ function WizardInner({
             </Button>
             <div className={styles.footerEnd}>
               {step > 1 ? (
-                <Button variant="neutral" onPress={back} isDisabled={submitting || checking}>
-                  ← Back
+                <Button
+                  variant="neutral"
+                  icon={<Icon name="chevron-left" size={12} />}
+                  onPress={back}
+                  isDisabled={submitting || checking}
+                >
+                  Back
                 </Button>
               ) : null}
               <Button
@@ -418,7 +424,7 @@ function WizardInner({
                 loading={submitting || checking}
                 data-testid="wizard-next"
               >
-                {step === 3 ? submitLabel : 'Continue →'}
+                {step === 3 ? submitLabel : 'Continue'}
               </Button>
             </div>
           </div>

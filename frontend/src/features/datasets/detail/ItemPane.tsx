@@ -170,8 +170,8 @@ export function ItemPane({
       {editable ? (
         <footer className={styles.foot}>
           {item && !disabled ? (
-            <Button variant="neutral" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
-              Disable item…
+            <Button variant="danger" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
+              Disable item
             </Button>
           ) : null}
           <Text as="span" variant="sm" tone="muted" aria-live="polite" className={styles.status}>

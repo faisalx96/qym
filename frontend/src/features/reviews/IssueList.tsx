@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import type { RootCauseIssue } from '@/api/reviews';
 import { useCategoryCatalogQuery } from '@/api/runs';
 import { textDirAttrs } from '@/lib/text';
-import { Button, IconButton, Select, Tag, Text, TextField, Textarea } from '@/ui';
+import { Button, IconButton, Select, Tag, Text, TextField, Textarea, Icon } from '@/ui';
 import styles from './IssueList.module.css';
 
 const NEW_CATEGORY = '__new__';
@@ -217,8 +217,13 @@ export function IssueEditForm({
             </Link>
           ) : null
         ) : (
-          <Button variant="ghost" size="sm" onPress={() => setIssues((l) => [...l, { ...BLANK }])}>
-            + Add issue
+          <Button
+            icon={<Icon name="plus" size={12} />}
+            variant="ghost"
+            size="sm"
+            onPress={() => setIssues((l) => [...l, { ...BLANK }])}
+          >
+            Add issue
           </Button>
         )}
         <span className={styles.grow} />

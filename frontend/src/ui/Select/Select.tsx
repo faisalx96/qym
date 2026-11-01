@@ -134,7 +134,7 @@ export function Select<T extends SelectItem>({
           <Autocomplete filter={contains}>
             <AriaSearchField aria-label={`Search ${label}`} className={styles.searchWrap} autoFocus>
               <Icon name="search" size={12} />
-              <Input className={styles.search} placeholder="Search…" />
+              <Input className={styles.search} placeholder="Search" />
             </AriaSearchField>
             {list}
           </Autocomplete>

@@ -63,6 +63,7 @@ export function GeneralTab() {
                 type="submit"
                 variant="primary"
                 isDisabled={!name.trim() || name.trim() === project.name}
+                disabledReason={!name.trim() ? 'Enter a project name' : 'No changes to save'}
                 loading={rename.isPending}
               >
                 Save

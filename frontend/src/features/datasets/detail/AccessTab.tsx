@@ -452,7 +452,12 @@ function AccessBody({
                     value={newLevel}
                     onChange={setNewLevel}
                   />
-                  <Button variant="neutral" isDisabled={who === null} onPress={addPerson}>
+                  <Button
+                    variant="neutral"
+                    isDisabled={who === null}
+                    disabledReason="Pick a person first"
+                    onPress={addPerson}
+                  >
                     Add person
                   </Button>
                 </div>
@@ -494,12 +499,18 @@ function AccessBody({
                   : 'No changes'}
           </span>
           <div className={styles.saveActions}>
-            <Button variant="neutral" isDisabled={!dirty || save.isPending} onPress={discard}>
+            <Button
+              variant="neutral"
+              isDisabled={!dirty || save.isPending}
+              disabledReason="No changes to discard"
+              onPress={discard}
+            >
               Discard
             </Button>
             <Button
               variant="primary"
               isDisabled={!dirty}
+              disabledReason="No changes to save"
               loading={save.isPending}
               onPress={() => void onSave()}
             >

@@ -184,7 +184,7 @@ test.describe('detail: draft lifecycle', () => {
     await draftWithItems(request, p.slug, d, 2);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
     await page.getByTestId('hero-more').click();
-    await page.getByRole('menuitem', { name: 'Name version…' }).click();
+    await page.getByRole('menuitem', { name: 'Name version' }).click();
     const dlg = page.getByRole('dialog', { name: 'Name v1' });
     await dlg.getByRole('textbox', { name: 'Name' }).fill('Q3 refresh');
     await dlg.getByRole('button', { name: 'Save' }).click();

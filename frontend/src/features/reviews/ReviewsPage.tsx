@@ -454,7 +454,7 @@ export function ReviewsPage() {
             <SearchField
               ref={searchRef}
               label="Search corrections"
-              placeholder="Search task, item, root cause…"
+              placeholder="Search task, item, root cause"
               value={search}
               onChange={setSearch}
               width={260}
@@ -529,7 +529,7 @@ export function ReviewsPage() {
                   Reset{resetFit.skipped ? ` (${resetFit.ids.length} of ${resetFit.selected})` : ''}
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="danger"
                   size="sm"
                   onPress={() => setDialog({ kind: 'bulk-delete' })}
                   data-testid="bulk-delete"

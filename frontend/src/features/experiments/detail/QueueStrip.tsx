@@ -1,7 +1,7 @@
 /** Where this experiment's jobs sit in the dispatch queue; hidden when nothing is live. */
 import { useMemo } from 'react';
 import { useExperimentQueue } from '@/api/experiments';
-import { LinkButton, SectionHeader, Card } from '@/ui';
+import { LinkButton, SectionHeader, Card, Icon } from '@/ui';
 import { buildQueueStrip } from '../lib/matrix';
 import { queuePath } from '../paths';
 import styles from './detail.module.css';
@@ -29,8 +29,12 @@ export function QueueStrip({
             title="Queue"
             description="Jobs of this experiment that have not finished."
           />
-          <LinkButton to={queuePath(slug, { experiment: experimentId })} variant="neutral">
-            Open in queue →
+          <LinkButton
+            to={queuePath(slug, { experiment: experimentId })}
+            variant="neutral"
+            iconEnd={<Icon name="chevron-right" size={12} />}
+          >
+            Open in queue
           </LinkButton>
         </div>
         <ul className={styles.queueList}>

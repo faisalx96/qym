@@ -130,7 +130,7 @@ test.describe('models', () => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await openSection(page, 'Models');
     const global = page.getByRole('group', { name: 'Global model' });
-    await global.getByRole('button', { name: '+ Temporary model' }).click();
+    await global.getByRole('button', { name: 'Add temporary model' }).click();
     const form = global.getByRole('group', { name: 'Temporary model' });
     await form.getByRole('textbox', { name: /^Model/ }).fill('gpt-4o-mini');
     await form.getByRole('textbox', { name: 'Base URL' }).fill('https://api.example.com/v1');
@@ -146,7 +146,7 @@ test.describe('models', () => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await openSection(page, 'Models');
     await page.getByRole('textbox', { name: 'New LLM endpoint name' }).fill('fast');
-    await page.getByRole('button', { name: '+ Add LLM endpoint' }).click();
+    await page.getByRole('button', { name: 'Add LLM endpoint' }).click();
     const card = page.getByRole('article', { name: /fast/i });
     await expect(card).toBeVisible();
     await card.getByRole('button', { name: /^Remove/ }).click();

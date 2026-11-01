@@ -16,7 +16,7 @@ import {
 } from '@/api/evalEnvironments';
 import { errorCode, errorList, errorMessage, type EvalEnvironment } from '@/api/evalCommon';
 import { ApiError, api } from '@/lib/http';
-import { Button, Dialog, ErrorState, Select, Skeleton, Tag, TextField, useToast, Card } from '@/ui';
+import { Button, Dialog, ErrorState, Select, Skeleton, Tag, TextField, useToast, Card, Icon } from '@/ui';
 import styles from './SlotEditor.module.css';
 import {
   candidatesFor,
@@ -345,10 +345,11 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
           {editor ? (
             <div>
               <Button
+                icon={<Icon name="plus" size={12} />}
                 variant="neutral"
                 onPress={() => editor.dispatch({ type: 'addSet', slotKey: slot.slot_key })}
               >
-                + Add another set of keys
+                Add another set of keys
               </Button>
             </div>
           ) : null}
@@ -380,7 +381,7 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
               <Select
                 label={`Merge ${slot.label || slot.slot_key} into another group`}
                 hideLabel
-                placeholder="Move keys into group…"
+                placeholder="Move keys into group"
                 value={null}
                 items={mergeTargets.map((s) => ({ key: s.slot_key, label: s.label || s.slot_key }))}
                 onChange={(key) =>

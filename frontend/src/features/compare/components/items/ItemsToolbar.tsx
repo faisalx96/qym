@@ -55,7 +55,7 @@ export function ItemsToolbar({
         <SearchField
           label="Search items"
           hideLabel
-          placeholder="Search inputs / outputs / expected…"
+          placeholder="Search inputs / outputs / expected"
           value={q}
           onChange={setQ}
           onClear={() => setQ('')}

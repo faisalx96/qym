@@ -238,6 +238,7 @@ export function PromptsTab() {
                 <Button
                   variant="neutral"
                   isDisabled={!dirty}
+                  disabledReason="No changes to discard"
                   onPress={() => setDrafts((d) => ({ ...d, [key]: current }))}
                 >
                   Discard
@@ -245,6 +246,7 @@ export function PromptsTab() {
                 <Button
                   variant="primary"
                   isDisabled={!dirty}
+                  disabledReason="No changes to save"
                   loading={save.isPending}
                   onPress={() => persist(draft)}
                 >

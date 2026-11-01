@@ -118,7 +118,7 @@ test.describe('a viewer (A1-25 to A1-31)', () => {
         await expect(page.getByTestId(gone)).toHaveCount(0);
       }
       await expect(page.getByRole('button', { name: 'Rename dataset' })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: '+ Add a description' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Add a description' })).toHaveCount(0);
       await page.getByTestId('hero-more').click();
       const menu = page.getByRole('menu', { name: 'More actions' });
       await expect(menu.getByRole('menuitem', { name: /Download JSONL/ })).toBeVisible();

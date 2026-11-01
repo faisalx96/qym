@@ -1,4 +1,5 @@
-/* Segmented control: 24px inset box; the selected option is filled accent. */
+/* Segmented control: 24px inset box; the selected option is an accent wash with accent text at 600 (C136). A solid
+   accent fill is for primary buttons only. */
 .segmented {
   position: relative;
   display: inline-flex;
@@ -19,7 +20,7 @@
   left: var(--qym-segment-x, 0);
   width: var(--qym-segment-width, 0);
   border-radius: 3px;
-  background: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
   transition:
     left var(--transition-fast),
     width var(--transition-fast);
@@ -51,12 +52,13 @@
 }
 
 .option[data-selected] {
-  color: var(--bg-void);
+  color: var(--accent-primary);
+  font-weight: 600;
   background: transparent;
 }
 
 .segmented:not([data-ready]) .option[data-selected] {
-  background: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
 }
 
 .option[data-focus-visible] {

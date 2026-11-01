@@ -129,8 +129,12 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
           title="Nothing to compare yet"
           body="Create a second version to compare items between versions."
           action={
-            <LinkButton to={datasetPath(slug, dataset.slug)} variant="neutral">
-              ← Back to the dataset
+            <LinkButton
+              to={datasetPath(slug, dataset.slug)}
+              variant="neutral"
+              icon={<Icon name="chevron-left" size={12} />}
+            >
+              Back to the dataset
             </LinkButton>
           }
         />

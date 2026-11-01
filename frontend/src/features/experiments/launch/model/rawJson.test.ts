@@ -213,7 +213,7 @@ describe('model bindings in the text', () => {
 
   it('REFUSES a literal api key in a temporary model', () => {
     expect(errorsOf(bind({ temporary: { model: 'm', api_key: 'sk-live-abc' } }))).toEqual([
-      '/slot_bindings/endpoint:primary/temporary/api_key: Keys are never typed into JSON: use "+ Temporary model" on the model card',
+      '/slot_bindings/endpoint:primary/temporary/api_key: Keys are never typed into JSON: use "Add temporary model" on the model card',
     ]);
     expect(
       errorsOf(bind({ temporary: { model: 'm', api_key: { $secret: 'x', extra: 'sk' } } })),
@@ -294,7 +294,7 @@ describe('model bindings in the text', () => {
       '/slot_bindings/endpoint:primary/sweep/1: Duplicate model',
     ]);
     expect(errorsOf(bind({ sweep: [{ temporary: { model: 'm', api_key: 'sk-live' } }] }))).toEqual([
-      '/slot_bindings/endpoint:primary/sweep/0/temporary/api_key: Keys are never typed into JSON: use "+ Temporary model" on the model card',
+      '/slot_bindings/endpoint:primary/sweep/0/temporary/api_key: Keys are never typed into JSON: use "Add temporary model" on the model card',
     ]);
   });
 });

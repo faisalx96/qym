@@ -17,6 +17,7 @@ import {
   Text,
   Tooltip,
   useToast,
+  Icon,
 } from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { catalogPath, datasetPath } from '../lib/route';
@@ -53,8 +54,8 @@ export function DeletedDatasetsPage() {
         title="Deleted datasets"
         description="Deleted datasets keep their versions, items and history until a project manager restores them."
         actions={
-          <LinkButton to={catalogPath(slug)} variant="ghost">
-            ← All datasets
+          <LinkButton to={catalogPath(slug)} variant="ghost" icon={<Icon name="chevron-left" size={12} />}>
+            All datasets
           </LinkButton>
         }
       />

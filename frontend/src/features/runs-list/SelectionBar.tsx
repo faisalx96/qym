@@ -74,6 +74,7 @@ export function SelectionBar(p: SelectionBarProps) {
           variant="accent"
           onPress={p.onCompare}
           isDisabled={n < 2}
+          disabledReason="Select two runs"
           icon={<Icon name="grid" size={12} />}
         >
           Compare
@@ -90,6 +91,7 @@ export function SelectionBar(p: SelectionBarProps) {
           variant={cohortMode ? 'accent' : 'neutral'}
           onPress={p.onCohort}
           isDisabled={cohortMode ? !cohort.valid : n < 1}
+          disabledReason={cohortMode ? 'Pick at least one run for Cohort B' : 'Select a run'}
           icon={<Icon name="split" size={12} />}
         >
           {cohortMode ? 'Open Cohort' : 'Cohort'}
@@ -101,6 +103,7 @@ export function SelectionBar(p: SelectionBarProps) {
             <Button
               variant="neutral"
               isDisabled={n < 1}
+              disabledReason="Select a run"
               onPress={p.onSubmit}
               icon={<Icon name="send" size={12} />}
             >
@@ -110,6 +113,7 @@ export function SelectionBar(p: SelectionBarProps) {
           <Button
             variant="danger"
             isDisabled={n < 1 || !p.canDelete}
+            disabledReason={n < 1 ? 'Select a run' : 'You can delete only runs you own'}
             onPress={p.onDelete}
             icon={<Icon name="trash" size={12} />}
           >

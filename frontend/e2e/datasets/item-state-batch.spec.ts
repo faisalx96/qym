@@ -688,7 +688,7 @@ test.describe('item pane, item page and the disable dialog (A2-13 to A2-35)', ()
     await expect(pane(page)).toBeVisible();
     near((await size(pane(page))).w, 460, 2);
     const action = pane(page).getByTestId('item-state-action');
-    await expect(action).toHaveText('Disable item…');
+    await expect(action).toHaveText('Disable item');
     await action.click();
     const dialog = page.getByRole('dialog', { name: 'Disable item faq-001?' });
     near((await size(dialog)).w, 440, 2);
@@ -759,7 +759,7 @@ test.describe('item pane, item page and the disable dialog (A2-13 to A2-35)', ()
     await expect(page.getByTestId('item-state-action')).toHaveCount(0);
     await gotoApp(page, `/projects/${s.slug}/datasets/${s.ds}?v=${s.v2}&item=faq-001`);
     const disable = page.getByTestId('item-state-action');
-    await expect(disable).toHaveText('Disable item…');
+    await expect(disable).toHaveText('Disable item');
     expect((await size(disable)).h).toBe(32);
     await gotoApp(page, `/projects/${s.slug}/datasets/${s.ds}?v=${s.v1}&item=faq-001`);
     await expect(page.getByTestId('create-draft-to-edit')).toBeVisible();

@@ -41,9 +41,7 @@ test('expanding an item lazily loads bodies (POST /items/details) and shows a ca
   await waitLoaded(page);
   expect(details).toHaveLength(0); // the compact snapshot carries no bodies
   const req = page.waitForRequest((r) => r.method() === 'POST' && /\/items\/details/.test(r.url()));
-  await row(page, 'cmp-001')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-001').locator('[data-part="item-head"]').click();
   await req;
   const detail = itemDetail(page, 'cmp-001');
   await expect(detail).toBeVisible();
@@ -56,16 +54,12 @@ test('expanding an item lazily loads bodies (POST /items/details) and shows a ca
   await expect(card(page, base)).toContainText('Not sure about clause 0.');
   await expect(card(page, base).getByRole('link')).toHaveAttribute('href', /\/runs\/.+\?item=cmp-001/);
   // collapse again
-  await row(page, 'cmp-001')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-001').locator('[data-part="item-head"]').click();
   await expect(detail).toHaveCount(0);
 
   // copy button puts the output on the clipboard
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await row(page, 'cmp-001')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-001').locator('[data-part="item-head"]').click();
   await card(page, a)
     .getByRole('button', { name: /^Copy output of/ })
     .click();
@@ -78,9 +72,7 @@ test('a task error shows ERROR and the message on the output card', async ({ pag
   const { base, a } = seed.runs;
   await page.goto(compareUrl([base, a, seed.runs.c]));
   await waitLoaded(page);
-  await row(page, 'cmp-005')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-005').locator('[data-part="item-head"]').click();
   await expect(card(page, base)).toContainText('ERROR');
   await expect(card(page, base)).toContainText('TimeoutError');
 });
@@ -89,9 +81,7 @@ test('Trace opens the drawer for a traced item and Escape closes it', async ({ p
   const { base } = seed.runs;
   await page.goto(compareUrl([traced, base]));
   await waitLoaded(page);
-  await row(page, 'cmp-010')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-010').locator('[data-part="item-head"]').click();
   await expect(card(page, traced)).toBeVisible();
   await expect(card(page, base)).toBeVisible();
   await expect(card(page, base).getByRole('button', { name: 'Trace' })).toHaveCount(0);
@@ -117,9 +107,7 @@ test('edit a score: pencil, Enter saves via POST /api/runs/update_metric and the
   const { base, a } = seed.runs;
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
-  await row(page, 'cmp-002')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-002').locator('[data-part="item-head"]').click();
   const chip = card(page, base).locator('[data-metric="quality"]');
   const before = (await chip.innerText()).replace(/\s+/g, ' ');
   await chip.getByRole('button', { name: /^Edit quality score of/ }).click();
@@ -152,9 +140,7 @@ test('a 422 on save keeps the editor open with the message; Escape cancels', asy
   );
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
-  await row(page, 'cmp-003')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-003').locator('[data-part="item-head"]').click();
   const chip = card(page, base).locator('[data-metric="quality"]');
   await chip.getByRole('button', { name: /^Edit quality score of/ }).click();
   await chip.getByRole('textbox', { name: 'New quality score' }).fill('50%');
@@ -175,9 +161,7 @@ test('a locked (submitted) run shows no edit pencil and no Add issue', async ({ 
   const { base } = seed.runs;
   await page.goto(compareUrl([base, locked!]));
   await waitLoaded(page);
-  await row(page, 'cmp-002')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-002').locator('[data-part="item-head"]').click();
   await expect(card(page, locked!)).toBeVisible();
   await expect(card(page, locked!).getByRole('button', { name: /^Edit .* score of/ })).toHaveCount(0);
   await expect(card(page, locked!).getByRole('button', { name: 'Add issue' })).toHaveCount(0);
@@ -194,9 +178,7 @@ test('root-cause issues: validation, add, show on the card, edit, delete, and fi
   const { base, a } = seed.runs;
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
-  await row(page, 'cmp-004')
-    .locator('[data-part="item-head"]')
-    .click();
+  await row(page, 'cmp-004').locator('[data-part="item-head"]').click();
   const c = card(page, base);
   await expect(c).toContainText('No root-cause issues assigned.');
   await c.getByRole('button', { name: 'Add issue' }).click();
@@ -212,7 +194,7 @@ test('root-cause issues: validation, add, show on the card, edit, delete, and fi
   expect(posts).toBe(0);
   // valid: new category + finding
   await dialog.getByRole('button', { name: /Category/ }).click();
-  await page.getByRole('option', { name: 'New category…' }).click();
+  await page.getByRole('option', { name: 'New category' }).click();
   await dialog.getByRole('textbox', { name: 'New category' }).fill('Hallucination');
   await dialog.getByRole('textbox', { name: 'Finding' }).fill('Invented a clause number');
   const req = page.waitForRequest((r) => r.method() === 'POST' && /update_root_cause_issue/.test(r.url()));

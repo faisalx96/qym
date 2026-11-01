@@ -72,7 +72,13 @@ export function EditorEntry() {
             </Tag>
           ) : null}
           <span className={entry.statusActions}>
-            <Button size="sm" variant="ghost" isDisabled={count === 0 || readOnly} onPress={resetAll}>
+            <Button
+              size="sm"
+              variant="ghost"
+              isDisabled={count === 0 || readOnly}
+              disabledReason={readOnly ? 'Read-only' : 'No changes to undo'}
+              onPress={resetAll}
+            >
               Undo all changes
             </Button>
           </span>

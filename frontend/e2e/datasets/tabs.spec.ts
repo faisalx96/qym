@@ -105,7 +105,7 @@ test.describe('compare', () => {
 
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?v=v2`);
     await page.getByTestId('hero-more').click();
-    await page.getByRole('menuitem', { name: 'Compare…' }).click();
+    await page.getByRole('menuitem', { name: 'Compare versions' }).click();
     await expect(page).toHaveURL(/compare\?base=v1&head=v2/);
 
     const solo = await createDataset(request, p.slug, 'Solo');
@@ -249,7 +249,7 @@ test.describe('settings', () => {
     await page.getByRole('link', { name: 'Deleted datasets' }).click();
     await expect(page).toHaveURL(/view=deleted/);
     await expect(page.getByText('No deleted datasets')).toBeVisible();
-    await page.getByRole('link', { name: '← All datasets' }).click();
+    await page.getByRole('link', { name: 'All datasets' }).click();
     await expect(page.getByTestId('new-dataset')).toBeVisible();
   });
 
