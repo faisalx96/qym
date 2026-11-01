@@ -2843,6 +2843,11 @@ def scheduled_partitions(db, *, limit=20):
     return selected
 
 
+# A rolling deploy finishes within this many seconds of a worker start (C184).
+SHAPE_CHECK_WINDOW = 30 * 60
+SHAPE_CHECK_INTERVAL = 60 * 60
+
+
 class DashboardSummaryWorker:
     """A restart-safe polling worker with bounded transactions and owned sessions.
 
@@ -2893,6 +2898,8 @@ class DashboardSummaryWorker:
         # Discovery/reconcile scans are cheap but need not run 20x per second.
         self._next_reconcile = 0.0
         self._next_bootstrap = 0.0
+        self._started = time.monotonic()
+        self._next_shape_check = 0.0
         # Outbox retention needs no 1 s cadence: it runs at most once a minute (C074).
         self._next_event_prune = 0.0
 
@@ -2929,10 +2936,19 @@ class DashboardSummaryWorker:
             # number of unregistered runs instead of leaving them invisible.
             if now >= self._next_bootstrap:
                 found = bootstrap_partitions(db, limit=self.max_partitions * 5)
-                found += reconcile_summary_shapes(db, limit=self.max_partitions * 5)
                 db.commit()
                 # Keep discovering quickly while there is a backlog; otherwise every 30 s.
                 self._next_bootstrap = now + (0.0 if found else 30.0)
+            if now >= self._next_shape_check:
+                # Old-shape summaries come from an older worker during a rolling
+                # deploy, so the full rescan runs every 30 s only in the first
+                # SHAPE_CHECK_WINDOW after this worker starts, then hourly (C184).
+                reshaped = reconcile_summary_shapes(db, limit=self.max_partitions * 5)
+                db.commit()
+                after_deploy = now - self._started < SHAPE_CHECK_WINDOW
+                self._next_shape_check = now + (
+                    0.0 if reshaped else 30.0 if after_deploy else SHAPE_CHECK_INTERVAL
+                )
             partitions = scheduled_partitions(db, limit=self.max_partitions)
         processed = 0
         failed = False

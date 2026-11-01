@@ -44,6 +44,8 @@ class UserRole(str, enum.Enum):
 
 
 class ProjectRole(str, enum.Enum):
+    # A viewer opens, compares and exports; every write answers 403 (C033).
+    VIEWER = "VIEWER"
     MEMBER = "MEMBER"
     MANAGER = "MANAGER"
 
@@ -1753,6 +1755,15 @@ class RunItemPassScore(Base):
             name="uq_run_item_metric_pass",
         ),
         Index("ix_run_item_pass_scores_run_metric", "run_id", "metric_name"),
+        # Migration 0096 (C073): the numbers read from the index alone.
+        Index(
+            "ix_run_item_pass_scores_cover",
+            "run_id",
+            "metric_name",
+            "item_id",
+            "pass_number",
+            postgresql_include=["score_numeric"],
+        ),
     )
 
 
@@ -1898,6 +1909,17 @@ class Span(Base):
 
     __table_args__ = (
         Index("ix_span_run_trace", "run_id", "trace_id"),
+        # Migration 0096 (C073): step latency reads these columns from the index alone.
+        Index(
+            "ix_span_run_start_cover",
+            "run_id",
+            "start_time_ns",
+            postgresql_include=[
+                "id", "run_created_at", "trace_id", "span_id", "parent_span_id", "name",
+                "duration_ms", "end_time_ns", "status", "oi_kind", "usage_scope", "model_name",
+                "tool_name", "token_total", "token_prompt", "token_completion",
+            ],
+        ),
         UniqueConstraint("run_id", "span_id", "run_created_at", name="uq_span"),
     )
 

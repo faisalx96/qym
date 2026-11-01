@@ -32,6 +32,7 @@ from qym_platform.deps import get_db
 from qym_platform.middleware.etag import mark_cacheable
 from qym_platform.permissions import can_view_run
 from qym_platform.services.repeat_passes import pass_revision
+from qym_platform.services.span_scope import span_run_clause, spans_of_runs_clause
 
 router = APIRouter()
 
@@ -608,10 +609,10 @@ def _load_spans(
                 RunItemAttempt.trace_id.isnot(None),
             )
             filters.append(
-                and_(Span.run_id == base, Span.trace_id.in_(pass_traces))
+                and_(spans_of_runs_clause(db, [base]), Span.trace_id.in_(pass_traces))
             )
     if whole_runs:
-        filters.append(Span.run_id.in_(whole_runs))
+        filters.append(spans_of_runs_clause(db, whole_runs))
     return _project_spans(db, filters), passes
 
 
@@ -744,7 +745,7 @@ WRITER_ROLLUP = "site"
 def _summary_fingerprint(db: Session, run: Run) -> str:
     """The span set a stored summary was built from: a late span, a removed pass or a new attempt changes it."""
     span_count, max_span = (
-        db.query(func.count(Span.id), func.max(Span.id)).filter(Span.run_id == run.id).one()
+        db.query(func.count(Span.id), func.max(Span.id)).filter(span_run_clause(db, run.id, run.created_at)).one()
     )
     attempts = db.query(func.count()).select_from(RunItemAttempt).filter(RunItemAttempt.run_id == run.id).scalar()
     status = run.status.value if hasattr(run.status, "value") else str(run.status or "")

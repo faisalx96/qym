@@ -22,6 +22,7 @@ from qym_platform.db.models import (
     RunWorkflowStatus,
     Span,
 )
+from qym_platform.services.span_scope import span_run_clause
 from sqlalchemy import Integer, and_, cast, func, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
@@ -605,7 +606,7 @@ def delete_repeat_pass(
     if exclusive_trace_ids:
         (
             db.query(Span)
-            .filter(Span.run_id == run.id, Span.trace_id.in_(exclusive_trace_ids))
+            .filter(span_run_clause(db, run.id, run.created_at), Span.trace_id.in_(exclusive_trace_ids))
             .delete(synchronize_session=False)
         )
         (

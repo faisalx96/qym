@@ -1,0 +1,182 @@
+# Who can do what
+
+Each change the platform accepts, with the least role that may make it. A platform
+admin may make every change. Reads are open to every project member, Viewers included. A Viewer opens every page, compares runs and exports, and every change answers 403 "Viewers cannot change this project".
+
+Roles:
+
+- **public**: no sign-in (sign-in and sign-up).
+- **any_user**: any signed-in user, no project role needed.
+- **reader**: a project member of any role, a Viewer included: a read sent as POST.
+- **member**: a project member who may change it; a Viewer is refused.
+- **review_rule**: the project's review rule decides (managers, or members too).
+- **owner_or_manager**: the owner of the run, experiment or key, or a project manager.
+- **manager**: a project manager.
+- **admin**: a platform admin.
+- **api_key**: an API key of the project (the SDK).
+
+| Method | Route | Least role |
+|---|---|---|
+| POST | `/api/admin/maintenance/jobs` | admin |
+| POST | `/api/admin/maintenance/jobs/{job_id}/cancel` | admin |
+| POST | `/api/admin/maintenance/jobs/{job_id}/start` | admin |
+| POST | `/api/analysis-jobs/active-runs` | reader |
+| POST | `/api/corrections/approve-metric-analysis` | review_rule |
+| POST | `/api/corrections/bulk` | member |
+| DELETE | `/api/corrections/{correction_id}` | member |
+| PUT | `/api/corrections/{correction_id}` | member |
+| POST | `/api/corrections/{correction_id}/approve` | member |
+| POST | `/api/corrections/{correction_id}/reject` | member |
+| POST | `/api/corrections/{correction_id}/reset` | member |
+| POST | `/api/dashboard/kpis` | reader |
+| POST | `/api/dashboard/models` | reader |
+| POST | `/api/dashboard/models/stats` | reader |
+| POST | `/api/dashboard/neighbors` | reader |
+| POST | `/api/dashboard/overview` | reader |
+| POST | `/api/dashboard/points` | reader |
+| POST | `/api/dashboard/runs` | reader |
+| POST | `/api/dashboard/trend` | reader |
+| PUT | `/api/projects/{project_slug}/analysis-category-catalog` | manager |
+| POST | `/api/projects/{project_slug}/analysis-category-catalog/versions/{version_id}:restore` | manager |
+| POST | `/api/projects/{project_slug}/analysis-category-catalog/{version_ref}/restore` | manager |
+| PATCH | `/api/projects/{project_slug}/analysis-context` | manager |
+| POST | `/api/projects/{project_slug}/analysis-documents` | manager |
+| DELETE | `/api/projects/{project_slug}/analysis-documents/{document_id}` | manager |
+| PATCH | `/api/projects/{project_slug}/analysis-documents/{document_id}` | manager |
+| POST | `/api/projects/{project_slug}/analysis-examples` | reader |
+| POST | `/api/projects/{project_slug}/analysis-rule-aliases/{alias_name}` | manager |
+| POST | `/api/projects/{project_slug}/analysis-rule-jobs` | manager |
+| POST | `/api/projects/{project_slug}/analysis-rule-jobs/{job_id}/cancel` | manager |
+| POST | `/api/projects/{project_slug}/analysis-rule-versions` | manager |
+| POST | `/api/projects/{project_slug}/analysis-rule-versions/{target_ref}:merge` | manager |
+| DELETE | `/api/projects/{project_slug}/analysis-rule-versions/{version_id}` | manager |
+| POST | `/api/projects/{project_slug}/analysis-rule-versions/{version_id}/activate` | manager |
+| DELETE | `/api/projects/{project_slug}/analysis-rule-versions/{version_id}/permanent` | admin |
+| POST | `/api/projects/{project_slug}/analysis-rule-versions/{version_id}/restore` | admin |
+| POST | `/api/projects/{project_slug}/analysis-rule-versions/{version_ref}:publish` | manager |
+| POST | `/api/projects/{project_slug}/analysis-rules/infer` | manager |
+| POST | `/api/runs/delete` | owner_or_manager |
+| POST | `/api/runs/purge` | admin |
+| POST | `/api/runs/restore` | admin |
+| POST | `/api/runs/update_metric` | member |
+| POST | `/api/runs/update_root_cause` | member |
+| POST | `/api/runs/update_root_cause_issue` | member |
+| POST | `/api/runs/{run_id:path}/aggregate-analysis` | owner_or_manager |
+| PATCH | `/api/runs/{run_id:path}/analysis-context` | manager |
+| POST | `/api/runs/{run_id:path}/analysis-documents` | owner_or_manager |
+| DELETE | `/api/runs/{run_id:path}/analysis-documents/{document_id}` | manager |
+| PATCH | `/api/runs/{run_id:path}/analysis-documents/{document_id}` | owner_or_manager |
+| POST | `/api/runs/{run_id:path}/analysis-examples` | reader |
+| POST | `/api/runs/{run_id:path}/analysis-jobs` | owner_or_manager |
+| POST | `/api/runs/{run_id:path}/analysis-jobs/{job_id}/cancel` | member |
+| POST | `/api/runs/{run_id:path}/analysis-rule-aliases/{alias_name}` | manager |
+| POST | `/api/runs/{run_id:path}/analysis-rule-jobs` | manager |
+| POST | `/api/runs/{run_id:path}/analysis-rule-jobs/{job_id}/cancel` | manager |
+| POST | `/api/runs/{run_id:path}/analysis-rule-versions` | manager |
+| POST | `/api/runs/{run_id:path}/analysis-rule-versions/{target_ref}:merge` | manager |
+| DELETE | `/api/runs/{run_id:path}/analysis-rule-versions/{version_id}` | manager |
+| POST | `/api/runs/{run_id:path}/analysis-rule-versions/{version_id}/activate` | manager |
+| DELETE | `/api/runs/{run_id:path}/analysis-rule-versions/{version_id}/permanent` | admin |
+| POST | `/api/runs/{run_id:path}/analysis-rule-versions/{version_id}/restore` | admin |
+| POST | `/api/runs/{run_id:path}/analysis-rule-versions/{version_ref}:publish` | manager |
+| POST | `/api/runs/{run_id:path}/analysis-rules/infer` | manager |
+| POST | `/api/runs/{run_id:path}/analyze` | owner_or_manager |
+| POST | `/api/runs/{run_id:path}/analyze-preview` | reader |
+| POST | `/api/runs/{run_id:path}/analyze-stream` | owner_or_manager |
+| POST | `/api/runs/{run_id:path}/analyze-test` | member |
+| POST | `/api/runs/{run_id}/force-stop` | admin |
+| POST | `/api/runs/{run_id}/items/details` | reader |
+| POST | `/api/runs/{run_id}/items/reasons` | reader |
+| POST | `/api/runs/{run_id}/items/search` | reader |
+| DELETE | `/api/runs/{run_id}/passes` | owner_or_manager |
+| DELETE | `/api/runs/{run_id}/passes/{pass_number}` | owner_or_manager |
+| POST | `/ingestion/v1/runs` | api_key |
+| POST | `/ingestion/v1/runs/{run_id}/events` | api_key |
+| POST | `/ingestion/v1/runs:upload` | api_key |
+| DELETE | `/v1/admin/feedback-agent` | admin |
+| PUT | `/v1/admin/feedback-agent` | admin |
+| POST | `/v1/admin/feedback-agent/test` | admin |
+| POST | `/v1/admin/projects` | admin |
+| DELETE | `/v1/admin/projects/{project_id}` | admin |
+| PATCH | `/v1/admin/projects/{project_id}` | admin |
+| POST | `/v1/admin/projects/{project_id}/archive` | admin |
+| POST | `/v1/admin/projects/{project_id}/unarchive` | admin |
+| POST | `/v1/admin/users` | admin |
+| DELETE | `/v1/admin/users/{user_id}` | admin |
+| PUT | `/v1/admin/users/{user_id}` | admin |
+| POST | `/v1/admin/users/{user_id}/reset-password` | admin |
+| POST | `/v1/auth/bootstrap-admin` | public |
+| POST | `/v1/auth/login/password` | public |
+| POST | `/v1/auth/logout` | public |
+| POST | `/v1/auth/password/change` | public |
+| POST | `/v1/auth/signup/password` | public |
+| POST | `/v1/datasets` | member |
+| POST | `/v1/datasets/{dataset_id}:restore` | manager |
+| DELETE | `/v1/datasets/{dataset_ref}` | manager |
+| PATCH | `/v1/datasets/{dataset_ref}` | manager |
+| PUT | `/v1/datasets/{dataset_ref}/access` | manager |
+| POST | `/v1/datasets/{dataset_ref}/aliases/{alias_name}` | member |
+| POST | `/v1/datasets/{dataset_ref}/versions` | member |
+| PATCH | `/v1/datasets/{dataset_ref}/versions/{version_ref}` | member |
+| POST | `/v1/datasets/{dataset_ref}/versions/{version_ref}/items` | member |
+| DELETE | `/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}` | member |
+| PATCH | `/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}` | member |
+| POST | `/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}:disable` | member |
+| POST | `/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}:enable` | member |
+| POST | `/v1/datasets/{dataset_ref}/versions/{version_ref}/items:batch` | member |
+| POST | `/v1/datasets/{dataset_ref}/versions/{version_ref}/items:bulk` | member |
+| POST | `/v1/datasets/{dataset_ref}/versions/{version_ref}:publish` | member |
+| POST | `/v1/datasets:upload` | member |
+| POST | `/v1/feedback` | any_user |
+| DELETE | `/v1/feedback/{ref}` | any_user |
+| POST | `/v1/feedback/{ref}/confirm` | any_user |
+| POST | `/v1/feedback/{ref}/messages` | any_user |
+| POST | `/v1/feedback/{ref}/stop` | any_user |
+| PATCH | `/v1/feedback/{ref}/triage` | admin |
+| POST | `/v1/feedback/{ref}/turn` | any_user |
+| POST | `/v1/product-evals` | api_key |
+| POST | `/v1/product-evals/jobs/{job_id}/stop` | api_key |
+| POST | `/v1/product-evals/{identifier}/stop` | api_key |
+| POST | `/v1/projects` | any_user |
+| PUT | `/v1/projects/{project_id}/analysis-prompts` | manager |
+| PATCH | `/v1/projects/{project_id}/analysis-prompts/{prompt_key}` | manager |
+| POST | `/v1/projects/{project_id}/api-keys` | member |
+| DELETE | `/v1/projects/{project_id}/api-keys/{key_id}` | owner_or_manager |
+| POST | `/v1/projects/{project_id}/dataset-read-tokens` | admin |
+| DELETE | `/v1/projects/{project_id}/dataset-read-tokens/{token_id}` | admin |
+| POST | `/v1/projects/{project_id}/eval-environments` | manager |
+| DELETE | `/v1/projects/{project_id}/eval-environments/{env_id}` | manager |
+| PUT | `/v1/projects/{project_id}/eval-environments/{env_id}` | manager |
+| PUT | `/v1/projects/{project_id}/eval-environments/{env_id}/model-slots` | manager |
+| POST | `/v1/projects/{project_id}/eval-environments/{env_id}/presets` | manager |
+| POST | `/v1/projects/{project_id}/eval-environments/{env_id}/presets/{preset_id}/versions` | member |
+| POST | `/v1/projects/{project_id}/eval-environments/{env_id}/schema/refresh` | member |
+| POST | `/v1/projects/{project_id}/eval-environments/{env_id}/test` | manager |
+| POST | `/v1/projects/{project_id}/eval-queue/cancel` | member |
+| POST | `/v1/projects/{project_id}/eval-queue/remote/cancel` | manager |
+| POST | `/v1/projects/{project_id}/experiments` | member |
+| POST | `/v1/projects/{project_id}/experiments/{experiment_id}/cancel` | owner_or_manager |
+| POST | `/v1/projects/{project_id}/experiments/{experiment_id}/clone` | reader |
+| POST | `/v1/projects/{project_id}/experiments/{experiment_id}/jobs/{job_id}/cancel` | owner_or_manager |
+| POST | `/v1/projects/{project_id}/experiments/{experiment_id}/jobs/{job_id}/retry` | owner_or_manager |
+| POST | `/v1/projects/{project_id}/llm-connections` | manager |
+| POST | `/v1/projects/{project_id}/llm-connections/test` | manager |
+| DELETE | `/v1/projects/{project_id}/llm-connections/{connection_id}` | manager |
+| PUT | `/v1/projects/{project_id}/llm-connections/{connection_id}` | manager |
+| POST | `/v1/projects/{project_id}/llm-connections/{connection_id}/set-default` | manager |
+| POST | `/v1/projects/{project_id}/llm-connections/{connection_id}/test` | manager |
+| POST | `/v1/projects/{project_id}/members` | manager |
+| DELETE | `/v1/projects/{project_id}/members/{user_id}` | manager |
+| PATCH | `/v1/projects/{project_id}/members/{user_id}` | manager |
+| PATCH | `/v1/projects/{project_id}/metric-directions` | manager |
+| PATCH | `/v1/projects/{project_id}/review-rules` | manager |
+| POST | `/v1/runs` | api_key |
+| POST | `/v1/runs/submit` | owner_or_manager |
+| POST | `/v1/runs/{run_id}/approve` | manager |
+| POST | `/v1/runs/{run_id}/events` | api_key |
+| POST | `/v1/runs/{run_id}/owner` | manager |
+| POST | `/v1/runs/{run_id}/reject` | manager |
+| POST | `/v1/runs/{run_id}/submit` | owner_or_manager |
+| POST | `/v1/runs/{run_id}/unapprove` | manager |
+| POST | `/v1/runs/{run_id}/unreject` | manager |
+| POST | `/v1/runs:upload` | api_key |

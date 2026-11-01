@@ -201,6 +201,10 @@ def test_span_without_span_id_is_rejected_without_losing_its_batch(api):
     with Session(engine) as db:
         assert db.query(RunItem).one().output == "ok"
         assert [row.span_id for row in db.query(Span)] == ["good"]
+        # C184: span reads add run_created_at to prune partitions, which is right
+        # only because ingest stores the run's own created_at on every span.
+        run = db.get(Run, run_id)
+        assert [row.run_created_at for row in db.query(Span)] == [run.created_at]
 
 
 def test_reused_sequence_is_a_per_event_rejection(api):

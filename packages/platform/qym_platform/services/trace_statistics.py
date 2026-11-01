@@ -37,6 +37,7 @@ from qym_platform.db.models import (
     RunTraceSummary,
     Span,
 )
+from qym_platform.services.span_scope import span_run_clause
 
 # Private marker kept in ``RunTraceSummary.totals`` while the ledger needs repair.
 STALE_KEY = "_stale"
@@ -415,7 +416,7 @@ def _rebuild(db, run, summary, touched_trace_ids, *, full):
     if full:
         rebuild_traces = cached | {
             row[0]
-            for row in db.query(Span.trace_id).filter(Span.run_id == run_id).distinct()
+            for row in db.query(Span.trace_id).filter(span_run_clause(db, run_id, run.created_at)).distinct()
         }
     else:
         rebuild_traces = set(touched_trace_ids or ()) | (

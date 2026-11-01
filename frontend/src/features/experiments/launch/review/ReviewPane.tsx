@@ -1,6 +1,7 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
 import type { EnvTasksPayload } from '@/api/launch';
 import { useEnvTaskLists } from '@/api/launch';
+import { readOnlyReason, useOptionalProject } from '@/features/shell';
 import { Button, Card, KeyValueGrid, Text, StatusMark } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
@@ -242,6 +243,7 @@ export function ReviewPane({
   rawAction?: boolean;
 }) {
   const { doc, ctx, review, preview, selectedEnvs, readOnly, projectId } = useLaunch();
+  const projectContext = useOptionalProject();
   const { count } = review;
   const envCount = doc.environmentIds.length;
   const pairs = pairCount(doc);
@@ -366,7 +368,11 @@ export function ReviewPane({
             ) : null}
           </details>
         ) : null}
-        {readOnly ? <Callout tone="warning">Archived project: read only.</Callout> : null}
+        {readOnly ? (
+          <Callout tone="warning">
+            Read only: {projectContext ? readOnlyReason(projectContext) : 'This project is archived.'}
+          </Callout>
+        ) : null}
         {hideActions ? null : (
           <LaunchActions onCancel={onCancel} hideRaw={!rawAction} hideLaunch={hideLaunch} />
         )}

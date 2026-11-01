@@ -31,7 +31,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from qym_platform.db.maintenance_models import MaintenanceJob
-from qym_platform.db.migration_helpers import COLUMN_TYPE_CONVERSIONS
+from qym_platform.db.migration_helpers import (
+    COLUMN_TYPE_CONVERSIONS,
+    COVERING_SCORE_INDEX,
+    COVERING_SPAN_INDEX,
+)
 from qym_platform.log import get_logger
 
 logger = get_logger(__name__)
@@ -627,9 +631,12 @@ def _drop_redundant_indexes(ctx: JobContext) -> bool:
     return True
 
 
-# The indexes migrations 0051 and 0055 defer to ``create_deferred_indexes`` when a
-# table is too large to index during startup. The job builds only these: the
-# table, columns and WHERE predicate come from here, never from job params.
+# The indexes migrations 0051, 0055, 0093 and 0096 defer to ``create_deferred_indexes``
+# when a table is too large to index during startup. The job builds only these: the
+# table, columns, INCLUDE columns and WHERE predicate come from here, never from job
+# params. ``partitioned`` builds the index on every partition CONCURRENTLY and attaches
+# it to an index ON ONLY the parent, then vacuums the finished partitions so their
+# reads can be index-only.
 DEFERRED_INDEXES: Dict[str, Dict[str, Any]] = {
     spec["name"]: spec
     for spec in (
@@ -650,8 +657,88 @@ DEFERRED_INDEXES: Dict[str, Dict[str, Any]] = {
             "columns": ["project_key", "bucket_key", "score"],
             "where": "present AND record_kind = 'score'",
         },
+        # Migration 0093 (C074): outbox retention walks published events.
+        {
+            "name": "ix_dashboard_event_published",
+            "table": "dashboard_change_events",
+            "columns": ["source_version"],
+            "where": "published_at IS NOT NULL",
+        },
+        # Migration 0096 (C073): the numbers of a run's pass scores and spans,
+        # read from the index alone (pass scores average 1.6 KB a row, spans 2.5 KB).
+        COVERING_SCORE_INDEX,
+        COVERING_SPAN_INDEX,
     )
 }
+
+
+def _partitions(conn, table: str) -> List[Tuple[str, str]]:
+    """``(partition name, bound expression)`` of a partitioned table in the current schema."""
+    return [
+        (row[0], row[1] or "")
+        for row in conn.execute(
+            text(
+                "SELECT c.relname, pg_get_expr(c.relpartbound, c.oid) FROM pg_inherits i "
+                "JOIN pg_class c ON c.oid = i.inhrelid JOIN pg_class p ON p.oid = i.inhparent "
+                "JOIN pg_namespace n ON n.oid = p.relnamespace "
+                "WHERE p.relname = :table AND n.nspname = current_schema() ORDER BY c.relname"
+            ),
+            {"table": table},
+        )
+    ]
+
+
+def _finished_partition(bound: str, now: datetime) -> bool:
+    """A range partition whose upper bound is in the past takes no new rows."""
+    match = re.search(r"TO \('([^']+)'\)", bound)
+    if not match:
+        return False
+    try:
+        upper = datetime.fromisoformat(match.group(1).replace(" ", "T")[:19])
+    except ValueError:
+        return False
+    return upper <= now
+
+
+def _create_partitioned_index(ctx: "JobContext", spec: Dict[str, Any], cols: str, include: str, where: str) -> None:
+    """An index ON ONLY the parent, built CONCURRENTLY on each partition and attached.
+
+    Partitions created later inherit the parent index once it is valid. Finished
+    partitions are vacuumed afterwards: an index-only scan needs their visibility map.
+    """
+    parent = _quoted(ctx, spec["name"])
+    table = _quoted(ctx, spec["table"])
+    with ctx.autocommit() as conn:
+        conn.execute(text(f"CREATE INDEX IF NOT EXISTS {parent} ON ONLY {table} ({cols}){include}{where}"))
+        attached = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT ci.relname FROM pg_inherits i JOIN pg_class ci ON ci.oid = i.inhrelid "
+                    "JOIN pg_class pi ON pi.oid = i.inhparent WHERE pi.relname = :parent"
+                ),
+                {"parent": spec["name"]},
+            )
+        }
+        partitions = _partitions(conn, spec["table"])
+        for partition, _bound in partitions:
+            child_name = f"{partition}_{spec['suffix']}"[:63]
+            if child_name in attached:
+                continue
+            child = _quoted(ctx, child_name)
+            # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+            conn.execute(text(f"DROP INDEX IF EXISTS {child}"))
+            started = time.perf_counter()
+            conn.execute(
+                text(f"CREATE INDEX CONCURRENTLY {child} ON {_quoted(ctx, partition)} ({cols}){include}{where}")
+            )
+            conn.execute(text(f"ALTER INDEX {parent} ATTACH PARTITION {child}"))
+            ctx.log(f"created {child_name} on {partition} in {time.perf_counter() - started:.0f}s")
+        now = datetime.utcnow()
+        for partition, bound in partitions:
+            if _finished_partition(bound, now):
+                conn.execute(text(f"VACUUM (ANALYZE) {_quoted(ctx, partition)}"))
+        ctx.log(f"attached {spec['name']} on {len(partitions)} partitions of {spec['table']}")
 
 
 def _deferred_index_name(where: str, entry: Any) -> Any:
@@ -694,17 +781,31 @@ def _create_deferred_indexes(ctx: JobContext) -> bool:
         name, table = _quoted(ctx, spec["name"]), _quoted(ctx, spec["table"])
         cols = ", ".join(_quoted(ctx, c) for c in spec["columns"])
         where = f" WHERE {spec['where']}" if spec.get("where") else ""
+        include = (
+            f" INCLUDE ({', '.join(_quoted(ctx, c) for c in spec['include'])})"
+            if spec.get("include") and ctx.is_postgres()
+            else ""
+        )
+        if spec.get("partitioned") and ctx.is_postgres():
+            _create_partitioned_index(ctx, spec, cols, include, where)
+            done.add(spec["name"])
+            ctx.progress["done"] = sorted(done)
+            return len(done) >= len(specs)
         with ctx.autocommit() as conn:
             if ctx.is_postgres():
                 # An earlier interrupted build leaves an INVALID index behind; rebuild it.
                 conn.execute(text(f"DROP INDEX IF EXISTS {name}"))
                 started = time.perf_counter()
                 conn.execute(
-                    text(f"CREATE INDEX CONCURRENTLY {name} ON {table} ({cols}){where}")
+                    text(f"CREATE INDEX CONCURRENTLY {name} ON {table} ({cols}){include}{where}")
                 )
                 ctx.log(
                     f"created {spec['name']} on {spec['table']}({', '.join(spec['columns'])}){where} in {time.perf_counter() - started:.0f}s"
                 )
+                if spec.get("vacuum"):
+                    started = time.perf_counter()
+                    conn.execute(text(f"VACUUM (ANALYZE) {table}"))
+                    ctx.log(f"vacuumed {spec['table']} in {time.perf_counter() - started:.0f}s")
             else:
                 conn.execute(
                     text(

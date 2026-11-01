@@ -120,7 +120,7 @@ from qym_platform.db.models import (
     User,
 )
 from qym_platform.deps import get_db
-from qym_platform.permissions import is_project_manager, require_project_writable
+from qym_platform.permissions import is_project_manager, require_project_writable, require_project_writer
 from qym_platform.secrets import decrypt_llm_api_key, encryption_available
 from qym_platform.api.eval_environments import (
     EvalClientFactory,
@@ -1969,6 +1969,7 @@ def cancel_experiment(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    require_project_writer(db, project_id)  # a Viewer cannot cancel (C033)
     experiment = _get_experiment(db, project_id, experiment_id)
     _require_control(db, principal, experiment)
     reason = req.reason if req else None
@@ -2019,6 +2020,7 @@ def cancel_experiment_job(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    require_project_writer(db, project_id)  # a Viewer cannot cancel (C033)
     experiment = _get_experiment(db, project_id, experiment_id)
     job = _get_job(db, experiment, job_id)
     _require_control(db, principal, experiment)

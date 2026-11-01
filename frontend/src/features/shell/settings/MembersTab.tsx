@@ -36,11 +36,15 @@ import styles from './settings.module.css';
 import { transferCandidates } from './transferCandidates';
 import { SettingsCard } from './SettingsCard';
 
-type Role = 'MEMBER' | 'MANAGER';
+type Role = 'VIEWER' | 'MEMBER' | 'MANAGER';
 const ROLE_ITEMS = [
+  { key: 'VIEWER', label: 'Viewer' },
   { key: 'MEMBER', label: 'Member' },
   { key: 'MANAGER', label: 'Manager' },
 ];
+/** What each role can do (C033), under the role select. */
+const ROLE_HELP =
+  'Viewer: opens, compares and exports. Member: also runs, reviews and edits. Manager: also manages members and settings.';
 
 export function MembersTab() {
   const { project, readOnly, canManage } = useProjectContext();
@@ -179,7 +183,12 @@ export function MembersTab() {
       }
       data-members
     >
-      {canManage && !readOnly ? <AddMemberBar projectId={project.id} existing={members.data ?? []} /> : null}
+      {canManage && !readOnly ? (
+        <>
+          <AddMemberBar projectId={project.id} existing={members.data ?? []} />
+          <p className={styles.roleHelp}>{ROLE_HELP}</p>
+        </>
+      ) : null}
       {members.isError ? (
         <ErrorState
           error={members.error}
