@@ -1981,6 +1981,69 @@ def list_datasets(
     }
 
 
+# The catalog lists at most this many unregistered names, the most used first.
+UNREGISTERED_MAX = 100
+
+
+@router.get("/v1/datasets:unregistered")
+def list_unregistered_dataset_names(
+    project_slug: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(dataset_principal),
+) -> Dict[str, Any]:
+    """Dataset names the project's runs used that no dataset registers (C030).
+
+    A run links to a dataset by ``dataset_id``. Runs sent with a name that no
+    dataset of the project carries keep ``dataset_id`` empty, so the catalog
+    never showed them ("No datasets yet" next to hundreds of runs). Each name
+    comes with its run count (live runs; a union run counts once per name). A
+    name that a live dataset now carries (its name or slug) is left out.
+    """
+    _require_scope(principal, "datasets:read")
+    project = _project_for_request(db, principal, project_slug)
+    counts: Dict[str, int] = {}
+    for name, runs in (
+        db.query(Run.dataset, func.count(Run.id))
+        .filter(
+            Run.project_id == project.id,
+            Run.deleted_at.is_(None),
+            Run.dataset_id.is_(None),
+            Run.dataset_count == 1,
+            Run.dataset != "",
+        )
+        .group_by(Run.dataset)
+    ):
+        counts[name] = counts.get(name, 0) + int(runs)
+    for name, runs in (
+        db.query(RunDataset.dataset, func.count(func.distinct(RunDataset.run_id)))
+        .join(Run, Run.id == RunDataset.run_id)
+        .filter(
+            Run.project_id == project.id,
+            Run.deleted_at.is_(None),
+            RunDataset.dataset_id.is_(None),
+            RunDataset.dataset != "",
+        )
+        .group_by(RunDataset.dataset)
+    ):
+        counts[name] = counts.get(name, 0) + int(runs)
+    known = {
+        value.casefold()
+        for row in db.query(Dataset.name, Dataset.slug).filter(
+            Dataset.project_id == project.id, Dataset.deleted_at.is_(None)
+        )
+        for value in row
+        if value
+    }
+    names = sorted(
+        ((name, runs) for name, runs in counts.items() if name and name.casefold() not in known),
+        key=lambda pair: (-pair[1], pair[0].casefold()),
+    )
+    return {
+        "names": [{"name": name, "runs": runs} for name, runs in names[:UNREGISTERED_MAX]],
+        "total": len(names),
+    }
+
+
 @router.post("/v1/datasets")
 def create_dataset(
     req: CreateDatasetRequest,

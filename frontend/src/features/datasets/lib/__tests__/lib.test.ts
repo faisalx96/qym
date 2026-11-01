@@ -181,11 +181,11 @@ describe('versions', () => {
     expect(catalogStateLine(base)).toBe('empty');
     expect(
       catalogStateLine({ ...base, production_version: versions[2]!, latest_version: versions[0]! }),
-    ).toBe('v1 prod · v3 draft');
-    expect(catalogStateLine({ ...base, latest_version: versions[0]! })).toBe('v3 draft · never published');
+    ).toBe('v1 Production · v3 Draft');
+    expect(catalogStateLine({ ...base, latest_version: versions[0]! })).toBe('v3 Draft · never published');
     expect(
       catalogStateLine({ ...base, production_version: versions[2]!, latest_version: versions[2]! }),
-    ).toBe('v1 prod · current');
+    ).toBe('v1 Production');
   });
 });
 

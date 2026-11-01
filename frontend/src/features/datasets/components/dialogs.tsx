@@ -31,10 +31,13 @@ export function NewDatasetDialog({
   open,
   onOpenChange,
   slug,
+  initialName,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   slug: string;
+  /** Register: the name runs already used (C030). */
+  initialName?: string;
 }) {
   const create = useCreateDataset(slug);
   const navigate = useNavigate();
@@ -48,10 +51,18 @@ export function NewDatasetDialog({
       confirmLabel="Create dataset"
       submittingLabel="Creating…"
       fields={[
-        { name: 'name', label: 'Name', required: true, autoFocus: true, placeholder: 'e.g. Support QA' },
+        {
+          name: 'name',
+          label: 'Name',
+          required: true,
+          autoFocus: true,
+          placeholder: 'e.g. Support QA',
+          value: initialName,
+        },
         {
           name: 'slug',
           label: 'Slug',
+          value: initialName ? slugifyDatasetName(initialName) : undefined,
           mono: true,
           placeholder: 'auto from the name',
           help: 'Letters and digits of any script; blank = generated.',

@@ -72,10 +72,24 @@
   }
 }
 
+/* The version line: each version with its own status mark (C168) */
 .state {
-  font-family: var(--font-mono);
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
   font-size: var(--font-sm);
   color: var(--text-muted);
+}
+
+.stateVersion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.stateLabel {
+  font-family: var(--font-mono);
 }
 
 .description {
@@ -132,10 +146,43 @@
   gap: var(--space-sm);
 }
 
-.state [data-kind='prod'] {
-  color: var(--success);
+/* Used by runs, not registered (C030) */
+.unregistered {
+  margin-top: var(--space-lg);
 }
 
-.state [data-kind='draft'] {
-  color: var(--warning);
+.unregisteredHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.unregisteredList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.unregisteredRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xs) 0;
+}
+
+.unregisteredRow + .unregisteredRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.unregisteredName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
 }

@@ -34,6 +34,7 @@ import {
 import { CreateDraftDialog, DisableItemDialog } from '../components/dialogs';
 import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
 import { FieldEditor } from '../components/FieldEditor';
+import { VersionBadge } from '../components/VersionSwitcher';
 import { useItemEditor } from './useItemEditor';
 import { formatDate, relativeTime } from '../lib/itemValue';
 import { metaFiltersToParams, metaModesToParams, parseMetaFilters } from '../lib/metaFilter';
@@ -198,9 +199,10 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
           <span key="id" className={styles.mono}>
             id {item.item_id}
           </span>,
-          <Tag key="v" kind="version">
-            {version.version} {version.status}
-          </Tag>,
+          <span key="v" className={styles.versionMeta}>
+            <span className={styles.mono}>{version.version}</span>
+            <VersionBadge version={version} />
+          </span>,
           ...(neighbors.data
             ? [`${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString()} in this view`]
             : []),

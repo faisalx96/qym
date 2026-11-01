@@ -40,7 +40,7 @@ import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
 import { fieldLabel, formatDate, itemIdentity } from '../lib/itemValue';
 import { comparePath, datasetPath, parseDatasetRoute } from '../lib/route';
-import { resolveActiveVersion } from '../lib/versions';
+import { resolveActiveVersion, versionStatusLabel } from '../lib/versions';
 import styles from './DatasetComparePage.module.css';
 
 const KINDS: { id: CompareKind; label: string }[] = [
@@ -170,7 +170,8 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
 
   const items = versions.map((v) => ({
     key: v.version,
-    label: `${v.version}${v.name ? ` — ${v.name}` : ''} (${v.status})`,
+    // the status in words, Production in full (C168); a select option cannot hold a status mark
+    label: `${v.version}${v.name ? ` — ${v.name}` : ''} · ${versionStatusLabel(v)}`,
   }));
   const go = (next: { base?: string; head?: string; tab?: CompareKind }) =>
     navigate(

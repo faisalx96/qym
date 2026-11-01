@@ -399,6 +399,21 @@ export interface NeighborParams {
 
 // ---------------------------------------------------------------- queries
 
+export interface UnregisteredName {
+  name: string;
+  runs: number;
+}
+
+/** Dataset names the project's runs used that no dataset registers, with run counts (C030). */
+export function useUnregisteredDatasetNames(slug: string) {
+  return useQuery({
+    queryKey: ['datasets', slug, 'unregistered'] as const,
+    queryFn: () =>
+      api.get<{ names: UnregisteredName[]; total: number }>(withSlug('/v1/datasets:unregistered', slug)),
+    staleTime: 30_000,
+  });
+}
+
 export function useDatasetCatalog(slug: string, deleted = false) {
   return useQuery({
     queryKey: dsKeys.catalog(slug, deleted),

@@ -29,16 +29,32 @@ export function versionNumber(label: string | null | undefined): number {
 }
 
 /** Catalog card state line: `v3 prod · v4 draft`, `v2 draft · never published`, `empty`. */
-export function catalogStateLine(d: Dataset): string {
+/** A version's status in words (C168): Production in full, then Draft or Published. */
+export function versionStatusLabel(v: DatasetVersion): 'Production' | 'Draft' | 'Published' {
+  return isProduction(v) ? 'Production' : v.status === 'draft' ? 'Draft' : 'Published';
+}
+
+/**
+ * The versions a catalog card names (C168): the production version, then the newest one when it is another. Each
+ * carries its own status mark (VersionBadge); the production one is marked production even when the card's summary
+ * of it lists no aliases.
+ */
+export function catalogStateVersions(d: Dataset): DatasetVersion[] {
   const prod = d.production_version;
   const latest = d.latest_version;
-  if (!latest) return 'empty';
-  const parts: string[] = [];
-  if (prod) parts.push(`${prod.version} prod`);
-  if (latest.status === 'draft') parts.push(`${latest.version} draft`);
-  else if (!prod || latest.id !== prod.id) parts.push(`${latest.version} published`);
-  if (!prod && latest.status === 'draft') parts.push('never published');
-  if (prod && latest.id === prod.id) parts.push('current');
+  const out: DatasetVersion[] = [];
+  if (prod) out.push({ ...prod, aliases: [...new Set([...(prod.aliases ?? []), 'production'])] });
+  if (latest && (!prod || latest.id !== prod.id))
+    out.push({ ...latest, aliases: (latest.aliases ?? []).filter((a) => a !== 'production') });
+  return out;
+}
+
+/** The catalog card's version line in words: 'v1 Production · v3 Draft' (no 'prod', no 'current'). */
+export function catalogStateLine(d: Dataset): string {
+  const versions = catalogStateVersions(d);
+  if (!versions.length) return 'empty';
+  const parts = versions.map((v) => `${v.version} ${versionStatusLabel(v)}`);
+  if (!d.production_version && d.latest_version?.status === 'draft') parts.push('never published');
   return parts.join(' · ');
 }
 
