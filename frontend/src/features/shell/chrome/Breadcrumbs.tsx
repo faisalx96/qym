@@ -1,7 +1,8 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
 import { useCurrentCrumbLabel } from '@/lib/crumb-label';
+import { LIST_PARAM, normalizeContext } from '@/lib/runs-order';
 import { Icon } from '@/ui';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import type { RouteContext } from './nav';
@@ -18,11 +19,17 @@ export interface BreadcrumbsProps {
  */
 export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
   const { pathname } = useLocation();
+  const [params] = useSearchParams();
   const pageLabel = useCurrentCrumbLabel();
   const crumbs: { label: string; to?: string; mono?: boolean }[] = [];
   if (project) {
     if (route.page === 'run-detail' && route.runId) {
-      crumbs.push({ label: 'Runs', to: projectPath(project.slug) }, { label: route.runId, mono: true });
+      // The run id stays the last crumb (owner, C124). Runs goes back to the filtered list the run was opened from.
+      const listContext = normalizeContext(params.get(LIST_PARAM));
+      crumbs.push(
+        { label: 'Runs', to: `${projectPath(project.slug)}${listContext ? `?${listContext}` : ''}` },
+        { label: route.runId, mono: true },
+      );
     } else if (route.page === 'analyzer' && route.runId) {
       crumbs.push(
         { label: route.runId, to: projectPath(project.slug, `runs/${route.runId}`), mono: true },
