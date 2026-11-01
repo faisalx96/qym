@@ -35,7 +35,7 @@ export function overviewFrames(overview: LiveOverview | undefined, daysPage: num
         Math.max(0, overview.days.total - (daysPage - 1) * overview.days.page_size),
       )
     : 14;
-  const wide = Math.ceil(services / 6);
+  const wide = Math.ceil(services / 7);
   const medium = Math.ceil(services / 3);
   const narrow = Math.ceil(services / 2);
   // Fixed chrome includes the canary line at the measured column width. Wrapping names

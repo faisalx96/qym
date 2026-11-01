@@ -175,8 +175,10 @@ duplicate names cause a database conflict. At most one spec may be primary.
 | `values` | array of objects or null | no | Default null; categorical entries described below |
 
 For categorical metrics, use `values: [{"value":"ok","label":"OK","tone":"accent"}]`.
-The presentation contract supports tones `accent`, `warning`, `danger`, `meta`,
-and `neutral`; the ingest validator accepts arbitrary objects in this list.
+The presentation contract supports tones `accent`, `success`, `info`, `warning`, `danger`,
+`meta` and `neutral` (give each label its own tone: two labels with one tone are
+indistinguishable in the mix bar and the trend); the ingest validator accepts arbitrary
+objects in this list.
 `percentage` scores conventionally use 0–1, boolean scores 0/1, and duration
 scores the declared unit. The ingest API does not enforce these metric-specific
 ranges or validate score values against categorical entries.

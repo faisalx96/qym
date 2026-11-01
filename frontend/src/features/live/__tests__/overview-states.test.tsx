@@ -95,7 +95,7 @@ describe('overview loading and error states', () => {
     const frames = container.querySelector<HTMLElement>('[data-live-loading]')!;
     expect(frames).toHaveAttribute('data-visible', 'false');
     for (const [size, services, days, trend] of [
-      ['wide', 258, 676, 330],
+      ['wide', 192, 676, 330],
       ['medium', 380, 688, 330],
       ['narrow', 572, 716, 427],
     ] as const) {

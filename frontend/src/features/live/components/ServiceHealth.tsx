@@ -1,8 +1,13 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import { Card, HelpMarker, ScoreValue, Text } from '@/ui';
 import styles from '../live.module.css';
+
+/** One framed strip of equal cells (DESIGN_LANGUAGE stat tiles: seven or fewer in a row). */
+export function serviceColumns(count: number): number {
+  return Math.min(Math.max(count, 1), 7);
+}
 
 export function ServiceHealth({
   services,
@@ -30,7 +35,10 @@ export function ServiceHealth({
         </div>
       }
     >
-      <div className={styles.services}>
+      <div
+        className={styles.services}
+        style={{ '--live-service-columns': serviceColumns(services.length) } as CSSProperties}
+      >
         {services.map((service) => {
           // Overview rates carry metric names; the turns filter takes the bare service key.
           const name = service.name.replace(/^service\./, '');

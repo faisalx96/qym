@@ -12,12 +12,15 @@ export function DaysTable({
   source,
   specs,
   primaryMetric,
+  stale = false,
 }: {
   days: LiveOverview['days'];
   slug: string;
   source: string;
   specs: LiveMetricSpec[];
   primaryMetric: string | null;
+  /** The source has no recent heartbeat: its open day is stale, not running. */
+  stale?: boolean;
 }) {
   const { replaceUrlQuery } = useSearchParamsState();
   const primary =
@@ -71,14 +74,30 @@ export function DaysTable({
       id: 'worker',
       header: 'Worker',
       width: 110,
-      cell: (row) => (
-        <StatusMark
-          tone={row.worker_gap ? 'warning' : row.status === 'running' ? 'success' : 'neutral'}
-          shape={row.worker_gap ? 'hourglass' : row.status === 'running' ? 'orbit' : 'full'}
-          label={row.worker_gap ? 'Gap' : row.status}
-          title={row.worker_gap ? `Worker gap: ${row.max_poll_gap_s} s between heartbeats` : undefined}
-        />
-      ),
+      cell: (row) => {
+        if (row.worker_gap) {
+          return (
+            <StatusMark
+              tone="warning"
+              shape="hourglass"
+              label="Gap"
+              title={`Worker gap: ${row.max_poll_gap_s} s between heartbeats`}
+            />
+          );
+        }
+        if (row.status === 'running' && stale) {
+          return (
+            <StatusMark tone="danger" shape="cross" label="Stale" title="Open day, worker not heard from" />
+          );
+        }
+        return (
+          <StatusMark
+            tone={row.status === 'running' ? 'success' : 'neutral'}
+            shape={row.status === 'running' ? 'orbit' : 'full'}
+            label={row.status}
+          />
+        );
+      },
     },
   ];
   return (

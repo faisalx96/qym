@@ -111,6 +111,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
             source={source}
             specs={overview.specs}
             primaryMetric={overview.primary_metric}
+            stale={overview.status.stale}
           />
         </>
       ) : null}

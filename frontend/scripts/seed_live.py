@@ -25,7 +25,7 @@ DIAGNOSES = [
     ("ok", "OK", "accent", 40),
     ("suboptimal", "Suboptimal", "warning", 15),
     ("agent_problem", "Agent problem", "danger", 12),
-    ("reference_problem", "Reference problem", "warning", 8),
+    ("reference_problem", "Reference problem", "info", 8),
     ("system_problem", "System problem", "meta", 10),
     ("inconclusive", "Inconclusive", "neutral", 15),
 ]

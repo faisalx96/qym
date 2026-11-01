@@ -240,6 +240,24 @@ describe('overview service and history blocks', () => {
     expect(screen.getByRole('tooltip')).not.toHaveTextContent('%');
   });
 
+  it('marks the open day stale when the source has no recent heartbeat', () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/live?source=worker']}>
+        <DaysTable days={days} slug="demo" source="worker" specs={specs} primaryMetric="quality" stale />
+      </MemoryRouter>,
+    );
+    const open = container.querySelector('[data-live-day="2026-10-28"]')!;
+    expect(open.querySelector('[data-tone="danger"][data-shape="cross"]')).toHaveAttribute(
+      'title',
+      'Open day, worker not heard from',
+    );
+    expect(open).toHaveTextContent('Stale');
+    expect(container.querySelector('[data-live-day="2026-10-30"] [data-shape="full"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-live-day="2026-10-29"] [data-tone="warning"][data-shape="hourglass"]'),
+    ).not.toBeNull();
+  });
+
   it('shows worker states and diagnosis tones, paginates in the URL and opens the selected day', async () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/live?source=worker&trend_days=30']}>

@@ -30,7 +30,7 @@ export const liveDiagnosisSpec = {
     { value: 'ok', label: 'OK', tone: 'accent' },
     { value: 'suboptimal', label: 'Suboptimal', tone: 'warning' },
     { value: 'agent_problem', label: 'Agent problem', tone: 'danger' },
-    { value: 'reference_problem', label: 'Reference problem', tone: 'warning' },
+    { value: 'reference_problem', label: 'Reference problem', tone: 'info' },
     { value: 'system_problem', label: 'System problem', tone: 'meta' },
     { value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' },
   ],
