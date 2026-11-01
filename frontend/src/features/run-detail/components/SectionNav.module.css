@@ -26,6 +26,13 @@
   display: inline-flex;
 }
 
+/* RF1 (C132): below 1600 px the stuck nav does not repeat the run name and status, so the links get the room. */
+@media (max-width: 1599px) {
+  .nav[data-compact] .identity {
+    display: none;
+  }
+}
+
 .name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -46,6 +53,20 @@
   scrollbar-width: none;
 }
 
+/* A copy of every link and of the More trigger, for their widths only (RF1): no size, no paint, no pointer. */
+.measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: var(--space-xs);
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Underline tabs, as in the first qym (round 10): 13px / 600, the section in view in the accent with a 2px line on
    the bar's bottom edge. The pill tabs read as small grey text. */
 .link {
@@ -63,11 +84,22 @@
   transition: color var(--transition-fast);
 }
 
-.link:hover {
+.link:hover,
+.link[data-hovered],
+.link[data-pressed] {
   color: var(--text-primary);
 }
 
-.link:focus-visible {
+/* The More trigger is a link-styled button (RF1). */
+button.link {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.link:focus-visible,
+.link[data-focus-visible] {
   outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
   border-radius: var(--control-radius);

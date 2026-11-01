@@ -119,7 +119,8 @@ export function useSectionEntries(): SectionEntry[] {
       ? [{ id: 'datasets' as const, label: 'Datasets', count: payload.run.dataset_count }]
       : []),
     ...(model.isRepeat && !model.viewPass ? [{ id: 'repeat' as const, label: 'Repeat' }] : []),
-    { id: 'latency', label: 'Latency and traces' },
+    // RF1 (C132): the short label; the section keeps its title
+    { id: 'latency', label: 'Latency' },
     { id: 'deep', label: 'Deep analysis' },
     { id: 'categories', label: 'Categories' },
     { id: 'errors', label: 'Errors', ...(rowsPending ? {} : { count: errorCount, danger: errorCount > 0 }) },

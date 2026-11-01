@@ -1,6 +1,15 @@
 /** Report sections: stacked order, nav jumps, hash and ?panel= anchors, lazy mounting, error / category / deep / root-cause sections. */
 import { test, expect, type Page } from '@playwright/test';
-import { itemsCount, openRun, params, runUrl, seedClassic, seedProject, type Seeded } from './support';
+import {
+  goToSection,
+  itemsCount,
+  openRun,
+  params,
+  runUrl,
+  seedClassic,
+  seedProject,
+  type Seeded,
+} from './support';
 
 let s: Seeded;
 let classic: string;
@@ -35,10 +44,10 @@ test.describe('report sections', () => {
 
   test('nav links jump to the section and ?panel= is not written', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await navLink(page, /^Errors/).click();
+    await goToSection(page, /^Errors/);
     await expect(section(page, 'errors')).toBeInViewport();
     await expect(section(page, 'errors')).toContainText('Task errors');
-    await navLink(page, 'Categories').click();
+    await goToSection(page, 'Categories');
     await expect(section(page, 'categories')).toBeInViewport();
     expect(params(page).get('panel')).toBeNull();
     await expect(navLink(page, 'Categories')).toHaveAttribute('aria-current', 'location');
@@ -63,7 +72,7 @@ test.describe('report sections', () => {
   test('lazy sections mount once they near the viewport', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await expect(section(page, 'deep')).not.toHaveAttribute('data-mounted', '');
-    await navLink(page, 'Deep').click();
+    await goToSection(page, 'Deep');
     await expect(section(page, 'deep')).toHaveAttribute('data-mounted', '');
     await expect(page.getByRole('grid', { name: 'Pearson correlation matrix' })).toBeVisible();
   });
