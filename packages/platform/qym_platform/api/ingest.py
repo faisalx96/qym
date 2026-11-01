@@ -1098,13 +1098,7 @@ def create_run(
         getattr(run, "origin", None) or "-",
     )
 
-    settings = PlatformSettings()
-    project = db.query(Project).filter(Project.id == run.project_id).first()
-    if project and project.slug:
-        live_path = f"/projects/{project.slug}/runs/{run.id}"
-    else:
-        live_path = f"/run/{run.id}"
-    live_url = f"{settings.public_ui_base}{live_path}"
+    live_url = _run_live_url(db, run)
     # supports_pass_events: capability flag for repeat runs (samples=k) — new
     # SDKs check it before streaming pass-aware events to old platforms.
     return {
@@ -2757,6 +2751,17 @@ def _ingest_events_sync(
     )
 
 
+def _run_live_url(db: Session, run: Run) -> str:
+    """The run page URL in the UI: the canonical project URL, or /run/<id> for a run with no project slug (C209)."""
+    settings = PlatformSettings()
+    project = db.query(Project).filter(Project.id == run.project_id).first()
+    if project and project.slug:
+        path = f"/projects/{project.slug}/runs/{run.id}"
+    else:
+        path = f"/run/{run.id}"
+    return f"{settings.public_ui_base}{path}"
+
+
 @router.post("/runs:upload")
 async def upload_run(
     file: UploadFile = File(...),
@@ -3440,6 +3445,4 @@ def _upload_run_sync(
         "JSON" if filename.endswith(".json") else "CSV",
         run.project_id,
     )
-    settings = PlatformSettings()
-    live_url = f"{settings.public_ui_base}/run/{run.id}"
-    return {"run_id": run.id, "live_url": live_url}
+    return {"run_id": run.id, "live_url": _run_live_url(db, run)}

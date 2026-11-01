@@ -24,10 +24,13 @@ export const ROUTES = {
   docsPage: '/docs/:section/:page',
   docsNew: '/docs/*',
   legacyRun: '/run/*',
+  projectsIndex: '/projects',
   project: '/projects/:slug',
   // children of /projects/:slug
   projectChildren: {
     runs: '',
+    /** A run URL trimmed to `runs`: redirects to the list. */
+    runsTrimmed: 'runs',
     overview: 'overview',
     charts: 'charts',
     models: 'models',

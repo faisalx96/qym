@@ -55,6 +55,9 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
     } else {
       crumbs.push({ label: route.label });
     }
+  } else if (route.projectSlug) {
+    // No project loaded for this slug (missing, no access, or still loading): "Projects / <slug>" (C209).
+    crumbs.push({ label: route.projectSlug, mono: true });
   } else if (route.page === 'feedback' && /^\/feedback\/.+/.test(pathname)) {
     crumbs.push(
       { label: 'Feedback', to: '/feedback' },
