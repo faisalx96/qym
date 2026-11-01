@@ -1,8 +1,10 @@
 /** Root cause categories across items, aggregate and auto-analyze actions (brief 04 §3h). */
 import { useMemo, useState } from 'react';
 import { useAggregateAnalysis } from '@/api/runs';
+import { AnalysisSpark } from '@/features/runs-list/AnalyzeAction';
 import { Button, Card, LinkButton, Select, Tag, useToast } from '@/ui';
 import { getRowRootCauseAnalyses, rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
+import { analyzerHref } from '../../lib/runActions';
 import { useRunPage } from '../../RunContext';
 import { messageFor } from '../items/ScoreEditor';
 import styles from './Panels.module.css';
@@ -72,7 +74,12 @@ export function RootCauseTab() {
           </Button>
         )}
         {readOnly ? null : (
-          <LinkButton size="sm" variant="accent" to={`${basePath}/analyzer`}>
+          <LinkButton
+            size="sm"
+            variant="meta"
+            to={analyzerHref(basePath, model.viewPass, metric === 'all' ? api.selectedMetric : metric)}
+            icon={<AnalysisSpark filled={false} />}
+          >
             Auto-Analyze
           </LinkButton>
         )}

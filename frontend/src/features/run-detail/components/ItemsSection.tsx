@@ -1,7 +1,7 @@
 /** The Items section: header, filter bar, filter banner, virtualized table or heatmap, deep link to ?item=. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
-import { Button, HelpMarker, Icon, LinkButton, ReportSection } from '@/ui';
+import { Button, HelpMarker, ReportSection } from '@/ui';
 import { useItemDetails } from '../hooks/useItemDetails';
 import { REASON_ORDER } from '../lib/itemReasons';
 import { emptyFilters, type SortBy } from '../lib/filterRules';
@@ -18,7 +18,7 @@ const HIGHLIGHT_MS = 2600;
 void PAGE_SIZES;
 
 export function ItemsSection() {
-  const { runId, model, api, items, payload, basePath, readOnly } = useRunPage();
+  const { runId, model, api, items, payload } = useRunPage();
   const { view } = api;
   const sectionRef = useRef<HTMLDivElement>(null);
   const details = useItemDetails(runId);
@@ -125,17 +125,8 @@ export function ItemsSection() {
         title="Items"
         description="Every input, outcome and metric. Filters apply to the table and to every section above."
         aside={
+          // RF3 (C113): auto-analysis starts from the Root cause section and the header's Actions menu
           <span className={styles.aside}>
-            {readOnly ? null : (
-              <LinkButton
-                size="sm"
-                variant="neutral"
-                to={`${basePath}/analyzer`}
-                icon={<Icon name="sparkles" size={12} />}
-              >
-                Auto-analyze
-              </LinkButton>
-            )}
             <CsvExport />
           </span>
         }

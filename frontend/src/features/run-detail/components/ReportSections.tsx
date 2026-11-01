@@ -9,11 +9,13 @@ import {
   loadRepeatTab,
   loadRootCauseTab,
 } from '../chunks';
+import { AnalysisSpark } from '@/features/runs-list/AnalyzeAction';
 import { metricDirectionLabel } from '@/lib/metrics';
-import { Icon, ReportSection, SectionBoundary, StatStrip } from '@/ui';
+import { Icon, LinkButton, ReportSection, SectionBoundary, Stack, StatStrip, Text } from '@/ui';
 import { runCounts } from '../lib/overviewModel';
 import { errorBucketCount } from '../lib/panelCounts';
 import { getRowRootCauseAnalyses } from '../lib/rowMeta';
+import { analyzerHref } from '../lib/runActions';
 import { useRunPage } from '../RunContext';
 import { BlockSkeleton, ErrorsSkeleton, OverviewSkeleton } from './StageSkeletons';
 import { DatasetsSection } from './panels/DatasetsSection';
@@ -93,15 +95,42 @@ export interface SectionEntry {
   danger?: boolean;
 }
 
-/** Root cause shows only once the run has analyses (or an aggregation record). */
-export function useHasRootCause(): boolean {
-  const { model, payload } = useRunPage();
+/** Items with at least one root-cause analysis: the nav's Root cause count. */
+export function useRootCauseCount(): number {
+  const { model } = useRunPage();
   const repeatAggregate = model.isRepeat && !model.viewPass;
   return useMemo(
-    () =>
-      !!payload.run.metadata?.analysis_aggregation ||
-      model.rows.some((row) => getRowRootCauseAnalyses(row, 'all', repeatAggregate).length > 0),
-    [model.rows, payload.run.metadata, repeatAggregate],
+    () => model.rows.filter((row) => getRowRootCauseAnalyses(row, 'all', repeatAggregate).length > 0).length,
+    [model.rows, repeatAggregate],
+  );
+}
+
+/** The run has analyses (or an aggregation record): the Root cause section shows its categories. */
+export function useHasRootCause(): boolean {
+  const { payload } = useRunPage();
+  const count = useRootCauseCount();
+  return count > 0 || !!payload.run.metadata?.analysis_aggregation;
+}
+
+/** RF3 (C113): with no analyses the Root cause section is one line and the purple 'Analyze failures'. */
+function RootCauseEmpty() {
+  const { model, api, basePath, readOnly } = useRunPage();
+  return (
+    <Stack direction="row" gap="md" align="center" data-testid="root-cause-empty">
+      <Text variant="md" tone="muted" weight={400} as="span">
+        No analysis yet.
+      </Text>
+      {readOnly ? null : (
+        <LinkButton
+          size="sm"
+          variant="meta"
+          to={analyzerHref(basePath, model.viewPass, api.selectedMetric)}
+          icon={<AnalysisSpark filled={false} />}
+        >
+          Analyze failures
+        </LinkButton>
+      )}
+    </Stack>
   );
 }
 
@@ -110,7 +139,7 @@ export function useSectionEntries(): SectionEntry[] {
   const { model, items, payload, rowsPending } = useRunPage();
   // Until the rows arrive the nav shows the sections the summary knows about, without counts.
   const errorCount = rowsPending ? 0 : errorBucketCount(model.rows, model.isRepeat && !model.viewPass);
-  const hasRootCause = useHasRootCause();
+  const rootCauseCount = useRootCauseCount();
   const total = payload.snapshot.rows_total ?? payload.snapshot.rows.length;
   return [
     // C027: the review log opens from the hero's History button, so the nav has no Reviews link
@@ -124,7 +153,8 @@ export function useSectionEntries(): SectionEntry[] {
     { id: 'deep', label: 'Deep analysis' },
     { id: 'categories', label: 'Categories' },
     { id: 'errors', label: 'Errors', ...(rowsPending ? {} : { count: errorCount, danger: errorCount > 0 }) },
-    ...(hasRootCause ? [{ id: 'root-cause' as const, label: 'Root cause' }] : []),
+    // RF3 (C113): Root cause is always in the nav, before Items, so the first analysis shifts no link
+    { id: 'root-cause', label: 'Root cause', ...(rowsPending ? {} : { count: rootCauseCount }) },
     {
       id: 'items',
       label: 'Items',
@@ -272,18 +302,19 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
       <ReportSection
         id={sectionDomId('root-cause')}
         title="Root cause analysis"
-        description="Why items failed. Click a category to filter the items."
+        description={
+          hasRootCause ? 'Why items failed. Click a category to filter the items.' : 'Why items failed.'
+        }
         scopeNote={scopeNote}
-        hidden={!hasRootCause}
-        lazy
-        minHeight={200}
+        lazy={hasRootCause}
+        minHeight={hasRootCause ? 200 : undefined}
       >
         <Staged
           pending={rowsPending}
           skeleton={<BlockSkeleton height={200} label="Loading root cause" />}
           name="Root cause analysis"
         >
-          <RootCauseTab />
+          {hasRootCause ? <RootCauseTab /> : <RootCauseEmpty />}
         </Staged>
       </ReportSection>
     </>

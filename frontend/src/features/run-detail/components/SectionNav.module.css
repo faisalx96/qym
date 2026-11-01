@@ -76,7 +76,7 @@
   gap: 6px;
   flex: none;
   align-self: stretch;
-  padding: 0 var(--space-sm);
+  padding: 0 6px;
   font-size: var(--font-md);
   font-weight: 600;
   color: var(--text-secondary);
@@ -112,7 +112,7 @@ button.link {
 .link[aria-current='location']::after {
   content: '';
   position: absolute;
-  inset-inline: var(--space-sm);
+  inset-inline: 6px;
   bottom: calc(-1 * var(--space-xs) - 1px);
   height: 2px;
   border-radius: 1px;
@@ -157,7 +157,6 @@ button.link {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
-  margin-inline-end: var(--space-sm);
 }
 
 .metricLabel {
@@ -166,10 +165,11 @@ button.link {
   color: var(--text-muted);
 }
 
-/* The page-wide Pass if threshold (C039): one inline slider beside the metric. */
+/* The page-wide Pass if threshold (C039): one inline slider beside the metric. The controls keep only the bar's
+   gap between them, so every section link fits at 1440 px (RF1). */
 .threshold {
   flex: none;
-  margin-inline-end: var(--space-sm);
+  margin-inline: var(--space-xs);
 }
 
 @media (max-width: 767px) {

@@ -12,15 +12,19 @@ import { useRunsPage } from '@/api/dashboard';
 import type { RunRow } from '@/api/dashboardTypes';
 import { exportHtmlUrl, runKeys, useReviewHistoryQuery } from '@/api/runs';
 import { useAuth, useProjectContext } from '@/features/shell';
+import { AnalysisSpark } from '@/features/runs-list/AnalyzeAction';
+import { isActiveRun } from '@/features/runs-list/polling';
 import { RunDialogs, type DialogState } from '@/features/runs-list/RunDialogs';
 import { platformUrl } from '@/lib/runtime';
 import { ActionTile, Button, DropdownMenu, Icon, LinkButton, Popover, type MenuItemSpec } from '@/ui';
 import {
+  analyzerHref,
   compareWithReferenceUrl,
   pickReferenceRun,
   runActionItems,
   type RunActionId,
 } from '../lib/runActions';
+import { useRunPage } from '../RunContext';
 import type { Run } from '../types';
 import { ReviewLogList, who } from './RunPanels';
 import styles from './RunHero.module.css';
@@ -52,6 +56,7 @@ export function RunHeaderActions({ run, slug }: { run: Run; slug: string }) {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<DialogState>(null);
   const reference = useReference(run, slug);
+  const { model, api, basePath } = useRunPage();
   const row = {
     run_id: run.run_id,
     run_name: run.run_name || run.run_id,
@@ -65,14 +70,31 @@ export function RunHeaderActions({ run, slug }: { run: Run; slug: string }) {
     isAdmin,
     readOnly,
   });
-  const menu: MenuItemSpec[] = items.map((it) => ({
-    id: it.id,
-    label: it.label,
-    tone: it.tone,
-    separatorBefore: it.separatorBefore,
-    icon: <ActionTile icon={it.icon} tone={it.tone === 'danger' ? 'danger' : 'default'} />,
-  }));
+  // RF3 (C113): auto-analysis first, in purple with its spark, as in the runs-list row menu; a live run has none yet
+  const analyze: MenuItemSpec[] = isActiveRun({ status: run.status } as Pick<RunRow, 'status'>)
+    ? []
+    : [
+        {
+          id: 'analyze',
+          label: 'Open auto-analysis',
+          tone: 'meta',
+          icon: <ActionTile tone="meta" icon={<AnalysisSpark filled={false} />} />,
+        },
+      ];
+  const menu: MenuItemSpec[] = analyze.concat(
+    items.map((it) => ({
+      id: it.id,
+      label: it.label,
+      tone: it.tone,
+      separatorBefore: it.separatorBefore,
+      icon: <ActionTile icon={it.icon} tone={it.tone === 'danger' ? 'danger' : 'default'} />,
+    })),
+  );
   const onAction = (id: string) => {
+    if (id === 'analyze') {
+      navigate(analyzerHref(basePath, model.viewPass, api.selectedMetric));
+      return;
+    }
     const action = id as RunActionId;
     if (action === 'export') window.location.assign(platformUrl(exportHtmlUrl(run.run_id)));
     else if (action === 'submit' || action === 'resubmit') setDialog({ kind: 'submit', rows: [row] });

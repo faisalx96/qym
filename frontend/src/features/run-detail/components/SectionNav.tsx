@@ -129,7 +129,8 @@ function NavFilters() {
   );
 }
 
-/** Chips fit while the metrics are few and the bar is wide; otherwise one select. */
+/** Chips fit while the metrics are few and the bar is wide; otherwise one select, narrow enough that every section
+ * link fits beside it and the Pass if slider at 1440 px (RF1, RF3). */
 const METRIC_CHIPS_MAX = 5;
 
 /**
@@ -161,7 +162,7 @@ function NavMetric() {
           value={metric}
           onChange={(k) => k && pick(String(k))}
           searchable={names.length > 8}
-          width={150}
+          width={128}
         />
       )}
     </span>
@@ -199,7 +200,7 @@ function NavThreshold() {
       value={draft}
       onChange={(v) => setDraft(v as number)}
       onChangeEnd={(v) => api.setView({ threshold: (v as number) / 100 })}
-      width="200px"
+      width="176px"
       className={styles.threshold}
       data-testid="nav-threshold"
     />

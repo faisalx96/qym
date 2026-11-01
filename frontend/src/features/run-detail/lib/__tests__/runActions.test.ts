@@ -1,7 +1,7 @@
 /** Review group R4 (C034, C031, C047): the run header's Actions menu and the reference run. */
 import { describe, expect, it } from 'vitest';
 import type { RunRow } from '@/api/dashboardTypes';
-import { compareWithReferenceUrl, pickReferenceRun, runActionItems } from '../runActions';
+import { analyzerHref, compareWithReferenceUrl, pickReferenceRun, runActionItems } from '../runActions';
 
 const owner = { isOwner: true, canManage: false, isAdmin: false, readOnly: false };
 const manager = { isOwner: false, canManage: true, isAdmin: false, readOnly: false };
@@ -82,5 +82,17 @@ describe('pickReferenceRun (C034)', () => {
     expect(compareWithReferenceUrl('/compare', { runId: 'a2', name: 'a2', kind: 'approved' }, 'me')).toBe(
       '/compare?runs=a2&runs=me&baseline=a2',
     );
+  });
+});
+
+describe('analyzerHref (RF3, C113)', () => {
+  it('opens the analyzer on the page pass and metric', () => {
+    expect(analyzerHref('/projects/p/runs/r1', 3, 'accuracy')).toBe(
+      '/projects/p/runs/r1/analyzer?pass=3&metric=accuracy',
+    );
+  });
+
+  it('leaves out what the page does not set', () => {
+    expect(analyzerHref('/projects/p/runs/r1', null, null)).toBe('/projects/p/runs/r1/analyzer');
   });
 });

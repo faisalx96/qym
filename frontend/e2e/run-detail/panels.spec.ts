@@ -31,14 +31,13 @@ test.describe('report sections', () => {
         e.id.replace('run-section-', '').replace('run-items', 'items'),
       ),
     );
-    expect(order).toEqual(['overview', 'latency', 'deep', 'categories', 'errors', 'items']);
+    expect(order).toEqual(['overview', 'latency', 'deep', 'categories', 'errors', 'root-cause', 'items']);
     await expect(page.getByRole('heading', { level: 2, name: 'Overview' })).toBeVisible();
     // no side panel and no tabs any more
     await expect(page.locator('#analysis-panel')).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveCount(0);
-    // sections for data the run does not have are absent
+    // sections for data the run does not have are absent; Root cause always shows (RF3)
     await expect(section(page, 'repeat')).toHaveCount(0);
-    await expect(section(page, 'root-cause')).toHaveCount(0);
     await expect(navLink(page, 'Repeat')).toHaveCount(0);
   });
 
@@ -169,10 +168,12 @@ test.describe('deep and root cause sections', () => {
     await expect(rel).toContainText('hallucination');
   });
 
-  test('Root cause: hidden while the run has no analyses', async ({ page }) => {
+  test('Root cause: a run with no analyses keeps the section, one line and Analyze failures (RF3)', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic, 'panel=root-cause');
-    await expect(section(page, 'root-cause')).toHaveCount(0);
-    await expect(navLink(page, 'Root cause')).toHaveCount(0);
+    await expect(section(page, 'root-cause')).toContainText('No analysis yet.');
+    await expect(section(page, 'root-cause').getByRole('link', { name: 'Analyze failures' })).toBeVisible();
   });
 });
 
