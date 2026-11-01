@@ -127,7 +127,7 @@
   clip-path: inset(50%);
 }
 
-/* Pending reviews: one line each, the review number then its root cause */
+/* Pending reviews: the review number, then its first issue and, muted under it, the item input (C068) */
 .reviews {
   display: flex;
   flex-direction: column;
@@ -164,6 +164,13 @@
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+.reviewBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .reviewText {

@@ -5,7 +5,7 @@
 import { lazy, Suspense, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useKpis, usePendingCorrections, useRunsPage, useTrend } from '@/api/dashboard';
-import type { DashboardFilters, RunRow } from '@/api/dashboardTypes';
+import type { DashboardFilters, PendingCorrection, RunRow } from '@/api/dashboardTypes';
 import {
   DataTable,
   EmptyState,
@@ -32,6 +32,7 @@ import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
 import { ModelCell, Mono, OwnerCell, StatusCell } from './cells';
 import { modelKeyOf } from './model';
+import { pendingIssue } from './pendingReview';
 import { isActiveRun } from './polling';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { useKpiTopbar } from './kpiTopbar';
@@ -315,9 +316,7 @@ export function OverviewPage() {
                           >
                             #{String(c.id)}
                           </Link>
-                          <Text variant="sm" tone="secondary" as="span" className={styles.reviewText}>
-                            {String(c.ai_root_cause ?? c.human_root_cause ?? '—')}
-                          </Text>
+                          <PendingReviewText c={c} />
                         </li>
                       ))}
                       {pendingTotal > pendingItems.length ? (
@@ -353,6 +352,34 @@ export function OverviewPage() {
         </div>
       </div>
     </RunsCtx.Provider>
+  );
+}
+
+function PendingReviewText({ c }: { c: PendingCorrection }) {
+  const issue = pendingIssue(c);
+  return (
+    <span className={styles.reviewBody}>
+      <Text variant="sm" tone="secondary" as="span" className={styles.reviewText}>
+        {issue ? (
+          <>
+            {issue.category ? (
+              <Text as="span" variant="sm" weight={600}>
+                {issue.category}
+              </Text>
+            ) : null}
+            {issue.category && issue.finding ? ' · ' : null}
+            {issue.finding}
+          </>
+        ) : (
+          '—'
+        )}
+      </Text>
+      {c.input_preview ? (
+        <Text variant="sm" tone="muted" as="span" className={styles.reviewText} title={c.input_preview}>
+          {c.input_preview}
+        </Text>
+      ) : null}
+    </span>
   );
 }
 

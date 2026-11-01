@@ -374,6 +374,10 @@ export interface PendingCorrection {
   item_index?: number;
   ai_root_cause?: string | null;
   human_root_cause?: string | null;
+  ai_root_cause_issues?: { category?: string | null; finding?: string | null }[] | null;
+  human_root_cause_issues?: { category?: string | null; finding?: string | null }[] | null;
+  /** The item's input, cut short by the server. */
+  input_preview?: string | null;
   created_at?: string;
   proposed_by?: { display_name?: string; email?: string } | null;
   [key: string]: unknown;
