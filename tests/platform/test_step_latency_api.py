@@ -569,3 +569,52 @@ def test_a_running_run_reuses_its_summary_for_a_few_seconds(client, session_fact
         session.commit()
     # within LIVE_SUMMARY_REUSE the stored summary answers; the next build picks the new span up
     assert client.get(url, headers=headers).json() == before
+
+
+def test_the_summary_writer_hook_builds_once_for_a_finished_run(session_factory):
+    """C022 (owner: use the existing summary writers): the dashboard worker stores the summary after it publishes a run."""
+    from qym_platform.api.step_latency import refresh_stored_summary
+
+    with session_factory() as session:
+        _seed(session)
+        run = session.get(Run, "run-1")
+        assert refresh_stored_summary(session, run) is True
+        assert refresh_stored_summary(session, run) is False  # the fingerprint holds: nothing to rebuild
+        session.add(_span("run-1", "trace-1-late", "sql_execute", parent="trace-1-task", dur=5.0,
+                          attrs=_tool_attrs("sql_execute")))
+        session.commit()
+        assert refresh_stored_summary(session, run) is True  # a late span rebuilds it
+    (row,) = _stored(session_factory)
+    assert (row.pass_number, row.rollup) == (0, "site")
+
+
+def test_the_summary_writer_rebuilds_a_live_run_at_most_every_interval(session_factory):
+    from qym_platform.api.step_latency import refresh_stored_summary
+
+    with session_factory() as session:
+        _seed(session)
+        run = session.get(Run, "run-1")
+        run.status = RunWorkflowStatus.RUNNING
+        session.commit()
+        assert refresh_stored_summary(session, run) is True
+        session.add(_span("run-1", "trace-1-late", "sql_execute", parent="trace-1-task", dur=5.0,
+                          attrs=_tool_attrs("sql_execute")))
+        session.commit()
+        # a large running run is not rebuilt on every new span: once per LIVE_SUMMARY_REBUILD
+        assert refresh_stored_summary(session, run) is False
+
+
+def test_the_worker_stores_the_summary_after_publishing(session_factory):
+    from qym_platform.db.models import RunStepLatencySummary
+    from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
+
+    with session_factory() as session:
+        _seed(session)
+    worker = DashboardSummaryWorker.__new__(DashboardSummaryWorker)
+    worker.session_factory = session_factory
+    import logging
+
+    worker._logger = logging.getLogger("test")
+    worker._store_step_latency("run-1")
+    with session_factory() as session:
+        assert session.query(RunStepLatencySummary).count() == 1

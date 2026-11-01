@@ -546,7 +546,7 @@ def _parse_run_ref(ref: str) -> tuple:
 
 def _load_spans(
     db: Session,
-    principal: Principal,
+    principal: Optional[Principal],
     run_ids: List[str],
     pass_number: Optional[int] = None,
 ) -> tuple:
@@ -579,7 +579,8 @@ def _load_spans(
     if missing:
         raise HTTPException(status_code=404, detail=f"Run not found: {missing[0]}")
     for run in runs:
-        if not can_view_run(db, principal, run):
+        # principal None: the summary writer (C022), which serves no user
+        if principal is not None and not can_view_run(db, principal, run):
             raise HTTPException(status_code=403, detail="Access denied")
 
     passes = sorted(
@@ -729,9 +730,14 @@ def _csv_response(fieldnames: List[str], rows: Iterable[Dict[str, Any]], filenam
     )
 
 
-# A live run's stored summary is reused for this long while new spans arrive (owner on C022: large running runs
-# have the same cost), so a page that polls a running run does not rebuild it from every raw span each time.
-LIVE_SUMMARY_REUSE = timedelta(seconds=15)
+# The run page's summary of a run is stored in run_step_latency_summaries (C022). The dashboard summary worker (the
+# existing summary writer; no new process, owner) rebuilds it after it publishes a run: once when the run finishes,
+# and at most every LIVE_SUMMARY_REBUILD while a run is live, so a large running run is not rebuilt per request.
+# A read serves the stored row; only a missing or stale row is built on read.
+LIVE_SUMMARY_REBUILD = timedelta(seconds=15)
+# A running run's stored summary is served while it is this new (two writer rebuild intervals).
+LIVE_SUMMARY_SERVE = timedelta(seconds=30)
+WRITER_ROLLUP = "site"
 
 
 def _summary_fingerprint(db: Session, run: Run) -> str:
@@ -744,34 +750,20 @@ def _summary_fingerprint(db: Session, run: Run) -> str:
     return f"{status}|{pass_revision(run)}|{span_count or 0}|{max_span or 0}|{attempts or 0}"
 
 
-def _stored_summary(
-    db: Session,
-    principal: Principal,
-    run_id: str,
-    rollup: str,
-    pass_number: Optional[int],
-    build: Callable[[], Dict[str, Any]],
-) -> Dict[str, Any]:
-    """The run page's summary of one run or pass, stored on first read (C022).
+def _is_live(run: Run) -> bool:
+    return str(getattr(run.status, "value", run.status) or "").upper() in {"RUNNING", "PENDING"}
 
-    A finished run's summary is built once from the raw spans and read back while its fingerprint holds; a running
-    run's stored summary is reused for ``LIVE_SUMMARY_REUSE``. No worker builds it: the first read pays once.
-    """
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if run is None:
-        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
-    if not can_view_run(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
-    key = (run.id, pass_number or 0, rollup)
-    fingerprint = _summary_fingerprint(db, run)
-    stored = db.get(RunStepLatencySummary, key)
+
+def _usable(stored: Optional[RunStepLatencySummary], fingerprint: str, live: bool, age: timedelta) -> bool:
+    if stored is None:
+        return False
+    return stored.fingerprint == fingerprint or (live and datetime.utcnow() - stored.computed_at < age)
+
+
+def _store(db: Session, run: Run, stored, rollup: str, pass_number: Optional[int], fingerprint: str) -> Dict[str, Any]:
+    """Build the summary from the raw spans and store it; another writer's row wins a race."""
+    payload = _summary_payload(db, None, [run.id], rollup, pass_number)
     now = datetime.utcnow()
-    live = str(getattr(run.status, "value", run.status) or "").upper() == "RUNNING"
-    if stored is not None and (
-        stored.fingerprint == fingerprint or (live and now - stored.computed_at < LIVE_SUMMARY_REUSE)
-    ):
-        return stored.payload
-    payload = build()
     try:
         if stored is None:
             db.add(
@@ -788,9 +780,38 @@ def _stored_summary(
             stored.fingerprint, stored.payload, stored.computed_at = fingerprint, payload, now
         db.commit()
     except IntegrityError:
-        # Another request stored the same summary first: its row is as good as this one.
         db.rollback()
     return payload
+
+
+def refresh_stored_summary(db: Session, run: Run) -> bool:
+    """The summary writer's hook: rebuild the run's stored summary when it is stale. Returns whether it rebuilt."""
+    fingerprint = _summary_fingerprint(db, run)
+    stored = db.get(RunStepLatencySummary, (run.id, 0, WRITER_ROLLUP))
+    if _usable(stored, fingerprint, _is_live(run), LIVE_SUMMARY_REBUILD):
+        return False
+    _store(db, run, stored, WRITER_ROLLUP, None, fingerprint)
+    return True
+
+
+def _stored_summary(
+    db: Session,
+    principal: Principal,
+    run_id: str,
+    rollup: str,
+    pass_number: Optional[int],
+) -> Dict[str, Any]:
+    """The run page's summary of one run or pass: the stored row, or built and stored when it is missing or stale."""
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    if not can_view_run(db, principal, run):
+        raise HTTPException(status_code=403, detail="Access denied")
+    fingerprint = _summary_fingerprint(db, run)
+    stored = db.get(RunStepLatencySummary, (run.id, pass_number or 0, rollup))
+    if _usable(stored, fingerprint, _is_live(run), LIVE_SUMMARY_SERVE):
+        return stored.payload
+    return _store(db, run, stored, rollup, pass_number, fingerprint)
 
 
 @router.get("/api/runs/step-latency")
@@ -816,19 +837,12 @@ def multi_run_step_latency(
     ids = [rid.strip() for rid in run_ids.split(",") if rid.strip()]
     if len(ids) == 1 and "::" not in ids[0] and level == "summary" and format == "json" and group_by is None:
         # The run page's request: one run (or one pass), summary JSON. Served from the stored summary (C022).
-        return _stored_summary(
-            db,
-            principal,
-            ids[0],
-            rollup,
-            pass_number,
-            lambda: _summary_payload(db, principal, ids, rollup, pass_number),
-        )
+        return _stored_summary(db, principal, ids[0], rollup, pass_number)
     return _step_latency_response(db, principal, ids, format, level, rollup, pass_number, group_by)
 
 
 def _summary_payload(
-    db: Session, principal: Principal, ids: List[str], rollup: str, pass_number: Optional[int]
+    db: Session, principal: Optional[Principal], ids: List[str], rollup: str, pass_number: Optional[int]
 ) -> Dict[str, Any]:
     """The JSON summary of the given refs, built from their raw spans."""
     payload = _step_latency_response(db, principal, ids, "json", "summary", rollup, pass_number, None)
@@ -838,7 +852,7 @@ def _summary_payload(
 
 def _step_latency_response(
     db: Session,
-    principal: Principal,
+    principal: Optional[Principal],
     ids: List[str],
     format: str,
     level: str,
