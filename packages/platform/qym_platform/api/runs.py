@@ -179,6 +179,7 @@ from qym_platform.services.run_means import (
     supersede_metric_error,
 )
 from qym_platform.services.retention import purge_due_at
+from qym_platform.services.text_search import fold_search_text
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
     delete_repeat_pass,
@@ -5324,7 +5325,7 @@ def search_run_items(
         for (item_id,) in (
             db.query(RunItem.item_id).filter(RunItem.run_id == run.id).yield_per(1000)
         ):
-            lowered_id = str(item_id or "").lower()
+            lowered_id = fold_search_text(str(item_id or ""))
             for condition in conditions:
                 if condition["field"] == "all" and condition["value"] in lowered_id:
                     for scope_matches in matches_by_scope.values():
@@ -5407,9 +5408,10 @@ def search_run_items(
 
         texts = pass_texts()
     for item_id, content, outputs in texts:
-        content_lowered = [value.lower() for value in content]
+        # C066: fold the text the way the terms are folded (search_conditions)
+        content_lowered = [fold_search_text(value) for value in content]
         for scope, output in outputs.items():
-            lowered = content_lowered + [output.lower()]
+            lowered = content_lowered + [fold_search_text(output)]
             for condition in conditions:
                 candidates = (
                     lowered if condition["field"] == "all"

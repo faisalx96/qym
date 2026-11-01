@@ -18,6 +18,7 @@ from qym_platform.api.runs import (
     search_run_items,
 )
 from qym_platform.auth import Principal
+from qym_platform.services.text_search import fold_search_text
 from qym_platform.db.base import Base
 from qym_platform.db.models import (
     Project,
@@ -234,11 +235,39 @@ def test_server_text_search_matches_full_response_for_all_items(data, term):
             row["expected"],
             row["output"],
         ]
-        if any(term.lower() in value.lower() for value in fields):
+        # C066: the server folds case, Arabic letter forms, marks and digits
+        if any(fold_search_text(term) in fold_search_text(value) for value in fields):
             expected_all.append(row["item_id"])
-        if term.lower() in row["output"].lower():
+        if fold_search_text(term) in fold_search_text(row["output"]):
             expected_output.append(row["item_id"])
     assert result["matches"] == {"all": expected_all, "output": expected_output}
+
+
+@pytest.mark.parametrize(
+    "term", ["احمد", "أحمد", "أَحْمَد", "الي", "30", "٣٠", "۳۰", "مدرسة"]
+)
+def test_server_text_search_folds_arabic_like_dataset_search(data, term):
+    """C066: hamza, alef maqsura, diacritics, tatweel and Arabic-Indic digits do not hide a match."""
+    db, run, principal = data
+    for index, output in enumerate(["أحمد ذهب إلى المدرسـة ٣٠ مرة", "no arabic here"]):
+        db.add(
+            RunItem(
+                run_id=run.id,
+                item_id=f"ar-{index}",
+                index=index,
+                input="q",
+                expected="e",
+                output=output,
+            )
+        )
+    db.commit()
+    result = search_run_items(
+        run.id,
+        {"conditions": [{"id": "q", "field": "output", "value": term}]},
+        db,
+        principal,
+    )
+    assert result["matches"] == {"q": ["ar-0"]}
 
 
 def test_repeat_pass_bodies_and_search_keep_pass_identity(data):

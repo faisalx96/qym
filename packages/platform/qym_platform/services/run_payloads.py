@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException
 
+from qym_platform.services.text_search import fold_search_text
+
 MAX_DETAIL_ITEMS = 100
 MAX_SEARCH_CONDITIONS = 32
 # Index rows keep metric metadata values no longer than this. Judge output
@@ -180,7 +182,8 @@ def search_conditions(payload: Dict[str, Any]) -> List[Dict[str, str]]:
                 422, "Search values must be strings of at most 10000 characters"
             )
         seen.add(ident)
-        result.append({"id": ident, "field": field, "value": term.lower()})
+        # C066: the same Arabic fold as dataset search, plus Arabic-Indic and Persian digits
+        result.append({"id": ident, "field": field, "value": fold_search_text(term)})
     return result
 
 

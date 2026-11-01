@@ -9,6 +9,7 @@ import { SKIPPED_METADATA } from './skipMetadata';
 import { runShortName } from './labels';
 import type { metricDirection } from '@/lib/metrics';
 import { isErrorRow } from '@/lib/metrics';
+import { foldSearchText } from '@/lib/text';
 import type { Row } from '@/features/run-detail/types';
 import {
   errorFilterUrlValue,
@@ -575,9 +576,7 @@ export function evalFilterNode(
   const hit =
     f.id === 'output' && match
       ? match('output', needle, c)
-      : String(value ?? '')
-          .toLowerCase()
-          .includes(needle.toLowerCase());
+      : foldSearchText(String(value ?? '')).includes(foldSearchText(needle));
   return node.oper === 'notcontains' ? !hit : hit;
 }
 
@@ -636,9 +635,10 @@ export function rowText(row: Row | null): string {
 
 /** Default matcher: item ids, previews and whatever bodies are loaded. */
 export const localMatcher: TextMatcher = (field, needle, c) => {
-  const q = needle.toLowerCase();
-  if (field === 'output') return c.outputText.toLowerCase().includes(q);
-  return c.itemId.toLowerCase().includes(q) || c.rows.some((r) => rowText(r).toLowerCase().includes(q));
+  // C066: the same Arabic and digit fold as run and dataset search
+  const q = foldSearchText(needle);
+  if (field === 'output') return foldSearchText(c.outputText).includes(q);
+  return foldSearchText(c.itemId).includes(q) || c.rows.some((r) => foldSearchText(rowText(r)).includes(q));
 };
 
 export function buildItemContext(
