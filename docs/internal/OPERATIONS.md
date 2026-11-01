@@ -858,6 +858,161 @@ Rollback: set `QYM_SERVICE=all` (or unset) on main and stop ingestion and
 workers. Jobs still queued then are not run by the single server; they read
 as failed after `QYM_JOB_QUEUE_TIMEOUT_SECONDS` and can be started again.
 
+## Live evaluation worker
+
+The live evaluation engine runs as its own image and pushes evaluated turns,
+daily counters and heartbeats into qym. qym stores the results and shows them in
+the project's **Live** tab. The two images travel together to the air-gapped
+registry. Both contain their runtime dependencies; nothing is downloaded at
+runtime. qym does not pull evaluations from the worker. The worker's data
+sources and judge connections are configured in its own env file.
+
+Create a **project API key** in **Project settings → API keys**. Name it after
+the environment, for example `preprod`. The key must belong to `QYM_PROJECT_ID`;
+its owner must remain active and retain project access. The live ingest API
+requires this key even when UI authentication is disabled. The request contract
+is in [Live Evaluation Ingest v1.0](../live-evaluation-ingest-v1.0.md).
+
+### Compose
+
+Copy `docker/live-worker.env.example` to `docker/live-worker.env`. Fill in the
+key, project ID, source name and the worker image's own settings. Keep the
+filled file out of version control. Reuse the source key on restart so the
+worker continues the same source's history.
+
+Worker env file:
+
+| Variable | Value / meaning |
+|---|---|
+| `QYM_LIVE_ENABLED` | `true`; enables publishing to qym |
+| `QYM_BASE_URL` | Platform origin, including any deployed path prefix; Compose sets it below |
+| `QYM_API_KEY` | Project API key |
+| `QYM_PROJECT_ID` | ID of the project that owns the key, not its slug |
+| `QYM_LIVE_SOURCE_KEY` | Stable key, for example `worker-preprod`; use a separate key per worker/environment |
+| `QYM_LIVE_SOURCE_NAME` | Display name in the Live tab |
+| `QYM_LIVE_ENVIRONMENT` | Environment label, for example `preprod` |
+
+Compose variables (set in the shell or Compose `.env`, not the worker env file):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `QYM_LIVE_WORKER_IMAGE` | `qym-live-worker:unset` | Evaluation engine image from the deployment bundle; the placeholder keeps the other services starting when the profile is off, so set it before using the profile |
+| `QYM_LIVE_WORKER_ENV_FILE` | `./live-worker.env` | Path relative to the Compose file; supplies the worker's credentials, data sources and judges |
+| `QYM_LIVE_WORKER_QYM_URL` | `http://api:8000` | Overrides the worker's `QYM_BASE_URL`; use for an external platform or a path prefix |
+
+The `live-worker` service starts only with the `live` profile and exposes no
+ports. Without `QYM_LIVE_WORKER_IMAGE` the service is defined with a placeholder
+image, so `docker compose up` of the other services keeps working; with the
+profile on, an unset variable fails at pull time. The optional env-file syntax requires
+Docker Compose 2.24 or later; a missing file is ignored, but the worker still
+needs its credentials and source settings.
+
+With the platform's existing Compose environment configured, run from `docker/`:
+
+```bash
+export QYM_LIVE_WORKER_IMAGE='<registry>/live-worker:<release>'
+docker compose --profile live up -d
+```
+
+For the split layout, run from the repository root:
+
+```bash
+docker compose -f docker/docker-compose.split.yml --profile live up -d
+```
+
+The split service depends on `ingestion` and defaults to
+`QYM_BASE_URL=http://ingestion:8000`. If unprefixed ingest routes are disabled
+(`QYM_INGESTION_LEGACY_PATHS=false`), set
+`QYM_LIVE_WORKER_QYM_URL=http://ingestion:8000/ingestion` (use the deployed
+`QYM_INGESTION_PREFIX` and any root path). Compose's `environment` overrides
+`QYM_BASE_URL` in the worker env file; set `QYM_LIVE_WORKER_QYM_URL` to change it.
+
+### Kubernetes sketch
+
+Set `QYM_BASE_URL` in `live-worker.env` to the in-cluster platform or ingestion
+Service URL, including any prefix. Create the Secret in the deployment's namespace:
+
+```bash
+kubectl create secret generic live-worker-env --from-env-file=live-worker.env
+```
+
+Use one replica and `Recreate` so a rollout stops the old worker before starting
+the next. Allow 300 seconds for shutdown. Measure CPU and memory with the actual
+data sources, judges and concurrency, then set requests and limits. The sketch
+leaves resources for the operator to size.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: live-worker }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: live-worker } }
+  template:
+    metadata: { labels: { app: live-worker } }
+    spec:
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: live-worker
+          image: <registry>/live-worker:<release>
+          envFrom: [{ secretRef: { name: live-worker-env } }]
+          # Optional private CA: uncomment with the mount and volume below.
+          # env:
+          #   - { name: CA_BUNDLE, value: /etc/live-worker/ca/ca.crt }
+          livenessProbe:
+            exec:
+              command: ["python", "-m", "real_eval.tracks.live.healthcheck"]
+            initialDelaySeconds: 180
+            periodSeconds: 60
+            failureThreshold: 3
+          resources: {}   # set requests and limits after measuring the worker
+          volumeMounts:
+            - { name: output, mountPath: /app/output }
+            - { name: tmp, mountPath: /tmp }
+            # - { name: ca-bundle, mountPath: /etc/live-worker/ca, readOnly: true }
+      volumes:
+        - { name: output, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+        # - { name: ca-bundle, configMap: { name: live-worker-ca } }
+```
+
+For a private CA, create the optional ConfigMap and uncomment `CA_BUNDLE`, its
+volume mount and its volume in the sketch:
+
+```bash
+kubectl create configmap live-worker-ca --from-file=ca.crt=ca-bundle.pem
+```
+
+`/app/output` and `/tmp` are scratch space and are lost when the pod is replaced.
+The worker image documents its trace store, databases, judge models and CA
+bundle settings.
+
+### Worker status and retention
+
+The Live overview's status line becomes stale after no heartbeat has been
+received for `QYM_LIVE_STALE_AFTER_SECONDS` (default 300). It shows **Worker not
+heard from** with the last heartbeat time. The **Days** table shows per-day
+worker gaps, so an outage remains visible after the worker resumes. Check both
+the current status and the affected day's gaps when investigating missing turns.
+
+`QYM_LIVE_RETENTION_DAYS` (default 180) is a platform setting. It controls
+retention of live turns, scores and canary checks. Day rows have separate
+two-year retention. Configure it on the qym process that runs retention, and
+keep the background loops running in the single-server or split layout.
+
+### Troubleshooting
+
+- **401**: wrong, missing or revoked API key. Check `QYM_API_KEY` and that it was
+  issued for the intended project; a valid key from another project returns 403.
+- **403**: the key belongs to another project, its owner is inactive, or the
+  owner no longer has project access. Check `QYM_PROJECT_ID` and key ownership.
+- **409 archived**: the project is archived. Restore it before resuming ingest.
+- **503 maintenance**: qym is in maintenance mode. Keep pending data and retry
+  after the response's `Retry-After` delay (60 seconds).
+- **Turns rejected**: a batch can return 200 with rejected turns. Read each
+  `results[].error`, correct the reported fields and retry those turns.
+
 ## Evaluation Service experiments
 
 This section is the runbook for Evaluation Service experiments: remote deployments
