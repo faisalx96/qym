@@ -189,7 +189,8 @@ test.describe('axe', () => {
 
   test('detail: cancel confirm, save-as-preset form', async ({ page }) => {
     await open(page, pages(world)[2]!);
-    await page.getByRole('button', { name: 'Cancel experiment' }).click();
+    await page.getByTestId('exp-actions').click();
+    await page.getByRole('menuitem', { name: 'Cancel experiment' }).click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await expectNoSeriousViolations(page, 'cancel experiment confirm');
     await page.keyboard.press('Escape');
@@ -284,8 +285,11 @@ test.describe('keyboard', () => {
     page,
   }) => {
     await open(page, pages(world)[2]!);
-    const trigger = page.getByRole('button', { name: 'Cancel experiment' });
+    // Cancel experiment is an item of the header's Actions menu (E1)
+    const trigger = page.getByTestId('exp-actions');
     await trigger.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Cancel experiment' }).focus();
     await page.keyboard.press('Enter');
     const dialog = page.getByRole('alertdialog');
     await expect(dialog.getByRole('button', { name: 'Keep running' })).toBeFocused();

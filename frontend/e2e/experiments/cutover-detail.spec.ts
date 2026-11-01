@@ -50,7 +50,8 @@ test('Retry failed over several jobs confirms once, asks for the HIGH acknowledg
       bodies.push((r.postDataJSON() ?? {}) as Record<string, unknown>);
   });
   await gotoApp(page, expPath(project.slug, `/${x.id}`));
-  await page.getByRole('button', { name: 'Retry failed (2)' }).click();
+  await page.getByTestId('exp-actions').click();
+  await page.getByRole('menuitem', { name: 'Retry failed (2)' }).click();
   const confirm = page.locator('[role="alertdialog"],[role="dialog"]').last();
   await expect(confirm.getByRole('heading', { name: 'Retry 2 jobs?' })).toBeVisible();
   await confirm.getByRole('button', { name: 'Retry jobs' }).click();

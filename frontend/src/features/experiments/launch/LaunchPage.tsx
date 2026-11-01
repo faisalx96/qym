@@ -188,7 +188,7 @@ export function LaunchPage() {
     );
   else
     body = (
-      // A new form-defining search string (e.g. "Copy an experiment") is a new form; `?step=` is not.
+      // A new form-defining search string (e.g. "Run again") is a new form; `?step=` is not.
       <LaunchProvider
         key={formKey}
         slug={slug}

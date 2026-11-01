@@ -31,7 +31,7 @@ const BASE_LABELS: Record<string, string> = {
   best_run: 'Best run',
   saved: 'Saved preset',
   blank: 'Blank',
-  clone: 'Clone',
+  clone: 'Run again',
 };
 
 export function baseSourceLabel(base: BaseSource | null | undefined): string {

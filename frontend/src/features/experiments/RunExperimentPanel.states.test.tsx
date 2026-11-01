@@ -53,8 +53,8 @@ describe('RunExperimentPanel states', () => {
         runStatus="COMPLETED"
       />,
     );
-    expect(screen.queryByRole('link', { name: 'Rerun with this config' })).toBeNull();
-    expect(screen.getByText('Rerun with this config').getAttribute('aria-disabled')).toBe('true');
+    expect(screen.queryByRole('link', { name: 'Run again' })).toBeNull();
+    expect(screen.getByText('Run again').getAttribute('aria-disabled')).toBe('true');
     expect(screen.queryByRole('link', { name: 'Open experiment' })).toBeNull();
     expect(screen.getByText(/launch job is no longer available/)).toBeTruthy();
   });

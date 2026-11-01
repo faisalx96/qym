@@ -3,7 +3,7 @@
  * ever reaches the browser. Visible to every project member.
  */
 import type { ReactNode } from 'react';
-import type { CredentialState, ExperimentDetail } from '@/api/experiments';
+import { isTerminalJob, type CredentialState, type ExperimentDetail } from '@/api/experiments';
 import { Eyebrow, Text, StatusMark } from '@/ui';
 import { Callout } from '../launch/components/Callout';
 import {
@@ -82,9 +82,25 @@ function CredBadge({
   );
 }
 
+/**
+ * The row shows only when a credential needs attention (C137): the token is not sent, or a credential is revoked
+ * while a job still waits (not terminal, or BLOCKED). The platform revokes both when the experiment settles, so a
+ * revoked key on a settled experiment is normal and shows nothing.
+ */
+export function credentialsNeedAttention(detail: ExperimentDetail): boolean {
+  const { api_key: apiKey, dataset_read_token: token } = detail.credentials;
+  const facts = tokenFacts(detail);
+  if (facts.neverSent || facts.notDeclared.length) return true;
+  const waiting = detail.jobs.some(
+    (j) => !j.superseded && (!isTerminalJob(j.status) || j.status === 'BLOCKED'),
+  );
+  return waiting && (apiKey.state === 'revoked' || token.state === 'revoked');
+}
+
 export function Credentials({ detail }: { detail: ExperimentDetail }) {
   const { api_key: apiKey, dataset_read_token: token } = detail.credentials;
   const facts = tokenFacts(detail);
+  if (!credentialsNeedAttention(detail)) return null;
   const at = (c: CredentialState) => (c.revoked_at ? revokedLabel(c.revoked_at) : '');
   let notice: ReactNode = null;
   if (facts.revokedStillNeeded) {

@@ -277,8 +277,8 @@ export function ExperimentsPage() {
               ? []
               : [
                   {
-                    id: 'duplicate',
-                    label: 'Duplicate',
+                    id: 'run-again',
+                    label: 'Run again',
                     onPress: () => navigate(launchPath(slug, { clone: x.id })),
                   },
                 ]),

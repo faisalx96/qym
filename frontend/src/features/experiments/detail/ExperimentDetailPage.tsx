@@ -1,6 +1,8 @@
 /**
  * /projects/:slug/experiments/:id (brief 06 §2.2-2.3): header + controls, stat strip, queue
  * strip, matrix with compare selection, setting-vs-metric chart, job history.
+ * The header follows the run header (E1, owner answer Nov 1): one accent "Run again" and one "Actions" menu with
+ * Retry failed and Cancel experiment, each with its action tile. Normal states stay out of the header (C137).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -10,13 +12,25 @@ import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { useCrumbLabel } from '@/lib/crumb-label';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
-import { Button, ErrorState, PageHeader, Skeleton, StatStrip, Text } from '@/ui';
+import {
+  ActionTile,
+  Button,
+  DropdownMenu,
+  ErrorState,
+  Icon,
+  LinkButton,
+  PageHeader,
+  Skeleton,
+  StatStrip,
+  Text,
+  type MenuItemSpec,
+} from '@/ui';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { absTime, baseSourceLabel, relTime, titleCase } from '../lib/format';
 import { buildMatrix, compareHref, currentJobs, jobStats, pruneSelection } from '../lib/matrix';
-import { defaultPresetEditPath, experimentsPath } from '../paths';
+import { defaultPresetEditPath, experimentsPath, launchPath } from '../paths';
 import { ChartCard } from './ChartCard';
 import { Credentials } from './Credentials';
 import { JobHistoryCard } from './JobHistoryCard';
@@ -122,6 +136,25 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
     return () => cancelAnimationFrame(frame);
   }, [scrollTo, showEarlier]);
 
+  // Retry and Cancel show only while they apply (C137): no cancel button that cannot be used on a finished experiment.
+  const actions: MenuItemSpec[] = [];
+  if (retryable.length)
+    actions.push({
+      id: 'retry',
+      label: `Retry failed (${retryable.length})`,
+      icon: <ActionTile icon="retry" />,
+      disabled: !canControl || flows.busy.size > 0,
+    });
+  if (cancellable.length)
+    actions.push({
+      id: 'cancel',
+      label: 'Cancel experiment',
+      tone: 'danger',
+      separatorBefore: actions.length > 0,
+      icon: <ActionTile icon="stop" tone="danger" />,
+      disabled: !canControl || flows.busy.has('all'),
+    });
+
   const envNames = (x.environments ?? []).map((e) => `${e.name}${e.is_active ? '' : ' (disabled)'}`);
   const meta = [
     x.created_by_email ?? 'unknown creator',
@@ -153,26 +186,37 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
       />
       <Credentials detail={x} />
       <div className={styles.headerActions}>
-        {retryable.length ? (
-          <Button
-            variant="neutral"
+        {readOnly ? null : (
+          <LinkButton
+            to={launchPath(slug, { clone: x.id })}
+            variant="accent"
             size="md"
-            isDisabled={!canControl || flows.busy.size > 0}
-            onPress={flows.retryFailed}
+            icon={<Icon name="retry" size={14} />}
+            title="Open the launch form as a copy of this experiment"
+            data-testid="exp-run-again"
           >
-            Retry failed ({retryable.length})
-          </Button>
+            Run again
+          </LinkButton>
+        )}
+        {actions.length ? (
+          <DropdownMenu
+            label="Experiment actions"
+            trigger={
+              <Button
+                size="md"
+                variant="neutral"
+                icon={<Icon name="more" size={14} />}
+                data-testid="exp-actions"
+              >
+                Actions
+              </Button>
+            }
+            items={actions}
+            onAction={(id) => (id === 'retry' ? flows.retryFailed() : flows.cancelExperiment())}
+          />
         ) : null}
-        <Button
-          variant="danger"
-          size="md"
-          isDisabled={!canControl || !cancellable.length || flows.busy.has('all')}
-          onPress={flows.cancelExperiment}
-        >
-          Cancel experiment
-        </Button>
       </div>
-      {!canControl && !readOnly ? (
+      {!canControl && !readOnly && actions.length ? (
         <Text variant="base" tone="muted" className={styles.note}>
           {flows.denied
             ? 'You are not allowed to change this experiment.'
@@ -191,18 +235,13 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
             tone: stats.succeeded ? 'success' : undefined,
           },
           { key: 'failed', label: 'Failed', value: stats.failed, tone: stats.failed ? 'danger' : undefined },
-          {
-            key: 'live',
-            label: 'In progress',
-            value: stats.inProgress,
-            tone: stats.inProgress ? 'accent' : undefined,
-          },
-          {
-            key: 'cancelled',
-            label: 'Cancelled',
-            value: stats.cancelled,
-            tone: stats.cancelled ? 'warning' : undefined,
-          },
+          // In progress and Cancelled are normal at 0: they show only when they hold a job (C137)
+          ...(stats.inProgress
+            ? [{ key: 'live', label: 'In progress', value: stats.inProgress, tone: 'accent' as const }]
+            : []),
+          ...(stats.cancelled
+            ? [{ key: 'cancelled', label: 'Cancelled', value: stats.cancelled, tone: 'warning' as const }]
+            : []),
         ]}
       />
       <QueueStrip projectId={project.id} slug={slug} experimentId={x.id} live={live} />

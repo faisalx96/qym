@@ -87,7 +87,7 @@ const BASE_LABELS: Record<string, string> = {
   saved: 'Saved preset',
   best_run: 'Best run',
   blank: 'Blank',
-  clone: 'Clone',
+  clone: 'Run again',
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -220,11 +220,11 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
               size="sm"
               title="Open the launch form prefilled with this run’s configuration"
             >
-              Rerun with this config
+              Run again
             </LinkButton>
           ) : (
             <span className={styles.disabledHint} title="The experiment no longer exists">
-              Rerun unavailable
+              Run again unavailable
             </span>
           )}
           {promoteHref && promotable ? (
