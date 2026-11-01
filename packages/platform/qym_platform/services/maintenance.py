@@ -552,6 +552,18 @@ class MaintenanceWorker:
 
         run_purge(self.session_factory)
 
+        from qym_platform.datetime_utils import utc_now_naive
+        from qym_platform.services.live_retention import purge_live
+
+        try:
+            purge_live(
+                self.session_factory,
+                retention_days=settings.live_retention_days,
+                now=utc_now_naive(),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("live retention purge failed")
+
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
