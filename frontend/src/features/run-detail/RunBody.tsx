@@ -17,7 +17,7 @@ import {
 } from '@/api/runs';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { ReportLayout, ScopeBar, Stack } from '@/ui';
+import { ErrorState, ReportLayout, ScopeBar, Stack } from '@/ui';
 import { ExperimentPanel, RunNotices } from './components/RunPanels';
 import { RunHero } from './components/RunHero';
 import { QuickFilters } from './components/QuickFilters';
@@ -69,7 +69,7 @@ function scrollToSection(id: SectionId, host: HTMLElement | null) {
 
 /** Everything below the hero: nav, scope bar, sidebar, sections and items (needs the run context). */
 function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null> }) {
-  const { rowsPending } = useRunPage();
+  const { rowsPending, rowsError, retryRows } = useRunPage();
   const [params] = useSearchParams();
   const location = useLocation();
   const wide = useMediaQuery(WIDE_QUERY);
@@ -100,6 +100,19 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
   const scopeNote = scope.active
     ? `over ${scope.shown.toLocaleString('en-US')} of ${scope.total.toLocaleString('en-US')} items`
     : undefined;
+  if (rowsError)
+    // R9 (C019): the hero and the nav stay; one error panel stands in place of the sections and Items, which all
+    // read the rows, so none of them shows a skeleton forever
+    return (
+      <>
+        <SectionNav onSection={onSection} />
+        <ReportLayout wide={wide} sidebarOpen={false}>
+          <div className={styles.rowsError} data-testid="rows-error">
+            <ErrorState error={rowsError} title="Couldn’t load this run’s items" onRetry={retryRows} />
+          </div>
+        </ReportLayout>
+      </>
+    );
   return (
     <>
       <SectionNav onSection={onSection} />
@@ -150,12 +163,17 @@ export function RunBody({
   runId,
   payload,
   rowsPending = false,
+  rowsError,
+  onRetryRows,
   summary,
   summaryPending = false,
 }: {
   runId: string;
   payload: RunPayload;
   rowsPending?: boolean;
+  /** The rows request failed (R9, C019). */
+  rowsError?: unknown;
+  onRetryRows?: () => void;
   /** The run summary (stage 1), once it has answered: carries the review count and the pager's neighbours. */
   summary?: RunPayload;
   /** The summary has not answered (the header is the list row): hold the requests it makes unnecessary. */
@@ -257,6 +275,8 @@ export function RunBody({
     summaryPending,
     summaryNeighbors: summary?.neighbors,
     rowsPending,
+    rowsError,
+    retryRows: onRetryRows,
     hasGroup,
     needGroup,
   };
