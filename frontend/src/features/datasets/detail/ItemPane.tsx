@@ -194,12 +194,13 @@ export function ItemPane({
       ) : null}
       {!readOnly && published && item && onCreateDraft ? (
         <footer className={styles.foot}>
+          {/* one action to change a published item, the same as on the item page (C142) */}
           <Button
-            variant="neutral"
+            variant="accent"
             onPress={() => onCreateDraft(item.item_id)}
-            data-testid="item-state-action"
+            data-testid="pane-edit-in-draft"
           >
-            {disabled ? 'Create a draft to enable' : 'Create a draft to disable'}
+            Edit in a new draft
           </Button>
         </footer>
       ) : null}

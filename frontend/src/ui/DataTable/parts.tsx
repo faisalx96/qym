@@ -25,6 +25,11 @@ export interface ToolbarProps {
   columnsMenu?: boolean;
   /** Density menu: default shown unless the table locks its density. */
   densityMenu?: boolean;
+  /**
+   * While rows are selected, the selection actions take the toolbar's place at the same height, so the table does not
+   * move down (C228). The toolbar's own controls stay laid out under them, hidden.
+   */
+  selectionReplaces?: boolean;
 }
 
 const DENSITIES: { id: Density; label: string }[] = [
@@ -43,6 +48,7 @@ export function Toolbar({
   trailing,
   columnsMenu,
   densityMenu,
+  selectionReplaces,
 }: ToolbarProps) {
   const {
     model,
@@ -86,6 +92,20 @@ export function Toolbar({
       {chips ? <div className={styles.chips}>{chips}</div> : null}
     </div>
   );
+  if (selectionReplaces && cluster)
+    return (
+      <div className={styles.toolbar} data-dt-toolbar="" data-selection-replaces="">
+        <div className={styles.selectionOverlay}>{cluster}</div>
+        {/* visibility: hidden also takes these controls out of the Tab order */}
+        <div className={styles.toolbarHidden} aria-hidden="true">
+          {main}
+          <div className={styles.toolbarEnd}>
+            {count ? <span className={styles.count}>{count}</span> : null}
+            {trailing}
+          </div>
+        </div>
+      </div>
+    );
   return (
     <div className={styles.toolbar} data-dt-toolbar="">
       {rows && cluster ? (

@@ -21,6 +21,11 @@ export function FieldDiff({ field, before, after, onlyAfter, onlyBefore }: Field
   const typeChanged = !onlyAfter && !onlyBefore && storedType(before) !== storedType(after);
   const ops = useMemo(() => (onlyAfter || onlyBefore ? null : wordDiff(a, b)), [a, b, onlyAfter, onlyBefore]);
   const tooLarge = !onlyAfter && !onlyBefore && ops === null;
+  // A string diff reads in the sans face; JSON values stay mono (C153).
+  const isText =
+    (onlyAfter || typeof before === 'string' || before == null) &&
+    (onlyBefore || typeof after === 'string' || after == null) &&
+    (typeof before === 'string' || typeof after === 'string');
   return (
     <div className={styles.field}>
       <div className={styles.fieldHead}>
@@ -36,7 +41,11 @@ export function FieldDiff({ field, before, after, onlyAfter, onlyBefore }: Field
           </Text>
         ) : null}
       </div>
-      <div className={styles.panes} data-single={onlyAfter || onlyBefore ? '' : undefined}>
+      <div
+        className={styles.panes}
+        data-single={onlyAfter || onlyBefore ? '' : undefined}
+        data-kind={isText ? 'text' : undefined}
+      >
         {!onlyAfter ? (
           <Pane label="before" text={a} ops={ops ? diffSide(ops, 'before') : null} tone="before" />
         ) : null}

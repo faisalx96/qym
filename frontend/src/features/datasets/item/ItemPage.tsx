@@ -210,24 +210,15 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         actions={
           <div className={styles.actions}>
             {version.status !== 'draft' && !readOnly ? (
-              <>
-                <Button
-                  variant="accent"
-                  size="md"
-                  onPress={() => setDraftOpen(true)}
-                  data-testid="create-draft-to-edit"
-                >
-                  Create draft to edit
-                </Button>
-                <Button
-                  variant="neutral"
-                  size="md"
-                  onPress={() => setDraftOpen(true)}
-                  data-testid="item-state-action"
-                >
-                  {item.state === 'disabled' ? 'Create a draft to enable' : 'Create a draft to disable'}
-                </Button>
-              </>
+              // one action to change a published item, the same as in the pane (C142)
+              <Button
+                variant="accent"
+                size="md"
+                onPress={() => setDraftOpen(true)}
+                data-testid="create-draft-to-edit"
+              >
+                Edit in a new draft
+              </Button>
             ) : null}
             {editable && item.state !== 'disabled' ? (
               <Button

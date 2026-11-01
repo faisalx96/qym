@@ -1033,6 +1033,29 @@
   border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
+/* selectionReplaces (C228): the selection actions sit over the toolbar's own controls, which keep its height */
+.toolbar[data-selection-replaces] {
+  position: relative;
+  background: var(--bg-elevated);
+}
+
+.selectionOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: inherit;
+}
+
+.selectionOverlay > .selectionCluster {
+  border-inline-end: 0;
+}
+
+.toolbarHidden {
+  display: contents;
+  visibility: hidden;
+}
+
 .toolbar[data-selection-bar] {
   background: var(--bg-elevated);
 }

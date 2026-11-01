@@ -410,34 +410,23 @@ test.describe('All matching menu and selected rows (A3-15 to A3-26)', () => {
     await expect(page.getByRole('dialog', { name: 'Create draft' })).toBeVisible();
   });
 
-  test('selected rows: Disable N…, Enable N, Delete N and the toolbar heights (A3-21 to A3-23)', async ({
+  test('selected rows: Disable N…, Delete N, and the toolbar keeps its height (A3-21 to A3-23, C228)', async ({
     page,
     request,
   }) => {
     const s = await seedFaq(request, 'selrows');
-    for (const [width, h] of [
-      [1440, 99],
-      [1024, 131],
-      [390, 321],
-    ] as const) {
+    for (const width of [1440, 1024, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await open(page, s, `label=arabic&${FILTER}&meta=difficulty:0`);
+      const h = (await size(toolbar(page))).h;
       await selectRows(page, ['faq-001', 'faq-016']);
       const cluster = page.getByRole('region', { name: 'Selection actions' });
       await expect(cluster).toContainText('2 selected');
-      await expect(cluster.getByRole('button')).toHaveText([
-        'Disable 2…',
-        'Enable 2',
-        'Delete 2',
-        'Clear selection',
-      ]);
+      // both rows are active, so there is no Enable (C228)
+      await expect(cluster.getByRole('button')).toHaveText(['Disable 2…', 'Delete 2', 'Clear selection']);
+      // the selection takes the toolbar's place at the toolbar's own height (C228)
       near((await size(toolbar(page))).h, h, 4);
     }
-    // Enable 2 applies at once (reversible): these two are active, so nothing changes.
-    await page.getByTestId('bulk-enable-selected').click();
-    await expect(page.locator('[data-toast-container]')).toContainText(
-      'No change: the 2 items were already enabled',
-    );
   });
 
   test('disabling selected rows: the dialog is titled with the count (A2-35, A3-22)', async ({
@@ -739,8 +728,10 @@ test.describe('item pane, item page and the disable dialog (A2-13 to A2-35)', ()
     await page.setViewportSize({ width: 1440, height: 900 });
     await open(page, s, '', s.v1);
     await rowOf(page, 'faq-002').click();
-    const action = pane(page).getByTestId('item-state-action');
-    await expect(action).toHaveText('Create a draft to disable');
+    // a published item has one action in the pane: Edit in a new draft (C142)
+    await expect(pane(page).getByTestId('item-state-action')).toHaveCount(0);
+    const action = pane(page).getByTestId('pane-edit-in-draft');
+    await expect(action).toHaveText('Edit in a new draft');
     await action.click();
     await page
       .getByRole('dialog', { name: 'Create draft' })
@@ -762,8 +753,9 @@ test.describe('item pane, item page and the disable dialog (A2-13 to A2-35)', ()
     await expect(disable).toHaveText('Disable item…');
     expect((await size(disable)).h).toBe(32);
     await gotoApp(page, `/projects/${s.slug}/datasets/${s.ds}?v=${s.v1}&item=faq-001`);
-    await expect(page.getByTestId('create-draft-to-edit')).toBeVisible();
-    await expect(page.getByTestId('item-state-action')).toHaveText('Create a draft to disable');
+    // one action on a published item: Edit in a new draft (C142)
+    await expect(page.getByTestId('create-draft-to-edit')).toHaveText('Edit in a new draft');
+    await expect(page.getByTestId('item-state-action')).toHaveCount(0);
   });
 
   test('a 409 from the server shows its detail under the reason field (A2-27, A2-33)', async ({

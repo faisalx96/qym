@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Key } from 'react-aria-components';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useDatasetItems,
   fetchMatchingItemIds,
@@ -310,21 +310,11 @@ export function ItemsTab({
       pin: 'start',
       hideable: false,
       priority: 1,
+      // Plain text: the whole row opens the pane, and the row's arrow opens the item page (C142).
       cell: (item) => (
-        <Link
-          to={itemHref(item)}
-          className={styles.indexLink}
-          data-item-link={item.item_id}
-          onKeyDown={(e) => {
-            // Keyboard activation opens the docked pane; a click on the link opens the item page.
-            if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
-              e.preventDefault();
-              openItem(item);
-            }
-          }}
-        >
+        <span className={styles.indexText} data-item-link={item.item_id}>
           {item.index}
-        </Link>
+        </span>
       ),
     },
     ...(hasUserIds || route.state !== 'active'
@@ -373,7 +363,7 @@ export function ItemsTab({
       sort: 'metadata',
       width: 180,
       priority: 3,
-      cell: (item) => <Preview value={item.metadata} />,
+      cell: (item) => <Preview value={item.metadata} mono />,
     },
     {
       id: 'labels',
@@ -429,7 +419,13 @@ export function ItemsTab({
   ];
 
   const rowActions = (): RowAction<DatasetItem>[] => [
-    { id: 'open', label: 'Open item', icon: 'external', primary: true, onPress: openItem },
+    {
+      id: 'open',
+      label: 'Open item page',
+      icon: 'external',
+      primary: true,
+      onPress: (it) => navigate(itemHref(it)),
+    },
     {
       id: 'copy',
       label: 'Copy as JSON',
@@ -526,6 +522,7 @@ export function ItemsTab({
         className={styles.table}
       >
         <DataTable.Toolbar
+          selectionReplaces
           search={
             <SearchField
               label="Search items"
@@ -708,7 +705,8 @@ export function ItemsTab({
 }
 
 /** Mono one-line preview; Arabic text flows RTL. Hovering for 700 ms shows the full value. */
-export function Preview({ value, wrap }: { value: unknown; wrap?: boolean }) {
+/** A cell preview: item text in the sans face; `mono` for JSON such as metadata (C153). */
+export function Preview({ value, wrap, mono }: { value: unknown; wrap?: boolean; mono?: boolean }) {
   const text = promptPreview(value);
   const dir = textDirAttrs(text);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
@@ -721,6 +719,7 @@ export function Preview({ value, wrap }: { value: unknown; wrap?: boolean }) {
   return (
     <span
       className={wrap ? styles.previewWrap : styles.preview}
+      data-mono={mono ? '' : undefined}
       {...dir}
       onMouseEnter={(e) => {
         if (!text) return;

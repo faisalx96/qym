@@ -435,7 +435,9 @@ test.describe('detail: items table', () => {
     await expect(pane).toHaveCount(0);
     await expect(page.getByRole('checkbox')).toHaveCount(0); // no bulk selection on published
 
+    // the row opens the pane (C142); the pane's Open page leads to the item page
     await page.locator('[data-item-link]').first().click();
+    await page.locator('[data-item-pane]').getByTestId('pane-open-page').click();
     await expect(page.locator('[data-item-page]')).toBeVisible();
     await expect(page.getByTestId('save-item')).toHaveCount(0);
     await expect(page.getByTestId('delete-item')).toHaveCount(0);
