@@ -14,6 +14,7 @@ import { OverviewTab } from './panel/OverviewTab';
 import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
 import { ItemsHeadAside, ItemsSection } from './items/ItemsSection';
+import { Deferred, useAfterFirstPaint } from './Deferred';
 import { RunCards, RunsDiff } from './RunCards';
 import { PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
@@ -141,6 +142,8 @@ export function CompareReport() {
   const sections = useSectionList();
   const has = (k: SectionKey) => sections.some((s) => s.key === k);
   useSectionAnchor();
+  // C076: header, run cards and averages first; the rest after the first paint or when the reader nears them
+  const ready = useAfterFirstPaint();
   const passes = ctx.direction && !ctx.isBoolean && model.types[metric] !== 'numeric';
   const overviewDescription = `Pass rates, winners and how many runs got each item right for ${metric}. ${metricDirectionLabel(ctx.direction)}${passes ? `; a run passes when its score is ${passThresholdLabel(ctx.threshold, ctx.direction)}` : ''}.`;
   return (
@@ -169,9 +172,13 @@ export function CompareReport() {
         title="Comparison overview"
         description={overviewDescription}
       >
-        <OverviewTab />
+        <Deferred ready={ready}>
+          <OverviewTab />
+        </Deferred>
       </ReportSection>
-      <CategoriesSection />
+      <Deferred ready={ready}>
+        <CategoriesSection />
+      </Deferred>
       <ReportSection
         id={sectionDomId('steps')}
         part="section-steps"
@@ -179,7 +186,9 @@ export function CompareReport() {
         description="Mean latency per traced step and run."
         hidden={!has('steps')}
       >
-        <StepsTab />
+        <Deferred ready={ready}>
+          <StepsTab />
+        </Deferred>
       </ReportSection>
       <ReportSection
         id={sectionDomId('errors')}
@@ -187,7 +196,9 @@ export function CompareReport() {
         title="Error distribution"
         description="Errors by kind and message for each run. Press a card to filter the items."
       >
-        <ErrorsTab />
+        <Deferred ready={ready}>
+          <ErrorsTab />
+        </Deferred>
       </ReportSection>
       <ReportSection
         id={sectionDomId('root-cause')}
@@ -196,7 +207,9 @@ export function CompareReport() {
         description="Why items failed, from the analyzer, per run."
         hidden={!has('root-cause')}
       >
-        <RootCauseTab />
+        <Deferred ready={ready}>
+          <RootCauseTab />
+        </Deferred>
       </ReportSection>
       <ReportSection
         id={sectionDomId('items')}
@@ -205,7 +218,9 @@ export function CompareReport() {
         description="Filter and inspect aligned inputs, outputs, scores and review metadata."
         aside={<ItemsHeadAside />}
       >
-        <ItemsSection />
+        <Deferred ready={ready} minHeight={480}>
+          <ItemsSection />
+        </Deferred>
       </ReportSection>
     </div>
   );
