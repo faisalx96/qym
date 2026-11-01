@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +22,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.security import generate_temporary_password, hash_password
+from qym_platform.api.paging import DEFAULT_LIMIT, MAX_LIMIT, PAGE_FORMAT, decode_cursor, page_body
 from qym_platform.settings import PlatformSettings
 
 
@@ -82,23 +83,33 @@ def me(
 
 @router.get("/v1/users")
 def list_users(
+    limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    cursor: Optional[str] = Query(default=None, max_length=200),
+    format: str = PAGE_FORMAT,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-) -> list[Dict[str, Any]]:
+) -> Any:
+    """Active users by email. ``format=page`` pages them with the list contract (C160);
+    the default bare list (every user) stays for one release."""
     # The whole user directory is for admins. Project managers look people up
     # through GET /v1/projects/{id}/member-candidates instead.
     _require_admin(principal)
-    users = db.query(User).filter(User.is_active == True).order_by(User.email).all()
-    return [
-        {
+    query = db.query(User).filter(User.is_active == True).order_by(User.email, User.id)
+
+    def row(user: User) -> Dict[str, Any]:
+        return {
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
             "title": user.title,
             "role": user.role.value,
         }
-        for user in users
-    ]
+
+    if format != "page":
+        return [row(user) for user in query.all()]
+    offset = decode_cursor(cursor)
+    total = query.order_by(None).count()
+    return page_body([row(user) for user in query.offset(offset).limit(limit).all()], offset=offset, total=total)
 
 
 class CreateUserRequest(BaseModel):

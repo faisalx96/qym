@@ -14,6 +14,7 @@ from sqlalchemy import Text, case, cast, func, null, or_, select, type_coerce
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session, load_only
 
+from qym_platform.api.paging import PAGE_FORMAT, decode_cursor, page_body
 from qym_platform.services.html_export import (
     build_compare_export_html,
     build_run_export_html,
@@ -4437,9 +4438,11 @@ def list_deleted_runs(
     offset: int = Query(default=0, ge=0),
     project_id: Optional[str] = Query(default=None),
     q: str = Query(default="", max_length=200),
+    cursor: Optional[str] = Query(default=None, max_length=200),
+    format: str = PAGE_FORMAT,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-) -> List[Dict[str, Any]]:
+) -> Any:
     """List soft-deleted runs (admin only) with the date retention purges each.
 
     Pages through every deleted run: ``limit``/``offset`` select the page and
@@ -4454,6 +4457,9 @@ def list_deleted_runs(
     grace_days = PlatformSettings().deleted_run_grace_days
     response.headers["X-Qym-Deleted-Run-Grace-Days"] = str(grace_days)
 
+    # The list contract (C160): a cursor stands for an offset of the same order.
+    if cursor:
+        offset = decode_cursor(cursor)
     query = _deleted_runs_query(db, project_id, q)
     total = query.order_by(None).count()
     response.headers["X-Qym-Total-Count"] = str(total)
@@ -4537,6 +4543,8 @@ def list_deleted_runs(
                 "project_slug": projects[r.project_id].slug if r.project_id in projects else "",
             }
         )
+    if format == "page":
+        return page_body(result, offset=offset, total=total)
     return result
 
 
