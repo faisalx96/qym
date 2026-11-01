@@ -152,7 +152,7 @@ function PickerBody({
           <Button
             size="md"
             variant="primary"
-            isDisabled={over}
+            isDisabled={over || selected.size === 0}
             onPress={() => {
               onUse({ ids: [...selected], fields });
               onOpenChange(false);

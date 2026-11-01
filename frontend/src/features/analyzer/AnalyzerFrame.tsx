@@ -7,7 +7,7 @@ import s from './analyzer.module.css';
 
 /**
  * Page chrome shared by the run workspace and the project landing: title, one-line description
- * and ONE tab row (Analyze run, Diagnosis categories, Production rules, Documents). A live
+ * and ONE tab row (Analyze run, Diagnosis categories, Rules, Documents). A live
  * analysis puts a dot on "Analyze run" so it stays visible from every tab.
  */
 export function AnalyzerFrame({
@@ -57,7 +57,7 @@ export function AnalyzerFrame({
                 label: 'Diagnosis categories',
                 count: c ? (c.category_catalog?.categories ?? c.default_categories).length : undefined,
               },
-              { id: 'rules', label: 'Production rules' },
+              { id: 'rules', label: 'Rules' },
               { id: 'documents', label: 'Documents', count: c?.enabled_document_count },
             ]}
           >

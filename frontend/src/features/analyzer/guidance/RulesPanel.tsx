@@ -19,7 +19,6 @@ import {
   DropdownMenu,
   EmptyState,
   ErrorState,
-  Icon,
   IconButton,
   SectionHeader,
   Skeleton,
@@ -139,12 +138,24 @@ function RulesView({
   });
 
   if (!open) {
+    // C126: a project with no version yet can start one here (managers)
     return (
       <div className={s.rules}>
         <EmptyState
           compact
-          title="No rule versions yet"
-          body="A draft appears here once the project has rules."
+          title="No rules yet"
+          body="Create a draft to add rules by hand, or to generate them from project documents and approved examples."
+          action={
+            canManage ? (
+              <Button
+                variant="primary"
+                loading={createDraft.isPending}
+                onPress={() => void onCreateDraft(null)}
+              >
+                Create draft
+              </Button>
+            ) : undefined
+          }
         />
       </div>
     );
@@ -156,27 +167,29 @@ function RulesView({
   const selectedExamples = examples.ids.length;
   const docsUsed = includeDocs ? enabledDocs : 0;
   const usable = docsUsed > 0 || selectedExamples > 0;
+  // C249: say what blocks generation in the project's own numbers
   let sourceMessage = '';
   if (!usable) {
     if (enabledDocs === 0 && approved === 0)
       sourceMessage =
-        'Rules cannot be generated yet. This project has neither an enabled project document nor an approved example. Add and enable a project document, or approve an example, then try again.';
-    else if (includeDocs && enabledDocs === 0)
-      sourceMessage =
-        'Rules cannot be generated yet. No enabled project documents are available. Add an approved example, or add and enable a project document, then try again.';
-    else if (approved > 0 && selectedExamples === 0)
-      sourceMessage =
-        'Add at least one approved example before generating rules, or turn on Project documents.';
-    else
-      sourceMessage =
-        'Rules cannot be generated yet. No approved examples are available, and Project documents are turned off.';
+        'Nothing to generate from yet: enable a project document in Documents, or approve a diagnosis in Reviews.';
+    else if (approved > 0 && enabledDocs > 0)
+      sourceMessage = `Pick some of the ${approved} approved ${approved === 1 ? 'example' : 'examples'}, or turn on documents, to generate rules.`;
+    else if (approved > 0)
+      sourceMessage = `Pick some of the ${approved} approved ${approved === 1 ? 'example' : 'examples'} to generate rules. No project document is enabled.`;
+    else sourceMessage = 'Turn on documents to generate rules. No diagnosis is approved yet.';
   }
 
-  async function onCreateDraft(from: RuleVersion) {
+  async function onCreateDraft(from: RuleVersion | null) {
     try {
-      const res = await createDraft.mutateAsync(from.id);
+      const res = await createDraft.mutateAsync(from?.id);
       setOpenId(res.version.id);
-      toast.show(`Draft v${res.version.version} created from v${from.version}`, { tone: 'success' });
+      toast.show(
+        from
+          ? `Draft v${res.version.version} created from v${from.version}`
+          : `Draft v${res.version.version} created`,
+        { tone: 'success' },
+      );
     } catch (e) {
       toast.show(
         e instanceof ApiError ? e.detail || 'Could not create a draft' : 'Could not create a draft',
@@ -287,21 +300,24 @@ function RulesView({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not promote this version'
-                : 'Could not promote this version',
+                ? e.detail || 'Could not make this version live'
+                : 'Could not make this version live',
               { tone: 'error' },
             );
           }
         }}
         promoting={promote.isPending}
-        onCreateDraft={() => void onCreateDraft(open)}
         sources={
           <div className={s.sources}>
             <Text variant="md" weight={600}>
               Rule sources
             </Text>
             <div className={s.sourceRow}>
-              <Checkbox isSelected={includeDocs} onChange={setIncludeDocs} isDisabled={!canManage}>
+              <Checkbox
+                isSelected={includeDocs && enabledDocs > 0}
+                onChange={setIncludeDocs}
+                isDisabled={!canManage || enabledDocs === 0}
+              >
                 {`Add documents (${enabledDocs} enabled)`}
               </Checkbox>
               <Button size="sm" isDisabled={!canManage || approved === 0} onPress={() => setPickerOpen(true)}>
@@ -511,7 +527,6 @@ function VersionWorkspace({
   onPublish,
   onPromote,
   promoting,
-  onCreateDraft,
   sources,
   generation,
 }: {
@@ -523,7 +538,6 @@ function VersionWorkspace({
   onPublish: () => void;
   onPromote: () => void;
   promoting: boolean;
-  onCreateDraft: () => void;
   sources: React.ReactNode;
   generation: React.ReactNode;
 }) {
@@ -551,12 +565,7 @@ function VersionWorkspace({
               </Button>
             ) : version.status === 'published' && !isProduction && canPromote ? (
               <Button variant="accent" size="sm" loading={promoting} onPress={onPromote}>
-                Promote to production
-              </Button>
-            ) : null}
-            {!editable && canManage ? (
-              <Button size="sm" icon={<Icon name="edit" size={12} />} onPress={onCreateDraft}>
-                Create draft to edit
+                Make live
               </Button>
             ) : null}
           </div>
