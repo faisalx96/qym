@@ -211,6 +211,12 @@ export function runSummaryOptions(runId: string) {
   };
 }
 
+/** C198: a finished run's rows do not change on their own (edits invalidate them), so they never go stale. */
+function rowsStaleTime(query: { state: { data?: RunPayload } }): number {
+  const status = String(query.state.data?.run?.status ?? '').toUpperCase();
+  return status && status !== 'RUNNING' && status !== 'PENDING' ? Infinity : 10_000;
+}
+
 /** Stage 2. A refetch (a live run) asks for the core groups and every late group already in the store. */
 export function runRowsOptions(
   qc: QueryClient,
@@ -225,7 +231,7 @@ export function runRowsOptions(
       const next = await fetchRunRows(runId, [...CORE_GROUPS, ...late], signal);
       return reuseRows(prev, mergeRowGroups(prev, next));
     },
-    staleTime: 10_000,
+    staleTime: rowsStaleTime,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
     structuralSharing: false,
