@@ -180,6 +180,23 @@ export function useLlmConnectionAction(projectId: string) {
   });
 }
 
+/** Test the values in the connection form before they are saved (C157). */
+export function useTestLlmDraft(projectId: string) {
+  return useMutation({
+    mutationFn: (body: {
+      llm_base_url: string;
+      llm_model: string;
+      llm_api_key: string;
+      connection_id?: string;
+      available_for_experiments?: boolean;
+    }) =>
+      api.post<{ ok: boolean; model: string; response?: string }>(
+        `/v1/projects/${projectId}/llm-connections/test`,
+        body,
+      ),
+  });
+}
+
 export function useAnalysisPrompts(projectId: string | undefined, enabled: boolean) {
   return useQuery({
     queryKey: k.prompts(projectId ?? ''),
