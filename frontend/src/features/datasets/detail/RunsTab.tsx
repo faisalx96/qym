@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DATASET_RUNS_PAGE, useDatasetRuns, type DatasetRunRow, type DatasetVersion } from '@/api/datasets';
 import { runPath } from '@/app/routes';
-import { useDelayedPending } from '@/lib/pending';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { DataTable, EmptyState, RelativeTime, ScoreBar, StatusCell, Text, type Column } from '@/ui';
 import { formatLatency } from '../lib/itemValue';
 import { metricDir } from '../lib/metricDir';
@@ -94,7 +94,7 @@ export function RunsTab({
         rowHref={(r) => runPath(slug, r.id)}
         onRowOpen={(r) => navigate(runPath(slug, r.id))}
         columns={columns}
-        loading={showSkeleton}
+        loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
         onRetry={() => void query.refetch()}
         empty={

@@ -148,7 +148,7 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
       });
       onDeleted();
     } catch (e) {
-      setGeneral(mapEnvironmentError(e).general || 'Could not delete the environment.');
+      setGeneral(mapEnvironmentError(e).general || 'Couldn’t delete the environment.');
       throw e;
     }
   }

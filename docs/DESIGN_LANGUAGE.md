@@ -777,6 +777,15 @@ Recipes that exist only on the run report. They compose the primitives above and
 
 ### 3.7 Loading, empty and failed states
 
+**One pattern per state (C018, C156, C059, C182, C181).** A failure names its cause (`ErrorState` shows the cause for
+every kind). A missing thing reads "<Thing> not found" (`notFoundTitle`), one sentence of cause and one link to its
+parent list (`parent`), with no HTTP line and no Retry; a load failure is titled "Couldn’t load <thing>". Error titles
+use "Couldn’t", never "Could not", "Unable to" or "Failed to". A table never shows its empty state while its query is
+pending (`tableLoading`), and an unknown count is not zero: no tab count, '–' in a line. An empty state or a settings card
+with a docs page carries a "Read the guide" link (`guide`). A failed write is one plain sentence
+(`actionErrorMessage`, `errorSentence`: "Couldn’t save the rules. The server had a problem. Try again."), never the
+browser or server text as is, and a 422 lands on its field (`fieldErrorsOf`; `FormDialog` does it).
+
 - **Loading and empty** (`Skeleton`, `EmptyState`): a skeleton appears only
   after the pending delay (`useDelayedPending`, 300 ms) and respects
   `prefers-reduced-motion`. `EmptyState` is for a successful empty result only:

@@ -10,7 +10,7 @@ import {
   type DatasetItem,
   type DatasetVersion,
 } from '@/api/datasets';
-import { ApiError } from '@/lib/http';
+import { errorSentence, fieldErrorsOf } from '@/lib/http';
 import { useRef, useState } from 'react';
 import { Button, Dialog, FormDialog, Textarea, useToast, type FormValue } from '@/ui';
 import { Note } from './Note';
@@ -22,9 +22,9 @@ import { PRODUCTION_RULE } from '../lib/versions';
 
 import styles from './dialogs.module.css';
 
+/** One plain sentence (C181). */
 function errorText(e: unknown): string {
-  if (e instanceof ApiError) return e.detail || e.message;
-  return e instanceof Error ? e.message : String(e);
+  return errorSentence(e);
 }
 
 export function NewDatasetDialog({
@@ -74,6 +74,7 @@ export function NewDatasetDialog({
           toast.show(`Dataset "${r.dataset.name}" created`, { tone: 'success' });
           navigate(datasetPath(slug, r.dataset.slug));
         } catch (e) {
+          if (Object.keys(fieldErrorsOf(e)).length) throw e;
           return errorText(e);
         }
       }}

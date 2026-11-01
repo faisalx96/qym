@@ -196,7 +196,8 @@ describe('ErrorState', () => {
       </MemoryRouter>,
     );
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
-    expect(screen.getByText(/HTTP 404/)).toBeInTheDocument();
+    // C156: a not-found has no HTTP line
+    expect(screen.queryByText(/HTTP 404/)).not.toBeInTheDocument();
   });
 });
 

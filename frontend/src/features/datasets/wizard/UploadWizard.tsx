@@ -152,7 +152,7 @@ function WizardInner({
     } catch {
       if (ticket !== parseTicket.current) return;
       setParsed(null);
-      setErrors({ file: 'Could not read the file.' });
+      setErrors({ file: 'Couldn’t read the file.' });
       setParsing(false);
       return;
     }
@@ -666,7 +666,7 @@ function WizardInner({
               <div className={styles.matches} data-testid="wizard-matches">
                 <Text variant="base" tone="warning" role="status">
                   {matchCheck.matched === null
-                    ? `Could not check which ${noun}s match items already in ${draft?.version ?? 'the draft'} (${matchCheck.error}). Matching items are skipped unless you choose Replace.`
+                    ? `Couldn’t check which ${noun}s match items already in ${draft?.version ?? 'the draft'} (${matchCheck.error}). Matching items are skipped unless you choose Replace.`
                     : matchLine(matchCheck.matched, parsed.rows.length, noun, draft?.version ?? 'the draft')}
                 </Text>
                 <RadioGroup<OnExisting>

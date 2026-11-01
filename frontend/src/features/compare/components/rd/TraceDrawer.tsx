@@ -374,7 +374,7 @@ export function TraceDrawer({
         {query.isError ? (
           <ErrorState
             error={query.error}
-            title="Failed to load the trace"
+            title="Couldn’t load the trace"
             notFoundMessage="No trace was recorded for this item."
             onRetry={() => void query.refetch()}
           />

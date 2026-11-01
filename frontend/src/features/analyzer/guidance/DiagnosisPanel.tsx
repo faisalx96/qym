@@ -205,8 +205,8 @@ function DiagnosisEditor({
       } else {
         setFailure(
           e instanceof ApiError
-            ? e.detail || 'Could not save diagnosis categories.'
-            : 'Could not save diagnosis categories.',
+            ? e.detail || 'Couldn’t save diagnosis categories.'
+            : 'Couldn’t save diagnosis categories.',
         );
       }
     }

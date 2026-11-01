@@ -16,7 +16,7 @@ import {
   type DatasetVersion,
 } from '@/api/datasets';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import { Button, ConfirmDialog, useToast } from '@/ui';
 import { DisableItemDialog } from '../components/dialogs';
 import type { BatchCriteria } from '../lib/batchCopy';
@@ -166,7 +166,7 @@ export function ItemsWorkspace({
         tone: 'success',
       });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
+      toast.show(actionErrorMessage('delete the items', e), { tone: 'error' });
       throw e;
     }
   }
@@ -197,7 +197,7 @@ export function ItemsWorkspace({
     try {
       await applySelected('enable');
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t enable the items', {
+      toast.show(actionErrorMessage('enable the items', e), {
         tone: 'error',
       });
     }
@@ -334,7 +334,7 @@ export function ItemsWorkspace({
             const g = guard;
             setGuard(null);
             g?.proceed();
-          } else throw new Error('Could not save; fix the item first.');
+          } else throw new Error('Couldn’t save; fix the item first.');
         }}
         onAlternative={() => {
           dirty.current.reset();

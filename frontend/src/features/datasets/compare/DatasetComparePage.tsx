@@ -278,7 +278,7 @@ function DownloadDiff({
           a.remove();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch {
-          toast.show('Could not download the diff', { tone: 'error' });
+          toast.show('Couldn’t download the diff', { tone: 'error' });
         } finally {
           setBusy(false);
         }

@@ -5,7 +5,7 @@ import {
   type MaintenanceJobParam,
   type MaintenanceOverview,
 } from '@/api/admin';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
 import { Button, Flag, Select, Text, TextField, useToast } from '@/ui';
 import styles from './maintenance.module.css';
@@ -80,9 +80,7 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
       setConfirm('');
       onQueued?.(job.id);
     } catch (e) {
-      setError(
-        e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e),
-      );
+      setError(actionErrorMessage('queue the job', e));
     }
   }
 

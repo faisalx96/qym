@@ -47,6 +47,6 @@ export async function runPublish(
     };
   } catch (error) {
     if (error instanceof ApiError) return publishFailure(error.status, errorMessage(error), errorList(error));
-    return { kind: 'error', message: errorMessage(error) || 'Could not publish' };
+    return { kind: 'error', message: errorMessage(error) || 'Couldn’t publish' };
   }
 }

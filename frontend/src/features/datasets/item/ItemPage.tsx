@@ -167,16 +167,11 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         <ErrorState
           error={itemQuery.error}
           title="Couldn’t load this item"
+          notFoundTitle="Item not found"
           notFoundMessage={`No item “${itemId}” in ${version.version}.`}
           onRetry={() => void itemQuery.refetch()}
+          parent={{ to: linkTo({ item: null, tab: 'items' }), label: 'Items' }}
         />
-        <LinkButton
-          to={linkTo({ item: null, tab: 'items' })}
-          variant="ghost"
-          icon={<Icon name="chevron-left" size={12} />}
-        >
-          Back to items
-        </LinkButton>
       </div>
     );
   }

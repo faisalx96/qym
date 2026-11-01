@@ -58,11 +58,7 @@ export function EnvironmentsList({
 
   if (list.isError)
     return (
-      <ErrorState
-        error={list.error}
-        title="Could not load environments"
-        onRetry={() => void list.refetch()}
-      />
+      <ErrorState error={list.error} title="Couldn’t load environments" onRetry={() => void list.refetch()} />
     );
   if (list.isPending)
     return showSkeleton ? <Skeleton kind="table" rows={4} label="Loading environments" /> : null;
@@ -71,8 +67,9 @@ export function EnvironmentsList({
   if (!envs.length) {
     return (
       <EmptyState
-        icon={<Icon name="flask" />}
+        icon={<Icon name="settings" />}
         title="No environments yet"
+        guide="/docs/platform-guide/projects-data-review"
         body={
           canEdit
             ? 'Add one to launch experiments against an Evaluation Service deployment.'

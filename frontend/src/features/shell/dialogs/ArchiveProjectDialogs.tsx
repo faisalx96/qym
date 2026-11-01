@@ -9,13 +9,14 @@ import {
   useUnarchiveProject,
 } from '@/api/projects';
 import type { ArchivePreview, DeletionPreview, Project, UnarchivePreview } from '@/api/types';
-import { ApiError } from '@/lib/http';
+import { errorSentence } from '@/lib/http';
 import { ConfirmDialog, useToast, type ConfirmWarning } from '@/ui';
 import { projectPath } from '@/app/routes';
 import { formatHeaderDate, toDate } from '@/lib/dates';
 
+/** One plain sentence (C181). */
 function errorText(e: unknown): string {
-  return e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e);
+  return errorSentence(e);
 }
 
 /** Archive: previews running runs, then POST …/archive, toast, navigate home. */
@@ -54,7 +55,7 @@ function ArchiveProjectDialogInner({ project, open, onOpenChange, onArchived }: 
       }
     : previewError
       ? {
-          lead: 'Could not check for running runs',
+          lead: 'Couldn’t check for running runs',
           text: `${previewError}. Runs that are still in progress will be stopped if you continue.`,
         }
       : undefined;
@@ -124,7 +125,7 @@ function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDia
             }
           : previewError
             ? {
-                lead: 'Could not check for active API keys',
+                lead: 'Couldn’t check for active API keys',
                 text: `${previewError}. Keys that were active before archiving will work again if you continue; review them under API keys first.`,
               }
             : undefined

@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Button, Card, Text, type CardTone } from '@/ui';
 import styles from './settings.module.css';
 
@@ -8,6 +9,8 @@ export interface SettingsCardProps {
   title: ReactNode;
   /** One line under the title: what the block is for. */
   description?: ReactNode;
+  /** C182: the docs page for this block; a 'Read the guide' link follows the description. */
+  guide?: string;
   /** The block's main action (Add, Create), on the title row's end side. */
   action?: ReactNode;
   /** A custom footer. A card that saves settings passes `save` instead (C145: one footer recipe). */
@@ -28,6 +31,7 @@ export function SettingsCard({
   id: anchor,
   title,
   description,
+  guide,
   action,
   footer,
   save,
@@ -49,7 +53,17 @@ export function SettingsCard({
             <Text variant="md" id={id}>
               {title}
             </Text>
-            {description ? <Text variant="sm">{description}</Text> : null}
+            {description || guide ? (
+              <Text variant="sm">
+                {description}
+                {guide ? (
+                  <>
+                    {description ? ' ' : null}
+                    <Link to={guide}>Read the guide</Link>
+                  </>
+                ) : null}
+              </Text>
+            ) : null}
           </div>
           {action ? <div className={styles.cardAction}>{action}</div> : null}
         </div>

@@ -2,8 +2,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDatasetCatalog, useRestoreDataset, type Dataset } from '@/api/datasets';
-import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
+import { actionErrorMessage } from '@/lib/http';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
@@ -41,7 +41,7 @@ export function DeletedDatasetsPage() {
       toast.show(`"${r.dataset.name}" restored`, { tone: 'success' });
       navigate(datasetPath(slug, r.dataset.slug));
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Restore failed', { tone: 'error' });
+      toast.show(actionErrorMessage('restore the dataset', e), { tone: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -65,7 +65,7 @@ export function DeletedDatasetsPage() {
         density="regular"
         rows={rows}
         rowKey={(d) => d.id}
-        loading={showSkeleton}
+        loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
         onRetry={() => void query.refetch()}
         empty={

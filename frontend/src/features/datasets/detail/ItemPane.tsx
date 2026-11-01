@@ -1,7 +1,7 @@
 /** Docked (non-modal) item editor beside the items table: Text/JSON fields, sticky footer, Prev/Next. */
 import { useState } from 'react';
 import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import {
   Button,
   ConfirmDialog,
@@ -83,7 +83,7 @@ export function ItemPane({
       if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
       return true;
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
+      toast.show(actionErrorMessage('save the item', e), { tone: 'error' });
       return false;
     }
   };

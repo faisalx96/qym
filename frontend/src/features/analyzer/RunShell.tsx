@@ -56,7 +56,7 @@ export function RunShell({
       <div className={`${fullWidth} ${s.page}`}>
         <ErrorState
           error={summary.error ?? config.error}
-          title="Unable to load auto-analysis"
+          title="Couldn’t load auto-analysis"
           notFoundMessage="Run not found. It may have been deleted, or the link is wrong."
           onRetry={() => {
             void summary.refetch();

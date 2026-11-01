@@ -45,7 +45,9 @@ export function ExperimentDetailPage({ experimentId }: { experimentId: string })
         <ErrorState
           error={query.error}
           title="Couldn’t load this experiment"
+          notFoundTitle="Experiment not found"
           notFoundMessage="This experiment doesn’t exist in this project, or it was deleted."
+          parent={{ to: experimentsPath(slug), label: 'Experiments' }}
           onRetry={() => void query.refetch()}
         />
       ) : showSkeleton ? (

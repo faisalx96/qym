@@ -16,7 +16,7 @@ import {
   type DatasetVersion,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
 import {
@@ -494,7 +494,7 @@ export function ItemsTab({
             : undefined
         }
         bulkActions={bulkActions}
-        loading={showSkeleton}
+        loading={tableLoading(query.isPending && visible, showSkeleton)}
         refreshing={query.isFetching && query.isPlaceholderData}
         error={query.isError ? query.error : undefined}
         onRetry={() => void query.refetch()}

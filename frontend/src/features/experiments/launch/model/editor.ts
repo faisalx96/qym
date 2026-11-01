@@ -202,5 +202,5 @@ export function publishFailure(
     };
   if (status === 422 && errors.length)
     return { kind: 'invalid', message: 'The configuration is not valid', errors };
-  return { kind: 'error', message: message || 'Could not publish' };
+  return { kind: 'error', message: message || 'Couldn’t publish' };
 }

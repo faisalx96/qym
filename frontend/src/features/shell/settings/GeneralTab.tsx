@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useRenameProject, useReviewRules } from '@/api/projects';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
 import { Checkbox, Select, Stack, TextField, useToast } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
@@ -25,7 +25,7 @@ export function GeneralTab() {
         const updated = await rename.mutateAsync({ name: name.trim() });
         toast.show(`Renamed to ${updated.name}`, { tone: 'success' });
       } catch (e) {
-        toast.show(e instanceof ApiError ? e.detail || 'Could not rename' : 'Could not rename', {
+        toast.show(actionErrorMessage('rename the project', e), {
           tone: 'error',
         });
       }
@@ -78,7 +78,7 @@ export function GeneralTab() {
                       });
                       toast.show('Review rules saved', { tone: 'success' });
                     } catch (e) {
-                      toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
+                      toast.show(actionErrorMessage('save the rules', e), {
                         tone: 'error',
                       });
                     }

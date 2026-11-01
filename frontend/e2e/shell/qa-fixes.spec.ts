@@ -120,9 +120,9 @@ test.describe('login (B5, B11, B14, B15, B19)', () => {
 });
 
 test.describe('not-found pages (A25)', () => {
-  test('"Back to projects" is a real link-button: Enter works from the keyboard', async ({ page }) => {
+  test('"Projects" is a real link-button: Enter works from the keyboard', async ({ page }) => {
     await gotoApp(page, '/definitely-not-a-page');
-    const back = page.getByRole('link', { name: 'Back to projects' });
+    const back = page.locator('[data-not-found]').getByRole('link', { name: 'Projects' });
     await expect(back).toBeVisible();
     await expect(page.locator('[data-not-found] button a')).toHaveCount(0);
     await back.focus();

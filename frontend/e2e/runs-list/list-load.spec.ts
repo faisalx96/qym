@@ -84,7 +84,7 @@ test.describe('runs list: load (J1)', () => {
       fail ? route.fulfill({ status: 500, json: { detail: 'boom' } }) : route.continue(),
     );
     await page.goto(runsUrl(s.project.slug));
-    const err = page.getByRole('alert').filter({ hasText: 'Could not load runs' });
+    const err = page.getByRole('alert').filter({ hasText: 'Couldn’t load runs' });
     await expect(err).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('No evaluation runs found')).toHaveCount(0);
     fail = false;
@@ -108,7 +108,7 @@ test.describe('runs list: load (J1)', () => {
     await expect(banner).toBeVisible({ timeout: 15_000 });
     await expect(banner).toContainText('not applied');
     await expect(dataRows(page)).toHaveCount(before);
-    await expect(page.getByRole('alert').filter({ hasText: 'Could not load runs' })).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({ hasText: 'Couldn’t load runs' })).toHaveCount(0);
   });
 
   test('a later refresh failure keeps the rows and shows the stale banner', async ({ page, request }) => {

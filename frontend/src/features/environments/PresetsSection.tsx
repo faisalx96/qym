@@ -234,7 +234,7 @@ export function PresetsSection({
       <Section id="env-presets" title="Presets">
         <ErrorState
           error={presets.error}
-          title="Failed to load presets"
+          title="Couldn’t load presets"
           onRetry={() => void presets.refetch()}
           compact
         />
@@ -343,7 +343,7 @@ export function PresetsSection({
             {versions.isError ? (
               <ErrorState
                 error={versions.error}
-                title="Failed to load the version history"
+                title="Couldn’t load the version history"
                 onRetry={() => void versions.refetch()}
                 compact
               />

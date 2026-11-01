@@ -213,7 +213,7 @@ export function DocumentsPanel({
                   onChange={(selected) =>
                     toggle.mutate(
                       { id: d.id, selected },
-                      { onError: () => toast.show(`Could not update ${d.name}`, { tone: 'error' }) },
+                      { onError: () => toast.show(`Couldn’t update ${d.name}`, { tone: 'error' }) },
                     )
                   }
                 >
@@ -281,8 +281,8 @@ export function DocumentsPanel({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not delete the document'
-                : 'Could not delete the document',
+                ? e.detail || 'Couldn’t delete the document'
+                : 'Couldn’t delete the document',
               {
                 tone: 'error',
               },

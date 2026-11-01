@@ -109,6 +109,6 @@ test('page beyond the last is clamped; live count hidden on error', async ({ pag
   await expect(page).not.toHaveURL(/page=99/);
   await page.route(/\/api\/runs\/live/, (route) => route.fulfill({ status: 500, json: { detail: 'boom' } }));
   await gotoApp(page, '/admin/runs');
-  await expect(page.getByText('Failed to load live runs')).toBeVisible();
+  await expect(page.getByText('Couldn’t load live runs')).toBeVisible();
   await expect(page.getByText(/running across all projects/)).toHaveCount(0);
 });

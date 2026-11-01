@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useItemRuns, type Dataset, type DatasetVersion, type ItemRunRow } from '@/api/datasets';
 import { runPath } from '@/app/routes';
-import { useDelayedPending } from '@/lib/pending';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import {
   Button,
   DataTable,
@@ -209,7 +209,7 @@ export function ItemRunsTab({
         sort={sort}
         onSortChange={(s) => s && setSort(s)}
         columns={columns}
-        loading={showSkeleton}
+        loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
         onRetry={() => void query.refetch()}
         rowHref={(r) => `${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`}

@@ -14,7 +14,7 @@ import {
 import { useEvalEnvironments, type EvalEnvironment } from '@/api/evalCommon';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { useDelayedPending } from '@/lib/pending';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import {
   Checkbox,
   DataTable,
@@ -286,7 +286,7 @@ export function ExperimentsPage() {
           rowState={(x) => (LIVE_EXPERIMENT_STATUSES.includes(x.status) ? 'live' : undefined)}
           minWidth={1000}
           density="regular"
-          loading={showSkeleton}
+          loading={tableLoading(query.isPending, showSkeleton)}
           refreshing={query.isFetching && !showSkeleton && live}
           error={query.isError && !query.data ? query.error : undefined}
           onRetry={() => void query.refetch()}
@@ -296,6 +296,7 @@ export function ExperimentsPage() {
               <EmptyState
                 icon={<Icon name="flask" />}
                 title="No experiments yet"
+                guide="/docs/platform-guide/projects-data-review"
                 body="An experiment launches the same evaluation across settings and environments so you can compare the results."
                 action={launch}
               />

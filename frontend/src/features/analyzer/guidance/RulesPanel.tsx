@@ -178,10 +178,9 @@ function RulesView({
       setOpenId(res.version.id);
       toast.show(`Draft v${res.version.version} created from v${from.version}`, { tone: 'success' });
     } catch (e) {
-      toast.show(
-        e instanceof ApiError ? e.detail || 'Could not create a draft' : 'Could not create a draft',
-        { tone: 'error' },
-      );
+      toast.show(e instanceof ApiError ? e.detail || 'Couldn’t create a draft' : 'Couldn’t create a draft', {
+        tone: 'error',
+      });
     }
   }
 
@@ -287,8 +286,8 @@ function RulesView({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not promote this version'
-                : 'Could not promote this version',
+                ? e.detail || 'Couldn’t promote this version'
+                : 'Couldn’t promote this version',
               { tone: 'error' },
             );
           }
@@ -482,8 +481,8 @@ function RulesView({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not delete this version'
-                : 'Could not delete this version',
+                ? e.detail || 'Couldn’t delete this version'
+                : 'Couldn’t delete this version',
               { tone: 'error' },
             );
           }

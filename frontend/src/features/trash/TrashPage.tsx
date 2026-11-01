@@ -303,7 +303,11 @@ export function TrashPage() {
         meta={[
           <span key="r">Retention {grace ? `${grace} days` : 'Off'}</span>,
           <span key="n">
-            {filtered ? `${total} matching` : `${total} deleted run${total === 1 ? '' : 's'}`}
+            {list.data
+              ? filtered
+                ? `${total} matching`
+                : `${total} deleted run${total === 1 ? '' : 's'}`
+              : '–'}
           </span>,
           <span key="a">Only admins can restore runs</span>,
         ]}

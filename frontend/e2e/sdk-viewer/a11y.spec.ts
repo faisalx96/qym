@@ -59,7 +59,7 @@ test.describe('accessibility', () => {
       await expectNoSeriousA11y(page, 'missing file');
       await page.route('**/api/**', (r) => r.abort('connectionrefused'));
       await page.reload();
-      await expect(page.getByRole('alert')).toContainText('Could not reach');
+      await expect(page.getByRole('alert')).toContainText('Couldn’t reach');
       await expectNoSeriousA11y(page, 'unreachable');
     });
   });

@@ -246,7 +246,9 @@ export function localErrors(
   }
   if (!datasetValue(doc)) push('/evaluator/dataset', 'Choose a dataset.');
   datasetErrors(doc).forEach((e) => push(e.pointer, e.message, { rule: e.rule }));
-  taskErrors(doc, ctx).forEach((e) => push(e.pointer, e.message, { rule: e.rule, environmentId: e.environmentId }));
+  taskErrors(doc, ctx).forEach((e) =>
+    push(e.pointer, e.message, { rule: e.rule, environmentId: e.environmentId }),
+  );
   for (const p of Object.keys(doc.invalid))
     push('/env_overrides' + p, (doc.invalid[p] as { message: string }).message);
   for (const p of Object.keys(doc.values)) {
@@ -490,7 +492,7 @@ export type LaunchFailure =
 /** Reads the error body of a failed POST /experiments. */
 export function parseLaunchFailure(status: number, data: unknown): LaunchFailure {
   const detail = (data as { detail?: unknown } | null)?.detail;
-  const message = errorMessage(detail, 'Failed to launch the experiment');
+  const message = errorMessage(detail, 'Couldn’t launch the experiment');
   if (status === 422 && detail && typeof detail === 'object' && !Array.isArray(detail)) {
     const d = detail as { code?: string; errors?: unknown };
     if (d.code === PREEMPTION_ACK_REQUIRED) return { kind: 'preemption', message };

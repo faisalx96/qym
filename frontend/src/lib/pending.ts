@@ -68,3 +68,12 @@ export function useSubmitLock(): <T>(fn: () => Promise<T>) => Promise<T | undefi
     }
   }, []);
 }
+
+/**
+ * The DataTable `loading` value for a query (C059): skeleton rows once the delayed skeleton shows, an empty body
+ * ('quiet') before that, and false only when the query has settled. A pending table never shows its empty state.
+ */
+export function tableLoading(pending: boolean, skeletonShown: boolean): boolean | 'quiet' {
+  if (!pending) return false;
+  return skeletonShown ? true : 'quiet';
+}

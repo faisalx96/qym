@@ -163,7 +163,7 @@ describe('UploadWizard re-import into a draft (C006)', () => {
     });
     const user = await openReview();
     expect(screen.getByTestId('wizard-matches')).toHaveTextContent(
-      /Could not check which records match items already in v1 .*Matching items are skipped unless you choose Replace\./,
+      /Couldn’t check which records match items already in v1 .*Matching items are skipped unless you choose Replace\./,
     );
     expect(screen.getByRole('radio', { name: /Skip matching items/ })).toBeChecked();
     await user.click(screen.getByTestId('wizard-next'));

@@ -6,7 +6,7 @@ import {
   type LlmConnectionBody,
 } from '@/api/projectSettings';
 import type { LlmConnection } from '@/api/types';
-import { ApiError } from '@/lib/http';
+import { ApiError, actionErrorMessage } from '@/lib/http';
 import { KEY_FOR_NEW_HOST_PLACEHOLDER, keyHostChanged } from '@/lib/keyHost';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
@@ -61,7 +61,7 @@ export function LlmConnectionsTab() {
       const r = (await action.mutateAsync({ id: c.id, action: 'test' })) as { model?: string };
       toast.show(`“${c.name}” connected · ${r.model ?? c.llm_model}`, { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || 'Connection failed' : 'Connection failed', {
+      toast.show(actionErrorMessage('test the connection', e), {
         tone: 'error',
         timeout: 8000,
       });
@@ -135,8 +135,8 @@ export function LlmConnectionsTab() {
                       .catch((e) =>
                         toast.show(
                           e instanceof ApiError
-                            ? e.detail || 'Could not set the default'
-                            : 'Could not set the default',
+                            ? e.detail || 'Couldn’t set the default'
+                            : 'Couldn’t set the default',
                           { tone: 'error' },
                         ),
                       ),
@@ -215,7 +215,7 @@ export function LlmConnectionsTab() {
                 toast.show(editing ? 'Connection updated' : 'Connection added', { tone: 'success' });
                 setShowForm(false);
               } catch (e) {
-                toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
+                toast.show(actionErrorMessage('save the connection', e), {
                   tone: 'error',
                 });
               }
@@ -236,7 +236,7 @@ export function LlmConnectionsTab() {
               await action.mutateAsync({ id: deleting.id, action: 'delete' });
               toast.show('Connection deleted', { tone: 'info' });
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not delete' : String(e));
+              throw new Error(actionErrorMessage('test the connection', e));
             }
           }}
         />

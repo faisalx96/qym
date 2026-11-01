@@ -62,7 +62,7 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
           toast.show(`Created ${project.name}`, { tone: 'success' });
           navigate(projectPath(project.slug));
         } catch (e) {
-          if (e instanceof ApiError) return e.detail || 'Could not create the project.';
+          if (e instanceof ApiError) return e.detail || 'Couldn’t create the project.';
           throw e;
         }
       }}

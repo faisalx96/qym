@@ -572,7 +572,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     await chevron(page).click();
     const err = table(page).locator('tr[data-error-row]');
     await expect(err).toHaveCount(1, { timeout: 20_000 });
-    await expect(err).toContainText('Could not load passes');
+    await expect(err).toContainText('Couldn’t load passes');
     await page.unroute(/\/api\/runs\/[^/]+\/passes$/);
     await revealActions(err);
     await err.getByRole('button', { name: 'Retry', exact: true }).click();

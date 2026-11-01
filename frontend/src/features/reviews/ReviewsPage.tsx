@@ -22,7 +22,7 @@ import {
   type ReviewFilters,
   type ReviewSort,
 } from '@/api/reviews';
-import { ApiError } from '@/lib/http';
+import { ApiError, actionErrorMessage } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useDocumentTitle } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
@@ -247,7 +247,7 @@ export function ReviewsPage() {
           { tone: 'success' },
         );
       } catch (e) {
-        toast.show(e instanceof ApiError ? e.detail || e.message : 'Action failed', { tone: 'error' });
+        toast.show(actionErrorMessage('update the review', e), { tone: 'error' });
         if (e instanceof ApiError && e.status === 409) invalidateCorrections(qc);
       } finally {
         inflight.current.delete(row.id);
@@ -269,7 +269,7 @@ export function ReviewsPage() {
       setEditing(false);
       toast.show('Diagnosis saved', { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
+      toast.show(actionErrorMessage('save the correction', e), { tone: 'error' });
     }
   }
 
@@ -281,7 +281,7 @@ export function ReviewsPage() {
       if (currentId === row.id) moveTo(next);
       toast.show(`Correction #${row.id} deleted (marked rejected)`, { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
+      toast.show(actionErrorMessage('delete the correction', e), { tone: 'error' });
       throw e;
     }
   }
@@ -328,7 +328,7 @@ export function ReviewsPage() {
         setConflict(e.detail || 'The selected corrections changed.');
         return;
       }
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Bulk action failed', { tone: 'error' });
+      toast.show(actionErrorMessage('update the selected corrections', e), { tone: 'error' });
       throw e;
     }
   }
@@ -396,16 +396,18 @@ export function ReviewsPage() {
   }, [loaded.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // ---- render --------------------------------------------------------------
-  const stats = first?.stats ?? { total: 0, pending: 0, approved: 0, rejected: 0 };
+  // C059: unknown counts (loading or failed) are not zero: the tabs show no count and the queue line shows '–'
+  const known = first?.stats ?? null;
+  const stats = known ?? { total: 0, pending: 0, approved: 0, rejected: 0 };
   const reviewed = stats.approved + stats.rejected;
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const approveFit = bulkSelection(rows, selected, 'approve');
   const resetFit = bulkSelection(rows, selected, 'reset');
   const statusItems = [
-    { id: 'pending', label: 'To review', count: stats.pending },
-    { id: 'approved', label: 'Approved', count: stats.approved },
-    { id: 'rejected', label: 'Rejected', count: stats.rejected },
-    { id: 'all', label: 'All', count: stats.total },
+    { id: 'pending', label: 'To review', count: known ? stats.pending : undefined },
+    { id: 'approved', label: 'Approved', count: known ? stats.approved : undefined },
+    { id: 'rejected', label: 'Rejected', count: known ? stats.rejected : undefined },
+    { id: 'all', label: 'All', count: known ? stats.total : undefined },
   ];
   const filtered = hasActiveFilters(filters);
 
@@ -416,10 +418,10 @@ export function ReviewsPage() {
         description="Validate corrections before they become examples for future auto-analysis."
         meta={[
           <span key="q">
-            Queue: <strong>{stats.pending}</strong> to review
+            Queue: <strong>{known ? stats.pending : '–'}</strong> to review
           </span>,
           <span key="p" className={styles.progress}>
-            {reviewed} of {stats.total} reviewed
+            {known ? `${reviewed} of ${stats.total}` : '–'} reviewed
             <span
               className={styles.bar}
               role="progressbar"

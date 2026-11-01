@@ -35,7 +35,11 @@ function countTasks(page: Page) {
     const m = /\/eval-environments\/([^/]+)\/tasks$/.exec(r.url());
     if (r.method() === 'GET' && m) hits.push(m[1]!);
   });
-  return { of: (id: string) => hits.filter((h) => h === id).length, total: () => hits.length, reset: () => (hits = []) };
+  return {
+    of: (id: string) => hits.filter((h) => h === id).length,
+    total: () => hits.length,
+    reset: () => (hits = []),
+  };
 }
 const near = (actual: number, expected: number, tolerance = 1.6) =>
   expect(Math.abs(actual - expected), `${actual} vs ${expected}`).toBeLessThanOrEqual(tolerance);
@@ -54,7 +58,13 @@ test.describe('the task row', () => {
       await expect(row(page)).toContainText('Task');
       // Directly after the versions line, inside the same box.
       const order = await envBox(page, 'production').evaluate((li) =>
-        Array.from(li.children).map((c) => c.getAttribute('data-env-version') !== null ? 'versions' : c.getAttribute('data-env-task') !== null ? 'task' : 'other'),
+        Array.from(li.children).map((c) =>
+          c.getAttribute('data-env-version') !== null
+            ? 'versions'
+            : c.getAttribute('data-env-task') !== null
+              ? 'task'
+              : 'other',
+        ),
       );
       expect(order.slice(-2)).toEqual(['versions', 'task']);
       // Worker default, then the tasks in the service's order, each with its description.
@@ -63,17 +73,26 @@ test.describe('the task row', () => {
       const options = page.getByRole('option');
       await expect(options).toHaveCount(4);
       const texts = await options.allInnerTexts();
-      expect(texts.map((t) => t.split('\n')[0])).toEqual(['Worker default', 'Answer a ticket', 'Route a ticket', 'Summarise a ticket']);
+      expect(texts.map((t) => t.split('\n')[0])).toEqual([
+        'Worker default',
+        'Answer a ticket',
+        'Route a ticket',
+        'Summarise a ticket',
+      ]);
       expect(texts[1]).toContain('Reply to a support ticket from the knowledge base');
-      if (width === 1440 && SHOTS) await page.screenshot({ path: path.join(SHOTS, 'after-d-task-open-1440.png') });
+      if (width === 1440 && SHOTS)
+        await page.screenshot({ path: path.join(SHOTS, 'after-d-task-open-1440.png') });
       await page.keyboard.press('Escape');
       await expectNoPageOverflow(page);
-      if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `after-d-task-row-${width}.png`), fullPage: true });
+      if (SHOTS)
+        await page.screenshot({ path: path.join(SHOTS, `after-d-task-row-${width}.png`), fullPage: true });
       save(`measure-d-task-${width}`, m);
     });
   }
 
-  test('QD-28, QD-31: one tasks request per ticked environment that offers tasks; none for the other, none on Customize', async ({ page }) => {
+  test('QD-28, QD-31: one tasks request per ticked environment that offers tasks; none for the other, none on Customize', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const counts = countTasks(page);
     await openHome(page, f.project.slug);
@@ -94,20 +113,28 @@ test.describe('the task row', () => {
     await expect(row(page)).toHaveAttribute('data-status', 'ok');
     expect(counts.total()).toBe(1);
     // Refresh reads versions and tasks, once each (QD-39).
-    const refresh = envBox(page, 'production').getByRole('button', { name: 'Refresh versions and tasks of production' });
+    const refresh = envBox(page, 'production').getByRole('button', {
+      name: 'Refresh versions and tasks of production',
+    });
     await refresh.click();
     await expect.poll(() => counts.of(f.production.id)).toBe(2);
-    await expect(envBox(page, 'staging').getByRole('button', { name: 'Refresh versions of staging' })).toBeVisible();
+    await expect(
+      envBox(page, 'staging').getByRole('button', { name: 'Refresh versions of staging' }),
+    ).toBeVisible();
   });
 
-  test('QD-38: the chosen task is part of the request and is dropped with the environment', async ({ page }) => {
+  test('QD-38: the chosen task is part of the request and is dropped with the environment', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const posts = captureExperimentPosts(page);
     await openHome(page, f.project.slug, both());
     await select(page).click();
     await page.getByRole('option', { name: /Route a ticket/ }).click();
     await expect(select(page)).toContainText('Route a ticket');
-    await expect.poll(() => posts.dryRuns.at(-1)?.body.spec.evaluator.task).toEqual({ [f.production.id]: 'route-ticket' });
+    await expect
+      .poll(() => posts.dryRuns.at(-1)?.body.spec.evaluator.task)
+      .toEqual({ [f.production.id]: 'route-ticket' });
     // Unticking drops the entry; a later tick starts at the worker default.
     await page.getByRole('checkbox', { name: 'production' }).click({ force: true });
     await page.getByRole('checkbox', { name: 'production' }).click({ force: true });
@@ -155,7 +182,11 @@ test.describe('the task row', () => {
     test(`QD-36: a service answering ${status} has no row and no error`, async ({ page, request }) => {
       await setFakeTasks(request, FAKE_A, { status });
       const consoleErrors: string[] = [];
-      page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && consoleErrors.push(m.text()));
+      page.on(
+        'console',
+        (m) =>
+          m.type() === 'error' && !/Couldn’t load resource/.test(m.text()) && consoleErrors.push(m.text()),
+      );
       await openHome(page, f.project.slug, `?env=${f.production.id}`);
       await expect(page.locator('[data-env-version][data-status="ok"]')).toHaveCount(1);
       await expect(page.locator('[data-env-task]')).toHaveCount(0);
@@ -183,6 +214,10 @@ test.describe('the task row', () => {
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`);
     await expect(row(page)).toHaveAttribute('data-status', 'ok');
     const box: Locator = envBox(page, 'production');
-    save('measure-d-task-step1-1440', { box: await sized(box), row: await sized(row(page)), select: await sized(select(page)) });
+    save('measure-d-task-step1-1440', {
+      box: await sized(box),
+      row: await sized(row(page)),
+      select: await sized(select(page)),
+    });
   });
 });

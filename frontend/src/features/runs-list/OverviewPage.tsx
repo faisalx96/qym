@@ -154,7 +154,7 @@ export function OverviewPage() {
           {kpisQ.isError && !kpis ? (
             <ErrorState
               error={kpisQ.error}
-              title="Could not load project KPIs"
+              title="Couldn’t load project KPIs"
               onRetry={() => kpisQ.refetch()}
               compact
             />
@@ -516,7 +516,7 @@ function Part({
         <ErrorState
           compact
           error={query.error}
-          title={`Could not load ${title.toLowerCase()}`}
+          title={`Couldn’t load ${title.toLowerCase()}`}
           onRetry={() => query.refetch()}
         />
       ) : loading ? (
@@ -576,7 +576,7 @@ function Card({
           <ErrorState
             compact
             error={query.error}
-            title={`Could not load ${title.toLowerCase()}`}
+            title={`Couldn’t load ${title.toLowerCase()}`}
             onRetry={() => query.refetch()}
           />
         ) : query?.isPending && !query.data ? (

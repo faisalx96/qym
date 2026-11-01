@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useResetPassword, useUpdateUser, type AdminUser, type UpdateUserBody } from '@/api/admin';
-import { ApiError } from '@/lib/http';
+import { errorSentence } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
 import { Button, Checkbox, ConfirmDialog, CopyButton, Dialog, Select, Text, TextField, useToast } from '@/ui';
 import { isValidEmail } from '../format';
@@ -16,8 +16,9 @@ export interface EditUserDialogProps {
   localAuth: boolean;
 }
 
+/** One plain sentence (C181). */
 function errorText(e: unknown): string {
-  return e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e);
+  return errorSentence(e);
 }
 
 /**

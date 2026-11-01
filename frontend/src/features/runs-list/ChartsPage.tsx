@@ -201,7 +201,7 @@ export function ChartsPage() {
         {d.overviewQ.isError && !overview ? (
           <ErrorState
             error={d.overviewQ.error}
-            title="Could not load charts"
+            title="Couldn’t load charts"
             onRetry={() => d.overviewQ.refetch()}
           />
         ) : !overview ? (
@@ -550,7 +550,7 @@ function TaskCard({
               <ErrorState
                 compact
                 error={q.error}
-                title={`Could not load ${activeDataset} runs`}
+                title={`Couldn’t load ${activeDataset} runs`}
                 onRetry={() => q.refetch()}
               />
             ) : !seen || !loaded ? (

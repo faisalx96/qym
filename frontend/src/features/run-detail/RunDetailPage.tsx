@@ -7,7 +7,7 @@ import { useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { useRunQuery, useRunSummaryQuery } from '@/api/runs';
 import { useDelayedPending } from '@/lib/pending';
-import { ErrorState, LinkButton, Skeleton, Icon } from '@/ui';
+import { ErrorState, Skeleton } from '@/ui';
 import { loadItemsSection, loadOverviewTab } from './chunks';
 import { RunBody } from './RunBody';
 
@@ -58,20 +58,12 @@ function RunLoader({ runId }: { runId: string }) {
         <ErrorState
           error={error}
           title={RUN_ERROR_TITLES[kind] ?? 'Couldn’t load this run'}
-          notFoundMessage="Run not found. It may have been deleted, or the link is wrong."
+          notFoundMessage="It may have been deleted, or the link is wrong."
           onRetry={() => {
             void summary.refetch();
             void rows.refetch();
           }}
-          action={
-            <LinkButton
-              to={projectPath(slug)}
-              variant="neutral"
-              icon={<Icon name="chevron-left" size={12} />}
-            >
-              Back to runs
-            </LinkButton>
-          }
+          parent={{ to: projectPath(slug), label: 'Runs' }}
         />
       </div>
     );

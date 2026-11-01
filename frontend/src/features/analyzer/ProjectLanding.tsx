@@ -6,6 +6,7 @@ export function ProjectLanding({ slug, onGuidance }: { slug: string; onGuidance?
   return (
     <EmptyState
       title="Select a run to analyze"
+      guide="/docs/platform-guide/run-detail"
       body="Auto-analysis diagnoses the failed items of one run. Pick a run from the Runs list, then open Auto-analysis from it. Project guidance (diagnosis categories, production rules and documents) applies to the whole project."
       action={
         <>

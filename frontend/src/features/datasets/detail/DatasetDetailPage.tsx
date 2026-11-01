@@ -17,6 +17,7 @@ import {
   type DatasetVersion,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
+import { projectPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
 import { useCrumbLabel } from '@/lib/crumb-label';
@@ -151,8 +152,10 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
         <ErrorState
           error={dsQuery.error}
           title="Couldn’t load this dataset"
-          notFoundMessage="No dataset with this name or slug exists in the project (it may have been deleted)."
+          notFoundTitle="Dataset not found"
+          notFoundMessage="No dataset with this name or slug exists in the project. It may have been deleted."
           onRetry={() => void dsQuery.refetch()}
+          parent={{ to: projectPath(slug, 'datasets'), label: 'Datasets' }}
         />
       </div>
     );
@@ -259,7 +262,7 @@ function DetailBody({
       await setProduction.mutateAsync(active.version);
       toast.show(`${active.version} is now production`, { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Could not set production', {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t set production', {
         tone: 'error',
       });
     }

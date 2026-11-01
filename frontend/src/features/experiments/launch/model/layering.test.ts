@@ -413,7 +413,7 @@ describe('bases from server responses', () => {
       ctx,
     );
     expect(loaded.info.loaded).toBe(false);
-    expect(loaded.info.error).toBe('Failed to load the preset');
+    expect(loaded.info.error).toBe('Couldn’t load the preset');
   });
 
   it('a best run carries drift, prompts and a header', () => {

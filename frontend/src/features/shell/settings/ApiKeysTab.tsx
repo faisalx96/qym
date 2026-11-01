@@ -119,7 +119,10 @@ function KeysCard({
             <Text variant="md" id="keys-title">
               API keys
             </Text>
-            <Text variant="sm">Used by the SDK (QYM_API_KEY) to push runs into this project.</Text>
+            <Text variant="sm">
+              Used by the SDK (QYM_API_KEY) to push runs into this project.{' '}
+              <Link to="/docs/get-started/api-keys">Read the guide</Link>
+            </Text>
           </div>
         </div>
       }
@@ -137,7 +140,7 @@ function KeysCard({
                   setName('');
                 } catch (err) {
                   toast.show(
-                    err instanceof ApiError ? err.detail || 'Could not create key' : 'Could not create key',
+                    err instanceof ApiError ? err.detail || 'Couldn’t create key' : 'Couldn’t create key',
                     { tone: 'error' },
                   );
                 }
@@ -214,7 +217,7 @@ function KeysCard({
               await revoke.mutateAsync(revoking.id);
               toast.show('Key revoked', { tone: 'info' });
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not revoke' : String(e));
+              throw new Error(e instanceof ApiError ? e.detail || 'Couldn’t revoke' : String(e));
             }
           }}
         />
@@ -334,9 +337,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
                   setName('');
                 } catch (err) {
                   toast.show(
-                    err instanceof ApiError
-                      ? err.detail || 'Could not create token'
-                      : 'Could not create token',
+                    err instanceof ApiError ? err.detail || 'Couldn’t create token' : 'Couldn’t create token',
                     { tone: 'error' },
                   );
                 }
@@ -412,7 +413,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
               await revoke.mutateAsync(revoking.id);
               toast.show('Token revoked', { tone: 'info' });
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not revoke' : String(e));
+              throw new Error(e instanceof ApiError ? e.detail || 'Couldn’t revoke' : String(e));
             }
           }}
         />

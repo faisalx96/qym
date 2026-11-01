@@ -337,6 +337,7 @@ export function RunsPage() {
     d.projectTotal === 0 && !filtered ? (
       <EmptyState
         title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No evaluation runs found'}
+        guide={d.data?.freshness.unpublished_runs ? undefined : '/docs/get-started/first-run'}
         body={
           d.data?.freshness.unpublished_runs ? (
             'Available runs will appear automatically.'

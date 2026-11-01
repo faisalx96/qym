@@ -4,7 +4,7 @@
  * environment record every page needs.
  */
 import { useQuery } from '@tanstack/react-query';
-import { api, ApiError } from '@/lib/http';
+import { api, ApiError, errorSentence } from '@/lib/http';
 
 export type EvalPriority = 'LOW' | 'NORMAL' | 'HIGH';
 export const PRIORITIES: EvalPriority[] = ['LOW', 'NORMAL', 'HIGH'];
@@ -90,7 +90,8 @@ export function errorCode(error: unknown): string | undefined {
 
 /** One human sentence from any error envelope the platform produces. */
 export function errorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return error instanceof Error ? error.message : String(error);
+  // C181: transport failures and server faults read as plain sentences, never 'Failed to fetch'
+  if (!(error instanceof ApiError) || error.status >= 500) return errorSentence(error);
   const detail = errorDetail(error);
   if (detail && typeof detail.message === 'string' && detail.message) return detail.message;
   const body = error.body as { detail?: unknown } | null;

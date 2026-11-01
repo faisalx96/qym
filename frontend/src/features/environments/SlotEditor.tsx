@@ -125,7 +125,7 @@ export function useSlotEditor(
         dispatch({
           type: 'setErrors',
           errors: {},
-          general: errorMessage(error) || 'Could not confirm the slots.',
+          general: errorMessage(error) || 'Couldn’t confirm the slots.',
           reload:
             error instanceof ApiError && (error.status === 409 || errorCode(error) === 'schema_changed'),
         });
@@ -145,7 +145,7 @@ export function useSlotEditor(
       setDescriptor(form.descriptor);
       dispatch({ type: 'reset', slots: slots.slots, notice: 'Reloaded the slots of the current schema.' });
     } catch (error) {
-      dispatch({ type: 'general', message: errorMessage(error) || 'Could not reload the slots.' });
+      dispatch({ type: 'general', message: errorMessage(error) || 'Couldn’t reload the slots.' });
     }
   }, [projectId, envId]);
 
@@ -172,7 +172,7 @@ export function useSlotEditor(
           dispatch({ type: 'addSlot', slot: normalizeSlot({ ...res.proposal, status: 'new' }) });
         }
       } catch (error) {
-        dispatch({ type: 'general', message: errorMessage(error) || 'Could not propose the endpoint slot.' });
+        dispatch({ type: 'general', message: errorMessage(error) || 'Couldn’t propose the endpoint slot.' });
       } finally {
         setAdding(false);
       }
@@ -596,7 +596,7 @@ export function SlotEditorDialog(props: SlotEditorDialogProps) {
       {source.isError ? (
         <ErrorState
           error={source.error}
-          title="Could not load the LLM settings"
+          title="Couldn’t load the LLM settings"
           onRetry={() => void source.refetch()}
           compact
         />

@@ -138,6 +138,7 @@ export function CatalogPage() {
         <EmptyState
           icon={<Icon name="folder" />}
           title="No datasets yet"
+          guide="/docs/get-started/datasets"
           body={
             canCreate
               ? 'Create a dataset to version your test items and track which runs used them.'

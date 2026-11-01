@@ -184,7 +184,7 @@ export function LaunchPage() {
     body = (
       <ErrorState
         error={envs.error}
-        title="Could not load the environments"
+        title="Couldn’t load the environments"
         onRetry={() => void envs.refetch()}
       />
     );

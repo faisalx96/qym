@@ -9,7 +9,7 @@ import {
   useUpdateMemberRole,
 } from '@/api/projectSettings';
 import type { Member, MemberCandidate, RemovalPreview } from '@/api/types';
-import { ApiError } from '@/lib/http';
+import { ApiError, actionErrorMessage } from '@/lib/http';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
@@ -196,9 +196,7 @@ export function MembersTab() {
               await updateRole.mutateAsync({ userId: editing.user_id, role });
               toast.show('Role saved', { tone: 'success' });
             } catch (e) {
-              return e instanceof ApiError
-                ? e.detail || 'Could not save the role'
-                : 'Could not save the role';
+              return e instanceof ApiError ? e.detail || 'Couldn’t save the role' : 'Couldn’t save the role';
             }
           }}
         />
@@ -264,7 +262,7 @@ export function MembersTab() {
                 { tone: 'info' },
               );
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not remove' : String(e));
+              throw new Error(actionErrorMessage('remove the member', e));
             }
           }}
         />
@@ -314,10 +312,7 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
             setPicked(null);
             setQuery('');
           } catch (err) {
-            toast.show(
-              err instanceof ApiError ? err.detail || 'Could not add member' : 'Could not add member',
-              { tone: 'error' },
-            );
+            toast.show(actionErrorMessage('add the member', err), { tone: 'error' });
           }
         });
       }}
@@ -366,7 +361,7 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
         {open && options.length === 0 && !candidates.isFetching ? (
           <div className={styles.comboHint} role="status">
             {candidates.isError
-              ? `Could not search people: ${candidates.error instanceof ApiError ? candidates.error.detail || candidates.error.message : 'try again'}`
+              ? `Couldn’t search people: ${candidates.error instanceof ApiError ? candidates.error.detail || candidates.error.message : 'try again'}`
               : debounced
                 ? `No one outside the project matches “${debounced}”.`
                 : 'Everyone is already a member.'}

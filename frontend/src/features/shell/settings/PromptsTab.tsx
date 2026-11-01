@@ -134,7 +134,7 @@ export function PromptsTab() {
       });
       toast.show('Prompt saved', { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', { tone: 'error' });
+      toast.show(e instanceof ApiError ? e.detail || 'Couldn’t save' : 'Couldn’t save', { tone: 'error' });
     }
   }
 
