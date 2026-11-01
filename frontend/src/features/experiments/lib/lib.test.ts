@@ -131,7 +131,7 @@ describe('buildMatrix', () => {
     expect(jobStats(detail)).toEqual({ jobs: 3, succeeded: 2, failed: 0, inProgress: 1, cancelled: 0 });
   });
   it('builds the compare link with each run id encoded', () => {
-    expect(compareHref(['a/b', 'c'])).toBe('/compare?runs=a%2Fb&runs=c');
+    expect(compareHref('p', ['a/b', 'c'])).toBe('/projects/p/compare?runs=a%2Fb&runs=c');
   });
 });
 

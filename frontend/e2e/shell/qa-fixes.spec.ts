@@ -140,14 +140,15 @@ test.describe('not-found pages (A25)', () => {
   });
 });
 
-test.describe('project context on /compare and /reviews (A45)', () => {
-  test('the sidebar and breadcrumb keep the last project', async ({ page, request }) => {
+test.describe('project context on /compare and /reviews (A45, C044)', () => {
+  test('/compare and /reviews open inside the last project', async ({ page, request }) => {
     const p = await createProject(request, 'Context Project', uniqueSlug('ctx'));
     await gotoApp(page, `/projects/${p.slug}`);
     await expect(page.locator('[data-nav="runs"]')).toBeVisible();
     for (const path of ['/compare', '/reviews']) {
       await page.getByRole('link', { name: 'Projects', exact: true }).first().click();
       await gotoApp(page, path);
+      await expect(page).toHaveURL(new RegExp(`/projects/${p.slug}${path}`));
       await expect(page.locator('[data-project-switcher]')).toContainText('Context Project');
       await expect(page.locator('[data-nav="runs"]')).toBeVisible();
     }

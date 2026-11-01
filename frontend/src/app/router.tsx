@@ -10,6 +10,7 @@ import { ProfilePage } from '@/features/shell/profile/ProfilePage';
 import { ProjectSettingsPage } from '@/features/shell/settings/ProjectSettingsPage';
 import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
+import { ProjectRedirect } from '@/features/shell/ProjectRedirect';
 import { RouteError } from '@/features/shell/RouteError';
 import { AdminGuard } from '@/features/admin/AdminGuard';
 import { DocsRedirect } from '@/features/docs/DocsRedirect';
@@ -116,8 +117,22 @@ export const routes: RouteObject[] = [
           { path: ROUTES.feedback, element: <FeedbackIndexRoute /> },
           { path: ROUTES.feedbackNew, element: <FeedbackNewRoute /> },
           { path: ROUTES.feedbackItem, element: <FeedbackItemRoute /> },
-          { path: ROUTES.compare, element: <ComparePage /> },
-          { path: ROUTES.reviews, element: <ReviewsPage /> },
+          {
+            path: ROUTES.compare,
+            element: (
+              <ProjectRedirect page="compare">
+                <ComparePage />
+              </ProjectRedirect>
+            ),
+          },
+          {
+            path: ROUTES.reviews,
+            element: (
+              <ProjectRedirect page="reviews">
+                <ReviewsPage />
+              </ProjectRedirect>
+            ),
+          },
           { path: ROUTES.docs, element: <DocsRedirect /> },
           { path: ROUTES.docsIndex, element: <DocsRedirect /> },
           { path: ROUTES.docsPage, element: <DocsPage /> },

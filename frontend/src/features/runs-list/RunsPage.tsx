@@ -5,7 +5,7 @@ import { Button, EmptyState, StaleBanner, Text, useToast } from '@/ui';
 import { useAnalyzingRuns } from '@/api/analysis';
 import { readPersisted } from '@/ui/DataTable/model';
 import { useAuth, useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
-import { ROUTES, runPath } from '@/app/routes';
+import { ROUTES, runPath, projectPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { KEYS, readLocal, writeLocal } from '@/lib/storage';
 import { runHref } from '@/lib/runs-order';
@@ -187,8 +187,8 @@ export function RunsPage() {
     const units = cohortUnitCount(refs, samplesOf);
     if (units < 2) return toast.show('Select at least 2 runs to compare', { tone: 'error' });
     const qs = handoffCompare(refs, samplesOf);
-    navigate(`${ROUTES.compare}?${qs}`);
-  }, [refs, samplesOf, toast, navigate]);
+    navigate(`${projectPath(slug, 'compare')}?${qs}`);
+  }, [refs, samplesOf, toast, navigate, slug]);
   const cohort = useCallback(() => {
     if (!selection.cohortA.length) {
       if (!refs.length) return;
@@ -211,8 +211,8 @@ export function RunsPage() {
         tone: 'error',
       });
     const qs = handoffCohorts(a, refs, samplesOf, nameOf);
-    navigate(`${ROUTES.compare}?${qs}`);
-  }, [selection, refs, samplesOf, nameOf, toast, navigate]);
+    navigate(`${projectPath(slug, 'compare')}?${qs}`);
+  }, [selection, refs, samplesOf, nameOf, toast, navigate, slug]);
 
   const selectedRows = (): typeof rows =>
     [...new Set(refs.map(passRefBase))]

@@ -93,7 +93,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
     } catch {
       /* the URL carries the runs */
     }
-    navigate(compareHref(selectedRuns));
+    navigate(compareHref(slug, selectedRuns));
   }
 
   function showAttempts(job: ExperimentJob) {

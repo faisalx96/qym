@@ -7,7 +7,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { projectPath, ROUTES } from '@/app/routes';
+import { projectPath } from '@/app/routes';
 import { useRunsPage } from '@/api/dashboard';
 import type { RunRow } from '@/api/dashboardTypes';
 import { exportHtmlUrl, runKeys, useReviewHistoryQuery } from '@/api/runs';
@@ -115,7 +115,11 @@ export function RunHeaderActions({ run, slug }: { run: Run; slug: string }) {
         <LinkButton
           variant="accent"
           size="sm"
-          href={compareWithReferenceUrl(ROUTES.compare, reference, run.run_id)}
+          href={compareWithReferenceUrl(
+            projectPath(run.project?.slug ?? '', 'compare'),
+            reference,
+            run.run_id,
+          )}
           icon={<Icon name="split" size={14} />}
           title={`Compare with ${reference.name} (${
             reference.kind === 'approved'

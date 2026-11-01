@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useProject } from '@/api/projects';
-import { KEYS, readLocal } from '@/lib/storage';
 import { Icon, IconButton, Kbd } from '@/ui';
 import { useAuth } from './AuthContext';
 import { useContentScrollRestoration, useSidebarCollapsed } from './hooks';
@@ -26,13 +25,8 @@ export function AppShell() {
   const { me, isAdmin } = useAuth();
   const location = useLocation();
   const route = parseRoute(location.pathname);
-  // /compare, /reviews and legacy /run/:id carry no project in the URL: keep the
-  // last project as the sidebar / breadcrumb context.
-  const contextSlug =
-    route.projectSlug ??
-    (['compare', 'reviews', 'run-detail', 'analyzer'].includes(route.page)
-      ? readLocal(KEYS.lastProjectSlug)
-      : null);
+  // C044: the shell names a project only when the URL has one (a legacy /run/:id link redirects into its project).
+  const contextSlug = route.projectSlug;
   const project = useProject(contextSlug ?? undefined, me).data ?? null;
   const [collapsed, toggleCollapsed, narrow] = useSidebarCollapsed();
   const [overlayOpen, setOverlayOpen] = useState(false);
