@@ -50,6 +50,7 @@ import {
   Card,
   Flag,
   StatusMark,
+  SearchField,
 } from '@/ui';
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
@@ -118,7 +119,17 @@ export function QueuePage() {
     return () => clearInterval(t);
   }, []);
 
-  const jobs = useMemo(() => query.data?.jobs ?? [], [query.data]);
+  const [search, setSearch] = useState('');
+  // C152: the toolbar starts with a 260px search over the listed jobs
+  const jobs = useMemo(() => {
+    const all = query.data?.jobs ?? [];
+    const needle = search.trim().toLowerCase();
+    return needle
+      ? all.filter((j) =>
+          `${j.experiment_name} ${j.environment_name ?? ''} ${j.id}`.toLowerCase().includes(needle),
+        )
+      : all;
+  }, [query.data, search]);
   // Selections of jobs that left the queue drop out here instead of in an effect.
   const selected = useMemo(
     () => new Set([...selectedRaw].filter((k) => jobs.some((j) => j.id === k))),
@@ -339,6 +350,13 @@ export function QueuePage() {
 
   const filterControls = (
     <div className={styles.filters} role="group" aria-label="Queue filters">
+      <SearchField
+        label="Search jobs"
+        placeholder="Search experiment or environment"
+        value={search}
+        onChange={setSearch}
+        width={260}
+      />
       <Select
         label="Environment"
         items={envItems}

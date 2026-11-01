@@ -532,6 +532,9 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
 
 ### 3.4 Data tables
 
+**List toolbars (C152).** Every list toolbar starts with a 260px search (runs, experiments, queue, deleted runs,
+reviews), then its filters.
+
 - **Data table** (`DataTable`, own `<table>` markup, `role="grid"`; `treegrid` when rows expand): sticky header
   `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650;
   body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
