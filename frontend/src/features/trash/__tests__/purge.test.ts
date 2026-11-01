@@ -37,6 +37,6 @@ describe('retentionLabel', () => {
     expect(retentionLabel(null)).toBe('Off (kept until restored)');
     expect(retentionLabel(0)).toBe('Off (kept until restored)');
     expect(retentionLabel(30)).toBe('30 days');
-    expect(retentionLabel(1)).toBe('Retention 1 day');
+    expect(retentionLabel(1)).toBe('1 day');
   });
 });

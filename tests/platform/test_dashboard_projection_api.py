@@ -649,6 +649,8 @@ def test_project_descriptor_preserves_action_permissions(dataset, role, expected
         # Correction review rules (C074) are part of every project payload.
         "correction_approvers",
         "correction_require_different_reviewer",
+        # The direction saved for a metric with none declared (C129, R5).
+        "metric_directions",
     }
 
 

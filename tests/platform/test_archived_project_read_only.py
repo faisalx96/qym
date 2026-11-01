@@ -647,6 +647,9 @@ KEY_ONLY = [
 
 # Allowed on purpose, with the reason.
 ALLOWED = {
+    # An administrator's permanent delete of Deleted runs ignores the archive pause on purpose: with retention Off it is
+    # the one way to empty a project's Deleted runs before the project is deleted (C118, X1).
+    ("POST", "/api/runs/purge"): "deleted runs: admin permanent delete (ignores the archive pause by design)",
     # Feedback is platform-level (one list for everyone, administrators triage); a product request names a project the
     # person can access but stores no project data, so an archived project does not refuse it.
     ("POST", "/v1/feedback"): "feedback: a new draft",
