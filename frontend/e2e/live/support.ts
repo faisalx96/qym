@@ -180,7 +180,8 @@ export async function seedLive(request: APIRequestContext, slug: string, opts: {
       results: ['sql_generation', 'viz_agent'].map((canary) => ({
         canary,
         checked_at: now.toISOString(),
-        status: 'ok',
+        status: canary === 'viz_agent' ? 'failed' : 'ok',
+        fault: canary === 'viz_agent' ? 'validation' : null,
         latency_ms: 120,
         detail: { probe: 'synthetic' },
         eval_code_version: 'e2e-v1',

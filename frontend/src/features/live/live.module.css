@@ -125,12 +125,133 @@
   font-size: var(--font-base);
 }
 
+.services {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.service {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.service + .service {
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.service > :first-child {
+  font-size: var(--font-xl);
+  font-weight: 700;
+}
+
+.canaries {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  padding-block-start: var(--space-md);
+  margin-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+  font-size: var(--font-sm);
+}
+
+.trendPlot {
+  position: relative;
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: calc(var(--space-xl) * 6);
+  margin-inline: calc(var(--live-trend-overhang, 0px) * -1);
+}
+
+/* Half-gap edge padding keeps pitch = plot width / count in both layouts, matching BarColumns' label rule. */
+.trendPlot[data-dense='true'] .trendColumns {
+  gap: calc(var(--space-xs) / 4);
+  padding-inline: calc(var(--space-xs) / 8);
+}
+
+.trendPlot[data-dense='true'] [data-part='well'] {
+  margin-inline: calc(var(--space-xs) / -8);
+  padding-inline: calc(var(--space-xs) / 8);
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day] {
+  min-inline-size: calc(var(--space-xs) / 2);
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:first-child [data-part='count'] {
+  align-self: flex-start;
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:last-child [data-part='count'] {
+  align-self: flex-end;
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:first-child [data-part='foot'] {
+  align-items: flex-start;
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:last-child [data-part='foot'] {
+  align-items: flex-end;
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:not([data-zero]) [data-part='bar'] {
+  min-block-size: calc(var(--space-xs) / 2);
+}
+
+.rateLine {
+  position: absolute;
+  inset-block: var(--space-lg) calc(var(--space-md) + var(--space-xs));
+  inset-inline: 0;
+  inline-size: 100%;
+  block-size: calc(100% - var(--space-lg) - var(--space-md) - var(--space-xs));
+  overflow: visible;
+  pointer-events: none;
+}
+
+.rateLine polyline {
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.rateLine circle {
+  fill: var(--text-primary);
+}
+
+.lineKey {
+  inline-size: var(--space-md);
+  border-block-start: 2px solid var(--text-primary);
+}
+
+.trendCaption {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.trendPlot [data-live-gap='true'] [data-part='bar'] {
+  flex: 1;
+  min-block-size: var(--bar-action-h);
+}
+
+.trendPlot [data-live-gap='true'] [data-part='well']::before {
+  flex: 0;
+}
+
 /* Reserve the approved six-tile / six-metric mock's frames during the pending delay. */
 .loading {
   --live-status-height: calc(var(--control-height) + var(--space-md));
   --live-tiles-height: calc(var(--space-xl) * 2 + var(--space-sm) + 2px);
   --live-means-height: calc(var(--space-xl) * 8 + var(--space-sm) + 1px);
   --live-mix-height: var(--live-means-height);
+  --live-services-height: calc(var(--space-xl) * 6);
+  --live-trend-height: calc(var(--space-xl) * 10 + var(--space-sm));
+  --live-days-height: calc(var(--space-xl) * 12 + var(--space-sm) + var(--space-xs));
 
   display: flex;
   flex-direction: column;
@@ -154,9 +275,20 @@
     grid-column: span 6;
   }
 
+  .services {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: var(--space-md);
+  }
+
+  .service:nth-child(3n + 1) {
+    border-inline-start: 0;
+  }
+
   .loading {
     --live-tiles-height: calc(var(--space-xl) * 4 + var(--space-lg) - 1px);
     --live-mix-height: calc(var(--space-xl) * 6 + var(--space-md) + var(--space-xs));
+    --live-services-height: calc(var(--space-xl) * 9 + var(--space-sm) + var(--space-xs));
+    --live-days-height: calc(var(--space-xl) * 12 + var(--space-lg) + var(--space-xs));
   }
 }
 
@@ -165,9 +297,24 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .services {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service:nth-child(odd) {
+    border-inline-start: 0;
+  }
+
+  .service:nth-child(even) {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
   .loading {
     --live-status-height: calc(var(--space-xl) * 3 + var(--control-height) - 1px);
     --live-tiles-height: calc(var(--space-xl) * 7 - var(--space-xs));
     --live-mix-height: calc(var(--space-xl) * 9 + var(--space-sm) + var(--space-xs));
+    --live-services-height: calc(var(--space-xl) * 15 + var(--space-sm) + var(--space-xs));
+    --live-trend-height: calc(var(--space-xl) * 14 + var(--space-sm));
+    --live-days-height: calc(var(--space-xl) * 13 + var(--space-lg));
   }
 }

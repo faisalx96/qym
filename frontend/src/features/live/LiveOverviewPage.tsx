@@ -13,14 +13,22 @@ import { StatusLine } from './components/StatusLine';
 import { DayNumbers } from './components/DayNumbers';
 import { DiagnosisMix } from './components/DiagnosisMix';
 import { MetricMeans } from './components/MetricMeans';
+import { ServiceHealth } from './components/ServiceHealth';
+import { Canaries } from './components/Canaries';
+import { TrendChart } from './components/TrendChart';
+import { DaysTable } from './components/DaysTable';
 import styles from './live.module.css';
 
 export function LiveOverviewPage({ slug, source, day }: { slug: string; source: string; day: string }) {
   const { project } = useProjectContext();
   useDocumentTitle(`Live · ${project.name}`);
-  const { replaceUrlQuery } = useSearchParamsState();
+  const { get, replaceUrlQuery } = useSearchParamsState();
+  const requestedTrendDays = Number(get('trend_days', '14'));
+  const trendDays = [14, 30, 90].includes(requestedTrendDays) ? requestedTrendDays : 14;
+  const requestedDaysPage = Number(get('days_page', '1'));
+  const daysPage = Number.isSafeInteger(requestedDaysPage) && requestedDaysPage > 0 ? requestedDaysPage : 1;
   const sourcesQuery = useLiveSources(slug);
-  const query = useLiveOverview(slug, { source, day });
+  const query = useLiveOverview(slug, { source, day, trendDays, daysPage });
   const showSkeleton = useDelayedPending(query.isPending);
   const overview = query.data;
   const sources = sourcesQuery.data?.sources ?? [];
@@ -94,6 +102,13 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
             <Skeleton kind="chart" height="var(--live-mix-height)" label="Loading diagnosis mix" />
             <Skeleton kind="chart" height="var(--live-means-height)" label="Loading metric means" />
           </div>
+          <Skeleton
+            kind="chart"
+            height="var(--live-services-height)"
+            label="Loading service health and canaries"
+          />
+          <Skeleton kind="chart" height="var(--live-trend-height)" label="Loading turns over time" />
+          <Skeleton kind="chart" height="var(--live-days-height)" label="Loading days" />
         </div>
       ) : overview ? (
         <>
@@ -103,9 +118,25 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
             <DiagnosisMix overview={overview} linkTo={linkTo} />
             <MetricMeans overview={overview} />
           </div>
+          <ServiceHealth services={overview.day.services} specs={overview.specs} linkTo={linkTo}>
+            <Canaries canaries={overview.canaries} specs={overview.specs} />
+          </ServiceHealth>
+          <TrendChart
+            trend={overview.trend}
+            specs={overview.specs}
+            primaryMetric={overview.primary_metric}
+            days={trendDays}
+            onDays={(value) => replaceUrlQuery({ trend_days: value })}
+          />
+          <DaysTable
+            days={overview.days}
+            slug={slug}
+            source={source}
+            specs={overview.specs}
+            primaryMetric={overview.primary_metric}
+          />
         </>
       ) : null}
-      <div data-live-block="more" />
     </div>
   );
 }

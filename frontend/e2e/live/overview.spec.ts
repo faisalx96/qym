@@ -71,3 +71,73 @@ test('a source without a heartbeat shows the stale error variant', async ({ page
   await expect(status).toHaveAttribute('data-tone', 'danger');
   await expect(status).toContainText('No heartbeat yet');
 });
+
+test('service health links to failed service turns, with failed canaries first', async ({
+  page,
+  request,
+}) => {
+  const seed = await seedLive(request, uniqueSlug('live-services'));
+  const day = seed.days.at(-1)!.day;
+  await gotoApp(page, `/projects/${seed.projectSlug}/live?day=${day}`);
+  const canaries = page.locator('[data-live-canary]');
+  await expect(canaries).toHaveCount(2);
+  await expect(canaries.first()).toHaveAttribute('data-live-canary', 'viz_agent');
+  await expect(canaries.first()).toContainText('failed');
+  await page.locator('[data-live-service="sql_generation"]').click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/projects/${seed.projectSlug}/live/turns`);
+  const url = new URL(page.url());
+  expect(url.searchParams.get('day')).toBe(day);
+  expect(url.searchParams.get('source')).toBe(seed.sourceKey);
+  expect(url.searchParams.get('service')).toBe('sql_generation');
+  expect(url.searchParams.get('service_status')).toBe('not_ok');
+});
+
+test('trend includes quiet days, switches its URL window and selects a day; Days rows open turns', async ({
+  page,
+  request,
+}) => {
+  const seed = await seedLive(request, uniqueSlug('live-trend'));
+  const day = seed.days.at(-1)!.day;
+  const overviewUrl = `/projects/${seed.projectSlug}/live?day=${day}&source=${seed.sourceKey}`;
+  await gotoApp(page, overviewUrl);
+  const columns = page.locator('[data-live-trend-day]');
+  await expect(columns).toHaveCount(14);
+  // record_heartbeat computes max_poll_gap_s from qym's receive clock, ignoring body.at.
+  // DayBody also forbids polls/max_poll_gap_s. Two requests whose `at` values differ by
+  // 7200 seconds cannot seed a gap without a server-clock override or actually waiting.
+  // The real API fixture therefore has no gaps; Vitest verifies the hatched-gap rendering.
+  await expect(page.locator('[data-live-trend-day][data-live-gap="false"]')).toHaveCount(14);
+  await expect(page.locator('[data-live-trend-day][data-live-gap="true"]')).toHaveCount(0);
+
+  await page.getByRole('radiogroup', { name: 'Trend period' }).getByText('30', { exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('trend_days')).toBe('30');
+  await expect(columns).toHaveCount(30);
+  await gotoApp(page, `${overviewUrl}&trend_days=30`);
+  await expect(columns).toHaveCount(30);
+  const previous = seed.days.at(-2)!.day;
+  await page.locator(`[data-live-trend-day="${previous}"]`).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('day')).toBe(previous);
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/projects/${seed.projectSlug}/live`);
+
+  await page.locator(`[data-live-day="${day}"]`).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/projects/${seed.projectSlug}/live/turns`);
+  expect(new URL(page.url()).searchParams.get('day')).toBe(day);
+  expect(new URL(page.url()).searchParams.get('source')).toBe(seed.sourceKey);
+});
+
+test('ninety trend days fit the card at a 390-pixel viewport', async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const seed = await seedLive(request, uniqueSlug('live-trend-dense'));
+  await gotoApp(page, `/projects/${seed.projectSlug}/live?source=${seed.sourceKey}&trend_days=90`);
+  const card = page.locator('[data-live-block="trend"]');
+  await expect(card.locator('[data-live-trend-day]')).toHaveCount(90);
+  await expect(card.locator('[data-live-block="trend-plot"]')).toHaveAttribute('data-dense', 'true');
+  await expect
+    .poll(() =>
+      card
+        .locator('[data-part="bar"]')
+        .evaluateAll((bars) => Math.min(...bars.map((bar) => bar.getBoundingClientRect().width))),
+    )
+    .toBeGreaterThanOrEqual(2);
+  await expect.poll(() => card.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
