@@ -69,6 +69,9 @@ const projectChildren: RouteObject[] = [
   {
     path: C.runs_detail,
     loader: runRouteLoader,
+    // The loader returns at once (it only starts prefetches), so nothing needs to show while it runs. Without
+    // this, every deep link to a run logs React Router's missing-HydrateFallback warning (C197).
+    hydrateFallbackElement: null,
     element: (
       <RunAnalyzerRedirect>
         <RunDetailPage />
