@@ -72,7 +72,8 @@ test('C-items-2: the banner is one line above the toolbar, names in bold, Clear 
   page,
 }) => {
   await openCompare(page, s.four, 1440);
-  await part(page, 'averages-counts').nth(1).locator('button').nth(1).click(); // a regressed count
+  // a regressed count (C201: a zero count has no button, so pick the down button by its kind)
+  await part(page, 'averages-counts').locator('button[data-kind="down"]').first().click();
   const banner = part(page, 'baseline-delta-banner');
   await expect(banner).toHaveAttribute('role', 'status');
   expect((await box(banner)).h).toBeLessThanOrEqual(44);

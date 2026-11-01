@@ -85,6 +85,15 @@ export function AveragesMatrix() {
     const dir = model.directions[m] ?? null;
     const band = metricBand(cell.mean, type, dir);
     const beyond = !r.isBaseline && cell.delta ? verdictOf(cell.delta.verdict) : undefined;
+    // C201: a metric the run did not score is one muted 'not scored', with no change and no count buttons
+    if (cell.mean === null)
+      return (
+        <span className={styles.notScored} data-part="averages-not-scored">
+          not scored
+        </span>
+      );
+    // ...and a value with no baseline score to pair with stands alone
+    const paired = !!cell.delta && cell.delta.paired > 0;
     return (
       <>
         <span
@@ -95,7 +104,7 @@ export function AveragesMatrix() {
         >
           {cell.mean === null ? '—' : formatMetricValue(cell.mean, type, 1)}
         </span>
-        {!r.isBaseline && cell.delta ? (
+        {!r.isBaseline && cell.delta && paired ? (
           <>
             <DeltaLine2 stats={cell.delta} type={type} metric={m} />
             <CountButtons
@@ -194,7 +203,12 @@ export function AveragesMatrix() {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} data-testid="average-row" data-row={row.id} data-part={`averages-${row.kind}-row`}>
+            <tr
+              key={row.id}
+              data-testid="average-row"
+              data-row={row.id}
+              data-part={`averages-${row.kind}-row`}
+            >
               <th
                 scope="row"
                 className={styles.metricName}
