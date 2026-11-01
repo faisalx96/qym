@@ -89,7 +89,8 @@ test.describe('add environment', () => {
     const { project } = await seedProject(request, 'envbad');
     await gotoApp(page, envsPath(project.slug));
     await page.getByRole('button', { name: 'Add environment' }).first().click();
-    const dialog = page.getByRole('dialog', { name: 'Add environment' });
+    // after step 1 the dialog is titled 'Set up <name>' (C122)
+    const dialog = page.getByRole('dialog', { name: /^(Add environment|Set up )/ });
     await dialog.getByRole('textbox', { name: /^Name/ }).fill('broken');
     await dialog.getByRole('textbox', { name: /^Base URL/ }).fill('http://127.0.0.1:9/nothing-here');
     await dialog.getByLabel(/^API key/).fill('some-key');
@@ -116,7 +117,8 @@ test.describe('add environment', () => {
     const { project } = await seedProject(request, 'envadd');
     await gotoApp(page, envsPath(project.slug));
     await page.getByRole('button', { name: 'Add environment' }).first().click();
-    const dialog = page.getByRole('dialog', { name: 'Add environment' });
+    // after step 1 the dialog is titled 'Set up <name>' (C122)
+    const dialog = page.getByRole('dialog', { name: /^(Add environment|Set up )/ });
     const url = `http://127.0.0.1:${FAKE_A}/${uniqueSlug('added')}`;
     await dialog.getByRole('textbox', { name: /^Name/ }).fill('added env');
     await dialog.getByRole('textbox', { name: /^Base URL/ }).fill(url);
@@ -126,7 +128,7 @@ test.describe('add environment', () => {
     await dialog.getByRole('button', { name: 'Test & connect' }).click();
 
     await expectToast(page, 'Connected “added env”');
-    await expect(dialog.getByRole('listitem').filter({ hasText: 'Review settings' })).toHaveAttribute(
+    await expect(dialog.getByRole('listitem').filter({ hasText: 'Generated form' })).toHaveAttribute(
       'aria-current',
       'step',
     );
@@ -159,7 +161,8 @@ test.describe('add environment', () => {
     const { project } = await seedProject(request, 'envskip');
     await gotoApp(page, envsPath(project.slug));
     await page.getByRole('button', { name: 'Add environment' }).first().click();
-    const dialog = page.getByRole('dialog', { name: 'Add environment' });
+    // after step 1 the dialog is titled 'Set up <name>' (C122)
+    const dialog = page.getByRole('dialog', { name: /^(Add environment|Set up )/ });
     await dialog.getByRole('textbox', { name: /^Name/ }).fill('skipper');
     await dialog
       .getByRole('textbox', { name: /^Base URL/ })

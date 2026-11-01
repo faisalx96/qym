@@ -4,7 +4,6 @@
  * A member who may not add one is sent to the environments list.
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { projectPath } from '@/app/routes';
 import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDialog';
@@ -14,7 +13,6 @@ import { environmentsPath } from '../paths';
 
 export function ConnectFirst({ onCreated }: { onCreated: (env: EvalEnvironment) => void }) {
   const { project, slug, canManage, readOnly } = useProjectContext();
-  const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const canAdd = canManage && !readOnly;
   return (
@@ -50,10 +48,7 @@ export function ConnectFirst({ onCreated }: { onCreated: (env: EvalEnvironment) 
           open={adding}
           onOpenChange={setAdding}
           onCreated={onCreated}
-          onGotoApiKeys={() => {
-            setAdding(false);
-            navigate(`${projectPath(slug, 'settings')}?tab=apikeys`);
-          }}
+          apiKeysTo={`${projectPath(slug, 'settings')}?tab=apikeys`}
         />
       ) : null}
     </>
