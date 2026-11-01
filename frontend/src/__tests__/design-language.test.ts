@@ -818,6 +818,25 @@ describe('confirm dialogs (C146)', () => {
   });
 });
 
+describe('Arabic text (C056, C140, C050)', () => {
+  it('lets names read in their own direction (dir="auto" on entity tags and people)', () => {
+    expect(read(join(SRC, 'ui/EntityTag/EntityTag.tsx'))).toContain('dir="auto"');
+    expect(read(join(SRC, 'ui/UserName/UserName.tsx'))).toContain('dir="auto"');
+  });
+  it('gives tag text room for Arabic dots and sets Arabic in sans', () => {
+    const css = read(join(SRC, 'ui/Tag/Tag.module.css'));
+    expect(css).toContain('line-height: 1.5');
+    expect(css).toContain(':dir(rtl)');
+  });
+  it('formats numbers and dates in one locale (no locale-less toLocale* call)', () => {
+    const problems: string[] = [];
+    for (const file of tsxFiles)
+      if (/\.toLocale(String|DateString|TimeString)\((\)|undefined)/.test(read(file)))
+        problems.push(rel(file));
+    expect(problems).toEqual([]);
+  });
+});
+
 describe('documentation wiring', () => {
   it('README points at the design language', () => {
     const readme = read(join(FRONTEND, 'README.md'));

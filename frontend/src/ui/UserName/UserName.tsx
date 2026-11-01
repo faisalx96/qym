@@ -38,7 +38,9 @@ export function UserName({ id, name, email, showEmail, className }: UserNameProp
       <span className={styles.avatar} data-series={userSeries(id)} aria-hidden="true">
         {userInitials(label)}
       </span>
-      <span className={styles.name}>{label}</span>
+      <span className={styles.name} dir="auto">
+        {label}
+      </span>
       {showEmail && email && email !== label ? <span className={styles.email}>{email}</span> : null}
     </span>
   );

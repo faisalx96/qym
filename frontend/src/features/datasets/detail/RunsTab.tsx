@@ -7,6 +7,7 @@ import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { DataTable, EmptyState, RelativeTime, ScoreBar, StatusCell, Text, type Column } from '@/ui';
 import { formatLatency } from '../lib/itemValue';
 import { metricDir } from '../lib/metricDir';
+import { APP_LOCALE } from '@/lib/dates';
 
 export function RunsTab({
   slug,
@@ -112,7 +113,9 @@ export function RunsTab({
         }
       >
         <DataTable.Footer
-          summary={query.data ? `${total.toLocaleString()} ${total === 1 ? 'run' : 'runs'}` : undefined}
+          summary={
+            query.data ? `${total.toLocaleString(APP_LOCALE)} ${total === 1 ? 'run' : 'runs'}` : undefined
+          }
           pagination={
             total > DATASET_RUNS_PAGE
               ? { total, page, pageSize: DATASET_RUNS_PAGE, noun: 'runs', onPageChange: setPage }

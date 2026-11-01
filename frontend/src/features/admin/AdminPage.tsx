@@ -12,6 +12,7 @@ import { ProjectsTab } from './projects/ProjectsTab';
 import { RunsTab } from './runs/RunsTab';
 import { UsersTab } from './users/UsersTab';
 import styles from './AdminPage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 /** /admin/:tab — tab is a path segment; /admin → /admin/runs; unknown → /admin/runs. */
 export function AdminPage() {
@@ -73,9 +74,9 @@ export function AdminPage() {
               label: 'Runs',
               icon: <Icon name="chart" />,
               tone: 'accent',
-              value: runs !== undefined ? runs.toLocaleString() : '—',
+              value: runs !== undefined ? runs.toLocaleString(APP_LOCALE) : '—',
               sub: archived.length
-                ? `All projects, incl. ${archived.reduce((n, p) => n + p.run_count, 0).toLocaleString()} archived`
+                ? `All projects, incl. ${archived.reduce((n, p) => n + p.run_count, 0).toLocaleString(APP_LOCALE)} archived`
                 : 'All projects',
               help: 'Sum of every project’s run count, including archived projects. Deleted runs are excluded. The lists below only show active projects.',
             },

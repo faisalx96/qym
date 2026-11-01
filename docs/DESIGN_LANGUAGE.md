@@ -426,6 +426,11 @@ preselected.
 
 ### 3.3 Labels, statistics and identity
 
+**Arabic text (C056, C140, C050).** User and model text carries `dir="auto"` (entity tags, people, and
+`textDirAttrs` for longer text), so mixed Arabic and Latin reads in the right order. Tag text has a 1.5 line height so
+the dots under Arabic letters show, and Arabic inside a tag reads in the sans face at 11px. Every number and date is
+formatted in the one app locale (`APP_LOCALE`); ESLint rejects a `toLocale*` call without a locale.
+
 **People, models and tags (C144, C165, C051, C238).** A person is always `UserName` (an initials disc in the person's
 series colour, then the name): the runs Owner, the run header, admin, API keys, datasets, presets, Reviews and Deleted
 runs. Task, dataset and model names are `TaskTag`, `DatasetTag` and `ModelTag` at 11px (`--font-sm`); count and role

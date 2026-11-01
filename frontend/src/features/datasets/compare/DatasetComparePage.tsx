@@ -43,6 +43,7 @@ import { formatDate, itemIdentity } from '../lib/itemValue';
 import { comparePath, datasetPath, parseDatasetRoute } from '../lib/route';
 import { resolveActiveVersion } from '../lib/versions';
 import styles from './DatasetComparePage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 const KINDS: { id: CompareKind; label: string }[] = [
   { id: 'changed', label: 'Changed' },
@@ -376,7 +377,7 @@ function CompareBody({
           )}
           <div className={styles.footer}>
             <Text variant="sm" tone="muted">
-              Showing {rows.length.toLocaleString()} of {total.toLocaleString()}
+              Showing {rows.length.toLocaleString(APP_LOCALE)} of {total.toLocaleString(APP_LOCALE)}
             </Text>
             {query.hasNextPage ? (
               <Button

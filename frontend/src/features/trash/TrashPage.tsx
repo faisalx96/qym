@@ -41,7 +41,7 @@ import {
   UserName,
 } from '@/ui';
 import styles from './TrashPage.module.css';
-import { formatDay } from '@/lib/dates';
+import { APP_LOCALE, formatDay } from '@/lib/dates';
 
 const DAY = 86_400_000;
 
@@ -180,7 +180,10 @@ export function TrashPage() {
           <Text as="span" variant="md" weight={600} truncate>
             {r.run_name}
           </Text>
-          <span className={styles.runId} title={`Created ${new Date(r.created_at).toLocaleString()}`}>
+          <span
+            className={styles.runId}
+            title={`Created ${new Date(r.created_at).toLocaleString(APP_LOCALE)}`}
+          >
             {r.id}
           </span>
         </span>

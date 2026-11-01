@@ -40,6 +40,7 @@ import {
 } from '../lib/versions';
 import { UploadWizard } from '../wizard/UploadWizard';
 import styles from './CatalogPage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export function CatalogPage() {
   const { slug, project, readOnly } = useProjectContext();
@@ -250,13 +251,13 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
         </p>
         <div className={styles.stats}>
           <span>
-            <strong>{catalogItemCount(d).toLocaleString()}</strong> items
+            <strong>{catalogItemCount(d).toLocaleString(APP_LOCALE)}</strong> items
           </span>
           <span>
             <strong>{catalogVersionCount(d)}</strong> {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
           </span>
           <span>
-            <strong>{d.run_count.toLocaleString()}</strong> {d.run_count === 1 ? 'run' : 'runs'}
+            <strong>{d.run_count.toLocaleString(APP_LOCALE)}</strong> {d.run_count === 1 ? 'run' : 'runs'}
           </span>
         </div>
         <div className={styles.cardFoot}>

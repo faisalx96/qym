@@ -20,7 +20,9 @@ export function TaskTag({ name, className }: EntityTagBase & { name: string | nu
   if (!name) return <span className={styles.none}>—</span>;
   return (
     <Tag kind="task" title={name} className={[styles.entity, className].filter(Boolean).join(' ')}>
-      <span className={styles.text}>{name}</span>
+      <span className={styles.text} dir="auto">
+        {name}
+      </span>
     </Tag>
   );
 }
@@ -44,7 +46,9 @@ export function DatasetTag({
     <span className={[styles.group, className].filter(Boolean).join(' ')}>
       <Tag kind="dataset" title={title} className={styles.entity}>
         <Icon name="database" size={12} />
-        <span className={styles.text}>{name}</span>
+        <span className={styles.text} dir="auto">
+          {name}
+        </span>
         {v ? <span className={styles.version}>v{v.replace(/^v/i, '')}</span> : null}
       </Tag>
       {aliases?.map((a) => (
@@ -81,7 +85,9 @@ export function ModelTag({
       className={[styles.entity, className].filter(Boolean).join(' ')}
     >
       {mark}
-      <span className={styles.text}>{name}</span>
+      <span className={styles.text} dir="auto">
+        {name}
+      </span>
       {reasoning ? <span className={styles.version}>reasoning</span> : null}
     </Tag>
   );

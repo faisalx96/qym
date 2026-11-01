@@ -29,8 +29,16 @@ export default tseslint.config(
           message: 'No inline fontSize: use a Text role or a var(--font-*) token in a CSS module.',
         },
         {
-          selector: "JSXAttribute[name.name='style'] ObjectExpression > Property[key.name=/^(color|background|backgroundColor)$/] > Literal[value=/^#|^white$/]",
+          selector:
+            "JSXAttribute[name.name='style'] ObjectExpression > Property[key.name=/^(color|background|backgroundColor)$/] > Literal[value=/^#|^white$/]",
           message: 'No hardcoded colours: use var(--…) tokens.',
+        },
+        {
+          // C050: one app locale (APP_LOCALE in lib/dates) for every number and date, so Arabic browsers get one
+          // digit system: a toLocale* call must name its locale.
+          selector:
+            "CallExpression[callee.property.name=/^toLocale(String|DateString|TimeString)$/]:matches([arguments.length=0], [arguments.0.type='Identifier'][arguments.0.name='undefined'])",
+          message: 'Pass the locale: toLocaleString(APP_LOCALE) (lib/dates).',
         },
         {
           selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",

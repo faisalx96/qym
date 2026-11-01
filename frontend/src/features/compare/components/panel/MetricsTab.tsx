@@ -8,12 +8,13 @@ import { RunTag } from '../RunTag';
 import { AveragesMatrix } from './AveragesMatrix';
 import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 const fmtTrace = (v: number, f: TraceFormat) =>
   f === 'latency'
     ? formatLatency(v)
     : f === 'tokens'
-      ? Math.round(v).toLocaleString()
+      ? Math.round(v).toLocaleString(APP_LOCALE)
       : f === 'percent'
         ? `${(v * 100).toFixed(1)}%`
         : v.toFixed(1);

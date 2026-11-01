@@ -41,6 +41,7 @@ import { ITEM_TABS, datasetPath, parseDatasetRoute, type ItemTab } from '../lib/
 import { ItemHistoryTab } from './ItemHistoryTab';
 import { ItemRunsTab } from './ItemRunsTab';
 import styles from './ItemPage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export interface ItemPageProps {
   slug: string;
@@ -201,7 +202,9 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
             {version.version} {version.status}
           </Tag>,
           ...(neighbors.data
-            ? [`${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString()} in this view`]
+            ? [
+                `${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString(APP_LOCALE)} in this view`,
+              ]
             : []),
         ]}
         actions={

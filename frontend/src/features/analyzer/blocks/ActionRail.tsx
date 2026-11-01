@@ -5,6 +5,7 @@ import type { RunnerState } from '../useAnalysisRunner';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import { ProgressBar, shortOutcome, summarize, viewRunTo } from './JobStatus';
 import s from './blocks.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 /** Why Test / Analyze are unavailable, in words, next to the disabled buttons. */
 function notice(config: AnalysisConfig, ws: RunWorkspace): string | null {
@@ -163,7 +164,7 @@ export function ActionRail({
         />
         <Button size="sm" onPress={onPreview} isDisabled={!preview.hasTarget} className={s.railPreview}>
           {preview.characters != null
-            ? `Prompt preview · ${preview.characters.toLocaleString()} chars`
+            ? `Prompt preview · ${preview.characters.toLocaleString(APP_LOCALE)} chars`
             : 'Prompt preview'}
         </Button>
       </div>

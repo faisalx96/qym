@@ -12,8 +12,16 @@
   font-family: var(--font-sans);
   font-size: var(--font-xs);
   font-weight: 650;
-  line-height: 1.3;
+  /* C140: room for the dots under Arabic letters (1.3 clipped them) */
+  line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+/* C140: Arabic in a tag (task names are mono) reads in the sans face at 11px */
+.tag :dir(rtl),
+.tag:dir(rtl) {
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
 }
 
 .tag[data-kind='role'],

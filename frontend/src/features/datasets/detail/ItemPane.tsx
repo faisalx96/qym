@@ -19,6 +19,7 @@ import { DisabledBanner, EnableButton, useItemStateActions } from '../components
 import { useItemEditor } from '../item/useItemEditor';
 import { datasetPath } from '../lib/route';
 import styles from './ItemPane.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export interface ItemPaneProps {
   slug: string;
@@ -97,7 +98,7 @@ export function ItemPane({
             {itemId}
           </Text>
           <span className={styles.pos}>
-            {position.index + 1} / {position.total.toLocaleString()}
+            {position.index + 1} / {position.total.toLocaleString(APP_LOCALE)}
           </span>
           {disabled ? (
             <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />

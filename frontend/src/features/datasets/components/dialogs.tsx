@@ -21,6 +21,7 @@ import { slugifyDatasetName } from '../lib/slugify';
 import { PRODUCTION_RULE } from '../lib/versions';
 
 import styles from './dialogs.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 /** One plain sentence (C181). */
 function errorText(e: unknown): string {
@@ -163,7 +164,7 @@ export function PublishDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={`Publish ${version.version}`}
-      description={`Publishing freezes ${version.version} (${version.item_count.toLocaleString()} items) as a snapshot; runs can target it and it can no longer be edited.`}
+      description={`Publishing freezes ${version.version} (${version.item_count.toLocaleString(APP_LOCALE)} items) as a snapshot; runs can target it and it can no longer be edited.`}
       notice={
         version.disabled_count > 0 ? (
           <Note tone="info" data-testid="publish-disabled-note">

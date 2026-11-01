@@ -14,6 +14,7 @@ import {
   TextField,
 } from '@/ui';
 import s from './rules.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 const PAGE = 10;
 
@@ -53,7 +54,7 @@ export function RuleEditor({
   return (
     <div className={s.editor}>
       <Text variant="sm" tone="muted" as="p" data-testid="rule-count">
-        {`${rules.length} ${rules.length === 1 ? 'rule' : 'rules'} · ~${estimateTokens(rules).toLocaleString()} prompt tokens · no rule count limit`}
+        {`${rules.length} ${rules.length === 1 ? 'rule' : 'rules'} · ~${estimateTokens(rules).toLocaleString(APP_LOCALE)} prompt tokens · no rule count limit`}
       </Text>
       <div className={s.ruleTools}>
         <SearchField

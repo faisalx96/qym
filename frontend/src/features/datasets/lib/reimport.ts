@@ -4,6 +4,7 @@
  */
 import { BULK_CHUNK, type BulkSummary, type ItemBody } from '@/api/datasets';
 import { pluralize } from './itemValue';
+import { APP_LOCALE } from '@/lib/dates';
 
 export type ImportCounts = Pick<BulkSummary, 'created' | 'updated' | 'skipped'>;
 
@@ -37,14 +38,14 @@ export async function countMatches(
 /** Review line: "4 of 4 records match items already in v1." */
 export function matchLine(matched: number, total: number, noun: string, version: string): string {
   const verb = matched === 1 ? 'matches an item' : 'match items';
-  return `${matched.toLocaleString()} of ${pluralize(total, noun)} ${verb} already in ${version}.`;
+  return `${matched.toLocaleString(APP_LOCALE)} of ${pluralize(total, noun)} ${verb} already in ${version}.`;
 }
 
 /** Toast after an import: "4 items added", or "0 added, 4 skipped" when records matched existing items. */
 export function importResultText(c: ImportCounts): string {
   if (!c.updated && !c.skipped) return `${pluralize(c.created, 'item')} added`;
-  const parts = [`${c.created.toLocaleString()} added`];
-  if (c.updated) parts.push(`${c.updated.toLocaleString()} replaced`);
-  if (c.skipped) parts.push(`${c.skipped.toLocaleString()} skipped`);
+  const parts = [`${c.created.toLocaleString(APP_LOCALE)} added`];
+  if (c.updated) parts.push(`${c.updated.toLocaleString(APP_LOCALE)} replaced`);
+  if (c.skipped) parts.push(`${c.skipped.toLocaleString(APP_LOCALE)} skipped`);
   return parts.join(', ');
 }
