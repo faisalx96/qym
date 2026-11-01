@@ -94,7 +94,11 @@ export function ComparePage() {
     body = (
       <EmptyState
         title="Select at least two runs"
-        body="A comparison needs two or more runs."
+        body={
+          c.refs.length === 1
+            ? 'This run has one pass. A comparison needs two or more runs, or one run with several passes.'
+            : 'A comparison needs two or more runs.'
+        }
         action={<BackLink slug={slug} />}
       />
     );

@@ -78,6 +78,9 @@ export function readSelection(params: URLSearchParams, storage: Pick<Storage, 'g
   if (fromUrl) return { refs: [...fromUrl.left, ...fromUrl.right], cohorts: fromUrl, source: 'url' };
   const runs = params.getAll('runs').filter(Boolean);
   if (runs.length >= MIN_COMPARE_RUNS) return { refs: dedupe(runs), cohorts: null, source: 'url' };
+  // C211: one whole run is a comparison of its passes when it has more than one (decided once it loads)
+  if (runs.length === 1 && passRefNumber(runs[0]!) === null)
+    return { refs: runs, cohorts: null, source: 'url' };
   const stored = normalizeCohorts(readSession(storage, 'compareCohorts'));
   if (stored) return { refs: [...stored.left, ...stored.right], cohorts: stored, source: 'session' };
   const list = readSession<unknown>(storage, 'compareRuns');

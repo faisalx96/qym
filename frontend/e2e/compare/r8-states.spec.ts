@@ -66,7 +66,8 @@ test('C-state-1: the placeholder count follows the runs in the URL', async ({ pa
 test('C-state-2: fewer than two runs: a plain empty state that fits 390 without scroll', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(compareUrl([s.seed.runs.base]));
-  await expect(page.getByText('No runs to compare')).toBeVisible();
+  // C211: one single-pass run loads, then says a comparison needs more
+  await expect(page.getByText('Select at least two runs')).toBeVisible();
   await expect(page.getByRole('link', { name: /Back to runs/ })).toBeVisible();
   await noSidewaysScroll(page);
   const [sh, ch] = await page.locator('#shell-content').evaluate((e) => [e.scrollHeight, e.clientHeight]);
