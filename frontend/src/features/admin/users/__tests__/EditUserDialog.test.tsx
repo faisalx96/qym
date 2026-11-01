@@ -39,3 +39,10 @@ describe('EditUserDialog password reset', () => {
     expect(screen.queryByRole('button', { name: 'Reset password' })).not.toBeInTheDocument();
   });
 });
+
+describe('EditUserDialog status (C158)', () => {
+  it('has no Active checkbox: status changes only through the row action', () => {
+    open(false);
+    expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+  });
+});

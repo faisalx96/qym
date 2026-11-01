@@ -56,6 +56,32 @@
   gap: var(--space-sm);
 }
 
+.createBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* The Create user error: a reserved line under the whole bar, so the fields never move (C243). */
+.barError {
+  margin: 0;
+  min-block-size: calc(var(--font-sm) * 1.5);
+  font-size: var(--font-sm);
+  color: var(--error);
+}
+
+/* A created user's one-time password: shown once, green-edged, under the bar (C131). */
+.created {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-inline-size: 640px;
+  padding: var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--success) 55%, var(--border-default));
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
 .status[data-tone='muted'] {
   color: var(--text-muted);
 }

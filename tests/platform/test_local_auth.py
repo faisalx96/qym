@@ -691,3 +691,41 @@ def test_concurrent_first_resets_on_postgres_both_succeed(postgres_engine, monke
             .count()
             == 1
         )
+
+
+def test_create_user_issues_a_one_time_password_when_password_sign_in_is_on(session_factory, monkeypatch):
+    """C131: a new colleague can sign in at once with the one-time password and must choose a new one."""
+    _create_local_user(session_factory, "admin@example.com", "admin-pass-123", role=UserRole.ADMIN)
+    _configure_env(monkeypatch, auth_mode="oidc", auth_local_enabled=True)
+
+    with _client(session_factory) as admin_client:
+        assert _login(admin_client, "admin@example.com", "admin-pass-123").status_code == 200
+        created = admin_client.post(
+            "/v1/admin/users",
+            json={"email": "New.Person@example.com", "display_name": "New Person"},
+            headers=ORIGIN_HEADERS,
+        )
+        again = admin_client.post(
+            "/v1/admin/users", json={"email": "new.person@example.com"}, headers=ORIGIN_HEADERS
+        )
+    assert created.status_code == 200
+    assert created.headers["cache-control"] == "no-store"
+    temporary_password = created.json()["temporary_password"]
+    assert len(temporary_password) >= 16
+    # An existing user gets no new password from Create user.
+    assert again.json()["existing"] is True and "temporary_password" not in again.json()
+
+    with _client(session_factory) as client:
+        gated = _login(client, "new.person@example.com", temporary_password)
+        assert gated.status_code == 403
+        assert gated.json()["code"] == "password_change_required"
+
+
+def test_create_user_issues_no_password_without_password_sign_in(session_factory, monkeypatch):
+    _configure_env(monkeypatch, auth_mode="none", auth_local_enabled=False, auth_session_secret=None)
+    with _client(session_factory) as client:
+        created = client.post("/v1/admin/users", json={"email": "sso@example.com"}, headers=ORIGIN_HEADERS)
+    assert created.status_code == 200
+    assert "temporary_password" not in created.json()
+    with session_factory() as session:
+        assert session.query(LocalAuthCredential).count() == 0

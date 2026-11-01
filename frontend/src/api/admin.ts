@@ -177,7 +177,11 @@ export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateUserBody) =>
-      api.post<{ id: string; email: string; existing?: boolean }>('/v1/admin/users', body),
+      // temporary_password: only with email/password sign-in on, shown once (C131).
+      api.post<{ id: string; email: string; existing?: boolean; temporary_password?: string }>(
+        '/v1/admin/users',
+        body,
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: adminKeys.users }),
   });
 }

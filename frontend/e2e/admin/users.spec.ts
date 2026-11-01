@@ -20,7 +20,8 @@ test.describe('create user', () => {
     await expect(submit).toBeDisabled();
     await email.fill('a@b');
     await submit.click();
-    await expect(form.getByText('Enter a valid email address.')).toBeVisible();
+    // The app's message, on the reserved line under the whole bar (C243).
+    await expect(page.locator('[data-create-user-error]')).toHaveText('Enter a valid email address.');
 
     const addr = uniq('new');
     await email.fill(addr);
@@ -78,14 +79,15 @@ test.describe('disable / enable', () => {
 });
 
 test.describe('edit user', () => {
-  test('self edit locks role + active and the PUT omits them', async ({ page }) => {
+  test('self edit locks the role and the PUT omits it', async ({ page }) => {
     await openUsers(page);
     const row = page.getByRole('grid', { name: 'Users' }).getByRole('row').filter({ hasText: 'dev@local' });
     await row.getByRole('button', { name: /^Edit / }).click();
     const dialog = page.getByRole('dialog', { name: /^Edit / });
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('[data-self-note]')).toBeVisible();
-    await expect(dialog.getByRole('checkbox', { name: 'Active' })).toBeDisabled();
+    // No Active checkbox: status changes only through the row action (C158).
+    await expect(dialog.getByRole('checkbox', { name: 'Active' })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: /Role/ })).toBeDisabled();
     await expect(dialog.locator('[data-password-section]')).toHaveCount(0);
 

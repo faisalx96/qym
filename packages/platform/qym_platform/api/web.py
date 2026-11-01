@@ -138,9 +138,12 @@ def admin_list_users(
 @router.post("/v1/admin/users")
 def admin_create_user(
     req: CreateUserRequest,
+    response: Response,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
+    """Create a user. With email/password sign-in on, the user also gets a one-time password,
+    returned once (``temporary_password``): they choose a new one at first sign-in (C131)."""
     _require_admin(principal)
     email = req.email.strip().lower()
     existing = db.query(User).filter(User.email == email).first()
@@ -154,10 +157,20 @@ def admin_create_user(
         is_active=req.is_active,
     )
     db.add(user)
+    db.flush()
+    temporary_password = None
+    if local_auth_enabled(PlatformSettings()):
+        temporary_password = generate_temporary_password()
+        _store_temporary_password(db, user, principal.user.id, hash_password(temporary_password))
     db.commit()
     db.refresh(user)
     logger.info("User %s created by admin %s", user.id, principal.user.id)
-    return {"id": user.id, "email": user.email}
+    body: Dict[str, Any] = {"id": user.id, "email": user.email}
+    if temporary_password is not None:
+        response.headers["Cache-Control"] = "no-store"
+        # Never logged: shown once in the admin's browser.
+        body["temporary_password"] = temporary_password
+    return body
 
 
 def _other_active_admins_locked(db: Session, user_id: str) -> List[str]:
