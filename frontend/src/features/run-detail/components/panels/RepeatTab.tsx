@@ -19,6 +19,7 @@ import {
 } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import { queuedLabel, repeatCopy, statisticOptions, type RepeatStatistic } from '../../lib/repeatCopy';
+import { localRepeatStats, repeatStatsView } from '../../lib/repeatStats';
 import { useRunPage } from '../../RunContext';
 import { Curve, CurveLegend, PassCountBars, type CurvePoint } from '../charts/Charts';
 import { ChartCard } from '../charts/ChartCard';
@@ -38,9 +39,24 @@ export function RepeatTab() {
   const [statistic, setStatistic] = useState<RepeatStatistic>('compare');
   const passes = usePassesQuery(runId, true);
   const group = useGroupMetricsQuery(runId, metric, committed, true);
-  const g = group.data;
-  const k = g?.group?.k ?? model.samples;
   const direction = model.metricDirections[metric] ?? null;
+  // C085: the tiles, the curve and the distribution come from the rows' pass scores at once; the server's answer
+  // (with the confidence band) replaces them when it arrives for this metric and threshold.
+  const reportK = group.data?.report_k ?? null;
+  const local = useMemo(
+    () =>
+      model.samples > 1
+        ? localRepeatStats(model.rows, metric, committed, model.samples, direction, reportK)
+        : null,
+    [model.rows, model.samples, metric, committed, direction, reportK],
+  );
+  const serverIsCurrent =
+    !!group.data &&
+    !group.isPlaceholderData &&
+    group.data.metric === metric &&
+    Math.abs(Number(group.data.threshold) - committed) < 1e-9;
+  const g = repeatStatsView(group.data, serverIsCurrent, local);
+  const k = g?.group?.k ?? model.samples;
   const passBased = model.metricTypes[metric] !== 'numeric' && !!direction;
   const options = statisticOptions(passBased);
   const selected = options.find((o) => o.key === statistic) ?? options[0]!;
@@ -112,7 +128,7 @@ export function RepeatTab() {
           </span>
         ) : null}
       </div>
-      {group.isPending ? <Skeleton kind="cards" count={1} label="Loading repeat analysis" /> : null}
+      {group.isPending && !local ? <Skeleton kind="cards" count={1} label="Loading repeat analysis" /> : null}
       {group.isError ? (
         <ErrorState
           compact
