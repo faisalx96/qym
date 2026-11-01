@@ -132,7 +132,9 @@ test.describe('items table and item page editing (C003, C017)', () => {
     const req = await patch;
     expect(new URL(req.url()).pathname).toBe(`/v1/datasets/${d.slug}/versions/v1/items/case-1`);
     // the untouched expected_output ("51" string), metadata and labels are not sent at all
-    expect(req.postDataJSON()).toEqual({ input: 'What is 50+2?' });
+    expect(req.postDataJSON()).toMatchObject({ input: 'What is 50+2?' });
+    // plus the loaded updated_at, so a save after someone else's answers 409 (C015)
+    expect(Object.keys(req.postDataJSON() as object).sort()).toEqual(['expected_updated_at', 'input']);
 
     // a textarea reads "\r\n" back as "\n": an untouched multiline value is still unchanged
     await gotoApp(page, dsUrl(p, d, '?v=v1&item=case-2'));
@@ -141,7 +143,7 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await page.getByRole('textbox', { name: 'Expected output', exact: true }).fill('52');
     const patch2 = page.waitForRequest((r) => r.method() === 'PATCH' && r.url().includes('/items/case-2'));
     await save.click();
-    expect((await patch2).postDataJSON()).toEqual({ expected_output: '52' });
+    expect((await patch2).postDataJSON()).toMatchObject({ expected_output: '52' });
   });
 
   test('a string stays a string unless the field is switched to JSON', async ({ page, request }) => {
@@ -153,7 +155,7 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await page.getByRole('textbox', { name: 'Expected output', exact: true }).fill('52');
     const first = page.waitForRequest((r) => r.method() === 'PATCH');
     await page.getByTestId('save-item').click();
-    expect((await first).postDataJSON()).toEqual({ expected_output: '52' });
+    expect((await first).postDataJSON()).toMatchObject({ expected_output: '52' });
 
     await gotoApp(page, dsUrl(p, d, '?v=v1&item=case-1'));
     await expected.getByRole('radiogroup').getByText('JSON').click();
@@ -161,7 +163,7 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await expect(expected).toContainText('will be saved as number');
     const second = page.waitForRequest((r) => r.method() === 'PATCH');
     await page.getByTestId('save-item').click();
-    expect((await second).postDataJSON()).toEqual({ expected_output: 52 });
+    expect((await second).postDataJSON()).toMatchObject({ expected_output: 52 });
   });
 
   test('JSON values stay JSON; invalid JSON cannot be saved', async ({ page, request }) => {
@@ -180,7 +182,7 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await box.fill('8');
     const patch = page.waitForRequest((r) => r.method() === 'PATCH');
     await page.getByTestId('save-item').click();
-    expect((await patch).postDataJSON()).toEqual({ expected_output: 8 });
+    expect((await patch).postDataJSON()).toMatchObject({ expected_output: 8 });
   });
 });
 

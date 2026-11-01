@@ -13,9 +13,20 @@ export interface FieldDiffProps {
   /** Only one side exists (created / deleted). */
   onlyAfter?: boolean;
   onlyBefore?: boolean;
+  /** Pane names: 'before' / 'after' by default ('mine' / 'theirs' in a save conflict, C015). */
+  beforeLabel?: string;
+  afterLabel?: string;
 }
 
-export function FieldDiff({ field, before, after, onlyAfter, onlyBefore }: FieldDiffProps) {
+export function FieldDiff({
+  field,
+  before,
+  after,
+  onlyAfter,
+  onlyBefore,
+  beforeLabel = 'before',
+  afterLabel = 'after',
+}: FieldDiffProps) {
   const a = diffText(before);
   const b = diffText(after);
   const typeChanged = !onlyAfter && !onlyBefore && storedType(before) !== storedType(after);
@@ -47,10 +58,10 @@ export function FieldDiff({ field, before, after, onlyAfter, onlyBefore }: Field
         data-kind={isText ? 'text' : undefined}
       >
         {!onlyAfter ? (
-          <Pane label="before" text={a} ops={ops ? diffSide(ops, 'before') : null} tone="before" />
+          <Pane label={beforeLabel} text={a} ops={ops ? diffSide(ops, 'before') : null} tone="before" />
         ) : null}
         {!onlyBefore ? (
-          <Pane label="after" text={b} ops={ops ? diffSide(ops, 'after') : null} tone="after" />
+          <Pane label={afterLabel} text={b} ops={ops ? diffSide(ops, 'after') : null} tone="after" />
         ) : null}
       </div>
     </div>

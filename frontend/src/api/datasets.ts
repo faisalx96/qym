@@ -851,6 +851,8 @@ export interface ItemBody {
   expected_output?: unknown;
   metadata?: Record<string, unknown>;
   labels?: string[];
+  /** The item's updated_at as the editor loaded it: the save answers 409 when someone saved since (C015). */
+  expected_updated_at?: string;
 }
 
 export function useCreateItem(slug: string, ref: string, version: string) {

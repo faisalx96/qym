@@ -33,6 +33,7 @@ import {
 } from '@/ui';
 import { CreateDraftDialog, DisableItemDialog } from '../components/dialogs';
 import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
+import { ConflictNotice } from '../components/ConflictNotice';
 import { FieldEditor } from '../components/FieldEditor';
 import { VersionBadge } from '../components/VersionSwitcher';
 import { useItemEditor } from './useItemEditor';
@@ -125,6 +126,15 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
   async function save() {
     try {
       const saved = await editor.save();
+      if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
+    }
+  }
+
+  async function keepMine() {
+    try {
+      const saved = await editor.keepMine();
       if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
     } catch (e) {
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
@@ -303,6 +313,14 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         <TabPanel id="details">
           <div className={styles.panels}>
             <div className={styles.mainCol}>
+              {editor.conflict ? (
+                <ConflictNotice
+                  conflict={editor.conflict}
+                  busy={editor.saving}
+                  onReview={editor.reviewTheirs}
+                  onKeep={() => void keepMine()}
+                />
+              ) : null}
               <FieldEditor
                 label="Input"
                 value={item.input}

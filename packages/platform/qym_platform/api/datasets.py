@@ -1926,6 +1926,8 @@ class PatchItemRequest(BaseModel):
     expected_output: Any = None
     metadata: Optional[Dict[str, Any]] = None
     labels: Optional[list[str]] = None
+    # The item's updated_at as the editor loaded it: a save answers 409 when someone saved since (C015).
+    expected_updated_at: Optional[str] = None
 
 
 class BulkUpsertEntry(BaseModel):
@@ -3161,8 +3163,27 @@ def update_item(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Dataset item not found")
+    if req.expected_updated_at and req.expected_updated_at != to_api_timestamp(item.updated_at):
+        # Someone saved this item after the editor loaded it: say who and send their version (C015).
+        last = (
+            db.query(DatasetItemRevision)
+            .filter(DatasetItemRevision.dataset_item_id == item.id)
+            .order_by(DatasetItemRevision.id.desc())
+            .first()
+        )
+        editor = db.get(User, last.actor_user_id) if last and last.actor_user_id else None
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "item_changed",
+                "message": "Someone else saved this item after you opened it.",
+                "item": _item_payload(item, users=_item_users(db, [item])),
+                "changed_by": _user_payload(editor),
+                "changed_at": to_api_timestamp(item.updated_at),
+            },
+        )
     before = _item_snapshot(item)
-    changes = req.model_dump(exclude_unset=True)
+    changes = req.model_dump(exclude_unset=True, exclude={"expected_updated_at"})
     next_item_id = (changes.get("item_id") or "").strip() or item.item_id
     input_value = _json_safe(changes["input"]) if "input" in changes else item.input
     expected = _json_safe(changes["expected_output"]) if "expected_output" in changes else item.expected_output
