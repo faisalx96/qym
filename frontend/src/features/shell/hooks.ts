@@ -15,9 +15,10 @@ export function useDocumentTitle(title: string | null | undefined): void {
   }, [title]);
 }
 
-export const COLLAPSE_BREAKPOINT = 760;
+/** C134: below 1023px the sidebar is an overlay (tablets and phones); below 600px there is no rail either. */
+export const COLLAPSE_BREAKPOINT = 1023;
 
-/** Sidebar collapse persisted in localStorage['qym:sidebar-collapsed']; auto-collapse ≤760px. */
+/** Sidebar collapse persisted in localStorage['qym:sidebar-collapsed']; auto-collapse ≤1023px. */
 export function useSidebarCollapsed(): [boolean, () => void, boolean] {
   const narrow = useMediaQuery(`(max-width: ${COLLAPSE_BREAKPOINT}px)`);
   const [stored, setStored] = useState(() => readLocal(KEYS.sidebarCollapsed) === '1');

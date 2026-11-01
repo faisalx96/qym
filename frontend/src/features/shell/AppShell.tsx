@@ -19,8 +19,8 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
  * Variant A (UX_DECISION.md): persistent left sidebar (brand · global · project
  * pages · Platform for admins · user footer) + 50px topbar (collapse toggle,
  * breadcrumb project switcher, read-only tag, Ctrl/Cmd+K palette). Pages keep their own counts.
- * `main#shell-content` is the only scroller; ≤760px the sidebar auto-collapses
- * and expands as an overlay.
+ * `main#shell-content` is the only scroller; ≤1023px the sidebar auto-collapses
+ * and expands as an overlay, and below 600px the collapsed rail goes too (C134).
  */
 export function AppShell() {
   const { me, isAdmin } = useAuth();
