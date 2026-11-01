@@ -29,11 +29,12 @@ function Mark({ index, children, block }: { index: number; children: ReactNode; 
 }
 
 export function AveragesMatrix() {
-  const { model, columns, baseline, items, ctx, c } = useCompare();
+  const { model, columns, baseline, ctx, c } = useCompare();
   // C058: unpaired runs show their averages side by side, with no change, band or counts
   const unpaired = !!model.unpaired;
   const narrow = useMediaQuery('(max-width: 640px)');
-  const ids = useMemo(() => new Set(items.map((i) => i.itemId)), [items]);
+  // C011: the averages and their verdicts are over every aligned item; a filter only picks rows to read
+  const ids = useMemo(() => new Set(model.itemIds), [model.itemIds]);
   const data = useMemo(
     () => buildColumnRows(model, columns, baseline, ids, c.view.thresholds),
     [model, columns, baseline, ids, c.view.thresholds],

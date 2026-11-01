@@ -18,7 +18,7 @@ export interface CompareValue {
   /** Items after every filter, in display order. */
   items: FilteredItem[];
   itemIds: string[];
-  /** Stats over the filtered items. */
+  /** Stats over every aligned item (C011): filters pick the rows to read, not the statistics. */
   stats: ComparisonStats;
   defs: FieldDef[];
   cohorts: CohortGroups | null;

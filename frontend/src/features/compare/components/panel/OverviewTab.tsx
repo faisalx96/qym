@@ -1,4 +1,4 @@
-/** Stats strip, winner breakdown and "how many runs were correct" over the filtered items (brief 05 J4). */
+/** Stats strip, winner breakdown and "how many runs were correct" over every aligned item (brief 05 J4, C011). */
 import { formatLatency, formatMetricValue, metricBand } from '@/lib/metrics';
 import type { CSSProperties } from 'react';
 import { HelpMarker } from '@/ui';

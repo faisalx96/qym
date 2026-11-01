@@ -185,9 +185,11 @@ function CompareLoaded({
     [model, c.view, metric, c.thresholds, c.cohorts, search.matcher],
   );
   const itemIds = useMemo(() => (result ? result.items.map((i) => i.itemId) : []), [result]);
+  // C011: the Overview strip is over every aligned item; a score-derived filter selects rows for reading and must not
+  // feed the statistics that defined it
   const stats = useMemo(
-    () => (c.ctx ? computeComparisonStats(model, c.ctx, itemIds) : null),
-    [model, c.ctx, itemIds],
+    () => (c.ctx ? computeComparisonStats(model, c.ctx, model.itemIds) : null),
+    [model, c.ctx],
   );
   const barRef = useRef<HTMLDivElement>(null);
   const letters = useMemo(
