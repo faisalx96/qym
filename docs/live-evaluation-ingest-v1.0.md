@@ -1,4 +1,6 @@
-# Live Evaluation Ingest API — Integration Guide v1.0
+# Live Evaluation Ingest API — Integration Guide v1.1
+
+v1.1 — chart images. Additive to v1.0; existing producers keep working.
 
 The evaluation worker publishes its configuration, daily counters, evaluated turns,
 and active probe results through this API. Writes are synchronous: a successful
@@ -19,6 +21,9 @@ Authorization: Bearer <project API key>
 Content-Type: application/json
 ```
 
+Chart image uploads use `Content-Type: image/png` and a raw PNG body instead
+(section 3.8).
+
 The key must belong to the project in the path. Its owner must remain active and
 retain project access. An archived project refuses ingestion. UI authentication
 being disabled in a local deployment does not remove the API-key requirement.
@@ -30,7 +35,7 @@ ingestion service also serves them under `QYM_INGESTION_PREFIX` (default
 routes depend on `QYM_INGESTION_LEGACY_PATHS`. Set `BASE_URL` to the service origin
 plus its deployed prefix, without a trailing slash; append the router path once.
 
-During maintenance, **all seven routes**, including `GET turns/ids`, return
+During maintenance, **all eight routes**, including `GET turns/ids`, return
 `503` with `{"detail":"Platform is in maintenance mode; retry later"}` and
 `Retry-After: 60`. Retain pending data and retry after that delay.
 
@@ -58,6 +63,8 @@ DAY="2026-11-01"
    `current_day`, `last_poll_at`, and changed worker metadata.
 5. After each evaluation, push the turn and its complete score set. Batch buffered
    turns within the configured cap and inspect every result for rejection.
+   After a turn is accepted, upload any chart screenshots using its
+   `summary.charts[].ref` values.
 6. After each probe sweep, push the canary results with their original check times.
 7. On restart or during reconciliation, call `GET .../turns/ids?day=YYYY-MM-DD` and
    compare the returned list with local IDs. Push missing or re-evaluated turns.
@@ -335,6 +342,45 @@ Response (`200`), sorted by `turn_id`, without pagination:
 `404` source/project absent; `409` archived project; `422` missing/invalid day or
 invalid key; `503` maintenance.
 
+### 3.8 `PUT /sources/{key}/turns/{turn_id}/charts/{ref}/image` — upload a chart screenshot
+
+Send the PNG as the raw request body with `Content-Type: image/png` and the
+project API key. Do not JSON-encode, base64-encode or wrap it in multipart form
+data. The turn must already exist, and `ref` must match one of its
+`summary.charts[].ref` values: that reference links the screenshot to the chart.
+
+```bash
+curl -sS -X PUT "$SOURCE/turns/turn-1/charts/chart-1/image" \
+  -H "Authorization: Bearer $API_KEY" -H "Content-Type: image/png" \
+  --data-binary @chart.png
+```
+
+Response: `204 No Content` on both creation and replacement. Repeating the PUT
+for the same turn and ref replaces the stored bytes and image metadata. It does
+not consume another image slot, even when the turn is at its image limit.
+
+The platform limits each image to `QYM_LIVE_CHART_IMAGE_MAX_BYTES` (default
+**2097152**, 2 MiB; minimum **65536**). Both `Content-Length` and streamed bytes
+are checked. This limit is separate from the JSON ingest body cap. At most
+`QYM_LIVE_CHART_IMAGES_PER_TURN` distinct refs may have images on one turn
+(default **10**). The PNG signature and IHDR must be readable.
+
+| HTTP / scope | Exact detail or message | Meaning / action |
+|---|---|---|
+| `404` | `turn not found` | Push the turn before its screenshots |
+| `404` | `chart not found` | Use a ref declared in this turn's `summary.charts` |
+| `409` | `chart image limit reached` | The turn already has the configured number of distinct image refs; replacing an existing ref is allowed |
+| `409` | `Project is archived; its API keys stop working until an admin unarchives it` | Same archived-project guard as other key-only writes |
+| `413` | `The event batch exceeds ...; send smaller batches.` | Image body exceeds `QYM_LIVE_CHART_IMAGE_MAX_BYTES`; reduce the PNG size |
+| `415` | `unsupported content type` | Send `Content-Type: image/png` |
+| `422` | `invalid PNG` | PNG signature or IHDR is unreadable |
+| `503` | `Platform is in maintenance mode; retry later` | Buffer and retry; `Retry-After: 60` |
+
+The authentication, source lookup and path validation errors in section 6 also
+apply. Re-pushing a turn keeps images whose refs remain in `summary.charts` and
+drops images whose refs disappeared. Images follow the turn's retention
+(180 days by default) and are removed when the project is deleted.
+
 ---
 
 ## 4. Turn, summary, and Score schema
@@ -403,7 +449,7 @@ do not recognize them.
 | `tools.failures[]` | `{name: string, step: integer, error: string, fault: string}` | Failed call and fault classification |
 | `tools.list[]` | `{name: string, step: integer, ok: boolean}` | Observed calls in sequence |
 | `sql_notes` | `{reused_by_judges: boolean, dialect_ok: boolean, validator_ok: boolean}` | Query reuse and validation findings |
-| `charts` | `[{ref: string, kind: string, scores: {name: number}, issues: string[], reading: string}]` | Chart references, types, metric values, issues and interpretation |
+| `charts` | `[{ref: string, kind: string, scores: {name: number}, issues: string[], reading: string}]` | Chart references, types, metric values, issues and interpretation; `charts[].ref` links each optional screenshot uploaded through section 3.8 |
 | `services` | `{name: {status: string, score: number or null, fault: string or null, signals: object}}` | Per-service state and evidence; e.g. status `ok`, `failed`, `skipped`; service names are data |
 | `manifest_hash` | string | Reference/configuration manifest identifier |
 | `evaluation_failed` | boolean | Whether evaluation itself failed |
@@ -525,7 +571,7 @@ null numeric score.
 - All six JSON-body POST/PUT routes enforce `QYM_LIVE_INGEST_MAX_BODY_BYTES`
   (default **67108864**, 64 MiB; minimum **1048576**). Both `Content-Length`
   and streamed bytes are checked before parsing JSON; oversized bodies return
-  `413`. There is no API rate limit in v1.0.
+  `413`. There is no API rate limit in v1.1.
 - Non-finite numbers (`NaN`, `Infinity`, `-Infinity`) are rejected in numeric
   scores, turn/canary latency, and metric thresholds. A turn is also rejected
   with `non-finite number in JSON` if any nested value in its `summary`, `detail`,
@@ -660,9 +706,11 @@ print(json.dumps(turn_ids))
 
 ## 8. Quick reference
 
-Paths below use the router's literal `{key:path}` notation. `:path` is a route
-converter, not text to send; substitute a valid source key as in the examples.
-It allows invalid slash-containing keys to reach validation and receive `422`.
+Paths below use the router's literal `{key:path}` and `{turn_id:path}` notation.
+`:path` is a route converter, not text to send; substitute the key or turn ID as
+in the examples. On the JSON routes it allows invalid slash-containing source
+keys to reach validation and receive `422`; the image route accepts turn IDs
+containing slashes.
 Prepend the deployed ingestion alias prefix when required. The `day` query
 parameter is mandatory on the final route.
 
@@ -673,7 +721,8 @@ parameter is mandatory on the final route.
 | `PUT` | `/v1/projects/{project_id}/live/sources/{key:path}/metric-specs` | Replace specs | `200` |
 | `PUT` | `/v1/projects/{project_id}/live/sources/{key:path}/days/{day}` | Replace daily counters | `200` |
 | `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/turns` | Create/replace turns with per-turn results | `200` |
+| `PUT` | `/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image` | Create/replace chart screenshot (raw PNG) | `204` |
 | `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/canaries` | Insert checks once per name and time | `200` |
 | `GET` | `/v1/projects/{project_id}/live/sources/{key:path}/turns/ids` | Reconcile IDs (`?day=YYYY-MM-DD`) | `200` |
 
-Changelog: v1.0 (2026-11): first version.
+Changelog: v1.1 (2026-11): chart images; v1.0 (2026-11): first version.

@@ -15,10 +15,12 @@ import argparse
 import json
 import random
 import re
+import struct
 import sys
 import urllib.error
 import urllib.request
 import uuid
+import zlib
 from datetime import datetime, time, timedelta, timezone
 
 DIAGNOSES = [
@@ -81,12 +83,12 @@ REASONS = {
 }
 
 
-def call(base, path, *, method="GET", body=None, token=None):
+def call(base, path, *, method="GET", body=None, token=None, content_type="application/json"):
     headers = {}
     data = None
     if body is not None:
-        headers["Content-Type"] = "application/json"
-        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = content_type
+        data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode("utf-8")
     if token:
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(base + path, data=data, method=method, headers=headers)
@@ -99,6 +101,22 @@ def call(base, path, *, method="GET", body=None, token=None):
         raise SystemExit(f"{method} {path} -> {exc.code}: {detail}") from None
     except urllib.error.URLError as exc:
         raise SystemExit(f"{method} {path} -> connection failed: {exc.reason}") from None
+
+
+def chart_png(day_index: int) -> bytes:
+    """Generate a 240×140 solid-colour PNG without image dependencies."""
+    width, height = 240, 140
+    color = bytes(((48 + day_index * 31) % 256, (112 + day_index * 47) % 256,
+                   (176 + day_index * 19) % 256))
+    pixels = (b"\x00" + color * width) * height
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (struct.pack("!I", len(data)) + kind + data
+                + struct.pack("!I", zlib.crc32(kind + data) & 0xffffffff))
+
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack("!2I5B", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b""))
 
 
 def ensure_project(base, slug):
@@ -309,6 +327,7 @@ def main() -> None:
     labels = [entry[0] for entry, size in zip(DIAGNOSES, counts) for _ in range(size)]
     rng.shuffle(labels)
     count = 0
+    images_uploaded = 0
     for offset in range(args.days):
         day = now.date() - timedelta(days=args.days - offset - 1)
         start = datetime.combine(day, time.min, tzinfo=timezone.utc)
@@ -327,6 +346,13 @@ def main() -> None:
             if report["rejected"]:
                 raise SystemExit(f"Rejected seed turns: {json.dumps(report['results'])}")
             count += report["accepted"] + report["updated"]
+        charted_turns = [turn for turn in turns if turn["summary"]["charts"]]
+        image = chart_png(offset)
+        for turn in charted_turns[1:]:
+            for chart in turn["summary"]["charts"]:
+                path = source + f"/turns/{turn['turn_id']}/charts/{chart['ref']}/image"
+                call(base, path, method="PUT", token=token, body=image, content_type="image/png")
+                images_uploaded += 1
         if historical and not args.stale:
             call(base, source + "/heartbeat", method="POST", token=token,
                  body={"at": iso(last_poll), "last_poll_at": iso(last_poll),
@@ -359,7 +385,8 @@ def main() -> None:
         call(base, source + "/heartbeat", method="POST", token=token,
              body={"at": iso(at), "last_poll_at": iso(at), "current_day": now.date().isoformat(),
                    "worker": worker})
-    print(json.dumps({"project": project["slug"], "source": args.source_key, "days": args.days, "turns": count}))
+    print(json.dumps({"project": project["slug"], "source": args.source_key, "days": args.days,
+                      "turns": count, "images_uploaded": images_uploaded}))
 
 
 if __name__ == "__main__":

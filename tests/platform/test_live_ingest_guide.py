@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from qym_platform.api.live_ingest import live_ingest_router
 from qym_platform.db.models import LiveTurn
 from sqlalchemy.orm import sessionmaker
@@ -38,6 +39,27 @@ def test_guide_lists_every_route():
         for method in route.methods
     }
     assert expected <= documented, f"Missing routes: {expected - documented}"
+
+
+def test_guide_chart_image_request_matches_openapi():
+    guide = GUIDE.read_text(encoding="utf-8")
+    section = guide.split("### 3.8 ", 1)[1].split("\n---", 1)[0]
+    method, path = re.match(r"`(\w+) ([^`]+)`", section).groups()
+    app = FastAPI()
+    app.include_router(live_ingest_router)
+    operation = app.openapi()["paths"][live_ingest_router.prefix + path][method.lower()]
+
+    content_type = re.search(r'-H "Content-Type: ([^"]+)"', section).group(1)
+    assert content_type == "image/png"
+    assert operation["requestBody"] == {
+        "required": True,
+        "content": {content_type: {"schema": {"type": "string", "format": "binary"}}},
+    }
+    assert "--data-binary @chart.png" in section
+    status = re.search(r"Response: `(\d+) No Content`", section).group(1)
+    assert status == "204"
+    assert status in operation["responses"]
+    assert "content" not in operation["responses"][status]
 
 
 def test_guide_python_example_runs_against_the_app(

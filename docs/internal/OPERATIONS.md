@@ -872,7 +872,23 @@ Create a **project API key** in **Project settings → API keys**. Name it after
 the environment, for example `preprod`. The key must belong to `QYM_PROJECT_ID`;
 its owner must remain active and retain project access. The live ingest API
 requires this key even when UI authentication is disabled. The request contract
-is in [Live Evaluation Ingest v1.0](../live-evaluation-ingest-v1.0.md).
+is in [Live Evaluation Ingest v1.1](../live-evaluation-ingest-v1.0.md).
+
+**Chart screenshots.** qym stores PNG bytes and image metadata in PostgreSQL's
+`live_chart_images` table (migration `0093`). The platform settings
+`QYM_LIVE_CHART_IMAGE_MAX_BYTES` (default 2097152, 2 MiB; minimum 65536) and
+`QYM_LIVE_CHART_IMAGES_PER_TURN` (default 10) cap each image and the number of
+distinct image refs per turn. Budget roughly 150–300 KB per chart: about
+15 MB/day at 100 turns/day with 40 % charted turns, or 2.7 GB at the default
+180-day retention. Images follow turn retention and project deletion; backups
+remain a single `pg_dump`.
+
+Platform env settings for screenshots:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `QYM_LIVE_CHART_IMAGE_MAX_BYTES` | `2097152` | Maximum bytes per PNG (2 MiB; minimum 65536) |
+| `QYM_LIVE_CHART_IMAGES_PER_TURN` | `10` | Maximum distinct chart image refs per turn |
 
 ### Compose
 
@@ -894,6 +910,8 @@ Worker env file:
 | `QYM_LIVE_ENVIRONMENT` | Environment label, for example `preprod` |
 | `QYM_LIVE_TIMEOUT_SECONDS` | Optional; HTTP timeout per push in seconds (default 10) |
 | `QYM_LIVE_DETAIL` | Optional; `full` (default) pushes the complete per-turn evidence as the turn detail, `summary` pushes the summary only |
+| `QYM_LIVE_CHART_IMAGES` | Optional; `true` (default) uploads chart screenshots |
+| `QYM_LIVE_CHART_IMAGE_MAX_BYTES` | Optional; worker-side cap in bytes (default 2097152); must not exceed the platform's cap |
 
 Compose variables (set in the shell or Compose `.env`, not the worker env file):
 
