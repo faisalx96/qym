@@ -311,8 +311,11 @@ function CompareLoaded({
       {c.cohorts ? <CohortBanner /> : null}
       <div ref={barRef} className={styles.focusRoot}>
         <SeriesHighlightRoot className={styles.focusRoot}>
-          {sweep ? null : <CompareBar />}
-          <ItemsUiHost>{sweep ? <SweepView /> : <CompareBody />}</ItemsUiHost>
+          {/* CompareBar reads the Items UI state (Filters open), so it sits inside the host too (K6). */}
+          <ItemsUiHost>
+            {sweep ? null : <CompareBar />}
+            {sweep ? <SweepView /> : <CompareBody />}
+          </ItemsUiHost>
         </SeriesHighlightRoot>
       </div>
     </CompareCtx.Provider>
