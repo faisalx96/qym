@@ -202,8 +202,12 @@ def _upsert_turn(
 ) -> dict[str, Any]:
     """Replace one turn and its complete score set within the caller's savepoint."""
     values, notes = _turn_values(body, settings)
+    # Match retention's turn-before-children lock order.
     row = (
-        db.query(LiveTurn).filter_by(source_id=source.id, turn_id=body.turn_id).first()
+        db.query(LiveTurn)
+        .filter_by(source_id=source.id, turn_id=body.turn_id)
+        .with_for_update()
+        .first()
     )
     created = row is None
     if row is None:
@@ -211,6 +215,18 @@ def _upsert_turn(
         db.add(row)
     else:
         values["summary"]["replaced_at"] = to_api_timestamp(utcnow())
+        charts = values["summary"].get("charts", [])
+        if not isinstance(charts, list):
+            charts = []
+        refs = {
+            chart["ref"]
+            for chart in charts
+            if isinstance(chart, dict) and isinstance(chart.get("ref"), str)
+        }
+        db.query(LiveChartImage).filter(
+            LiveChartImage.turn_pk == row.id,
+            LiveChartImage.ref.notin_(refs),
+        ).delete(synchronize_session=False)
         db.query(LiveTurnScore).filter_by(turn_pk=row.id).delete(
             synchronize_session=False
         )

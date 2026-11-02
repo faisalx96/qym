@@ -14,7 +14,14 @@ from test_live_ingest_sources import (  # noqa: F401
     session_factory,
 )
 
-from qym_platform.db.models import LiveCanaryResult, LiveSource, LiveTurn, LiveTurnScore
+from _live_support import _png
+from qym_platform.db.models import (
+    LiveCanaryResult,
+    LiveChartImage,
+    LiveSource,
+    LiveTurn,
+    LiveTurnScore,
+)
 from qym_platform.settings import PlatformSettings
 
 METRICS = ("accuracy", "compliance", "coverage")
@@ -59,6 +66,15 @@ def _push(client, turns):
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _upload_chart(client, turn_id, ref):
+    response = client.put(
+        f"{BASE}/turns/{turn_id}/charts/{ref}/image",
+        headers={**_auth_headers(), "Content-Type": "image/png"},
+        content=_png(),
+    )
+    assert response.status_code == 204, response.text
 
 
 def test_batch_creates_turns_and_scores(client, session_factory):
@@ -177,6 +193,65 @@ def test_repush_replaces_turn_and_scores(client, session_factory, monkeypatch):
             ("compliance", 1.0),
         ]
         assert session.query(LiveSource).one().last_turn_at == datetime(2026, 11, 1, 10)
+
+
+def test_repush_keeps_surviving_chart_images_only(client, session_factory):
+    _create_source(client)
+    removed_ref = "chart_20261101_abcd1234"
+    kept_ref = "chart_20261101_ffff0000"
+    _push(
+        client,
+        [
+            _turn(summary={"charts": [{"ref": removed_ref}, {"ref": kept_ref}]}),
+            _turn("other-turn", summary={"charts": [{"ref": removed_ref}]}),
+        ],
+    )
+    for turn_id, ref in (
+        ("turn-1", removed_ref),
+        ("turn-1", kept_ref),
+        ("other-turn", removed_ref),
+    ):
+        _upload_chart(client, turn_id, ref)
+    with session_factory() as session:
+        turn_pk = session.query(LiveTurn).filter_by(turn_id="turn-1").one().id
+        kept = session.query(LiveChartImage).filter_by(turn_pk=turn_pk, ref=kept_ref).one()
+        kept_image = (kept.id, kept.image, kept.sha256, kept.received_at)
+
+    report = _push(
+        client,
+        [_turn(summary={"charts": [{"ref": kept_ref}, {"ref": "new-chart"}, {}]})],
+    )
+    assert report["updated"] == 1 and report["rejected"] == 0
+    with session_factory() as session:
+        kept = session.query(LiveChartImage).filter_by(turn_pk=turn_pk).one()
+        assert kept.ref == kept_ref
+        assert (kept.id, kept.image, kept.sha256, kept.received_at) == kept_image
+        other_turn = session.query(LiveTurn).filter_by(turn_id="other-turn").one()
+        other_image = session.query(LiveChartImage).filter_by(turn_pk=other_turn.id).one()
+        assert other_image.ref == removed_ref
+
+
+def test_repush_removed_chart_frees_image_limit(client, session_factory, monkeypatch):
+    _create_source(client)
+    monkeypatch.setattr(
+        "qym_platform.api.live_ingest.ingest_settings",
+        lambda: PlatformSettings(live_chart_images_per_turn=1),
+    )
+    old_ref, new_ref = "chart_20261101_abcd1234", "chart_20261101_ffff0000"
+    _push(client, [_turn(summary={"charts": [{"ref": old_ref}]})])
+    _upload_chart(client, "turn-1", old_ref)
+
+    report = _push(client, [_turn(summary={"charts": [{"ref": new_ref}]})])
+    assert report["updated"] == 1 and report["rejected"] == 0
+    _upload_chart(client, "turn-1", new_ref)
+    with session_factory() as session:
+        assert session.query(LiveChartImage).one().ref == new_ref
+
+    # A re-push without charts removes the last image as well.
+    report = _push(client, [_turn()])
+    assert report["updated"] == 1 and report["rejected"] == 0
+    with session_factory() as session:
+        assert session.query(LiveChartImage).count() == 0
 
 
 def test_duplicate_turn_id_in_one_batch_last_wins(client, session_factory):

@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date, datetime, timedelta
 
 import pytest
-from _live_support import seed_week
+from _live_support import _png, seed_week
 from qym_platform.db.models import (
     AuditLog,
     LiveCanaryResult,
+    LiveChartImage,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
     LiveTurn,
     LiveTurnScore,
 )
-from sqlalchemy import select
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 
 # The first three seeded days expire; October 29 through November 1 remain.
@@ -31,9 +33,13 @@ def session_factory(database):
     return factory
 
 
-def test_purge_deletes_old_turns_scores_and_canaries_only(session_factory):
+@pytest.mark.parametrize("batch_size", [5, 16])
+def test_purge_deletes_old_turns_scores_and_canaries_only(
+    session_factory, monkeypatch, batch_size
+):
     from qym_platform.services.live_retention import purge_live
 
+    monkeypatch.setattr("qym_platform.services.live_retention.BATCH_SIZE", batch_size)
     with session_factory() as db:
         source = db.query(LiveSource).one()
         cutoff = datetime(2026, 10, 29, 12)
@@ -50,6 +56,21 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(session_factory):
                     status="ok",
                 )
             )
+        image = _png()
+        for turn in db.query(LiveTurn):
+            db.add(
+                LiveChartImage(
+                    turn_pk=turn.id,
+                    ref="chart_20261101_abcd1234",
+                    content_type="image/png",
+                    byte_size=len(image),
+                    width=3,
+                    height=2,
+                    sha256=hashlib.sha256(image).hexdigest(),
+                    image=image,
+                    received_at=NOW,
+                )
+            )
         db.commit()
         kept_turn_ids = {
             row.id
@@ -64,6 +85,11 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(session_factory):
             .where(LiveTurnScore.turn_pk.in_(kept_turn_ids))
             .order_by(LiveTurnScore.id)
         ).all()
+        kept_images = db.execute(
+            select(LiveChartImage.__table__)
+            .where(LiveChartImage.turn_pk.in_(kept_turn_ids))
+            .order_by(LiveChartImage.id)
+        ).all()
         kept_canaries = db.execute(
             select(LiveCanaryResult.__table__)
             .where(LiveCanaryResult.checked_at >= cutoff)
@@ -72,11 +98,14 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(session_factory):
         assert len(old_turn_ids) == 16
         assert len(kept_turn_ids) == 24
         assert len(kept_scores) == 144
+        assert len(kept_images) == 24
         assert len(kept_canaries) == 5
 
     counts = purge_live(session_factory, retention_days=180, now=NOW)
 
-    assert counts == {"turns": 16, "scores": 96, "canaries": 2, "days": 0}
+    assert counts == {
+        "turns": 16, "scores": 96, "chart_images": 16, "canaries": 2, "days": 0
+    }
     with session_factory() as db:
         assert {row.id for row in db.query(LiveTurn)} == kept_turn_ids
         assert {row.day for row in db.query(LiveTurn)} == {
@@ -96,6 +125,10 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(session_factory):
             == kept_scores
         )
         assert (
+            db.execute(select(LiveChartImage.__table__).order_by(LiveChartImage.id)).all()
+            == kept_images
+        )
+        assert (
             db.execute(
                 select(LiveCanaryResult.__table__).order_by(LiveCanaryResult.id)
             ).all()
@@ -110,11 +143,114 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(session_factory):
     assert purge_live(session_factory, retention_days=180, now=NOW) == {
         "turns": 0,
         "scores": 0,
+        "chart_images": 0,
         "canaries": 0,
         "days": 0,
     }
     with session_factory() as db:
         assert db.query(AuditLog).filter_by(action="live_retention").count() == 1
+
+
+def test_sqlite_repush_after_batch_selection_survives_purge(tmp_path):
+    from test_live_ingest_sources import _seed_api_key
+
+    from qym_platform.api.live_ingest import TurnBody
+    from qym_platform.db.base import Base
+    from qym_platform.services.live_ingest import upsert_chart_image, upsert_turns
+    from qym_platform.services.live_retention import purge_live
+    from qym_platform.settings import PlatformSettings
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'live-retention-race.db'}")
+    factory = sessionmaker(bind=engine, autoflush=False)
+    settings = PlatformSettings()
+    cutoff = date(2026, 10, 29)
+    ref = "chart_20261101_abcd1234"
+    image = _png()
+
+    def turn(turn_id, day, score):
+        return TurnBody(
+            turn_id=turn_id,
+            day=day,
+            turn_at=datetime(2026, 10, 28, 12),
+            status="completed",
+            question="Question?",
+            summary={"charts": [{"ref": ref}]},
+            scores=[{"metric_name": "accuracy", "score_numeric": score}],
+        )
+
+    try:
+        Base.metadata.create_all(engine)
+        with factory() as db:
+            _seed_api_key(db)
+            source = LiveSource(
+                project_id="live-project-1",
+                key="worker",
+                name="Worker",
+                environment="test",
+            )
+            db.add(source)
+            db.flush()
+            source_id = source.id
+            report = upsert_turns(
+                db,
+                source,
+                [
+                    turn(name, cutoff - timedelta(days=1), 0.5)
+                    for name in ("repushed", "expired")
+                ],
+                settings,
+            )
+            assert report["accepted"] == 2
+            for name in ("repushed", "expired"):
+                upsert_chart_image(db, source, name, ref, image, settings)
+            db.commit()
+            turn_ids = {row.turn_id: row.id for row in db.query(LiveTurn)}
+
+        repushed = False
+
+        def repush_before_children(
+            conn, cursor, statement, parameters, context, executemany
+        ):
+            nonlocal repushed
+            if repushed or not statement.startswith("DELETE FROM live_chart_images"):
+                return
+            # Re-push on a second connection after selection, before any child DELETE.
+            repushed = True
+            with factory() as db:
+                assert (
+                    db.connection().connection.driver_connection
+                    is not conn.connection.driver_connection
+                )
+                report = upsert_turns(
+                    db,
+                    db.get(LiveSource, source_id),
+                    [turn("repushed", cutoff + timedelta(days=1), 0.9)],
+                    settings,
+                )
+                assert report["updated"] == 1 and report["rejected"] == 0
+                db.commit()
+
+        event.listen(engine, "before_cursor_execute", repush_before_children)
+        try:
+            counts = purge_live(factory, retention_days=180, now=NOW)
+        finally:
+            event.remove(engine, "before_cursor_execute", repush_before_children)
+
+        assert repushed
+        with factory() as db:
+            kept = db.query(LiveTurn).one()
+            assert kept.id == turn_ids["repushed"]
+            assert kept.day == cutoff + timedelta(days=1)
+            assert db.get(LiveTurn, turn_ids["expired"]) is None
+            score = db.query(LiveTurnScore).one()
+            assert score.turn_pk == kept.id and score.score_numeric == 0.9
+            chart = db.query(LiveChartImage).one()
+            assert chart.turn_pk == kept.id and chart.image == image
+        assert counts == {
+            "turns": 1, "scores": 1, "chart_images": 1, "canaries": 0, "days": 0
+        }
+    finally:
+        engine.dispose()
 
 
 def test_purge_keeps_day_rows_under_two_years(session_factory):
@@ -155,7 +291,7 @@ def test_maintenance_loop_calls_purge_live(session_factory, database, monkeypatc
 
     def purge(factory, *, retention_days, now):
         calls.append((factory, retention_days, now))
-        return {"turns": 0, "scores": 0, "canaries": 0, "days": 0}
+        return {"turns": 0, "scores": 0, "chart_images": 0, "canaries": 0, "days": 0}
 
     monkeypatch.setenv("QYM_LIVE_RETENTION_DAYS", "180")
     monkeypatch.setattr(datetime_utils, "utc_now_naive", lambda: NOW)

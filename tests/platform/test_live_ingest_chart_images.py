@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import struct
-import zlib
 from datetime import datetime
 
 import pytest
@@ -16,30 +15,13 @@ from test_live_ingest_sources import (  # noqa: F401
     _seed_api_key,
 )
 
-from _live_support import seed_week
+from _live_support import _png, seed_week
 from qym_platform.db.models import LiveChartImage, LiveSource, LiveTurn, Project
 from qym_platform.settings import PlatformSettings
 
 TURN_ID = "turn-2026-11-01-0"
 REF = "chart_20261101_abcd1234"
 OTHER_REF = "chart_20261101_ffff0000"
-
-
-def _png(width=3, height=2, color=b"\xff\x00\x00\xff"):
-    def chunk(kind, data):
-        return (
-            struct.pack(">I", len(data))
-            + kind
-            + data
-            + struct.pack(">I", zlib.crc32(kind + data))
-        )
-
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
-        + chunk(b"IDAT", zlib.compress((b"\x00" + color * width) * height))
-        + chunk(b"IEND", b"")
-    )
 
 
 @pytest.fixture()

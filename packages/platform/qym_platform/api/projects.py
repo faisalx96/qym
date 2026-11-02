@@ -24,6 +24,7 @@ from qym_platform.db.models import (
     DatasetVersion,
     DatasetVersionChange,
     LiveCanaryResult,
+    LiveChartImage,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
@@ -1859,15 +1860,29 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
         synchronize_session=False
     )
 
-    # Live evaluation: scores point at turns, the other rows at sources.
+    # Live deletion order: lock turns -> children -> turns -> source rows.
     live_source_ids = select(LiveSource.id).where(LiveSource.project_id == project_id)
-    live_turn_ids = select(LiveTurn.id).where(LiveTurn.source_id.in_(live_source_ids))
-    db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk.in_(live_turn_ids)).delete(
-        synchronize_session=False
-    )
-    db.query(LiveTurn).filter(LiveTurn.source_id.in_(live_source_ids)).delete(
-        synchronize_session=False
-    )
+    live_turn_ids = [
+        row[0]
+        for row in db.execute(
+            select(LiveTurn.id)
+            .where(LiveTurn.source_id.in_(live_source_ids))
+            .order_by(LiveTurn.id)
+            .with_for_update()
+        ).all()
+    ]
+    batch_size = 1000
+    for offset in range(0, len(live_turn_ids), batch_size):
+        ids = live_turn_ids[offset : offset + batch_size]
+        db.query(LiveChartImage).filter(LiveChartImage.turn_pk.in_(ids)).delete(
+            synchronize_session=False
+        )
+        db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk.in_(ids)).delete(
+            synchronize_session=False
+        )
+        db.query(LiveTurn).filter(LiveTurn.id.in_(ids)).delete(
+            synchronize_session=False
+        )
     db.query(LiveCanaryResult).filter(
         LiveCanaryResult.source_id.in_(live_source_ids)
     ).delete(synchronize_session=False)

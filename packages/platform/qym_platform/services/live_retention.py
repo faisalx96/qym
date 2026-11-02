@@ -8,6 +8,7 @@ from typing import Callable
 from qym_platform.db.models import (
     AuditLog,
     LiveCanaryResult,
+    LiveChartImage,
     LiveDay,
     LiveTurn,
     LiveTurnScore,
@@ -21,31 +22,45 @@ logger = get_logger(__name__)
 BATCH_SIZE = 1000
 
 
-def _purge_turns(db: Session, cutoff: date) -> tuple[int, int]:
-    """Delete scores explicitly before their turns, committing each batch."""
-    turns = scores = 0
+def _purge_turns(db: Session, cutoff: date) -> tuple[int, int, int]:
+    """Lock each turn batch before deleting its images, scores and turns."""
+    turns = scores = chart_images = 0
     while True:
-        ids = (
-            select(LiveTurn.id)
-            .where(LiveTurn.day < cutoff)
-            .order_by(LiveTurn.id)
-            .limit(BATCH_SIZE)
+        ids = [
+            row[0]
+            for row in db.execute(
+                select(LiveTurn.id)
+                .where(LiveTurn.day < cutoff)
+                .order_by(LiveTurn.id)
+                .limit(BATCH_SIZE)
+                .with_for_update(skip_locked=True)
+            ).all()
+        ]
+        # SQLite ignores FOR UPDATE, so each DELETE must recheck the cutoff.
+        eligible = select(LiveTurn.id).where(
+            LiveTurn.id.in_(ids), LiveTurn.day < cutoff
+        )
+        deleted_images = (
+            db.query(LiveChartImage)
+            .filter(LiveChartImage.turn_pk.in_(eligible))
+            .delete(synchronize_session=False)
         )
         deleted_scores = (
             db.query(LiveTurnScore)
-            .filter(LiveTurnScore.turn_pk.in_(ids))
+            .filter(LiveTurnScore.turn_pk.in_(eligible))
             .delete(synchronize_session=False)
         )
         deleted_turns = (
             db.query(LiveTurn)
-            .filter(LiveTurn.id.in_(ids))
+            .filter(LiveTurn.id.in_(ids), LiveTurn.day < cutoff)
             .delete(synchronize_session=False)
         )
         db.commit()
         turns += deleted_turns
         scores += deleted_scores
-        if deleted_turns < BATCH_SIZE:
-            return turns, scores
+        chart_images += deleted_images
+        if len(ids) < BATCH_SIZE:
+            return turns, scores, chart_images
 
 
 def purge_live(
@@ -53,9 +68,11 @@ def purge_live(
 ) -> dict[str, int]:
     """Purge expired turns and canaries, retaining daily rows for 730 days."""
     cutoff = now - timedelta(days=retention_days)
-    counts = {"turns": 0, "scores": 0, "canaries": 0, "days": 0}
+    counts = {"turns": 0, "scores": 0, "chart_images": 0, "canaries": 0, "days": 0}
     with session_factory() as db:
-        counts["turns"], counts["scores"] = _purge_turns(db, cutoff.date())
+        counts["turns"], counts["scores"], counts["chart_images"] = _purge_turns(
+            db, cutoff.date()
+        )
         for name, model, condition in (
             ("canaries", LiveCanaryResult, LiveCanaryResult.checked_at < cutoff),
             ("days", LiveDay, LiveDay.day < (now - timedelta(days=730)).date()),

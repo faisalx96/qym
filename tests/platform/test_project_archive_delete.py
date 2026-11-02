@@ -8,6 +8,7 @@ a clear 409 while the project still has runs.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 from datetime import datetime
@@ -21,6 +22,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from _live_support import _png
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +48,7 @@ from qym_platform.db.models import (
     DatasetVersionChange,
     DatasetVersionStatus,
     LiveCanaryResult,
+    LiveChartImage,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
@@ -317,7 +321,12 @@ def test_delete_removes_datasets_llm_connections_and_settings(client, session_fa
     assert _row_counts(session_factory, keep_id) == keep_before
 
 
-def test_delete_removes_live_rows_only_for_the_project(client, session_factory):
+@pytest.mark.parametrize("foreign_keys", [True, False])
+def test_delete_removes_live_rows_only_for_the_project(client, session_factory, foreign_keys):
+    if not foreign_keys:
+        with session_factory() as db:
+            db.connection().exec_driver_sql("PRAGMA foreign_keys=OFF")
+    image = _png()
     projects = {}
     now = datetime(2026, 11, 1, 12)
     for slug in ("live-doomed", "live-keeper"):
@@ -347,6 +356,13 @@ def test_delete_removes_live_rows_only_for_the_project(client, session_factory):
             )
             db.flush()
             db.add(LiveTurnScore(turn_pk=turn.id, metric_name="accuracy", score_numeric=1.0))
+            db.add(
+                LiveChartImage(
+                    turn_pk=turn.id, ref="chart_20261101_abcd1234", content_type="image/png",
+                    byte_size=len(image), width=3, height=2,
+                    sha256=hashlib.sha256(image).hexdigest(), image=image, received_at=now,
+                )
+            )
             projects[slug] = (project_id, source.id, turn.id)
             db.commit()
 
@@ -372,6 +388,7 @@ def test_delete_removes_live_rows_only_for_the_project(client, session_factory):
             for model in (LiveMetricSpec, LiveDay, LiveTurn, LiveCanaryResult):
                 assert db.query(model).filter(model.source_id == source_id).count() == expected
             assert db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk == turn_pk).count() == expected
+            assert db.query(LiveChartImage).filter(LiveChartImage.turn_pk == turn_pk).count() == expected
 
 
 def test_delete_accepts_the_slug_as_confirmation(client, session_factory):

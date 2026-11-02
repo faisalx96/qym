@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import struct
+import zlib
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
@@ -14,6 +16,23 @@ from qym_platform.db.models import (
     LiveTurn,
     LiveTurnScore,
 )
+
+
+def _png(width=3, height=2, color=b"\xff\x00\x00\xff"):
+    def chunk(kind, data):
+        return (
+            struct.pack(">I", len(data))
+            + kind
+            + data
+            + struct.pack(">I", zlib.crc32(kind + data))
+        )
+
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress((b"\x00" + color * width) * height))
+        + chunk(b"IEND", b"")
+    )
 
 
 def seed_week(db: Session, project_id: str) -> LiveSource:
