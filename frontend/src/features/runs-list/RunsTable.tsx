@@ -531,6 +531,8 @@ export function RunsTable(p: RunsTableProps) {
               : 'Select row'
         }
         selectAllLabel="Select all runs on this page"
+        // C020: the select column stays (0px) out of select mode, so Select changes no column set
+        reserveSelection
         selectOnRowClick={p.selectMode}
         expandColumn={false}
         canExpand={(tr) => tr.kind === 'run' && tr.row.samples > 1}

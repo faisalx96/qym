@@ -144,6 +144,9 @@ export interface DataTableProps<R> {
   rowClassName?: (row: R) => string | undefined;
 
   selection?: SelectionConfig<R>;
+  /** Keep the select column in the table, 0px wide, while `selection` is off: turning select mode on then changes no
+   *  column set, so the table measures nothing (C020). */
+  reserveSelection?: boolean;
   bulkActions?: ReactNode;
   /** `bulkActions` already show their own count and Clear (the runs list counts executions). */
   bulkOwnSummary?: boolean;
@@ -236,7 +239,7 @@ export interface DataTableProps<R> {
 
 type TableEntry<R> = Extract<DisplayRow<R>, { kind: 'row' | 'child' }>;
 
-type PseudoColumn = Column<never> & { pseudo: 'select' | 'expand' | 'actions' };
+type PseudoColumn = Column<never> & { pseudo: 'select' | 'expand' | 'actions'; collapsed?: boolean };
 
 const OpenHref = createContext<(href: string) => void>((href) => window.location.assign(href));
 
@@ -262,6 +265,8 @@ function useMedia(query: string): boolean {
 }
 
 const VIRTUAL_AFTER = 200;
+/** Rows read for the content fit of a column set (C020): enough for a fair width, few enough for one cheap layout. */
+const FIT_SAMPLE_ROWS = 20;
 const ROW_PX: Record<Density, number> = { compact: 32, regular: 40, comfortable: 52 };
 /** First-guess height of a display row before it is measured: the density height, 45 for a full-width block. */
 const estimateHeight = (kind: DisplayRow<unknown>['kind'] | undefined, density: Density): number =>
@@ -438,6 +443,7 @@ function DataTableInner<R>({
   rowProps,
   rowClassName,
   selection,
+  reserveSelection,
   bulkActions,
   bulkOwnSummary,
   bulkAlways,
@@ -583,14 +589,17 @@ function DataTableInner<R>({
   /* columns incl. pseudo columns */
   const multi = Boolean(selection) && (selection?.mode ?? 'multiple') === 'multiple';
   const actionsOf = rowActions;
+  // reserved: the column stays (0px, empty) while selection is off, so select mode keeps the column set (C020)
+  const selectCol = multi || Boolean(reserveSelection && !selection);
   const leading: PseudoColumn[] = [];
-  if (multi)
+  if (selectCol)
     leading.push({
       id: '__select',
       pseudo: 'select',
-      width: 40,
+      width: multi ? 40 : 0,
       pin: 'start',
       resizable: false,
+      collapsed: !multi,
     } as PseudoColumn);
   if (renderExpanded && expandColumn)
     leading.push({
@@ -631,7 +640,7 @@ function DataTableInner<R>({
   const renderCols = useMemo(
     () => [...(leading as unknown as Column<R>[]), ...visible, ...(trailing as unknown as Column<R>[])],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visible, multi, hasExpander, hasActions],
+    [visible, multi, selectCol, hasExpander, hasActions],
   );
   const pseudoOf = (c: Column<R>) => (c as unknown as PseudoColumn).pseudo;
   const hasBands = groupBand && visible.some((c) => c.group);
@@ -640,8 +649,10 @@ function DataTableInner<R>({
     useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
 
   /* content fit (the `fit` prop): natural width per column, measured below; widths are derived in render */
-  const fitOn = fit === 'content' && !virtual && !cardMode && !loading;
-  const [natural, setNatural] = useState<Record<string, number> | null>(null);
+  const fitAllowed = fit === 'content' && !virtual && !cardMode;
+  const [measuredFit, setNatural] = useState<Record<string, number> | null>(null);
+  // a table without the content fit (fit off, virtual rows, cards) ignores what was measured
+  const natural = fitAllowed ? measuredFit : null;
 
   /* pin offsets from measured header widths */
   const [measured, setMeasured] = useState<Record<string, number>>({});
@@ -702,30 +713,39 @@ function DataTableInner<R>({
     };
   }, []);
   const shown = scrollerWidth > 0;
+  // Measured once per column set and density, from the first FIT_SAMPLE_ROWS rows, and kept: search, sort, page and
+  // poll change the rows but never toggle `data-measure` (a full-table layout) or move a column (C020). A new column
+  // set or density measures afresh; the same set measured again (fonts loaded, first rows after an empty list) only
+  // widens.
+  const fitKey = `${colSig}\u0002${model.density}`;
+  const fitCache = useRef<{ key: string; fonts: number; widths: Record<string, number> } | null>(null);
+  const hasRows = rows.length > 0;
   useLayoutEffect(() => {
     const table = tableRef.current;
-    if (!fitOn || !shown || !table) {
-      setNatural((p) => (p === null ? p : null));
+    if (!fitAllowed) return;
+    const cached = fitCache.current?.key === fitKey ? fitCache.current : null;
+    if (cached && cached.fonts === fontsTick) {
+      setNatural((p) => (p === cached.widths ? p : cached.widths));
+      return;
+    }
+    if (loading || !shown || !table || !hasRows) {
+      setNatural((p) => (p === (cached?.widths ?? null) ? p : (cached?.widths ?? null)));
       return;
     }
     table.setAttribute('data-measure', '');
-    const next: Record<string, number> = {};
+    const next: Record<string, number> = { ...(cached?.widths ?? {}) };
     table
       .querySelectorAll<HTMLElement>(
-        'tbody td[data-col] > [data-cell], thead th[data-col] [data-th-label]:not([data-hidden])',
+        `tbody tr:nth-child(-n+${FIT_SAMPLE_ROWS}) td[data-col] > [data-cell], thead th[data-col] [data-th-label]:not([data-hidden])`,
       )
       .forEach((el) => {
         const id = el.closest<HTMLElement>('[data-col]')?.dataset.col;
         if (id) next[id] = Math.max(next[id] ?? 0, Math.ceil(el.scrollWidth));
       });
     table.removeAttribute('data-measure');
-    setNatural((prev) => {
-      const keys = Object.keys(next);
-      if (prev && keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === next[k]))
-        return prev;
-      return next;
-    });
-  }, [fitOn, shown, colSig, rows, model.density, fontsTick]);
+    fitCache.current = { key: fitKey, fonts: fontsTick, widths: next };
+    setNatural(next);
+  }, [fitAllowed, loading, shown, fitKey, fontsTick, hasRows]);
   // Freeze cap: trailing frozen columns that would take more than `maxPinShare` of the scroller scroll instead.
   // Computed from the measured widths in the same render as the pin change (no second pass).
   const suspended = useMemo(() => {
@@ -802,7 +822,8 @@ function DataTableInner<R>({
       el.removeEventListener('scroll', flags);
       ro.disconnect();
     };
-  }, [renderCols, rows.length, cardMode]);
+    // The observer sees the table grow or shrink with its rows; only a new column set needs a fresh read (C020).
+  }, [colSig, cardMode]);
 
   /* mirrored horizontal scrollbar rail */
   const railRef = useRef<HTMLDivElement>(null);
@@ -1428,6 +1449,7 @@ function DataTableInner<R>({
 
   const thFor = (col: Column<R>) => {
     const pseudo = (col as unknown as PseudoColumn).pseudo;
+    const collapsed = Boolean((col as unknown as PseudoColumn).collapsed);
     const pin = effectivePin(col, pins);
     const key = sortKeyOf(col);
     const canSort = !pseudo && key && sortable(col);
@@ -1460,6 +1482,8 @@ function DataTableInner<R>({
         data-sorted={active ? sort!.direction : undefined}
         data-sortable={canSort ? '' : undefined}
         data-pseudo={pseudo ?? undefined}
+        data-collapsed={collapsed ? '' : undefined}
+        aria-hidden={collapsed || undefined}
         data-band={hasBands ? '' : undefined}
         aria-sort={ariaSort}
         aria-label={pseudo === 'select' ? undefined : text}
@@ -1479,13 +1503,15 @@ function DataTableInner<R>({
         }
       >
         {pseudo === 'select' ? (
-          <Checkbox
-            aria-label={selectAllLabel}
-            hideLabel
-            isSelected={allSelected}
-            isIndeterminate={someSelected}
-            onChange={toggleAll}
-          />
+          collapsed ? null : (
+            <Checkbox
+              aria-label={selectAllLabel}
+              hideLabel
+              isSelected={allSelected}
+              isIndeterminate={someSelected}
+              onChange={toggleAll}
+            />
+          )
         ) : pseudo === 'expand' ? (
           <span className={styles.srOnly}>Expand</span>
         ) : (
@@ -1564,6 +1590,18 @@ function DataTableInner<R>({
       'data-pin-edge': col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined,
       style,
     } as const;
+    if (pseudo === 'select' && (col as unknown as PseudoColumn).collapsed) {
+      return (
+        <td
+          key={col.id}
+          {...common}
+          role="gridcell"
+          data-pseudo="select"
+          data-collapsed=""
+          aria-hidden="true"
+        />
+      );
+    }
     if (pseudo === 'select') {
       return (
         <td

@@ -471,6 +471,14 @@
   text-align: center;
 }
 
+/* The reserved select column while select mode is off (C020): in the table, 0px wide, empty. */
+.th[data-collapsed],
+.td[data-collapsed] {
+  padding: 0;
+  border-inline-width: 0;
+  overflow: hidden;
+}
+
 .td[data-pin] {
   position: sticky;
   z-index: 2;
