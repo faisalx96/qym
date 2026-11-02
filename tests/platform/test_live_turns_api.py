@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker
+from test_live_ingest_chart_images import OTHER_REF, REF, TURN_ID, _upload
+from test_live_ingest_sources import _seed_api_key
 
-from _live_support import seed_week
+from _live_support import _png, seed_week
 from qym_platform.db.models import LiveMetricSpec, LiveSource, LiveTurn, LiveTurnScore
 
 ADMIN = {"X-User-Email": "owner@example.test"}
 BASE = "/api/projects/test/live"
 DAY = "2026-11-01"
+CHART_BASE = "/api/projects/live-project-1/live"
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +34,16 @@ def session_factory(database):
         seed_week(db, "p")
         db.commit()
     return factory
+
+
+@pytest.fixture()
+def chart_turn(session_factory):
+    with session_factory() as db:
+        _seed_api_key(db)
+        source = seed_week(db, "live-project-1")
+        turn = db.query(LiveTurn).filter_by(source_id=source.id, turn_id=TURN_ID).one()
+        turn.summary = {"charts": [{"ref": REF}, {"ref": OTHER_REF}]}
+        db.commit()
 
 
 def _turns(client, **params):
@@ -336,6 +350,7 @@ def test_turn_detail_has_conversation_siblings_in_time_order(client, session_fac
     assert body["turn"]["answer"] == "Answer 6"
     assert body["summary"] == {"judges_agree": True}
     assert body["detail"] == {"extra": "evidence"}
+    assert body["chart_images"] == {}
     assert [row["turn_id"] for row in body["conversation"]] == [
         "midnight-turn",
         *(f"turn-2026-10-31-{index}" for index in range(5)),
@@ -385,6 +400,279 @@ def test_turn_detail_404(client, session_factory):
         f"{BASE}/turns/other-turn", headers=ADMIN, params={"source": "other"}
     )
     assert response.status_code == 200
+
+
+def test_chart_image_bytes_headers_and_replacement(client, chart_turn):
+    first = _png()
+    uploaded = _upload(client, first)
+    assert uploaded.status_code == 204, uploaded.text
+    detail = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+    assert detail.status_code == 200, detail.text
+    url = detail.json()["chart_images"][REF]["url"]
+    response = client.get(url, headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.content == first
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["content-length"] == str(len(first))
+    assert response.headers["cache-control"] == "private, max-age=86400"
+    etag = response.headers["etag"]
+    assert etag == f'"{hashlib.sha256(first).hexdigest()}"'
+
+    second = _png(width=2, height=1, color=b"\x00\xff\x00\xff")
+    uploaded = _upload(client, second)
+    assert uploaded.status_code == 204, uploaded.text
+    detail = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+    assert detail.status_code == 200, detail.text
+    replacement_url = detail.json()["chart_images"][REF]["url"]
+    assert replacement_url != url
+    assert replacement_url.endswith(f"&v={hashlib.sha256(second).hexdigest()[:16]}")
+    response = client.get(replacement_url, headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.content == second
+    response = client.get(url, headers={**ADMIN, "If-None-Match": etag})
+    assert response.status_code == 200, response.text
+    assert response.content == second
+    assert response.headers["content-length"] == str(len(second))
+    assert response.headers["etag"] != etag
+    assert response.headers["etag"] == f'"{hashlib.sha256(second).hexdigest()}"'
+
+
+@pytest.mark.parametrize("etag_form", ["plain", "weak", "list"])
+def test_chart_image_matching_etag_is_304(client, chart_turn, etag_form):
+    data = _png()
+    uploaded = _upload(client, data)
+    assert uploaded.status_code == 204, uploaded.text
+    etag = f'"{hashlib.sha256(data).hexdigest()}"'
+    condition = {
+        "plain": etag,
+        "weak": f"W/{etag}",
+        "list": f'"stale", W/{etag}, "other"',
+    }[etag_form]
+    response = client.get(
+        f"{CHART_BASE}/chart-image",
+        params={"turn_id": TURN_ID, "ref": REF},
+        headers={**ADMIN, "If-None-Match": condition},
+    )
+    assert response.status_code == 304, response.text
+    assert response.content == b""
+    assert response.headers["etag"] == etag
+    assert response.headers["cache-control"] == "private, max-age=86400"
+
+
+@pytest.mark.parametrize(
+    "turn_id, ref", [("unknown", REF), (TURN_ID, "unknown"), (TURN_ID, OTHER_REF)]
+)
+def test_chart_image_not_found(client, chart_turn, turn_id, ref):
+    uploaded = _upload(client)
+    assert uploaded.status_code == 204, uploaded.text
+    response = client.get(
+        f"{CHART_BASE}/chart-image",
+        headers=ADMIN,
+        params={"turn_id": turn_id, "ref": ref},
+    )
+    assert response.status_code == 404, response.text
+    assert response.json() == {"detail": "chart image not found"}
+
+
+@pytest.mark.parametrize("ref", [None, "", "bad ref", "bad/ref", "x" * 101])
+def test_chart_image_ref_is_validated(client, chart_turn, ref):
+    params = {"turn_id": TURN_ID}
+    if ref is not None:
+        params["ref"] = ref
+    response = client.get(f"{CHART_BASE}/chart-image", headers=ADMIN, params=params)
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("turn_id", [None, "", "x" * 201])
+def test_chart_image_turn_id_is_validated(client, chart_turn, turn_id):
+    params = {"ref": REF}
+    if turn_id is not None:
+        params["turn_id"] = turn_id
+    response = client.get(f"{CHART_BASE}/chart-image", headers=ADMIN, params=params)
+    assert response.status_code == 422, response.text
+
+
+def test_turn_detail_loads_chart_metadata_without_bytes(
+    client, session_factory, chart_turn
+):
+    images = {REF: _png(), OTHER_REF: _png(width=4, height=1)}
+    for ref, data in images.items():
+        uploaded = _upload(client, data, ref=ref)
+        assert uploaded.status_code == 204, uploaded.text
+    with session_factory() as db:
+        engine = db.get_bind()
+    image_queries = []
+
+    def record_queries(connection, cursor, statement, parameters, context, executemany):
+        sql = " ".join(statement.split())
+        if sql.startswith("SELECT") and "FROM live_chart_images" in sql:
+            image_queries.append(sql)
+
+    event.listen(engine, "before_cursor_execute", record_queries)
+    try:
+        response = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+    finally:
+        event.remove(engine, "before_cursor_execute", record_queries)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["summary"] == {"charts": [{"ref": REF}, {"ref": OTHER_REF}]}
+    assert body["turn"]["summary"] == body["summary"]
+    assert body["chart_images"] == {
+        ref: {
+            "url": (
+                f"{CHART_BASE}/chart-image?source=worker-1&turn_id={TURN_ID}"
+                f"&ref={ref}&v={hashlib.sha256(images[ref]).hexdigest()[:16]}"
+            ),
+            "width": width,
+            "height": height,
+            "byte_size": len(images[ref]),
+        }
+        for ref, width, height in ((REF, 3, 2), (OTHER_REF, 4, 1))
+    }
+    assert len(image_queries) == 1, image_queries
+    selected = image_queries[0].split(" FROM ")[0]
+    assert "live_chart_images.image" not in selected
+    for column in ("ref", "width", "height", "byte_size", "sha256"):
+        assert f"live_chart_images.{column}" in selected
+    for metadata in body["chart_images"].values():
+        response = client.get(metadata["url"], headers=ADMIN)
+        assert response.status_code == 200, response.text
+
+
+def test_chart_image_urls_quote_turn_ref_and_source(client, session_factory, chart_turn):
+    ref = "chart:one"
+    with session_factory() as db:
+        source = db.query(LiveSource).filter_by(project_id="live-project-1").one()
+        turn = db.query(LiveTurn).filter_by(source_id=source.id, turn_id=TURN_ID).one()
+        turn.turn_id = "trace/1"
+        turn.summary = {"charts": [{"ref": ref}]}
+        db.commit()
+    uploaded = _upload(client, turn_id="trace/1", ref=ref)
+    assert uploaded.status_code == 204, uploaded.text
+    with session_factory() as db:
+        source = db.query(LiveSource).filter_by(project_id="live-project-1").one()
+        source.key = "worker:blue"
+        db.commit()
+    for path in ("trace%2F1", "trace/1"):
+        response = client.get(
+            f"{CHART_BASE}/turns/{path}",
+            headers=ADMIN,
+            params={"source": "worker:blue"},
+        )
+        assert response.status_code == 200, response.text
+        url = response.json()["chart_images"][ref]["url"]
+        assert url == (
+            f"{CHART_BASE}/chart-image?source=worker%3Ablue"
+            f"&turn_id=trace%2F1&ref=chart%3Aone"
+            f"&v={hashlib.sha256(_png()).hexdigest()[:16]}"
+        )
+        response = client.get(url, headers=ADMIN)
+        assert response.status_code == 200, response.text
+        assert response.content == _png()
+
+
+def test_turn_detail_with_chart_image_suffix(client, session_factory, chart_turn):
+    turn_id = f"{TURN_ID}/charts/{REF}/image"
+    with session_factory() as db:
+        source = db.query(LiveSource).filter_by(project_id="live-project-1").one()
+        turn = db.query(LiveTurn).filter_by(source_id=source.id, turn_id=TURN_ID).one()
+        turn.turn_id = turn_id
+        db.commit()
+    uploaded = _upload(client, turn_id=turn_id)
+    assert uploaded.status_code == 204, uploaded.text
+    response = client.get(f"{CHART_BASE}/turns/{turn_id}", headers=ADMIN)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["turn"]["turn_id"] == turn_id
+    response = client.get(body["chart_images"][REF]["url"], headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.content == _png()
+
+
+def test_chart_image_url_includes_root_path(client, chart_turn, monkeypatch):
+    uploaded = _upload(client)
+    assert uploaded.status_code == 204, uploaded.text
+    monkeypatch.setattr(client.app, "root_path", "/qym")
+    response = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+    assert response.status_code == 200, response.text
+    url = response.json()["chart_images"][REF]["url"]
+    assert url == (
+        f"/qym{CHART_BASE}/chart-image?source=worker-1&turn_id={TURN_ID}"
+        f"&ref={REF}&v={hashlib.sha256(_png()).hexdigest()[:16]}"
+    )
+    response = client.get(url, headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.content == _png()
+
+
+def test_chart_image_is_scoped_to_selected_source(client, session_factory, chart_turn):
+    uploaded = _upload(client)
+    assert uploaded.status_code == 204, uploaded.text
+    # The other project has the same source key and turn id, but no image.
+    response = client.get(
+        f"{BASE}/chart-image",
+        headers=ADMIN,
+        params={"turn_id": TURN_ID, "ref": REF},
+    )
+    assert response.status_code == 404, response.text
+    assert response.json() == {"detail": "chart image not found"}
+    response = client.get(f"{BASE}/turns/{TURN_ID}", headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.json()["chart_images"] == {}
+    with session_factory() as db:
+        source = LiveSource(
+            project_id="live-project-1",
+            key="other",
+            name="Other",
+            environment="test",
+            is_active=False,
+        )
+        db.add(source)
+        db.flush()
+        db.add(
+            LiveTurn(
+                source_id=source.id,
+                day=date(2026, 11, 1),
+                turn_id=TURN_ID,
+                turn_at=datetime(2026, 11, 1),
+                status="completed",
+                question="Other",
+            )
+        )
+        db.commit()
+    response = client.get(
+        f"{CHART_BASE}/chart-image",
+        headers=ADMIN,
+        params={"source": "other", "turn_id": TURN_ID, "ref": REF},
+    )
+    assert response.status_code == 404, response.text
+    assert response.json() == {"detail": "chart image not found"}
+    response = client.get(
+        f"{CHART_BASE}/chart-image",
+        headers=ADMIN,
+        params={"source": "worker-1", "turn_id": TURN_ID, "ref": REF},
+    )
+    assert response.status_code == 200, response.text
+    assert response.content == _png()
+
+
+def test_chart_image_requires_project_access(client, session_factory, chart_turn):
+    uploaded = _upload(client)
+    assert uploaded.status_code == 204, uploaded.text
+    with session_factory() as db:
+        _seed_api_key(db, token="other-project-token", suffix="2")
+    headers = {"X-User-Email": "live-owner-2@example.test"}
+    url = f"{CHART_BASE}/turns/{TURN_ID}"
+    detail = client.get(url, headers=headers)
+    assert detail.status_code == 403, detail.text
+    etag = f'"{hashlib.sha256(_png()).hexdigest()}"'
+    response = client.get(
+        f"{CHART_BASE}/chart-image",
+        params={"turn_id": TURN_ID, "ref": REF},
+        headers={**headers, "If-None-Match": etag},
+    )
+    assert response.status_code == detail.status_code, response.text
+    assert response.json() == detail.json()
 
 
 def test_csv_export_has_one_column_per_spec(client, session_factory):

@@ -8,6 +8,7 @@ from datetime import date, datetime
 from itertools import islice
 from math import isfinite
 from typing import Any, Iterator, Mapping, Optional, Sequence
+from urllib.parse import quote
 
 from sqlalchemy import JSON, and_, case, column, func, or_, select, type_coerce
 from sqlalchemy.dialects.postgresql import JSONB
@@ -15,7 +16,13 @@ from sqlalchemy.orm import Query, Session, load_only
 from sqlalchemy.sql.elements import ColumnElement
 
 from qym_platform.datetime_utils import to_api_timestamp
-from qym_platform.db.models import LiveMetricSpec, LiveSource, LiveTurn, LiveTurnScore
+from qym_platform.db.models import (
+    LiveChartImage,
+    LiveMetricSpec,
+    LiveSource,
+    LiveTurn,
+    LiveTurnScore,
+)
 from qym_platform.log import get_logger
 from qym_platform.services.live_overview import _spec_payload
 
@@ -475,11 +482,30 @@ def list_turns(
     }
 
 
+def chart_image(
+    db: Session, source: LiveSource, turn_id: str, ref: str
+) -> Optional[LiveChartImage]:
+    """Look up a chart image within the selected source and turn."""
+    return (
+        db.query(LiveChartImage)
+        .join(LiveTurn, LiveTurn.id == LiveChartImage.turn_pk)
+        .filter(
+            LiveTurn.source_id == source.id,
+            LiveTurn.turn_id == turn_id,
+            LiveChartImage.ref == ref,
+        )
+        .first()
+    )
+
+
 def turn_detail(
     db: Session,
     source: LiveSource,
     turn_id: str,
     specs: Sequence[LiveMetricSpec],
+    *,
+    project_slug: str,
+    root_path: str = "",
 ) -> Optional[dict[str, Any]]:
     """Return a full turn with score definitions and ordered conversation siblings."""
     turn = (
@@ -497,6 +523,21 @@ def turn_detail(
         .order_by(LiveTurnScore.metric_name)
         .all()
     )
+    images = (
+        db.query(
+            LiveChartImage.ref,
+            LiveChartImage.width,
+            LiveChartImage.height,
+            LiveChartImage.byte_size,
+            LiveChartImage.sha256,
+        )
+        .filter(LiveChartImage.turn_pk == turn.id)
+        .all()
+    )
+    image_base = (
+        f"{root_path.rstrip('/')}/api/projects/{quote(project_slug, safe='')}/live/chart-image"
+        f"?source={quote(source.key, safe='')}&turn_id={quote(turn_id, safe='')}"
+    )
     siblings = db.query(LiveTurn).filter(LiveTurn.source_id == source.id)
     siblings = siblings.filter(
         LiveTurn.conversation_id == turn.conversation_id
@@ -507,6 +548,18 @@ def turn_detail(
         "turn": _columns(turn, [col.key for col in LiveTurn.__table__.columns]),
         "summary": turn.summary,
         "detail": turn.detail,
+        "chart_images": {
+            image.ref: {
+                "url": (
+                    f"{image_base}&ref={quote(image.ref, safe='')}"
+                    f"&v={image.sha256[:16]}"
+                ),
+                "width": image.width,
+                "height": image.height,
+                "byte_size": image.byte_size,
+            }
+            for image in images
+        },
         "scores": [
             {
                 **_columns(score, [col.key for col in LiveTurnScore.__table__.columns]),

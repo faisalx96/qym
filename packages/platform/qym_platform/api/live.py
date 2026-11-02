@@ -8,7 +8,7 @@ from datetime import date
 from typing import Any, Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
@@ -174,17 +174,54 @@ def project_live_turns_csv(
     )
 
 
+@live_router.get(
+    "/api/projects/{project_slug}/live/chart-image",
+    response_class=Response,
+)
+def project_live_chart_image(
+    project_slug: str,
+    request: Request,
+    turn_id: str = Query(..., min_length=1, max_length=200),
+    ref: str = Query(..., pattern=r"^[A-Za-z0-9_.:-]{1,100}$"),
+    source: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Response:
+    """Return a chart image after checking the project's read permission."""
+    selected = _selected_source(db, principal, project_slug, source)
+    row = live_turns.chart_image(db, selected, turn_id, ref)
+    if row is None:
+        raise HTTPException(status_code=404, detail="chart image not found")
+    etag = f'"{row.sha256}"'
+    headers = {"ETag": etag, "Cache-Control": "private, max-age=86400"}
+    if any(
+        value.strip().removeprefix("W/") == etag
+        for value in request.headers.get("if-none-match", "").split(",")
+    ):
+        return Response(status_code=304, headers=headers)
+    headers["Content-Length"] = str(row.byte_size)
+    return Response(content=row.image, media_type=row.content_type, headers=headers)
+
+
 @live_router.get("/api/projects/{project_slug}/live/turns/{turn_id:path}")
 def project_live_turn_detail(
     project_slug: str,
     turn_id: str,
+    request: Request,
     source: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> dict[str, Any]:
     """Return turn evidence and conversation context within the selected source."""
     selected = _selected_source(db, principal, project_slug, source)
-    payload = live_turns.turn_detail(db, selected, turn_id, _specs(db, selected))
+    payload = live_turns.turn_detail(
+        db,
+        selected,
+        turn_id,
+        _specs(db, selected),
+        project_slug=project_slug,
+        root_path=request.scope.get("root_path", ""),
+    )
     if payload is None:
         raise HTTPException(status_code=404, detail="turn not found")
     return payload
