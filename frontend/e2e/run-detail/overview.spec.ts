@@ -81,14 +81,20 @@ test.describe('open a run (J1, scenario 1)', () => {
     expect(overview.y).toBeLessThan(1100);
   });
 
-  test('J10, R4: Export HTML sits in the Actions menu and downloads from the legacy export endpoint', async ({
+  test('J10, R4, C173: Export HTML sits in the Actions menu and builds the file from the React export page', async ({
     page,
   }) => {
     await openRun(page, s.slug, classic);
     await page.getByTestId('run-actions').click();
-    const download = page.waitForRequest((r) => r.url().endsWith(`/api/runs/${classic}/export-html`));
+    // The file is built in the browser from the built export page; the frozen template is not asked for.
+    const template = page.waitForRequest((r) => r.url().endsWith('/api/export/run-template'));
+    const legacy: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/export-html')) legacy.push(r.url());
+    });
     await page.getByRole('menuitem', { name: 'Export HTML' }).click();
-    await download;
+    await template;
+    expect(legacy).toEqual([]);
   });
 
   test('metric cards: boolean split, score histogram, numeric range, error notes', async ({ page }) => {

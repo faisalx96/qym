@@ -6,17 +6,26 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useRunsPage } from '@/api/dashboard';
 import type { RunRow } from '@/api/dashboardTypes';
-import { exportHtmlUrl, runKeys, useReviewHistoryQuery } from '@/api/runs';
+import { runKeys, useReviewHistoryQuery } from '@/api/runs';
 import { useAuth, useProjectContext } from '@/features/shell';
 import { AnalysisSpark } from '@/features/runs-list/AnalyzeAction';
 import { isActiveRun } from '@/features/runs-list/polling';
 import { RunDialogs, type DialogState } from '@/features/runs-list/RunDialogs';
-import { platformUrl } from '@/lib/runtime';
-import { ActionTile, Button, DropdownMenu, Icon, LinkButton, Popover, type MenuItemSpec } from '@/ui';
+import {
+  ActionTile,
+  Button,
+  DropdownMenu,
+  Icon,
+  LinkButton,
+  Popover,
+  useToast,
+  type MenuItemSpec,
+} from '@/ui';
+import { exportRunHtml } from '../lib/exportRun';
 import {
   analyzerHref,
   compareWithReferenceUrl,
@@ -53,8 +62,11 @@ export function RunHeaderActions({ run, slug }: { run: Run; slug: string }) {
   const { project, readOnly, canManage, isAdmin } = useProjectContext();
   const { me } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [exporting, setExporting] = useState(false);
   const reference = useReference(run, slug);
   const { model, api, basePath } = useRunPage();
   const row = {
@@ -96,8 +108,26 @@ export function RunHeaderActions({ run, slug }: { run: Run; slug: string }) {
       return;
     }
     const action = id as RunActionId;
-    if (action === 'export') window.location.assign(platformUrl(exportHtmlUrl(run.run_id)));
-    else if (action === 'submit' || action === 'resubmit') setDialog({ kind: 'submit', rows: [row] });
+    if (action === 'export') {
+      // C173: the file is today's run page, read-only, built from this page's data
+      if (exporting) return;
+      setExporting(true);
+      toast.show('Preparing the export…', { tone: 'info' });
+      void exportRunHtml(queryClient, {
+        runId: run.run_id,
+        slug,
+        project,
+        me,
+        runName: run.run_name || run.run_id,
+        path: location.pathname + location.search + location.hash,
+      })
+        .catch((e: unknown) =>
+          toast.show(`Couldn’t export the run: ${e instanceof Error ? e.message : 'unknown error'}`, {
+            tone: 'error',
+          }),
+        )
+        .finally(() => setExporting(false));
+    } else if (action === 'submit' || action === 'resubmit') setDialog({ kind: 'submit', rows: [row] });
     else if (action === 'transfer') setDialog({ kind: 'transfer', row });
     else if (action === 'delete')
       setDialog({
