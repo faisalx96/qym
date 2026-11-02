@@ -34,6 +34,7 @@
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-sm);
   min-block-size: 24px;
@@ -41,6 +42,7 @@
   font-weight: 650;
 }
 
+/* The name keeps its own line when the badges and the Actions menu do not fit beside it. */
 .top > :first-child {
   flex: 1 1 auto;
   min-inline-size: 0;
