@@ -2256,6 +2256,25 @@ class LiveTurnScore(Base):
     )
 
 
+class LiveChartImage(Base):
+    __tablename__ = "live_chart_images"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    turn_pk: Mapped[int] = mapped_column(BIG_ID, ForeignKey("live_turns.id", ondelete="CASCADE"), index=True)
+    ref: Mapped[str] = mapped_column(String(100))
+    content_type: Mapped[str] = mapped_column(String(32))
+    byte_size: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    image: Mapped[bytes] = mapped_column(LargeBinary)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("turn_pk", "ref", name="uq_live_chart_image"),
+    )
+
+
 class LiveCanaryResult(Base):
     __tablename__ = "live_canary_results"
 
