@@ -63,6 +63,31 @@ for (const viewport of viewports) {
   test.describe(`${viewport.width} × ${viewport.height}`, () => {
     test.use({ viewport });
 
+    test('Charts screenshots fit the page and full-image dialog', async ({ page }) => {
+      const id = `${seed.days.at(-1)!.day}/turn-2`;
+      await gotoApp(
+        page,
+        `/projects/${seed.projectSlug}/live/turns/${encodeURIComponent(id)}?${new URLSearchParams({ source: seed.sourceKey, tab: 'charts' })}`,
+      );
+      const screenshot = page.locator('[data-live-chart-image] img');
+      await expect(screenshot).toBeVisible();
+      await expect
+        .poll(() => screenshot.evaluate((element: HTMLImageElement) => element.naturalWidth))
+        .toBeGreaterThan(0);
+      await expect
+        .poll(() =>
+          page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        )
+        .toBe(true);
+      await screenshot.click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        )
+        .toBe(true);
+    });
+
     test('LV-31, LV-34: overview cards stack, fourteen days stay visible and values are tabular', async ({
       page,
     }) => {

@@ -130,7 +130,15 @@ export interface LiveTurnsPage {
   };
 }
 
+export interface LiveChartImage {
+  url: string;
+  width: number;
+  height: number;
+  byte_size: number;
+}
+
 export interface LiveTurnDetail {
+  chart_images: Record<string, LiveChartImage>;
   turn: LiveTurnColumns & {
     id: number;
     source_id: string;
@@ -289,10 +297,12 @@ export function useLiveTurns(slug: string, filters: LiveFilters, source?: string
 export function useLiveTurn(slug: string, turnId: string, source?: string | null) {
   return useQuery({
     queryKey: ['project', slug, 'live', 'turn', source, turnId],
-    queryFn: () =>
-      api.get<LiveTurnDetail>(
+    queryFn: async () => {
+      const data = await api.get<LiveTurnDetail>(
         livePath(slug, `/turns/${turnId.split('/').map(encodeURIComponent).join('/')}`, sourceQuery(source)),
-      ),
+      );
+      return { ...data, chart_images: data.chart_images ?? {} };
+    },
   });
 }
 

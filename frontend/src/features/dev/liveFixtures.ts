@@ -343,7 +343,16 @@ export const liveTurnEvidence = {
 };
 
 const firstTurn = liveTurnsPage.rows[0]!;
+// Generated 240 × 140 PNG, shared with e2e/live/fixtures/chart.png (836 bytes).
+export const liveChartImage = {
+  url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAACMCAIAAADN17N/AAADC0lEQVR4nO3SsY1YQQxDQZZxoctw8+7LoWMnGwlfoDDA5MsVXn5+fsEZWV8Ag7K+AAZlfQEMyvoCGJT1BTAo6wtgUNYXwKCsL4BBWV8Ag7K+AAZlfQEMyvoCGJT1BTAo6wtgUNYXwKCsL4BBWV8Ag7K+AAZlfQEMyvoCGJT1BTAo6wtgUNYXwKCsL+Bjv//8/cz3v8v6ffmYoDlF0JwiaE4RNKcImlMEzSmC5hRBc4qgOUXQnCJoThE0pwiaUwTNKYLmFEFziqA5RdCcImhOETSnCJpTBM0pguY/7UG073/Leh912oNo3/+W9T7qtAfRvv8t633UaQ+iff9b1vuo0x5E+/63rPdRpz2I9v1vWe+jTnsQ7fvfst5HnfYg2ve/Zb2POu1BtO9/y3ofddqDaN//lvU+6rQH0b7/Let91GkPon3/W9b7qNMeRPv+t6z3Uac9iPb9b1nvo057EO3737LeR532INr3v2W9jzrtQbTvf8t6H3Xag2jf/5b1Puq0B9G+/y3rfdRpD6J9/1vW+6jTHkT7/res91GnPYj2/W9Z76NOexDt+9+y3ked9iDa979lvY867UG073/Leh912oNo3/+W9T7qtAfRvv8t633UaQ+iff9bBGF/1/63fP9k+0HtF/Spg9ov6FMHtV/Qpw5qv6BPHdR+QZ86qP2CPnVQ+wV96qD2C/rUQe0X9KmD2i/oUwe1X9CnDmq/oE8d1H5Bnzqo/YI+dVD7BX3qoPYL+tRB7Rf0qYPaL+hTB7Vf0KcOar+gTx3UfkGfOqj9gj51UPsFfeqg9gv61EHtF/Spg9ov6FMHtV/Qpw5qv6BPHdR+QZ86qP2CPnVQ+wV96qD2C/rUQe0X9KmD2i/oUwe1X9CnDmq/oE8d1H5Bnzqo/YI+dVD7BX3qoPYL+tRB7Rc0fCTrC2BQ1hfAoKwvgEFZXwCDsr4ABmV9AQzK+gIYlPUFMCjrC2BQ1hfAoKwvgEFZXwCDsr4ABmV9AQzK+gIYlPUFMCjrC2BQ1hfAoKwvgEFZXwCDsr4ABv0DyyvFMm6/1agAAAAASUVORK5CYII=',
+  width: 240,
+  height: 140,
+  byte_size: 836,
+};
+
 export const liveTurnDetail: LiveTurnDetail = {
+  chart_images: { [liveTurnEvidence.charts[0]!.ref]: liveChartImage },
   turn: {
     ...firstTurn,
     id: 1,

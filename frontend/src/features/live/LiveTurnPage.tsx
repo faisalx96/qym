@@ -1,4 +1,5 @@
-import { useLiveTurn } from '@/api/live';
+import { useQueryClient } from '@tanstack/react-query';
+import { useLiveTurn, type LiveTurnsPage } from '@/api/live';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
@@ -9,6 +10,7 @@ import { ChartsTab } from './components/turn/ChartsTab';
 import { ConversationTab } from './components/turn/ConversationTab';
 import { DiagnosisTab } from './components/turn/DiagnosisTab';
 import { EvaluatorTab } from './components/turn/EvaluatorTab';
+import { EvidenceCard } from './components/turn/Evidence';
 import { JudgesTab } from './components/turn/JudgesTab';
 import { ServicesTab } from './components/turn/ServicesTab';
 import { TurnHeader } from './components/turn/TurnHeader';
@@ -26,6 +28,7 @@ const tabs = [
 ];
 
 export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: string; turnId: string }) {
+  const queryClient = useQueryClient();
   const query = useLiveTurn(slug, turnId, source);
   const { get, replaceUrlQuery } = useSearchParamsState();
   const selected = get('tab', 'diagnosis');
@@ -33,6 +36,13 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
   const showSkeleton = useDelayedPending(query.isPending);
   useDocumentTitle(`${query.data?.turn.question ?? 'Turn'} · Live`);
   const data = query.data;
+  const chartSlots =
+    query.isPending && tab === 'charts'
+      ? (queryClient
+          .getQueriesData<LiveTurnsPage>({ queryKey: ['project', slug, 'live', 'turns', source] })
+          .flatMap(([, page]) => page?.rows ?? [])
+          .find((row) => row.turn_id === turnId)?.charts.count ?? 1)
+      : 0;
   return (
     <div className={`${fullWidth} ${styles.page}`}>
       {query.isError ? (
@@ -48,19 +58,42 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
           <Skeleton kind="chart" height="var(--turn-header-height)" label="Loading turn header" />
           <Skeleton kind="chart" height="var(--turn-tiles-height)" label="Loading turn numbers" />
           <Skeleton kind="chart" height="var(--tab-height)" label="Loading turn sections" />
-          <div className={styles.twoColumns}>
-            <Skeleton kind="chart" height="var(--turn-why-height)" label="Loading diagnosis" />
-            <Skeleton kind="chart" height="var(--turn-deviations-height)" label="Loading judge deviations" />
-          </div>
-          <div className={styles.twoColumns}>
-            <Skeleton kind="chart" height="var(--turn-agent-sql-height)" label="Loading agent SQL" />
-            <Skeleton kind="chart" height="var(--turn-judge-sql-height)" label="Loading judge SQL" />
-          </div>
-          <div className={styles.threeColumns}>
-            <Skeleton kind="chart" height="var(--turn-answer-height)" label="Loading answer" />
-            <Skeleton kind="chart" height="var(--turn-chart-height)" label="Loading charts" />
-            <Skeleton kind="chart" height="var(--turn-services-height)" label="Loading services" />
-          </div>
+          {tab === 'charts' ? (
+            <div className={styles.panel} data-live-block="charts-loading" data-chart-slots={chartSlots}>
+              <div className={styles.twoColumns}>
+                {Array.from({ length: chartSlots }, (_, index) => (
+                  <EvidenceCard key={index} title={`Chart ${index + 1}`}>
+                    <Skeleton
+                      kind="chart"
+                      height="var(--turn-chart-image-height)"
+                      label={`Loading chart screenshot ${index + 1}`}
+                    />
+                    <Skeleton kind="lines" rows={3} label={`Loading chart evidence ${index + 1}`} />
+                  </EvidenceCard>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className={styles.twoColumns}>
+                <Skeleton kind="chart" height="var(--turn-why-height)" label="Loading diagnosis" />
+                <Skeleton
+                  kind="chart"
+                  height="var(--turn-deviations-height)"
+                  label="Loading judge deviations"
+                />
+              </div>
+              <div className={styles.twoColumns}>
+                <Skeleton kind="chart" height="var(--turn-agent-sql-height)" label="Loading agent SQL" />
+                <Skeleton kind="chart" height="var(--turn-judge-sql-height)" label="Loading judge SQL" />
+              </div>
+              <div className={styles.threeColumns}>
+                <Skeleton kind="chart" height="var(--turn-answer-height)" label="Loading answer" />
+                <Skeleton kind="chart" height="var(--turn-chart-height)" label="Loading charts" />
+                <Skeleton kind="chart" height="var(--turn-services-height)" label="Loading services" />
+              </div>
+            </>
+          )}
         </div>
       ) : data ? (
         <>

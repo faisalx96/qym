@@ -171,7 +171,50 @@
   font-size: var(--font-base);
 }
 
-.chartPlaceholder {
+.chartImage {
+  margin: 0;
+}
+
+.chartImage img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  max-block-size: 420px;
+  object-fit: contain;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.chartImage.chartThumb img {
+  max-block-size: 180px;
+}
+
+.chartButton {
+  display: block;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.chartButton:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.chartFull {
+  overflow-wrap: anywhere;
+}
+
+.chartFull img {
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.chartMissing {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -217,6 +260,7 @@
 
 /* Reserved frames match the approved mock's measured LV-22–LV-27 heights. */
 .loading {
+  --turn-chart-image-height: 420px;
   --turn-header-height: 117px;
   --turn-tiles-height: 74px;
   --turn-why-height: 411px;
@@ -257,7 +301,12 @@
 }
 
 @container (width < 480px) {
+  .chartImage img {
+    max-block-size: 280px;
+  }
+
   .loading {
+    --turn-chart-image-height: 280px;
     --turn-header-height: 300px;
     --turn-tiles-height: 257px;
     --turn-why-height: 447px;

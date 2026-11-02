@@ -1,5 +1,8 @@
 import { expect, type APIRequestContext } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { createApiKey, createProject } from '../helpers';
+
+const chartPng = readFileSync(new URL('./fixtures/chart.png', import.meta.url));
 
 const diagnoses = [
   { value: 'ok', label: 'OK', tone: 'accent' },
@@ -115,8 +118,11 @@ export async function seedLive(
           ? []
           : [
               {
+                ref: `chart-${index + 1}`,
+                kind: 'bar',
                 type: 'bar',
                 title: 'Monthly totals',
+                reading: 'Monthly totals increased. The final month was highest.',
                 issues: chartFailed ? ['missing_axis_label'] : [],
               },
             ];
@@ -176,6 +182,17 @@ export async function seedLive(
     const result = await request.post(`${base}/turns`, { headers, data: { turns } });
     expect(result.ok(), await result.text()).toBeTruthy();
     expect(await result.json()).toMatchObject({ accepted: 12, rejected: 0 });
+    for (const turn of turns) {
+      // Keep the last chart of each day without a screenshot for the empty state.
+      if (turn.turn_id === `${day}/turn-12`) continue;
+      for (const chart of turn.summary.charts) {
+        const upload = await request.put(
+          `${base}/turns/${encodeURIComponent(turn.turn_id)}/charts/${encodeURIComponent(chart.ref)}/image`,
+          { headers: { ...headers, 'Content-Type': 'image/png' }, data: chartPng },
+        );
+        expect(upload.status(), await upload.text()).toBe(204);
+      }
+    }
     days.push({ day, ...counters, turns });
   }
 

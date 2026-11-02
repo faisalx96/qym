@@ -1,3 +1,5 @@
+import type { LiveChartImage } from '@/api/live';
+
 /** Optional producer evidence is unvalidated JSON; never coerce missing or malformed facts. */
 export function recordOf(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -237,6 +239,7 @@ export function toolsOf(summary: Record<string, unknown>): ToolsEvidence | null 
 }
 
 export interface ChartEvidence {
+  image: LiveChartImage | null;
   ref: string | null;
   kind: string | null;
   scores: Record<string, number>;
@@ -244,8 +247,13 @@ export interface ChartEvidence {
   reading: string | null;
 }
 
-export function chartsOf(summary: Record<string, unknown>): ChartEvidence[] {
+export function chartsOf(
+  summary: Record<string, unknown>,
+  images: Record<string, LiveChartImage> = {},
+): ChartEvidence[] {
   return recordsOf(recordOf(summary)?.charts).map((chart) => ({
+    image:
+      typeof chart.ref === 'string' && Object.hasOwn(images, chart.ref) ? (images[chart.ref] ?? null) : null,
     ref: stringOf(chart.ref),
     kind: stringOf(chart.kind),
     scores: Object.fromEntries(

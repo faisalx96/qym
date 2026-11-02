@@ -57,7 +57,7 @@ for (const viewport of [
   { width: 1024, height: 768 },
   { width: 390, height: 844 },
 ]) {
-  for (const surface of ['overview', 'turns', 'turn'] as const) {
+  for (const surface of ['overview', 'turns', 'turn', 'charts'] as const) {
     test(`LV-32: axe has zero violations on ${surface} at ${viewport.width}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       const day = seed.days.at(-1)!.day;
@@ -66,17 +66,19 @@ for (const viewport of [
           ? ''
           : surface === 'turns'
             ? '/turns'
-            : `/turns/${encodeURIComponent(`${day}/turn-1`)}`;
+            : `/turns/${encodeURIComponent(`${day}/turn-${surface === 'charts' ? 2 : 1}`)}`;
       await gotoApp(
         page,
-        `/projects/${seed.projectSlug}/live${suffix}?${new URLSearchParams({ source: seed.sourceKey, day })}`,
+        `/projects/${seed.projectSlug}/live${suffix}?${new URLSearchParams({ source: seed.sourceKey, day, ...(surface === 'charts' ? { tab: 'charts' } : {}) })}`,
       );
       const ready =
         surface === 'overview'
           ? '[data-live-day]'
           : surface === 'turns'
             ? '[data-live-turn-row]'
-            : '[data-live-answer]';
+            : surface === 'charts'
+              ? '[data-live-chart-image]'
+              : '[data-live-answer]';
       await expect(page.locator(ready).first()).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
       await page.addScriptTag({ path: AXE_PATH });

@@ -36,6 +36,8 @@ import {
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { ChartCard } from '@/features/run-detail/components/charts/ChartCard';
 import { BarColumns, type BarSpec } from '@/features/run-detail/components/charts/Charts';
+import { ChartImage } from '@/features/live/components/turn/ChartImage';
+import { chartsOf } from '@/features/live/lib/summary';
 import {
   liveDay,
   liveDiagnosisSpec,
@@ -1029,7 +1031,10 @@ function Turn() {
                   </Text>
                 }
               >
-                <div className={styles.chartPlaceholder}>Chart screenshots arrive in a later release</div>
+                <ChartImage
+                  chart={chartsOf(liveTurnDetail.summary, liveTurnDetail.chart_images)[0]!}
+                  size="thumb"
+                />
                 {Object.entries(evidence.charts[0]!.scores).map(([key, value]) => (
                   <div key={key} className={styles.metricRow}>
                     <span>{metricLabel(key)}</span>

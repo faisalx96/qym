@@ -26,7 +26,7 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
   const groups = [...new Set(deviations.map((item) => item.judge))];
   const notes = recordOf(summary.sql_notes);
   const reused = booleanOf(notes?.reused_by_judges);
-  const chart = chartsOf(summary)[0];
+  const chart = chartsOf(summary, data.chart_images)[0];
   const services = servicesOf(summary);
   const meta = evalMetaOf(summary);
   const models = recordOf(meta?.models);
@@ -152,12 +152,9 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
         </EvidenceCard>
         <EvidenceCard title="Chart" block="chart">
           {chart ? (
-            <ChartEvidenceBody chart={chart} specs={specs} reading={false} />
+            <ChartEvidenceBody chart={chart} specs={specs} reading={false} size="thumb" />
           ) : (
-            <>
-              <div className={styles.chartPlaceholder}>Chart screenshots arrive in a later release</div>
-              <Text tone="muted">No charts available for this turn.</Text>
-            </>
+            <Text tone="muted">No charts available for this turn.</Text>
           )}
         </EvidenceCard>
         <EvidenceCard title="Services on this turn" block="turn-services">

@@ -310,7 +310,7 @@ describe('live turn evidence presentation', () => {
       within(judgeA).getByText('Overall compliance').closest('dt')?.nextElementSibling,
     ).toHaveTextContent('42%');
     await user.click(screen.getByRole('tab', { name: 'Charts' }));
-    expect(screen.getByText('Chart screenshots arrive in a later release')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /bar chart/ })).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Services and tools' }));
     expect(screen.getByLabelText('Tool failures')).toHaveTextContent('Output validation failed');
     await user.click(screen.getByRole('tab', { name: 'Conversation' }));

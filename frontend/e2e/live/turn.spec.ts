@@ -199,6 +199,31 @@ test('a sparse seeded turn uses the reasoning fallback and unavailable call-list
   await expect(page.getByText('Call list not available for this turn', { exact: true })).toBeVisible();
 });
 
+test('Charts shows an uploaded screenshot, opens its dialog and explains a missing screenshot', async ({
+  page,
+  request,
+}) => {
+  const seed = await seedLive(request, uniqueSlug('live-turn-charts'));
+  const day = seed.days[0]!.day;
+  await gotoApp(page, turnPath(seed, `${day}/turn-2`, { tab: 'charts' }));
+  const screenshot = page.locator('[data-live-chart-image] img');
+  await expect(screenshot).toBeVisible();
+  await expect
+    .poll(() => screenshot.evaluate((element: HTMLImageElement) => element.naturalWidth))
+    .toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'bar chart — Monthly totals increased.' }).click();
+  const dialog = page.getByRole('dialog', { name: 'bar chart — Monthly totals increased.' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('img')).toHaveAttribute('src', (await screenshot.getAttribute('src'))!);
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await gotoApp(page, turnPath(seed, `${day}/turn-12`, { tab: 'charts' }));
+  await expect(page.locator('[data-live-chart-missing]')).toHaveText(
+    'No screenshot was captured for this chart',
+  );
+  await expect(page.locator('[data-live-chart-image]')).toHaveCount(0);
+});
+
 test('next and previous preserve the originating list order and disable its ends', async ({
   page,
   request,

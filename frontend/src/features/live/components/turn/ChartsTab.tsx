@@ -1,6 +1,7 @@
 import type { LiveMetricSpec, LiveTurnDetail } from '@/api/live';
 import { Text, TextBlock } from '@/ui';
 import { chartsOf, type ChartEvidence } from '../../lib/summary';
+import { ChartImage } from './ChartImage';
 import { EvidenceCard, MetricValue } from './Evidence';
 import styles from '../../turn.module.css';
 
@@ -8,14 +9,16 @@ export function ChartEvidenceBody({
   chart,
   specs,
   reading = true,
+  size = 'card',
 }: {
   chart: ChartEvidence;
   specs: LiveMetricSpec[];
   reading?: boolean;
+  size?: 'card' | 'thumb';
 }) {
   return (
     <>
-      <div className={styles.chartPlaceholder}>Chart screenshots arrive in a later release</div>
+      <ChartImage chart={chart} size={size} />
       {Object.entries(chart.scores).map(([name, value]) => {
         const spec = specs.find((item) => item.metric_name === name);
         return (
@@ -42,7 +45,7 @@ export function ChartEvidenceBody({
 }
 
 export function ChartsTab({ data }: { data: LiveTurnDetail }) {
-  const charts = chartsOf(data.summary);
+  const charts = chartsOf(data.summary, data.chart_images);
   if (!charts.length) return <Text tone="muted">No charts available for this turn.</Text>;
   return (
     <div className={styles.twoColumns}>
