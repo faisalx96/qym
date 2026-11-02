@@ -36,6 +36,7 @@ live_ingest_router = APIRouter(
     dependencies=[Depends(require_ingest_open)],
 )
 _SOURCE_KEY_PATTERN = r"^[A-Za-z0-9_.:-]{1,100}$"
+_CHART_REF_PATTERN = r"^[A-Za-z0-9_.:-]{1,100}$"
 _BODY_SCHEMAS: dict[str, Any] = {}
 
 
@@ -290,6 +291,18 @@ def _validated_body(
     return read_body
 
 
+async def _chart_image_body(request: Request) -> bytes:
+    """Read a bounded raw PNG body before the synchronous ingest handler."""
+    content_type = (
+        request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    )
+    if content_type != "image/png":
+        raise HTTPException(status_code=415, detail="unsupported content type")
+    return await _read_ingest_body(
+        request, ingest_settings().live_chart_image_max_bytes
+    )
+
+
 def _source_scope(
     project_id: str,
     principal: Principal = Depends(require_api_key_principal),
@@ -364,6 +377,38 @@ def _day_payload(row: LiveDay) -> dict[str, Any]:
         "max_poll_gap_s": row.max_poll_gap_s,
         "parameters": row.parameters,
     }
+
+
+# Register the image path before every PUT with a greedy source key.
+@live_ingest_router.put(
+    "/sources/{key}/turns/{turn_id:path}/charts/{ref}/image",
+    status_code=204,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "image/png": {"schema": {"type": "string", "format": "binary"}}
+            },
+        }
+    },
+)
+def put_chart_image(
+    scope: tuple[Project, Principal] = Depends(_source_scope),
+    key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
+    turn_id: str = Path(..., min_length=1, max_length=200),
+    ref: str = Path(..., pattern=_CHART_REF_PATTERN),
+    data: bytes = Depends(_chart_image_body),
+    db: Session = Depends(get_db),
+) -> Response:
+    source = _source(db, scope[0].id, key)
+    try:
+        live_ingest.upsert_chart_image(db, source, turn_id, ref, data, ingest_settings())
+    except live_ingest.ChartImageError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+    except ValueError:
+        raise HTTPException(status_code=422, detail="invalid PNG") from None
+    _commit(db)
+    return Response(status_code=204)
 
 
 @live_ingest_router.post(

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import struct
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -12,6 +14,7 @@ from sqlalchemy.orm import Session
 from qym_platform.datetime_utils import to_api_timestamp, to_storage_utc, utc_now_naive
 from qym_platform.db.models import (
     LiveCanaryResult,
+    LiveChartImage,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
@@ -38,9 +41,32 @@ class _NonFiniteJSONError(ValueError):
     """A turn contains a non-finite number in a producer JSON value."""
 
 
+class ChartImageError(Exception):
+    """A chart image cannot be attached to the requested live turn."""
+
+    def __init__(self, status: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status = status
+        self.detail = detail
+
+
 def utcnow() -> datetime:
     """Return qym's receive time as naive UTC."""
     return utc_now_naive()
+
+
+def parse_png(data: bytes) -> tuple[int, int]:
+    """Read dimensions from a PNG signature and complete first IHDR chunk."""
+    if (
+        len(data) < 33
+        or not data.startswith(b"\x89PNG\r\n\x1a\n")
+        or data[8:16] != b"\x00\x00\x00\rIHDR"
+    ):
+        raise ValueError("invalid PNG")
+    width, height = struct.unpack_from(">II", data, 16)
+    if not (0 < width <= 2147483647 and 0 < height <= 2147483647):
+        raise ValueError("invalid PNG")
+    return width, height
 
 
 def upsert_source(
@@ -254,6 +280,47 @@ def upsert_turns(
         report[counter] += 1
         report["results"].append(result)
     return report
+
+
+def upsert_chart_image(
+    db: Session,
+    source: LiveSource,
+    turn_id: str,
+    ref: str,
+    data: bytes,
+    settings: PlatformSettings,
+) -> str:
+    """Store a declared chart's PNG, leaving the commit to the caller."""
+    turn = (
+        db.query(LiveTurn)
+        .filter_by(source_id=source.id, turn_id=turn_id)
+        .with_for_update()
+        .first()
+    )
+    if turn is None:
+        raise ChartImageError(404, "turn not found")
+    charts = (turn.summary or {}).get("charts", [])
+    if not isinstance(charts, list) or not any(
+        isinstance(chart, dict) and chart.get("ref") == ref for chart in charts
+    ):
+        raise ChartImageError(404, "chart not found")
+    width, height = parse_png(data)
+    row = db.query(LiveChartImage).filter_by(turn_pk=turn.id, ref=ref).first()
+    created = row is None
+    if row is None:
+        count = db.query(LiveChartImage.id).filter_by(turn_pk=turn.id).count()
+        if count >= settings.live_chart_images_per_turn:
+            raise ChartImageError(409, "chart image limit reached")
+        row = LiveChartImage(turn_pk=turn.id, ref=ref)
+        db.add(row)
+    row.content_type = "image/png"
+    row.byte_size = len(data)
+    row.width = width
+    row.height = height
+    row.sha256 = hashlib.sha256(data).hexdigest()
+    row.image = data
+    row.received_at = utcnow()
+    return "created" if created else "replaced"
 
 
 def insert_canaries(db: Session, source: LiveSource, results: list[CanaryBody]) -> int:
