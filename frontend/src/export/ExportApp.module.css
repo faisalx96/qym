@@ -1,0 +1,38 @@
+/* The exported run page (C173): a one-line snapshot note above the page, which scrolls in its own region like the app. */
+.frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.banner {
+  flex: none;
+  margin: 0;
+  padding: var(--space-xs) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-size: var(--shell-font-xs);
+}
+
+.banner strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background: var(--bg-void);
+  outline: none;
+}
+
+.away {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  align-items: flex-start;
+  padding: var(--space-lg);
+  color: var(--text-secondary);
+}

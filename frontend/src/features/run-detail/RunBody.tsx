@@ -184,7 +184,7 @@ export function RunBody({
   /** The summary has not answered (the header is the list row): hold the requests it makes unnecessary. */
   summaryPending?: boolean;
 }) {
-  const { slug, readOnly, project } = useProjectContext();
+  const { slug, readOnly, project, snapshot } = useProjectContext();
   const [params] = useSearchParams();
   const passParam = readPassParam(params);
   const directions = project.metric_directions;
@@ -315,7 +315,8 @@ export function RunBody({
           />
           <ExperimentPanel run={run} slug={slug} />
           {/* C027: no Review history card; the hero's History button opens the review log */}
-          <RunNotices run={run} readOnly={readOnly} />
+          {/* An exported file (C173) says it is a read-only snapshot above the page */}
+          {snapshot ? null : <RunNotices run={run} readOnly={readOnly} />}
         </Stack>
         <RunReport pageRef={pageRef} />
       </div>

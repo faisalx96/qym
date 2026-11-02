@@ -4,7 +4,11 @@
 features of the server, not pages: the file opens offline, so the run page it
 is built from (``export_templates/run/``: the frozen run template with its CSS
 and scripts) is inlined here and fed the run's data through
-``window.__QYM_EXPORT_DATA__``.
+``window.__QYM_EXPORT_DATA__``. The file is a read-only snapshot (C173).
+
+The run page's own "Export HTML" no longer uses this: it builds the file in the
+browser from today's React run page (``GET /api/export/run-template``). This
+template stays for the Compare export's run tabs and for API callers.
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from __future__ import annotations
 import html as html_lib
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
@@ -169,6 +174,8 @@ def build_run_export_html(data: Dict[str, Any]) -> str:
     # Serialize data. Escape every "<" (JSON has none outside strings) so stored
     # text can neither close this script ("</script>") nor switch the parser
     # into a comment state that swallows it ("<!--<script>").
+    # The file says when it was exported (C173: it is a read-only snapshot).
+    data = {**data, "exported_at": datetime.now(timezone.utc).isoformat()}
     data_json = json.dumps(data, ensure_ascii=False, default=str)
     data_json = data_json.replace("<", "\\u003c")
 

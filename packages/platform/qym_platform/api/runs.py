@@ -4390,6 +4390,25 @@ def export_run_html(
     )
 
 
+@router.get("/api/export/run-template")
+def run_export_template(principal: Principal = Depends(require_ui_principal)) -> HTMLResponse:
+    """The built export page (C173): today's React run page, every script and style inlined, with no run in it.
+
+    The run page's "Export HTML" fetches it, puts the run's data in it in the
+    browser and downloads one read-only file. The frontend build writes it to
+    ``_static/app/export.html`` (``vite.export.config.ts``).
+    """
+    from qym_platform.api import spa
+
+    page = spa.spa_dir() / "export.html"
+    if not page.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="The export page is not built: run `npm run build` in frontend/",
+        )
+    return HTMLResponse(content=page.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
+
+
 # Every run is built in full into the one file: keep the request bounded.
 MAX_COMPARE_EXPORT_RUNS = 8
 

@@ -274,18 +274,24 @@ export function useRunSummaryQuery(runId: string, slug: string, project?: RunPay
   });
 }
 
+/** Fetch one late group and merge it into the rows store. */
+export async function loadLateGroup(
+  qc: QueryClient,
+  runId: string,
+  group: RowGroup,
+  signal?: AbortSignal,
+): Promise<true> {
+  const data = await fetchRunRows(runId, [group], signal);
+  qc.setQueryData<RunPayload>(runKeys.compact(runId), (prev) => (prev ? mergeLateGroup(prev, data) : prev));
+  return true;
+}
+
 /** One late group on its way into the rows store (stage 3). Aborted when its section leaves the page. */
 export function useRowGroupQuery(runId: string, group: RowGroup, enabled: boolean) {
   const qc = useQueryClient();
   return useQuery({
     queryKey: runKeys.rows(runId, group),
-    queryFn: async ({ signal }) => {
-      const data = await fetchRunRows(runId, [group], signal);
-      qc.setQueryData<RunPayload>(runKeys.compact(runId), (prev) =>
-        prev ? mergeLateGroup(prev, data) : prev,
-      );
-      return true;
-    },
+    queryFn: ({ signal }) => loadLateGroup(qc, runId, group, signal),
     enabled,
     staleTime: Infinity,
     gcTime: 60_000,
@@ -575,6 +581,9 @@ export function useApproveLegacyCorrection(runId: string) {
     onSuccess: () => void qc.invalidateQueries({ queryKey: runKeys.compact(runId) }),
   });
 }
+
+/** The built export page (C173): the React run page with every script and style inlined, and no run in it yet. */
+export const RUN_EXPORT_TEMPLATE_URL = '/api/export/run-template';
 
 export function exportHtmlUrl(runId: string): string {
   return runUrl(runId, '/export-html');

@@ -46,6 +46,7 @@ import { RunPager } from './RunPager';
 import { RejectNote, ReviewLog, RunHeaderActions } from './RunActions';
 import { useRunPage } from '../RunContext';
 import { useModelIndex } from '@/api/dashboard';
+import { useOptionalProject } from '@/features/shell/ProjectContext';
 import { modelSlot } from '@/features/runs-list/model';
 import styles from './RunHero.module.css';
 
@@ -243,6 +244,7 @@ function ContextBand({
 
 export function RunHero({ run, model, live, passSummary, slug, listParam, basePath }: RunHeroProps) {
   const location = useLocation();
+  const snapshot = !!useOptionalProject()?.snapshot;
   const samples = model.samples;
   const viewPass = model.viewPass;
   const pass = viewPass ? passSummary : null;
@@ -337,8 +339,13 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
                 Runtime <span className={styles.mono}>{formatDurationMs(runtimeMs)}</span>
               </span>
             ) : null}
-            <RunHeaderActions run={run} slug={slug} />
-            <RunPager runId={run.run_id} slug={slug} listParam={listParam} />
+            {/* An exported file (C173) has no server: no actions and no other runs to page to */}
+            {snapshot ? null : (
+              <>
+                <RunHeaderActions run={run} slug={slug} />
+                <RunPager runId={run.run_id} slug={slug} listParam={listParam} />
+              </>
+            )}
           </div>
         </div>
         {viewPass ? null : <RejectNote runId={run.run_id} status={run.status} enabled={reviewsKnown} />}

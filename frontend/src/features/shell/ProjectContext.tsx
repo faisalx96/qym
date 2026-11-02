@@ -10,6 +10,8 @@ export interface ProjectValue {
   archived: boolean;
   /** The caller is a Viewer of the project: the server answers 403 to every change (C033). */
   viewer: boolean;
+  /** The page is an exported file (C173): read-only, with no server behind it. */
+  snapshot?: boolean;
   /** project.role === 'MANAGER' or global admin. */
   canManage: boolean;
   isAdmin: boolean;
@@ -24,7 +26,8 @@ export function useProjectContext(): ProjectValue {
 }
 
 /** Why the project's controls are locked, for a tooltip or a toast. */
-export function readOnlyReason(ctx: Pick<ProjectValue, 'archived' | 'viewer'>): string {
+export function readOnlyReason(ctx: Pick<ProjectValue, 'archived' | 'viewer' | 'snapshot'>): string {
+  if (ctx.snapshot) return 'This is a read-only snapshot.';
   return ctx.archived ? 'This project is archived.' : 'Viewers cannot change this project.';
 }
 
