@@ -1,0 +1,1145 @@
+{
+  "w1440": {
+    "filterGroup": {
+      "x": 221,
+      "y": 192,
+      "w": 420,
+      "h": 43.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "StatusAll statuses All statusesqueuedrunningcompletedpartialfailedcancelledCreated by meLatency-sensitive only"
+    },
+    "filterBox": {
+      "x": 499,
+      "y": 219,
+      "w": 141.9,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive only"
+    },
+    "filterOrder": [
+      "Created by me",
+      "Latency-sensitive only"
+    ],
+    "tagsOff": [
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      }
+    ],
+    "rowsAll": [
+      34,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "footerAll": [
+      "13 experiments",
+      "13 experiments"
+    ],
+    "url": "latency=1",
+    "rowsOn": [
+      34,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "names": [
+      "NameStatusProgressEnvironmentsBaseJobsCr",
+      "lat sweepLatency-sensitiverunning2/6stag",
+      "alice latLatency-sensitiverunning0/1prod",
+      "gateLatency-sensitivefailed1/1production",
+      "lat twoLatency-sensitiverunning0/1stagin",
+      "lat oneLatency-sensitivecompleted1/1stag"
+    ],
+    "footerOn": [
+      "5 experiments",
+      "5 experiments"
+    ],
+    "overflowList": 0,
+    "urlOff": "",
+    "queueFilter": {
+      "x": 958,
+      "y": 376,
+      "w": 141.9,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive only"
+    },
+    "queueFilterOrder": [
+      "Only my jobs",
+      "Latency-sensitive only"
+    ],
+    "note": [
+      {
+        "t": "A latency-sensitive job is active on production. Other jobs wait until it finishes.",
+        "h": 25.4,
+        "role": "note",
+        "font": "11px",
+        "bc": "color(srgb 0.632549 0.444902 0.171961)"
+      },
+      {
+        "t": "A latency-sensitive job is active on staging. Other jobs wait until it finishes.",
+        "h": 25.4,
+        "role": "note",
+        "font": "11px",
+        "bc": "color(srgb 0.632549 0.444902 0.171961)"
+      }
+    ],
+    "highNote": 0,
+    "queueTags": [
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      }
+    ],
+    "queueRows": [
+      34,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "queueJobCells": [
+      "—blocked tok #0The experiment's dataset read token is unavailable; ret",
+      "—lat two #0Latency-sensitiveattempt 2stagingNormalRUNNING18m ago18m 11",
+      "—staging vs prod #0stagingNormalRUNNING33m ago32m 31sNot started",
+      "—staging vs prod #0productionNormalRUNNING33m ago32m 31sNot started"
+    ],
+    "queueOverflow": 0,
+    "queueUrl": "latency=1",
+    "queueMeta": [
+      "6 jobs",
+      "6 jobs"
+    ],
+    "sel": {
+      "x": 1010,
+      "y": 1568,
+      "w": 374.3,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "Anyone in the project"
+    },
+    "selDisabled": false,
+    "section": {
+      "x": 212,
+      "y": 1481,
+      "w": 1193,
+      "h": 262.9,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "20px",
+      "text": "PoliciesLimits applied to experiments launched on this environment.Max priorityHIGH LOWNORMALHIGHDefault priorityNORMAL LOWNORMALHIGHWho can launch latency-sens"
+    },
+    "selects": [
+      {
+        "t": "HIGH",
+        "w": 374.3,
+        "h": 24,
+        "dis": false
+      },
+      {
+        "t": "NORMAL",
+        "w": 374.3,
+        "h": 24,
+        "dis": false
+      },
+      {
+        "t": "Anyone in the project",
+        "w": 374.3,
+        "h": 24,
+        "dis": false
+      }
+    ],
+    "help": {
+      "x": 1010,
+      "y": 1596,
+      "w": 374.3,
+      "h": 30.8,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "0px",
+      "text": "Latency-sensitive runs make other jobs on this environment wait. Project managers and admins can change this."
+    },
+    "options": [
+      "Anyone in the project",
+      "Project managers only"
+    ],
+    "envOverflow": 0,
+    "tokCard": {
+      "x": 212,
+      "y": 949,
+      "w": 1193,
+      "h": 786.7,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Dataset read tokensAdmin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Experiment tokens are issued at launch and revoked when the exp"
+    },
+    "tokDesc": [
+      "Dataset read tokens",
+      "Admin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Experiment tokens are issued at launch and revoked when the experiment settles.",
+      "Token name"
+    ],
+    "tokRows": [
+      {
+        "h": 34,
+        "t": "NamePrefixCreated byCreatedStatusActions"
+      },
+      {
+        "h": 40,
+        "t": "admin svc tokenqym_dr_g5jVwOQvR…Dev Userjust nowactive"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · lat sweepexperimentExperiment · lat sweepqym_dr_k2KcEoufX…A"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · blocked tokexperimentExperiment · blocked tokqym_dr_7jbhk8F"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · alice latexperimentExperiment · alice latqym_dr_qxQGv-UpT…A"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · lat twoexperimentExperiment · lat twoqym_dr_Xj_sRVM6C…Dev U"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · gateexperimentExperiment · gateqym_dr_0vSzm6ATR…Bob23m agor"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · gateexperimentExperiment · gateqym_dr_lg_HyExqi…Alice23m ag"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · plain twoexperimentExperiment · plain twoqym_dr_Z1pI3rXqm…D"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · lat twoexperimentExperiment · lat twoqym_dr_u9KPokF1u…Dev U"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · lat oneexperimentExperiment · lat oneqym_dr_S0nFirneO…Dev U"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · private runexperimentExperiment · private runqym_dr_FgmJolp"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · urgent checkexperimentExperiment · urgent checkqym_dr__Wb8v"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · timeout sweepexperimentExperiment · timeout sweepqym_dr_eB9"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · staging vs prodexperimentExperiment · staging vs prodqym_dr"
+      },
+      {
+        "h": 40,
+        "t": "Evaluation Service · baseline runexperimentExperiment · baseline runqym_dr_XxT-D"
+      }
+    ],
+    "kindChips": [
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      }
+    ],
+    "links": [
+      {
+        "t": "Experiment · lat sweep",
+        "href": "/projects/design-b/experiments/bd255fbd-e49a-4eda-b378-0aeca476915c",
+        "w": 113.2,
+        "h": 14,
+        "font": "11px/400"
+      },
+      {
+        "t": "Experiment · blocked tok",
+        "href": "/projects/design-b/experiments/1d141a8e-3dfb-4413-bcee-9fcc7cac5a16",
+        "w": 123.2,
+        "h": 14,
+        "font": "11px/400"
+      }
+    ],
+    "tokCount": 16,
+    "tokOverflow": 0,
+    "secretVisible": 0
+  },
+  "w1024": {
+    "filterGroup": {
+      "x": 221,
+      "y": 192,
+      "w": 420,
+      "h": 43.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "StatusAll statuses All statusesqueuedrunningcompletedpartialfailedcancelledCreated by meLatency-sensitive only"
+    },
+    "filterBox": {
+      "x": 499,
+      "y": 219,
+      "w": 141.9,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive only"
+    },
+    "filterOrder": [
+      "Created by me",
+      "Latency-sensitive only"
+    ],
+    "tagsOff": [
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      }
+    ],
+    "rowsAll": [
+      34,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "footerAll": [
+      "13 experiments",
+      "13 experiments"
+    ],
+    "url": "latency=1",
+    "rowsOn": [
+      34,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "names": [
+      "NameStatusProgressEnvironmentsBaseJobsCr",
+      "lat sweepLatency-sensitiverunning2/6stag",
+      "alice latLatency-sensitiverunning0/1prod",
+      "gateLatency-sensitivefailed1/1production",
+      "lat twoLatency-sensitiverunning0/1stagin",
+      "lat oneLatency-sensitivecompleted1/1stag"
+    ],
+    "footerOn": [
+      "5 experiments",
+      "5 experiments"
+    ],
+    "overflowList": 0,
+    "urlOff": "",
+    "queueFilter": {
+      "x": 221,
+      "y": 422,
+      "w": 141.9,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive only"
+    },
+    "queueFilterOrder": [
+      "Only my jobs",
+      "Latency-sensitive only"
+    ],
+    "note": [
+      {
+        "t": "A latency-sensitive job is active on production. Other jobs wait until it finishes.",
+        "h": 40.8,
+        "role": "note",
+        "font": "11px",
+        "bc": "color(srgb 0.632549 0.444902 0.171961)"
+      },
+      {
+        "t": "A latency-sensitive job is active on staging. Other jobs wait until it finishes.",
+        "h": 40.8,
+        "role": "note",
+        "font": "11px",
+        "bc": "color(srgb 0.632549 0.444902 0.171961)"
+      }
+    ],
+    "highNote": 0,
+    "queueTags": [
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      }
+    ],
+    "queueRows": [
+      34,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      45,
+      40,
+      40,
+      45,
+      40,
+      40,
+      40
+    ],
+    "queueJobCells": [
+      "—blocked tok #0The experiment's dataset read token is unavailable; ret",
+      "—gate #0productionNormalRUNNING23m ago22m 39sNot started",
+      "—lat sweep #1Latency-sensitivetimeout=12stagingNormalRUNNING13m ago13m",
+      "—lat sweep #2Latency-sensitivetimeout=13 · Queued on the evaluation se"
+    ],
+    "queueOverflow": 0,
+    "queueUrl": "latency=1",
+    "queueMeta": [
+      "6 jobs",
+      "6 jobs"
+    ],
+    "sel": {
+      "x": 732,
+      "y": 1585,
+      "w": 235.7,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "Anyone in the project"
+    },
+    "selDisabled": false,
+    "section": {
+      "x": 212,
+      "y": 1498,
+      "w": 777,
+      "h": 278.3,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "20px",
+      "text": "PoliciesLimits applied to experiments launched on this environment.Max priorityHIGH LOWNORMALHIGHDefault priorityNORMAL LOWNORMALHIGHWho can launch latency-sens"
+    },
+    "selects": [
+      {
+        "t": "HIGH",
+        "w": 235.7,
+        "h": 24,
+        "dis": false
+      },
+      {
+        "t": "NORMAL",
+        "w": 235.7,
+        "h": 24,
+        "dis": false
+      },
+      {
+        "t": "Anyone in the project",
+        "w": 235.7,
+        "h": 24,
+        "dis": false
+      }
+    ],
+    "help": {
+      "x": 732,
+      "y": 1613,
+      "w": 235.7,
+      "h": 46.2,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "0px",
+      "text": "Latency-sensitive runs make other jobs on this environment wait. Project managers and admins can change this."
+    },
+    "options": [
+      "Anyone in the project",
+      "Project managers only"
+    ],
+    "envOverflow": 0,
+    "tokCard": {
+      "x": 212,
+      "y": 949,
+      "w": 777,
+      "h": 1040,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Dataset read tokensAdmin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Experiment tokens are issued at launch and revoked when the exp"
+    },
+    "tokDesc": [
+      "Dataset read tokens",
+      "Admin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Experiment tokens are issued at launch and revoked when the experiment settles.",
+      "Token name"
+    ],
+    "tokRows": [
+      {
+        "h": 34,
+        "t": "NamePrefixCreated byCreatedStatusActions"
+      },
+      {
+        "h": 40,
+        "t": "admin svc tokenqym_dr_g5jVwOQvR…Dev Userjust nowactive"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · lat sweepexperimentExperiment · lat sweepqym_dr_k2KcEoufX…A"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · blocked tokexperimentExperiment · blocked tokqym_dr_7jbhk8F"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · alice latexperimentExperiment · alice latqym_dr_qxQGv-UpT…A"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · lat twoexperimentExperiment · lat twoqym_dr_Xj_sRVM6C…Dev U"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · gateexperimentExperiment · gateqym_dr_0vSzm6ATR…Bob23m agor"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · gateexperimentExperiment · gateqym_dr_lg_HyExqi…Alice23m ag"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · plain twoexperimentExperiment · plain twoqym_dr_Z1pI3rXqm…D"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · lat twoexperimentExperiment · lat twoqym_dr_u9KPokF1u…Dev U"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · lat oneexperimentExperiment · lat oneqym_dr_S0nFirneO…Dev U"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · private runexperimentExperiment · private runqym_dr_FgmJolp"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · urgent checkexperimentExperiment · urgent checkqym_dr__Wb8v"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · timeout sweepexperimentExperiment · timeout sweepqym_dr_eB9"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · staging vs prodexperimentExperiment · staging vs prodqym_dr"
+      },
+      {
+        "h": 56.9,
+        "t": "Evaluation Service · baseline runexperimentExperiment · baseline runqym_dr_XxT-D"
+      }
+    ],
+    "kindChips": [
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      }
+    ],
+    "links": [
+      {
+        "t": "Experiment · lat sweep",
+        "href": "/projects/design-b/experiments/bd255fbd-e49a-4eda-b378-0aeca476915c",
+        "w": 113.2,
+        "h": 14,
+        "font": "11px/400"
+      },
+      {
+        "t": "Experiment · blocked tok",
+        "href": "/projects/design-b/experiments/1d141a8e-3dfb-4413-bcee-9fcc7cac5a16",
+        "w": 123.2,
+        "h": 14,
+        "font": "11px/400"
+      }
+    ],
+    "tokCount": 16,
+    "tokOverflow": 0,
+    "secretVisible": 0
+  },
+  "w390": {
+    "filterGroup": {
+      "x": 85,
+      "y": 244,
+      "w": 261,
+      "h": 74.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "StatusAll statuses All statusesqueuedrunningcompletedpartialfailedcancelledCreated by meLatency-sensitive only"
+    },
+    "filterBox": {
+      "x": 199,
+      "y": 302,
+      "w": 141.9,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive only"
+    },
+    "filterOrder": [
+      "Created by me",
+      "Latency-sensitive only"
+    ],
+    "tagsOff": [
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      },
+      {
+        "w": 98.4,
+        "h": 20,
+        "fam": "\"Qym Sans\", "
+      }
+    ],
+    "rowsAll": [],
+    "footerAll": [
+      "13 experiments",
+      "13 experiments"
+    ],
+    "url": "latency=1",
+    "rowsOn": [],
+    "names": [],
+    "footerOn": [
+      "5 experiments",
+      "5 experiments"
+    ],
+    "overflowList": 0,
+    "urlOff": "",
+    "queueFilter": {
+      "x": 190,
+      "y": 690,
+      "w": 141.9,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive only"
+    },
+    "queueFilterOrder": [
+      "Only my jobs",
+      "Latency-sensitive only"
+    ],
+    "note": [
+      {
+        "t": "A latency-sensitive job is active on production. Other jobs wait until it finishes.",
+        "h": 40.8,
+        "role": "note",
+        "font": "11px",
+        "bc": "color(srgb 0.632549 0.444902 0.171961)"
+      },
+      {
+        "t": "A latency-sensitive job is active on staging. Other jobs wait until it finishes.",
+        "h": 40.8,
+        "role": "note",
+        "font": "11px",
+        "bc": "color(srgb 0.632549 0.444902 0.171961)"
+      }
+    ],
+    "highNote": 0,
+    "queueTags": [
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      },
+      {
+        "w": 98.4,
+        "h": 20
+      }
+    ],
+    "queueRows": [],
+    "queueJobCells": [],
+    "queueOverflow": 0,
+    "queueUrl": "latency=1",
+    "queueMeta": [
+      "6 jobs",
+      "6 jobs"
+    ],
+    "sel": {
+      "x": 97,
+      "y": 2453,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "Anyone in the project"
+    },
+    "selDisabled": false,
+    "section": {
+      "x": 76,
+      "y": 2236,
+      "w": 279,
+      "h": 472.9,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "20px",
+      "text": "PoliciesLimits applied to experiments launched on this environment.Max priorityHIGH LOWNORMALHIGHDefault priorityNORMAL LOWNORMALHIGHWho can launch latency-sens"
+    },
+    "selects": [
+      {
+        "t": "HIGH",
+        "w": 237,
+        "h": 24,
+        "dis": false
+      },
+      {
+        "t": "NORMAL",
+        "w": 237,
+        "h": 24,
+        "dis": false
+      },
+      {
+        "t": "Anyone in the project",
+        "w": 237,
+        "h": 24,
+        "dis": false
+      }
+    ],
+    "help": {
+      "x": 97,
+      "y": 2481,
+      "w": 237,
+      "h": 46.2,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "0px",
+      "text": "Latency-sensitive runs make other jobs on this environment wait. Project managers and admins can change this."
+    },
+    "options": [
+      "Anyone in the project",
+      "Project managers only"
+    ],
+    "envOverflow": 0,
+    "tokCard": {
+      "x": 76,
+      "y": 2194,
+      "w": 279,
+      "h": 2718.7,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Dataset read tokensAdmin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Experiment tokens are issued at launch and revoked when the exp"
+    },
+    "tokDesc": [
+      "Dataset read tokens",
+      "Admin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Experiment tokens are issued at launch and revoked when the experiment settles.",
+      "Token name"
+    ],
+    "tokRows": [],
+    "kindChips": [
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      },
+      {
+        "t": "experiment",
+        "w": 69.6,
+        "h": 20
+      }
+    ],
+    "links": [
+      {
+        "t": "Experiment · lat sweep",
+        "href": "/projects/design-b/experiments/bd255fbd-e49a-4eda-b378-0aeca476915c",
+        "w": 113.2,
+        "h": 14,
+        "font": "11px/400"
+      },
+      {
+        "t": "Experiment · blocked tok",
+        "href": "/projects/design-b/experiments/1d141a8e-3dfb-4413-bcee-9fcc7cac5a16",
+        "w": 123.2,
+        "h": 14,
+        "font": "11px/400"
+      }
+    ],
+    "tokCount": 0,
+    "tokOverflow": 0,
+    "secretVisible": 0
+  },
+  "memberTokenCard": 0,
+  "memberSelectDisabled": true,
+  "memberSelects": [
+    true,
+    true,
+    true
+  ]
+}

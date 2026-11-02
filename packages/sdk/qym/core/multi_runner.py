@@ -20,6 +20,7 @@ from .evaluator import Evaluator
 from .observers import CompositeEvaluationObserver, EvaluationObserver
 from .results import EvaluationResult, render_results_summary, summary_display_enabled
 from .config import RunSpec, EvaluatorConfig
+from .dataset import DatasetRef, dataset_label
 
 
 class MultiModelRunner:
@@ -191,7 +192,10 @@ class MultiModelRunner:
         for index, spec in enumerate(self.specs):
             model_name = spec.config.model or spec.config.run_metadata.get("model")
             ds_name = spec.dataset
-            if hasattr(spec.dataset, "name"):
+            if isinstance(spec.dataset, (list, tuple, DatasetRef)):
+                # Several datasets (or a reference): the run label, nothing loaded.
+                ds_name = dataset_label(spec.dataset)
+            elif hasattr(spec.dataset, "name"):
                 ds_name = spec.dataset.name
             total_items = None
             try:
@@ -309,7 +313,10 @@ class MultiModelRunner:
 
             # Handle dataset name for display
             ds_name = spec.dataset
-            if hasattr(spec.dataset, "name"):
+            if isinstance(spec.dataset, (list, tuple, DatasetRef)):
+                # Several datasets (or a reference): the run label, nothing loaded.
+                ds_name = dataset_label(spec.dataset)
+            elif hasattr(spec.dataset, "name"):
                 ds_name = spec.dataset.name
 
             dashboard_configs.append(
@@ -331,6 +338,8 @@ class MultiModelRunner:
         semaphore = asyncio.Semaphore(max_parallel_runs) if max_parallel_runs else None
 
         # Size the thread pool to match actual parallelism so sync tasks don't queue.
+        # Sync metrics don't share it: each Evaluator scores through its own
+        # metric queue and thread pool (metric_concurrency x max_metric_concurrency).
         # Effective parallel models = min(num_specs, max_parallel_runs or num_specs)
         num_specs = len(self.specs)
         effective_parallel = (

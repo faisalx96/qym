@@ -1,0 +1,81 @@
+/* Selection action cluster (status bar inline, or bottom sheet in the rail variant). */
+.actions {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.count {
+  white-space: nowrap;
+}
+
+/* Cohort mode: one flat segment per side; A carries the lock, B turns green once it balances A. */
+.cohorts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.side {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.side[data-side='a'] {
+  color: var(--text-primary);
+}
+
+.side[data-side='a'] svg {
+  color: var(--text-muted);
+}
+
+.side[data-ready] {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+}
+
+/* between the actions and Done selecting */
+.divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-default);
+}
+
+.actions > * {
+  flex-shrink: 0;
+}
+
+/* Guidance gives way first: it adds no minimum width, so the buttons never clip. */
+.actions > .guidance {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  flex-shrink: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .actions > .guidance {
+    flex-basis: 100%;
+    width: auto;
+  }
+}

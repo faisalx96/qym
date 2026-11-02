@@ -1,0 +1,65 @@
+/* Items section content (the ReportSection panel owns the frame and the head). */
+.section {
+  position: relative; /* contains the absolutely positioned .srOnly live regions */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.aside {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.srOnly {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The filter bar stays under the section nav while the table scrolls (tall viewports only). At 1440+ it is exactly
+   one --bar-action-h row (below); narrower it wraps onto a second line (the controls need about 1190px). */
+.sticky {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  background: var(--panel-bg, var(--bg-void));
+}
+
+@media (min-width: 761px) and (min-height: 640px) {
+  .sticky {
+    position: sticky;
+    min-height: var(--bar-action-h);
+    box-sizing: border-box;
+    top: var(--run-nav-h, 0px);
+    z-index: 5;
+    padding-bottom: var(--space-xs);
+  }
+}
+
+/* Wide: the filter bar is exactly one --bar-action-h row (FilterBar lays itself out in one line). */
+@media (min-width: 1440px) and (min-height: 640px) {
+  .sticky {
+    height: var(--bar-action-h);
+    padding-bottom: 0;
+  }
+}

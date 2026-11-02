@@ -1,0 +1,179 @@
+/* Sticky section nav under the shell topbar; the filter bar sticks right below it. */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+  min-height: var(--bar-nav-h);
+  box-sizing: border-box;
+  padding: var(--space-xs) 0;
+  background: var(--bg-void);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.identity {
+  display: none;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  max-width: 28ch;
+}
+
+.nav[data-compact] .identity {
+  display: inline-flex;
+}
+
+/* RF1 (C132): below 1600 px the stuck nav does not repeat the run name and status, so the links get the room. */
+@media (max-width: 1599px) {
+  .nav[data-compact] .identity {
+    display: none;
+  }
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.links {
+  flex: 1;
+  display: flex;
+  align-self: stretch;
+  align-items: stretch;
+  gap: var(--space-xs);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* A copy of every link and of the More trigger, for their widths only (RF1): no size, no paint, no pointer. */
+.measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: var(--space-xs);
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Underline tabs, as in the first qym (round 10): 13px / 600, the section in view in the accent with a 2px line on
+   the bar's bottom edge. The pill tabs read as small grey text. */
+.link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  align-self: stretch;
+  padding: 0 6px;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.link:hover,
+.link[data-hovered],
+.link[data-pressed] {
+  color: var(--text-primary);
+}
+
+/* The More trigger is a link-styled button (RF1). */
+button.link {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.link:focus-visible,
+.link[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+  border-radius: var(--control-radius);
+}
+
+.link[aria-current='location'] {
+  color: var(--accent-primary);
+}
+
+.link[aria-current='location']::after {
+  content: '';
+  position: absolute;
+  inset-inline: 6px;
+  bottom: calc(-1 * var(--space-xs) - 1px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent-primary);
+}
+
+.count {
+  padding: 0 5px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.link[data-tone='danger'] .count {
+  /* `--danger` is not a token; match the Tabs count: tinted pill, readable numeral */
+  padding: 0 var(--space-xs);
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
+}
+
+.sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--border-subtle);
+}
+
+/* Page-wide Filters and Clear sit at the end of the bar; a phone keeps only the scrolling link row. */
+.actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* The page-wide metric: a label, then chips (or one select when the metrics are many or the bar is narrow). */
+.metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.metricLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* The page-wide Pass if threshold (C039): one inline slider beside the metric. The controls keep only the bar's
+   gap between them, so every section link fits at 1440 px (RF1). */
+.threshold {
+  flex: none;
+  margin-inline: var(--space-xs);
+}
+
+@media (max-width: 767px) {
+  .actions {
+    display: none;
+  }
+}

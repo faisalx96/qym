@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
+from qym_platform.log import get_logger
 from qym_platform.services.root_cause_categories import (
     analysis_root_cause_issues,
     category_taxonomy_for_categories,
@@ -28,6 +29,9 @@ if TYPE_CHECKING:
 AGGREGATION_TIMEOUT_SECONDS = 120.0
 AGGREGATION_MAX_TOKENS = 4096
 MAX_GENERATED_CANONICAL_LABEL_CHARS = 120
+
+
+logger = get_logger(__name__)
 
 
 class AnalysisAggregationError(RuntimeError):
@@ -469,6 +473,7 @@ async def _aggregate_catalogs(
             ),
         }
     except asyncio.TimeoutError as exc:
+        logger.warning("Root-cause aggregation timed out after %.1fs", timeout_seconds)
         raise AnalysisAggregationError(
             "root-cause category/detail aggregation timed out "
             f"after {timeout_seconds:.1f}s"
@@ -476,6 +481,7 @@ async def _aggregate_catalogs(
     except AnalysisAggregationError:
         raise
     except Exception as exc:
+        logger.exception("Root-cause aggregation failed")
         raise AnalysisAggregationError(
             f"root-cause category/detail aggregation failed: {exc}"
         ) from exc

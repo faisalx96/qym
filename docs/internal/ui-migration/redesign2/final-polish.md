@@ -1,0 +1,34 @@
+# Final polish pass (branch ui/final-polish, from UI-redesign 7e2e6242)
+
+Screenshots of every fixed surface at 1440 and 390 px are in the orchestrator scratchpad `fp/shots/`
+(not committed): `items-toolbar`, `exp-home`, `exp-detail`, `admin-runs`, `overview`, `analysis`, `errors`, `sweep`,
+`wiz-settings`, `wiz-models`, `repeat`, each `-1440.png` and `-390.png`.
+
+| # | Item | Change | Test | Status |
+|---|---|---|---|---|
+| 1 | F7 hover on "Input mapping", "More options", "Full value" | `ui/Disclosure` trigger: title and chevron turn `--accent-primary` on hover (was `--text-primary` to `--text-primary`, so no pixel changed). "Full value" is a `Button` and already reacted. | `e2e/visual-language/hover-audit.spec.ts` "analysis: Input mapping, More options and Full value answer hover" (fails without the CSS, passes with it) | done |
+| 2 | F8 bars at `--bar-action-h` (56 px) | Experiment home `.homeBar`: centred row, name field label visually hidden (`hideLabel`, placeholder is the hint), `height: var(--bar-action-h)` and no wrap above 960 px (was 61 px). Run items toolbar: at 1440+ `FilterBar` lays controls, count and chips in one nowrap row, `.sticky` height `--bar-action-h` (was 71 px); only the chips scroll (`.chipList`), "Clear" stays reachable. | `sticky-bars.spec.ts`: items toolbar and home bar are 56 (+1) at 1440; toolbar stays one row with an active filter and Clear is clickable | done at 1440+; **partial below 1440**: the 761 to 1439 px toolbar still wraps onto two rows (min-height 56, about 71 at 1100). The controls need about 1190 px; the overflow-menu alternative was not built because moving Sort / threshold would change the specs that drive them. Made the bar non-sticky below 1440 first, which broke `run-detail/qa-fixes.spec.ts` (sticky at 1280), so sticky from 761 px is kept. |
+| 3 | F10 Admin and Overview tags | Admin run cell: name and task pill inline (`runInline`, was `TwoLine` stacked). Overview Live / Recent / Approved: name + Official + task pill on one line, dataset and model tags on a second nowrap line (shared `DatasetCell` / `ModelCell`); model tag hidden at 390; model colours follow first appearance (the overview has no frequency index). | `final-polish.spec.ts`: Admin pill same line (centres within 6 px, cell under 34 px), Overview 1440 (task + dataset + model visible), Overview 390 (task and dataset visible, model hidden) | done |
+| 4 | F13 analysis headings | Analysis `Card` titles H3 to H2 (`--font-xl` 18); run header name `lg` to `xl` H2. No H3 left on the page. | `heading-scale.spec.ts` "analysis: sections are H2 18px, panels H3 15px, no H3 larger than an H2" (plus the existing 22/18/15 scale test) | done |
+| 5 | F15 card recipes | `Card` gains `flush` (0-padding table or chart card) and `as="aside"`. Now on `Card`: experiment home and step-1 cards (environments, dataset, name and priority, start from), review pane, latency kind tiles, per-task chart cards, experiment matrix table frame. `.panel` recipe in `launch.module.css` deleted (replaced by `.cardStack`), the `.kind`, `.tableWrap` (detail) and `.card` (charts) frames deleted. The start cards keep `role=radio` and their local class (which already mirrors the Card recipe: 1 px outline, `--card-padding`, `--rail-width` rail). | `final-polish.spec.ts` "one card recipe" (radius = `--radius-md`, 1 px outline, `--bg-surface` on four surfaces); Vitest `visual-language.test.tsx` (aside + flush) | done for the listed surfaces. The repeat-run page itself had no 5 px / 8 px tile; the only such tiles found in the run report were the Latency kind tiles, converted. Other bespoke frames (analyzer guidance, datasets, reviews) were not in scope and remain. |
+| 6 | N1 compare error cards | Card column capped at `minmax(min(22rem, 100%), 26rem)` with `auto-fit` (about 420 px, no full-row stretch); each row is name, count, a 4 px share-of-largest bar, then the change pill, on a shared subgrid so rows align. | `final-polish.spec.ts` (card at most 430 px, count follows name, bar between count and card edge); `compare/final-fixes.spec.ts` rewritten from "fill the row" to "keep a compact column" | done |
+| 7 | N2 wizard double bar | New `WizardBar` replaces the sticky `StepNav` + `MobileLaunchBar` where the review rail gives way (settings step, narrow): one `--bar-action-h` region "Launch" holding the "Step navigation" nav (Back, Skip, Continue), run count, problem link, Cancel, Launch. At 390 the problem link and Cancel move into a "More launch options" menu, the long labels drop under 1100 px. `MobileLaunchBar.tsx` deleted. | `final-polish.spec.ts`: bar is 56 (+1) at 1440 on settings and at 390 on models, exactly one Step navigation, only one sticky element in the bottom 140 px, no problem link in the bar at 390; `wizard.spec.ts` and `layout.spec.ts` updated | done |
+| 8 | N3 sweep titles and rhythm | The three sweep section titles use `SectionHeader` (18 px H2, hairline, 48 px lead-in) like the compare sections; `.sweep > section` takes the flex gap back so spacing matches. | `final-polish.spec.ts`: every sweep H2 is 18 px, and the lead-in from the previous section to the next H2 differs from the compare report's by at most 3 px | done |
+
+## Gate
+
+- `npm run check` (heavy.sh --cost 2): typecheck, eslint, stylelint, Vitest 140 files / 1,265 tests (was 1,263), design-language 49; green.
+- `pytest tests/platform/test_design_language.py`: 1 passed.
+- Playwright, `heavy.sh --cost 4`, folders `visual-language experiments compare run-detail shell runs-list analyzer admin`: **971 passed, 12 skipped, 2 failed** (21.2 min).
+- `npm run build`: green.
+
+### Failures, classified
+
+1. `compare/final-fixes.spec.ts` "the eight run colours are eight distinct hues": run colours 1 and 7 are 198 and 187 degrees apart (needs 20). Not caused by this pass: `frontend/src/styles` is untouched here; the cyan series (`--chart-7`) added by the design pass sits 11 degrees from sky (`--chart-1`). The spec predates the palette change. **Left failing; needs a palette decision** (move one of the two hues, or relax the spec to the colour-blind-safe check the design pass used). It also failed in the first run before any change here.
+2. `run-detail/qa-fixes.spec.ts` "sticky section nav and filter bar" (default 1280 viewport): caused by this pass (first attempt made the filter bar non-sticky below 1440). Fixed by keeping sticky from 761 px; passes in the rerun.
+
+Earlier in the work, a first full run had 6 more failures from my own change (the chip strip scrolled "Clear" out of reach at 1280, and the wizard bar overflowed at 768 px); fixed with `.chipList` and shorter labels under 1100 px, rerun green.
+
+Targeted rerun after the fixes (`heavy.sh --cost 4`): qa-fixes, traces, filters, panels, repeat, sticky-bars, final-polish, heading-scale, hover-audit and `experiments/launch`: **217 passed, 0 failed**.
+
+All servers (8961, 5961, fake eval services, stub LLM) stopped; no listener left.

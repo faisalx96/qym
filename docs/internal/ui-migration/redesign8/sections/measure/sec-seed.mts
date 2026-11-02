@@ -1,0 +1,13 @@
+import { seedCompareScenario, ensureProject, createApiKey, seedCompareRun } from '/home/meshari-aldossari/Documents/qym/qym-wt-redesign8-sections/frontend/e2e/compare/seed.ts';
+import { seedAll } from '/home/meshari-aldossari/Documents/qym/qym-wt-redesign8-sections/frontend/e2e/run-detail/seed.ts';
+import { writeFileSync } from 'node:fs';
+const client = { baseUrl: 'http://127.0.0.1:8984' };
+const cmp = await seedCompareScenario(client, 'cmp-r8');
+const project = await ensureProject(client, 'Compare demo', 'cmp-r8');
+const token = await createApiKey(client, project.id);
+const ids: Record<string,string> = {};
+const specs = [['cand-d-mini-high','openai/gpt-5-mini',0.2,7],['cand-e-haiku','anthropic/claude-haiku-4',-0.05,8],['cand-f-large','openai/gpt-5',0.3,9],['cand-g-flash','google/gemini-2.5-flash',0.05,10]] as const;
+for (const [i,[name,model,skill,seed]] of specs.entries()) ids['e'+(i+1)] = await seedCompareRun(client, token, { name, model, skill, seed, taskErrors: i===1?[3]:[] });
+const rd = await seedAll(client, 'rd-seed');
+writeFileSync(process.env.S + '/sec-ids.json', JSON.stringify({ cmp, extra: ids, rd }, null, 1));
+console.log(JSON.stringify({cmp, ids, rd}, null, 1));

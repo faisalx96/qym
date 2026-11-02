@@ -1,0 +1,65 @@
+{
+  "/": [
+    {
+      "sel": "a._card_1mljt_2",
+      "text": "Access demoaccess-demoMANAGER2 runs16 membersupdat",
+      "w": 288,
+      "h": 127,
+      "href": "/projects/access-demo",
+      "kids": 8,
+      "idx": 6,
+      "rest": {
+        "deco": "none",
+        "border": "rgb(43,",
+        "bg": "rgb(26, 26, 40)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "underline",
+        "border": "rgb(59,",
+        "bg": "rgb(34, 34, 50)",
+        "shadow": "shadow"
+      }
+    }
+  ],
+  "/projects/access-demo": [],
+  "/projects/access-demo/overview": [],
+  "/projects/access-demo/charts": [],
+  "/projects/access-demo/models": [],
+  "/projects/access-demo/experiments": [],
+  "/projects/access-demo/experiments/queue": [],
+  "/projects/access-demo/environments": [],
+  "/projects/access-demo/datasets": [
+    {
+      "sel": "a._card_1mljt_2",
+      "text": "refund-casesv1 prod · currentRestrictedEdge cases ",
+      "w": 388,
+      "h": 226,
+      "href": "/projects/access-demo/datasets/refund-cases",
+      "kids": 14,
+      "idx": 16,
+      "rest": {
+        "deco": "none",
+        "border": "rgb(43,",
+        "bg": "rgb(26, 26, 40)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "underline",
+        "border": "rgb(59,",
+        "bg": "rgb(34, 34, 50)",
+        "shadow": "shadow"
+      }
+    }
+  ],
+  "/projects/access-demo/datasets/support-faq?tab=runs&v=v1": [],
+  "/projects/access-demo/datasets/support-faq?tab=lineage&v=v1": [],
+  "/projects/access-demo/datasets/support-faq?tab=items&v=v1": [],
+  "/projects/access-demo/reviews": [],
+  "/projects/access-demo/analysis": [],
+  "/docs": [],
+  "/admin/runs": [],
+  "/admin/projects": [],
+  "/profile": [],
+  "/trash": []
+}

@@ -1,19 +1,31 @@
 # qym Design Language
 
 **The single source of truth for all UI work in this repo.** If you are styling,
-editing, or generating anything under `packages/platform/qym_platform/_static/`,
-follow this document. It is enforced by `tests/platform/test_design_language.py` —
+editing, or generating anything under `frontend/` (the React app that is the
+platform UI, and the SDK-local viewer built from the same sources), follow this
+document. It is enforced by `frontend/src/__tests__/design-language.test.ts`
+(run by `tests/platform/test_design_language.py`), ESLint and Stylelint —
 violations fail CI, so read this before writing CSS, not after.
 
-Scope: the platform dashboard (`_static/dashboard/`). Two sanctioned exceptions
-are listed at the end (docs prose scale, the separate `/ui` app).
+Scope: everything in `frontend/src/`. The frozen offline export templates in
+`packages/platform/qym_platform/export_templates/` are a sanctioned exception
+(see section 5).
+
+**How this document is organised.** Section 1 is the vocabulary (tokens, type scale, fonts, spacing); section 2 the
+hard rules CI enforces; section 3 the recipes, one per primitive, grouped by purpose; section 4 the page anatomy;
+section 5 the sanctioned exceptions; section 6 how a product complaint becomes a measured spec and a verdict; section 7
+the design choices that failed and the generic rules that replaced them; section 8 the checks to run before you finish.
+When a recipe and a rule disagree, the rule (section 2 or 7) wins and the recipe is the thing to fix.
 
 ---
 
 ## 1. Vocabulary: design tokens
 
 All colors, sizes, spacing, and fonts come from the `:root` block in
-[`dashboard.css`](../packages/platform/qym_platform/_static/dashboard/dashboard.css).
+[`tokens.css`](../frontend/src/styles/tokens.css) (shell chrome sizes live in
+[`shell.css`](../frontend/src/styles/shell.css), global resets in `base.css`).
+The shared scale is defined there only; no other stylesheet may redefine
+`--font-*`, `--text-*`, `--bg-*` or `--control-height`.
 **Never hardcode a value that has a token.** If you need a value that doesn't
 exist, add a token first, then use it.
 
@@ -30,7 +42,7 @@ The dim rule is the one most often violated, and it is absolute: if a human is
 expected to read it, it is `--text-muted` or brighter.
 
 Semantic colors (`--success/--warning/--error/--metric-error/--info`), the 5-step score scale
-(`--score-1..5`), chart colors (`--chart-1..5`), and accents
+(`--score-1..5`), chart colors (`--chart-1..8`), and accents
 (`--accent-primary/secondary/tertiary/tertiary-soft`) are for state and data
 encoding — they are not part of the hierarchy ramp and don't substitute for it.
 
@@ -48,46 +60,65 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 | Card title / sub-header | `--font-md` | 13px / 600 | primary | Also form inputs. |
 | Body / table cell / code | `--font-base` | 12px / 400 | secondary | |
 | Meta / caption / label / **table header** | `--font-sm` | 11px / 400 (labels 600–650) | muted | Uppercase labels get `letter-spacing: 0.05em`. |
-| Badge / pill | `--font-xs` | 10px / 650 | semantic | Badges only — nothing else may be 10px. |
+| Badge / pill | `--font-xs` | 10px / 650 | semantic | Tag chrome (and the retired Badge) only — nothing else may be 10px. |
 
-Major analytical sections use a sentence-case `--font-lg` section title followed
-by a concise muted `--font-sm` description. Do not introduce a major section
-with an uppercase metadata-style label. The run detail page is the exception:
-its top-level sections are page sections reached from the sticky section nav
-and use the run section header recipe below (`--font-xl` title).
+**One heading scale across pages** (enforced by `e2e/visual-language/heading-scale.spec.ts`): the page title is
+`--font-title` 22/650 (even the visually hidden `h1` of Runs and Charts), a section heading is `--font-xl` 18/650
+(`SectionHeader`'s default level; the run, compare, analysis, charts and admin sections), a panel or group heading is
+`--font-lg` 15/600 (Overview panels, per-task chart cards, run-detail group titles such as "Response time" and "By pass"),
+and a small label is `--font-md` 13/600 uppercase and tracked. No page writes its own heading size.
+
+Major analytical sections use a sentence-case section title (`--font-xl`) followed
+by a concise muted `--font-base` description, through the `Section` recipe below. Do not introduce a major section
+with an uppercase metadata-style label. The run and compare pages are the exception: their top-level sections are
+framed `ReportSection` panels (see "Report section"), reached from the sticky section nav.
 
 **Floor: no readable text below 11px.** 10px is reserved for badge/pill chrome.
 Off-scale values (9px, 10.5px, 11.5px, 12.5px, 13.5px, 14px, 16px, 17px, 20px…)
 must snap to the nearest role token.
 
-**Glyph exemption:** decorative glyphs — `×` close buttons, `▶`/`▼` disclosure
-arrows, `●` markers, `↕` sort hints, emoji, and oversized empty-state icons
-(32–48px) — may keep hardcoded pixel sizes. They are icons drawn with text, not
-text. The CI test freezes the current inventory of these; adding a new one means
-updating the test's allowlist deliberately.
+**Glyph exemption:** decorative glyphs — `×` close buttons, disclosure arrows,
+markers, sort hints, emoji, and oversized empty-state icons — use the
+`--glyph-*` tokens (`--glyph-md` 20px, `--glyph-lg` 48px), not raw pixels. They
+are icons drawn with text, not text. The frozen px inventory in
+`design-language.test.ts` (`FROZEN_HARDCODED_SIZES`) starts empty; adding an
+entry is a deliberate exemption, named in the commit message.
 
 ### Font families
 
+- Body text is weight 450 (Plex Sans is variable, 400 to 700) with font hinting on (no
+  `text-rendering: geometricPrecision`): at 400, and with hinting off, 11 to 13px text drew thin and blurred under
+  Windows ClearType next to the first qym's Segoe UI (round 10). Explicit weights (500, 600, 650, 700) are unchanged.
 - `--font-sans` — everything humans read: names, descriptions, prose, buttons,
   headers, labels.
 - `--font-mono` — **data only**: IDs, row numbers, JSON, code, metric/latency
-  values, timestamps, version strings. Never for prose or UI chrome. When in
+  values, timestamps, version strings. The runs list's Date column is the exception: sans with `tabular-nums`
+  (round 10: the mono face spread the date and time apart). Never for prose or UI chrome. When in
   doubt: if it could contain a sentence, it's sans.
-- No other families. No webfonts (DM Sans and Georgia were removed; the CI test
-  bans them).
-- The mono stack is system faces only: `ui-monospace, SFMono-Regular, 'SF Mono',
-  Menlo, …, Consolas, 'Liberation Mono', monospace`. **Menlo must stay**: it is
-  the only mono face Chrome on macOS can see by name; without it the generic
-  `monospace` resolves to Courier. Any hardcoded mono stack (e.g. the SDK-local
-  `_static/ui`) names Menlo too; CI checks both.
-- **Text direction.** Every block that shows user or model text takes
-  `QymSafe.textDirAttrs(text)` (or `QymSafe.applyTextDir(el, text)` for DOM
-  nodes): mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else
+- One typeface family, three scripts: **IBM Plex Sans** (Latin), **IBM Plex Sans Arabic** and
+  **IBM Plex Mono**, self-hosted as subsetted woff2 in `src/styles/fonts/` (SIL OFL, licence texts beside
+  the files; choice and measurements in `docs/internal/ui-migration/redesign2/typeface-study.md`).
+  `@font-face` lives in `tokens.css`: `Qym Sans` and `Qym Mono` are Latin-only by `unicode-range`, `Qym Arabic`
+  is Arabic-only, so Arabic text in a sans or mono block renders in the Arabic face at its own optical size
+  with no `lang` plumbing. All use `font-display: swap`, and `Qym Sans Fallback` / `Qym Mono Fallback`
+  (local Arial / Menlo with `size-adjust` and `ascent-override`) keep layout still during the swap.
+- The stacks are `--font-sans` and `--font-mono` and nothing else; never name a family in a component.
+  DM Sans, Georgia, Google Fonts imports and `@fontsource` packages stay banned (the CI test checks).
+  New files must be subsetted (Latin + Arabic), woff2, with a licence file; total font payload is capped
+  at 200 KB by the design test.
+- The system tail of the mono stack still names **Menlo** (the only mono face Chrome on macOS can see by name);
+  any hardcoded mono stack names Menlo too; CI checks both.
+- Tables (`table`, `grid`, `treegrid`) set `font-variant-numeric: tabular-nums` once in `base.css`.
+- **Text direction.** Every block that shows user or model text goes through
+  `TextBlock` (`src/ui/TextBlock`) or takes `textDirAttrs(text)` from
+  `@/lib/text`: mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else
   `dir="auto"`. Put it on the block element, never an inline span inside a
   left-to-right block; use `text-align: start`, never `left`. Code and JSON
   editors whose lines mix scripts use `unicode-bidi: plaintext` on every layer
   (CodeMirror: `EditorView.perLineTextDirection`). Arabic blocks get the 1.7
-  leading from `dashboard.css`, which page line-heights cannot override.
+  leading from `tokens.css`, which component line-heights cannot override.
+  `TextBlock` is also the only place `dangerouslySetInnerHTML` is allowed
+  (ESLint).
 
 ### Shell chrome scale
 
@@ -103,336 +134,928 @@ removed on purpose; one token name means one value everywhere.
   `--bg-surface` cards/panels, `--bg-elevated` table headers/inputs/nested
   surfaces, `--bg-hover`/`--bg-active` interaction states.
 - Borders: `--border-subtle` (default hairlines), `--border-default`
-  (inputs, popovers), `--border-strong` (emphasis/dividers).
+  (popovers), `--border-strong` (emphasis/dividers). A field-like control's edge is `--control-edge`
+  (`--border-subtle`) at rest and `--control-edge-hover` (`--border-default`) on hover (round 10).
 
 ---
 
 ## 2. Hard rules (CI-enforced)
 
-1. **Tokens only** for font sizes and text grays. No new hardcoded `font-size: Npx`
-   (CSS) or `fontSize: 'Npx'` (JS) outside the frozen glyph allowlist.
+Enforced by `npm run test:design` (vitest), ESLint (TSX rules) and Stylelint.
+
+1. **Tokens only** for font sizes and text grays. No hardcoded `font-size: Npx`
+   (CSS Modules; Stylelint also rejects it) or `fontSize` in a TSX `style`
+   prop (ESLint), outside the frozen glyph allowlist.
 2. **`--text-dim` never on readable content.**
 3. **No readable text below 11px.**
 4. **Mono for data, sans for words.**
-5. **No new font families**; DM Sans / Georgia / webfont imports are banned.
+5. **No new font families** beyond the self-hosted Plex set; DM Sans / Georgia / Google Fonts / `@fontsource` are banned.
 6. **The old grays `#7a7a90` and `#50505e` must not reappear** (they were the
    pre-2026-07 sub-AA ramp).
-7. JS-generated markup follows the same rules — `var(--font-sm)` etc. work fine
-   inside inline `style` strings; use them.
-8. Hex colors may be hardcoded in JS **only** when concatenated with alpha
-   suffixes (e.g. `color + '40'`) where `var()` is impossible — note it with a
-   comment.
+7. **No hardcoded colours.** Hex and `white` are rejected for `color` and
+   `background` in CSS (Stylelint) and in TSX `style` props (ESLint). Use
+   `var(--…)`.
+8. **Surfaces are always themed.** The app is dark only and `:root` declares
+   `color-scheme: dark` (also set in `index.html`), so anything the browser
+   draws itself (form controls, `<dialog>`, scrollbars, native popups) comes up
+   dark even before a stylesheet has loaded. No stylesheet paints a surface in
+   raw `#fff`/`white`; use `var(--bg-*)`.
+9. **The shared scale is defined once.** Only `tokens.css` declares
+   `--font-*`, `--text-*`, `--bg-*` and `--control-height`.
+10. **Features compose primitives.** Feature CSS does not restyle a primitive
+    (no `--control-height` heights, no `--font-xs` outside Badge/Tag, no
+    pill-shaped clickable chips of its own); `--docs-font-*` / `--docs-body`
+    are only referenced from `features/docs/`.
+11. **`dangerouslySetInnerHTML` only inside `src/ui/TextBlock`.**
+12. **Tints come from the tone recipe.** No `rgba()` literal outside `tokens.css`
+    (tints are `color-mix(in srgb, var(--tone) var(--tint-soft), transparent)`,
+    scrims and scrollbars are tokens); `tones.css` maps every tone, band and series.
+13. **Pages do not declare their own `.card`.** Use `ui/Card` (see "Card").
+14. **Hover is colour, border and opacity only**: no `transform`, `translate` or
+    `scale` in a `:hover` / `[data-hovered]` rule.
+15. **`LinkButton` shares Button's states**: `a.button:hover`, `:active` and
+    `:focus-visible` exist in `Button.module.css`.
+16. **Scroll- and pin-driven geometry never transitions** (`ui/DataTable`): no
+    `transition` or `animation` on `left`, `right`, `top`, `bottom`, `inset-*`,
+    `transform`, `box-shadow`, `width`, `inline-size` or `all` (a frozen cell or sticky
+    header follows the scroll position directly; a transition would trail it). Nothing in the
+    table fades while scrolling: the frozen boundary's shade switches on and off with the scroll
+    flags, with no transition (see "Data table"), so no `opacity` transition exists either. Scroll handlers write refs,
+    data attributes and styles only: no React state and no layout read (`getBoundingClientRect`)
+    per scroll event.
 
 ---
 
-## 3. Component recipes (copy these, don't invent)
+## 3. Component recipes: the React primitives
 
-The shared control and display primitives live in
-[`ui_components.css`](../packages/platform/qym_platform/_static/dashboard/ui_components.css),
-with shared keyboard/touch behavior in
-[`ui_components.js`](../packages/platform/qym_platform/_static/dashboard/ui_components.js).
-Load the stylesheet after page-local styles and load the script with `defer`.
-New markup uses the canonical `qym-*` classes; the legacy selectors listed
-beside them are migration aliases only.
+Every shared control and display element is a primitive in
+[`frontend/src/ui/<Name>/`](../frontend/src/ui/): `<Name>.tsx`, a CSS Module `<Name>.module.css` whose **first line
+names the recipe it implements**, and an `index.ts` (import from `@/ui`). Do not build page-local copies; if a primitive
+is missing a variant, extend the primitive. State is expressed in `data-*` attributes (`data-selected`, `data-hovered`,
+`data-focus-visible`, ...). The UI gallery at `/__ui` (Vite dev server) shows every primitive in every state. The recipe
+contracts (heights, radii, fonts, z-index tokens) are pinned per primitive in `design-language.test.ts`.
 
-### Control
-`.qym-control` is the single aligned-density input recipe: 24px high, 5px
-radius, `--font-sm`, and `--font-sans`. The 24px height keeps control text
-visually level with adjacent 11px toolbar labels. Add `.qym-input`,
-`.qym-select`, or `.qym-search` to describe behavior, not density. There are no
-compact or roomy variants. Compact inline action buttons beside these controls
-use `.qym-inline-action` and the same height. Add
-`.qym-inline-action--neutral` for secondary toolbar actions,
-`.qym-inline-action--accent` for the primary action in that row, or
-`.qym-inline-action--danger` for an explicit destructive action; all use the
-shared borderless rounded-rectangle surface. Danger actions use the semantic
-error color and must state what will be deleted. External integration actions
-may use a documented brand modifier such as `.qym-inline-action--langfuse`;
-brand color belongs to the integration action, never to generic controls. Textareas,
-range inputs, the 42px authentication fields, and composite controls such as
-the playground connection picker remain separate recipes and must not inherit
-`--control-height`.
-Within a mixed header action cluster, align direct actions and an adjacent
-status badge to the same 24px control height. The badge keeps its pill
-silhouette and semantic tint; actions keep their own semantic surfaces.
+The recipes are grouped by what they are for. A "round N" or "Pn" inside a recipe names the feedback round that produced
+it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evidence.
 
-### Multiselect dropdown
-Use `.qym-dropdown` with content in this fixed order:
+### 3.1 Controls, navigation and overlays
 
-1. `.qym-dropdown__search`
-2. `.qym-dropdown__actions` containing Select All and None/Clear
-3. 32px `.qym-dropdown__option` rows
+**Focus and hit targets (C087, C202).** Only a focused control draws a ring: a tab button, a field, a button; a tab
+area, a list or a panel never outlines as a whole. Every small control has a 24x24 hit area without changing its drawn
+size (a checkbox box, an info marker, the pager arrows, the row `>` handle, which is 32px on a touch screen). Delete sits
+in the row menu, apart from the other row actions.
 
-Each option may expose `.qym-dropdown__only`, an explicit “Only” action that
-clears the prior selection and keeps that option. Do not hide this capability
-behind double-click.
+**Ctrl K (C043).** The palette lists projects, pages (with aliases: "trash" finds Deleted runs, "overview" the
+Dashboard; Queue, Environments and Deleted datasets included) and actions; from 2 characters it also shows the current
+project's Runs, Datasets and Experiments that match, 5 of each. With no query the current project's first page is
+preselected.
 
-### Tabs and switchers
-Section navigation uses `.qym-tabs` + `.qym-tabs__tab`: underline-only active
-state, `role="tablist"`/`role="tab"`, and synchronized `aria-selected`. Shared
-behavior provides roving focus and Left/Right/Home/End navigation.
-Dense dataset collection tabs inside chart cards are the exception: they keep
-an elevated strip, a filled active surface with green text/underline, and a
-filled count tile on every tab. Horizontally overflowing tab strips reveal
-their scrollbar thumb only on hover.
-The run detail page's **sticky section nav** (`.run-section-nav`) is the one
-jump-link variant: one row under the run header with the run name and status
-(shown once the bar sticks), one link per section (`data-run-section-link`,
-`--font-md` / 600, muted; the section in view gets `aria-current` and the
-shared sliding underline in Qym green), the page-wide Filters + Clear, and a
-back-to-top icon action. Links carry `.qym-tag--count` counts (errors use the
-danger tone). No percentages, progress bars or proportional link widths. The
-bar sticks with a frosted `--bg-void` background and gains a shadow only while
-stuck. Dropdowns opened from the bar (the filter builder) hang under it and
-close on Escape or an outside click.
+- **Control** (`TextField`, `Select`, `MultiSelect`, `SearchField`, `NumberField`,
+  `Textarea`, `Button`, `LinkButton`, `SegmentedControl`): one aligned density,
+  `--control-height` (24px) and `--control-radius`, `--font-sm`, sans. There are
+  no compact or roomy variants. Buttons come in neutral, accent (primary) and
+  danger tones; a danger action states what will be deleted. A neutral button is quiet at rest
+  (`--bg-elevated`, no border or ring, round 9) and brighter on hover (`--bg-active`), never the
+  reverse: a resting fill brighter than its hover reads as already pressed (round 8). Field-like controls (text field,
+  select, filter trigger, segmented control, date and time field) share that `--bg-elevated` fill with a soft
+  `--control-edge` (round 10: the `--border-default` outlines read as too bold next to the borderless buttons). A
+  disabled neutral or ghost button keeps the flat shape at half its fill with muted text and no outline (round 10: an
+  outline made a locked button look like another, louder style).
+  **Which button** (round 11, owner: "one unified rule set"): `primary` (solid green) is the one action that commits a
+  card or form: Save, Create, Add, New project. `accent` (green tint) runs something useful without saving: Test
+  connection, Run preset, Unarchive. `neutral` cancels, discards, compares or navigates: Cancel, Discard, View diff.
+  `danger` (red tint) deletes or replaces: Delete, Archive, Revoke, Restore default. A disabled primary, accent or
+  danger button keeps its own colour at 45% opacity, so a locked Save is still the green Save and a locked Restore
+  default is still red. A creating action carries the plus glyph (New project, Add connection, Add environment).
+  **Button rules (C049, C234, C136, C166, C232; enforced in `design-language.test.ts`):** Delete, Archive, Disable and
+  Revoke are `danger` everywhere; Cancel is neutral; the red `× Clear n` of a filter bar stays red (owner, Oct 26 and
+  Nov 1). Every button is 24px: `size="md"` draws 32px only inside a dialog footer (`[data-dialog-footer]`, set by
+  `Dialog`), so a page that asks for `md` still gets 24px. A page's main action is `primary`, 24px, with the `plus`
+  `Icon`, named "New <object>" or "Add <part>". A disabled button says why on hover through `disabledReason` ("No
+  changes to save", "Select two runs"). Labels and placeholders carry no "…" (progress words such as "Saving…" stay),
+  and a glyph is always an `Icon`: no typed "+", "×", "←" or "→" in a button.
+  Brand colour
+  belongs to an integration action only (e.g. Langfuse), never to generic
+  controls. The 42px authentication fields (`TextField`),
+  textareas, sliders and composite controls are separate recipes and do not
+  inherit `--control-height`. In a mixed header action cluster, actions and an
+  adjacent status badge share the 24px control height.
 
-**Run section header.** Every top-level run-page section opens with
-`.run-section-head` (`data-run-section="<key>"`): a `--font-xl` / 650 primary
-title, one muted `--font-base` description line (ellipsis), the section's
-controls in `.run-section-head__aside` on the right, a `--border-subtle`
-hairline above and about 48px (`--space-xl` × 1.5) from the previous section.
-Sections do not add their own top or bottom margins; the header owns the
-spacing.
+- **Multiselect** (`MultiSelect`): content in fixed order: search, actions
+  (Select all and None/Clear, neutral 20px buttons at rest, round 10), then `--dropdown-option-height` option rows.
+  The trigger's chevron sits at the end of the box, not after the label.
+  Each option may expose an explicit "Only" action; never hide it behind
+  double-click. As a filter (`emptyMeansAll`, the runs facets) no filter shows every box ticked: unticking a
+  value narrows to the rest, ticking them all again is no filter, and None (or unticking the last one) matches
+  nothing (`noneKey`). No hint line explains it; filter lists always have the search.
 
-In-place view, metric, repeat, and time switching uses `.qym-segmented` +
-`.qym-segmented__option`. The complete segmented control is 24px high so it
-aligns with adjacent selectors; options fill its inset content box, and only
-the selected option has a Qym-green background. Shared behavior moves one
-sliding selection indicator between options, preserves the prior position across
-keyed re-renders, re-measures controls after async content or visibility
-changes, and disables that motion when the user prefers reduced motion; pages
-must not add page-local selection animation.
+- **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
+  underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and
+  Left/Right/Home/End from React Aria). The selected tab is green, label and 2px underline (a danger tab is red); the
+  list's baseline is an inset 1px shadow, so the underline sits inside the list and is never clipped, and the list never
+  shows a scrollbar unless the tabs really overflow (round 10). In-place view/metric/repeat/time
+  switching uses `SegmentedControl`: 24px high, only the selected option has the
+  accent wash with accent text at 600 (C136: the solid green fill is for primary buttons only), one sliding indicator,
+  no motion under
+  `prefers-reduced-motion`. Pages never add their own selection animation. The
+  run detail page's sticky section nav (jump links at `--font-md` / 600 with the section in view in the accent and a 2px
+  accent underline on the bar's edge, the page metric, page-wide Filters + Clear, back-to-top) is
+  the one jump-link variant; no percentages or progress bars in it. The page metric (round 10) is one control in the
+  nav: chips while the metrics are five or fewer and the window is at least 1680px wide, else one `Select`. Every
+  section follows it (Repeat tiles and curves, Quality vs latency, Categories, the Items analysis); no section carries
+  its own metric picker, and each names the metric it shows.
 
-### Badges, tags, and chips
-Status and outcome labels use `.qym-badge`: 20px minimum height, fully rounded,
-tinted outline, sans 10px/650. Semantic tones are success
-(completed/approved/improved), info (running), danger
-(failed/rejected/regressed), warning (draft/stopped), and neutral
-(submitted/within-noise). Statuses keep their outline and pill silhouette.
+- **Disclosure** (`Disclosure`): a closed-by-default group inside a section,
+  one trigger row (chevron, `--font-md` title, muted `--font-sm` summary such as
+  "Default fields") and a panel that animates its height in `--transition-fast`
+  (none under `prefers-reduced-motion`). Use it instead of a nested card for
+  advanced settings; never inside another Disclosure.
 
-Roles, provenance, versions, passive metadata, and compact counts use
-`.qym-tag`: 20px minimum height, borderless, `--control-radius`, and a
-tinted/elevated fill. Add `.qym-tag--role`, `.qym-tag--accent`, or
-`.qym-tag--count` for those specific meanings; use `.qym-tag--data` or
-`.qym-tag--version` when the content itself is data. Semantic filled tones use
-`.qym-tag--success`, `--info`, `--warning`, or `--danger`. Roles, counts, data,
-and versions are mono; other human-readable tags are sans. A tag may grow
-vertically when its content wraps.
+- **Steppers and disclosure motion** (`Stepper`, `Collapse`): a wizard's progress rail is
+  `Stepper`: an ordered list of always-clickable buttons (`aria-current="step"`), a 4px
+  bar per step that fills with a `scaleX` transition (logical origin, flips in RTL), a
+  `--accent-primary` bar for done and current steps, info and danger count tags, and a
+  compact "Step n of N" form with a jump select below 760px. Disclosures animate with
+  `Collapse` (`grid-template-rows` 0fr to 1fr, never a px height; closed content is `inert`
+  and `visibility: hidden`). Motion tokens: `--motion-step` (180ms), `--motion-step-out`
+  (140ms), `--ease-standard`, `--transition-fast` for hover; every animation is off under
+  `prefers-reduced-motion`. A wizard step panel enters with a 180ms opacity and 8px rise;
+  pages never add other selection animations.
 
-Interactive filters use `.qym-chip`: 26px tall, rounded outline, sans 11px/600.
-Counts remain mono. Buttons remain real buttons; passive metadata must not use
-the chip recipe.
+- **Action rail** (auto-analysis, `features/analyzer/blocks/ActionRail`): a page-level sticky bottom bar of
+  `--action-rail-height`, always mounted, with a fixed primary-button width (`--action-primary-width`) so
+  label changes never move neighbours. Exactly one accent button per state. The sections above it reserve
+  their space (`--results-slot-min-height`) so state changes insert nothing above existing content.
 
-### Compact icon actions
-Use `.qym-icon-action` for a single icon-only action such as copy, expand, open,
-more, edit, or close. It is a 24px borderless square with
-`--control-radius` and a transparent resting surface. Hover and keyboard focus
-change only the glyph to Qym green platform-wide: do not add a tile, surface
-tint, ring, or glow on pointer hover. Keyboard focus retains the standard thin
-focus outline for accessibility. Copied confirmation keeps the green glyph
-briefly. Semantic actions keep their meaning: approve/submit use green while
-reject/delete use red. Help markers and passive icons are not icon actions and
-must not inherit this recipe. Every copy action uses the same 24×24-viewBox
-overlapping-rectangles SVG with `stroke="currentColor"`; page-local copy glyphs
-or hardcoded stroke colors are not allowed.
+- **Pagination** (`Pagination`): every paginated view uses it. Borderless
+  rounded-square icon buttons for First, Previous, Next, Last around a direct
+  page entry (28x24px, growing only with the digit count) and total, mono; no
+  connected pill and no visible action names. The Runs view pins it inside the
+  status bar with the range summary. Pass page-size options only where changing
+  the size is supported. After a page change in an item-by-item detail view the
+  scroll host returns to the start of the whole Items section (below the sticky
+  section nav), after layout has settled.
 
-### Connected statistics
-Primary summary bands use `.qym-stat-strip` with `.qym-stat-strip__item`,
-`__label`, and `__value`. The strip owns the outer border; equal cells have
-dividers and no individual card borders. Labels are 13px/650 with extra vertical
-space before 18px/700 mono values. Tiny card-footer metadata is not a stat strip.
-The Runs-table repeat-run **Group metrics** header is also not a stat strip: it
-is a compact inline summary within a table group row and intentionally keeps the
-`.samples-summary-*` recipe without `qym-stat-strip` classes.
-When a connected summary accompanies a section heading, use the compact header
-variant: one 34px row, with each icon, label, and value inline. It should match
-the heading block's visual height rather than compete with the section content.
-When a statistic cell has a leading icon beside a label/value stack, align the
-icon container to the top of the stack so it sits level with the label. Never
-center the icon against the combined label-and-value height.
-Compact model-card metric matrices also remain individual tiles; they are not
-page-level summary bands and must not be converted into connected strips.
+- **Icon action** (`IconButton`, `CopyButton`): a single icon-only action, a
+  24px borderless square with `--control-radius` and a transparent resting
+  surface. Hover and keyboard focus change only the glyph colour (Qym green);
+  no tile, tint, ring or glow on pointer hover. Keyboard focus keeps the thin
+  focus outline. Semantic actions keep their meaning (approve/submit green,
+  reject/delete red). The one exception is `tile` (table row actions only): the
+  tone's `--tint-soft` 20px square at rest and `--tint-strong` on hover, focus and press,
+  the glyph in the tone (accent, `--error` for danger, `--accent-tertiary` for `meta`, the auto-analysis purple).
+  `ActionTile` draws the same square with no action of its own, as the glyph of a `RowMenu` item. Help markers and
+  passive icons are not icon actions.
+  Revoking a key or token and disabling a user use the `ban` glyph (a circle with a slash), never a bare square or a
+  cross (round 10). A row action menu that would hold one action with a glyph, or a delete, shows it as an icon
+  instead; a lone action with no glyph stays in the menu (round 10).
+  Every copy action is `CopyButton` with the shared overlapping-rectangles
+  glyph from `Icon`.
 
-### Explanations
-Use the focusable `.qym-help-marker` with a nested `.qym-help-tooltip`
-(`role="tooltip"`). The same 12px marker is used for estimator definitions,
-uncertainty, and confidence explanations. Hover/focus opens it; click/touch pins
-one marker; outside-click and Escape close it. Shared behavior assigns tooltip
-IDs and `aria-describedby`, including for dynamically rendered markers and
-standalone exports.
+- **Explanations** (`HelpMarker`, `Tooltip`): the focusable 12px
+  `--info-marker-size` marker with a tooltip (`role="tooltip"`). Hover/focus
+  opens it, click/touch pins it, outside click and Escape close it. The marker is a filled accent disc with the "i" cut
+  out (a drawn glyph, centred), the same at rest and on hover: the tooltip is the only hover change (round 10).
 
-### Data table
-Use the shared `QymDataTable` component (`qym_table.js` + `.qdt-table` in
-`dashboard.css`) for new tables. Its styles are the reference implementation:
+- **Dialog and Drawer** (`Dialog`, `ConfirmDialog`, `FormDialog`, `Drawer`,
+  `Popover`, `Toast`): title `--font-xl`, body `--font-sm`-`--font-base`
+  secondary; z-index from the `--z-*` tokens only. Every modal surface has
+  `role="dialog"`, `aria-modal`, a label from its title, focus moved in on open,
+  Tab kept inside, Escape closing, and focus returned to the trigger (React
+  Aria provides this; do not hand-roll). Destructive confirms start on Cancel.
+  A closed drawer that stays mounted is `inert`. Never close a modal by toggling
+  `display`.
 
-```css
-thead th {  /* sticky header */
-  font-size: var(--font-sm);        /* 11px */
-  color: var(--text-muted);
-  background: var(--bg-elevated);
-  text-transform: uppercase; letter-spacing: 0.05em; font-weight: 650;
-}
-tbody td {
-  font-size: var(--font-base);      /* 12px */
-  color: var(--text-secondary);
-  font-family: var(--font-sans);    /* mono only on ID/number/JSON columns */
-}
-```
-Numeric/ID columns add `font-family: var(--font-mono)` and
-`font-variant-numeric: tabular-nums` per column, not per table.
-Right-align scalar numeric columns. A column whose primary content is a chart,
-bar, or score track aligns its header to the visualization's left edge.
-Score-bearing table values use `.qym-score-value` plus the `score-1`…`score-5`
-class returned by `QymMetrics.getMetricColorClass(value, type, direction)`,
-with the direction from `QymMetrics.metricDirection(spec)`. Lower-is-better
-metrics read the ramp inverted; a metric that declares no direction stays
-neutral (no good/bad color, Pass/Fail, "best" or winner). A lower-is-better
-metric leaves task and scorer errors out of its mean (`QymMetrics.getRowScore`
-with the direction): an errored value shows as "Error" or the ⚠
-`--metric-error` glyph, never as a colored score, a "best" or a histogram
-bucket, and the error count sits beside the mean. Raw numeric metrics
-stay neutral, and confidence intervals remain muted rather than inheriting the
-estimate's score color.
-Wide tables that use `.qym-scroll-mirror` expose only the persistent mirrored
-horizontal scrollbar. Shared behavior adds `.qym-scroll-mirror-target` to hide
-the target's native scrollbar while preserving wheel, touch, keyboard, and
-programmatic scrolling; never render both controls.
+### 3.2 Surfaces and layout
 
-### Pagination
-Use `QymUIComponents.renderPagination()` with a `.qym-pagination` host for every
-paginated data view. The Runs view uses the approved option A placement: the
-pager is pinned inside the existing status bar, with its range summary and
-controls kept together. The shared control uses individual borderless
-rounded-square icon buttons for First, Previous, Next, and Last around a direct
-page entry and total. The current-page entry keeps the filled rounded input
-treatment but is tightly controlled: 28×24px for short values and digit-aware
-growth only when the page count requires it. It must not expand into a large
-selected button. Do not wrap the controls in a connected pill or repeat the
-action names as visible button text. Matching disabled, hover, and focus states
-apply platform-wide. Pass `pageSizeOptions` only where changing the page size is
-supported. Do not build page-local pagination markup or CSS.
-Changing pages in an item-by-item detail view returns its nested scroll host to
-the start of the complete Items section (title and toolbar included, just below
-the run page's sticky section nav), not merely the first card. If content above that section rerenders asynchronously,
-perform the scroll after the layout has settled.
+- **Card** (`Card`): the one grouping surface. `--bg-surface` (`--bg-elevated` with no outline inside a `ReportSection` body, see "Report section"), 1px `--border-subtle`, `--radius-md`, padding
+  `--card-padding` (`compact`: `--card-padding-compact`), optional `header` / `footer` slots with a hairline. A 3px
+  inline-start rail (`--rail-width`, logical so RTL mirrors) carries the meaning: `tone`, `band` or `series`
+  (`rail="none"` drops it; `rail="bottom"` moves it under a tile that reads as a gauge, as the sweep stat tiles; `left` is
+  the default and the only other spelling). `wash="danger"|"live"` adds the 6% tint and is the only wash. A passive card has no hover.
+  `onPress` (div `role="button"`, Enter and Space), `href` or `to` (anchors) make it interactive: hover raises the
+  border to `--border-default`, the fill to `--bg-elevated` and adds `--shadow-card-hover`; pressed is `--bg-active`;
+  `isSelected` draws the accent border and a soft accent fill while the rail keeps its tone; focus is the 2px accent
+  outline. `fill` makes the card a flex column whose body takes the remaining height (a card a grid row stretches gives
+  the extra height to its plot, never to empty space under it). An interactive card holds no other interactive element. Never restyle a card per page: pass layout via
+  `className`, meaning via props.
 
-Wide tables that cannot expose their native horizontal scrollbar without
-vertical scrolling use `.qym-scroll-mirror` with
-`data-qym-scroll-mirror-for="<scroll-host-id>"`. The shared behavior renders an
-always-visible thumb over the table's bottom edge, keeps it synchronized with
-the table, and hides it when the table fits. The interaction wrapper remains
-transparent: do not create a separate rail, border, or background band above
-pagination. The thumb reuses the quiet, translucent neutral palette of the
-platform's vertical scrollbars; interaction may increase neutral contrast but
-must not introduce an accent-colored flash.
+- **Calm surface** (run detail, applies everywhere): a container (card, drawer, expanded item) is the only filled layer; inside
+  it at most one more fill level, reserved for code and JSON viewers, inputs and the selected or open state. Parts are
+  separated by a `--border-subtle` hairline and `--space-md` rhythm, never by nested tiles (a `ReportSection` panel holding inset cards is one level of containment, not nesting: the cards read `--bg-surface`/`--card-edge`, which the body redefines, owner decision H6); colour carries status, band,
+  series (a pass is `--chart-1..3`) or a selected state only. Stats in a group are a `StatStrip` (`StatStripItem.group`
+  labels runs of cells), key/value groups a `KeyValueGrid`.
 
-### Page hero
-```
-h1.page-title      → var(--font-title) / 650 / --text-primary
-p.description      → var(--font-base) / 400 / --text-muted (one line, ellipsis)
-div.meta-line      → var(--font-base) / 400 / --text-muted, '·' separators
-```
+- **Sticky bars** (`--bar-nav-h` 44px, `--bar-action-h` 56px): two heights across the app. The navigation bar of a
+  report (run-detail `SectionNav`) is `--bar-nav-h`; the compare page's links-only jump nav is the one exception,
+  `--bar-link-h` 36px (round 8, owner decision H5: it carries links only, no selects or buttons); an action bar (the experiment home launch bar,
+  the analysis action rail, the run items toolbar) is `--bar-action-h`. Pages set `min-height` from the token, never a
+  number. Enforced by `design-language.test.ts`.
 
-### Stat card
-```
-.label → var(--font-sm) / 600 / --text-muted / uppercase / ls 0.05em
-.value → var(--font-stat) / 700 / --font-mono / tabular-nums
-        (--text-primary, or a --score-N color when it encodes a score)
-```
-Mid-tier stats embedded in drawers/tiles use `--font-xl` instead of `--font-stat`.
+- **Page hero** (`PageHeader`): `Text` roles: title `--font-title` / 650 /
+  primary; description `--font-base` / muted, one line with ellipsis; meta line
+  `--font-base` / muted with `·` separators.
 
-### Uppercase label / eyebrow
-`var(--font-sm)` (or `--font-xs` only when physically inside a pill),
-weight 600–700, `--text-muted`, `text-transform: uppercase`,
-`letter-spacing: 0.05em`–`0.12em`.
+- **Report page and scope sidebar** (`ReportSection`, `ReportLayout`, `ScopeBar`,
+  `QuickFilterGroup`): run detail and compare are one stacked report. Every
+  analytic topic is a full-width `ReportSection` (framed panel, `xl`
+  title, container-query body so cards respond to the real column width: 2 / 3 /
+  4 per row, never a fixed 380px column); sections below the fold mount lazily
+  (`lazy`, once, with a reserved `minHeight`) and are hidden, not shown empty,
+  when the run has no such data. The quick-filter sidebar (`--report-sidebar-width`
+  300px, 320px from 1920px) exists only while the reader has narrowed the item
+  set (a scope: any chip, rule or search; sort, page, metric and layout are not
+  scope). The `ScopeBar` above the report lists "N of M items" with removable
+  chips, Clear all, View N items and the Hide / Show toggle (stored in
+  `localStorage qym:report-sidebar-hidden`). Under 1200px the sidebar is a
+  `Drawer` (360px) opened from the ScopeBar. The sidebar's first group lists the active
+  chips (the ScopeBar then shows only the count and actions; below 1200px the sticky
+  ScopeBar carries the chips). Lazy section bodies are not in the DOM until they near the
+  viewport, so browser find-in-page cannot see them and the scrollbar thumb grows as they mount. Sidebar and ScopeBar fade with
+  `--transition-fast` and not at all under `prefers-reduced-motion`.
 
-### Status badge / pill
-`var(--font-xs)` / 650, `border-radius: 999px`, 1px border, semantic color for
-both text and border, transparent or `*-dim` background.
+- **Section and section divider** (`Section`, `SectionHeader`; owner round, October 2026: "a reusable component for
+  sections and section dividers"): every titled block of a page outside the run and compare reports (admin tabs,
+  profile, dataset lineage) is a `Section`: a `SectionHeader` (`--font-xl` / 650 primary title, a 2px
+  gap, one muted `--font-base` description line, the controls on the end side and centred on the title block,
+  `--space-md` above the body) over its body. Sections that follow each other are divided by one `--border-subtle`
+  hairline with `--section-gap` (32px) on both sides of it, so the line belongs to neither block; the first section of
+  a page area (right under the tabs or the page header) has no line, so nothing doubles the tab underline.
+  `SectionHeader` draws no divider and no lead-in of its own (inside a card it is just the header). Parents stack
+  sections with no gap of their own. The run and compare reports use the framed `ReportSection` below instead.
+- **Settings card** (`SettingsCard`, project settings; round 10, as the old settings page): every settings tab opens
+  the same way, a card with a title, one description line and the block's main action (Add, Create) on the title
+  row's end side, then the controls. A tab has one Add button, in its card header; its empty state does not repeat it.
+  Facts about the project (slug, role, members, runs, created) live once, in the page header meta. The Danger zone is
+  the last section of General, a card like the others with no red rail; only its Archive and Delete buttons are red
+  (round 11). Members show the person, a role tag and an Edit action that changes the role in a dialog, as admin users
+  do (round 11). The AI prompt editor is a `Textarea` with `quietFocus` (a click in brightens the border to
+  `--border-strong` instead of the green ring; keyboard focus keeps the ring) and spell check off (round 11).
+  **One footer and two title recipes (C145, C235):** a card that saves settings ends with `SaveFooter` (pass `save` to
+  `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "All changes saved"), the 24px
+  primary Save at the end, disabled with the reason "No changes to save" until something changed; Discard or Test sit
+  before Save. Titles come in two recipes only: `SettingsCard` (13px, `--font-md`) for blocks that edit settings and
+  `Section` (18px) for read-mostly blocks. The run page title is the page title at 22px (`--font-title`).
+- **Person** (`UserName`; round 11): a user is an initials disc in the person's series colour (the same person is the
+  same colour everywhere), then the name; lists that must tell two people apart add the email after the name, muted
+  and mono. The runs Owner cell, admin users, project members and the add-member search all use it, and every user
+  search is the shared `SearchField`.
+- **Report section** (`ReportSection`; the run page and the compare page, `CompareSection` is retired; round 8b, owner
+  decision H6): every top-level section is a framed panel: `--bg-surface`, 1px `--border-subtle`, `--radius-md`, 14px
+  padding, 20px under the previous panel, the first panel with no lead-in. It opens with a `section-head` inside the
+  panel (no rule): a `--font-xl` / 650 primary title, one muted `--font-sm` description line, the section controls on the right, then
+  14px to the body. A card inside the body is an inset card: `--bg-elevated` with no visible outline. The primitive owns
+  every distance: pages set no gap between sections, sections add no margin of their own. Reason (section 6 amendment
+  rule): measured on both pages, the old 1.33:1 hairline was as faint as the card borders in the bodies and the compare
+  page had 28px and no mark between sections; one framed section replaces two recipes (measured: 20px between panels,
+  50px from the last pixel of a body to the next title (14 padding + 1 border + 20 gap + 1 border + 14 padding), first screen of the compare page unchanged within its ceilings).
 
-### Role / metadata tag
-`var(--font-xs)` / 650, `border-radius: var(--control-radius)`, no border, and a
-tinted or elevated background. Use mono only for roles, counts, IDs, and version
-strings.
+- **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
+  body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
+  Arabic input mirrors with the label next to the text; under 640px of container width the label stacks above. An object,
+  array or JSON string is a `StructuredValue`: one hairline section per top-level key (collapsible, copyable, typed body:
+  text, chips, table, tree), Sections | Raw (`localStorage qym:json-view`), expand all, a key index above four keys.
+  `SplitPane` is the window splitter (`role="separator"`, drag, Left/Right 2%, Home/End, double click resets, persisted in
+  a per-viewer key). `DataTable detailFit="viewport"` (default) keeps an expanded detail as wide as the visible scroller;
+  `ScoreBar marker` draws a baseline tick; `Drawer` takes `eyebrow`, `meta` and `scrim="heavy"`.
 
-### Modal
-Title `var(--font-xl)` (page-level modals) or reuse `.shell-modal` (body-mounted,
-root-token sizes). Body text `var(--font-sm)`–`var(--font-base)` secondary.
+- **Text blocks** (`TextBlock`, `JsonViewer`, `KeyValueGrid`): see Text
+  direction above; code and JSON are mono. `KeyValueGrid variant="tiles"` puts each pair on a `--bg-elevated`
+  tile (the run "Execution context"); an item `kind` of `config` or `metadata` adds a suffix and the `meta` tone,
+  `tone` adds a 3px start rail on a tile, `icon` a leading glyph.
 
-Every modal surface (shell dialogs, page modals, drawers, the trace viewer)
-goes through `QymUIComponents.openDialog(panel, { initialFocus, onEscape })`
-and `releaseDialog(panel)`: `role="dialog"`, `aria-modal`, a label from its
-title, focus moved in on open, Tab kept inside, Escape closing when the caller
-passes `onEscape`, and focus returned to the trigger on close. Destructive
-confirms start on Cancel, and Enter acts on the focused button (only a text
-field submits on Enter). A closed drawer that stays in the DOM is `inert`
-and `aria-hidden`, and carries `aria-modal` only while open. Never close a
-modal by toggling `display` inline.
+### 3.3 Labels, statistics and identity
 
-### Failed requests
-A failed load is never an empty or "not found" state. Use
-`QymUIComponents.renderErrorState(host, { title, error, onRetry })` in place
-of the region that failed: it names the cause (session ended → Sign in, no
-access, not found only for a real 404, server error, network) and offers
-Retry; it never shows a create action. A refresh that fails after data was
-shown keeps the rows dimmed (`.qym-is-stale`) under a `.qym-stale-banner`
-that says how old they are and whether the latest filter change is applied.
+**Arabic text (C056, C140, C050).** User and model text carries `dir="auto"` (entity tags, people, and
+`textDirAttrs` for longer text), so mixed Arabic and Latin reads in the right order. Tag text has a 1.5 line height so
+the dots under Arabic letters show, and Arabic inside a tag reads in the sans face at 11px. Every number and date is
+formatted in the one app locale (`APP_LOCALE`); ESLint rejects a `toLocale*` call without a locale.
 
-### Empty state
-Icon: hardcoded 32–48px glyph, `--text-dim`, low opacity. Title:
-`var(--font-xl)` / 650 / primary. Body: `var(--font-md)` / muted, line-height ≥1.5.
+**People, models and tags (C144, C165, C051, C238).** A person is always `UserName` (an initials disc in the person's
+series colour, then the name): the runs Owner, the run header, admin, API keys, datasets, presets, Reviews and Deleted
+runs. Task, dataset and model names are `TaskTag`, `DatasetTag` and `ModelTag` at 11px (`--font-sm`); count and role
+tags stay at 10px. A model's colour comes from one source, the project's model index (`useModelIndex` and `modelSlot`),
+on every page. A count is `Tag kind="count"` (a failure count is `tone="danger"`), a fact such as Baseline,
+Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill.
+
+- **Status mark** (`StatusMark`, `RunStatusBadge`): the one status component. Every lifecycle or state of a
+  run, pass, job, experiment, review, request, version, credential, environment or save is a `StatusMark`. No pill,
+  outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project marks) in the status
+  tone, then the word with its first letter upper-cased (the rest as the caller gives it, so OK stays OK), `--font-base` / 600, `--tone-text`, at least `--badge-height` tall. The
+  figure's shape is the non-colour cue: `full` completed or succeeded, `check` approved or ready, `cross` failed or
+  rejected, `pause` stopped, cancelled, archived, disabled or revoked, `orbit` running, submitting, cancelling or
+  checking (the ring with its first pixel lit; static: an infinite animation would keep the page from settling),
+  `ring` pending, queued, not run or unknown, `hourglass` waiting on someone (submitted, paused, blocked, not sent), `dot` draft
+  or unsaved. Tones as the Status row of "Colour as information". Passive: no hover. Each domain keeps its own
+  status → tone and figure map next to its component (`RunStatusBadge`, `JobStatusBadge`, `ReviewStatusMark`, …).
+
+- **On/off state** (archived project, disabled user or item, revoked key or token): only the exception shows, as a
+  `StatusMark` (`warning`, `pause`) after the item's name. The normal state shows nothing, and a table has no Status
+  column for an on/off state. A single item's settings page shows the exception the same way, in its header.
+
+- **Flag** (`Flag`): a fact attached to an item that is not a lifecycle (Private test set, Restricted, View only,
+  Duplicate, Needs examples, Irreversible, a purge due date). An optional 12px glyph and the word in the tone
+  colour, `--font-base`, 600 (neutral: `--text-muted`, 500). No pill, outline or fill. Passive.
+
+- **Badge** (`Badge`): retired. No status, flag or label in feature code uses the pill; the design-language test
+  blocks a new `<Badge>` outside `features/dev` mock pages. Counts and categories (priority, kind, diff counts,
+  change types) are a `Tag`.
+
+- **Tag** (`Tag`): roles, provenance, versions, passive metadata and compact
+  counts; 20px minimum, borderless, `--control-radius`, tinted or elevated
+  fill. Roles, counts, data and versions are mono; other tags are sans. A tag
+  may grow vertically when its content wraps. `kind` says what the label is: `task`, `version` and `config` are
+  definition metadata and take the `meta` (purple) tone; `dataset` is neutral; `model` (+ `series`) renders the series
+  dot; `origin` is neutral (official is `tone="info"`). A `role` tag takes its tone from the role, so an admin never
+  reads as a member: admin `info` (blue), manager `accent` (green), member neutral (round 10). A changed AI prompt shows
+  `custom` in the `meta` tone (purple: it is configuration) and a shipped prompt shows no tag, by the on/off rule; the
+  green `default` on an LLM connection marks the connection in use, a selection (round 11). Passive: no hover. Task,
+  dataset and model names are 500 (round 10); a model tag's name is `--text-secondary` and its dot is flush (no ring),
+  6px before the name.
+
+- **Chip** (`Chip`): interactive filters only; `--chip-height`, rounded outline,
+  sans `--font-sm` / 600, counts mono. Passive metadata never uses the chip
+  recipe. `tone` or `series` sets the colour of the selected state (a status
+  filter in its status tone, a category group in its series colour); hover on a
+  selected chip deepens to `--tint-strong`, pressed is `--bg-active`.
+
+- **Eyebrow** (`Eyebrow`): `--font-sm` (`--font-xs` only inside a pill), 600-700,
+  muted, uppercase, `letter-spacing` 0.05em-0.12em.
+
+- **Stat card / stat value** (`Text`, `StatStrip`): label `--font-sm` / 600 /
+  muted / uppercase; value `--font-stat` / 700 / mono / `tabular-nums`
+  (primary, or a `--score-N` colour when it encodes a score). Mid-tier stats in
+  drawers and tiles use `--font-xl`.
+
+- **Connected statistics** (`StatStrip`): primary summary bands; the strip owns
+  the outer border, cells have dividers and no card borders, labels sit above
+  mono values, and a leading icon aligns to the top of the label/value stack.
+  Tiny card-footer metadata, the Runs-table repeat-run group metrics row, and
+  compact model-card metric matrices are not stat strips. With a section
+  heading, use the compact one-row variant.
+
+- **Stat tiles** (`ui/StatTiles`, round 10: the first qym's strip): seven or fewer equal cells in one framed strip
+  (1px `--border-subtle`, `--radius-md`), parted by hairlines (the repeat analysis). Each cell: a `--font-md` 600
+  `--text-secondary` label with its `HelpMarker`, the value in `--font-xl` mono 700 in its band colour. The help marker
+  explains the figure, so no sentence is drawn under the value (it is the cell's tooltip and accessible description); no
+  rails, no groups, no hover. The grid answers to the report column: one row of N from 900px, a 12-column 4 + 3 split
+  below that, two per row and a full-width last cell under 480px. `StatStrip` stays for connected summary bands; its
+  `compact-header` variant (a section head's counts) draws the number at `--font-md` with a 20px icon tile.
+
+- **Subsection** (`ui/Subsection`, round 10): a named part inside a report section (Repeat performance, Between
+  metrics, Across passes, Response time, Inside the traces): a 3px `--accent-primary` bar at the inline start, the
+  `--font-md` / 650 title and one muted `--font-sm` line on the same line, controls at the end, then the body; 20px
+  between two subsections. It is the one sub-grouping recipe of the report pages; a card title is never a subsection.
+
+- **Section boundary** (`ui/SectionBoundary`, round 10): every report section's body renders inside one, so a render
+  error shows a compact `ErrorState` with Retry in that section and never blanks the page.
+
+- **Scores** (`ScoreValue`): score-bearing values use the five-band
+  `--score-1..5` ramp, direction-aware via `src/lib/metrics.ts`. Lower-is-better
+  metrics read the ramp inverted; a metric that declares no direction stays
+  neutral (no good/bad colour, Pass/Fail, "best" or winner). A lower-is-better
+  metric leaves task and scorer errors out of its mean; an errored value shows
+  "Error" or the warning glyph in `--metric-error`, never a coloured score, a
+  "best" or a histogram bucket, and the error count sits beside the mean. Raw
+  numeric metrics stay neutral and confidence intervals stay muted. `variant="pill"`
+  shows the band as a `--tint-soft` fill (cards, stat strips, compare averages); the
+  number and the `Band n of 5` title stay the non-colour cue. `variant="plain"` is the band-coloured number alone,
+  for table cells: the runs table shows a score as that number, centred under its header, with no bar (rounds 8, 9);
+  the run Items table does the same in 120px columns (C149). **Pass threshold (C220):** where a metric declares a pass
+  threshold, the run Items scores and the Overview ring and mean are plain `--success` when the value passes and
+  `--error-text` when it fails (`ScoreValue verdict`, `BandValue verdict`, the ring's `data-tone`); the title names the
+  verdict. Bands stay everywhere a threshold does not apply.
+
+- **Run name and entities**: a run is written by `RunName` (sans, a link when it has a target, mono only when the label is a
+  bare id) and the task, dataset and model by `TaskTag`, `DatasetTag` and `ModelTag`, on every surface (runs list,
+  overview, admin, run header, compare cards, analysis header). An input shows as `promptPreview` (its prompt line, never
+  raw JSON) wherever it is a table cell (dataset items, analysis targets).
+
+- **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
+  (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for
+  colour-blind readers) and the name (`run_name`, label as fallback, truncated, full label in the tooltip). Run
+  colour is identity, never verdict: text is never run-coloured. Elements that belong to a run carry
+  `useRunMark(index)` (`data-mark`, `data-series`, hover and keyboard focus-visible handlers) inside the page's
+  `SeriesHighlightRoot`, so hovering a run dims every other run's cards, cells, rows and legend entries (no layout
+  change; instant under reduced motion). `ScoreBar` takes `marker` (a decorative tick at the baseline position, used by
+  compare category cards) and `height="md"`.
+
+### 3.4 Data tables
+
+**List toolbars (C152).** Every list toolbar starts with a 260px search (runs, experiments, queue, deleted runs,
+reviews), then its filters.
+
+- **Data table** (`DataTable`, own `<table>` markup, `role="grid"`; `treegrid` when rows expand): sticky header
+  `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650;
+  body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
+  Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (two-line
+  and wrapped cells raise the minimum to comfortable); zebra alternates `--bg-base` and `--bg-surface` by logical row;
+  rows part on a faint hairline (`--row-line`, 55% of `--border-subtle`), none under zebra stripes and none under the
+  last row, where the frame closes the table (round 10: a full-strength line on every row read as a grid of boxes);
+  admin tables are locked to comfortable rows with no density menu (round 10);
+  hover `--bg-hover`; selected `--bg-selected` plus a 2px accent bar; `rowState` draws a 3px rail (error, warn, live,
+  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are centred, header and values, in every
+  table (C236: the default for numeric column types in `ui/DataTable/model.ts`; `align` overrides it); a column
+  whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
+  `--table-group-height` band above the header unless the table passes `groupBand={false}` (the runs, run Items,
+  Charts and dataset Items tables: one header line, the groups still label the Columns menu; C253). Sort glyph, header menu and resize divider show on hover/focus only;
+  pinned columns (start/end) are opaque. The boundary has **no line** (round 9): while content is scrolled under a
+  frozen edge, the pinned cells on that edge (the last start cell and the first end cell of the header, the group band
+  and every body row) darken toward it with an 8px `--pin-shade` gradient inside their own box, in the cell padding.
+  The start edge shades once the scroller leaves its start, the end edge while columns remain past the end; at rest, at
+  the end, or with no overflow there is nothing. The sides swap under `dir="rtl"`. **A table's boundary is drawn by its
+  own cells: nothing is painted over scrolling content or over a row that is not in the columns** (no overlay element,
+  no shade outside the pinned cell), so a row without a pinned cell (the passes strip, an expanded item) has no shade and
+  a glyph is never covered (round 7, owner rule).
+  **Column widths fit the content** (`fit="content"`, the default for tables whose rows are not windowed): while the
+  columns fit the scroller, each column is as wide as its widest cell or header (one measuring pass when the rows or
+  the column set change, `FIT_MAX_WIDTH` 480px at most before sharing) and the spare width is shared in proportion to
+  those widths, the way an auto table layout spreads it, so no single flex column takes all of it; a flex column may give
+  width back down to its minimum so the others still fit; a cell that fills its column (score, delta) counts its
+  declared width; a width the user dragged always wins; when even that does not fit, every column keeps its content
+  width and the table scrolls (round 10: a declared width narrower than its content cut it with an ellipsis).
+  `fit="declared"` keeps the declared widths.
+  **Fold column** (`Column.foldLabel`, the runs Actions column, round 8): a pinned-end actions column is not a frozen
+  block. While the scroller has columns past its end edge, a row shows one borderless 20px handle (`chevron-left`, named
+  "Actions for <row>") at the inline end while it is hovered or focused (every row on a touch screen; round 10: a handle
+  on every row covered the scores under it); the rest of the cell is see-through, draws no line and lets clicks pass.
+  The handle opens that row's cell in place (the usual opaque cell, focus on its first action; Escape, the handle
+  or a press outside folds it). Scrolled to the end, or with no overflow, the column renders as usual, with its
+  title (`Actions`, end-aligned; the title is hidden while folded). A fold
+  column never shows a boundary line or shade, in any state. A row with nothing to act on has no handle. **Row
+  actions** (owner decision, Nov 1: "all action buttons inside >"): the runs Actions column is a `Column.menuColumn`
+  (a fold column with no body) whose cell is one `RowMenu`: a borderless 20px handle (`chevron-right`, named
+  "Actions for <row>", `--bg-elevated`) on the hovered or focused row (every row on a touch screen) that opens one
+  menu with every row action. Each item leads with its action tile (`ActionTile`: the tone's `--tint-soft` 20px square,
+  12px glyph), so the menu keeps the row's iconography: Open auto-analysis (sparkle, `meta` purple tile and label),
+  Submit (`send`, accent; never a check, which reads as a status), the review items (Approve `check`, Reject `close`
+  danger, Unapprove and Unreject `retry`, Transfer ownership on the review menu's `file` tile), then Delete (`trash`,
+  danger) after a separator. No tile sits in the row itself. Pass rows carry the same handle and menu (Open
+  auto-analysis, Open pass, Delete pass).
+  **Keyboard** (`singleTabStop`, the runs table, C089): the rows are one Tab stop (the grid pattern): arrows and j/k
+  move between rows, Enter opens, F2 moves focus into the focused row's links and buttons (Tab walks them) and Escape
+  returns to the row. The first Tab into the table shows a `Skip to pagination` button at its top start (hidden until
+  focused). A cell keeps `--space-xs` of block room inside its clip, so a control's full 2px focus ring shows (C090). Wide
+  tables expose only the persistent mirrored horizontal scrollbar rail (never both native and mirror), which is the
+  overflow cue. Below 640px tables that declare
+  column `priority` become stacked cards. Chrome parts (`DataTable.Toolbar`, `DataTable.Footer`, selection bar, Columns
+  and Density menus) sit inside the card on `--bg-surface`. `ScoreBar` takes `size='lg'` (14 to 16px track, value inside the bar), `series` and `index`; `DeltaCell emphasis`
+  renders the pill outside the noise band. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
+  `RelativeTime`, `TagsCell`, `UserCell`, `ProgressCell`, `StatusCell`, `NumberCell`) lives in `ui/DataTable/cells`.
+  Pages never restyle table cells; they supply columns.
+  **Child rows** (`childRows`, round 4): the children of an open row are rows of the same table, rendered by the same
+  column model (so reorder, freeze, hide and resize apply to them at once); they sit on `--bg-void` with the open parent and
+  the full-width block that follows them carrying one 3px `--accent-primary` rail (`--rail-width`), no wash, no opacity, no
+  zebra, one density height, `aria-level` 2 with `aria-posinset` / `aria-setsize`. Card mode draws them as lines inside the
+  parent's card (`cardChildColumns` names the second-line columns).
+  **Column layout** (`reorderable`, `storageScope`, `maxPinShare`, `Column.lockOrder`): the Columns menu lists every column in
+  display order, one row each: drag handle (pointer, touch, or keyboard: Space lifts, arrows move, Space drops, Esc
+  cancels), visibility checkbox, muted group tag and a freeze toggle (`aria-pressed`, "Freeze Status"); the line between
+  the frozen block and the scrolling columns can be dragged across. A menu header names the frozen count and any column
+  suspended by the cap (the frozen block never takes more than `maxPinShare` = 50% of the scroller; the first frozen
+  column always stays, and a frozen flex column is capped at that share too: a sticky cell stays inside its row, so a
+  frozen column wider than the scroller would scroll away with the content). The header menu has Freeze / Unfreeze, Move left / right / to start, Hide, and
+  `Alt+Shift+Arrow` moves the focused header. Layout (order, pins, widths, hidden, density) is one object saved under
+  `qym:data-table:v2:<storageKey>:<userId>`; an unscoped layout is adopted once. Handles and freeze toggles hide under 640px.
+
+- **Filter bar** (`features/runs-list/FilterBar`, `MultiSelect triggerVariant="bar"`, toolbar `rows` slot): row 1 is search,
+  Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint when active),
+  `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset, User, Version)
+  and, right after them, one `× Clear n` in the danger tone, the count on its own red disc. There is no chip line (round 8: each trigger already names
+  its value, and the status-bar sentence lists every filter). The table controls (Select, Columns, Density) centre on
+  both rows. Facet lists are `emptyMeansAll` (every box ticked = no filter) and always searchable. `Range` (no
+  ellipsis) expands From – To `DateTimeField`s (typed date and 24-hour time segments, a qym calendar with a Time field;
+  a day picked alone covers the whole day: From 00:00, To 23:59; the URL carries `YYYY-MM-DDTHH:mm`, a plain day still
+  reads), Apply and a red Cancel in place after the Time control, never a dialog; they stay open while a custom range
+  is applied. A list applies on each click, no Done button. Under 600px the bar is search plus `Filters n` (and
+  `× Clear n`), opening every facet in a drawer. In select mode the selection is a full-width line above the filter
+  rows (round 10): the count (or Cohort A, locked, and Cohort B, green once it balances A), then Compare, Cohort,
+  Submit, Delete and Clear, each a visible button with its icon, the ready action green, then `Done selecting` and the
+  guidance. The score columns are the metrics of the filtered runs, so a filter drops the scores none of them has.
+
+- **Project dashboard** (`features/runs-list/OverviewPage`, round 10): the KPI band, the Trend card, then two panels of
+  parts with one hairline between them: Live runs over Recent runs, and Pending reviews beside Approved runs. A run is
+  one table line (Run, Task, Model, User, Status, Items, Date; Approved runs keep Run, User, Date), never a tag line
+  under the name. An empty part says so on its title line ("No live runs").
+
+- **Passes panel** (`features/runs-list/passes`): one surface and a 2px accent rail, sticky at the scroller start
+  (`--dt-scroller-width`); one line, left to right: title, metric Select, the threshold as one inline `Slider`
+  (`layout="inline"`: "Pass if ≥", a 220px track, the value once; it refetches on release; no chip, popover, number
+  field or presets), the five statistics right after it (Pass@k, Pass^k, Avg@k, Consistency, Reliability) and one help
+  marker; issues are one glyph plus count per pass (`!` danger, `~` warning, retry info).
+
+### 3.5 Charts and distributions
+
+- **Chart kit** (`ui/Chart`, `styles/marks.css`): every data mark is a `Mark` inside a `ChartTooltipHost`. A mark
+  carries `data-mark`; with `onPick` it is interactive (a `button`, or an SVG element with `role="button"`, Enter and
+  Space) and answers with `filter: brightness(var(--hover-brightness))` while its siblings dim to `--dim-opacity`
+  (`:has`, graceful where unsupported); selected draws a 2px `--text-primary` outline (stroke on SVG) and dims the rest;
+  focus is the 2px accent outline. Colour, outline and opacity only: no transform, scale or glow. `tip` opens a
+  `role="tooltip"` (markup allowed) on hover and keyboard focus, pinned by a touch tap, closed by Escape; it replaces the
+  native `<title>`. `SeriesHighlightRoot` + `useSeriesHighlight(n)` (compare) sets `data-series-active=n` so every
+  `[data-mark][data-series]` of another series dims. Encodings: scores take bands (`bucketTone`), outcomes pass = band 5,
+  fail = band 1, task error = an open `--error` ring on the axis, latency bulk is `--bg-active` and only the tail is
+  `--score-3` (p90) and `--score-2` (p95), series come from `--chart-1..8`. A scatter shows two faint quadrant washes
+  (fast and passing, slow and failing) and a legend with the same swatches. Hit areas are at least 24px.
+
+- **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
+  `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
+  of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`, round 5 R1 "well and foot"): each bucket is a
+  two-row grid, the well (flex column `[spacer][count][bar]`, the spacer taking `1 - p` and the bar `p` of the free
+  height, `--p` = count / max) and a foot of one constant height per plot (`--foot` = 4px + 14px per line: axis label,
+  optional note and sub line). The well's bottom border (1px `--border-default`, bridged across the 4px gaps) is the drawn
+  x axis and every bar bottom stands on it; a thinned axis label is a blank line (U+00A0), never a missing one, so no
+  column can end higher than its neighbour. The count sits on the bar's top edge (a 16px line, 2px above it) and is visible
+  at rest, never hover-only (the tooltip only adds the longer sentence). Bars are at most 44px wide with a 4px gap and a
+  3px minimum when the count is above 0; an empty score bucket draws no count, pass/fail bars and "Passes passed"
+  draw `0` in `--text-muted`. Axis labels follow one rule for every plot: every k-th label with
+  `k = ceil(labelWidth / pitch)` (`pitch` = column + gap, `labelWidth` = characters x 7 + 6), column 0 always; the full list
+  stays in the `aria-label`. When counts are wider than the pitch the plot is `data-dense`: each count takes the lowest of three 18px tiers whose box clears
+  the earlier counts it overlaps (`countTiers`; no layout change). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
+  horizontal split bar. Bars rise and counts fade in together on mount; nothing animates under
+  `prefers-reduced-motion` (`animation: none`). Overview cards flow in `repeat(auto-fit, minmax(260px, 1fr))`.
+
+- **Box plot** (`run-detail/components/charts/BoxPlot.tsx`, round 3 P7, round 5 R2): the one glyph set for a distribution: box p25 to p75, a
+  2.5px median line, whiskers p5 to p95 with caps, a hollow mean diamond, dots outside the whiskers (at most 40 per side, min and max
+  always kept). **One tone per plot** (`data-band` of the median for a score with a direction, so a failing pass is red; `data-series="1"`,
+  `--chart-1`, for latency, tokens, cost, undirected numerics and step rows; the slow latency tail keeps `--score-2`); stroke, box fill
+  (`--tint-strong` over the surface), whiskers, median and mean all take `--tone`. **No number row**: the median is printed above its line,
+  the data minimum and maximum under a 1px baseline at the ends of the data (one merged "a to b" label when they would collide), and all six
+  numbers plus the IQR are in the box tooltip and the `aria-label` (which ends with "band n of 5" for a band tone). Total is the one fact the
+  plot cannot show: plain text "Total **64.0K**" in the card header, additive quantities only (numeric metrics, tokens, cost; never latency,
+  scores or negative values). The key is a `HelpMarker` "How to read the box plot" in the header; cards that stack rows (per pass, Steps) keep
+  one muted key line. The picture is one `role="img"` named by a sentence; the clickable marks (box, whiskers, min, max) are a transparent
+  overlay in tab order. Rows (`BoxTrack`) draw the same glyph per pass and per step. Box plot cards flow in their own grid rows under the
+  histograms (`slot="box"`: 80px plot, no 146px minimum).
+
+- **Categories** (run detail, round 10): a control row (a `SegmentedControl` Cards | Compare, stored in
+  `?category_view=`, Cards by default; the metric and its overall average; one Sort button, worst first by default,
+  that orders both views). **Cards** shows up to three keys at first (the widest spread first), turned on and off with
+  checkboxes (never pills); each key is a title and a grid of value cards: the value name in its band colour, Average,
+  Items and Latency, and a 6px bar with the overall-average tick; a card toggles the item filter (accent outline when
+  on). **Compare** ranks one key, chosen with a `SegmentedControl` "Category" (up to 5 keys that fit the column,
+  else a searchable `Select`; stored in `?category=`), in one `Card`: header with the key, the value count and the
+  "Overall average" tick legend; no insight sentence; rows `[value][bar + %][items][pass][latency]` as buttons that toggle the
+  item filter (`aria-pressed`, `--bg-selected` and an accent bar, never a band fill). The bar follows the value name (value column at
+  most 220px), is a 12px track in the average's band (neutral without a direction) with a 2 x 18px `--text-primary` tick at the
+  overall average. Six rows show first, then "Show all N values". Under 640px a row is two lines (name, items, pass / full-width bar).
+
+### 3.6 Run detail page
+
+Recipes that exist only on the run report. They compose the primitives above and follow the same rules.
+
+- **Run header** (round 3 P6, round 10, review group R4): three bands, nothing behind a chevron. Band 1 identity (name,
+  passes tag, Copy run id, the status mark beside them, then a neutral "History N" button that opens the review log in
+  a popover, C027; there is no Review history card and no Reviews nav link) and actions ("Compare with reference" in
+  accent when the run has a reference, C034; one neutral "Actions" menu that holds the review action for the viewer's
+  role first, Export HTML, Transfer ownership and Delete in red, each item with its `ActionTile`; the pager; all 24px).
+  A stop reason, or a rejected run's reject comment (C047), is one muted line under it. Band 2
+  seven labelled facts (`dl`, 7 / 4 / 2 columns by column width), every value at the tag height and 600 so plain values sit
+  level with tagged ones; the model tag carries the model recipe (series dot and tint). Band 3 `KeyValueTag` chips (24px
+  passive key / value, key at most 20 characters, value at most 30) in the groups Versioning, Config, Metadata, clamped to
+  two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`). The card is the first qym's: a 2px
+  accent gradient along the top edge (accent, secondary, tertiary, fading out) and a faint accent wash from the top-left
+  corner; no status rail.
+
+- **Overview cards** (round 10, the first qym's card; C012): a 40px score ring in the band colour (or plain pass/fail
+  where a threshold applies, C220) and the mean, the metric name under them, the scored count ("N scored", no error
+  count) at the top end, then one full-width line with the error note (a warning glyph and "3 task errors counted as
+  0%") and the key of the hatch the bars draw for errored items, then the plot. Task-errored items count as 0, as
+  declared: an empty `pass_scores` is a plain item row, not a repeat aggregate. No header band, no side rail. Three cards to a row at 1440. A plain
+  number (a numeric metric, tokens per item when the traces carry tokens) is the same frame with the mean, "mean per
+  item", a Total · Min · Median · Max line and the box plot. Cost per item is not shown (a default every attempt reports).
+
+- **Repeat run analysis** (round 10, the first qym's order): the page metric and the Pass if threshold (an inline
+  `Slider`: dark thumb with an accent ring that glows on hover, the value in the accent), the stat tiles, the By pass
+  table, then the "Repeat performance" subsection: Performance across attempts (Compare / Pass@k / Pass^k / Average,
+  Chart | Table; a line-sample legend with "95% CI" under the head; every point labelled when the plot is at least 640px;
+  y in fifths; "Attempts allowed") beside Pass distribution (one description line, no caption). **By pass** is a
+  `DataTable` with `hoverEdge` (the row under the pointer draws an accent edge), nothing resizable: Pass (a dot and the
+  pass, a link), every metric (the page metric first) centred with a fixed 44px slot for its best / worst tag, ⚡ Avg
+  latency, ⚡ Median latency, Errors (red above 0), Items. The per-pass score spread lives in Deep analysis, "Across
+  passes".
+
+- **Deep analysis** (round 10; C221, C167 Nov 1): "Between metrics", the correlation matrix beside the relationship
+  scatter from 1000px of column; the scatter's X and Y pickers and r sit in its head, its legend on its own row under the
+  head. The matrix is a heatmap of strength only: one `--chart-1` ramp by |r| on a fixed 0 to 1 scale (strength is
+  neither good nor bad, and teal and purple are not data), the sign in the number (+0.20, −0.15), a blank diagonal, and
+  a small "|r| 0 to 1" key under it. The scatter fits both axes to the data with 5% padding (a threshold line, when the
+  chart draws one, stays inside). For a repeat run, "Across passes": the page metric's box per pass.
+
+- **Errors** (round 10): one group per kind (Task, Metric, Trace, Analysis): a 24px icon tile and the title in the kind's
+  colour (`--error`, `--metric-error`, `--warning`, `--accent-tertiary`), its total, and one muted line on what the kind
+  means for the numbers; then message cards in a grid (no table, no sideways scroll): the message and its detail, the
+  count in `--font-xl` mono in the kind's colour with "errors · N items", and a 4px bar of its share of the kind. A card
+  toggles the item filter (`aria-pressed`, an outline in the kind's colour).
+
+- **Items table header and ItemBar** (round 3 P4): the column header sticks at the sticky line only over collapsed rows. For an
+  expanded item it is held above the detail (it stops when its bottom touches the detail's top, scrolls away, and returns to the line
+  when the line crosses the detail's bottom; `useStickyShift` takes the detail spans, pure geometry in `stickyShift.ts`). The
+  expanded item starts with an `ItemBar` (`--row-compact`, opaque, number, verdict, input preview, Copy link, Collapse) that
+  takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky;
+  the hook writes `--head-shift` on the bar itself (a custom property is inherited: written on the item it restyled every descendant on every
+  scroll event), and the bar is its own layer only while it is shifted (round 7, D1).
+
+- **Items table columns** (review group R2): #, Status (a `StatusMark`, no tinted pill), Input, one 120px centred score
+  column per metric (page metric first), Latency, then the open-trace action: a green action tile (`IconButton tile`) with
+  the `trace` glyph and the tooltip "Open trace", in a normal last column that scrolls with the table (not pinned, C230).
+  There is no Reason column (C017). The `list` glyph is for filters only; the compare output cards' Trace button uses
+  the `trace` glyph too.
+
+- **Item details** (round 3 P5): the expanded item is `direction: ltr` and left anchored: Input, Expected and Tags are
+  `FieldRow labelAnchor="start"` (label column `--field-label-width`, the value block as wide as its text up to
+  `--field-measure`; only the value carries `dir`), then the Output region, a full-width divider (1px `--border-strong`, 20px
+  above) and the Metrics region. Output keys are collapsed key rows (`StructuredValue variant="keys"` / `KeyTree`: chevron, key,
+  one-line preview; open: the value, Copy, per-key Expand all / Collapse all recursive; the region has global Expand all / Collapse
+  all and Sections | Raw). **A data key is a name: it is shown exactly as written (case included, `text-transform: none`), wraps
+  (`overflow-wrap: anywhere`) and is never cut, clipped or ellipsised; whatever follows it (its preview, its actions) starts after
+  its last line, so a key never overlaps its content** (round 7, D2; tree keys, `StructuredValue` section keys, fact keys, Tag
+  keys; the key element carries `data-part="key"` and its own script direction, `textDirAttrs`, the row stays left to right). The
+  preview follows the key's last line (8px) when 12ch fit there, else starts the next line under it; the row's actions wrap under
+  the name when the whole name does not fit beside them. Fixed UI labels (Input, Expected, Output, the prose eyebrow) keep the
+  uppercase tracked eyebrow style. A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
+  side). **A pass has no colour**: its identity is text, colour on a pass is only its verdict. Metrics are one matrix
+  (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are mono 600 band-coloured text (no tinted cells, no
+  outline: the selected row takes `--bg-selected` and a 2px `--accent-primary` bar at its inline start; a single pass's Reason is a
+  `fit-content` block anchored at the column's inline start, whatever its direction) and open ONE detail panel below (round 5 R3).
+  The panel (`--bg-elevated`, `container-type: inline-size`, `direction: ltr`) has a one-row header (mono name, `ScoreValue`, "Pass n",
+  "edited", then the text button "Edit score" and Close), a hairline, then: **prose blocks** (reason, reasoning, explanation, label,
+  then any string over 60 characters) with the eyebrow label stacked above the text (13px, line 1.6, 76ch, `dir` on the text only) so a
+  label can never overlap its text; **facts** (`dl`: the judge key as written, `--font-sm` 650, in a key column of
+  `fit-content(40%)` at least `--field-label-width` where a long key wraps, value next to it; the row stacks under 420px); **tables** for `{columns, rows}`, arrays of arrays and
+  arrays of two or more uniform plain objects (`detectTable`; eyebrow with the row count over an embedded `DataTable`, every header
+  sortable, 12 rows then "Show N more rows", scrolls inside); and collapsed key rows for everything else. Label roles are exactly
+  three: eyebrow (11px 650 uppercase), fact key (11px 650, case as written), tree key (12px 600 mono). `FieldRow` labels wrap in
+  their column; no key is cut. Score edits happen in that panel.
+
+- **Items toolbar and correlation matrix** (round 5 R4): the toolbar row aligns its controls to one bottom edge, so a control with a
+  label above (analysis metric, threshold, sort) and one without share a vertical centre; the metric correlation grid is as wide as its
+  card body and its cells are as wide as their column (at least 20px, scrolling inside the card beyond that). A trace opens on its
+  content tab (messages, response, input / output, documents), never on Metrics, Scores or Raw; only a content pick is remembered.
+
+### 3.7 Loading, empty and failed states
+
+**Confirm dialogs (C146).** One rule by risk: type the name for a permanent loss (delete a project or a dataset);
+one click for a change that can be undone (a deleted run goes to Deleted runs); a named confirm for a change that
+others use ("Delete the environment “prod”?"). Every confirm title is a question. There is no Undo toast (the owner
+rejected it for runs, C099).
+
+**One pattern per state (C018, C156, C059, C182, C181).** A failure names its cause (`ErrorState` shows the cause for
+every kind). A missing thing reads "<Thing> not found" (`notFoundTitle`), one sentence of cause and one link to its
+parent list (`parent`), with no HTTP line and no Retry; a load failure is titled "Couldn’t load <thing>". Error titles
+use "Couldn’t", never "Could not", "Unable to" or "Failed to". A table never shows its empty state while its query is
+pending (`tableLoading`), and an unknown count is not zero: no tab count, '–' in a line. An empty state or a settings card
+with a docs page carries a "Read the guide" link (`guide`). A failed write is one plain sentence
+(`actionErrorMessage`, `errorSentence`: "Couldn’t save the rules. The server had a problem. Try again."), never the
+browser or server text as is, and a 422 lands on its field (`fieldErrorsOf`; `FormDialog` does it).
+
+- **Loading and empty** (`Skeleton`, `EmptyState`): a skeleton appears only
+  after the pending delay (`useDelayedPending`, 300 ms) and respects
+  `prefers-reduced-motion`. `EmptyState` is for a successful empty result only:
+  glyph icon in `--text-dim`, low opacity, title `--font-xl` / 650 / primary,
+  body `--font-md` / muted, line-height 1.5 or more.
+
+- **Failed requests** (`ErrorState`, `StaleBanner`): a failed load is never an
+  empty or "not found" state. `ErrorState` names the cause (session ended, no
+  access, not found only for a real 404, server error, network) and offers Retry;
+  it never shows a create action. A refresh that fails after data was shown
+  keeps the rows dimmed under a `StaleBanner` that says how old they are and
+  whether the latest filter change is applied.
+
+- **Inline notice** (`InlineNotice`, owner note on RF2, Nov 1): one subtle line
+  under a page title that says what happened to the object on the page, such as
+  a failed or stopped run. A 3px rail and a glyph in the tone (`danger` failed,
+  `warning` stopped), a `--tint-faint` wash, the lead words (`Failed.`,
+  `Stopped:`) in `--tone-text` / 600, the rest in `--text-secondary` at
+  `--font-sm`. A link to the details (See Errors) ends the line in the tone's
+  text colour. No border box, no title, never a banner or a toast.
+
+### 3.8 Colour as information
+
+One colour, one meaning per page. A hue appears as data only in its own encoding; teal (`--accent-primary`) is
+interaction (selected, primary action, link, focus, sort), never data. Colour is never the only cue: bands keep the
+number and the `Band n of 5` title, deltas keep the arrow and sign, severities keep their glyph (task warning, metric
+cross, trace clock, analysis sparkle), series keep their letter or name.
+
+| Encoding | Meaning | Tokens | Applied through | Rule |
+|---|---|---|---|---|
+| Band | quality of a value | `--score-1..5` | `ScoreValue` (text, pill), `ScoreBar`, `RateBar`, histogram buckets, `Card band`, stat values | direction-aware (`lib/metrics.ts`); a metric with no direction or a raw number stays neutral; an errored value shows Error in `--error` / `--metric-error`, never a band |
+| Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft/archived/disabled, neutral submitted/pending | `StatusMark` (`RunStatusBadge`) | the pixel figure's shape is the non-colour cue; running is the orbit figure |
+| Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts |
+| Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` | 3px rail, glyph, title colour | rail and glyph, never a filled card |
+| Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is sky blue (teal is reserved for selection, links and the primary action), never relied on alone |
+| Definition metadata | what was run | `--accent-tertiary` (purple) | `Tag kind=task|version|config`, `KeyValueGrid kind` | purple is only this, and the auto-analysis entry points (Analyze, N causes, Open auto-analysis), which keep their purple (owner decision, Nov 1) |
+
+Palette rules from the design pass (`docs/internal/ui-migration/redesign2/colour-review.md`): the score ramp is
+red `#ef4444`, orange `#f97316`, yellow `#facc15`, light green `#4ade80`, green `#10b981`; adjacent bands stay at
+least dE 21 apart under protanopia and deuteranopia (the old yellow/lime pair was dE 4 to 10). The eight series
+are sky, pink, orange, amber, indigo, lime, cyan, slate: no teal, purple or red, every one at least 4.5:1 on
+`--bg-surface` and `--bg-elevated`; series colours live in `tokens.css` only (no second palette file).
+Hairlines are `--border-subtle/default/strong` at 1.25 / 1.59 / 2.3 : 1 on `--bg-surface`.
+
+**Tint recipe.** `tones.css` maps `data-tone` (success, info, warning, danger, accent, meta, neutral), `data-band` (1 to 5)
+and `data-series` (1 to 8) to `--tone` and `--tone-text` (the AA-safe text variant: `--error-text` for danger and band 1,
+`--accent-tertiary-soft` for meta). A primitive then writes one rule:
+`background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent); color: var(--tone-text);`. The tint steps are
+`--tint-faint` 6% (row or card wash for danger and live only, and the inline notice), `--tint-soft` 12% (Badge, Tag, Chip selected, pill, icon
+tile), `--tint-strong` 20% (hover or pressed on a tinted fill, selected pill). No raw `rgba()` outside `tokens.css`
+(scrims and scrollbars are tokens). At most one tint fill per row-height region (row action tiles excepted: each action is its own tile); never zebra-tint; a card inside a card
+is not allowed.
+
+- **Series 1 to 8** (`--chart-1..8`, defined once in `tokens.css`): sky, pink, orange, amber, indigo, lime, cyan, slate
+  (the design pass order; cyan sits outside the first five because it is close to sky), so no run colour in the
+  first five repeats another's hue under any colour-vision simulation.
+
+- **Scroll cue** (`useScrollCue` and `scrollCue`): a region that scrolls sideways fades the edge that still has content
+  (overrides tables in the wizard, the compare section tabs on a phone). It is for chip rows and tab strips only; a data table never fades over its content (rule 16, section 7).
+
+### 3.9 Motion
+
+- **Motion** (`ui/motion`, tokens `--motion-fill` 360ms, `--ease-out`, `--motion-stagger` 24ms, `--motion-flash` 700ms):
+  M1 colour changes use `--transition-fast`; M2 data marks (bar fills, histogram bars, rings, scatter dots) grow in once
+  per mount (`data-enter` from `useEntrance`, which a container turns off for rows that scroll in later) with a stagger of
+  `--motion-stagger` per mark capped at 10; M3 a changed value morphs with the same transition and never replays the
+  entrance; M4 a lazy `ReportSection` body fades up once (`--arrive-fade`, 6px); M5 a live value flashes a
+  `--tint-soft` info tint (`data-changed`, `live`); M6 and M7 are unchanged. Never: a hover transform, glow, gradient, or
+  an infinite animation other than the skeleton shimmer. `base.css` zeroes every duration and
+  delay under `prefers-reduced-motion`.
 
 ---
 
 ## 4. Page anatomy
 
-Every dashboard page presents, in order: **page title → description → meta line →
-tabs (if any) → content**. Constrained pages (settings, admin, profile, projects,
-overview) render inside the 1120px shell container; data-dense pages (runs,
-charts, datasets, compare) go full-width with their own layout.
+Every page presents, in order: **page title -> description -> meta line ->
+tabs (if any) -> content**, via `PageHeader`. A page with tabs may show one compact (`compact-header`) `StatStrip` of
+page-wide totals between the hero and the tabs; it is the same on every tab, so switching tabs never moves the tabs
+(admin; tab-specific numbers belong in that tab's content). Constrained pages (settings,
+admin, projects, overview, models) use the `constrained` container, capped at
+`--page-max-w` (1233px, the width the report pages fill at 1440), from
+`@/features/shell/layout`; a text-first page (profile) asks for `narrow`
+(`--page-narrow-w`). Data-dense pages (runs, charts, datasets, compare) use
+`fullWidth` with their own layout. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
 
-Pages carry their styles in an inline `<style>` block — that's accepted — but the
-values inside must be tokens. Prefix page-local classes (`.dsx-`, `.pg-`, `.tv-`,
-`.sweep-`) to avoid cascade collisions with `dashboard.css`.
+Styles live in the page or component's CSS Module next to its `.tsx`, built from
+tokens and primitives. Class names are local (CSS Modules), so no prefixing is
+needed. Set the document title with `useDocumentTitle`.
 
 ---
 
 ## 5. Sanctioned exceptions
 
-- **Docs pages** (`docs.css`, `docs/**/*.html`): prose reading pages keep a
-  larger independent heading/body scale (28/20/16/13.5→13px) and a brighter
+- **Docs pages** (`frontend/src/features/docs/`): prose reading pages keep a
+  larger independent heading/body scale (28/20/16/15/13px) and a brighter
   `--docs-body`. They still use the shared color ramp for labels and the
-  tokenized `--code-*` syntax palette.
-- **`_static/ui/` (SDK-local run UI)**: a separate mini-app with its own theme
-  (`app.css`), including a light mode. Do not import dashboard tokens there or
-  vice versa.
+  tokenized `--code-*` syntax palette. The scale is carried by the
+  `--docs-font-*` tokens in `src/styles/tokens.css` (never px literals) and only
+  `features/docs` may reference them.
+- **Offline export templates**
+  (`packages/platform/qym_platform/export_templates/run/`): the frozen,
+  self-contained run page behind `GET /api/runs/{id}/export-html` and
+  `/api/compare/export-html`. It must work from a single `.html` file with no
+  server, so it keeps its own inlined stylesheet and is not subject to the token
+  and lint rules. It is not restyled with the app; do not import app code into it.
+- **SDK-local viewer** (`frontend/src/sdk-viewer/`, built to
+  `packages/sdk/qym/_static/ui/`): shares the primitives and tokens; the same
+  rules apply.
 - **`tmp/mockups/` (gitignored)**: design scratch files and mocks live here,
-  outside the shipped package, so they are exempt from all rules and from CI.
-  Do not add scratch mocks under `_static/` — they get served and shipped.
+  outside the shipped packages, and are exempt from all rules. Do not add
+  scratch mocks under `packages/*/_static/`: they get served and shipped. In-app
+  design variants use dev-only mock routes (`/__mock/<area>/<variant>`, see
+  `frontend/README.md`).
 
 ---
 
-## 6. Self-check before you finish (any LLM session: run these)
+## 6. Design and review standards for feedback rounds
 
-From `packages/platform/qym_platform/_static/dashboard/`:
+Learned in the October 2026 redesign rounds (`docs/internal/ui-migration/POSTMORTEM.md`). These rules decide
+how a product complaint becomes a spec and how a reviewer judges the result; the recipes in section 3 are what
+they produced; section 7 lists the design choices that failed on the way and the rules that replaced them.
+
+- **Numbers before code.** A complaint ("too cluttered", "not clear", "refer to the old design") is turned into
+  numbered acceptance criteria before anything is built. Each criterion names the element it measures (an id or a
+  component, never "the panel"), the width, and the value: heights, counts, gaps, what is visible without a click,
+  URL state, keyboard path, axe result. Mocks are drawn in the real column widths of the report pages (1193,
+  1033, 777, 521 and 279 px for 1440 to 390), never in a convenient width.
+- **Density, never disclosure, for default information.** A block that is too tall is made denser (chips, columns,
+  clamps with an exact "+ N more", compact rows) and never fixed by moving default-visible facts behind a chevron,
+  tab or hover. "Reachable" is not "visible". Criteria about information say "visible without interaction".
+- **Legacy is the usability baseline, not the design.** When the owner says "refer to the old design", the legacy
+  page defines what the user must be able to see and do in one glance (one metric from a dropdown, every
+  statistic in its own box, the inputs next to their labels); its faults (sideways scrolling chip rows, nested
+  boxes) are fixed, not copied. Every spec point carries a legacy screenshot and says what it keeps and what it
+  does differently.
+- **One idea per row, one control per choice.** A report section is a stack of full-width rows, each one visual
+  or one table; two visuals share a row only from 1100 px and only when they explain each other. A choice among
+  more than five values is a `Select` (URL-backed), not a chip row. Statistics are separate, equal, centred tiles;
+  groups and nested frames are not a way to organise them.
+- **Hue budget.** Eight series colours (`--chart-1..8`) is the limit, verified pairwise at CIE76 dE >= 20. Anything
+  with more identities than that (passes, steps, categories) is identified by text; colour on it means a state
+  (score band, verdict, kind), never "which one". Counts and values are drawn at rest, never hover-only.
+- **Distributions.** A quantity that used to print min / avg / max shows the box plot recipe (section 3): median, minimum and
+  maximum visible on the plot, all six numbers in the tooltip; a total (card header) only for additive quantities.
+- **Bidirectional text.** The layout of an item is one left-anchored grid; `dir` is set on value text only. Arabic
+  content never moves labels, keys or controls to the other side of the page.
+- **Reviewer method.** The reviewer measures every criterion in the browser (DOM geometry, computed styles,
+  counts, screenshots at 1440 and 390) and records the number next to met / not met, then judges each feedback
+  point as the owner would, against the mock and the legacy screenshot. "All features present" and "better than
+  before" are not verdicts.
+- **Amendments.** A criterion's number may change only with the measured value and a one-line reason in the
+  spec, and the e2e test must assert the amended number on the same element. Spec and product never disagree.
+- **Performance is a number too.** "Laggy" and "slow" become counts that do not depend on the machine (React commits,
+  forced layouts, requests and bytes, layout shift) asserted exactly in `frontend/e2e/perf/`, and times with a CI margin
+  (the strict local target runs under `QYM_PERF_STRICT=1`); each is the median of three passes
+  (`docs/internal/ui-migration/perf6/perf.md`).
+- **A fix changes a measurement.** If a commit does not move the measured value or the screenshot (for example a
+  rendering property that does not alter the raster), it is recorded as a limitation, not accepted as a fix.
+
+## 7. Design choices that failed, and the rules that replace them
+
+Each rule below comes from a design choice that looked reasonable, shipped, and was then rejected by the product owner or
+measured as a defect (October 2026, rounds 2 to 7; the evidence is in `docs/internal/ui-migration/`). They are written as
+rules for any future surface, not for the pages that taught them.
+
+- **Nothing is painted over content.** An affordance (a frozen-edge shadow, a scroll fade, a gradient cue) that lies on
+  top of text reduces its contrast and, when it is as tall as a scroll host, crosses rows it does not belong to (a summary
+  strip, an open detail, a toolbar). A boundary is drawn by the element that owns it: a pinned cell draws its own edge
+  shade inside its box (round 9: no line), so the shade exists exactly where pinned cells exist and stops at any row that
+  is not laid out in the columns. An overflow cue lives outside the content (the rail), never on it. Criterion: 0 px of
+  any glyph under an element with a gradient or an opacity below 1 (the edge shade lies in the cell padding); a
+  boundary's extent equals its owner's box.
+- **A hover that turns text green adds no underline** (round 8). The colour step is the hover cue (run names, pass
+  and chart row links, compare rows). Running-text links, which are green at rest, keep the hover underline (base.css).
+
+- **Nothing decorative where a glyph or a word will do** (round 8). Status is a `StatusMark`, not a pill; a filter's
+  value is written on its trigger, not repeated as a chip line; a score in a table is its number, not a bar; a project
+  mark sits flush on its surface (the `Identicon` chip has no fill of its own); a three-dot menu glyph is drawn with
+  4-unit dots so it is legible at 14px.
+
+- **A name is never truncated.** Keys, identifiers, labels and column names wrap; they are never cut with an ellipsis,
+  never clamped to a character count, never squeezed to a 0 px box, and a `title` tooltip does not count as visible.
+  Long names break at their words (a soft break after `_`, `-` and `.` and before a camelCase capital), with
+  `overflow-wrap: anywhere` only as the fallback for a single very long word. Data is shown as written: no
+  `text-transform` on a key or value (uppercasing a camelCase key hides its word boundaries); eyebrow styling is for
+  fixed UI labels only. Criterion: `scrollWidth <= clientWidth`, computed `text-overflow` is not `ellipsis`, rendered text
+  equals the source string.
+- **Text does not give up width to controls.** In a row that holds a name and its actions, the name has a non-shrinking
+  basis and the actions wrap under it when the row is narrow; `min-width: 0` goes only on the element that is meant to
+  shrink. Every such row is measured at the narrowest real width (390 and the narrowest nested depth), where this fails
+  first. Criterion: 0 px of overlap between the painted text of any two siblings; a value starts after its key's last line.
+- **A loading frame is the loaded layout.** Placeholders render the same DOM as the loaded state with skeleton values, and
+  their count follows the data (the number of rows that will arrive), not a cap. A frame that is "about the right height"
+  shifts at some width or some count. Criterion: the container's height at the placeholder frame equals its height at
+  the loaded frame, 0 +- 1 px, at every width and at the largest realistic count.
+- **A request returns what its view renders.** A lightweight component never shares the request path of an expensive
+  derived analysis; a `view=` parameter or a separate route serves the subset, the full computation stays on the surface
+  that shows it, and a GET writes nothing. The server cost of every component's request is measured on the largest
+  realistic data before it ships; a number nobody reads is never computed on a user's click. Criterion: endpoint time
+  and statement count at the realistic size, equal statement counts at two sizes (no N+1), rows written = 0.
+- **Load by default, in stages.** Everything a page will show is requested without a click or a scroll: the core first,
+  then the rest in order, from an idle callback with bounded concurrency and a cap, off under `saveData`. "Lazy" means
+  "after the core paints", never "when the user asks". A click on something still in flight joins the request instead of
+  starting another. Prefetching is not a visible default and needs no owner approval; a changed page size, column set or
+  density is, and does. Criterion: requests after the click = 0 when prefetched; click to painted <= the render cost alone.
+- **Whatever stays fixed while the page scrolls is positioned by the compositor.** Native `position: sticky`, which means
+  the element is placed outside any horizontal scroller when the component is first designed (a sticky element inside a
+  scroller sticks to that scroller, not to the page, and cannot be fixed later). When a JS-written offset is unavoidable
+  (a header that must stop above a detail), the write lands on the moving element only, never on a container whose
+  descendants inherit a custom property, and the structural limitation is recorded in the spec with the frames it cannot
+  prove. One sticky container, not one sticky layer per cell. Criterion: elements restyled per scroll event <= 150; pinned
+  cells 0 px off their row in every frame; sticky elements = pinned cells.
+- **Optional content never changes geometry.** Axis labels, count labels, badges and "+ N more" have fixed-height slots;
+  an empty or thinned label keeps its line, so the plot, the bar bottom and the row height do not move with the data.
+  Criterion: bar bottom = axis y at 0 px for 1 to 20 buckets; row height identical with and without the optional part.
+- **Fill the container.** A visual inside a fluid card spans the card; fixed pixel widths and heights belong to tokens
+  (row heights, bar heights), not to charts or grids. A row of controls uses one control height and aligns its items on
+  the centre line. Criterion: chart width = card content width at every width from 1440 to 390; control spread = 0.
+- **The default view is the primary content.** A tab set, a drawer or a detail opens on what the user came for (the
+  content, not its metadata; the item, not its settings), and a remembered choice never promotes a secondary tab to the
+  default. Criterion: the first painted tab after navigation is the content tab, regardless of stored state.
+- **Ambiguous complaints are measured on every candidate.** When the owner's words fit more than one element ("the
+  frozen input"), the designer measures each candidate, says which one the numbers point to, and records the open
+  question once. When a defect cannot be reproduced in the test environment (a trackpad fling on a compositor thread in
+  headless Chromium), the spec says so, fixes the structural cause anyway, and the reviewer verifies on the owner's
+  device rather than closing the point on a measurement that could not fail.
+
+---
+
+## 8. Self-check before you finish (any LLM session: run these)
 
 ```bash
-# New hardcoded sizes? (compare against the frozen inventory in the test)
-grep -rn "font-size: *[0-9]" --include="*.html" --include="*.css" . | grep -v mock
-
-# dim on content? (every hit must be placeholder/disabled/decorative)
-grep -rn "color: var(--text-dim)" --include="*.html" --include="*.css" . | grep -v mock
-
-# Banned fonts / stale grays?
-grep -rn "DM Sans\|Georgia\|#7a7a90\|#50505e" . | grep -v mock
+cd frontend
+npm run test:design      # this document, as a test
+npm run check            # typecheck + eslint + stylelint + vitest + design test
+cd .. && pytest tests/platform/test_design_language.py -q   # thin runner of the design test
 ```
 
-Then run the enforcement test:
+Open `/__ui` on the Vite dev server (`npm run dev`) to see the primitives in
+every state. If your change legitimately adds a decorative glyph size, add it
+to `FROZEN_HARDCODED_SIZES` in `design-language.test.ts` **in the same commit**,
+with the selector named in the diff so the reviewer can see what was exempted.
 
-```bash
-pytest tests/platform/test_design_language.py -q
-```
+### Round 8 amendment: the compare page's legacy-parity recipes
 
-If your change legitimately adds a decorative glyph size, update the frozen
-inventory in that test **in the same commit**, with the selector named in the
-diff so the reviewer can see what was exempted.
+The compare page (`features/compare`) reproduces the legacy page component by component (`docs/internal/ui-migration/redesign8/compare.md`).
+Where a measured legacy recipe is not a shared primitive, the page keeps a local one and the design-language test
+allow-lists it with this reason: raw `<table>` for the Averages and Error cards (aligned columns, pinned metric column),
+page-local card classes for the run card, category card, error card and output card (3 px run / value rail, one button
+each), and `--font-xs` for the 16x16 run letter badge (owner decision H1: swatch + letter badge + name identify a run).

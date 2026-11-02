@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1.7
+# The React SPA (frontend/) and the SDK's offline results viewer, built once
+# into an assets-only image. docker/Dockerfile copies the output from it
+# (ARG FRONTEND_IMAGE), so the platform image never needs Node.
+#
+#   podman build -f docker/Dockerfile.frontend -t qym-frontend:local .
+#
+# Layout of the image (a scratch image, no shell):
+#   /dist/app   -> packages/platform/qym_platform/_static/app  (the platform UI)
+#   /dist/ui    -> packages/sdk/qym/_static/ui                 (the SDK viewer)
+ARG FRONTEND_BASE_IMAGE=node:24-slim
+
+FROM ${FRONTEND_BASE_IMAGE} AS build
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY frontend/ ./
+# Vitest suites compare React against the server's golden payloads; `tsc -b` in the build type-checks them too.
+COPY tests/platform/fixtures/golden /build/tests/platform/fixtures/golden
+# vite.config.ts writes to ../packages/platform/qym_platform/_static/app and
+# vite.sdk.config.ts (the SDK's offline results viewer) to ../packages/sdk/qym/_static/ui
+RUN mkdir -p /build/packages/platform/qym_platform /build/packages/sdk/qym && npm run build && npm run build:sdk
+
+FROM scratch AS assets
+COPY --from=build /build/packages/platform/qym_platform/_static/app /dist/app
+COPY --from=build /build/packages/sdk/qym/_static/ui /dist/ui

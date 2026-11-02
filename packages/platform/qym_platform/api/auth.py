@@ -1,33 +1,28 @@
 from __future__ import annotations
 
-import json
 import secrets
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from qym_platform.auth import Principal, require_ui_principal
+from qym_platform.auth import Principal, require_ui_principal, secret_matches
 from qym_platform.auth_oidc import (
     auth_mode_is_oidc,
     begin_provider_login,
     clear_authenticated_session,
     end_user_sessions,
     exchange_provider_identity,
-    get_session_user_and_provider,
     local_auth_enabled,
     pop_login_next,
     provider_catalog,
-    request_root_path,
     resolve_or_provision_user,
     sanitize_next,
-    session_auth_enabled,
     set_authenticated_session,
     store_login_next,
     with_root_path,
@@ -39,11 +34,11 @@ from qym_platform.security import hash_password, verify_password
 from qym_platform.settings import PlatformSettings
 
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter()
-
-
-def _platform_static_dir() -> Path:
-    return Path(__file__).resolve().parent.parent / "_static"
 
 
 def _signup_allowed(db: Session, settings: PlatformSettings) -> bool:
@@ -147,36 +142,11 @@ def _verified_local_credential(
         throttle.cancel(attempt)
         raise
     if credential is None or not password_ok:
+        logger.info("password sign-in failed")
         throttle.failed(attempt)
         raise _invalid_credentials()
     throttle.succeeded(attempt)
     return user, credential
-
-
-@router.get("/login", response_model=None)
-def login_page(
-    request: Request,
-    db: Session = Depends(get_db),
-) -> Any:
-    settings = PlatformSettings()
-    next_value = _resolve_next(request)
-    if session_auth_enabled(settings):
-        resolved = get_session_user_and_provider(db, request)
-        if resolved:
-            return RedirectResponse(url=next_value, status_code=303)
-    idx = _platform_static_dir() / "dashboard" / "login.html"
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Login UI not found")
-    html = idx.read_text(encoding="utf-8")
-    root_path = request_root_path(request)
-    html = html.replace("__QYM_LOGIN_BOOTSTRAP_JSON__", json.dumps(_login_bootstrap_payload(db, settings)))
-    html = html.replace("__QYM_ROOT_PATH_JSON__", json.dumps(root_path))
-    html = html.replace("__QYM_PREFIX__", root_path)
-    html = html.replace(
-        "<!--__QYM_LOCAL_AUTH_MARKER__-->",
-        '<meta name="qym-local-auth" content="enabled">' if local_auth_enabled(settings) else "",
-    )
-    return HTMLResponse(html)
 
 
 @router.get("/v1/auth/providers")
@@ -249,6 +219,7 @@ def auth_login_password(
     credential.last_login_at = datetime.utcnow()
     db.commit()
     set_authenticated_session(db, request, user, "local_password")
+    logger.info("user %s signed in with a password", user.id)
     return {"ok": True, "next": _resolve_next(request)}
 
 
@@ -291,6 +262,7 @@ def auth_change_password(
     # A bulk UPDATE skips the ORM password hook, so end the other sessions here.
     end_user_sessions(db, user.id)
     db.commit()
+    logger.info("user %s changed their password; other sessions ended", user.id)
     set_authenticated_session(db, request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}
 
@@ -357,8 +329,10 @@ def auth_signup_password(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        logger.info("sign-up raced with an existing account")
         raise HTTPException(status_code=409, detail="An account with this email already exists") from exc
     db.refresh(user)
+    logger.info("user %s signed up with a password", user.id)
     set_authenticated_session(db, request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}
 
@@ -381,7 +355,8 @@ def bootstrap_admin(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     settings = PlatformSettings()
-    if not settings.admin_bootstrap_token or req.bootstrap_token != settings.admin_bootstrap_token:
+    if not secret_matches(req.bootstrap_token, settings.admin_bootstrap_token):
+        logger.warning("admin bootstrap refused: invalid bootstrap token")
         raise HTTPException(status_code=403, detail="Invalid bootstrap token")
 
     user = db.query(User).filter(User.id == principal.user.id).first()
@@ -395,4 +370,5 @@ def bootstrap_admin(
     user.role = UserRole.ADMIN
     db.commit()
     db.refresh(user)
+    logger.info("user %s claimed the first admin role with the bootstrap token", user.id)
     return {"ok": True, "user_id": user.id, "role": user.role.value}

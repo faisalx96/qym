@@ -499,6 +499,254 @@ def test_bulk_mutations_repeat_deletion_and_dimension_changes(database):
     assert projected(database)["owner"]["display_name"] == "New owner"
 
 
+def test_bulk_mutations_read_snapshot_fields_in_chunks(database, monkeypatch):
+    """A bulk UPDATE/DELETE of source rows locks them by key and reads only the
+    snapshot fields, in bounded chunks: never the rows' input/output JSON."""
+    from qym_platform.services import dashboard_outbox
+
+    monkeypatch.setattr(dashboard_outbox, "BULK_SNAPSHOT_CHUNK", 2)
+    with Session(database) as db:
+        run(db, run_metadata={"total_items": 5})
+        for i in range(5):
+            item(
+                db,
+                str(i),
+                latency_ms=i,
+                input={"large": "x" * 1000},
+                output="large output",
+                item_metadata={"root_cause": f"cause-{i % 2}"},
+            )
+        db.commit()
+    drain(database)
+    assert_legacy_parity(database)
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().lower().startswith("select"):
+            statements.append(statement)
+
+    event.listen(database, "before_cursor_execute", capture)
+    try:
+        with Session(database) as db:
+            # The WHERE no longer matches after the update: the new values
+            # are still read by key.
+            db.execute(
+                update(RunItem)
+                .where(RunItem.error.is_(None), RunItem.item_id != "0")
+                .values(error="failed", latency_ms=50)
+            )
+            db.execute(delete(RunItem).where(RunItem.item_id == "0"))
+            db.commit()
+    finally:
+        event.remove(database, "before_cursor_execute", capture)
+    reads = [s for s in statements if "run_items" in s]
+    assert reads
+    assert not [s for s in reads if "run_items.input" in s]
+    # One keyed lock, then two-row chunks before and after the update.
+    assert sum("IN (" in s.upper() and "run_items.id" in s for s in reads) >= 4
+    drain(database)
+    assert_legacy_parity(database)
+    assert projected(database)["total_items"] == 4
+    assert projected(database)["error_count"] == 4
+
+
+def test_worker_defers_and_throttles_live_rebuilds_outside_the_partition_lock(
+    database, monkeypatch
+):
+    """A live run's first rebuild publishes with its partition transaction;
+    later rebuilds run after commit in their own transaction, at most once per
+    interval, and still converge. Terminal publication stays transactional."""
+    with Session(database) as db:
+        run(db)
+        item(db, "a")
+        db.commit()
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(database, autoflush=False), live_refresh_interval=3600
+    )
+    worker.tick()
+    assert projected(database)["total_items"] == 1
+    calls = []
+    inner = service.refresh_live_summary
+
+    def spy(db, run_id, **kw):
+        # Called on a fresh session after the partition transaction committed.
+        assert not db.dirty and not db.new
+        calls.append(run_id)
+        return inner(db, run_id, **kw)
+
+    monkeypatch.setattr(service, "refresh_live_summary", spy)
+    with Session(database) as db:
+        item(db, "b", latency_ms=30.0)
+        db.commit()
+    worker.tick()
+    with Session(database) as db:
+        partition = db.get(Partition, "r")
+        # Events and watermark committed; the rebuild waits for the interval.
+        assert partition.last_applied_version == partition.last_enqueued_version
+        assert db.get(Summary, "r").count == 2
+    assert projected(database)["total_items"] == 1
+    assert calls == []
+    worker.live_refresh_interval = 0
+    worker.tick()
+    assert calls == ["r"]
+    assert projected(database)["total_items"] == 2
+    assert projected(database)["median_latency_ms"] == 20.0
+    assert_legacy_parity(database)
+    with Session(database) as db:
+        db.get(Run, "r").status = RunWorkflowStatus.COMPLETED
+        item(db, "c")
+        db.commit()
+    worker.live_refresh_interval = 3600
+    worker.tick()
+    assert projected(database)["total_items"] == 3
+    assert projected(database)["status"] == "COMPLETED"
+    assert "r" not in worker._live_refresh
+    assert_legacy_parity(database)
+
+
+def test_live_rebuild_skips_a_busy_row_and_retries_without_an_error(
+    database, monkeypatch, caplog
+):
+    """A bucket or summary row held by another transaction is not waited for:
+    the rebuild is skipped for this tick (debug log, counter), stays pending
+    and succeeds on a later tick. Any other failure is still logged as one."""
+    import logging
+
+    from sqlalchemy.exc import OperationalError
+
+    with Session(database) as db:
+        run(db)
+        item(db, "a")
+        db.commit()
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(database, autoflush=False), live_refresh_interval=0
+    )
+    worker.tick()
+    with Session(database) as db:
+        item(db, "b")
+        db.commit()
+    inner = service.refresh_live_summary
+    busy = {"left": 1}
+
+    class Held(Exception):
+        pgcode = "55P03"
+
+    def flaky(db, run_id, **kw):
+        assert kw.get("nowait") is True
+        if busy["left"]:
+            busy["left"] -= 1
+            raise OperationalError("select … for update nowait", {}, Held())
+        return inner(db, run_id, **kw)
+
+    monkeypatch.setattr(service, "refresh_live_summary", flaky)
+    with caplog.at_level(logging.DEBUG, logger=worker._logger.name):
+        worker.tick()
+    assert worker.live_refresh_busy == 1
+    assert worker._live_refresh["r"][1] is True, "still pending"
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert any("skipped" in r.getMessage() for r in caplog.records)
+    assert projected(database)["total_items"] == 1
+    caplog.clear()
+    worker.tick()
+    assert worker.live_refresh_busy == 1
+    assert worker._live_refresh["r"][1] is False
+    assert projected(database)["total_items"] == 2
+    # a failure that is not a busy row is still an error
+    monkeypatch.setattr(
+        service,
+        "refresh_live_summary",
+        lambda db, run_id, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    with Session(database) as db:
+        item(db, "c")
+        db.commit()
+    with caplog.at_level(logging.DEBUG, logger=worker._logger.name):
+        worker.tick()
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert worker.live_refresh_busy == 1
+
+
+def test_is_lock_busy_classifies_sqlstates():
+    from sqlalchemy.exc import OperationalError
+
+    class Pg:
+        def __init__(self, code):
+            self.pgcode = code
+
+    class Pg3:
+        def __init__(self, code):
+            self.sqlstate = code
+
+    assert service.is_lock_busy(OperationalError("s", {}, Pg("55P03")))
+    assert service.is_lock_busy(OperationalError("s", {}, Pg("40P01")))
+    assert service.is_lock_busy(OperationalError("s", {}, Pg3("55P03")))
+    assert not service.is_lock_busy(OperationalError("s", {}, Pg("23505")))
+    assert not service.is_lock_busy(RuntimeError("55P03"))
+
+
+def test_live_rebuild_does_not_wait_for_a_held_summary_row_on_postgres(database):
+    """PostgreSQL: with the summary row locked by another session the rebuild
+    returns at once (NOWAIT) instead of waiting for ``lock_timeout``.
+
+    The row is held only while the deferred rebuild runs: the partition step
+    before it increments the same row with a plain UPDATE, which (by design)
+    waits for the holder up to ``lock_timeout``."""
+    if database.dialect.name != "postgresql":
+        pytest.skip("NOWAIT is a PostgreSQL feature")
+    import time as _time
+
+    with Session(database) as db:
+        run(db)
+        item(db, "a")
+        db.commit()
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(database, autoflush=False), live_refresh_interval=3600
+    )
+    worker.tick()
+    with Session(database) as db:
+        item(db, "b")
+        db.commit()
+    worker.tick()  # applies "b"; the rebuild is deferred (interval not elapsed)
+    assert worker._live_refresh["r"][1] is True, "rebuild pending"
+    worker.live_refresh_interval = 0
+    holder = Session(database)
+    holder.execute(
+        select(Summary).where(Summary.run_key == "r").with_for_update()
+    ).scalar_one()
+    try:
+        started = _time.monotonic()
+        worker.tick()
+        elapsed = _time.monotonic() - started
+    finally:
+        holder.rollback()
+        holder.close()
+    assert elapsed < 2.0, elapsed
+    assert worker.live_refresh_busy == 1
+    assert worker._live_refresh["r"][1] is True
+    worker.tick()
+    assert worker._live_refresh["r"][1] is False
+    assert projected(database)["total_items"] == 2
+
+
+def test_projected_median_matches_python_median(database):
+    import random
+    import statistics
+
+    rng = random.Random(7)
+    for count in (1, 2, 5, 8):
+        run_id = f"median-{count}"
+        latencies = [rng.uniform(0.1, 9000.0) for _ in range(count)]
+        with Session(database) as db:
+            run(db, run_id, status=RunWorkflowStatus.COMPLETED)
+            for n, latency in enumerate(latencies):
+                item(db, str(n), run_id=run_id, latency_ms=latency)
+            db.commit()
+        drain(database)
+        assert projected(database, run_id)["median_latency_ms"] == statistics.median(
+            latencies
+        )
+
+
 def test_backfill_resumes_and_live_corrections_win(database):
     with Session(database) as db:
         db.info["dashboard_projection_worker"] = True
@@ -971,7 +1219,14 @@ def test_terminal_backlog_does_not_publish_completed_partial_totals(database):
         service.process_partition(db, "r", max_events=3)
         db.commit()
         assert service.dashboard_freshness(db, ["p"])["freshness"]["updating"]
-    assert projected(database) == previous
+    # The status is mirrored into the row by the source transaction (the run
+    # page already says COMPLETED); the numbers wait for the whole backlog.
+    partial = projected(database)
+    assert partial["status"] == "COMPLETED"
+    assert {k: v for k, v in partial.items() if k not in ("status", "status_reason")} == {
+        k: v for k, v in previous.items() if k not in ("status", "status_reason")
+    }
+    assert partial["total_items"] == previous["total_items"] == 1
     drain(database, max_events=3)
     assert projected(database)["status"] == "COMPLETED"
     assert projected(database)["total_items"] == 13
@@ -1036,6 +1291,71 @@ def test_retention_requires_watermark_and_preserves_sequence(database):
     drain(database)
     assert projected(database)["total_items"] == 1
 
+
+
+def test_retention_prunes_published_events_of_a_deleted_run_at_any_age(database):
+    """C074: a deleted run's published events go at the next prune, without the
+    30-day wait; a restore rebuilds from source, so nothing reads them again."""
+    with Session(database) as db:
+        run(db)
+        item(db)
+        run(db, run_id="kept")
+        item(db, "k", run_id="kept")
+        db.commit()
+    drain(database)
+    with Session(database) as db:
+        deleted_events = db.scalar(
+            select(func.count()).select_from(Change).where(Change.partition_key == "r")
+        )
+        assert deleted_events > 0
+        db.get(Partition, "r").queue_state = "deleted"
+        db.execute(
+            update(Change)
+            .where(Change.partition_key == "r")
+            .values(published_at=datetime.utcnow())
+        )
+        db.commit()
+        assert service.prune_dashboard_events(db) == deleted_events
+        db.commit()
+        left = {
+            key: n
+            for key, n in db.execute(
+                select(Change.partition_key, func.count()).group_by(Change.partition_key)
+            )
+        }
+        # The deleted run's events are gone; a ready run's recent events stay.
+        assert "r" not in left
+        assert left.get("kept", 0) > 0
+
+
+def test_retention_keeps_unpublished_and_leased_events_of_a_deleted_run(database):
+    with Session(database) as db:
+        run(db)
+        item(db)
+        db.commit()
+    drain(database)
+    with Session(database) as db:
+        part = db.get(Partition, "r")
+        part.queue_state = "deleted"
+        db.execute(update(Change).values(published_at=None))
+        db.commit()
+        assert service.prune_dashboard_events(db) == 0
+        db.execute(update(Change).values(published_at=datetime.utcnow()))
+        part.lease_until = datetime.utcnow() + timedelta(seconds=30)
+        db.commit()
+        assert service.prune_dashboard_events(db) == 0
+
+
+def test_worker_prunes_the_outbox_at_most_once_a_minute(database, monkeypatch):
+    calls = []
+    monkeypatch.setattr(service, "prune_dashboard_events", lambda db, **kw: calls.append(kw) or 0)
+    worker = service.DashboardSummaryWorker(sessionmaker(bind=database), interval=0)
+    worker.tick()
+    worker.tick()
+    assert len(calls) == 1
+    worker._next_event_prune = 0.0
+    worker.tick()
+    assert len(calls) == 2
 
 def test_normal_worker_batches_numerical_sql(database):
     with Session(database) as db:

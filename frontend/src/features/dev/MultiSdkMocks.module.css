@@ -1,0 +1,348 @@
+/* WP-C mocks: the Datasets group of the run hero, the breakdown table, the items bar, the runs list, the compare cards. */
+
+/* Datasets group chip: a name is never cut (DESIGN_LANGUAGE section 7), so the chip wraps its name and keeps the version and count on the first line. */
+.dsChip {
+  display: inline-flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  min-block-size: var(--control-height);
+  padding: 3px var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+a.dsChip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+a.dsChip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.dsChip > svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--text-muted);
+}
+
+.dsName {
+  min-inline-size: 0;
+  font-size: var(--font-base);
+  line-height: 1.3;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.dsVersion,
+.dsCount,
+.dsAlias {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.dsVersion {
+  color: var(--accent-primary);
+}
+
+.dsAlias {
+  color: var(--text-secondary);
+}
+
+.dsCount {
+  color: var(--text-muted);
+}
+
+.dsDeleted {
+  padding-inline: var(--space-xs);
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.dsChip[data-deleted] .dsName {
+  color: var(--text-secondary);
+}
+
+.dsCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.countLink {
+  display: inline-flex;
+  color: inherit;
+  text-decoration: none;
+}
+
+.countLink:hover > * {
+  opacity: 0.8;
+}
+
+.countLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.navStatic {
+  position: static;
+  margin-block-start: var(--space-md);
+}
+
+/* Overview cards (a picture of the unchanged section). */
+.metricCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+@media (width <= 480px) {
+  .metricCards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.metricCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.metricHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-xs);
+  block-size: 96px;
+}
+
+.bar {
+  flex: 1;
+  border-radius: var(--control-radius) var(--control-radius) 0 0;
+  background: var(--accent-primary);
+  opacity: 0.8;
+}
+
+/* The breakdown table. */
+.num {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.sumLabel {
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.scoreCell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.delta {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.showLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-base);
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.showLink:hover {
+  color: var(--text-primary);
+}
+
+.showLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Items bar: the dataset filter beside the count. */
+.itemsBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block-end: var(--space-sm);
+}
+
+.datasetFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  block-size: var(--control-height);
+  padding-inline: var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.filterLabel {
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.filterValue {
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.count {
+  margin-inline-start: auto;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* Runs list. */
+.listPage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.listToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  inline-size: 260px;
+  max-inline-size: 100%;
+  block-size: var(--control-height);
+  padding-inline: var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.runName {
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* Compare. */
+.cmpPage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.cmpTitle {
+  margin: 0;
+}
+
+.cmpCards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (width <= 480px) {
+  .cmpCards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.cmpHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block-end: var(--space-sm);
+}
+
+.cmpLetter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--accent-primary);
+}
+
+.cmpFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm) var(--space-md);
+  margin: 0;
+}
+
+.notice {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--info);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--info);
+}
+
+.noticeTitle {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.noticeBody {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+/* The shell at 1024: the viewport picks 1440, 1024 or 390 (column 1193, 777 or 279). */
+@media (width > 480px) and (width <= 1100px) {
+  .shellResp.shellResp {
+    inline-size: 1024px;
+  }
+}
+
+/* The column is the real page's: 1193 / 777 / 279 (the shell's 1 px borders took 2 px). */
+.contentFix.contentFix {
+  padding-inline-end: 33px;
+}

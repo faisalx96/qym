@@ -1,0 +1,244 @@
+/** Docked (non-modal) item editor beside the items table: Text/JSON fields, sticky footer, Prev/Next. */
+import { useState } from 'react';
+import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
+import { actionErrorMessage } from '@/lib/http';
+import {
+  Button,
+  ConfirmDialog,
+  ErrorState,
+  IconButton,
+  LinkButton,
+  Skeleton,
+  Text,
+  useToast,
+  StatusMark,
+} from '@/ui';
+import { DisableItemDialog } from '../components/dialogs';
+import { ConflictNotice } from '../components/ConflictNotice';
+import { FieldEditor } from '../components/FieldEditor';
+import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
+import { useItemEditor } from '../item/useItemEditor';
+import { datasetPath } from '../lib/route';
+import styles from './ItemPane.module.css';
+import { APP_LOCALE } from '@/lib/dates';
+
+export interface ItemPaneProps {
+  slug: string;
+  dataset: Dataset;
+  version: DatasetVersion;
+  itemId: string;
+  editable: boolean;
+  /** the reader cannot change this dataset (viewer or archived project): no state actions at all */
+  readOnly: boolean;
+  /** Published version: opens the create-draft flow, then this item opens in the draft. */
+  onCreateDraft?: (itemId: string) => void;
+  position: { index: number; total: number };
+  query: string;
+  onClose: () => void;
+  onNavigate: (delta: -1 | 1) => void;
+  /** Reports dirtiness so the workspace can guard Esc / row changes. */
+  onDirtyChange: (dirty: boolean, save: () => Promise<boolean>, reset: () => void) => void;
+  onTypeChangeConfirm?: (names: string[]) => Promise<boolean>;
+}
+
+export function ItemPane({
+  slug,
+  dataset,
+  version,
+  itemId,
+  editable,
+  readOnly,
+  onCreateDraft,
+  position,
+  query,
+  onClose,
+  onNavigate,
+  onDirtyChange,
+  onTypeChangeConfirm,
+}: ItemPaneProps) {
+  const toast = useToast();
+  const q = useDatasetItem(slug, dataset.slug, version.version, itemId);
+  const item: DatasetItem | undefined = q.data;
+  const editor = useItemEditor(slug, dataset.slug, version.version, item);
+  const state = useItemStateActions(slug, dataset.slug, version);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const disabled = item?.state === 'disabled';
+  const published = version.status !== 'draft';
+  // Saving a field as a different type (string -> number ...) asks first (UX must-fix 7).
+  const [typeConfirm, setTypeConfirm] = useState<{ names: string[]; resolve: (ok: boolean) => void } | null>(
+    null,
+  );
+  const askTypeChange = (names: string[]) =>
+    new Promise<boolean>((resolve) => setTypeConfirm({ names, resolve }));
+  const answerTypeChange = (ok: boolean) => {
+    typeConfirm?.resolve(ok);
+    setTypeConfirm(null);
+  };
+
+  // Publish dirtiness + imperative save/reset to the workspace on every render.
+  const saveAll = async (): Promise<boolean> => {
+    if (!editor.valid) return false;
+    if (editor.typeChanges.length && !(await (onTypeChangeConfirm ?? askTypeChange)(editor.typeChanges)))
+      return false;
+    try {
+      const saved = await editor.save();
+      if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
+      // null: someone saved first, and the conflict notice asks what to keep
+      return Boolean(saved);
+    } catch (e) {
+      toast.show(actionErrorMessage('save the item', e), { tone: 'error' });
+      return false;
+    }
+  };
+  onDirtyChange(editor.dirty, saveAll, editor.reset);
+
+  return (
+    <aside className={styles.pane} aria-label={`Item ${itemId}`} data-item-pane={itemId}>
+      <header className={styles.head}>
+        <div className={styles.headMain}>
+          <Text as="span" variant="md" weight={650} mono>
+            {itemId}
+          </Text>
+          <span className={styles.pos}>
+            {position.index + 1} / {position.total.toLocaleString(APP_LOCALE)}
+          </span>
+          {disabled ? (
+            <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+          ) : null}
+        </div>
+        <div className={styles.headActions}>
+          <IconButton label="Previous item" icon="chevron-up" onPress={() => onNavigate(-1)} />
+          <IconButton label="Next item" icon="chevron-down" onPress={() => onNavigate(1)} />
+          <LinkButton
+            to={`${datasetPath(slug, dataset.slug)}?${query}`}
+            variant="ghost"
+            size="sm"
+            data-testid="pane-open-page"
+          >
+            Open page
+          </LinkButton>
+          <IconButton label="Close editor" icon="close" onPress={onClose} data-testid="pane-close" />
+        </div>
+      </header>
+      <div className={styles.scroll}>
+        {q.isPending ? <Skeleton kind="lines" rows={5} label="Loading item" /> : null}
+        {q.isError ? (
+          <ErrorState
+            compact
+            error={q.error}
+            title="Couldn’t load this item"
+            onRetry={() => void q.refetch()}
+          />
+        ) : null}
+        {item && disabled ? (
+          <div className={styles.banner}>
+            <DisabledBanner item={item} published={published} />
+            {editable ? (
+              <div className={styles.bannerAction}>
+                <EnableButton loading={state.enabling} onPress={() => void state.enableItem(item.item_id)} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {editor.conflict ? (
+          <ConflictNotice
+            conflict={editor.conflict}
+            busy={editor.saving}
+            onReview={editor.reviewTheirs}
+            onKeep={() =>
+              void editor
+                .keepMine()
+                .then((saved) => saved && toast.show(`Item ${saved.item_id} saved`, { tone: 'success' }))
+                .catch((e: unknown) => toast.show(actionErrorMessage('save the item', e), { tone: 'error' }))
+            }
+          />
+        ) : null}
+        {item && editor.state ? (
+          <div className={styles.fields} data-disabled={disabled ? '' : undefined}>
+            <FieldEditor
+              compact
+              label="Input"
+              value={item.input}
+              editable={editable}
+              state={editor.state.input}
+              onChange={(s) => editor.set('input', s)}
+            />
+            <FieldEditor
+              compact
+              label="Expected output"
+              value={item.expected_output}
+              editable={editable}
+              state={editor.state.expected}
+              onChange={(s) => editor.set('expected', s)}
+            />
+            <FieldEditor
+              compact
+              label="Metadata"
+              value={item.metadata}
+              editable={editable}
+              jsonOnly
+              state={editor.state.metadata}
+              onChange={(s) => editor.set('metadata', s)}
+            />
+          </div>
+        ) : null}
+      </div>
+      {editable ? (
+        <footer className={styles.foot}>
+          {item && !disabled ? (
+            <Button variant="danger" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
+              Disable item
+            </Button>
+          ) : null}
+          <Text as="span" variant="sm" tone="muted" aria-live="polite" className={styles.status}>
+            {editor.dirty
+              ? editor.valid
+                ? 'Unsaved changes'
+                : 'Fix the invalid field to save'
+              : 'No changes'}
+          </Text>
+          <Button
+            variant="primary"
+            onPress={() => void saveAll()}
+            isDisabled={!editor.dirty || !editor.valid}
+            loading={editor.saving}
+            data-testid="pane-save"
+          >
+            Save changes
+          </Button>
+        </footer>
+      ) : null}
+      {!readOnly && published && item && onCreateDraft ? (
+        <footer className={styles.foot}>
+          {/* one action to change a published item, the same as on the item page (C142) */}
+          <Button
+            variant="accent"
+            onPress={() => onCreateDraft(item.item_id)}
+            data-testid="pane-edit-in-draft"
+          >
+            Edit in a new draft
+          </Button>
+        </footer>
+      ) : null}
+      {item ? (
+        <DisableItemDialog
+          open={disableOpen}
+          onOpenChange={setDisableOpen}
+          itemId={item.item_id}
+          onConfirm={(reason) => state.disableItem(item.item_id, reason)}
+        />
+      ) : null}
+      <ConfirmDialog
+        open={typeConfirm !== null}
+        onOpenChange={(o) => {
+          if (!o) answerTypeChange(false);
+        }}
+        title="Change the stored type?"
+        description={`These fields will be saved as a different type: ${(typeConfirm?.names ?? []).join(', ')}.`}
+        confirmLabel="Save with new type"
+        tone="accent"
+        onConfirm={() => answerTypeChange(true)}
+      />
+    </aside>
+  );
+}

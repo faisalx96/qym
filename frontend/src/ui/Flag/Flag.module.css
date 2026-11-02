@@ -1,0 +1,22 @@
+/* Flag: an optional glyph and a word in the tone colour; no pill, no outline, no fill. */
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--badge-height);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--tone-text);
+}
+
+.flag[data-tone='neutral'] {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.icon {
+  flex: none;
+}

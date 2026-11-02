@@ -1,0 +1,29 @@
+{
+  "list@100": {
+    "rect": 86.515625,
+    "offset": 87,
+    "transform": "none",
+    "anim": "_popover_1ia3n_61"
+  },
+  "list@800": {
+    "rect": 86.515625,
+    "offset": 87,
+    "transform": "none",
+    "anim": "_popover_1ia3n_61"
+  },
+  "list@2000": {
+    "rect": 86.515625,
+    "offset": 87,
+    "transform": "none",
+    "anim": "_popover_1ia3n_61"
+  },
+  "trigger": {
+    "rect": 99,
+    "offset": 99
+  },
+  "focus@300": "H2 id=launch-step-settings name= aria= label=",
+  "focus@1000": "H2 id=launch-step-settings name= aria= label=",
+  "focus@2500": "H2 id=launch-step-settings name= aria= label=",
+  "url": "http://127.0.0.1:8986/projects/design-b/experiments/new?step=settings&env=c63928bf-4d20-40df-b132-83b24274d854",
+  "ceilingField": 0
+}

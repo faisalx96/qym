@@ -1,0 +1,159 @@
+/* Expanded item card blocks. */
+.state {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: var(--space-md) var(--space-lg);
+  direction: ltr;
+  text-align: start;
+}
+
+/* Output and Metrics are separated by a full-width divider (1px --border-strong, 20px above). */
+.divider {
+  margin: var(--space-lg) 0 0;
+  border: 0;
+  border-block-start: 1px solid var(--border-strong);
+}
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding-block-start: var(--space-sm);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+}
+
+.output {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-block: var(--space-sm);
+  min-width: 0;
+}
+
+.output[data-rail] {
+  border-inline-start: 2px solid var(--tone);
+  padding-inline-start: var(--space-md);
+}
+
+.output[data-rail='success'] {
+  --tone: var(--success);
+}
+
+.output[data-rail='danger'] {
+  --tone: var(--error);
+}
+
+.outputBody {
+  min-width: 0;
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--lines);
+  overflow: hidden;
+}
+
+.more {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.more:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+.tags,
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+/* A tag's key and value: one wrapping run of two isolated spans, the key first whatever its script. */
+.tagText {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+.tagKey,
+.tagValue {
+  unicode-bidi: isolate;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.note {
+  margin: 0;
+  color: var(--warning);
+}
+
+.warning {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: 0;
+  color: var(--warning);
+  font-size: var(--font-sm);
+}
+
+.warningLabel {
+  font-weight: 600;
+}
+
+.metricsTitle {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* C086: the space the metrics take while they render in idle time, so the card does not jump */
+.metricsPending {
+  min-height: 160px;
+}

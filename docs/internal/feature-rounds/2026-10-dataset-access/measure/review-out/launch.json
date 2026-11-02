@@ -1,0 +1,779 @@
+{
+  "w1440": {
+    "checkboxExists": 1,
+    "unchecked": true,
+    "labelRow": {
+      "x": 233,
+      "y": 354,
+      "w": 779,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive run"
+    },
+    "helper": {
+      "x": 233,
+      "y": 375,
+      "w": 779,
+      "h": 15.4,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "24px",
+      "text": "Starts only when the gateway is quiet, makes other jobs wait while it runs, and is discarded and re-queued if foreign traffic overlaps. Expect a later start."
+    },
+    "cardOff": {
+      "x": 212,
+      "y": 288,
+      "w": 821,
+      "h": 236.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "nameInput": {
+      "x": 233,
+      "y": 322,
+      "w": 506,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": ""
+    },
+    "priority": {
+      "x": 759,
+      "y": 322,
+      "w": 253,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "Environment default"
+    },
+    "order": [
+      "DUDev Userdev@local",
+      "Collapse sidebar",
+      "Design B",
+      "Go toCtrl K",
+      "← Start",
+      "1Where it runs3 to fix",
+      "2Starting point",
+      "3Models",
+      "4Environment configurations",
+      "5Evaluation configurations",
+      "6Review and launch",
+      "Experiment name"
+    ],
+    "describedby": "launch-latency-help",
+    "callout": {
+      "x": 257,
+      "y": 398,
+      "w": 755,
+      "h": 34.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "14px",
+      "text": "Other jobs wait while this run executes"
+    },
+    "calloutText": "Other jobs wait while this run executes",
+    "cardOn": {
+      "x": 212,
+      "y": 288,
+      "w": 821,
+      "h": 279.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "overflowOn": 0,
+    "cardOffAgain": {
+      "x": 212,
+      "y": 288,
+      "w": 821,
+      "h": 236.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "dsTrigger": {
+      "x": 651,
+      "y": 572,
+      "w": 361.5,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "golden"
+    },
+    "dsCardBefore": {
+      "x": 651,
+      "y": 553,
+      "w": 361.5,
+      "h": 43.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Datasetgolden goldensecret-set"
+    },
+    "options": [
+      {
+        "text": "golden",
+        "h": 32
+      },
+      {
+        "text": "secret-set\nPrivate test set",
+        "h": 32
+      }
+    ],
+    "optionChips": [
+      {
+        "t": "Private test set",
+        "w": 86.5,
+        "h": 20,
+        "font": "10px/650",
+        "fam": "\"Qym Sans\", \"Qym Ara"
+      }
+    ],
+    "disabledOptions": 0,
+    "dsTrigger2": {
+      "x": 651,
+      "y": 572,
+      "w": 361.5,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "secret-setPrivate test set"
+    },
+    "dsTriggerScroll": {
+      "sw": 360,
+      "cw": 360
+    },
+    "triggerChip": {
+      "x": 716,
+      "y": 574,
+      "w": 99,
+      "h": 20,
+      "font": "10px/650",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "8px",
+      "text": "Private test set"
+    },
+    "help": {
+      "x": 651,
+      "y": 604,
+      "w": 361.5,
+      "h": 30.8,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "0px",
+      "text": "Private test set. The experiment reads it with its own dataset read token; only admins see its item contents."
+    },
+    "helpIcons": 0,
+    "helpText": "Private test set. The experiment reads it with its own dataset read token; only admins see its item contents.",
+    "helpAfterPlain": 0,
+    "chipAfterPlain": 0,
+    "aliceNoEnvEnabled": true,
+    "aliceProdDisabled": true,
+    "reason": {
+      "x": 233,
+      "y": 394,
+      "w": 779,
+      "h": 15.4,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "24px",
+      "text": "Only project managers can launch latency-sensitive runs on production."
+    },
+    "reasonColor": "rgb(168, 168, 186)",
+    "cardDisabled": {
+      "x": 212,
+      "y": 288,
+      "w": 821,
+      "h": 255.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default (NORMAL) Environment default (NORMAL)LOWNORMALHIGH (managers only)Latency-sensitive runStarts only when the gateway i"
+    },
+    "helperStill": 1,
+    "describedbyDisabled": "launch-latency-help launch-latency-reason",
+    "alicePartialEnabled": true,
+    "reasonGoneWhenPartial": 0,
+    "partialCallout": {
+      "x": 257,
+      "y": 398,
+      "w": 755,
+      "h": 55.6,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "14px",
+      "text": "Other jobs wait while this run executesOnly a project manager can launch it on production. Clear the box or ask a project manager."
+    },
+    "partialText": "Other jobs wait while this run executes\nOnly a project manager can launch it on production. Clear the box or ask a project manager.",
+    "cardPartial": {
+      "x": 212,
+      "y": 288,
+      "w": 821,
+      "h": 300,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default (NORMAL) Environment default (NORMAL)LOWNORMALHIGH (managers only)Latency-sensitive runStarts only when the gateway i"
+    },
+    "paneText": true,
+    "launchDisabled": false,
+    "problemItem": {
+      "x": 1074,
+      "y": 834,
+      "w": 310,
+      "h": 70.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "14px",
+      "text": "Latency-sensitiveLatency-sensitive runs on production need a project manager"
+    },
+    "focusAfterClick": "",
+    "problemGoneAfterClear": false
+  },
+  "w1024": {
+    "checkboxExists": 1,
+    "unchecked": true,
+    "labelRow": {
+      "x": 233,
+      "y": 259,
+      "w": 735,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive run"
+    },
+    "helper": {
+      "x": 233,
+      "y": 280,
+      "w": 735,
+      "h": 30.8,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "24px",
+      "text": "Starts only when the gateway is quiet, makes other jobs wait while it runs, and is discarded and re-queued if foreign traffic overlaps. Expect a later start."
+    },
+    "cardOff": {
+      "x": 212,
+      "y": 193,
+      "w": 777,
+      "h": 251.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "nameInput": {
+      "x": 233,
+      "y": 227,
+      "w": 476.7,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": ""
+    },
+    "priority": {
+      "x": 730,
+      "y": 227,
+      "w": 238.3,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "Environment default"
+    },
+    "order": [
+      "DUDev Userdev@local",
+      "Collapse sidebar",
+      "Design B",
+      "Go toCtrl K",
+      "← Start",
+      "1Where it runs3 to fix",
+      "2Starting point",
+      "3Models",
+      "4Environment configurations",
+      "5Evaluation configurations",
+      "6Review and launch",
+      "Experiment name"
+    ],
+    "describedby": "launch-latency-help",
+    "callout": {
+      "x": 257,
+      "y": 319,
+      "w": 711,
+      "h": 34.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "14px",
+      "text": "Other jobs wait while this run executes"
+    },
+    "calloutText": "Other jobs wait while this run executes",
+    "cardOn": {
+      "x": 212,
+      "y": 193,
+      "w": 777,
+      "h": 294.5,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "overflowOn": 0,
+    "cardOffAgain": {
+      "x": 212,
+      "y": 193,
+      "w": 777,
+      "h": 251.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "dsTrigger": {
+      "x": 629,
+      "y": 493,
+      "w": 339.5,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "golden"
+    },
+    "dsCardBefore": {
+      "x": 629,
+      "y": 473,
+      "w": 339.5,
+      "h": 43.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Datasetgolden goldensecret-set"
+    },
+    "options": [
+      {
+        "text": "golden",
+        "h": 32
+      },
+      {
+        "text": "secret-set\nPrivate test set",
+        "h": 32
+      }
+    ],
+    "optionChips": [
+      {
+        "t": "Private test set",
+        "w": 86.5,
+        "h": 20,
+        "font": "10px/650",
+        "fam": "\"Qym Sans\", \"Qym Ara"
+      }
+    ],
+    "disabledOptions": 0,
+    "dsTrigger2": {
+      "x": 629,
+      "y": 493,
+      "w": 339.5,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "secret-setPrivate test set"
+    },
+    "dsTriggerScroll": {
+      "sw": 338,
+      "cw": 338
+    },
+    "triggerChip": {
+      "x": 694,
+      "y": 495,
+      "w": 99,
+      "h": 20,
+      "font": "10px/650",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "8px",
+      "text": "Private test set"
+    },
+    "help": {
+      "x": 629,
+      "y": 525,
+      "w": 339.5,
+      "h": 30.8,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "0px",
+      "text": "Private test set. The experiment reads it with its own dataset read token; only admins see its item contents."
+    },
+    "helpIcons": 0,
+    "helpText": "Private test set. The experiment reads it with its own dataset read token; only admins see its item contents.",
+    "helpAfterPlain": 0,
+    "chipAfterPlain": 0,
+    "aliceNoEnvEnabled": true,
+    "aliceProdDisabled": true,
+    "reason": {
+      "x": 233,
+      "y": 315,
+      "w": 735,
+      "h": 15.4,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "24px",
+      "text": "Only project managers can launch latency-sensitive runs on production."
+    },
+    "reasonColor": "rgb(168, 168, 186)",
+    "cardDisabled": {
+      "x": 212,
+      "y": 193,
+      "w": 777,
+      "h": 271.1,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default (NORMAL) Environment default (NORMAL)LOWNORMALHIGH (managers only)Latency-sensitive runStarts only when the gateway i"
+    },
+    "helperStill": 1,
+    "describedbyDisabled": "launch-latency-help launch-latency-reason",
+    "alicePartialEnabled": true,
+    "reasonGoneWhenPartial": 0,
+    "partialCallout": {
+      "x": 257,
+      "y": 319,
+      "w": 711,
+      "h": 55.6,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "14px",
+      "text": "Other jobs wait while this run executesOnly a project manager can launch it on production. Clear the box or ask a project manager."
+    },
+    "partialText": "Other jobs wait while this run executes\nOnly a project manager can launch it on production. Clear the box or ask a project manager.",
+    "cardPartial": {
+      "x": 212,
+      "y": 193,
+      "w": 777,
+      "h": 315.3,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default (NORMAL) Environment default (NORMAL)LOWNORMALHIGH (managers only)Latency-sensitive runStarts only when the gateway i"
+    },
+    "paneText": true,
+    "launchDisabled": false,
+    "problemItem": {
+      "x": 233,
+      "y": 1398,
+      "w": 735,
+      "h": 53.6,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "14px",
+      "text": "Latency-sensitiveLatency-sensitive runs on production need a project manager"
+    },
+    "focusAfterClick": "",
+    "problemGoneAfterClear": false
+  },
+  "w390": {
+    "checkboxExists": 1,
+    "unchecked": true,
+    "labelRow": {
+      "x": 97,
+      "y": 363,
+      "w": 237,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "Latency-sensitive run"
+    },
+    "helper": {
+      "x": 97,
+      "y": 384,
+      "w": 237,
+      "h": 61.6,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "24px",
+      "text": "Starts only when the gateway is quiet, makes other jobs wait while it runs, and is discarded and re-queued if foreign traffic overlaps. Expect a later start."
+    },
+    "cardOff": {
+      "x": 76,
+      "y": 233,
+      "w": 279,
+      "h": 376.7,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "nameInput": {
+      "x": 97,
+      "y": 267,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": ""
+    },
+    "priority": {
+      "x": 97,
+      "y": 331,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "Environment default"
+    },
+    "order": [
+      "DUDev User — account menu",
+      "Expand sidebar",
+      "Design B",
+      "Go toCtrl K",
+      "← Start",
+      "1. Where it runs (3 to fix)",
+      "Experiment name",
+      "Environment default",
+      "Latency-sensitive run",
+      "Versioning details",
+      "production",
+      "staging"
+    ],
+    "describedby": "launch-latency-help",
+    "callout": {
+      "x": 121,
+      "y": 453,
+      "w": 213,
+      "h": 51.6,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "14px",
+      "text": "Other jobs wait while this run executes"
+    },
+    "calloutText": "Other jobs wait while this run executes",
+    "cardOn": {
+      "x": 76,
+      "y": 233,
+      "w": 279,
+      "h": 436.3,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "overflowOn": 0,
+    "cardOffAgain": {
+      "x": 76,
+      "y": 233,
+      "w": 279,
+      "h": 376.7,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default Environment defaultLOWNORMALHIGHLatency-sensitive runStarts only when the gateway is quiet, makes other jobs wait whi"
+    },
+    "dsTrigger": {
+      "x": 97,
+      "y": 936,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "golden"
+    },
+    "dsCardBefore": {
+      "x": 97,
+      "y": 916,
+      "w": 237,
+      "h": 43.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Datasetgolden goldensecret-set"
+    },
+    "options": [
+      {
+        "text": "golden",
+        "h": 32
+      },
+      {
+        "text": "secret-set\nPrivate test set",
+        "h": 32
+      }
+    ],
+    "optionChips": [
+      {
+        "t": "Private test set",
+        "w": 86.5,
+        "h": 20,
+        "font": "10px/650",
+        "fam": "\"Qym Sans\", \"Qym Ara"
+      }
+    ],
+    "disabledOptions": 0,
+    "dsTrigger2": {
+      "x": 97,
+      "y": 463,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "8px",
+      "text": "secret-setPrivate test set"
+    },
+    "dsTriggerScroll": {
+      "sw": 235,
+      "cw": 235
+    },
+    "triggerChip": {
+      "x": 162,
+      "y": 465,
+      "w": 99,
+      "h": 20,
+      "font": "10px/650",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "8px",
+      "text": "Private test set"
+    },
+    "help": {
+      "x": 97,
+      "y": 495,
+      "w": 237,
+      "h": 46.2,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(154, 154, 178)",
+      "pl": "0px",
+      "text": "Private test set. The experiment reads it with its own dataset read token; only admins see its item contents."
+    },
+    "helpIcons": 0,
+    "helpText": "Private test set. The experiment reads it with its own dataset read token; only admins see its item contents.",
+    "helpAfterPlain": 0,
+    "chipAfterPlain": 0,
+    "aliceNoEnvEnabled": true,
+    "aliceProdDisabled": true,
+    "reason": {
+      "x": 97,
+      "y": 449,
+      "w": 237,
+      "h": 30.8,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "24px",
+      "text": "Only project managers can launch latency-sensitive runs on production."
+    },
+    "reasonColor": "rgb(168, 168, 186)",
+    "cardDisabled": {
+      "x": 76,
+      "y": 233,
+      "w": 279,
+      "h": 411.5,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default (NORMAL) Environment default (NORMAL)LOWNORMALHIGH (managers only)Latency-sensitive runStarts only when the gateway i"
+    },
+    "helperStill": 1,
+    "describedbyDisabled": "launch-latency-help launch-latency-reason",
+    "alicePartialEnabled": true,
+    "reasonGoneWhenPartial": 0,
+    "partialCallout": {
+      "x": 121,
+      "y": 453,
+      "w": 213,
+      "h": 106,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "14px",
+      "text": "Other jobs wait while this run executesOnly a project manager can launch it on production. Clear the box or ask a project manager."
+    },
+    "partialText": "Other jobs wait while this run executes\nOnly a project manager can launch it on production. Clear the box or ask a project manager.",
+    "cardPartial": {
+      "x": 76,
+      "y": 233,
+      "w": 279,
+      "h": 490.7,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "0px",
+      "text": "Experiment namePriorityEnvironment default (NORMAL) Environment default (NORMAL)LOWNORMALHIGH (managers only)Latency-sensitive runStarts only when the gateway i"
+    },
+    "paneText": true,
+    "launchDisabled": false,
+    "problemItem": {
+      "x": 97,
+      "y": 1862,
+      "w": 237,
+      "h": 70.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "14px",
+      "text": "Latency-sensitiveLatency-sensitive runs on production need a project manager"
+    },
+    "focusAfterClick": "",
+    "problemGoneAfterClear": false
+  }
+}

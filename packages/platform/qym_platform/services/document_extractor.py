@@ -12,6 +12,10 @@ from pathlib import Path
 from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 
 MAX_REFERENCE_UPLOAD_BYTES = 10 * 1024 * 1024
 # Large documents require explicit confirmation before their retained content
@@ -125,6 +129,7 @@ def _extract_html(data: bytes) -> str:
     try:
         parser.feed(_decode_text(data))
     except Exception as exc:
+        logger.debug("HTML reference document could not be parsed", exc_info=True)
         raise DocumentExtractionError("The HTML document could not be read.") from exc
     return "".join(parser.parts)
 
@@ -255,6 +260,7 @@ def _extract_pdf_in_worker(data: bytes) -> str:
     except DocumentExtractionError:
         raise
     except Exception as exc:
+        logger.debug("PDF reference document could not be parsed", exc_info=True)
         raise DocumentExtractionError(
             "The PDF could not be read. Scanned PDFs need OCR before upload."
         ) from exc
@@ -315,6 +321,7 @@ def _extract_pdf(data: bytes) -> str:
         try:
             status, payload = parent_connection.recv()
         except EOFError as exc:
+            logger.warning("PDF extraction child process exited without a result (resource limit)")
             raise DocumentExtractionError(
                 "PDF extraction exceeded the resource limit."
             ) from exc

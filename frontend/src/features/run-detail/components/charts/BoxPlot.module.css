@@ -1,0 +1,230 @@
+/* Box plot marks (round 5 R2): one tone per plot. --tone comes from tones.css (data-band of the median, or data-series 1);
+   the slow latency tail keeps --score-2. No new token. */
+.plotBox {
+  min-width: 0;
+}
+
+.stack {
+  position: relative;
+}
+
+.box {
+  display: block;
+  max-inline-size: 100%;
+}
+
+/* Transparent marks over the picture: hover, focus, click. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  max-inline-size: 100%;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 146px;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.axisLine {
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+
+.axisTick {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.iqr {
+  fill: color-mix(in srgb, var(--tone, var(--chart-1)) var(--tint-strong), var(--card-bg));
+  stroke: var(--tone, var(--chart-1));
+  stroke-width: 1.5;
+}
+
+.whisker,
+.cap {
+  stroke: var(--tone, var(--chart-1));
+  stroke-width: 1.5;
+}
+
+.median {
+  stroke: var(--tone, var(--chart-1));
+  stroke-width: 2.5;
+}
+
+.meanMark {
+  fill: var(--card-bg);
+  stroke: var(--tone, var(--chart-1));
+  stroke-width: 1.5;
+}
+
+.outlier {
+  fill: var(--tone, var(--chart-1));
+  fill-opacity: 0.75;
+}
+
+.outlier[data-tail] {
+  fill: var(--score-2);
+  fill-opacity: 0.9;
+}
+
+.arrow {
+  fill: var(--tone, var(--chart-1));
+}
+
+.arrow[data-tail] {
+  fill: var(--score-2);
+}
+
+.hit {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.medianLabel,
+.endLabel {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  fill: var(--text-primary);
+}
+
+.endLabel {
+  fill: var(--text-muted);
+}
+
+/* Entrance (M2): the box grows from its median, dots fade in staggered. Nothing animates under reduced motion. */
+.iqr[data-enter] {
+  animation: box-grow var(--motion-fill) var(--ease-out) backwards;
+}
+
+.outlier[data-enter] {
+  animation: dot-fade var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes box-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes dot-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iqr[data-enter],
+  .outlier[data-enter] {
+    animation: none;
+  }
+}
+
+/* Tooltip of the box: the middle half and all six numbers. */
+.tip {
+  min-inline-size: 0;
+}
+
+.tipTitle {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tipGrid {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 2px var(--space-md);
+  margin: var(--space-xs) 0 0;
+}
+
+.tipGrid > div {
+  display: flex;
+  gap: var(--space-xs);
+  justify-content: space-between;
+}
+
+.tipGrid dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.tipGrid dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+
+.tipNote {
+  margin-block-start: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* One key line under a card that stacks rows. */
+.key {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* The glyph as a positioned row (per-pass rows, Step timings). */
+.track {
+  position: relative;
+  display: block;
+  min-inline-size: 0;
+}
+
+.tWhisker {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: var(--a);
+  inline-size: calc(var(--b) - var(--a));
+  block-size: 0;
+  border-block-start: 1.5px solid var(--tone, var(--chart-1));
+}
+
+.tBox {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: var(--a);
+  inline-size: max(3px, calc(var(--b) - var(--a)));
+  border: 1.5px solid var(--tone, var(--chart-1));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--tone, var(--chart-1)) var(--tint-strong), var(--card-bg));
+}
+
+.tMedian {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: var(--a);
+  inline-size: 2.5px;
+  background: var(--tone, var(--chart-1));
+}
+
+.tMean {
+  position: absolute;
+  inset-block-start: calc(50% - 4px);
+  inset-inline-start: calc(var(--a) - 4px);
+  inline-size: 8px;
+  block-size: 8px;
+  border: 1.5px solid var(--tone, var(--chart-1));
+  background: var(--card-bg);
+  transform: rotate(45deg);
+}
+
+/* All values equal: one muted line instead of a plot with a lone mark. */
+.flatNote {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--row-compact);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}

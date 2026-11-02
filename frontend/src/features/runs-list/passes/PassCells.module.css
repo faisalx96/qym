@@ -1,0 +1,76 @@
+.mono {
+  font-family: var(--font-mono);
+}
+
+.none {
+  color: var(--text-muted);
+}
+
+/* the run row's date recipe (cells.module.css .date): sans, tabular figures */
+.date {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.muted {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* the pass name starts at the run name's x: the chevron slot plus the gap */
+.passName {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+  padding-inline-start: calc(var(--control-height) + var(--space-xs));
+}
+
+.passLink {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  text-decoration: none;
+  border-radius: 2px;
+}
+
+.passLink:hover {
+  color: var(--accent-primary);
+  text-decoration: none; /* the colour step is the hover cue: no underline */
+}
+
+.passLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* the pass status, then its signals, in the run row's two columns (C028) */
+.statusRow {
+  display: inline-grid;
+  grid-template-columns: minmax(92px, max-content) auto;
+  align-items: center;
+  column-gap: var(--space-sm);
+  min-width: 0;
+}
+
+.metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.metricError {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-sm);
+  line-height: 1;
+  color: var(--metric-error);
+}
+
+@media (max-width: 639px) {
+  /* card lines: no indent, the line itself is the child */
+  .passName {
+    padding-inline-start: 0;
+  }
+}

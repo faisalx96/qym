@@ -1,0 +1,59 @@
+/* .qym-score-value + score-1..5 bands with a left bar as the non-colour cue. */
+.score {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  padding-inline-start: var(--space-xs);
+  border-inline-start: 2px solid transparent;
+}
+
+.score[data-band],
+.score[data-verdict] {
+  color: var(--tone-text);
+  border-color: var(--tone);
+}
+
+/* Plain: the number alone in its band colour (table cells); the number and the title are the non-colour cue. */
+.score[data-variant='plain'] {
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+/* Pill: the band as a tinted fill (12%), no bar; the number and the title stay the non-colour cue. */
+.score[data-variant='pill'] {
+  min-block-size: 20px;
+  padding-inline: var(--space-sm);
+  border-inline-start: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  font-weight: 650;
+}
+
+.score[data-variant='pill'][data-band],
+.score[data-variant='pill'][data-verdict] {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+}
+
+.score[data-error] {
+  color: var(--text-muted);
+}
+
+.glyph[data-error='task'] {
+  color: var(--error);
+}
+.glyph[data-error='metric'] {
+  color: var(--metric-error);
+}
+
+.retries {
+  color: var(--info);
+  font-size: var(--font-sm);
+}
+
+.ci {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}

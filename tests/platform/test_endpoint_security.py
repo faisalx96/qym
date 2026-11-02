@@ -517,6 +517,101 @@ def test_regular_member_cannot_repoint_preserved_llm_key(
         assert connection.llm_base_url == "http://127.0.0.1:9999/v1"
 
 
+def _llm_connection(client, base_url: str = "https://api.provider.example/v1") -> str:
+    created = client.post(
+        "/v1/projects/project-a/llm-connections",
+        headers=_headers("manager-a@example.com"),
+        json={
+            "name": "trusted",
+            "llm_base_url": base_url,
+            "llm_model": "test-model",
+            "llm_api_key": "sk-protected-1234",
+        },
+    )
+    assert created.status_code == 200, created.text
+    return created.json()["id"]
+
+
+def _stored_llm_connection(session_factory, connection_id: str) -> tuple[str, str]:
+    with session_factory() as session:
+        row = session.get(ProjectLlmConnection, connection_id)
+        return row.llm_base_url, row.llm_api_key_encrypted
+
+
+@pytest.mark.parametrize("sent_key", ["__KEEP__", ""])
+def test_manager_cannot_move_a_stored_llm_key_to_another_host(
+    client, session_factory, sent_key
+) -> None:
+    """C004: a stored key stays bound to the host it was entered for."""
+    with session_factory() as session:
+        _seed_platform_data(session)
+    connection_id = _llm_connection(client)
+    before = _stored_llm_connection(session_factory, connection_id)
+
+    moved = client.put(
+        f"/v1/projects/project-a/llm-connections/{connection_id}",
+        headers=_headers("manager-a@example.com"),
+        json={
+            "name": "trusted",
+            "llm_base_url": "https://attacker.example/v1",
+            "llm_model": "test-model",
+            "llm_api_key": sent_key,
+        },
+    )
+
+    assert moved.status_code == 400
+    assert moved.json()["detail"] == "Enter the API key again for the new host"
+    assert _stored_llm_connection(session_factory, connection_id) == before
+
+
+def test_llm_key_stays_on_a_new_path_and_moves_with_a_new_key(
+    client, session_factory
+) -> None:
+    with session_factory() as session:
+        _seed_platform_data(session)
+    connection_id = _llm_connection(client)
+    _, key_before = _stored_llm_connection(session_factory, connection_id)
+    url = f"/v1/projects/project-a/llm-connections/{connection_id}"
+    body = {"name": "trusted", "llm_model": "test-model"}
+
+    same_host = client.put(
+        url,
+        headers=_headers("manager-a@example.com"),
+        json={
+            **body,
+            "llm_base_url": "https://API.provider.example:443/v2",
+            "llm_api_key": "__KEEP__",
+        },
+    )
+    assert same_host.status_code == 200, same_host.text
+    assert same_host.json()["llm_api_key_hint"] == "••••1234"
+    assert _stored_llm_connection(session_factory, connection_id)[1] == key_before
+
+    new_host = client.put(
+        url,
+        headers=_headers("manager-a@example.com"),
+        json={
+            **body,
+            "llm_base_url": "https://other.example/v1",
+            "llm_api_key": "sk-other-host-9999",
+        },
+    )
+    assert new_host.status_code == 200, new_host.text
+    assert new_host.json()["llm_api_key_hint"] == "••••9999"
+
+
+def test_key_host_changed_compares_scheme_host_and_port() -> None:
+    from qym_platform.llm_endpoint_security import key_host_changed
+
+    stored = "https://api.example.com/v1"
+    assert not key_host_changed(stored, "https://API.example.com:443/v2/")
+    assert key_host_changed(stored, "https://api.example.com.evil.test/v1")
+    assert key_host_changed(stored, "http://api.example.com/v1")
+    assert key_host_changed(stored, "https://api.example.com:8443/v1")
+    assert key_host_changed(stored, "https://other.example.com/v1")
+    assert not key_host_changed("http://localhost/v1", "http://localhost:80/x")
+
+
 def test_metric_root_cause_edits_are_scoped_and_audited(
     client, session_factory
 ) -> None:
@@ -852,6 +947,9 @@ def test_csv_run_upload_preserves_multi_pass_structure(client, session_factory) 
 
     assert response.status_code == 200, response.text
     run_id = response.json()["run_id"]
+    # C209: the upload answers with the canonical project run URL, as run start does.
+    assert "/projects/" in response.json()["live_url"]
+    assert response.json()["live_url"].endswith(f"/runs/{run_id}")
     with session_factory() as session:
         run = session.get(Run, run_id)
         items = session.query(RunItem).filter(RunItem.run_id == run_id).all()

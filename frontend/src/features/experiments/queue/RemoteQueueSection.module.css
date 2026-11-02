@@ -1,0 +1,86 @@
+/* Collapsible remote-queue card (.exq-remote). */
+.queueCard {
+  margin-bottom: var(--space-xl);
+}
+
+.toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: start;
+  cursor: pointer;
+}
+
+.title {
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+.sub {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.tags {
+  display: inline-flex;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding: var(--space-md) 0 0;
+}
+
+.env {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.envHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+.meta {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.err {
+  color: var(--error);
+  font-size: var(--font-sm);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.toggle:hover .title {
+  color: var(--accent-primary);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+

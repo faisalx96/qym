@@ -23,6 +23,12 @@ except ImportError:  # SDK-only environment without the platform's dependencies
 if _platform_settings is not None:
     for _settings_cls in (_platform_settings.PlatformSettings, _platform_settings.ProductEvalSettings):
         _settings_cls.model_config["env_file"] = None
+    # Every platform app factory calls configure_logging() once per process.
+    # Do it before any test so the first create_app() inside a test cannot
+    # reset a root level that caplog.set_level() just lowered.
+    from qym_platform.log import configure_logging as _configure_platform_logging
+
+    _configure_platform_logging()
 
 # ``import qym`` loads the cwd .env, and a path-less load_dotenv() (Alembic's
 # env.py, insightor_eval.py) walks up from its own file; both reach the repo

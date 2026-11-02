@@ -25,8 +25,9 @@ def test_metric_compact_form_is_resolved_by_evaluator():
 
     assert evaluator.metrics == {"passed": passed}
     assert evaluator.metric_specs["passed"].score_type == "boolean"
-    # Schema 2: direction is None unless declared (C008).
+    # Schema 2: the direction is sent as the spec holds it, "maximize" by default (2.1.0).
     assert evaluator._metric_specs_payload()["passed"]["schema_version"] == 2
+    assert evaluator._metric_specs_payload()["passed"]["direction"] == "maximize"
 
 
 def test_metric_compact_form_is_preserved_by_parallel_runner():
@@ -99,11 +100,15 @@ def test_duplicate_metric_names_are_rejected():
         )
 
 
-def test_direction_is_undeclared_unless_given():
-    """C008: an undeclared direction is sent as None (shown neutrally)."""
-    assert MetricSpec(score_type="percentage").direction is None
-    assert MetricSpec(score_type="percentage").to_dict()["direction"] is None
-    assert Metric(lambda o: 1, name="m", score_type="count").spec.direction is None
+def test_direction_defaults_to_maximize_unless_given():
+    """2.1.0: an undeclared direction is classified as maximize; an explicit None stays neutral."""
+    assert MetricSpec(score_type="percentage").direction == "maximize"
+    assert MetricSpec(score_type="percentage").to_dict()["direction"] == "maximize"
+    assert MetricSpec(score_type="legacy").direction == "maximize"
+    assert Metric(lambda o: 1, name="m", score_type="count").spec.direction == "maximize"
+    assert MetricSpec(score_type="number", direction=None).direction is None
+    assert MetricSpec(score_type="number", direction=None).to_dict()["direction"] is None
+    assert Metric(lambda o: 1, name="m", score_type="count", direction=None).spec.direction is None
     spec = MetricSpec(score_type="percentage", direction="minimize")
     assert spec.to_dict()["direction"] == "minimize"
     with pytest.raises(ValueError, match="direction"):

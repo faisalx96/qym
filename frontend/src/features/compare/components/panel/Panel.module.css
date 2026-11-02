@@ -1,0 +1,409 @@
+/* Analytics panel recipes: tables with scoped headers inside a focusable scroll region. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  /* lets the caption size itself to the visible scroller instead of the (wider) table */
+  container-type: inline-size;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.caption {
+  /* stays inside the scroll viewport: a long caption wraps there instead of being clipped */
+  position: sticky;
+  inset-inline-start: 0;
+  width: 100cqw;
+  padding-bottom: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-align: start;
+}
+
+.table th {
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-align: start;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.table th[data-active] {
+  color: var(--accent-primary);
+}
+
+.table td,
+.table tbody th {
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  vertical-align: top;
+}
+
+.table tbody th {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.table tr[data-baseline] > * {
+  background: var(--bg-elevated);
+}
+
+.table tr[data-active] > * {
+  background: var(--bg-elevated);
+}
+
+.runCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
+}
+
+.runLabel {
+  display: inline-block;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.letter {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+.value {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.sub {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.count {
+  margin-inline-start: var(--space-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.rowButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.rowButton:hover {
+  color: var(--accent-primary);
+  text-decoration: none; /* the colour step is the hover cue: no underline */
+}
+
+.rowButton:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.rowButton[aria-pressed='true'] {
+  color: var(--accent-primary);
+}
+
+.subList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.bar {
+  display: flex;
+  gap: 2px;
+  margin-top: var(--space-xs);
+}
+
+.seg {
+  min-width: 2rem;
+  padding: var(--space-xs) var(--space-sm);
+  border: 0;
+  border-radius: var(--control-radius);
+  color: var(--bg-base);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.seg:hover {
+  filter: brightness(var(--hover-brightness));
+}
+
+.seg[data-tie] {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.seg[aria-pressed='true'] {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+.seg:focus-visible,
+.distBar:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.dist {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-xs);
+  height: 6rem;
+  margin-top: var(--space-xs);
+}
+
+.distBar {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.distFill {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  background: var(--tone, var(--accent-primary));
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+.distBar:hover .distFill,
+.distBar[aria-pressed='true'] .distFill {
+  opacity: 1;
+}
+
+.distBar:hover .distLabel {
+  color: var(--accent-primary);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.legendCount {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.legendTies {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.distLabel {
+  color: var(--text-primary);
+}
+
+.distCount {
+  color: var(--text-muted);
+}
+
+.errorCards {
+  display: grid;
+  /* auto-fit with a capped column (about 420px): cards keep a compact width instead of stretching across the row */
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 26rem));
+  gap: var(--space-sm);
+  margin: var(--space-xs) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.errorItem {
+  min-width: 0;
+}
+
+.errorHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.errorRuns {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) 2rem minmax(2rem, 1fr) 4.5rem;
+  column-gap: var(--space-sm);
+  row-gap: var(--space-xs);
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.errorRun {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid; /* every row of a card shares the name / count / bar / change columns */
+  align-items: center;
+}
+
+/* The count's share of the card's largest count, in the card's tone. */
+.errorBar {
+  block-size: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.errorBar > span {
+  display: block;
+  block-size: 100%;
+  background: var(--tone, var(--text-muted));
+}
+
+.errorNum {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  text-align: end;
+}
+
+.errorTitle {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.errorDetail {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+.table + .table {
+  margin-top: var(--space-lg);
+}
+
+/* The Analyze popover: padded, one run per line, no list bullets over the run dots. */
+.analyzeLinks {
+  padding: var(--space-md);
+  min-width: 16rem;
+}
+
+.analyzeList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analyzeList a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.stackGap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+/* Category tables share one column template so run columns line up across metadata keys. */
+.fixed {
+  table-layout: fixed;
+  min-width: 40rem;
+}
+
+.fixed th:first-child {
+  width: 12rem;
+}
+
+.chipBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.chipBarLabel {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.catKey {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-md);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+/* C217: trace stats are numbers, centred like every number column */
+.table td.traceValue {
+  text-align: center;
+}

@@ -1,0 +1,173 @@
+/* Key rows: one 32px row per key, hairline between top-level keys, depth guide lines for nested levels. */
+.tree {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  direction: ltr;
+  text-align: start;
+}
+
+.row {
+  min-width: 0;
+}
+
+.tree > .row {
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+/* The head: [toggle: chevron | name line] then the row's actions. The toggle keeps the width its content wants
+   (`flex-basis: auto`), so when the actions do not fit beside the whole name they wrap under it: the key never has to
+   give up its width for them (round 7, D2). */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: var(--space-xs);
+  min-block-size: var(--row-compact);
+}
+
+.toggle {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 14px minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: start;
+  min-inline-size: 0;
+  padding-block: 7px;
+  padding-inline: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  color: var(--text-muted);
+  cursor: pointer;
+  direction: ltr;
+}
+
+.toggle:hover {
+  color: var(--text-primary);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.chevron {
+  margin-block-start: 2px;
+}
+
+/* One flex line: the key, then its preview. The key never shrinks below its text: it wraps (anywhere) inside the line;
+   the preview takes the rest of the key's last line when at least 12ch fit there (8px gap) and otherwise starts a new line. */
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+/* A key is a name: exact case, wrapped, never truncated. `dir` comes from the key's own script. */
+.key {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: var(--text-primary);
+  unicode-bidi: isolate;
+}
+
+/* an Arabic key wraps at its words too; its lines stay flush with the left edge of the row like every other key */
+.key[dir='rtl'] {
+  text-align: left;
+}
+
+/* A preview may be cut (it is a summary of the value, the value is one click away); a key never is. */
+.preview {
+  flex: 1 1 12ch;
+  min-inline-size: 0;
+  max-inline-size: max-content;
+  overflow: hidden;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  unicode-bidi: isolate;
+}
+
+.type {
+  flex: 0 0 auto;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+  min-block-size: var(--row-compact);
+}
+
+.body {
+  margin-inline-start: 7px;
+  padding: var(--space-xs) 0 var(--space-sm) var(--space-md);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.leaf {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* A text value: left anchored, fit-content up to the reading measure; its lines follow the text direction. */
+.value {
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.value[data-code] {
+  inline-size: 100%;
+  max-inline-size: none;
+}
+
+.clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 12;
+  overflow: hidden;
+}
+
+.showFull {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.showFull:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+.more {
+  padding-block: var(--space-xs);
+}

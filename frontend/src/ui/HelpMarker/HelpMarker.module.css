@@ -1,0 +1,76 @@
+/* .qym-help-marker / .qym-help-tooltip: a filled 12px disc (round 10), 240px tooltip. */
+.marker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--info-marker-size);
+  height: var(--info-marker-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--accent-primary);
+  line-height: 0;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.disc {
+  fill: currentcolor;
+}
+
+.letter {
+  fill: var(--bg-void);
+}
+
+/* C202: a 24x24 hit area around the 12px disc, drawn size unchanged */
+.marker::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--info-marker-size) - 24px) / 2);
+}
+
+.marker[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.tooltip {
+  width: var(--help-tooltip-width);
+  max-width: calc(100vw - 16px);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  z-index: var(--z-tooltip);
+}
+
+.arrow svg {
+  display: block;
+  fill: var(--bg-elevated);
+  stroke: var(--border-default);
+}
+
+.tooltip[data-placement='bottom'] .arrow svg {
+  transform: rotate(180deg);
+}

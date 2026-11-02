@@ -1,0 +1,63 @@
+/* Task, dataset and model tags: the whole name, wrapping inside its column (C218: no ellipsis), the name as a tooltip. */
+.entity {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.version {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.alias {
+  flex: none;
+  font-family: var(--font-mono);
+}
+
+.none {
+  color: var(--text-muted);
+}
+
+/* Run name: sans, primary text; the accent only on hover. A bare id is the one mono case. */
+.runName {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 2px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  font-weight: 600;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runName[data-id] {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+a.runName:hover {
+  color: var(--accent-primary);
+  text-decoration: none; /* the colour step is the hover cue: no underline */
+}
+
+a.runName:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

@@ -17,11 +17,10 @@ Final review of the P0 series (C008, C015, C009, C011, C024):
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
-
 import pytest
+from _support_a1 import share_run_page
 from fastapi.testclient import TestClient
+from qym_platform.api import dashboard_stats
 from qym_platform.api import insights as insights_api
 from qym_platform.api import runs as runs_api
 from qym_platform.auth import Principal
@@ -48,13 +47,10 @@ from test_dashboard_durable_summaries import (
     run,
 )
 from test_minimize_errors import (
-    JS_MEANS,
-    PASS_VERDICTS,
     _approx,
     _event,
     _ingest,
     _ingest_env,
-    _node,
     _principal,
     _repeat,
     _rows,
@@ -92,24 +88,23 @@ def _edit(db, row_index, metric, value, **extra):
     )
 
 
-def _means_everywhere(engine, run_id="rr"):
-    """legacy list, published summary, run detail and the run page (JS)."""
+def _means_everywhere(engine, name, run_id="rr"):
+    """legacy list, published summary and run detail; the run page (React
+    lib/metrics.ts) must average the very rows to the same means:
+    frontend/src/features/run-detail/lib/__tests__/cutover-server-payloads.test.ts.
+    The callers assert every view equals the expected means."""
     expected_list = legacy(engine, run_id)
     drain(engine)
     published = projected(engine, run_id)
     with Session(engine) as db:
         detail = runs_api._compute_run_summary(db, db.get(runs_api.Run, run_id))
-    snapshot = _rows(engine, run_id)
-    js = _node(
-        JS_MEANS,
-        {"rows": snapshot["rows"], "metrics": ["h", "q"], "specs": snapshot["metric_specs"]},
+    share_run_page(
+        f"repeat_review_means_{name}",
+        _rows(engine, run_id),
+        {"means": expected_list["metric_averages"]},
+        samples=3,
     )
-    return {
-        "legacy": expected_list,
-        "projected": published,
-        "detail": detail,
-        "js": {"metric_averages": js},
-    }
+    return {"legacy": expected_list, "projected": published, "detail": detail}
 
 
 def test_item_level_edit_on_a_repeat_item_reaches_every_mean(database):
@@ -128,10 +123,9 @@ def test_item_level_edit_on_a_repeat_item_reaches_every_mean(database):
     # q: a 0.1 (edited), b 0.5, c 0.5, d 2/3 (its failed pass 3 as 0);
     # without scorer errors the same.
     expected = {"h": (0.9 + 0.2 + 0.5 + 0.2) / 4, "q": (0.1 + 0.5 + 0.5 + 2 / 3) / 4}
-    for name, payload in _means_everywhere(database).items():
+    for name, payload in _means_everywhere(database, "item_edit").items():
         assert payload["metric_averages"] == _approx(expected), name
-        if name != "js":
-            assert payload["metric_scored_averages"] == _approx({"q": expected["q"]}), name
+        assert payload["metric_scored_averages"] == _approx({"q": expected["q"]}), name
 
     # A pass edit makes the item the mean over its passes again.
     with Session(database) as db:
@@ -140,76 +134,33 @@ def test_item_level_edit_on_a_repeat_item_reaches_every_mean(database):
         assert "item_edit" not in stored.meta
         assert stored.score_numeric == pytest.approx(0.4)
     expected["h"] = (0.4 + 0.2 + 0.5 + 0.2) / 4
-    for name, payload in _means_everywhere(database).items():
+    for name, payload in _means_everywhere(database, "pass_edit").items():
         assert payload["metric_averages"]["h"] == pytest.approx(expected["h"]), name
 
 
-RUN_HTML = Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/_static/dashboard/run.html"
+def _categories(engine, name, expected, view_pass=None):
+    """Item a alone is "easy", b-d "hard"; every item is topic "all".
 
-
-def _run_page_functions(*names):
-    source = RUN_HTML.read_text()
-    chunks = []
-    for name in names:
-        match = re.search(rf"^      function {name}\([^\n]*\n.*?^      }}$", source, re.M | re.S)
-        assert match, f"Missing production function: {name}"
-        chunks.append(match.group())
-    return "\n".join(chunks)
-
-
-# The run page's Category Performance groups (run.html getCategoryGroupStats).
-JS_CATEGORIES = (
-    "const window = ctx.window;\n"
-    + _run_page_functions(
-        "metricDirectionOf", "metricPassesFor", "rowScoreFor", "errorsLeftOutFor",
-        "passValuesFor", "passVectorFor", "getCategoryMetricScores",
-        "categoryValueText", "isListCategoryKey", "getMetadataCategoryValues",
-        "getCategoryGroupStats",
-    )
-    + """
-const parseMetaList = raw => (Array.isArray(raw) ? raw : [raw]);
-const state = {
-  viewPass: input.viewPass || null, domainFilter: null, categoryBreakdownSort: 'name',
-  metricDirections: { h: 'minimize', q: 'maximize' },
-  metricThresholds: { h: 0.3, q: 0.8 }, metricIsBoolean: {},
-};
-const ids = new Set(input.rows.map(row => row.item_id || String(row.index)));
-const out = {};
-for (const key of ['topic', 'complexity']) {
-  out[key] = {};
-  ['h', 'q'].forEach((metric, index) => {
-    for (const stat of getCategoryGroupStats(key, input.rows, ids, metric, index, null, true)) {
-      out[key][stat.groupVal + ':' + metric] = [stat.avgScore, stat.passRate];
-    }
-  });
-}
-process.stdout.write(JSON.stringify(out));
-"""
-)
-
-
-def _categories(engine, view_pass=None):
-    """Item a alone is "easy", b-d "hard"; every item is topic "all"."""
-    rows = _rows(engine, "rr")["rows"]
+    The run page's Category Performance groups (React overviewModel
+    categoryBreakdown) must show ``expected``:
+    frontend/src/features/run-detail/lib/__tests__/cutover-server-payloads.test.ts.
+    """
+    snapshot = _rows(engine, "rr")
+    rows = snapshot["rows"]
     for row in rows:
         row["item_metadata"] = {
             "complexity": "easy" if row["item_id"] == "a" else "hard",
             "topic": "all",
         }
     if view_pass:
-        # The pass view's rows (run.html scopeRowToPass): the pass's own
-        # values and metadata.
-        rows = [
-            {
-                **row,
-                "metric_values": [row["pass_scores"][name][view_pass - 1] for name in ("h", "q")],
-                "metric_meta": {},
-                "pass_metric_meta": None,
-            }
-            for row in rows
-            if row["item_id"] == "a"
-        ]
-    return _node(JS_CATEGORIES, {"rows": rows, "viewPass": view_pass})
+        # The pass view: only item a is shown, read as that pass.
+        rows = [row for row in rows if row["item_id"] == "a"]
+    share_run_page(
+        f"repeat_review_categories_{name}",
+        {**snapshot, "rows": rows},
+        {"categories": {"view_pass": view_pass, "groups": expected}},
+        samples=3,
+    )
 
 
 def test_item_level_edit_on_a_repeat_item_reaches_the_category_means(database):
@@ -223,32 +174,42 @@ def test_item_level_edit_on_a_repeat_item_reaches_the_category_means(database):
     # Its reviewer value fills each of its 3 pass slots, like every other
     # item's passes: h b [0.1, 0.3] + 1 error, c [0.5] * 3, d [0.2, 0.2]
     # + 1 error; q b [1, 0, 0.5], c [0.5] * 3, d [1, 1, 0].
-    assert _categories(database) == {
-        "topic": {
-            "all:h": pytest.approx([(0.9 * 3 + 0.4 + 1.5 + 0.4) / 10, 4 / 12]),
-            "all:q": pytest.approx([(0.1 * 3 + 1.5 + 1.5 + 2) / 12, 3 / 12]),
+    _categories(
+        database,
+        "item_edit",
+        {
+            "topic": {
+                "all:h": [(0.9 * 3 + 0.4 + 1.5 + 0.4) / 10, 4 / 12],
+                "all:q": [(0.1 * 3 + 1.5 + 1.5 + 2) / 12, 3 / 12],
+            },
+            "complexity": {
+                "easy:h": [0.9, 0],
+                "hard:h": [2.3 / 7, 4 / 9],
+                "easy:q": [0.1, 0],
+                "hard:q": [5 / 9, 3 / 9],
+            },
         },
-        "complexity": {
-            "easy:h": pytest.approx([0.9, 0]),
-            "hard:h": pytest.approx([2.3 / 7, 4 / 9]),
-            "easy:q": pytest.approx([0.1, 0]),
-            "hard:q": pytest.approx([5 / 9, 3 / 9]),
-        },
-    }
+    )
     # The pass view shows that pass's own value, not the item's.
-    assert _categories(database, view_pass=3)["complexity"] == {
-        "easy:h": pytest.approx([0.4, 0]),
-        "easy:q": pytest.approx([1.0, 1]),
-    }
+    _categories(
+        database,
+        "item_edit_pass_view",
+        {"complexity": {"easy:h": [0.4, 0], "easy:q": [1.0, 1]}},
+        view_pass=3,
+    )
 
     # A pass edit makes the item its passes again (the server drops
     # item_edit), so h of item a is [0.2, 0.6] + 1 error.
     with Session(database) as db:
         _edit(db, 0, "h", "0.6", pass_number=3)
-    out = _categories(database)
-    assert out["complexity"]["easy:h"] == pytest.approx([0.4, 1 / 3])
-    assert out["topic"]["all:h"] == pytest.approx([(0.8 + 0.4 + 1.5 + 0.4) / 9, 5 / 12])
-    assert out["complexity"]["easy:q"] == pytest.approx([0.1, 0])
+    _categories(
+        database,
+        "pass_edit",
+        {
+            "complexity": {"easy:h": [0.4, 1 / 3], "easy:q": [0.1, 0]},
+            "topic": {"all:h": [(0.8 + 0.4 + 1.5 + 0.4) / 9, 5 / 12]},
+        },
+    )
 
 
 def test_metric_scored_before_a_cancel_is_a_failed_task_in_every_view():
@@ -301,41 +262,16 @@ def test_metric_scored_before_a_cancel_is_a_failed_task_in_every_view():
         "task_error": True,
         "label": "error",
     }
-    js = _node(JS_MEANS, {"rows": [row], "metrics": ["h"], "specs": data["snapshot"]["metric_specs"]})
-    assert js == _approx({"h": 0.3})
+    # The run page (React lib/metrics.ts) reads the cancelled pass as a failed
+    # task and averages the item over its clean pass only.
+    share_run_page(
+        "repeat_review_cancelled_pass",
+        {**data["snapshot"], "rows": [row]},
+        {"means": {"h": 0.3}},
+        samples=2,
+    )
     drain(engine)
     assert projected(engine, RUN_ID)["metric_averages"] == _approx({"h": 0.3})
-
-
-PASS_SLICE = """
-const row = {
-  __pass_scope: true, status: 'error', metric_values: [0.2, ''],
-  metric_meta: { h: { modified: 'true', original_score: 0 } },
-};
-process.stdout.write(JSON.stringify({
-  h: m.getRowScore(row, 0, 'h', 'minimize'),
-  q: m.getRowScore(row, 1, 'q', 'maximize'),
-  hErrors: m.rowMetricErrorCounts(row, 'h'),
-  qErrors: m.rowMetricErrorCounts(row, 'q'),
-  // Not a pass slice: a task error stays one for every metric.
-  whole: m.getRowScore({ ...row, __pass_scope: false }, 0, 'h', 'minimize'),
-  edited: m.getRowScore({ status: 'completed', metric_values: [0.9],
-    metric_meta: { h: { item_edit: 'true', modified: 'true' } },
-    pass_scores: { h: [0.2, 0] }, pass_metric_meta: { h: [{}, { status: 'error' }] } },
-    0, 'h', 'minimize'),
-}));
-"""
-
-
-def test_pass_slices_keep_a_reviewer_score_on_a_failed_task():
-    out = _node(PASS_SLICE, {})
-    assert out["h"] == {"score": pytest.approx(0.2), "isError": False}
-    assert out["q"] == {"score": 0, "isError": True}
-    assert out["hErrors"] == {"task": 0, "scorer": 0}
-    assert out["qErrors"] == {"task": 1, "scorer": 0}
-    assert out["whole"] == {"score": None, "isError": True}
-    # A reviewer's item value stands over the errored pass.
-    assert out["edited"] == {"score": pytest.approx(0.9), "isError": False}
 
 
 def test_models_errors_count_every_errored_pass_like_the_runs_list(database):
@@ -355,12 +291,26 @@ def test_models_errors_count_every_errored_pass_like_the_runs_list(database):
         attempt = db.query(RunItemAttempt).filter_by(run_id="rr", item_id="b", pass_number=1).one()
         attempt.status, attempt.error = "failed", "boom"
         db.commit()
-        models = runs_api.models_runs_data(files=["rr"], db=db, principal=_principal(db))["runs"][0]
+        runs_api.models_runs_data(files=["rr"], db=db, principal=_principal(db))
     listed = legacy(database, "rr")
-    verdicts = _node(PASS_VERDICTS, {"run": models})
-    for metric in ("h", "q"):
+    drain(database)
+    for metric, direction, threshold in (
+        ("h", "minimize", 0.3),
+        ("q", "maximize", 0.8),
+    ):
+        with Session(database) as db:
+            stats = dashboard_stats.dashboard_model_stats(
+                {
+                    "metric": metric,
+                    "threshold": threshold,
+                    "direction": direction,
+                    "groups": [{"key": "g", "runs": ["rr"]}],
+                },
+                db=db,
+                principal=_principal(db),
+            )["groups"]["g"]
         expected = listed["task_error_count"] + listed["metric_error_counts"][metric]
-        assert verdicts[metric]["failed"] == expected, metric
+        assert stats["failedCount"] == expected, metric
     assert listed["task_error_count"] == 3
 
 

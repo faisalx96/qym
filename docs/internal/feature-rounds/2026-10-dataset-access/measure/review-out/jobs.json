@@ -1,0 +1,831 @@
+{
+  "w1440": {
+    "lat": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 347.5,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 801.5,
+          "h": 30
+        },
+        {
+          "t": "Combo",
+          "w": 80,
+          "h": 34
+        },
+        {
+          "t": "Environment",
+          "w": 150,
+          "h": 34
+        },
+        {
+          "t": "Params",
+          "w": 257,
+          "h": 34
+        },
+        {
+          "t": "Status",
+          "w": 240,
+          "h": 34
+        },
+        {
+          "t": "Attempt",
+          "w": 90,
+          "h": 34
+        },
+        {
+          "t": "Run",
+          "w": 180,
+          "h": 34
+        },
+        {
+          "t": "Updated",
+          "w": 110,
+          "h": 34
+        },
+        {
+          "t": "Actions",
+          "w": 42,
+          "h": 34
+        }
+      ],
+      "rows": [
+        30,
+        65,
+        65,
+        88.4,
+        88.4,
+        88.4,
+        64,
+        34,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+      ],
+      "lines": [
+        {
+          "t": "re-queued ×1 · contaminated",
+          "title": "re-queued ×1 · contaminated",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 145
+        },
+        {
+          "t": "admitted 15:52",
+          "title": "2026-10-20T12:52:00Z",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 77
+        },
+        {
+          "t": "deferred ×3 · vllm quiet window",
+          "title": "deferred ×3 · vllm quiet window",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 157
+        },
+        {
+          "t": "deferred ×1 · gateway quiet window",
+          "title": "deferred ×1 · gateway quiet window",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 177
+        },
+        {
+          "t": "giving up after 3 discarded run(s)",
+          "title": "giving up after 3 discarded run(s)",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 162
+        }
+      ],
+      "requeue": [
+        {
+          "t": "↻ 1",
+          "aria": "re-queued 1 time",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        },
+        {
+          "t": "↻ 1",
+          "aria": "re-queued 1 time",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        },
+        {
+          "t": "↻ 3",
+          "aria": "re-queued 3 times",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        }
+      ],
+      "statusCells": [
+        "",
+        "succeededSave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset",
+        "submittedQueued on the evaluation serviceCancelSave as presetPromote to default preset",
+        "submittedQueued on the evaluation serviceCancelSave as presetPromote to default preset",
+        "failedgiving up after 3 discarded run(s)RetrySave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset",
+        "",
+        "#0 | staging | timeout=11 | succeeded↻ 1re-queued ×1 · contaminated | 1",
+        "#1 | staging | timeout=12 | runningadmitted 15:52 | 1",
+        "#2 | staging | timeout=13 | submitteddeferred ×3 · vllm quiet window | 1",
+        "#3 | staging | timeout=14 | submitted↻ 1deferred ×1 · gateway quiet window | 1",
+        "#4 | staging | timeout=15 | failed↻ 3giving up after 3 discarded run(s) | 1",
+        "#5 | staging | timeout=16 | running | 1"
+      ],
+      "overflow": 0
+    },
+    "plain": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 347.5,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 801.5,
+          "h": 30
+        },
+        {
+          "t": "Combo",
+          "w": 80,
+          "h": 34
+        },
+        {
+          "t": "Environment",
+          "w": 150,
+          "h": 34
+        },
+        {
+          "t": "Params",
+          "w": 297,
+          "h": 34
+        },
+        {
+          "t": "Status",
+          "w": 200,
+          "h": 34
+        },
+        {
+          "t": "Attempt",
+          "w": 90,
+          "h": 34
+        },
+        {
+          "t": "Run",
+          "w": 180,
+          "h": 34
+        },
+        {
+          "t": "Updated",
+          "w": 110,
+          "h": 34
+        },
+        {
+          "t": "Actions",
+          "w": 42,
+          "h": 34
+        }
+      ],
+      "rows": [
+        30,
+        65,
+        88.4,
+        64,
+        34,
+        40,
+        40,
+        40
+      ],
+      "lines": [
+        {
+          "t": "timeout",
+          "title": "timeout",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 39
+        }
+      ],
+      "requeue": [],
+      "statusCells": [
+        "",
+        "succeededSave as presetPromote to default preset",
+        "failedtimeoutRetrySave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset",
+        "",
+        "#0 | staging | timeout=10 | succeeded | 1",
+        "#1 | staging | timeout=30 | failedtimeout | 1",
+        "#2 | staging | timeout=60 | running | 1"
+      ],
+      "overflow": 0
+    },
+    "blocked": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 311.6,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 837.4,
+          "h": 30
+        },
+        {
+          "t": "Combo",
+          "w": 80,
+          "h": 34
+        },
+        {
+          "t": "Environment",
+          "w": 150,
+          "h": 34
+        },
+        {
+          "t": "Params",
+          "w": 271,
+          "h": 34
+        },
+        {
+          "t": "Status",
+          "w": 200,
+          "h": 34
+        },
+        {
+          "t": "Attempt",
+          "w": 90,
+          "h": 34
+        },
+        {
+          "t": "Run",
+          "w": 180,
+          "h": 34
+        },
+        {
+          "t": "Updated",
+          "w": 110,
+          "h": 34
+        },
+        {
+          "t": "Actions",
+          "w": 68,
+          "h": 34
+        }
+      ],
+      "rows": [
+        30,
+        87.4,
+        34,
+        40
+      ],
+      "lines": [
+        {
+          "t": "The experiment's dataset read token is unavailable; retry to issue a new one",
+          "title": "The experiment's dataset read token is unavailable; retry to issue a new one",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 374
+        }
+      ],
+      "requeue": [],
+      "statusCells": [
+        "",
+        "blockedThe experiment's dataset read token is unavailable; retry to issue a new oneCancelR",
+        "",
+        "#0 | staging | — | blockedThe experiment's dataset read token is unavailable; retry to issue a new one | 1"
+      ],
+      "overflow": 0
+    }
+  },
+  "w1024": {
+    "lat": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 221.7,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 511.3,
+          "h": 30
+        },
+        {
+          "t": "Combo",
+          "w": 80,
+          "h": 34
+        },
+        {
+          "t": "Environment",
+          "w": 150,
+          "h": 34
+        },
+        {
+          "t": "Params",
+          "w": 120,
+          "h": 34
+        },
+        {
+          "t": "Status",
+          "w": 240,
+          "h": 34
+        },
+        {
+          "t": "Attempt",
+          "w": 90,
+          "h": 34
+        },
+        {
+          "t": "Run",
+          "w": 180,
+          "h": 34
+        },
+        {
+          "t": "Updated",
+          "w": 110,
+          "h": 34
+        },
+        {
+          "t": "Actions",
+          "w": 42,
+          "h": 34
+        }
+      ],
+      "rows": [
+        30,
+        65,
+        65,
+        88.4,
+        88.4,
+        88.4,
+        64,
+        34,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+      ],
+      "lines": [
+        {
+          "t": "re-queued ×1 · contaminated",
+          "title": "re-queued ×1 · contaminated",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 145
+        },
+        {
+          "t": "admitted 15:52",
+          "title": "2026-10-20T12:52:00Z",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 77
+        },
+        {
+          "t": "deferred ×3 · vllm quiet window",
+          "title": "deferred ×3 · vllm quiet window",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 157
+        },
+        {
+          "t": "deferred ×1 · gateway quiet window",
+          "title": "deferred ×1 · gateway quiet window",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 177
+        },
+        {
+          "t": "giving up after 3 discarded run(s)",
+          "title": "giving up after 3 discarded run(s)",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 162
+        }
+      ],
+      "requeue": [
+        {
+          "t": "↻ 1",
+          "aria": "re-queued 1 time",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        },
+        {
+          "t": "↻ 1",
+          "aria": "re-queued 1 time",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        },
+        {
+          "t": "↻ 3",
+          "aria": "re-queued 3 times",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        }
+      ],
+      "statusCells": [
+        "",
+        "succeededSave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset",
+        "submittedQueued on the evaluation serviceCancelSave as presetPromote to default preset",
+        "submittedQueued on the evaluation serviceCancelSave as presetPromote to default preset",
+        "failedgiving up after 3 discarded run(s)RetrySave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset",
+        "",
+        "#0 | staging | timeout=11 | succeeded↻ 1re-queued ×1 · contaminated | 1",
+        "#1 | staging | timeout=12 | runningadmitted 15:52 | 1",
+        "#2 | staging | timeout=13 | submitteddeferred ×3 · vllm quiet window | 1",
+        "#3 | staging | timeout=14 | submitted↻ 1deferred ×1 · gateway quiet window | 1",
+        "#4 | staging | timeout=15 | failed↻ 3giving up after 3 discarded run(s) | 1",
+        "#5 | staging | timeout=16 | running | 1"
+      ],
+      "overflow": 0
+    },
+    "plain": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 221.7,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 511.3,
+          "h": 30
+        },
+        {
+          "t": "Combo",
+          "w": 80,
+          "h": 34
+        },
+        {
+          "t": "Environment",
+          "w": 150,
+          "h": 34
+        },
+        {
+          "t": "Params",
+          "w": 148,
+          "h": 34
+        },
+        {
+          "t": "Status",
+          "w": 200,
+          "h": 34
+        },
+        {
+          "t": "Attempt",
+          "w": 90,
+          "h": 34
+        },
+        {
+          "t": "Run",
+          "w": 180,
+          "h": 34
+        },
+        {
+          "t": "Updated",
+          "w": 110,
+          "h": 34
+        },
+        {
+          "t": "Actions",
+          "w": 42,
+          "h": 34
+        }
+      ],
+      "rows": [
+        30,
+        65,
+        88.4,
+        64,
+        34,
+        40,
+        40,
+        40
+      ],
+      "lines": [
+        {
+          "t": "timeout",
+          "title": "timeout",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 39
+        }
+      ],
+      "requeue": [],
+      "statusCells": [
+        "",
+        "succeededSave as presetPromote to default preset",
+        "failedtimeoutRetrySave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset",
+        "",
+        "#0 | staging | timeout=10 | succeeded | 1",
+        "#1 | staging | timeout=30 | failedtimeout | 1",
+        "#2 | staging | timeout=60 | running | 1"
+      ],
+      "overflow": 0
+    },
+    "blocked": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 198.8,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 534.2,
+          "h": 30
+        },
+        {
+          "t": "Combo",
+          "w": 80,
+          "h": 34
+        },
+        {
+          "t": "Environment",
+          "w": 150,
+          "h": 34
+        },
+        {
+          "t": "Params",
+          "w": 122,
+          "h": 34
+        },
+        {
+          "t": "Status",
+          "w": 200,
+          "h": 34
+        },
+        {
+          "t": "Attempt",
+          "w": 90,
+          "h": 34
+        },
+        {
+          "t": "Run",
+          "w": 180,
+          "h": 34
+        },
+        {
+          "t": "Updated",
+          "w": 110,
+          "h": 34
+        },
+        {
+          "t": "Actions",
+          "w": 68,
+          "h": 34
+        }
+      ],
+      "rows": [
+        30,
+        87.4,
+        34,
+        40
+      ],
+      "lines": [
+        {
+          "t": "The experiment's dataset read token is unavailable; retry to issue a new one",
+          "title": "The experiment's dataset read token is unavailable; retry to issue a new one",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 374
+        }
+      ],
+      "requeue": [],
+      "statusCells": [
+        "",
+        "blockedThe experiment's dataset read token is unavailable; retry to issue a new oneCancelR",
+        "",
+        "#0 | staging | — | blockedThe experiment's dataset read token is unavailable; retry to issue a new one | 1"
+      ],
+      "overflow": 0
+    }
+  },
+  "w390": {
+    "lat": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 160,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 200,
+          "h": 30
+        }
+      ],
+      "rows": [
+        30,
+        93,
+        93,
+        116.4,
+        116.4,
+        116.4,
+        92
+      ],
+      "lines": [
+        {
+          "t": "re-queued ×1 · contaminated",
+          "title": "re-queued ×1 · contaminated",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 145
+        },
+        {
+          "t": "admitted 15:52",
+          "title": "2026-10-20T12:52:00Z",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 77
+        },
+        {
+          "t": "deferred ×3 · vllm quiet window",
+          "title": "deferred ×3 · vllm quiet window",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 157
+        },
+        {
+          "t": "deferred ×1 · gateway quiet window",
+          "title": "deferred ×1 · gateway quiet window",
+          "cls": "",
+          "color": "rgb(154, 154, 178)",
+          "font": "11px",
+          "clip": false,
+          "w": 177
+        },
+        {
+          "t": "giving up after 3 discarded run(s)",
+          "title": "giving up after 3 discarded run(s)",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 162
+        }
+      ],
+      "requeue": [
+        {
+          "t": "↻ 1",
+          "aria": "re-queued 1 time",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        },
+        {
+          "t": "↻ 1",
+          "aria": "re-queued 1 time",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        },
+        {
+          "t": "↻ 3",
+          "aria": "re-queued 3 times",
+          "w": 34,
+          "h": 20,
+          "fam": "\"Qym Mono\", \"Q"
+        }
+      ],
+      "statusCells": [
+        "",
+        "succeededSave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset",
+        "submittedQueued on the evaluation serviceCancelSave as presetPromote to default preset",
+        "submittedQueued on the evaluation serviceCancelSave as presetPromote to default preset",
+        "failedgiving up after 3 discarded run(s)RetrySave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset"
+      ],
+      "overflow": 0
+    },
+    "plain": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 160,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 200,
+          "h": 30
+        }
+      ],
+      "rows": [
+        30,
+        93,
+        116.4,
+        92
+      ],
+      "lines": [
+        {
+          "t": "timeout",
+          "title": "timeout",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 39
+        }
+      ],
+      "requeue": [],
+      "statusCells": [
+        "",
+        "succeededSave as presetPromote to default preset",
+        "failedtimeoutRetrySave as presetPromote to default preset",
+        "runningCancelSave as presetPromote to default preset"
+      ],
+      "overflow": 0
+    },
+    "blocked": {
+      "headers": [
+        {
+          "t": "Combination",
+          "w": 160,
+          "h": 30
+        },
+        {
+          "t": "staging",
+          "w": 200,
+          "h": 30
+        }
+      ],
+      "rows": [
+        30,
+        174.2
+      ],
+      "lines": [
+        {
+          "t": "The experiment's dataset read token is unavailable; retry to issue a new one",
+          "title": "The experiment's dataset read token is unavailable; retry to issue a new one",
+          "cls": "_errorText_ucd6b_82",
+          "color": "rgb(239, 68, 68)",
+          "font": "11px",
+          "clip": false,
+          "w": 374
+        }
+      ],
+      "requeue": [],
+      "statusCells": [
+        "",
+        "blockedThe experiment's dataset read token is unavailable; retry to issue a new oneCancelR"
+      ],
+      "overflow": 0
+    }
+  }
+}

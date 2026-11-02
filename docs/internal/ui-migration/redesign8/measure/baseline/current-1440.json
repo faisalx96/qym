@@ -1,0 +1,222 @@
+{
+ "sticky-bar": {
+  "n": 1,
+  "w": 1193,
+  "h": 44,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px 4px",
+  "radius": "0px",
+  "gap": "14px",
+  "display": "flex",
+  "text": "Runs | Averages | Overview | Categories | Errors | Items | 40 | Metric | qua"
+ },
+ "section-runs": {
+  "n": 1,
+  "w": 1193,
+  "h": 320.3,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Runs |  | Configuration, status and what differs between the com"
+ },
+ "section-averages": {
+  "n": 1,
+  "w": 1193,
+  "h": 469.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Per-run averages |  | Average per run with the paired change fro"
+ },
+ "section-overview": {
+  "n": 1,
+  "w": 1193,
+  "h": 422.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Comparison overview |  | Pass rates, winners and how many runs g"
+ },
+ "section-categories": {
+  "n": 1,
+  "w": 1193,
+  "h": 1037.3,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Performance by category |  | Average per metadata value and run,"
+ },
+ "section-errors": {
+  "n": 1,
+  "w": 1193,
+  "h": 247.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Error distribution |  | Errors by kind and message for each run;"
+ },
+ "section-items": {
+  "n": 1,
+  "w": 1193,
+  "h": 1343.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Item-by-item comparison |  | One score per run for each aligned "
+ },
+ "run-card": {
+  "n": 4,
+  "w": 292.3,
+  "h": 247.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "list-item",
+  "text": "A | baseline-gpt-mini | ★ | COMPLETED | Items | 40 | Completed | 38 | Errors"
+ },
+ "run-cards": {
+  "n": 1,
+  "w": 1193,
+  "h": 247.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "8px",
+  "display": "flex",
+  "text": "A | baseline-gpt-mini | ★ | COMPLETED | Items | 40 | Completed | 38 | Errors"
+ },
+ "averages-table": {
+  "n": 1,
+  "w": 1193,
+  "h": 342,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "8px",
+  "gap": "normal",
+  "display": "flex",
+  "text": "METRIC | \t | A | BASELINE-GPT-MINI | ★ | \t | B | CAND-A-SONNET | \t | C | CAND-B-"
+ },
+ "average-row": {
+  "n": 4,
+  "w": 1191,
+  "h": 101,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "table-row",
+  "text": "correct | \t | 20.0% | baseline | \t | 37.5% | ▲ | +17.5 pts | (improved) | ±16."
+ },
+ "average-cell": {
+  "n": 16,
+  "w": 249.8,
+  "h": 84,
+  "font": "12px/16.2px 400 sans",
+  "pad": "4px 0px",
+  "radius": "0px",
+  "gap": "4px",
+  "display": "flex",
+  "text": "20.0% | baseline"
+ },
+ "category-card": {
+  "n": 7,
+  "w": 592.5,
+  "h": 201.2,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "8px",
+  "gap": "normal",
+  "display": "block",
+  "text": "Easy | 14 | A | baseline-gpt-mini | ★ | 65% | 1.3s | Baseline | B | cand-a-son"
+ },
+ "category-run": {
+  "n": 28,
+  "w": 560.5,
+  "h": 30.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "4px",
+  "display": "flex",
+  "text": "A | baseline-gpt-mini | ★ | 65% | 1.3s | Baseline"
+ },
+ "error-card": {
+  "n": 2,
+  "w": 416,
+  "h": 151.6,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "8px",
+  "gap": "normal",
+  "display": "block",
+  "text": "TimeoutError | 6 | task exceeded 30s | A | baseline-gpt-mini | 2 | Basel"
+ },
+ "error-run": {
+  "n": 8,
+  "w": 384,
+  "h": 16.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "grid",
+  "text": "A | baseline-gpt-mini | 2 | Baseline"
+ },
+ "items-toolbar": {
+  "n": 1,
+  "w": 1193,
+  "h": 28,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px 0px 4px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "block",
+  "text": "Search items | Filters | Display | CSV | Analyze | 40 of 40 items | a ru"
+ },
+ "item-list": {
+  "n": 1,
+  "w": 1193,
+  "h": 1116,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "block",
+  "text": "EXPAND | \t | # | \t | INPUT | \t | A | BASELINE-GPT-MINI | ★ | \t | B | CAND-A-SONNET"
+ },
+ "item-row": {
+  "n": 20,
+  "w": 1191,
+  "h": 52,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "table-row",
+  "text": "\t | Item 1: | 1 | \t | Question 1: what does clause 0 of the commerce"
+ },
+ "run-tag": {
+  "n": 55,
+  "w": 216.3,
+  "h": 16.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "4px",
+  "display": "flex",
+  "text": "A | baseline-gpt-mini | ★"
+ }
+}

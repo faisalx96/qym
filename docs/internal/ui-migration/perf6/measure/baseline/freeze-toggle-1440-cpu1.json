@@ -1,0 +1,260 @@
+{
+  "width": 1440,
+  "cpu": 1,
+  "median": [
+    {
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 28,
+      "commits": 1,
+      "layouts": 0,
+      "scriptMs": 52.5,
+      "longestFrameMs": 59,
+      "cssTransitionsStarted": 1
+    },
+    {
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 370,
+      "commits": 3,
+      "layouts": 2,
+      "scriptMs": 58.3,
+      "longestFrameMs": 106,
+      "cssTransitionsStarted": 1
+    },
+    {
+      "step": "unfreeze it",
+      "msToSettled": 139,
+      "commits": 3,
+      "layouts": 2,
+      "scriptMs": 55.8,
+      "longestFrameMs": 90,
+      "cssTransitionsStarted": 0
+    }
+  ],
+  "runs": [
+    {
+      "rep": 0,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 28,
+      "commits": 1,
+      "cssTransitionsStarted": 1,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 55,
+      "longestFrameMs": 62,
+      "loaf": [
+        {
+          "dur": 62,
+          "top": {
+            "d": 53.39999997615814,
+            "fn": "pe",
+            "inv": "MessagePort.onmessage",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 0,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 370,
+      "commits": 3,
+      "cssTransitionsStarted": 1,
+      "layouts": 2,
+      "layoutMs": 7.7,
+      "scriptMs": 59.9,
+      "longestFrameMs": 107,
+      "loaf": [
+        {
+          "dur": 80,
+          "top": {
+            "d": 55.200000047683716,
+            "fn": "zd",
+            "inv": "DIV#root.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        },
+        {
+          "dur": 107,
+          "top": {
+            "d": 88.79999995231628,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 0,
+      "step": "unfreeze it",
+      "msToSettled": 139,
+      "commits": 3,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 3.1,
+      "scriptMs": 51.2,
+      "longestFrameMs": 81,
+      "loaf": [
+        {
+          "dur": 81,
+          "top": {
+            "d": 72.79999995231628,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 26,
+      "commits": 1,
+      "cssTransitionsStarted": 1,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 52.5,
+      "longestFrameMs": 59,
+      "loaf": [
+        {
+          "dur": 59,
+          "top": {
+            "d": 50.799999952316284,
+            "fn": "pe",
+            "inv": "MessagePort.onmessage",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 365,
+      "commits": 3,
+      "cssTransitionsStarted": 1,
+      "layouts": 2,
+      "layoutMs": 8.2,
+      "scriptMs": 58.3,
+      "longestFrameMs": 106,
+      "loaf": [
+        {
+          "dur": 70,
+          "top": {
+            "d": 47.699999928474426,
+            "fn": "zd",
+            "inv": "DIV#root.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        },
+        {
+          "dur": 106,
+          "top": {
+            "d": 88.60000002384186,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "step": "unfreeze it",
+      "msToSettled": 135,
+      "commits": 3,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 3.4,
+      "scriptMs": 55.8,
+      "longestFrameMs": 90,
+      "loaf": [
+        {
+          "dur": 90,
+          "top": {
+            "d": 78.20000004768372,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 28,
+      "commits": 1,
+      "cssTransitionsStarted": 1,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 45,
+      "longestFrameMs": 52,
+      "loaf": [
+        {
+          "dur": 52,
+          "top": {
+            "d": 43.700000047683716,
+            "fn": "pe",
+            "inv": "MessagePort.onmessage",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 372,
+      "commits": 3,
+      "cssTransitionsStarted": 1,
+      "layouts": 2,
+      "layoutMs": 8.6,
+      "scriptMs": 57.7,
+      "longestFrameMs": 105,
+      "loaf": [
+        {
+          "dur": 81,
+          "top": {
+            "d": 51.5,
+            "fn": "zd",
+            "inv": "DIV#root.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        },
+        {
+          "dur": 105,
+          "top": {
+            "d": 87.60000002384186,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "step": "unfreeze it",
+      "msToSettled": 156,
+      "commits": 3,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 2.6,
+      "scriptMs": 60.2,
+      "longestFrameMs": 97,
+      "loaf": [
+        {
+          "dur": 97,
+          "top": {
+            "d": 88.30000007152557,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-BxMIrGsd.js"
+          }
+        }
+      ]
+    }
+  ]
+}

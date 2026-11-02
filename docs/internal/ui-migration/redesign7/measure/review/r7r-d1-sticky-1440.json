@@ -1,0 +1,128 @@
+{
+  "shipped": {
+    "setup": {
+      "line": 150,
+      "scrollsXWithVisible": true,
+      "hostOverflow": "hidden",
+      "tableW": 1246,
+      "tableClientW": 1191
+    },
+    "framesJudged": 91,
+    "medianErrPx": 0,
+    "maxErrPx": 0,
+    "framesOver1px": 0,
+    "ancestors": [
+      {
+        "el": "article._state_7ft25_2",
+        "overflow": "visible/visible",
+        "position": "static",
+        "contain": "none",
+        "containerType": "inline-size",
+        "scrollsY": "false",
+        "scrollsX": "false"
+      },
+      {
+        "el": "div._detailHold_betwm_615",
+        "overflow": "visible/visible",
+        "position": "sticky",
+        "contain": "layout",
+        "containerType": "normal",
+        "scrollsY": "false",
+        "scrollsX": "false"
+      },
+      {
+        "el": "td._detailCell_betwm_606",
+        "overflow": "clip/clip",
+        "position": "relative",
+        "contain": "none",
+        "containerType": "normal",
+        "scrollsY": "false",
+        "scrollsX": "false"
+      },
+      {
+        "el": "div._scroller_betwm_37",
+        "overflow": "auto/auto",
+        "position": "relative",
+        "contain": "none",
+        "containerType": "normal",
+        "scrollsY": "false",
+        "scrollsX": "true"
+      },
+      {
+        "el": "div._bodyHost_betwm_27",
+        "overflow": "hidden/hidden",
+        "position": "relative",
+        "contain": "none",
+        "containerType": "normal",
+        "scrollsY": "false",
+        "scrollsX": "false"
+      },
+      {
+        "el": "section#run-items._section_1etn1_2",
+        "overflow": "visible/visible",
+        "position": "relative",
+        "contain": "none",
+        "containerType": "inline-size",
+        "scrollsY": "false",
+        "scrollsX": "false"
+      },
+      {
+        "el": "main#shell-content._content_67obp_265",
+        "overflow": "auto/auto",
+        "position": "static",
+        "contain": "none",
+        "containerType": "normal",
+        "scrollsY": "true",
+        "scrollsX": "false"
+      },
+      {
+        "el": "body",
+        "overflow": "hidden/hidden",
+        "position": "static",
+        "contain": "none",
+        "containerType": "normal",
+        "scrollsY": "false",
+        "scrollsX": "false"
+      }
+    ]
+  },
+  "v1": {
+    "setup": {
+      "line": 150,
+      "scrollsXWithVisible": true,
+      "hostOverflow": "hidden",
+      "tableW": 1246,
+      "tableClientW": 1191
+    },
+    "framesJudged": 91,
+    "medianErrPx": 1020.45,
+    "maxErrPx": 1700.45,
+    "framesOver1px": 91
+  },
+  "v2": {
+    "setup": {
+      "line": 150,
+      "scrollsXWithVisible": true,
+      "hostOverflow": "visible",
+      "tableW": 1246,
+      "tableClientW": 1191
+    },
+    "framesJudged": 91,
+    "medianErrPx": 0,
+    "maxErrPx": 0,
+    "framesOver1px": 0
+  },
+  "v3": {
+    "setup": {
+      "line": 150,
+      "scrollsXWithVisible": true,
+      "hostOverflow": "visible",
+      "tableW": 1246,
+      "tableClientW": 1191
+    },
+    "framesJudged": 90,
+    "medianErrPx": 0,
+    "maxErrPx": 0,
+    "framesOver1px": 0
+  }
+}

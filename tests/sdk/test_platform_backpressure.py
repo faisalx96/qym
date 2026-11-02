@@ -501,3 +501,35 @@ def test_direct_delivery_accounting_includes_success_and_exhausted_failure(
     stream.emit("late_failure", {}, sync=True)
     assert stream.dropped_events == 1
     assert "failed to upload" in capsys.readouterr().err
+
+
+def test_zero_disk_allowance_never_spills_and_applies_backpressure():
+    """QYM_PLATFORM_EVENT_SPILL_BYTES=0 (the platform image): memory only."""
+    event = {"type": "item", "payload": "x" * 100}
+    size = len(EventBacklog.serialize(event)) + 64
+    queue = EventBacklog(size * 2, 0)
+    queue.put(event)
+    queue.put(event)
+    # Memory is full and there is no disk allowance: the producer waits.
+    with pytest.raises(Full):
+        queue.put(event, timeout=0.05)
+    assert queue.spool_path is None and queue.spilled_events == 0
+    # A consumed event frees room again.
+    assert queue.get(timeout=1)["type"] == "item"
+    queue.task_done()
+    queue.put(event, timeout=1)
+    assert queue.spool_path is None and queue.disk_bytes == 0
+
+
+def test_spill_limit_reads_the_environment(monkeypatch):
+    from qym.platform.client import PlatformEventStream, _spill_limit
+
+    monkeypatch.setenv("QYM_PLATFORM_EVENT_SPILL_BYTES", "0")
+    assert _spill_limit(PlatformEventStream) == 0
+    monkeypatch.setenv("QYM_PLATFORM_EVENT_SPILL_BYTES", "4096")
+    assert _spill_limit(PlatformEventStream) == 4096
+    for bad in ("-1", "lots"):
+        monkeypatch.setenv("QYM_PLATFORM_EVENT_SPILL_BYTES", bad)
+        assert _spill_limit(PlatformEventStream) == PlatformEventStream.MAX_PENDING_DISK_BYTES
+    monkeypatch.delenv("QYM_PLATFORM_EVENT_SPILL_BYTES")
+    assert _spill_limit(PlatformEventStream) == PlatformEventStream.MAX_PENDING_DISK_BYTES

@@ -1,0 +1,144 @@
+/** Small display helpers for experiments and jobs (pure, no React). */
+import type { BaseSource, Experiment, ExperimentJob } from '@/api/experiments';
+import { formatAgo, formatHeaderDate } from '@/lib/dates';
+import { formatPercentValue } from '@/lib/format';
+
+export function titleCase(status: string | null | undefined): string {
+  const text = String(status ?? '')
+    .toLowerCase()
+    .replace(/_/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Freshness, then the day (lib/dates, C048). */
+export function relTime(value: string | null | undefined, now = Date.now()): string {
+  return formatAgo(value, now);
+}
+
+/** Header form (lib/dates, C048). */
+export function absTime(value: string | null | undefined): string {
+  return value ? formatHeaderDate(value) : '';
+}
+
+const BASE_LABELS: Record<string, string> = {
+  official: 'Default preset',
+  best_run: 'Best run',
+  saved: 'Saved preset',
+  blank: 'Blank',
+  clone: 'Run again',
+};
+
+export function baseSourceLabel(base: BaseSource | null | undefined): string {
+  const kind = base?.kind;
+  return (kind && BASE_LABELS[kind]) || (kind ? titleCase(kind) : 'Blank');
+}
+
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** Headline metric / tick value: 3 decimals, fewer digits for large numbers. */
+/** A metric value: a 0–1 score reads as a percent with one decimal, as ScoreValue shows it (C164); else the number. */
+export function formatMetric(value: unknown): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  if (value >= 0 && value <= 1) return formatPercentValue(value, 1);
+  const abs = Math.abs(value);
+  if (abs >= 1000) return value.toFixed(0);
+  if (abs >= 100) return value.toFixed(1);
+  return value.toFixed(3);
+}
+
+/** A swept / bound value as short text (models read as their name, not as JSON). */
+export function formatParam(value: unknown): string {
+  if (value === null || value === undefined) return 'inherit';
+  if (typeof value !== 'object') return String(value);
+  const v = value as Record<string, unknown>;
+  const temporary = v.temporary as Record<string, unknown> | undefined;
+  if (temporary && typeof temporary === 'object')
+    return String(temporary.model || temporary.label || 'temporary');
+  if (v.connection_id) return String(v.model || v.name || v.connection_id);
+  if (v.inherit === true) return 'inherit';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '?';
+  }
+}
+
+/** `k=v, k=v` for a job's params (objects as JSON). */
+export function paramsSummary(params: ExperimentJob['params'] | null | undefined): string {
+  if (!params || typeof params !== 'object') return '';
+  return Object.entries(params)
+    .map(
+      ([key, value]) =>
+        `${key}=${value !== null && typeof value === 'object' ? JSON.stringify(value) : String(value)}`,
+    )
+    .join(', ');
+}
+
+/** The sweep part of a job's params as `label=value` pairs, falling back to the full params. */
+export function sweepSummary(job: ExperimentJob, labels: Record<string, string> = {}): string {
+  const sweep = job.params?.sweep;
+  if (sweep && typeof sweep === 'object' && Object.keys(sweep).length) {
+    return Object.entries(sweep)
+      .map(
+        ([pointer, value]) =>
+          `${labels[pointer] ?? pointer.split('/').pop() ?? pointer}=${formatParam(value)}`,
+      )
+      .join(', ');
+  }
+  return job.combo_label || '';
+}
+
+export interface JobTally {
+  ok: number;
+  failed: number;
+  /** Queued, blocked or running: every job that has not finished. */
+  live: number;
+  cancelled: number;
+  /** The part of `live` that is on the Evaluation Service (not queued or blocked here). */
+  running: number;
+}
+
+/** ok / failed / live / cancelled from the experiment's `job_counts`. */
+export function tallyJobCounts(counts: Experiment['job_counts'] | null | undefined): JobTally {
+  const tally: JobTally = { ok: 0, failed: 0, live: 0, cancelled: 0, running: 0 };
+  for (const [status, raw] of Object.entries(counts ?? {})) {
+    const n = Number(raw) || 0;
+    if (status === 'SUCCEEDED') tally.ok += n;
+    else if (status === 'FAILED' || status === 'TIMED_OUT') tally.failed += n;
+    else if (status === 'CANCELLED') tally.cancelled += n;
+    else {
+      tally.live += n;
+      // queued and blocked jobs wait on the platform; the others are on the Evaluation Service
+      if (status !== 'QUEUED' && status !== 'BLOCKED') tally.running += n;
+    }
+  }
+  return tally;
+}
+
+/** "5/6 · 1 failed": succeeded of all jobs; the failed and cancelled parts only when they are not zero (C139). */
+export function jobsText(t: JobTally): string {
+  const total = t.ok + t.failed + t.cancelled + t.live;
+  const parts = [`${t.ok}/${total}`];
+  if (t.failed) parts.push(`${t.failed} failed`);
+  if (t.cancelled) parts.push(`${t.cancelled} cancelled`);
+  return parts.join(' · ');
+}
+
+/** "kb_version" -> "KB version": words of two letters or fewer read as acronyms. */
+export function versioningWords(key: string): string {
+  const words = String(key)
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => (w.length <= 2 ? w.toUpperCase() : w.toLowerCase()));
+  return words.length ? words.join(' ') : String(key);
+}
+
+/** The label of a versioning filter: "KB version". */
+export function versioningLabel(key: string): string {
+  const words = versioningWords(key);
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}

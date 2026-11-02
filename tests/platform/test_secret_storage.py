@@ -171,6 +171,80 @@ def test_private_llm_base_url_is_blocked_by_default(
     assert "non-public address" in response.json()["detail"]
 
 
+def test_http_connection_cannot_be_available_for_experiments(
+    client, session_factory, monkeypatch
+) -> None:
+    _seed_admin_and_project(session_factory)
+    monkeypatch.setenv("QYM_ALLOW_PRIVATE_LLM_BASE_URLS", "false")
+    headers = _headers("user@example.com")
+    body = {
+        "llm_base_url": "http://api.example.com/v1",
+        "llm_api_key": "sk-secret-http-9999",
+        "llm_model": "m",
+    }
+
+    refused = client.post(
+        CONNECTIONS_URL,
+        headers=headers,
+        json={**body, "name": "refused", "available_for_experiments": True},
+    )
+    assert refused.status_code == 400
+    assert "https://" in refused.json()["detail"]
+    assert "Available for experiments" in refused.json()["detail"]
+    assert "sk-secret-http-9999" not in refused.text
+
+    # Analyzer connections keep accepting public http://.
+    analysis = client.post(
+        CONNECTIONS_URL,
+        headers=headers,
+        json={**body, "name": "analysis", "available_for_experiments": False},
+    )
+    assert analysis.status_code == 200, analysis.text
+    assert analysis.json()["available_for_experiments"] is False
+    omitted = client.post(CONNECTIONS_URL, headers=headers, json={**body, "name": "omitted"})
+    assert omitted.status_code == 200, omitted.text
+    assert omitted.json()["available_for_experiments"] is False
+
+    # Toggling it on later is refused too, and changes nothing.
+    conn_id = analysis.json()["id"]
+    toggle = client.put(
+        f"{CONNECTIONS_URL}/{conn_id}",
+        headers=headers,
+        json={
+            **body,
+            "name": "analysis",
+            "llm_api_key": "__KEEP__",
+            "available_for_experiments": True,
+        },
+    )
+    assert toggle.status_code == 400
+    with session_factory() as session:
+        assert session.get(ProjectLlmConnection, conn_id).available_for_experiments is False
+
+    # An https:// connection is available by default.
+    secure = client.post(
+        CONNECTIONS_URL,
+        headers=headers,
+        json={**body, "name": "secure", "llm_base_url": "https://api.example.com/v1"},
+    )
+    assert secure.json()["available_for_experiments"] is True
+
+    # Local development: QYM_ALLOW_PRIVATE_LLM_BASE_URLS lifts the rule.
+    monkeypatch.setenv("QYM_ALLOW_PRIVATE_LLM_BASE_URLS", "true")
+    toggle = client.put(
+        f"{CONNECTIONS_URL}/{conn_id}",
+        headers=headers,
+        json={
+            **body,
+            "name": "analysis",
+            "llm_api_key": "__KEEP__",
+            "available_for_experiments": True,
+        },
+    )
+    assert toggle.status_code == 200, toggle.text
+    assert toggle.json()["available_for_experiments"] is True
+
+
 def test_llm_endpoint_validation_rechecks_current_dns(monkeypatch) -> None:
     import qym_platform.llm_endpoint_security as endpoint_security
 

@@ -1,0 +1,131 @@
+{
+  "run": "big",
+  "kind": "nav",
+  "net": "none",
+  "median": {
+    "heroMs": 200,
+    "overviewMs": 200,
+    "rowsMs": 200,
+    "ttiMs": 200,
+    "tbtMs": 34,
+    "cls": 0.0145,
+    "requests": 3,
+    "jsChunks": 0,
+    "jsKB": 0,
+    "apiRequests": 3,
+    "apiKB": 89.6,
+    "compactKB": 88.2,
+    "compactTtfbMs": 77,
+    "compactDoneMs": 111
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 188,
+      "skeletonMs": null,
+      "overviewMs": 188,
+      "rowsMs": 188,
+      "ttiMs": 188,
+      "tbtMs": 29,
+      "cls": 0.0145,
+      "reactCommits": 306,
+      "requests": 3,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 75,
+      "compactDoneMs": 107,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [],
+      "apiList": [
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a?view=compact 88.2kB @21-107ms",
+        "/api/dashboard/neighbors 1.1kB @154-215ms",
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a/review-history 0.3kB @154-215ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 200,
+      "skeletonMs": null,
+      "overviewMs": 200,
+      "rowsMs": 200,
+      "ttiMs": 200,
+      "tbtMs": 34,
+      "cls": 0.0145,
+      "reactCommits": 307,
+      "requests": 3,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 80,
+      "compactDoneMs": 112,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [],
+      "apiList": [
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a?view=compact 88.2kB @21-112ms",
+        "/api/dashboard/neighbors 1.1kB @162-227ms",
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a/review-history 0.3kB @163-227ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 202,
+      "skeletonMs": null,
+      "overviewMs": 202,
+      "rowsMs": 202,
+      "ttiMs": 202,
+      "tbtMs": 37,
+      "cls": 0.0145,
+      "reactCommits": 308,
+      "requests": 3,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 77,
+      "compactDoneMs": 111,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [],
+      "apiList": [
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a?view=compact 88.2kB @23-111ms",
+        "/api/dashboard/neighbors 1.1kB @164-233ms",
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a/review-history 0.3kB @164-233ms"
+      ]
+    }
+  ]
+}

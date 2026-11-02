@@ -1,0 +1,62 @@
+{
+  "w1440": {
+    "h": 90.390625,
+    "w": 310,
+    "pad": "8px 14px",
+    "gap": "4px",
+    "display": "flex",
+    "kids": [
+      {
+        "tag": "DIV",
+        "h": 16.8,
+        "w": 280,
+        "cls": "_calloutTitle_1f7v",
+        "rects": 1
+      },
+      {
+        "tag": "SPAN",
+        "h": 51.6,
+        "w": 280,
+        "cls": "",
+        "rects": 1
+      },
+      {
+        "tag": "SPAN",
+        "h": 15,
+        "w": 158,
+        "cls": "_text_15ndv_2",
+        "rects": 1
+      }
+    ]
+  },
+  "w1024": {
+    "h": 73.59375,
+    "w": 735,
+    "pad": "8px 14px",
+    "gap": "4px",
+    "display": "flex",
+    "kids": [
+      {
+        "tag": "DIV",
+        "h": 16.8,
+        "w": 705,
+        "cls": "_calloutTitle_1f7v",
+        "rects": 1
+      },
+      {
+        "tag": "SPAN",
+        "h": 34.8,
+        "w": 705,
+        "cls": "",
+        "rects": 1
+      },
+      {
+        "tag": "SPAN",
+        "h": 15,
+        "w": 158,
+        "cls": "_text_15ndv_2",
+        "rects": 1
+      }
+    ]
+  }
+}

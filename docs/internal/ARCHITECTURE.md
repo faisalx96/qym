@@ -22,8 +22,11 @@ RunEventV1 schema is documented in `internal/RUN_EVENT_SCHEMA.md`.
 
 `Evaluator(..., samples=k)` evaluates every dataset item k times as k
 sequential passes inside ONE logical run (SDK: `qym/core/reducers.py` +
-pass-aware checkpointing). Item events carry `pass_number`; a
-`pass_completed` event fires at each pass barrier. The platform stores
+pass-aware checkpointing). The barrier between passes gates task execution
+only: pass j+1's tasks start as soon as pass j's tasks have run, while
+scoring drains on its own metric queue. Item events carry `pass_number`; a
+`pass_completed` event fires once every item of a pass has been scored
+(so it may arrive after later passes' item events). The platform stores
 per-pass scores in `run_item_pass_scores`, keeps the reduced mean in
 `run_item_scores` (compatibility contract: one row per item/metric), and
 serves per-pass slices (`/api/runs/{id}/passes`) plus on-demand group

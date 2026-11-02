@@ -1,0 +1,75 @@
+/* Passive role, provenance, metadata, and count tags: flat rounded squares tinted from --tone (no hover: a Tag never acts). */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--badge-height);
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-xs);
+  font-weight: 650;
+  /* C140: room for the dots under Arabic letters (1.3 clipped them) */
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* C140: Arabic in a tag (task names are mono) reads in the sans face at 11px */
+.tag :dir(rtl),
+.tag:dir(rtl) {
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+}
+
+.tag[data-kind='role'],
+.tag[data-kind='count'],
+.tag[data-kind='data'],
+.tag[data-kind='version'],
+.tag[data-kind='task'],
+.tag[data-kind='config'] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag[data-kind='role'] {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tag[data-kind='count'] {
+  color: var(--text-primary);
+}
+
+/* One rule for every tone: the tint recipe from tones.css (--tone / --tone-text). */
+.tag[data-tone] {
+  color: var(--tone-text);
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--tone);
+}
+
+/* A model tag carries its series colour: tinted fill, secondary text (round 10: primary text made every model name the
+   brightest word in the row), the dot in the full hue, flush, with a little more room before the name. */
+.tag[data-kind='model'][data-series] {
+  gap: 6px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+}
+
+/* Task, dataset and model names read as plain text inside their tint: 500, not the 650 of a role or count tag, and at
+   11px (--font-sm), while count and role tags stay at 10px (C165). */
+.tag[data-kind='task'],
+.tag[data-kind='dataset'],
+.tag[data-kind='model'] {
+  font-size: var(--font-sm);
+  font-weight: 500;
+}

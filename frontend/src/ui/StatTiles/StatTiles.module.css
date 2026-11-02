@@ -1,0 +1,93 @@
+/* Stat tiles (round 10): one framed strip, cells parted by hairlines, label over value, centred. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+}
+
+.tiles[data-count='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding: var(--space-md) var(--space-sm);
+  text-align: center;
+  box-shadow: -1px 0 0 var(--border-subtle);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.value[data-band] {
+  color: var(--tone-text);
+}
+
+.value[data-danger] {
+  color: var(--error-text);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Narrow (480 to 899): a 12-column grid, cells 1 to 4 span 3 and cells 5 to 7 span 4; a hairline under the first row. */
+@container (max-width: 899px) {
+  .tiles:not([data-count='3']) {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .tiles:not([data-count='3']) > :nth-child(-n + 4) {
+    grid-column: span 3;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .tiles:not([data-count='3']) > :nth-child(n + 5) {
+    grid-column: span 4;
+  }
+}
+
+/* Compact (under 480): rows of two and a full-width last cell; three cells stack. */
+@container (max-width: 479px) {
+  .tiles:not([data-count='3']) > :nth-child(-n + 6) {
+    grid-column: span 6;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .tiles:not([data-count='3']) > :nth-child(7) {
+    grid-column: span 12;
+  }
+
+  .tiles[data-count='3'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

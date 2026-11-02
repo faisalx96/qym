@@ -1,0 +1,29 @@
+/* Plain tooltip: elevated surface, --font-sm. */
+.tooltip {
+  max-width: 280px;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+  z-index: var(--z-tooltip);
+}
+
+.arrow svg {
+  display: block;
+  fill: var(--bg-elevated);
+  stroke: var(--border-default);
+}
+
+.tooltip[data-placement='bottom'] .arrow svg {
+  transform: rotate(180deg);
+}
+.tooltip[data-placement='left'] .arrow svg {
+  transform: rotate(-90deg);
+}
+.tooltip[data-placement='right'] .arrow svg {
+  transform: rotate(90deg);
+}

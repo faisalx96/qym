@@ -1,0 +1,638 @@
+{
+ "page": {
+  "title-block": {
+   "n": 1,
+   "w": 277,
+   "h": 123,
+   "font": "12px 400 sans"
+  },
+  "section-nav": {
+   "n": 1,
+   "w": 277,
+   "h": 36,
+   "font": "12px 400 sans"
+  },
+  "section-runs": {
+   "n": 1,
+   "w": 277,
+   "h": 1046.5,
+   "font": "12px 400 sans"
+  },
+  "run-grid": {
+   "n": 1,
+   "w": 277,
+   "h": 958.6,
+   "font": "12px 400 sans"
+  },
+  "run-card": {
+   "n": 4,
+   "w": 277,
+   "h": 238.6,
+   "font": "12px 400 sans"
+  },
+  "run-stat-strip": {
+   "n": 4,
+   "w": 245,
+   "h": 36,
+   "font": "12px 400 sans"
+  },
+  "run-meta": {
+   "n": 4,
+   "w": 245,
+   "h": 120,
+   "font": "12px 400 sans"
+  },
+  "run-remove": {
+   "n": 4,
+   "w": 24,
+   "h": 24,
+   "font": "12px 400 sans"
+  },
+  "section-averages": {
+   "n": 1,
+   "w": 277,
+   "h": 1192.9,
+   "font": "12px 400 sans"
+  },
+  "averages-table": {
+   "n": 1,
+   "w": 277,
+   "h": 1057.6,
+   "font": "12px 400 sans"
+  },
+  "averages-colhead": {
+   "n": 4,
+   "w": 55.2,
+   "h": 208.1,
+   "font": "11px 650 sans"
+  },
+  "averages-cell": {
+   "n": 8,
+   "w": 275,
+   "h": 44,
+   "font": "12px 400 mono"
+  },
+  "averages-value": {
+   "n": 8,
+   "w": 54,
+   "h": 20,
+   "font": "12px 600 mono"
+  },
+  "averages-delta": {
+   "n": 6,
+   "w": 112.3,
+   "h": 15,
+   "font": "11px 400 mono"
+  },
+  "averages-counts": {
+   "n": 6,
+   "w": 58,
+   "h": 20,
+   "font": "12px 400 mono"
+  },
+  "averages-latency-row": {
+   "n": 1,
+   "w": 275,
+   "h": 232.2,
+   "font": "12px 400 sans"
+  },
+  "section-overview": {
+   "n": 1,
+   "w": 277,
+   "h": 717.9,
+   "font": "12px 400 sans"
+  },
+  "stat-grid": {
+   "n": 1,
+   "w": 277,
+   "h": 301,
+   "font": "12px 400 sans"
+  },
+  "stat-box": {
+   "n": 8,
+   "w": 137,
+   "h": 74,
+   "font": "12px 400 sans"
+  },
+  "winner-bar": {
+   "n": 1,
+   "w": 247,
+   "h": 28,
+   "font": "12px 400 sans"
+  },
+  "winner-legend": {
+   "n": 1,
+   "w": 247,
+   "h": 36,
+   "font": "11px 400 sans"
+  },
+  "distribution-bar": {
+   "n": 1,
+   "w": 247,
+   "h": 32,
+   "font": "12px 400 sans"
+  },
+  "section-categories": {
+   "n": 1,
+   "w": 277,
+   "h": 870.8,
+   "font": "12px 400 sans"
+  },
+  "category-chip-bar": {
+   "n": 1,
+   "w": 269.5,
+   "h": 26,
+   "font": "12px 400 sans"
+  },
+  "category-card": {
+   "n": 3,
+   "w": 277,
+   "h": 228.9,
+   "font": "12px 400 sans"
+  },
+  "category-run-row": {
+   "n": 12,
+   "w": 245,
+   "h": 44.2,
+   "font": "12px 400 sans"
+  },
+  "category-track": {
+   "n": 12,
+   "w": 245,
+   "h": 8,
+   "font": "12px 400 sans"
+  },
+  "section-errors": {
+   "n": 1,
+   "w": 277,
+   "h": 455.1,
+   "font": "12px 400 sans"
+  },
+  "error-group": {
+   "n": 2,
+   "w": 277,
+   "h": 176.6,
+   "font": "12px 400 sans"
+  },
+  "error-card": {
+   "n": 2,
+   "w": 277,
+   "h": 148.6,
+   "font": "12px 400 sans"
+  },
+  "error-run": {
+   "n": 8,
+   "w": 245,
+   "h": 22.6,
+   "font": "12px 400 sans"
+  },
+  "section-items": {
+   "n": 1,
+   "w": 277,
+   "h": 1816,
+   "font": "12px 400 sans"
+  },
+  "items-toolbar": {
+   "n": 1,
+   "w": 277,
+   "h": 88,
+   "font": "12px 400 sans"
+  },
+  "items-filters-btn": {
+   "n": 1,
+   "w": 117,
+   "h": 24,
+   "font": "11px 600 sans"
+  },
+  "items-display-btn": {
+   "n": 1,
+   "w": 150,
+   "h": 24,
+   "font": "11px 600 sans"
+  },
+  "run-key": {
+   "n": 1,
+   "w": 277,
+   "h": 41.2,
+   "font": "12px 400 sans"
+  },
+  "item-list": {
+   "n": 1,
+   "w": 277,
+   "h": 1481.5,
+   "font": "12px 400 sans"
+  },
+  "item-row": {
+   "n": 20,
+   "w": 277,
+   "h": 68.4,
+   "font": "12px 400 sans"
+  },
+  "item-chevron": {
+   "n": 20,
+   "w": 26,
+   "h": 26,
+   "font": "12px 400 sans"
+  },
+  "item-index": {
+   "n": 20,
+   "w": 19.5,
+   "h": 18.2,
+   "font": "13px 600 mono"
+  },
+  "item-title": {
+   "n": 20,
+   "w": 173.5,
+   "h": 36.4,
+   "font": "13px 600 sans"
+  },
+  "item-score-chips": {
+   "n": 20,
+   "w": 268,
+   "h": 22,
+   "font": "12px 400 sans"
+  },
+  "item-score-chip": {
+   "n": 80,
+   "w": 64,
+   "h": 22,
+   "font": "12px 600 mono"
+  },
+  "pagination": {
+   "n": 1,
+   "w": 277,
+   "h": 43.4,
+   "font": "12px 400 sans"
+  },
+  "derived": {
+   "pageW": 277,
+   "docOverflowX": 277,
+   "pageScrollW": 283,
+   "pageClientW": 277,
+   "itemRowPitch": 74.4,
+   "chipsInOneRow": true,
+   "chipsRightEdgeToRowRight": -6,
+   "ellipsisElements": 1,
+   "clippedNames": 0,
+   "stickyElements": 1,
+   "sectionHeights": {
+    "runs": 1047,
+    "averages": 1193,
+    "overview": 718,
+    "categories": 871,
+    "errors": 455,
+    "items": 1816
+   },
+   "outputCardTops": [],
+   "metricRowTops": [],
+   "reasonTops": [],
+   "outputGridScroll": null,
+   "avgScroll": [
+    275,
+    275
+   ]
+  }
+ },
+ "expanded": {
+  "title-block": {
+   "n": 1,
+   "w": 277,
+   "h": 123,
+   "font": "12px 400 sans"
+  },
+  "section-nav": {
+   "n": 1,
+   "w": 277,
+   "h": 36,
+   "font": "12px 400 sans"
+  },
+  "section-runs": {
+   "n": 1,
+   "w": 277,
+   "h": 1046.5,
+   "font": "12px 400 sans"
+  },
+  "run-grid": {
+   "n": 1,
+   "w": 277,
+   "h": 958.6,
+   "font": "12px 400 sans"
+  },
+  "run-card": {
+   "n": 4,
+   "w": 277,
+   "h": 238.6,
+   "font": "12px 400 sans"
+  },
+  "run-stat-strip": {
+   "n": 4,
+   "w": 245,
+   "h": 36,
+   "font": "12px 400 sans"
+  },
+  "run-meta": {
+   "n": 4,
+   "w": 245,
+   "h": 120,
+   "font": "12px 400 sans"
+  },
+  "run-remove": {
+   "n": 4,
+   "w": 24,
+   "h": 24,
+   "font": "12px 400 sans"
+  },
+  "section-averages": {
+   "n": 1,
+   "w": 277,
+   "h": 1192.9,
+   "font": "12px 400 sans"
+  },
+  "averages-table": {
+   "n": 1,
+   "w": 277,
+   "h": 1057.6,
+   "font": "12px 400 sans"
+  },
+  "averages-colhead": {
+   "n": 4,
+   "w": 55.2,
+   "h": 208.1,
+   "font": "11px 650 sans"
+  },
+  "averages-cell": {
+   "n": 8,
+   "w": 275,
+   "h": 44,
+   "font": "12px 400 mono"
+  },
+  "averages-value": {
+   "n": 8,
+   "w": 54,
+   "h": 20,
+   "font": "12px 600 mono"
+  },
+  "averages-delta": {
+   "n": 6,
+   "w": 112.3,
+   "h": 15,
+   "font": "11px 400 mono"
+  },
+  "averages-counts": {
+   "n": 6,
+   "w": 58,
+   "h": 20,
+   "font": "12px 400 mono"
+  },
+  "averages-latency-row": {
+   "n": 1,
+   "w": 275,
+   "h": 232.2,
+   "font": "12px 400 sans"
+  },
+  "section-overview": {
+   "n": 1,
+   "w": 277,
+   "h": 717.9,
+   "font": "12px 400 sans"
+  },
+  "stat-grid": {
+   "n": 1,
+   "w": 277,
+   "h": 301,
+   "font": "12px 400 sans"
+  },
+  "stat-box": {
+   "n": 8,
+   "w": 137,
+   "h": 74,
+   "font": "12px 400 sans"
+  },
+  "winner-bar": {
+   "n": 1,
+   "w": 247,
+   "h": 28,
+   "font": "12px 400 sans"
+  },
+  "winner-legend": {
+   "n": 1,
+   "w": 247,
+   "h": 36,
+   "font": "11px 400 sans"
+  },
+  "distribution-bar": {
+   "n": 1,
+   "w": 247,
+   "h": 32,
+   "font": "12px 400 sans"
+  },
+  "section-categories": {
+   "n": 1,
+   "w": 277,
+   "h": 870.8,
+   "font": "12px 400 sans"
+  },
+  "category-chip-bar": {
+   "n": 1,
+   "w": 269.5,
+   "h": 26,
+   "font": "12px 400 sans"
+  },
+  "category-card": {
+   "n": 3,
+   "w": 277,
+   "h": 228.9,
+   "font": "12px 400 sans"
+  },
+  "category-run-row": {
+   "n": 12,
+   "w": 245,
+   "h": 44.2,
+   "font": "12px 400 sans"
+  },
+  "category-track": {
+   "n": 12,
+   "w": 245,
+   "h": 8,
+   "font": "12px 400 sans"
+  },
+  "section-errors": {
+   "n": 1,
+   "w": 277,
+   "h": 455.1,
+   "font": "12px 400 sans"
+  },
+  "error-group": {
+   "n": 2,
+   "w": 277,
+   "h": 176.6,
+   "font": "12px 400 sans"
+  },
+  "error-card": {
+   "n": 2,
+   "w": 277,
+   "h": 148.6,
+   "font": "12px 400 sans"
+  },
+  "error-run": {
+   "n": 8,
+   "w": 245,
+   "h": 22.6,
+   "font": "12px 400 sans"
+  },
+  "section-items": {
+   "n": 1,
+   "w": 277,
+   "h": 3236.3,
+   "font": "12px 400 sans"
+  },
+  "items-toolbar": {
+   "n": 1,
+   "w": 277,
+   "h": 88,
+   "font": "12px 400 sans"
+  },
+  "items-filters-btn": {
+   "n": 1,
+   "w": 117,
+   "h": 24,
+   "font": "11px 600 sans"
+  },
+  "items-display-btn": {
+   "n": 1,
+   "w": 150,
+   "h": 24,
+   "font": "11px 600 sans"
+  },
+  "run-key": {
+   "n": 1,
+   "w": 277,
+   "h": 41.2,
+   "font": "12px 400 sans"
+  },
+  "item-list": {
+   "n": 1,
+   "w": 277,
+   "h": 2901.8,
+   "font": "12px 400 sans"
+  },
+  "item-row": {
+   "n": 20,
+   "w": 277,
+   "h": 1488.7,
+   "font": "12px 400 sans"
+  },
+  "item-chevron": {
+   "n": 20,
+   "w": 26,
+   "h": 26,
+   "font": "12px 400 sans"
+  },
+  "item-index": {
+   "n": 20,
+   "w": 19.5,
+   "h": 18.2,
+   "font": "13px 600 mono"
+  },
+  "item-title": {
+   "n": 20,
+   "w": 173.5,
+   "h": 36.4,
+   "font": "13px 600 sans"
+  },
+  "item-score-chips": {
+   "n": 20,
+   "w": 268,
+   "h": 22,
+   "font": "12px 400 sans"
+  },
+  "item-score-chip": {
+   "n": 80,
+   "w": 64,
+   "h": 22,
+   "font": "12px 600 mono"
+  },
+  "pagination": {
+   "n": 1,
+   "w": 277,
+   "h": 43.4,
+   "font": "12px 400 sans"
+  },
+  "item-detail": {
+   "n": 1,
+   "w": 275,
+   "h": 1420.3,
+   "font": "12px 400 sans"
+  },
+  "output-toggles": {
+   "n": 1,
+   "w": 247,
+   "h": 52,
+   "font": "12px 400 sans"
+  },
+  "output-grid": {
+   "n": 1,
+   "w": 247,
+   "h": 1101.5,
+   "font": "12px 400 sans"
+  },
+  "output-card": {
+   "n": 4,
+   "w": 247,
+   "h": 268.4,
+   "font": "12px 400 sans"
+  },
+  "metric-details": {
+   "n": 4,
+   "w": 215,
+   "h": 56,
+   "font": "12px 400 sans"
+  },
+  "derived": {
+   "pageW": 277,
+   "docOverflowX": 277,
+   "pageScrollW": 283,
+   "pageClientW": 277,
+   "itemRowPitch": 1494.7,
+   "chipsInOneRow": true,
+   "chipsRightEdgeToRowRight": -6,
+   "ellipsisElements": 1,
+   "clippedNames": 0,
+   "stickyElements": 1,
+   "sectionHeights": {
+    "runs": 1047,
+    "averages": 1193,
+    "overview": 718,
+    "categories": 871,
+    "errors": 455,
+    "items": 3236
+   },
+   "outputCardTops": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "metricRowTops": [
+    68501,
+    68777,
+    69054,
+    69330
+   ],
+   "reasonTops": [
+    68577,
+    68853,
+    69130,
+    69406
+   ],
+   "outputGridScroll": [
+    247,
+    247
+   ],
+   "avgScroll": [
+    275,
+    275
+   ]
+  }
+ }
+}

@@ -1,7 +1,6 @@
 """Regression tests for the P1 final review fixes (API, services, static).
 
-Each test names the finding it covers. Browser checks for the run page live in
-test_p1_final_fixes_browser.py.
+Each test names the finding it covers.
 """
 
 from __future__ import annotations
@@ -46,57 +45,10 @@ from test_review_rules import (  # noqa: F401  (fixtures)
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages/platform/qym_platform/_static/dashboard"
-
-
-def _read(name: str) -> str:
-    return (DASHBOARD / name).read_text(encoding="utf-8")
-
 
 # ---------------------------------------------------------------------------
-# Static page fixes
+# API fixes (the UI halves live in frontend/ Vitest and Playwright specs)
 # ---------------------------------------------------------------------------
-
-
-def test_project_settings_document_listeners_end_with_the_page():
-    """C067/C043: the member-picker click listener used to outlive Settings."""
-    source = _read("project_settings.html")
-    for match in re.finditer(r"(document|window)\.addEventListener\('([a-zA-Z]+)'", source):
-        if match.group(2) == "DOMContentLoaded":
-            continue
-        # The listener's own options argument closes the call.
-        depth, i = 0, match.end()
-        while i < len(source):
-            char = source[i]
-            if char == "(":
-                depth += 1
-            elif char == ")":
-                if depth == 0:
-                    break
-                depth -= 1
-            i += 1
-        call = source[match.start() : i + 1]
-        assert "pageListen(" in call, call[:160]
-    body = source[source.index("function closeMemberResults()") :][:400]
-    assert "if (!input || !results) return;" in body
-
-
-def test_help_modal_escape_fallback_releases_the_dialog():
-    """C049/C071: the leftover Escape branch hid the modal without releaseDialog."""
-    source = _read("dashboard.js")
-    assert "el('help-modal').style.display = 'none'" not in source
-    branch = source[source.index("el('help-modal')?.style.display === 'flex'") :][:200]
-    assert "hideLegacyModal(el('help-modal'))" in branch
-
-
-def test_time_range_popover_outranks_the_shared_dropdown_anatomy():
-    """C054: same-specificity rule in the later stylesheet dropped the padding."""
-    css = _read("dashboard.css")
-    rule = re.search(r"\n([^\n{}]*time-range-dropdown[^\n{}]*)\{([^}]*)\}", css)
-    assert rule, "time-range dropdown rule missing"
-    selector, body = rule.group(1).strip(), rule.group(2)
-    assert selector == ".multi-select-dropdown.time-range-dropdown"
-    assert "padding: var(--space-md)" in body and "min-width: 260px" in body
 
 
 def test_transfer_picker_leaves_out_disabled_members(client, session_factory):
@@ -108,28 +60,6 @@ def test_transfer_picker_leaves_out_disabled_members(client, session_factory):
     by_id = {m["user_id"]: m for m in members}
     assert by_id["member-1"]["is_active"] is False
     assert by_id["owner-1"]["is_active"] is True
-    source = _read("dashboard.js")
-    picker = source[source.index("async function showTransferOwnershipModal") :][:2400]
-    assert "m.is_active !== false" in picker
-
-
-def test_dataset_compare_tab_switch_drops_responses_in_flight():
-    """C181/C321: a slow response for another tab overwrote the chosen tab."""
-    source = _read("datasets.html")
-    handler = source[source.index("navigate({ cmpTab: k }, { replace: true, silent: true });") :][:400]
-    assert "++loadSeq;" in handler
-    assert handler.index("++loadSeq;") < handler.index("renderList(k, true)")
-    assert "if (seq !== loadSeq || kind !== state.cmpTab || !listEl.isConnected) return;" in source
-
-
-def test_analyzer_requests_samples_only_for_repeat_runs():
-    """C027: /passes was fetched (and its server work paid) for every run."""
-    source = _read("analyzer.html")
-    start = source.index("'?view=summary'")
-    loader = source[start - 600 : start + 2400]
-    assert "Promise.all" not in loader
-    condition = loader.index("if (sampleCount > 1 || data.run.metadata?.has_repeat_pass_context) {")
-    assert loader.index("+ '/passes'") > condition
 
 
 # ---------------------------------------------------------------------------
@@ -238,9 +168,6 @@ def test_bulk_approve_returns_rows_with_reviewer_and_self_review(client, session
         assert "review_block" in row
     assert rows[mine]["self_reviewed"] is True
     assert rows[theirs]["self_reviewed"] is False
-    source = _read("reviews.html")
-    assert "applyBulkStatusUpdate(ids, 'approved', comment, result && result.corrections)" in source
-    assert "summaryRow(c, { ...updated, status })" in source
 
 
 # ---------------------------------------------------------------------------
@@ -460,14 +387,13 @@ def test_one_sample_view_matches_full_build_scoped_and_loads_one_pass(client, se
         event.remove(engine, "before_cursor_execute", capture)
     assert body["snapshot"]["rows"] == expected_rows
     assert body["snapshot"]["pass_number"] == pass_number
-    # Attempt rows (outputs) are read for the shown pass only; the state
-    # query reads other passes' outputs as NULL.
+    # Attempt outputs are read for the shown pass only (the state query reads
+    # none; this run has no attempt rows, so no output read happens at all).
     attempt_reads = [
         statement
         for statement, _ in statements
         if "FROM run_item_attempts" in statement and "run_item_attempts.output" in statement
     ]
-    assert attempt_reads
     for statement in attempt_reads:
         assert "pass_number =" in statement or "CASE WHEN" in statement, statement
 
@@ -600,7 +526,7 @@ def test_lineage_counts_follow_the_compare_rule_and_load_no_bodies(maint_db):
     event.listen(engine, "before_cursor_execute", lambda *a: statements.append(a[2]))
     with factory() as db:
         counts = compute_change_counts(db, db.get(DatasetVersion, "v2"))
-    assert counts == {"added": 0, "modified": 1, "deleted": 0, "unchanged": 1}
+    assert counts == {"added": 0, "modified": 1, "deleted": 0, "unchanged": 1, "disabled": 0, "enabled": 0}
     reads = [s for s in statements if "FROM dataset_items" in s]
     assert reads and not any("dataset_items.input" in s for s in reads)
 
@@ -660,7 +586,7 @@ def test_paged_compare_returns_only_its_page(maint_db, dataset_client):
     paged = dataset_client.get(url, params={"project_slug": "p", "base": "v1", "include_diffs": 1, "kind": "changed", "limit": 2})
     body = _ok(paged)
     assert [row["item_id"] for row in body["field_diffs"]] == ["c0", "c1"] or len(body["field_diffs"]) == 2
-    assert body["summary"] == {"added": 1, "removed": 0, "changed": 3, "unchanged": 4}
+    assert body["summary"] == {"added": 1, "removed": 0, "changed": 3, "unchanged": 4, "disabled": 0, "enabled": 0}
     for key in ("added", "removed", "changed", "unchanged", "timestamps"):
         assert key not in body, key
     full = _ok(dataset_client.get(url, params={"project_slug": "p", "base": "v1"}))

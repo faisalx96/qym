@@ -1,0 +1,11 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+.qym-e2e.db
+.qym-dev.db
+*.db-journal
+.vite/
+*.tsbuildinfo

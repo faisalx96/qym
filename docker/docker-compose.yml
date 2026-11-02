@@ -17,10 +17,22 @@ services:
       timeout: 5s
       retries: 20
 
+  # The UI assets image (docker/Dockerfile.frontend). Build it once before the
+  # platform image: `docker compose -f docker/docker-compose.yml build frontend`,
+  # or set QYM_FRONTEND_IMAGE to a published one and skip this. Never started.
+  frontend:
+    profiles: ["frontend-build"]
+    image: ${QYM_FRONTEND_IMAGE:-qym-frontend:local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+
   api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        FRONTEND_IMAGE: ${QYM_FRONTEND_IMAGE:-qym-frontend:local}
     environment:
       QYM_ENVIRONMENT: ${QYM_ENVIRONMENT}
       QYM_BASE_URL: ${QYM_BASE_URL}
@@ -28,6 +40,10 @@ services:
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
       # Default `all`: this container serves HTTP and runs the background
       # loops. Set QYM_ROLE=api and start the `worker` profile to split them.
+      # Recommended for production (the API warns at startup otherwise): a
+      # heavy maintenance job then cannot OOM-kill the API, since each
+      # container has its own memory limit. See docs/internal/OPERATIONS.md,
+      # "Recommended production layout".
       QYM_ROLE: ${QYM_ROLE:-all}
       # >1 serves HTTP from N processes; with QYM_ROLE=all one more process
       # runs the background loops (qym_platform/serve.py). Default: 1 process.
@@ -37,7 +53,11 @@ services:
       QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
       QYM_DELETED_RUN_GRACE_DAYS: ${QYM_DELETED_RUN_GRACE_DAYS:-30}
       QYM_ADMIN_BOOTSTRAP_TOKEN: ${QYM_ADMIN_BOOTSTRAP_TOKEN}
-      QYM_AUTH_MODE: ${QYM_AUTH_MODE}
+      # Unset gives proxy_headers, which needs QYM_PROXY_SHARED_SECRET (the
+      # value the proxy sends in X-Qym-Proxy-Secret) outside dev/test/local.
+      # QYM_AUTH_MODE=none starts only with QYM_ENVIRONMENT=dev, test or local.
+      QYM_AUTH_MODE: ${QYM_AUTH_MODE:-proxy_headers}
+      QYM_PROXY_SHARED_SECRET: ${QYM_PROXY_SHARED_SECRET:-}
       QYM_AUTH_SESSION_SECRET: ${QYM_AUTH_SESSION_SECRET}
       QYM_AUTH_LOCAL_ENABLED: ${QYM_AUTH_LOCAL_ENABLED}
       QYM_AUTH_LOCAL_SIGNUP: ${QYM_AUTH_LOCAL_SIGNUP:-false}
@@ -65,6 +85,16 @@ services:
       QYM_CA_BUNDLE: ${QYM_CA_BUNDLE:-}
       QYM_SSL_VERIFY: ${QYM_SSL_VERIFY:-}
       QYM_PRODUCT_EVAL_RUN_COUNT: ${QYM_PRODUCT_EVAL_RUN_COUNT:-3}
+      QYM_MAX_UPLOAD_BYTES: ${QYM_MAX_UPLOAD_BYTES:-104857600}
+    # Nothing is written into the container: read-only root filesystem, and a
+    # bounded tmpfs for /tmp (multipart parsing, HOME). Keep the tmpfs above
+    # QYM_MAX_UPLOAD_BYTES.
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    # Example memory ceiling (the tmpfs above counts toward it). Roughly
+    # 350 MB per web process plus headroom for product evals and analyses.
+    # mem_limit: 2g
     ports:
       - "8000:8000"
     depends_on:
@@ -101,6 +131,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        FRONTEND_IMAGE: ${QYM_FRONTEND_IMAGE:-qym-frontend:local}
     command: ["python", "-m", "qym_platform.worker"]
     environment:
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
@@ -111,6 +143,12 @@ services:
       QYM_EVENT_LOG_MODE: ${QYM_EVENT_LOG_MODE:-full}
       QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
       QYM_DELETED_RUN_GRACE_DAYS: ${QYM_DELETED_RUN_GRACE_DAYS:-30}
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    # Its own ceiling: a heavy maintenance job is restarted alone (jobs resume)
+    # instead of taking the API down with it.
+    # mem_limit: 1g
     depends_on:
       api:
         condition: service_healthy

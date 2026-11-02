@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import secrets
 from datetime import timedelta
 from typing import Any, Dict, Iterable, Optional
 from uuid import NAMESPACE_URL, uuid5
@@ -20,6 +19,8 @@ from qym_platform.db.models import (
     DatasetAlias,
     DatasetItem,
     DatasetItemRevision,
+    DatasetReadToken,
+    EvalExperiment,
     DatasetVersion,
     DatasetVersionChange,
     Project,
@@ -38,8 +39,12 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.llm_endpoint_security import (
+    DEFAULT_LLM_BASE_URL,
+    KEY_FOR_NEW_HOST_MESSAGE,
     LlmEndpointValidationError,
     create_llm_http_client,
+    experiment_base_url_needs_https,
+    key_host_changed,
     validate_llm_base_url,
 )
 from qym_platform.openai_compat import create_chat_completion_compat
@@ -47,6 +52,7 @@ from qym_platform.permissions import (
     can_manage_project_members,
     get_project_membership,
     has_project_access,
+    is_platform_admin,
     is_project_manager,
     require_project_writable,
 )
@@ -55,18 +61,29 @@ from qym_platform.secrets import (
     encryption_available,
     resolve_llm_api_key,
 )
-from qym_platform.security import api_key_prefix, hash_api_key
+from qym_platform.security import generate_api_key
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+from qym_platform.services import dataset_read_tokens
 from qym_platform.services.correction_rules import CORRECTION_APPROVERS, correction_rules
 from qym_platform.services.analysis_prompts import (
     DEFAULT_ANALYSIS_PROMPTS,
     serialize_analysis_prompt_settings,
+)
+from qym_platform.services.llm_connections import project_connections_query
+from qym_platform.services.metric_directions import (
+    DIRECTIONS as METRIC_DIRECTIONS,
+    metric_directions,
+    metric_directions_for,
+    set_metric_direction,
 )
 from qym_platform.services.retention import resume_purge_clocks
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, load_only
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -256,6 +273,7 @@ def _project_payload(
     member_counts: Optional[Dict[str, int]] = None,
     run_counts: Optional[Dict[str, int]] = None,
     role: Optional[str] = None,
+    directions: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     member_count = (
         int(member_counts[project.id])
@@ -285,6 +303,12 @@ def _project_payload(
         "updated_at": to_api_timestamp(project.updated_at),
         # Who may decide diagnosis corrections (C074).
         **correction_rules(project),
+        # The direction saved for metrics that declare none (C129).
+        "metric_directions": (
+            directions.get(project.id, {})
+            if directions is not None
+            else metric_directions(db, project.id)
+        ),
     }
 
 
@@ -298,6 +322,7 @@ def serialize_project_payloads(
     project_ids = [project.id for project in project_list]
     member_counts = _project_member_counts(db, project_ids)
     run_counts = _project_run_counts(db, project_ids)
+    directions = metric_directions_for(db, project_ids)
 
     if principal.user.role == UserRole.ADMIN:
         role_map = {project.id: ProjectRole.MANAGER.value for project in project_list}
@@ -323,6 +348,7 @@ def serialize_project_payloads(
             member_counts=member_counts,
             run_counts=run_counts,
             role=role_map.get(project.id, ""),
+            directions=directions,
         )
         for project in project_list
     ]
@@ -403,6 +429,10 @@ class UpdateMembershipRequest(BaseModel):
     role: ProjectRole
 
 
+class CreateDatasetReadTokenRequest(BaseModel):
+    name: str = Field(default="Evaluation Service", min_length=1, max_length=200)
+
+
 class CreateProjectKeyRequest(BaseModel):
     name: str = Field(default="default")
     # Scopes are no longer enforced (any valid key has full project access), but we still
@@ -423,7 +453,11 @@ class LlmConnectionRequest(BaseModel):
     llm_base_url: str = Field(default="https://api.openai.com/v1")
     llm_model: str = Field(default="gpt-4o-mini")
     # New key, or the sentinel "__KEEP__" on edit to preserve the stored key, or "" to clear.
+    # A new scheme, host or port refuses "__KEEP__" and "": the key must be sent again.
     llm_api_key: str = Field(default="")
+    # Offered in the experiments model picker. Omitted on create means true; omitted on
+    # edit keeps the stored value.
+    available_for_experiments: Optional[bool] = None
 
 
 class AnalysisPromptSettingsRequest(BaseModel):
@@ -466,6 +500,7 @@ def _serialize_connection(conn: ProjectLlmConnection) -> Dict[str, Any]:
             ("••••" + conn.llm_api_key_last4) if conn.llm_api_key_last4 else ""
         ),
         "is_default": conn.is_default,
+        "available_for_experiments": conn.available_for_experiments is not False,
         "created_at": to_api_timestamp(conn.created_at),
         "updated_at": to_api_timestamp(conn.updated_at),
     }
@@ -494,12 +529,41 @@ def _apply_connection_key(
     is_new: bool,
     settings: PlatformSettings,
 ) -> None:
-    """Set base_url/model/name and resolve the API key (new / keep / clear)."""
-    conn.name = req.name.strip()
-    conn.llm_base_url = _validate_llm_base_url(req.llm_base_url, settings)
-    conn.llm_model = req.llm_model.strip()
+    """Set name/base_url/model/availability and resolve the key (new / keep / clear).
 
+    A stored key stays bound to the host it was entered for: an edit that moves the
+    base URL to another scheme, host or port must send the key again (C004).
+    """
+    base_url = _validate_llm_base_url(req.llm_base_url, settings)
     api_key = req.llm_api_key.strip()
+    if (
+        not is_new
+        and conn.llm_api_key_encrypted
+        and (api_key == "__KEEP__" or not api_key)
+        and key_host_changed(conn.llm_base_url or DEFAULT_LLM_BASE_URL, base_url)
+    ):
+        raise HTTPException(status_code=400, detail=KEY_FOR_NEW_HOST_MESSAGE)
+    conn.name = req.name.strip()
+    conn.llm_base_url = base_url
+    conn.llm_model = req.llm_model.strip()
+    # Experiments need HTTPS (analyzer use keeps accepting public http://).
+    plain_http = experiment_base_url_needs_https(
+        conn.llm_base_url, allow_private=settings.allow_private_llm_base_urls
+    )
+    if req.available_for_experiments and plain_http:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only https:// connections can be available for experiments. Use an "
+                'https:// base URL or turn off "Available for experiments".'
+            ),
+        )
+    if req.available_for_experiments is not None:
+        conn.available_for_experiments = req.available_for_experiments
+    elif is_new:
+        # Omitted on create: an http:// connection is analysis-only.
+        conn.available_for_experiments = not plain_http
+
     if api_key == "__KEEP__":
         return  # leave the stored encrypted key untouched
     if not api_key:
@@ -525,18 +589,14 @@ def _apply_connection_key(
 @router.get("/v1/projects/{project_id}/llm-connections")
 def list_llm_connections(
     project_id: str,
+    available_for_experiments: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
-    conns = (
-        db.query(ProjectLlmConnection)
-        .filter(ProjectLlmConnection.project_id == project_id)
-        .order_by(
-            ProjectLlmConnection.is_default.desc(), ProjectLlmConnection.created_at
-        )
-        .all()
-    )
+    conns = project_connections_query(
+        db, project_id, available_for_experiments=available_for_experiments
+    ).all()
     return {"connections": [_serialize_connection(c) for c in conns]}
 
 
@@ -569,6 +629,7 @@ def create_llm_connection(
             status_code=400, detail="A connection with that name already exists"
         )
     db.refresh(conn)
+    logger.info("LLM connection %s saved in project %s", conn.id, project_id)
     return _serialize_connection(conn)
 
 
@@ -593,6 +654,7 @@ def update_llm_connection(
             status_code=400, detail="A connection with that name already exists"
         )
     db.refresh(conn)
+    logger.info("LLM connection %s saved in project %s", conn.id, project_id)
     return _serialize_connection(conn)
 
 
@@ -620,6 +682,7 @@ def delete_llm_connection(
         if nxt:
             nxt.is_default = True
     db.commit()
+    logger.info("LLM connection %s deleted from project %s", connection_id, project_id)
     return {"ok": True, "id": connection_id}
 
 
@@ -639,7 +702,82 @@ def set_default_llm_connection(
     conn.is_default = True
     db.commit()
     db.refresh(conn)
+    logger.info("LLM connection %s saved in project %s", conn.id, project_id)
     return _serialize_connection(conn)
+
+
+class LlmConnectionDraftTest(BaseModel):
+    """An unsaved connection to test (C157). ``connection_id`` with no key tests the stored key, on its own host."""
+
+    llm_base_url: str = Field(default="https://api.openai.com/v1")
+    llm_model: str = Field(default="gpt-4o-mini")
+    llm_api_key: str = Field(default="")
+    connection_id: Optional[str] = None
+    available_for_experiments: Optional[bool] = None
+
+
+@router.post("/v1/projects/{project_id}/llm-connections/test")
+async def test_llm_connection_draft(
+    project_id: str,
+    req: LlmConnectionDraftTest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Test the values in the form before they are saved, with the same rules a save applies (C157)."""
+    _require_project_manager(db, principal, project_id)
+    settings = PlatformSettings()
+    base_url = _validate_llm_base_url(req.llm_base_url, settings)
+    if req.available_for_experiments and experiment_base_url_needs_https(
+        base_url, allow_private=settings.allow_private_llm_base_urls
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only https:// connections can be available for experiments. Use an "
+                'https:// base URL or turn off "Available for experiments".'
+            ),
+        )
+    api_key = req.llm_api_key.strip()
+    if (not api_key or api_key == "__KEEP__") and req.connection_id:
+        conn = _get_connection(db, project_id, req.connection_id)
+        if conn.llm_api_key_encrypted and key_host_changed(
+            conn.llm_base_url or DEFAULT_LLM_BASE_URL, base_url
+        ):
+            raise HTTPException(status_code=400, detail=KEY_FOR_NEW_HOST_MESSAGE)
+        try:
+            api_key = resolve_llm_api_key(
+                {
+                    "llm_api_key_encrypted": conn.llm_api_key_encrypted,
+                    "llm_api_key_last4": conn.llm_api_key_last4,
+                },
+                settings,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    if not api_key or api_key == "__KEEP__":
+        raise HTTPException(status_code=400, detail="Enter an API key to test this connection")
+    model = req.llm_model.strip() or "gpt-4o-mini"
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        http_client=create_llm_http_client(allow_private=settings.allow_private_llm_base_urls),
+    )
+    db.close()
+    try:
+        resp = await create_chat_completion_compat(
+            client,
+            model=model,
+            messages=[{"role": "user", "content": "Reply with: ok"}],
+            max_tokens=4,
+        )
+        return {"ok": True, "model": model, "response": resp.choices[0].message.content}
+    except Exception as e:  # noqa: BLE001 - surface provider error to the user
+        logger.warning(
+            "LLM connection draft test failed (project=%s, model=%s)", project_id, model, exc_info=True
+        )
+        raise HTTPException(status_code=400, detail=f"LLM connection failed: {e}")
 
 
 @router.post("/v1/projects/{project_id}/llm-connections/{connection_id}/test")
@@ -689,6 +827,14 @@ async def test_llm_connection(
         )
         return {"ok": True, "model": model, "response": resp.choices[0].message.content}
     except Exception as e:  # noqa: BLE001 - surface provider error to the user
+        # Never the key; provider messages pass through the log redaction.
+        logger.warning(
+            "LLM connection test failed (project=%s, connection=%s, model=%s)",
+            project_id,
+            connection_id,
+            model,
+            exc_info=True,
+        )
         raise HTTPException(status_code=400, detail=f"LLM connection failed: {e}")
 
 
@@ -841,6 +987,7 @@ def create_project_for_creator(
     )
     db.commit()
     db.refresh(project)
+    logger.info("Project %s (%s) created by user %s", project.id, project.slug, principal.user.id)
     return _project_payload(db, project, principal)
 
 
@@ -963,7 +1110,52 @@ def add_project_member(
     db.add(member)
     db.commit()
     db.refresh(member)
+    logger.info("User %s added to project %s as %s", user.id, project.id, getattr(req.role, "value", req.role))
     return _serialize_member(member, user)
+
+
+class MetricDirectionRequest(BaseModel):
+    metric: str
+    direction: Optional[str] = None
+
+
+@router.patch("/v1/projects/{project_id}/metric-directions")
+def update_project_metric_direction(
+    project_id: str,
+    req: MetricDirectionRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Save which way is better for a metric that declares no direction, for this project (C129).
+
+    Project managers and admins. ``direction`` null clears the choice, and the
+    run page then assumes higher is better again for 0-1 scores.
+    """
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Only project managers can set a metric's direction")
+    require_project_writable(db, project_id)
+    project = _get_project(db, project_id)
+    metric = req.metric.strip()
+    if not metric or len(metric) > 200:
+        raise HTTPException(status_code=422, detail="metric is required (at most 200 characters)")
+    if req.direction is not None and req.direction not in METRIC_DIRECTIONS:
+        raise HTTPException(status_code=422, detail="direction must be maximize, minimize or null")
+    before = metric_directions(db, project.id)
+    after = set_metric_direction(db, project.id, metric, req.direction)
+    if after != before:
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="project.metric_direction_updated",
+                entity_type="project",
+                entity_id=project.id,
+                before={"metric_directions": before},
+                after={"metric_directions": after},
+            )
+        )
+    db.commit()
+    return {"project_id": project.id, "metric_directions": after}
 
 
 class ReviewRulesRequest(BaseModel):
@@ -1104,12 +1296,14 @@ def _transfer_member_runs(
             status_code=400, detail="The new owner must be an active member of the project"
         )
     # Lock in id order, like bulk submit, so concurrent run actions queue.
+    # FOR NO KEY UPDATE: only owner_user_id (not a key) changes, so inserts of
+    # the runs' child rows (FOR KEY SHARE) are not blocked.
     runs = (
         db.query(Run)
         .options(load_only(Run.id, Run.project_id, Run.owner_user_id, Run.deleted_at))
         .filter(Run.project_id == project_id, Run.owner_user_id == user_id)
         .order_by(Run.id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .all()
     )
     actor_id = principal.user.id if principal.auth_type != "none" else None
@@ -1183,6 +1377,13 @@ def remove_project_member(
     )
     db.delete(member)
     db.commit()
+    logger.info(
+        "User %s removed from project %s (%d API keys revoked, %d runs transferred)",
+        user_id,
+        project_id,
+        len(keys),
+        transferred,
+    )
     return {
         "ok": True,
         "project_id": project_id,
@@ -1237,18 +1438,20 @@ def create_project_api_key(
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
     require_project_writable(db, project_id)
-    token = secrets.token_urlsafe(32)
+    token, prefix, key_hash = generate_api_key()
     row = ApiKey(
         user_id=principal.user.id,
         project_id=project_id,
         name=req.name,
-        prefix=api_key_prefix(token),
-        key_hash=hash_api_key(token),
+        prefix=prefix,
+        key_hash=key_hash,
         scopes=req.scopes,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
+    # The prefix is a lookup handle, not a secret; the token is never logged.
+    logger.info("API key %s (prefix=%s) issued in project %s for user %s", row.id, row.prefix, project_id, principal.user.id)
     return {"id": row.id, "prefix": row.prefix, "token": token}
 
 
@@ -1275,7 +1478,138 @@ def revoke_project_api_key(
         raise HTTPException(status_code=400, detail="API key already revoked")
     key.revoked_at = utc_now_naive()
     db.commit()
+    logger.info("API key %s revoked in project %s by user %s", key.id, project_id, principal.user.id)
     return {"ok": True, "id": key.id}
+
+
+def _require_admin_project(db: Session, principal: Principal, project_id: str) -> Project:
+    project = _require_project_access(db, principal, project_id)
+    if not is_platform_admin(principal):
+        raise HTTPException(status_code=403, detail="Only admins can manage dataset read tokens")
+    return project
+
+
+# The list is capped: every experiment launch adds an experiment token (limit L-B2).
+DATASET_READ_TOKEN_LIST_LIMIT = 200
+
+
+def _dataset_read_token_payload(
+    row: DatasetReadToken,
+    creator: Optional[User],
+    experiment: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    return {
+        "kind": row.kind or "admin",
+        "experiment": experiment,
+        "id": row.id,
+        "name": row.name,
+        "prefix": row.prefix,
+        "project_id": row.project_id,
+        "creator": (
+            {"id": creator.id, "email": creator.email, "display_name": creator.display_name}
+            if creator
+            else None
+        ),
+        "created_at": to_api_timestamp(row.created_at),
+        "revoked_at": to_api_timestamp(row.revoked_at),
+    }
+
+
+@router.get("/v1/projects/{project_id}/dataset-read-tokens")
+def list_dataset_read_tokens(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_admin_project(db, principal, project_id)
+    rows = (
+        db.query(DatasetReadToken, User)
+        .outerjoin(User, User.id == DatasetReadToken.created_by_user_id)
+        .filter(DatasetReadToken.project_id == project_id)
+        .order_by(DatasetReadToken.created_at.desc(), DatasetReadToken.id)
+        .limit(DATASET_READ_TOKEN_LIST_LIMIT)
+        .all()
+    )
+    experiment_ids = sorted({row.experiment_id for row, _ in rows if row.experiment_id})
+    experiments = (
+        {
+            exp_id: {"id": exp_id, "name": name}
+            for exp_id, name in db.query(EvalExperiment.id, EvalExperiment.name).filter(
+                EvalExperiment.id.in_(experiment_ids)
+            )
+        }
+        if experiment_ids
+        else {}
+    )
+    return {
+        "tokens": [
+            _dataset_read_token_payload(
+                row, user, experiments.get(row.experiment_id or "")
+            )
+            for row, user in rows
+        ]
+    }
+
+
+@router.post("/v1/projects/{project_id}/dataset-read-tokens")
+def create_dataset_read_token(
+    project_id: str,
+    req: CreateDatasetReadTokenRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_admin_project(db, principal, project_id)
+    require_project_writable(db, project_id)
+    row, token = dataset_read_tokens.issue_token(
+        db,
+        project_id=project_id,
+        name=req.name.strip() or "Evaluation Service",
+        created_by_user_id=principal.user.id,
+    )
+    # The raw token is returned once and never stored (or logged).
+    logger.info("Dataset read token %s issued in project %s", row.id, project_id)
+    return {**_dataset_read_token_payload(row, principal.user), "token": token}
+
+
+@router.delete("/v1/projects/{project_id}/dataset-read-tokens/{token_id}")
+def revoke_dataset_read_token(
+    project_id: str,
+    token_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_admin_project(db, principal, project_id)
+    row = (
+        db.query(DatasetReadToken)
+        .filter(DatasetReadToken.id == token_id, DatasetReadToken.project_id == project_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Dataset read token not found")
+    if row.revoked_at:
+        if row.kind == "experiment":
+            # The dispatcher may have revoked it already: revoking again is a no-op.
+            return {"ok": True, "id": row.id}
+        raise HTTPException(status_code=400, detail="Dataset read token already revoked")
+    dataset_read_tokens.revoke_token(db, row)
+    if row.kind == "experiment" and row.experiment_id:
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="eval.dataset_token_revoked",
+                entity_type="eval_experiment",
+                entity_id=row.experiment_id,
+                before={},
+                after={
+                    "experiment_id": row.experiment_id,
+                    "token_id": row.id,
+                    "reason": "manual",
+                },
+            )
+        )
+        db.commit()
+    logger.info("Dataset read token %s revoked in project %s", row.id, project_id)
+    return {"ok": True, "id": row.id}
 
 
 @router.post("/v1/admin/projects")
@@ -1316,6 +1650,7 @@ def create_project(
     )
     db.commit()
     db.refresh(project)
+    logger.info("Project %s (%s) created by user %s", project.id, project.slug, principal.user.id)
     return _project_payload(db, project, principal)
 
 
@@ -1467,7 +1802,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
     if runs:
         parts.append(f"{runs} run{'s' if runs != 1 else ''}")
     if trashed:
-        parts.append(f"{trashed} run{'s' if trashed != 1 else ''} in Trash")
+        parts.append(f"{trashed} deleted run{'s' if trashed != 1 else ''}")
     # Deleted runs keep blocking until retention purges them, so say when.
     grace_days = PlatformSettings().deleted_run_grace_days
     if grace_days > 0:
@@ -1475,7 +1810,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
         if archived:
             purge += ", and purging is paused while the project is archived"
     else:
-        purge = "automatic Trash purging is turned off on this platform"
+        purge = "Retention is Off on this platform, so deleted runs are kept until restored"
     advice = (
         "It stays archived and keeps its data."
         if archived
@@ -1484,7 +1819,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
     return (
         f"This project still has {' and '.join(parts)}. Runs are never deleted with "
         "a project: it can be deleted only once all its runs are deleted and purged "
-        f"from Trash ({purge}). {advice}"
+        f"from Deleted runs ({purge}). {advice}"
     )
 
 
@@ -1495,6 +1830,10 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
     # Overviews stored for its (since purged) runs (C037).
     forget_shared(db, project_id)
     db.query(ApiKey).filter(ApiKey.project_id == project_id).delete(
+        synchronize_session=False
+    )
+    # Revoked tokens too: the rows keep a foreign key to the project.
+    db.query(DatasetReadToken).filter(DatasetReadToken.project_id == project_id).delete(
         synchronize_session=False
     )
     db.query(ProjectLlmConnection).filter(
@@ -1596,6 +1935,7 @@ def archive_project(
         _set_project_archived(db, project, True)
     # Also ends the transaction of a repeated request, releasing the row lock.
     db.commit()
+    logger.info("Project %s archived by admin %s", project.id, principal.user.id)
     _stop_project_jobs(db, project)
     return {"ok": True, "project_id": project.id, "archived": True}
 
@@ -1647,6 +1987,7 @@ def unarchive_project(
         _audit_project(db, principal, project, "project.unarchived", {"is_active": True})
         _set_project_archived(db, project, False)
     db.commit()
+    logger.info("Project %s unarchived by admin %s", project.id, principal.user.id)
     db.refresh(project)
     return _project_payload(db, project, principal)
 
@@ -1827,9 +2168,13 @@ def delete_project(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        logger.warning(
+            "Project %s deletion refused: other data still references it", project_id, exc_info=True
+        )
         raise HTTPException(
             status_code=409,
             detail="Other data still references this project (for example runs in "
             "another project that use its datasets); nothing was deleted.",
         ) from exc
+    logger.info("Project %s deleted by admin %s", project_id, principal.user.id)
     return {"ok": True, "project_id": project_id, "deleted": True, "counts": counts}

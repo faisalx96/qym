@@ -1,0 +1,192 @@
+{
+ "sticky-bar": {
+  "n": 1,
+  "w": 279,
+  "h": 71.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "4px 0px",
+  "radius": "0px",
+  "gap": "14px",
+  "display": "flex",
+  "text": "Runs | Averages | Overview | Categories | Errors | Items | 40 | View | 40 of"
+ },
+ "section-runs": {
+  "n": 1,
+  "w": 279,
+  "h": 1105.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Runs |  | Configuration, status and what differs between the com"
+ },
+ "section-averages": {
+  "n": 1,
+  "w": 279,
+  "h": 1193,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Per-run averages |  | Average per run with the paired change fro"
+ },
+ "section-overview": {
+  "n": 1,
+  "w": 279,
+  "h": 770.7,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Comparison overview |  | Pass rates, winners and how many runs g"
+ },
+ "section-categories": {
+  "n": 1,
+  "w": 279,
+  "h": 1714.9,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Performance by category |  | Average per metadata value and run,"
+ },
+ "section-errors": {
+  "n": 1,
+  "w": 279,
+  "h": 265.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Error distribution |  | Errors by kind and message for each run;"
+ },
+ "section-items": {
+  "n": 1,
+  "w": 279,
+  "h": 3513.7,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Item-by-item comparison |  | One score per run for each aligned "
+ },
+ "run-card": {
+  "n": 4,
+  "w": 279,
+  "h": 247.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "list-item",
+  "text": "A | baseline-gpt-mini | ★ | COMPLETED | Items | 40 | Completed | 38 | Errors"
+ },
+ "run-cards": {
+  "n": 1,
+  "w": 279,
+  "h": 1015,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "8px",
+  "display": "flex",
+  "text": "A | baseline-gpt-mini | ★ | COMPLETED | Items | 40 | Completed | 38 | Errors"
+ },
+ "averages-table": null,
+ "average-row": null,
+ "average-cell": null,
+ "category-card": {
+  "n": 7,
+  "w": 279,
+  "h": 201.2,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "8px",
+  "gap": "normal",
+  "display": "block",
+  "text": "Easy | 14 | A | baseline-gpt-mini | ★ | 65% | Baseline | B | cand-a-sonnet | 8"
+ },
+ "category-run": {
+  "n": 28,
+  "w": 247,
+  "h": 30.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "4px",
+  "display": "flex",
+  "text": "A | baseline-gpt-mini | ★ | 65% | Baseline"
+ },
+ "error-card": {
+  "n": 2,
+  "w": 279,
+  "h": 151.6,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "8px",
+  "gap": "normal",
+  "display": "block",
+  "text": "TimeoutError | 6 | task exceeded 30s | A | baseline-gpt-mini | 2 | Basel"
+ },
+ "error-run": {
+  "n": 8,
+  "w": 247,
+  "h": 16.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "grid",
+  "text": "A | baseline-gpt-mini | 2 | Baseline"
+ },
+ "items-toolbar": {
+  "n": 1,
+  "w": 279,
+  "h": 79.4,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "block",
+  "text": "Search items | Filters | Display | CSV | Analyze | 40 of 40 items | a ru"
+ },
+ "item-list": {
+  "n": 1,
+  "w": 279,
+  "h": 3015.4,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "block",
+  "text": "Question 1: what does clause 0 of the commerce policy requir"
+ },
+ "item-row": {
+  "n": 20,
+  "w": 277,
+  "h": 146.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "8px",
+  "radius": "0px",
+  "gap": "4px",
+  "display": "flex",
+  "text": "Question 1: what does clause 0 of the commerce policy requir"
+ },
+ "run-tag": {
+  "n": 51,
+  "w": 203,
+  "h": 16.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "4px",
+  "display": "flex",
+  "text": "A | baseline-gpt-mini | ★"
+ }
+}

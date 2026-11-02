@@ -1,0 +1,67 @@
+/* The Datasets section of a union run: one row per source dataset and a summary row with the run's own numbers. */
+.num {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.sumLabel {
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.scoreCell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.delta {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.showLink {
+  display: inline-flex;
+  vertical-align: top; /* no baseline gap under the link: a 390 px card is one line box tighter and equals its loading frame */
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--font-base);
+  color: var(--accent-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.showLink:hover {
+  color: var(--text-primary);
+}
+
+.showLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.dsCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.deleted {
+  padding-inline: var(--space-xs);
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.untagged {
+  color: var(--text-muted);
+}

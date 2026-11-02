@@ -1,0 +1,1600 @@
+/**
+ * Run-detail seeding through the public API only (RunEventV1 NDJSON stream).
+ * Used by the dev walkthrough (scripts/seed-run-detail.ts) and by the
+ * Playwright specs. Pure fetch, no Playwright types, so Node can run it.
+ *
+ * Scenarios (all deterministic, seeded PRNG):
+ *   classic   240 items, 4 metrics (boolean / score / lower-is-better / numeric),
+ *             task errors, scorer errors, retries, 3 not-received items, traces
+ *   repeat    samples=3, 60 items, 2 metrics, failed passes
+ *   running   RUNNING run with 30 completed items and no run_completed
+ *   arabic    12 items x 3 passes, Arabic prose, JSON inputs/outputs, a trace per pass
+ *   categories 300 items, metadata keys with 24 / 14 / 9 / 6 / 4 values
+ *   locked    a small COMPLETED run that is then submitted for review
+ */
+
+export interface SeedClient {
+  baseUrl: string;
+  /** Extra headers (none under QYM_AUTH_MODE=none). */
+  headers?: Record<string, string>;
+}
+
+export interface SeedRun {
+  runId: string;
+  token: string;
+  projectId: string;
+  slug: string;
+}
+
+export interface SeedResult {
+  slug: string;
+  projectId: string;
+  token: string;
+  runs: Record<string, string>;
+}
+
+function rng(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function uuid(random: () => number): string {
+  const hex = '0123456789abcdef';
+  let out = '';
+  for (let i = 0; i < 36; i++) {
+    if (i === 8 || i === 13 || i === 18 || i === 23) out += '-';
+    else if (i === 14) out += '4';
+    else if (i === 19) out += hex[8 + Math.floor(random() * 4)];
+    else out += hex[Math.floor(random() * 16)];
+  }
+  return out;
+}
+
+async function call<T>(
+  client: SeedClient,
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<T> {
+  const h: Record<string, string> = { ...(client.headers ?? {}), ...headers };
+  let payload: string | undefined;
+  if (body !== undefined) {
+    if (typeof body === 'string') payload = body;
+    else {
+      h['Content-Type'] = 'application/json';
+      payload = JSON.stringify(body);
+    }
+  }
+  const res = await fetch(`${client.baseUrl}${path}`, { method, headers: h, body: payload });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}: ${text.slice(0, 500)}`);
+  return (text ? JSON.parse(text) : null) as T;
+}
+
+export async function ensureProject(
+  client: SeedClient,
+  name: string,
+  slug: string,
+): Promise<{ id: string; slug: string }> {
+  // The dev SQLite database can answer 5xx ("database is locked") while other workers write:
+  // retry the create, and only look the project up by slug when it already exists (409).
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await call<{ id: string; slug: string }>(client, 'POST', '/v1/projects', { name, slug });
+    } catch (err) {
+      lastError = err;
+      if (String(err).includes('-> 409')) {
+        return call<{ id: string; slug: string }>(
+          client,
+          'GET',
+          `/v1/projects/by-slug/${encodeURIComponent(slug)}`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
+export async function createApiKey(client: SeedClient, projectId: string): Promise<string> {
+  const res = await call<{ token: string }>(client, 'POST', `/v1/projects/${projectId}/api-keys`, {
+    name: 'seed',
+  });
+  return res.token;
+}
+
+export class EventStream {
+  private seq = 0;
+  private lines: string[] = [];
+  private readonly random: () => number;
+  private readonly client: SeedClient;
+  private readonly token: string;
+  readonly runId: string;
+  constructor(client: SeedClient, token: string, runId: string, seed: number) {
+    this.client = client;
+    this.token = token;
+    this.runId = runId;
+    this.random = rng(seed);
+  }
+
+  push(type: string, payload: Record<string, unknown>): void {
+    this.seq += 1;
+    this.lines.push(
+      JSON.stringify({
+        schema_version: 1,
+        event_id: uuid(this.random),
+        sequence: this.seq,
+        sent_at: new Date(Date.UTC(2026, 9, 1, 12, 0, this.seq % 60)).toISOString(),
+        type,
+        run_id: this.runId,
+        payload,
+      }),
+    );
+  }
+
+  async flush(): Promise<void> {
+    while (this.lines.length) {
+      const batch = this.lines.splice(0, 400);
+      const res = await call<{ rejected: number; rejected_events?: unknown[] }>(
+        this.client,
+        'POST',
+        `/v1/runs/${this.runId}/events`,
+        batch.join('\n') + '\n',
+        { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/x-ndjson' },
+      );
+      if (res.rejected)
+        throw new Error(`events rejected: ${JSON.stringify(res.rejected_events).slice(0, 800)}`);
+    }
+  }
+}
+
+export async function createRun(
+  client: SeedClient,
+  token: string,
+  body: Record<string, unknown>,
+): Promise<string> {
+  const res = await call<{ run_id: string }>(client, 'POST', '/v1/runs', body, {
+    Authorization: `Bearer ${token}`,
+  });
+  return res.run_id;
+}
+
+const ARABIC_PROMPTS = [
+  'ما هي عاصمة المملكة العربية السعودية؟',
+  'اشرح الفرق بين التعلم الآلي والتعلم العميق باختصار.',
+  'لخص هذا النص في جملة واحدة: الذكاء الاصطناعي يغير طريقة عملنا.',
+];
+const DOMAINS = ['commerce', 'finance', 'support', 'analytics', 'operations'];
+const COMPLEXITIES = ['easy', 'medium', 'hard', 'expert'];
+
+export interface ClassicOptions {
+  items?: number;
+  taskErrors?: number;
+  scorerErrors?: number;
+  retries?: number;
+  notReceived?: number;
+  traced?: number;
+  complete?: boolean;
+  runName?: string;
+}
+
+const CLASSIC_SPECS = {
+  exact_match: { score_type: 'boolean', direction: 'maximize', pass_threshold: 1, schema_version: 2 },
+  quality: {
+    score_type: 'percentage',
+    direction: 'maximize',
+    pass_threshold: 0.7,
+    primary: true,
+    schema_version: 2,
+  },
+  hallucination: { score_type: 'percentage', direction: 'minimize', pass_threshold: 0.3, schema_version: 2 },
+  tokens_used: { score_type: 'count', schema_version: 2 },
+};
+
+function startedAt(i: number): string {
+  return new Date(Date.UTC(2026, 9, 1, 12, 0, 0) + i * 1500).toISOString();
+}
+
+/** Spans for one trace: AGENT root → RETRIEVER + CHAIN → LLM (+ TOOL), plus an eval-phase LLM span. */
+function pushTrace(
+  stream: EventStream,
+  traceId: string,
+  random: () => number,
+  opts: { error?: boolean; big?: boolean; model?: string; latency: number },
+): void {
+  const base = 1_700_000_000_000_000_000 + Math.floor(random() * 1e9);
+  const ms = 1_000_000;
+  const total = Math.max(50, opts.latency);
+  const span = (
+    id: string,
+    parent: string | null,
+    name: string,
+    kind: string,
+    startMs: number,
+    durMs: number,
+    attrs: Record<string, unknown>,
+    status = 'OK',
+    events: unknown[] = [],
+  ) =>
+    stream.push('span_completed', {
+      trace_id: traceId,
+      span_id: `${traceId}-${id}`,
+      parent_span_id: parent ? `${traceId}-${parent}` : null,
+      name,
+      kind: 'INTERNAL',
+      start_time_ns: base + startMs * ms,
+      end_time_ns: base + (startMs + durMs) * ms,
+      duration_ms: durMs,
+      status,
+      attributes: attrs,
+      events,
+      links: [],
+    });
+  const model = opts.model ?? 'gpt-5-mini';
+  span(
+    'root',
+    null,
+    'answer_question',
+    'AGENT',
+    0,
+    total,
+    {
+      'openinference.span.kind': 'AGENT',
+      'input.value': 'user question',
+      'output.value': opts.error ? '' : 'final answer',
+    },
+    opts.error ? 'ERROR' : 'OK',
+  );
+  span('ret', 'root', 'retrieve_docs', 'RETRIEVER', 2, Math.round(total * 0.2), {
+    'openinference.span.kind': 'RETRIEVER',
+    'input.value': 'user question',
+    'retrieval.documents.0.document.content': 'Riyadh is the capital of Saudi Arabia.',
+    'retrieval.documents.0.document.score': 0.91,
+    'retrieval.documents.0.document.metadata': JSON.stringify({ source: 'wiki', page: 3 }),
+    'retrieval.documents.1.document.content': 'Jeddah is a port city on the Red Sea.',
+    'retrieval.documents.1.document.score': 0.42,
+  });
+  const chainStart = Math.round(total * 0.22);
+  span('chain', 'root', 'RunnableSequence', 'CHAIN', chainStart, Math.round(total * 0.7), {
+    'openinference.span.kind': 'CHAIN',
+  });
+  const llmDur = Math.round(total * 0.55);
+  const inputMessages: Record<string, unknown> = {
+    'llm.input_messages.0.message.role': 'system',
+    'llm.input_messages.0.message.content': 'You are a careful assistant. Answer briefly.',
+    'llm.input_messages.1.message.role': 'user',
+    'llm.input_messages.1.message.content': opts.big
+      ? 'Explain. '.repeat(4000)
+      : 'What is the capital of Saudi Arabia?',
+  };
+  span(
+    'llm',
+    'chain',
+    'ChatOpenAI',
+    'LLM',
+    chainStart + 4,
+    llmDur,
+    {
+      'openinference.span.kind': 'LLM',
+      'llm.model_name': model,
+      'llm.token_count.prompt': 120 + Math.floor(random() * 200),
+      'llm.token_count.completion': 40 + Math.floor(random() * 120),
+      'llm.token_count.total': 300,
+      'llm.cost.total': 0.0012,
+      ...inputMessages,
+      'llm.output_messages.0.message.role': 'assistant',
+      'llm.output_messages.0.message.content': opts.error ? '' : 'The capital of Saudi Arabia is Riyadh.',
+      'llm.output_messages.0.message.tool_calls.0.tool_call.function.name': 'lookup',
+      'llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments': '{"q":"capital"}',
+    },
+    opts.error ? 'ERROR' : 'OK',
+    opts.error
+      ? [
+          {
+            name: 'exception',
+            attributes: {
+              'exception.type': 'RateLimitError',
+              'exception.message': 'Rate limit exceeded (429)',
+            },
+          },
+        ]
+      : [],
+  );
+  span('tool', 'chain', 'lookup', 'TOOL', chainStart + 4 + llmDur + 2, Math.round(total * 0.1), {
+    'openinference.span.kind': 'TOOL',
+    'tool.name': 'lookup',
+    'input.value': '{"q":"capital"}',
+    'output.value': '{"answer":"Riyadh"}',
+  });
+  span('guard', 'root', 'pii_guard', 'GUARDRAIL', total - 8, 6, {
+    'openinference.span.kind': 'GUARDRAIL',
+    'output.value': 'clean',
+  });
+  // eval phase
+  span('eval', null, 'eval_metrics', 'CHAIN', total + 5, 180, {
+    'openinference.span.kind': 'CHAIN',
+    'qym.usage_scope': 'metric',
+  });
+  span('judge', 'eval', 'judge_quality', 'LLM', total + 10, 160, {
+    'openinference.span.kind': 'LLM',
+    'llm.model_name': 'gpt-5',
+    'llm.token_count.total': 500,
+    'qym.usage_scope': 'metric',
+    'llm.input_messages.0.message.role': 'user',
+    'llm.input_messages.0.message.content': 'Grade the answer.',
+    'llm.output_messages.0.message.role': 'assistant',
+    'llm.output_messages.0.message.content': '{"score": 0.8}',
+  });
+}
+
+export async function seedClassicRun(
+  client: SeedClient,
+  token: string,
+  opts: ClassicOptions = {},
+): Promise<string> {
+  const n = opts.items ?? 240;
+  const random = rng(42);
+  const runId = await createRun(client, token, {
+    task: 'rag_answer',
+    dataset: 'qa-arabic-v3',
+    model: 'openai/gpt-5-mini',
+    metrics: Object.keys(CLASSIC_SPECS),
+    metric_specs: CLASSIC_SPECS,
+    run_metadata: {
+      run_name: opts.runName ?? 'classic-rag-eval',
+      langfuse_url: 'https://langfuse.example/project/proj-123/traces',
+      git_branch: 'main',
+      git_commit: 'abc1234',
+      environment: 'staging',
+      prompt_version: 'v7',
+    },
+    run_config: {
+      temperature: 0.2,
+      max_tokens: 512,
+      retriever: { top_k: 4, index: 'qa-v3' },
+      git_branch: 'main',
+      git_commit: 'abc1234',
+    },
+    versioning_details: { prompt: 'v7', retriever_index: 'qa-v3', model_tag: '2026-09' },
+  });
+  const stream = new EventStream(client, token, runId, 7);
+  stream.push('run_started', {
+    task: 'rag_answer',
+    dataset: 'qa-arabic-v3',
+    model: 'openai/gpt-5-mini',
+    metrics: Object.keys(CLASSIC_SPECS),
+    metric_specs: CLASSIC_SPECS,
+    total_items: n,
+    started_at: startedAt(0),
+    run_metadata: { run_name: opts.runName ?? 'classic-rag-eval' },
+    run_config: {
+      temperature: 0.2,
+      max_tokens: 512,
+      retriever: { top_k: 4, index: 'qa-v3' },
+      git_branch: 'main',
+      git_commit: 'abc1234',
+    },
+  });
+  const taskErrors = new Set<number>();
+  const scorerErrors = new Set<number>();
+  const retried = new Set<number>();
+  const notReceived = new Set<number>();
+  const traced = new Set<number>();
+  for (let i = 0; i < (opts.taskErrors ?? 12); i++) taskErrors.add(7 + i * 19);
+  for (let i = 0; i < (opts.scorerErrors ?? 8); i++) scorerErrors.add(11 + i * 23);
+  for (let i = 0; i < (opts.retries ?? 6); i++) retried.add(5 + i * 31);
+  for (let i = 0; i < (opts.notReceived ?? 3); i++) notReceived.add(n - 1 - i);
+  for (let i = 0; i < (opts.traced ?? 40); i++) traced.add(i * 3);
+
+  for (let i = 0; i < n; i++) {
+    const id = `item-${String(i + 1).padStart(4, '0')}`;
+    const arabic = i % 7 === 0;
+    const input = arabic
+      ? ARABIC_PROMPTS[i % ARABIC_PROMPTS.length]
+      : `Question ${i + 1}: what does clause ${i % 13} of the ${DOMAINS[i % 5]} policy require?`;
+    const domain = DOMAINS[i % 5];
+    const complexity = COMPLEXITIES[Math.floor(random() * 4)];
+    stream.push('item_started', {
+      item_id: id,
+      index: i,
+      input: i % 11 === 0 ? { prompt: input, context: ['doc-a', 'doc-b'] } : input,
+      expected: arabic ? 'الرياض' : `Clause ${i % 13} requires written approval.`,
+      item_metadata: { domain, complexity, source: i % 2 ? 'synthetic' : 'human' },
+    });
+    if (notReceived.has(i)) continue;
+    const latency = Math.round(300 + random() * 2500 + (complexity === 'expert' ? 1500 : 0));
+    const traceId = traced.has(i) || taskErrors.has(i) || retried.has(i) ? `trace-${id}` : undefined;
+    const startedMs = Date.UTC(2026, 9, 1, 12, 0, 0) + i * 1500;
+    if (retried.has(i)) {
+      stream.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        attempt_number: 1,
+        trace_id: `${traceId}-a1`,
+        task_started_at_ms: startedMs,
+      });
+      pushTrace(stream, `${traceId}-a1`, random, { error: true, latency: 400 });
+      stream.push('item_attempt_finished', {
+        item_id: id,
+        index: i,
+        attempt_number: 1,
+        status: 'failed',
+        latency_ms: 400,
+        trace_id: `${traceId}-a1`,
+        error: 'RateLimitError: 429 Too Many Requests',
+        is_last_attempt: false,
+      });
+      stream.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        attempt_number: 2,
+        trace_id: traceId,
+        task_started_at_ms: startedMs + 500,
+      });
+    } else if (traceId) {
+      stream.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        attempt_number: 1,
+        trace_id: traceId,
+        task_started_at_ms: startedMs,
+      });
+    }
+    if (traceId)
+      pushTrace(stream, traceId, random, {
+        error: taskErrors.has(i),
+        big: i === 3,
+        latency,
+        model: i % 4 === 0 ? 'gpt-5' : 'gpt-5-mini',
+      });
+    if (taskErrors.has(i)) {
+      stream.push('item_failed', {
+        item_id: id,
+        index: i,
+        error:
+          i % 2 ? 'TimeoutError: task exceeded 30s' : 'RateLimitError: 429 Too Many Requests from provider',
+        latency_ms: latency,
+        trace_id: traceId,
+        trace_url: traceId ? `https://langfuse.example/project/proj-123/traces/${traceId}` : undefined,
+        task_started_at_ms: startedMs,
+        retry_count: retried.has(i) ? 1 : 0,
+      });
+      continue;
+    }
+    const quality = Math.min(
+      1,
+      Math.max(
+        0,
+        0.55 + (complexity === 'easy' ? 0.3 : complexity === 'expert' ? -0.25 : 0) + (random() - 0.5) * 0.5,
+      ),
+    );
+    const exact = quality > 0.75 ? 1 : 0;
+    const halluc = Math.max(0, Math.min(1, 1 - quality + (random() - 0.5) * 0.3));
+    const tokens = 80 + Math.round(random() * 900);
+    const passed = quality >= 0.7;
+    const output =
+      i === 3
+        ? '# Long answer\n\n' + 'The capital is Riyadh. '.repeat(3000)
+        : arabic
+          ? 'عاصمة المملكة العربية السعودية هي الرياض.'
+          : passed
+            ? `Clause ${i % 13} requires written approval from the ${domain} lead.\n\n**Source:** policy handbook §${i % 13}`
+            : `I am not sure about clause ${i % 13}.`;
+    stream.push('metric_scored', {
+      item_id: id,
+      metric_name: 'exact_match',
+      score_numeric: exact,
+      score_raw: exact === 1,
+      meta: { reason: exact ? '' : 'Expected answer not found verbatim' },
+    });
+    if (scorerErrors.has(i)) {
+      stream.push('metric_scored', {
+        item_id: id,
+        metric_name: 'quality',
+        score_numeric: 0,
+        meta: { status: 'error', error: 'JudgeError: judge returned malformed JSON' },
+      });
+    } else {
+      stream.push('metric_scored', {
+        item_id: id,
+        metric_name: 'quality',
+        score_numeric: Number(quality.toFixed(3)),
+        label: passed ? 'pass' : 'fail',
+        explanation: passed
+          ? 'The answer cites the right clause and is concise.'
+          : 'The answer hedges and does not name the clause requirement.',
+        meta: {
+          judge_model: 'gpt-5',
+          reason: passed ? '' : 'Missing the approval requirement',
+          confidence: Number((0.6 + random() * 0.4).toFixed(2)),
+        },
+      });
+    }
+    stream.push('metric_scored', {
+      item_id: id,
+      metric_name: 'hallucination',
+      score_numeric: Number(halluc.toFixed(3)),
+      meta: { judge_model: 'gpt-5' },
+    });
+    stream.push('metric_scored', {
+      item_id: id,
+      metric_name: 'tokens_used',
+      score_numeric: tokens,
+      meta: {},
+    });
+    stream.push('item_completed', {
+      item_id: id,
+      index: i,
+      output: i % 17 === 0 ? { answer: output, citations: [{ doc: 'handbook', page: i % 13 }] } : output,
+      latency_ms: latency,
+      trace_id: traceId,
+      trace_url: traceId ? `https://langfuse.example/project/proj-123/traces/${traceId}` : undefined,
+      task_started_at_ms: startedMs,
+      retry_count: retried.has(i) ? 1 : 0,
+      item_metadata: { domain, complexity },
+    });
+  }
+  if (opts.complete !== false) {
+    stream.push('run_completed', {
+      ended_at: startedAt(n + 2),
+      final_status: 'COMPLETED',
+      summary: { total_items: n },
+    });
+  }
+  await stream.flush();
+  return runId;
+}
+
+export async function seedRepeatRun(
+  client: SeedClient,
+  token: string,
+  opts: { items?: number; samples?: number } = {},
+): Promise<string> {
+  const n = opts.items ?? 60;
+  const samples = opts.samples ?? 3;
+  const random = rng(99);
+  const specs = {
+    correct: {
+      score_type: 'boolean',
+      direction: 'maximize',
+      pass_threshold: 1,
+      primary: true,
+      schema_version: 2,
+    },
+    quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+  };
+  const runId = await createRun(client, token, {
+    task: 'sql_agent',
+    dataset: 'text2sql-small',
+    model: 'anthropic/claude-sonnet-4',
+    metrics: Object.keys(specs),
+    metric_specs: specs,
+    run_metadata: { run_name: 'repeat-sql-eval' },
+    run_config: { samples, temperature: 0.7 },
+  });
+  const stream = new EventStream(client, token, runId, 3);
+  stream.push('run_started', {
+    task: 'sql_agent',
+    dataset: 'text2sql-small',
+    model: 'anthropic/claude-sonnet-4',
+    metrics: Object.keys(specs),
+    metric_specs: specs,
+    total_items: n,
+    started_at: startedAt(0),
+    run_config: { samples },
+  });
+  for (let p = 1; p <= samples; p++) {
+    for (let i = 0; i < n; i++) {
+      const id = `sql-${String(i + 1).padStart(3, '0')}`;
+      stream.push('item_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        input: `List the top ${i + 1} customers by revenue in region ${i % 4}`,
+        expected: `SELECT name FROM customers WHERE region = ${i % 4} ORDER BY revenue DESC LIMIT ${i + 1}`,
+        item_metadata: { domain: DOMAINS[i % 5], complexity: COMPLEXITIES[i % 4] },
+      });
+      const traceId = `trace-${id}-p${p}`;
+      const latency = Math.round(500 + random() * 3000);
+      stream.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        attempt_number: 1,
+        trace_id: traceId,
+        task_started_at_ms: Date.UTC(2026, 9, 2, 9, 0, 0) + (p * n + i) * 1000,
+      });
+      if (i % 3 === 0)
+        pushTrace(stream, traceId, random, {
+          latency,
+          model: 'claude-sonnet-4',
+          error: i % 17 === 0 && p === 2,
+        });
+      if (i % 17 === 0 && p === 2) {
+        stream.push('item_failed', {
+          item_id: id,
+          index: i,
+          pass_number: p,
+          error: 'DatabaseError: relation "customers" does not exist',
+          latency_ms: latency,
+          trace_id: traceId,
+        });
+        continue;
+      }
+      const stable = i % 5 !== 0;
+      const correct = stable ? (i % 4 === 0 ? 0 : 1) : random() > 0.5 ? 1 : 0;
+      const quality = Math.min(1, Math.max(0, (correct ? 0.8 : 0.4) + (random() - 0.5) * 0.3));
+      stream.push('metric_scored', {
+        item_id: id,
+        pass_number: p,
+        metric_name: 'correct',
+        score_numeric: correct,
+        score_raw: correct === 1,
+        meta: { reason: correct ? '' : 'Wrong ORDER BY column' },
+      });
+      stream.push('metric_scored', {
+        item_id: id,
+        pass_number: p,
+        metric_name: 'quality',
+        score_numeric: Number(quality.toFixed(3)),
+        meta: { judge_model: 'gpt-5' },
+      });
+      stream.push('item_completed', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        is_final_pass: p === samples,
+        output: `SELECT name FROM customers WHERE region = ${i % 4} ORDER BY ${correct ? 'revenue' : 'name'} DESC LIMIT ${i + 1}${p === 3 && !stable ? ' -- variant' : ''}`,
+        latency_ms: latency,
+        trace_id: traceId,
+      });
+    }
+    stream.push('pass_completed', { pass_number: p, samples });
+  }
+  stream.push('run_completed', { ended_at: startedAt(n * samples + 2), final_status: 'COMPLETED' });
+  await stream.flush();
+  return runId;
+}
+
+const AR_PROMPTS = [
+  'اشرح بالتفصيل الفرق بين التعلم الآلي والتعلم العميق مع ذكر أمثلة عملية من قطاع المصارف والتأمين في المملكة العربية السعودية، وبيّن كيف يمكن للمؤسسات المالية الاستفادة منهما في كشف الاحتيال وتحسين تجربة العملاء.',
+  'لخص النص التالي في جملتين: يشهد قطاع التقنية المالية في المملكة نمواً متسارعاً مدفوعاً برؤية 2030 ودعم البنك المركزي للابتكار.',
+  'ما هي شروط الحصول على تمويل عقاري وفق الضوابط الحالية؟ اذكر المستندات المطلوبة والحد الأقصى لنسبة الاستقطاع.',
+  'اكتب استعلام SQL لإيجاد أعلى عشرة عملاء من حيث إجمالي المشتريات خلال الربع الأخير.',
+];
+
+/**
+ * arabic multi-pass JSON run: 12 items x 3 passes, Arabic prose, JSON inputs every third item,
+ * JSON outputs (answer / reasoning / citations / confidence / sql / followups), a trace per pass.
+ */
+export async function seedArabicRepeatRun(client: SeedClient, token: string): Promise<string> {
+  const n = 12;
+  const samples = 3;
+  const random = rng(5);
+  const specs = {
+    correct: {
+      score_type: 'boolean',
+      direction: 'maximize',
+      pass_threshold: 1,
+      primary: true,
+      schema_version: 2,
+    },
+    quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+  };
+  const metrics = Object.keys(specs);
+  const runId = await createRun(client, token, {
+    task: 'arabic_assistant',
+    dataset: 'ar-finance-qa',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    run_metadata: { run_name: 'arabic-multipass-json' },
+    run_config: { samples, temperature: 0.7 },
+  });
+  const s = new EventStream(client, token, runId, 21);
+  s.push('run_started', {
+    task: 'arabic_assistant',
+    dataset: 'ar-finance-qa',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    total_items: n,
+    started_at: new Date(Date.UTC(2026, 9, 3, 9)).toISOString(),
+    run_config: { samples },
+  });
+  for (let p = 1; p <= samples; p++) {
+    for (let i = 0; i < n; i++) {
+      const id = `ar-${String(i + 1).padStart(3, '0')}`;
+      s.push('item_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        input:
+          i % 3 === 0
+            ? {
+                question: AR_PROMPTS[i % 4],
+                context: ['وثيقة السياسة المالية', 'دليل المنتجات المصرفية'],
+                lang: 'ar',
+              }
+            : AR_PROMPTS[i % 4],
+        expected:
+          i % 3 === 0 ? { answer: 'التعلم العميق فرع من التعلم الآلي', topics: ['ml', 'dl'] } : 'الرياض',
+        item_metadata: {
+          domain: ['finance', 'support', 'legal'][i % 3],
+          complexity: ['easy', 'hard'][i % 2],
+          lang: 'ar',
+        },
+      });
+      const traceId = `trace-${id}-p${p}`;
+      const latency = Math.round(700 + random() * 2800);
+      s.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        attempt_number: 1,
+        trace_id: traceId,
+        task_started_at_ms: Date.UTC(2026, 9, 3, 9) + (p * n + i) * 1000,
+      });
+      pushTrace(s, traceId, random, { latency, model: 'gpt-5-mini' });
+      const correct = (i + p) % 3 === 0 ? 0 : 1;
+      s.push('metric_scored', {
+        item_id: id,
+        pass_number: p,
+        metric_name: 'correct',
+        score_numeric: correct,
+        score_raw: correct === 1,
+        meta: { reason: correct ? '' : 'الإجابة لا تذكر المستندات المطلوبة' },
+      });
+      s.push('metric_scored', {
+        item_id: id,
+        pass_number: p,
+        metric_name: 'quality',
+        score_numeric: correct ? 0.82 : 0.41,
+        label: correct ? 'pass' : 'fail',
+        explanation: correct
+          ? 'إجابة دقيقة ومنظمة وتغطي جميع النقاط المطلوبة.'
+          : 'الإجابة عامة ولا تتضمن أمثلة عملية.',
+        meta: { judge_model: 'gpt-5', confidence: 0.8 },
+      });
+      s.push('item_completed', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        is_final_pass: p === samples,
+        output: {
+          answer: `الإجابة رقم ${p}: ${AR_PROMPTS[(i + p) % 4].slice(0, 60)} ... التعلم العميق يستخدم الشبكات العصبية متعددة الطبقات.`,
+          reasoning: 'قمت بتحليل السؤال ثم استرجعت المستندات ذات الصلة وصغت الإجابة اعتماداً عليها.',
+          citations: [
+            { doc: 'policy-2026', page: i + 1, score: 0.91 },
+            { doc: 'products-guide', page: 4, score: 0.62 },
+          ],
+          confidence: 0.7 + p / 20,
+          sql: 'SELECT name, SUM(total) FROM orders GROUP BY name ORDER BY 2 DESC LIMIT 10',
+          followups: ['هل تريد التفاصيل؟', 'هل تحتاج مثالاً؟'],
+        },
+        latency_ms: latency,
+        trace_id: traceId,
+      });
+    }
+    s.push('pass_completed', { pass_number: p, samples });
+  }
+  s.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 3, 10)).toISOString(),
+    final_status: 'COMPLETED',
+  });
+  await s.flush();
+  return runId;
+}
+
+/**
+ * Round 3 wide repeat run: 10 passes x 24 items x 24 metrics (one boolean "correct" plus 23 percentage rubric
+ * metrics), Arabic and English items, JSON outputs with nested objects and lists, run metadata and config.
+ * Mirrors docs/internal/ui-migration/redesign3/seed-wide-repeat.mts. About 6,500 events.
+ */
+export async function seedWideRepeatRun(client: SeedClient, token: string): Promise<string> {
+  const specs: Record<string, Record<string, unknown>> = {
+    correct: {
+      score_type: 'boolean',
+      direction: 'maximize',
+      pass_threshold: 1,
+      primary: true,
+      schema_version: 2,
+    },
+  };
+  for (let m = 1; m <= 23; m++)
+    specs[`rubric_metric_${String(m).padStart(2, '0')}`] = {
+      score_type: 'percentage',
+      direction: 'maximize',
+      pass_threshold: 0.7,
+      schema_version: 2,
+    };
+  const metrics = Object.keys(specs);
+  const samples = 10;
+  const n = 24;
+  const random = rng(77);
+  const runId = await createRun(client, token, {
+    task: 'big_repeat',
+    dataset: 'ar-big',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    run_metadata: {
+      run_name: 'repeat-10-passes-24-metrics',
+      owner: 'meshari',
+      git_sha: 'a1b2c3d',
+      prompt_version: 'v7',
+    },
+    run_config: { samples, temperature: 0.7, max_tokens: 512 },
+  });
+  const s = new EventStream(client, token, runId, 77);
+  s.push('run_started', {
+    task: 'big_repeat',
+    dataset: 'ar-big',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    total_items: n,
+    started_at: new Date(Date.UTC(2026, 9, 4, 9)).toISOString(),
+    run_config: { samples },
+  });
+  for (let p = 1; p <= samples; p++) {
+    for (let i = 0; i < n; i++) {
+      const id = `big-${String(i + 1).padStart(3, '0')}`;
+      s.push('item_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        input:
+          i % 2
+            ? 'ما هي شروط الحصول على تمويل عقاري وفق الضوابط الحالية؟'
+            : `Question ${i}: summarise clause ${i}`,
+        expected: i % 2 ? 'تمويل بشروط' : `Clause ${i} requires approval`,
+        item_metadata: {
+          domain: ['finance', 'support', 'legal'][i % 3],
+          complexity: ['easy', 'hard'][i % 2],
+        },
+      });
+      s.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        attempt_number: 1,
+        trace_id: `t-${id}-${p}`,
+        task_started_at_ms: Date.UTC(2026, 9, 4, 9) + (p * n + i) * 1000,
+      });
+      const ok = random() > 0.35 + (i % 5) * 0.05 ? 1 : 0;
+      for (const name of metrics) {
+        const v =
+          name === 'correct' ? ok : Math.min(1, Math.max(0, (ok ? 0.8 : 0.4) + (random() - 0.5) * 0.4));
+        s.push('metric_scored', {
+          item_id: id,
+          pass_number: p,
+          metric_name: name,
+          score_numeric: Number(v.toFixed(3)),
+          ...(name === 'correct' ? { score_raw: ok === 1 } : {}),
+          meta:
+            name === 'rubric_metric_01'
+              ? { reason: 'يغطي معظم النقاط', judge_model: 'gpt-5', confidence: 0.7 }
+              : {},
+        });
+      }
+      s.push('item_completed', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        is_final_pass: p === samples,
+        output: {
+          answer: i % 2 ? `الإجابة ${p}: التمويل العقاري يتطلب مستندات` : `Answer ${p} for ${i}`,
+          reasoning: i % 2 ? 'حللت السؤال ثم استرجعت المستندات' : 'Looked up the clause then summarised it.',
+          citations: [
+            { doc: 'policy', page: i + 1, score: 0.9 },
+            { doc: 'guide', page: 4, score: 0.6 },
+          ],
+          meta: { nested: { a: [1, 2, { b: 'deep' }], c: { d: 'e' } }, tags: ['x', 'y'] },
+          confidence: 0.7,
+        },
+        latency_ms: 800 + Math.round(random() * 2000),
+        trace_id: `t-${id}-${p}`,
+      });
+    }
+    s.push('pass_completed', { pass_number: p, samples });
+  }
+  s.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 4, 10)).toISOString(),
+    final_status: 'COMPLETED',
+  });
+  await s.flush();
+  return runId;
+}
+
+/** 300 items whose metadata has many categories: topic 24, team 14, region 9, customer_tier 6, complexity 4. */
+export async function seedManyCategories(client: SeedClient, token: string): Promise<string> {
+  const specs = {
+    quality: {
+      score_type: 'percentage',
+      direction: 'maximize',
+      pass_threshold: 0.7,
+      primary: true,
+      schema_version: 2,
+    },
+  };
+  const r = rng(8);
+  const runId = await createRun(client, token, {
+    task: 'support_bot',
+    dataset: 'tickets-v9',
+    model: 'openai/gpt-5-mini',
+    metrics: ['quality'],
+    metric_specs: specs,
+    run_metadata: { run_name: 'many-categories' },
+  });
+  const s = new EventStream(client, token, runId, 31);
+  s.push('run_started', {
+    task: 'support_bot',
+    dataset: 'tickets-v9',
+    model: 'openai/gpt-5-mini',
+    metrics: ['quality'],
+    metric_specs: specs,
+    total_items: 300,
+    started_at: new Date(Date.UTC(2026, 9, 4, 9)).toISOString(),
+  });
+  const topics = Array.from({ length: 24 }, (_, i) => `topic-${String.fromCharCode(97 + i)}`);
+  const teams = Array.from({ length: 14 }, (_, i) => `team-${i + 1}`);
+  const regions = ['riyadh', 'jeddah', 'dammam', 'makkah', 'madinah', 'tabuk', 'abha', 'hail', 'jazan'];
+  const tiers = ['free', 'basic', 'plus', 'pro', 'business', 'enterprise'];
+  for (let i = 0; i < 300; i++) {
+    const id = `t-${String(i + 1).padStart(4, '0')}`;
+    s.push('item_started', {
+      item_id: id,
+      index: i,
+      input: `Ticket ${i + 1}`,
+      expected: 'resolved',
+      item_metadata: {
+        topic: topics[i % 24],
+        team: teams[(i * 7) % 14],
+        region: regions[i % 9],
+        customer_tier: tiers[i % 6],
+        complexity: ['easy', 'medium', 'hard', 'expert'][i % 4],
+      },
+    });
+    s.push('metric_scored', {
+      item_id: id,
+      metric_name: 'quality',
+      score_numeric: Number(Math.min(1, Math.max(0, 0.45 + (i % 24) / 60 + (r() - 0.5) * 0.4)).toFixed(3)),
+      meta: {},
+    });
+    s.push('item_completed', {
+      item_id: id,
+      index: i,
+      output: `Answer ${i}`,
+      latency_ms: 300 + Math.round(r() * 2000),
+    });
+  }
+  s.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 4, 10)).toISOString(),
+    final_status: 'COMPLETED',
+  });
+  await s.flush();
+  return runId;
+}
+
+/** A RUNNING run: `items` completed, no run_completed. Returns the stream so a test can push more. */
+export async function seedRunningRun(
+  client: SeedClient,
+  token: string,
+  items = 30,
+): Promise<{ runId: string; stream: EventStream; next: number }> {
+  const specs = {
+    quality: {
+      score_type: 'percentage',
+      direction: 'maximize',
+      pass_threshold: 0.7,
+      primary: true,
+      schema_version: 2,
+    },
+  };
+  const runId = await createRun(client, token, {
+    task: 'rag_answer',
+    dataset: 'qa-arabic-v3',
+    model: 'openai/gpt-5-mini',
+    metrics: ['quality'],
+    metric_specs: specs,
+    run_metadata: { run_name: 'live-rag-eval' },
+  });
+  const stream = new EventStream(client, token, runId, 11);
+  stream.push('run_started', {
+    task: 'rag_answer',
+    dataset: 'qa-arabic-v3',
+    model: 'openai/gpt-5-mini',
+    metrics: ['quality'],
+    metric_specs: specs,
+    total_items: 50,
+    started_at: new Date().toISOString(),
+  });
+  for (let i = 0; i < items; i++) pushLiveItem(stream, i);
+  await stream.flush();
+  return { runId, stream, next: items };
+}
+
+export function pushLiveItem(stream: EventStream, i: number): void {
+  const id = `live-${String(i + 1).padStart(3, '0')}`;
+  stream.push('item_started', { item_id: id, index: i, input: `Live question ${i + 1}`, expected: 'yes' });
+  stream.push('metric_scored', {
+    item_id: id,
+    metric_name: 'quality',
+    score_numeric: i % 3 === 0 ? 0.4 : 0.9,
+    meta: {},
+  });
+  stream.push('item_completed', {
+    item_id: id,
+    index: i,
+    output: `Live answer ${i + 1}`,
+    latency_ms: 400 + i * 10,
+  });
+}
+
+export async function completeRun(stream: EventStream): Promise<void> {
+  stream.push('run_completed', { ended_at: new Date().toISOString(), final_status: 'COMPLETED' });
+  await stream.flush();
+}
+
+export async function submitRun(client: SeedClient, runId: string): Promise<void> {
+  await call(client, 'POST', `/v1/runs/${encodeURIComponent(runId)}/submit`, {});
+}
+
+/** Seed every scenario into one project; idempotent per slug (new runs each call). */
+export async function seedAll(client: SeedClient, slug = 'rd-seed'): Promise<SeedResult> {
+  const project = await ensureProject(client, 'Run detail seed', slug);
+  const token = await createApiKey(client, project.id);
+  const classic = await seedClassicRun(client, token);
+  const repeat = await seedRepeatRun(client, token);
+  const running = await seedRunningRun(client, token);
+  const arabic = await seedArabicRepeatRun(client, token);
+  const categories = await seedManyCategories(client, token);
+  const locked = await seedClassicRun(client, token, {
+    items: 12,
+    taskErrors: 1,
+    scorerErrors: 1,
+    retries: 0,
+    notReceived: 0,
+    traced: 2,
+    runName: 'locked-small',
+  });
+  await submitRun(client, locked);
+  return {
+    slug: project.slug,
+    projectId: project.id,
+    token,
+    runs: { classic, repeat, running: running.runId, locked, arabic, categories },
+  };
+}
+
+/** Round 5 (docs/internal/ui-migration/redesign5/seed-r5.mts): 86 items, one pass; `quality` fills all 11 buckets; long judge metadata. */
+export async function seedR5DetailsRun(client: SeedClient, t: string): Promise<string> {
+  let seed = 11;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+
+  // ---- details run -------------------------------------------------------------------------------------------------
+  const specs: Record<string, unknown> = {
+    quality: {
+      score_type: 'percentage',
+      direction: 'maximize',
+      pass_threshold: 0.7,
+      schema_version: 2,
+      primary: true,
+    },
+    faithfulness: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+    correct: { score_type: 'boolean', direction: 'maximize', pass_threshold: 1, schema_version: 2 },
+    rubric_judge: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+    arabic_judge: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+    tokens_used: { score_type: 'count', schema_version: 2 },
+  };
+  const metrics = Object.keys(specs);
+  // bucket counts for `quality`: index 0..10 (0%..100%)
+  const bucketCounts = [2, 3, 5, 4, 6, 7, 9, 22, 14, 8, 6];
+  const qualityScores: number[] = [];
+  bucketCounts.forEach((c, b) => {
+    for (let k = 0; k < c; k++)
+      qualityScores.push(Math.min(1, b / 10 + (b === 10 ? 0 : 0.02 + (k % 3) * 0.02)));
+  });
+  const n = qualityScores.length;
+  const runId = await createRun(client, t, {
+    task: 'support_agent',
+    dataset: 'r5-details',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    run_metadata: { run_name: 'r5-metric-details', owner: 'meshari' },
+    run_config: { temperature: 0.2 },
+  });
+  const st = new EventStream(client, t, runId, 501);
+  st.push('run_started', {
+    task: 'support_agent',
+    dataset: 'r5-details',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    total_items: n,
+    started_at: new Date(Date.UTC(2026, 9, 4, 9)).toISOString(),
+    run_config: {},
+  });
+  const longReasoning =
+    'The answer identifies the correct policy (clause 4.2) and quotes the approval threshold, but it never mentions the exception for existing customers that the reference answer calls out. The tone is appropriate and the length is acceptable. Two of the three required steps are present; the escalation step is missing, which lowers the score from 0.9 to the value reported here. A reviewer should check whether the exception applies to this customer segment before trusting the result.';
+  for (let i = 0; i < n; i++) {
+    const id = `r5-${String(i + 1).padStart(3, '0')}`;
+    const ar = i % 3 === 1;
+    st.push('item_started', {
+      item_id: id,
+      index: i,
+      input: ar
+        ? 'ما هي شروط الحصول على تمويل عقاري وفق الضوابط الحالية؟'
+        : `Question ${i}: summarise clause ${i} of the policy`,
+      expected: ar ? 'تمويل بشروط' : `Clause ${i} requires approval`,
+      item_metadata: { domain: ['finance', 'support', 'legal'][i % 3], complexity: ['easy', 'hard'][i % 2] },
+    });
+    st.push('item_attempt_started', {
+      item_id: id,
+      index: i,
+      attempt_number: 1,
+      trace_id: `t-${id}`,
+      task_started_at_ms: Date.UTC(2026, 9, 4, 9) + i * 1000,
+    });
+    const q = qualityScores[i]!;
+    const scores: Record<string, number> = {
+      quality: q,
+      faithfulness: Math.min(1, Math.max(0, q + (rnd() - 0.5) * 0.3)),
+      correct: q >= 0.6 ? 1 : 0,
+      rubric_judge: Math.min(1, Math.max(0, q + (rnd() - 0.5) * 0.2)),
+      arabic_judge: Math.min(1, Math.max(0, q + (rnd() - 0.5) * 0.2)),
+      tokens_used: 300 + Math.round(rnd() * 900),
+    };
+    const meta: Record<string, Record<string, unknown>> = {
+      quality: {
+        reason: 'Covers most of the required points and cites the right policy.',
+        judge_model: 'gpt-5',
+        confidence: 0.82,
+      },
+      faithfulness: { reason: 'Every claim is supported by the retrieved passages.', unsupported_claims: 0 },
+      correct: { reason: 'The final answer matches the reference.' },
+      rubric_judge: {
+        reasoning: longReasoning,
+        detailed_reasoning_trace:
+          'Step 1 matched the question to clause 4.2. Step 2 compared the quoted threshold with the reference. Step 3 looked for the exception and did not find it.',
+        self_consistency_check_result:
+          'Three of three re-scored samples agree within 0.05, so the judge was stable on this item.',
+        judge_model: 'gpt-5',
+        confidence: 0.74,
+        latency_ms: 2140,
+        temperature: 0.2,
+        criteria: [
+          { criterion: 'Cites the governing policy', weight: 0.3, score: 1, note: 'Clause 4.2 quoted' },
+          { criterion: 'States the approval threshold', weight: 0.25, score: 1, note: 'SAR 50,000' },
+          { criterion: 'Mentions the existing-customer exception', weight: 0.25, score: 0, note: 'Missing' },
+          {
+            criterion: 'Escalation step is present',
+            weight: 0.2,
+            score: 0.5,
+            note: 'Mentioned without an owner',
+          },
+        ],
+        evidence: [
+          {
+            doc: 'policy-handbook.pdf',
+            page: 12,
+            quote: 'Approvals above SAR 50,000 require a second reviewer.',
+            relevance: 0.93,
+          },
+          { doc: 'faq.md', page: 3, quote: 'Existing customers follow the fast track.', relevance: 0.61 },
+          {
+            doc: 'guide.pdf',
+            page: 7,
+            quote: 'Escalate to the regional owner within two days.',
+            relevance: 0.48,
+          },
+        ],
+        breakdown: {
+          retrieval: { precision: 0.8, recall: 0.6, notes: ['one miss', 'one extra'] },
+          generation: { fluency: 0.95, tone: 'neutral' },
+        },
+        flags: ['missing_exception', 'no_owner'],
+        log_table: Array.from({ length: 14 }, (_, k) => ({
+          step: `step_${k + 1}`,
+          tool: ['search', 'rerank', 'read'][k % 3],
+          ms: 120 + k * 17,
+          ok: k % 5 !== 4,
+        })),
+        score_table: {
+          columns: ['criterion', 'weight', 'score', 'note'],
+          rows: [
+            ['Cites the governing policy', 0.3, 1, 'Clause 4.2 quoted'],
+            ['States the approval threshold', 0.25, 1, 'SAR 50,000'],
+            ['Mentions the existing-customer exception', 0.25, 0, 'Missing'],
+            ['Escalation step is present', 0.2, 0.5, 'Mentioned without an owner'],
+          ],
+        },
+      },
+      arabic_judge: {
+        reason: 'الإجابة تغطي معظم النقاط المطلوبة وتستشهد بالسياسة الصحيحة.',
+        reasoning:
+          'حللت السؤال أولاً ثم قارنت الإجابة بالمرجع. الإجابة تذكر الحد الأدنى للموافقة لكنها لا تذكر الاستثناء الخاص بالعملاء الحاليين، لذلك خُفضت الدرجة. يُنصح بمراجعة الحالة يدوياً قبل الاعتماد على النتيجة.',
+        explanation: 'درجة جيدة مع نقص في الاستثناءات',
+        step_by_step_reasoning_notes:
+          'الخطوة الأولى: قراءة السؤال. الخطوة الثانية: مطابقة الإجابة مع المرجع. الخطوة الثالثة: البحث عن الاستثناء ولم يُعثر عليه.',
+        confidence: 0.77,
+        judge_model: 'gpt-5',
+        checks: [
+          { name: 'السياسة', passed: true, weight: 0.5 },
+          { name: 'الاستثناء', passed: false, weight: 0.5 },
+        ],
+      },
+      tokens_used: {},
+    };
+    for (const m of metrics)
+      st.push('metric_scored', {
+        item_id: id,
+        metric_name: m,
+        score_numeric: Number(scores[m]!.toFixed(3)),
+        ...(m === 'correct' ? { score_raw: scores[m] === 1 } : {}),
+        meta: meta[m],
+      });
+    st.push('item_completed', {
+      item_id: id,
+      index: i,
+      output: ar
+        ? { answer: 'التمويل العقاري يتطلب مستندات', reasoning: 'حللت السؤال ثم استرجعت المستندات' }
+        : { answer: `Answer for ${i}`, reasoning: 'Looked up the clause then summarised it.' },
+      latency_ms: Math.round(500 * Math.exp(rnd() * 3.2)),
+      trace_id: `t-${id}`,
+    });
+  }
+  st.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 4, 10)).toISOString(),
+    final_status: 'COMPLETED',
+  });
+  await st.flush();
+  return runId;
+}
+
+/** Round 5: 19 passes x 6 items, 2 metrics (Passes passed has 20 columns). */
+export async function seedR5Passes19Run(client: SeedClient, t: string): Promise<string> {
+  let seed = 11;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+
+  const sp: Record<string, unknown> = {
+    correct: {
+      score_type: 'boolean',
+      direction: 'maximize',
+      pass_threshold: 1,
+      primary: true,
+      schema_version: 2,
+    },
+    quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+  };
+  const ms = Object.keys(sp);
+  const samples = 19,
+    items = 6;
+  const rid = await createRun(client, t, {
+    task: 'passes19',
+    dataset: 'r5-p19',
+    model: 'openai/gpt-5-mini',
+    metrics: ms,
+    metric_specs: sp,
+    run_metadata: { run_name: 'r5-19-passes' },
+    run_config: { samples },
+  });
+  const s2 = new EventStream(client, t, rid, 77);
+  s2.push('run_started', {
+    task: 'passes19',
+    dataset: 'r5-p19',
+    model: 'openai/gpt-5-mini',
+    metrics: ms,
+    metric_specs: sp,
+    total_items: items,
+    started_at: new Date(Date.UTC(2026, 9, 4, 9)).toISOString(),
+    run_config: { samples },
+  });
+  for (let ps = 1; ps <= samples; ps++) {
+    for (let i = 0; i < items; i++) {
+      const id = `p-${i + 1}`;
+      s2.push('item_started', {
+        item_id: id,
+        index: i,
+        pass_number: ps,
+        input: `Question ${i}`,
+        expected: 'x',
+      });
+      s2.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        pass_number: ps,
+        attempt_number: 1,
+        trace_id: `t-${id}-${ps}`,
+        task_started_at_ms: Date.UTC(2026, 9, 4, 9) + (ps * items + i) * 1000,
+      });
+      const ok = rnd() > 0.2 + i * 0.12 ? 1 : 0;
+      s2.push('metric_scored', {
+        item_id: id,
+        pass_number: ps,
+        metric_name: 'correct',
+        score_numeric: ok,
+        score_raw: ok === 1,
+        meta: {},
+      });
+      s2.push('metric_scored', {
+        item_id: id,
+        pass_number: ps,
+        metric_name: 'quality',
+        score_numeric: Number(Math.min(1, Math.max(0, (ok ? 0.8 : 0.4) + (rnd() - 0.5) * 0.4)).toFixed(3)),
+        meta: {},
+      });
+      s2.push('item_completed', {
+        item_id: id,
+        index: i,
+        pass_number: ps,
+        is_final_pass: ps === samples,
+        output: { answer: `a${ps}` },
+        latency_ms: 700 + Math.round(rnd() * 2500),
+        trace_id: `t-${id}-${ps}`,
+      });
+    }
+    s2.push('pass_completed', { pass_number: ps, samples });
+  }
+  s2.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 4, 10)).toISOString(),
+    final_status: 'COMPLETED',
+  });
+  await s2.flush();
+  return rid;
+}
+
+// ---- Round 7 (docs/internal/ui-migration/redesign7/qa.md, D2): JSON keys of every length and script ----------------
+
+/** A snake_case key of exactly `len` characters, built from natural words. */
+function r7Snake(len: number): string {
+  const words = [
+    'customer',
+    'eligibility',
+    'assessment',
+    'result',
+    'after',
+    'policy',
+    'review',
+    'step',
+    'with',
+    'exceptions',
+    'applied',
+    'to',
+    'segment',
+    'and',
+    'region',
+  ];
+  let k = '';
+  for (let w = 0; k.length < len; w++) k += (k ? '_' : '') + words[w % words.length];
+  return k.slice(0, len).replace(/_$/, 'x');
+}
+
+/** A camelCase key of exactly `len` characters. */
+function r7Camel(len: number): string {
+  const words = [
+    'Retrieved',
+    'Policy',
+    'Document',
+    'Identifiers',
+    'Used',
+    'To',
+    'Ground',
+    'The',
+    'Final',
+    'Answer',
+    'Text',
+    'After',
+    'Rerank',
+  ];
+  let k = 'retrieved';
+  for (let w = 1; k.length < len; w++) k += words[w % words.length];
+  return k.slice(0, len);
+}
+
+/** The key names of the round 7 fixture: exactly 10, 40 and 80 characters, snake_case and camelCase. */
+export const R7_KEYS = {
+  k10: 'confidence',
+  k40: r7Snake(40),
+  k80: r7Snake(80),
+  c40: r7Camel(40),
+  c80: r7Camel(80),
+  /** An Arabic key and an Arabic metadata key. */
+  ar: 'تحليل_أهلية_العميل_بعد_مراجعة_السياسة_والاستثناءات_المطبقة_على_الشريحة',
+  arTag: 'تصنيف_العميل_حسب_الشريحة_المعتمدة',
+};
+for (const [k, v] of Object.entries(R7_KEYS))
+  if (/^[kc]\d+$/.test(k) && v.length !== Number(k.slice(1))) throw new Error(`key ${k} is ${v.length}`);
+
+const R7_JSON_SPECS = {
+  quality: {
+    score_type: 'percentage',
+    direction: 'maximize',
+    pass_threshold: 0.7,
+    primary: true,
+    schema_version: 2,
+  },
+  json_valid: { score_type: 'boolean', direction: 'maximize', pass_threshold: 1, schema_version: 2 },
+  schema_judge: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+};
+
+function r7Expected(ar: boolean): Record<string, unknown> {
+  const K = R7_KEYS;
+  return ar
+    ? { السبب: 'مؤهل', الإجابة: 'نعم', [K.k40]: 'eligible' }
+    : { reasoning: 'Eligible under 4.2', answer: 'yes', [K.k80]: 'eligible', [K.c40]: ['faq.md'] };
+}
+
+function r7ItemMetadata(): Record<string, unknown> {
+  const K = R7_KEYS;
+  return { [K.k40]: 'segment-a', [K.c40]: 'region-1', domain: 'finance', [K.arTag]: 'ذهبي' };
+}
+
+function r7JudgeMeta(ar: boolean): Record<string, unknown> {
+  const K = R7_KEYS;
+  return ar
+    ? {
+        reasoning: 'الاستدلال: الإجابة مكتملة',
+        explanation: 'درجة جيدة',
+        تحليل_أهلية_العميل_بعد_مراجعة_السياسة_والاستثناءات: 'مؤهل',
+        الثقة: 0.8,
+        الخطة: { الخطوات: { الخطوة_الأولى: { المعاملات_الطويلة_جداً_للأداة_المستدعاة: 'بحث' } } },
+      }
+    : {
+        reasoning: 'Three of three re-scored samples agree within 0.05, so the judge was stable.',
+        confidence: 0.82,
+        [K.k40]: 0.9,
+        [K.k80]: 'stable across the three rescored samples',
+        [K.c40]: 4,
+        self_consistency_check_result_across_rescored_samples: 'agree',
+        nested: { a: { b: { the_deepest_key_with_a_long_descriptive_name_for_the_leaf: 'leaf' } } },
+      };
+}
+
+function r7JsonOutput(i: number): Record<string, unknown> {
+  const K = R7_KEYS;
+  if (i % 3 === 2)
+    return {
+      السبب: 'حللت السؤال أولاً ثم استرجعت المستندات المتعلقة بالتمويل العقاري وقارنتها بالضوابط الحالية',
+      reasoning:
+        'الاستدلال: الإجابة تذكر الحد الأدنى للموافقة لكنها لا تذكر الاستثناء الخاص بالعملاء الحاليين',
+      الإجابة: 'التمويل العقاري يتطلب مستندات إثبات الدخل',
+      [K.ar]: 'مؤهل',
+      الخطة: { الخطوات: { الخطوة_الأولى: { استدعاء_الأداة_ومعاملاتها_بصيغة_نصية_طويلة_جداً: 'بحث' } } },
+      [K.k40]: 'eligible',
+      confidence: 0.82,
+    };
+  return {
+    reasoning: 'Looked up the clause then summarised it, citing the threshold and the exception.',
+    answer: `Answer ${i}: approval above SAR 50,000 needs a second reviewer`,
+    [K.k10]: 0.91,
+    [K.k40]: 'eligible',
+    [K.c40]: ['policy-handbook.pdf', 'faq.md'],
+    [K.k80]:
+      'The customer is eligible for the fast track because the existing-customer exception applies to the segment.',
+    [K.c80]: { source: 'wiki', page: 3 },
+    plan: {
+      steps: {
+        step_one: {
+          tool_call_arguments_serialized_as_json_string: '{"q":"capital"}',
+          retry_policy_with_exponential_backoff_and_jitter_settings: { max: 3 },
+        },
+      },
+    },
+    deeply: {
+      nested: {
+        object: {
+          with_a_very_long_leaf_key_that_names_what_it_holds_in_detail: 'leaf value at depth four',
+          short: 1,
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Twelve items whose outputs, expected values, item metadata and metric details are JSON with long keys (40 and 80
+ * characters, snake_case and camelCase), depth-4 nesting, Arabic keys and values, and a key named `reasoning`.
+ * Items j-01 (English) and j-03 (Arabic) are the ones the round 7 specs open.
+ */
+export async function seedR7JsonKeys(
+  client: SeedClient,
+  token: string,
+  opts: { runName?: string; startedAt?: Date } = {},
+): Promise<string> {
+  const K = R7_KEYS;
+  const n = 12;
+  const name = opts.runName ?? 'r7-json-keys';
+  const started = (opts.startedAt ?? new Date(Date.UTC(2026, 9, 18, 12))).toISOString();
+  const metrics = Object.keys(R7_JSON_SPECS);
+  const runId = await createRun(client, token, {
+    task: 'json_agent',
+    dataset: 'r7-json',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: R7_JSON_SPECS,
+    run_metadata: { run_name: name },
+    run_config: {},
+  });
+  const st = new EventStream(client, token, runId, 7);
+  st.push('run_started', {
+    task: 'json_agent',
+    dataset: 'r7-json',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: R7_JSON_SPECS,
+    total_items: n,
+    started_at: started,
+    run_metadata: { run_name: name },
+    run_config: {},
+  });
+  for (let i = 0; i < n; i++) {
+    const id = `j-${String(i + 1).padStart(2, '0')}`;
+    const ar = i % 3 === 2;
+    st.push('item_started', {
+      item_id: id,
+      index: i,
+      input: ar
+        ? 'ما هي شروط الحصول على تمويل عقاري وفق الضوابط الحالية؟'
+        : `Question ${i}: is the customer eligible under clause ${i}?`,
+      expected: r7Expected(ar),
+      item_metadata: r7ItemMetadata(),
+    });
+    const q = 0.4 + ((i * 37) % 50) / 100;
+    st.push('metric_scored', {
+      item_id: id,
+      metric_name: 'quality',
+      score_numeric: Number(q.toFixed(3)),
+      meta: { reason: 'Covers most points', [K.k40]: 0.9 },
+    });
+    st.push('metric_scored', {
+      item_id: id,
+      metric_name: 'json_valid',
+      score_numeric: 1,
+      score_raw: true,
+      meta: {},
+    });
+    st.push('metric_scored', {
+      item_id: id,
+      metric_name: 'schema_judge',
+      score_numeric: Number(q.toFixed(3)),
+      meta: r7JudgeMeta(ar),
+    });
+    st.push('item_completed', { item_id: id, index: i, output: r7JsonOutput(i), latency_ms: 700 + i * 30 });
+  }
+  st.push('run_completed', {
+    ended_at: new Date(Date.parse(started) + 60_000).toISOString(),
+    final_status: 'COMPLETED',
+  });
+  await st.flush();
+  return runId;
+}
+
+/** Every key (at every depth) of the fixture's outputs, expected values, item metadata and judge details, as written. */
+export function r7AllKeys(): Set<string> {
+  const keys = new Set<string>(['reason']);
+  const walk = (v: unknown): void => {
+    if (v && typeof v === 'object')
+      for (const [k, x] of Object.entries(v)) {
+        keys.add(k);
+        walk(x);
+      }
+  };
+  for (const i of [0, 1, 2]) walk(r7JsonOutput(i));
+  for (const ar of [false, true]) {
+    walk(r7Expected(ar));
+    walk(r7JudgeMeta(ar));
+  }
+  walk(r7ItemMetadata());
+  return keys;
+}

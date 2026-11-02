@@ -1,0 +1,95 @@
+{
+  "390": {
+    "general": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 48.5,
+      "footerH": 53,
+      "descH": null,
+      "descTruncated": null
+    },
+    "visibility": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 129.5,
+      "footerH": null,
+      "descH": 77,
+      "descTruncated": false
+    },
+    "danger": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 114.1,
+      "footerH": null,
+      "descH": 61.6,
+      "descTruncated": false
+    },
+    "rows": [
+      65.5,
+      113.5,
+      117.9
+    ]
+  },
+  "1024": {
+    "general": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 48.5,
+      "footerH": 53,
+      "descH": null,
+      "descTruncated": null
+    },
+    "visibility": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 83.3,
+      "footerH": null,
+      "descH": 30.8,
+      "descTruncated": false
+    },
+    "danger": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 83.3,
+      "footerH": null,
+      "descH": 30.8,
+      "descTruncated": false
+    },
+    "rows": [
+      41,
+      89,
+      93.4
+    ]
+  },
+  "1440": {
+    "general": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 48.5,
+      "footerH": 53,
+      "descH": null,
+      "descTruncated": null
+    },
+    "visibility": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 114.1,
+      "footerH": null,
+      "descH": 61.6,
+      "descTruncated": false
+    },
+    "danger": {
+      "titleTop": 15,
+      "titleH": 19.5,
+      "headerH": 98.7,
+      "footerH": null,
+      "descH": 46.2,
+      "descTruncated": false
+    },
+    "rows": [
+      41,
+      89,
+      93.4
+    ]
+  }
+}

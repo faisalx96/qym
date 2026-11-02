@@ -1,0 +1,76 @@
+{
+  "table": "runs",
+  "width": 1440,
+  "touch": false,
+  "cpu": 1,
+  "median": {
+    "fpsMedian": null,
+    "droppedFrames": 0,
+    "maxLagPx": 0,
+    "framesLagOver1px": 0,
+    "maxHeaderCellMisalignPx": 0,
+    "reactCommitsDuringScroll": 2,
+    "longTasksOver50ms": 3,
+    "layoutCountDelta": 0,
+    "scriptMsDelta": 61.3,
+    "taskMsDelta": 1215.2
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "probe": {
+        "scrollable": 8942,
+        "stickyCellsInFirstRow": 4,
+        "cards": false
+      },
+      "scrollPx": 0,
+      "elapsedMs": 4667,
+      "frames": 0,
+      "fpsMedian": null,
+      "fpsP5": null,
+      "droppedFrames": 0,
+      "worstFrameMs": 0,
+      "maxLagPx": 0,
+      "framesLagOver1px": 0,
+      "maxHeaderCellMisalignPx": 0,
+      "reactCommitsDuringScroll": 2,
+      "commitsPerScrollSecond": 0.4,
+      "longTasksOver50ms": 3,
+      "layoutCountDelta": 0,
+      "recalcStyleDelta": 12,
+      "layoutMsDelta": 0,
+      "scriptMsDelta": 61.3,
+      "taskMsDelta": 1215.2,
+      "trace": {
+        "layouts": 0,
+        "layoutsInScrollDispatch": 0,
+        "layoutsWithStack": 0,
+        "recalcStyle": 12,
+        "scrollDispatches": 240,
+        "scrollDispatchMs": {
+          "n": 240,
+          "median": 0.061,
+          "p95": 0.109,
+          "max": 0.194
+        },
+        "beginMainFrames": 0,
+        "byName": {
+          "Layerize": 643.8,
+          "RasterTask": 321.2,
+          "Paint": 184.9,
+          "HitTest": 178.7,
+          "PrePaint": 75.6,
+          "FunctionCall": 64.4,
+          "Commit": 49.9,
+          "V8.GC_SCAVENGER_BACKGROUND_SCAVENGE_PARALLEL": 29.7,
+          "EventDispatch": 21.7,
+          "UpdateLayer": 12.7,
+          "UpdateLayoutTree": 8.2,
+          "ScrollLayer": 6.9,
+          "FireAnimationFrame": 6.1,
+          "MinorGC": 5.7
+        }
+      }
+    }
+  ]
+}

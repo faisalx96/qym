@@ -38,34 +38,31 @@ class _FakeSpan:
 
 
 def test_qym_span_processor_emits_only_for_active_stream():
-    processor_a = QymSpanProcessor()
-    processor_b = QymSpanProcessor()
+    # One shared processor; the stream bound in the current context decides
+    # where a span goes (and nothing is emitted outside an evaluation).
+    processor = QymSpanProcessor()
     stream_a = _FakeStream()
     stream_b = _FakeStream()
     span = _FakeSpan()
 
-    processor_a.set_stream(stream_a)
-    processor_b.set_stream(stream_b)
+    processor.on_start(span)
+    processor.on_end(span)
 
-    token_a = processor_a.activate_stream()
+    token_a = processor.activate_stream(stream_a)
     try:
-        processor_a.on_end(span)
-        processor_b.on_end(span)
+        processor.on_end(span)
     finally:
-        processor_a.reset_stream(token_a)
+        processor.reset_stream(token_a)
 
+    token_b = processor.activate_stream(stream_b)
+    try:
+        processor.on_end(span)
+    finally:
+        processor.reset_stream(token_b)
+
+    processor.on_end(span)
     assert [event[0] for event in stream_a.events] == ["span_completed"]
-    assert stream_b.events == []
-
-    token_b = processor_b.activate_stream()
-    try:
-        processor_a.on_end(span)
-        processor_b.on_end(span)
-    finally:
-        processor_b.reset_stream(token_b)
-
     assert [event[0] for event in stream_b.events] == ["span_completed"]
-    assert len(stream_a.events) == 1
 
 
 def test_qym_span_processor_drops_network_noise_spans():

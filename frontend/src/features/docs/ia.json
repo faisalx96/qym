@@ -1,0 +1,59 @@
+{
+  "sections": [
+    {
+      "id": "get-started",
+      "title": "Get started",
+      "icon": "rocket",
+      "pages": [
+        { "id": "what-is-qym", "title": "What is qym" },
+        { "id": "install", "title": "Install & requirements" },
+        { "id": "api-keys", "title": "Link repo & API keys" },
+        { "id": "first-run", "title": "Your first run" },
+        { "id": "builtin-metrics", "title": "Built-in metrics tour" },
+        { "id": "task-metric-io", "title": "Task & metric I/O" },
+        { "id": "datasets", "title": "Datasets & data access" },
+        { "id": "errors", "title": "Handling common errors" }
+      ]
+    },
+    {
+      "id": "platform-guide",
+      "title": "Platform guide",
+      "icon": "grid",
+      "pages": [
+        { "id": "navigation", "title": "Navigation & roles" },
+        { "id": "runs", "title": "Runs, selection & cohorts" },
+        { "id": "run-detail", "title": "Run detail & item analysis" },
+        { "id": "projects-data-review", "title": "Projects, data & review" }
+      ]
+    },
+    {
+      "id": "sdk-guide",
+      "title": "SDK guide",
+      "icon": "code",
+      "pages": [
+        { "id": "structure", "title": "Structure & exports" },
+        { "id": "ways-to-evaluate", "title": "Ways to evaluate" },
+        { "id": "metrics", "title": "Metrics deep dive" },
+        { "id": "custom-metrics", "title": "Custom metrics" },
+        { "id": "judges", "title": "LLM-as-judge & pairwise" },
+        { "id": "config", "title": "Configs & options" },
+        { "id": "multi-model", "title": "Multi-model & group analysis" },
+        { "id": "repeats", "title": "Repeat runs & pass@k" },
+        { "id": "observers", "title": "Progress & observers" },
+        { "id": "results", "title": "Results, artifacts & tracing" }
+      ]
+    },
+    {
+      "id": "developer",
+      "title": "Developer / API",
+      "icon": "terminal",
+      "pages": [
+        { "id": "api-overview", "title": "API overview & conventions" },
+        { "id": "auth", "title": "Authentication" },
+        { "id": "ingestion", "title": "Run ingestion" },
+        { "id": "endpoints", "title": "Endpoint reference" },
+        { "id": "cli", "title": "CLI reference" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "w1440": {
+    "stripLabels": {
+      "n": 10,
+      "minContrast": 6.9
+    },
+    "metricValues": {
+      "n": 184,
+      "minContrastAll": 5.8,
+      "neutralBandValues": 114,
+      "minContrastNeutral": 11.2
+    },
+    "headerLabels": {
+      "n": 27,
+      "minContrast": 5.7
+    },
+    "pinnedEdgeShadows": [
+      "rgb(82, 82, 108) -1px 0px 0px 0px inset, rgb(59, 59, 84) 0px -1px 0px 0px inset",
+      "rgb(82, 82, 108) 1px 0px 0px 0px inset",
+      "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+    ]
+  },
+  "w1024": {
+    "stripLabels": {
+      "n": 10,
+      "minContrast": 6.9
+    },
+    "metricValues": {
+      "n": 184,
+      "minContrastAll": 5.8,
+      "neutralBandValues": 114,
+      "minContrastNeutral": 11.2
+    },
+    "headerLabels": {
+      "n": 27,
+      "minContrast": 5.7
+    },
+    "pinnedEdgeShadows": [
+      "rgb(82, 82, 108) -1px 0px 0px 0px inset, rgb(59, 59, 84) 0px -1px 0px 0px inset",
+      "rgb(82, 82, 108) 1px 0px 0px 0px inset",
+      "rgb(82, 82, 108) -1px 0px 0px 0px inset",
+      "rgb(0, 212, 170) 3px 0px 0px 0px inset, rgb(82, 82, 108) -1px 0px 0px 0px inset"
+    ]
+  }
+}

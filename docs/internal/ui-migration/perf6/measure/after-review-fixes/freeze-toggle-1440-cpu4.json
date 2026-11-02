@@ -1,0 +1,212 @@
+{
+  "width": 1440,
+  "cpu": 4,
+  "median": [
+    {
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 34,
+      "commits": 0,
+      "layouts": 0,
+      "scriptMs": 1.9,
+      "longestFrameMs": 0,
+      "cssTransitionsStarted": 2
+    },
+    {
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 524,
+      "commits": 4,
+      "layouts": 2,
+      "scriptMs": 113,
+      "longestFrameMs": 289,
+      "cssTransitionsStarted": 1
+    },
+    {
+      "step": "unfreeze it",
+      "msToSettled": 328,
+      "commits": 2,
+      "layouts": 2,
+      "scriptMs": 77.1,
+      "longestFrameMs": 207,
+      "cssTransitionsStarted": 0
+    }
+  ],
+  "runs": [
+    {
+      "rep": 0,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 41,
+      "commits": 0,
+      "cssTransitionsStarted": 2,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 2,
+      "longestFrameMs": 0,
+      "loaf": []
+    },
+    {
+      "rep": 0,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 538,
+      "commits": 4,
+      "cssTransitionsStarted": 1,
+      "layouts": 2,
+      "layoutMs": 29.9,
+      "scriptMs": 123.7,
+      "longestFrameMs": 289,
+      "loaf": [
+        {
+          "dur": 289,
+          "top": {
+            "d": 236.89999997615814,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-Dy3GpWEd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 0,
+      "step": "unfreeze it",
+      "msToSettled": 327,
+      "commits": 2,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 9.6,
+      "scriptMs": 77.6,
+      "longestFrameMs": 207,
+      "loaf": [
+        {
+          "dur": 207,
+          "top": {
+            "d": 176.69999992847443,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-Dy3GpWEd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 29,
+      "commits": 0,
+      "cssTransitionsStarted": 2,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 1.9,
+      "longestFrameMs": 0,
+      "loaf": []
+    },
+    {
+      "rep": 1,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 512,
+      "commits": 4,
+      "cssTransitionsStarted": 1,
+      "layouts": 2,
+      "layoutMs": 30.5,
+      "scriptMs": 111.7,
+      "longestFrameMs": 282,
+      "loaf": [
+        {
+          "dur": 282,
+          "top": {
+            "d": 230.20000004768372,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-Dy3GpWEd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "step": "unfreeze it",
+      "msToSettled": 328,
+      "commits": 2,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 9,
+      "scriptMs": 76,
+      "longestFrameMs": 205,
+      "loaf": [
+        {
+          "dur": 205,
+          "top": {
+            "d": 175.30000007152557,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-Dy3GpWEd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 34,
+      "commits": 0,
+      "cssTransitionsStarted": 2,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 0.9,
+      "longestFrameMs": 0,
+      "loaf": []
+    },
+    {
+      "rep": 2,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 524,
+      "commits": 4,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 30.9,
+      "scriptMs": 113,
+      "longestFrameMs": 290,
+      "loaf": [
+        {
+          "dur": 284,
+          "top": {
+            "d": 199.89999997615814,
+            "fn": "zd",
+            "inv": "DIV#root.onclick",
+            "url": "react-Dy3GpWEd.js"
+          }
+        },
+        {
+          "dur": 290,
+          "top": {
+            "d": 237.39999997615814,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-Dy3GpWEd.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "step": "unfreeze it",
+      "msToSettled": 332,
+      "commits": 2,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 9.7,
+      "scriptMs": 77.1,
+      "longestFrameMs": 207,
+      "loaf": [
+        {
+          "dur": 207,
+          "top": {
+            "d": 178.79999995231628,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-Dy3GpWEd.js"
+          }
+        }
+      ]
+    }
+  ]
+}

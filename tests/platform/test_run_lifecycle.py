@@ -740,6 +740,22 @@ def test_recent_runs_endpoint_returns_global_and_per_project_admin_views(client,
     assert [run["run_id"] for run in page_payload["runs"]] == ["run-recent-a-old"]
     assert page_payload["projects"] == []
 
+    # Admin landing (C093): a run search (name or id, wildcards literal) and a Project filter.
+    def recent(query):
+        response = client.get(
+            f"/api/runs/recent?all_projects=true&include_projects=false&{query}",
+            headers=_ui_headers("admin-recent@example.com"),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        return body["total_count"], [run["run_id"] for run in body["runs"]]
+
+    assert recent("q=a%20old") == (1, ["run-recent-a-old"])
+    assert recent("q=RECENT-A-NEW") == (1, ["run-recent-a-new"])
+    assert recent("q=%25") == (0, [])
+    assert recent("project_id=project-recent-a") == (2, ["run-recent-a-new", "run-recent-a-old"])
+    assert recent("project_id=project-recent-a&q=new") == (1, ["run-recent-a-new"])
+
     project_response = client.get(
         "/api/runs?project_slug=recent-b&exclude_live=true",
         headers=_ui_headers("owner-recent-b@example.com"),
@@ -986,3 +1002,57 @@ def test_force_stop_can_seal_an_already_deleted_run(client, session_factory):
         run = db.get(Run, "run-1")
         assert run.status_reason == "admin_force_stopped"
         assert run.deleted_at is not None
+
+
+def test_liveness_uses_receive_time_not_the_workers_clock(client, session_factory) -> None:
+    """A worker clock far behind the platform must not make a live run look stale."""
+    run_id = "00000000-0000-0000-0000-000000000104"
+    token = "test-token"
+    with session_factory() as session:
+        run = _seed_run(session, token=token, run_id=run_id)
+        run.last_event_at = utc_now_naive() - timedelta(minutes=10)
+        session.commit()
+
+    _post_events(
+        client,
+        run_id,
+        token,
+        [
+            _event(
+                event_id="00000000-0000-0000-0000-000000000004",
+                sequence=11,
+                run_id=run_id,
+                type_="run_heartbeat",
+                payload={"heartbeat_at": "2020-01-01T00:00:00Z"},
+                sent_at="2020-01-01T00:00:00Z",
+            )
+        ],
+    )
+    with session_factory() as session:
+        run = session.query(Run).filter(Run.id == run_id).first()
+        assert run is not None
+        assert utc_now_naive() - run.last_event_at < timedelta(minutes=1)
+
+    response = client.get("/api/runs", headers=_ui_headers("admin@example.com"))
+    assert response.json()["tasks"]["task-1"]["nomodel"][0]["status"] == "RUNNING"
+
+
+def test_stopped_run_explains_why(client, session_factory) -> None:
+    run_id = "00000000-0000-0000-0000-000000000105"
+    with session_factory() as session:
+        run = _seed_run(session, run_id=run_id)
+        run.status = RunWorkflowStatus.STOPPED
+        run.status_reason = "upload_incomplete"
+        run.ended_at = utc_now_naive()
+        session.commit()
+
+    response = client.get(f"/api/runs/{run_id}?view=compact", headers=_ui_headers("admin@example.com"))
+    label = response.json()["run"]["status_reason_label"]
+    assert label.startswith("The Evaluation Service finished the job")
+
+    with session_factory() as session:
+        run = session.query(Run).filter(Run.id == run_id).first()
+        run.status_reason = "lease_timeout"
+        session.commit()
+    response = client.get(f"/api/runs/{run_id}?view=compact", headers=_ui_headers("admin@example.com"))
+    assert response.json()["run"]["status_reason_label"].startswith("No events received for 60s")

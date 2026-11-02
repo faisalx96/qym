@@ -1,0 +1,129 @@
+/* Metadata popover body: key select, value list (32px options), footer; the Popover primitive owns the surface. */
+.panel {
+  /* the popover surface adds a 1px border each side: 320 px outside, 290 px of content (QA1-4) */
+  inline-size: 318px;
+  max-inline-size: calc(100vw - 2 * var(--space-md) - 2px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.valuesHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-block-size: var(--space-lg);
+}
+
+.facetList {
+  display: flex;
+  flex-direction: column;
+  max-block-size: var(--dropdown-max-height);
+  margin: 0;
+  padding: var(--space-xs);
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+.facet {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: var(--dropdown-option-height);
+  padding-inline: var(--space-sm);
+  border-radius: var(--control-radius);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  outline: none;
+}
+
+.facet[data-focused],
+.facet[data-hovered] {
+  background: var(--bg-hover);
+}
+
+.facet[data-selected] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.facetValue {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.facet > span:last-child {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* the multi-select tick: 14 px box like the Checkbox primitive, filled when chosen */
+.tick {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 14px;
+  block-size: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+  color: var(--bg-void);
+}
+
+.facet[data-selected] .tick {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+}
+
+.facet[data-disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* the Match slot: one row (label, control) and a help line that always reserves two lines */
+.match {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.matchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.matchHelp {
+  min-block-size: 2lh;
+  margin: 0;
+}
+
+.foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+/* At the five-filter limit the button reads disabled (as a disabled Button does) but stays focusable for its tooltip. */
+.limit {
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+  cursor: not-allowed;
+}

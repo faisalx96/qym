@@ -1,0 +1,166 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { EnvVersions } from '../entry/VersionsBlock';
+import { envRecord, newClient, Providers } from './helpers';
+
+/**
+ * The versions line inside a ticked environment box (home view and Customize step 1): what a job
+ * started now would record as versioning_details, read once when the box is ticked and again on its
+ * Refresh (never on a re-render), with the service's reason when it cannot be read and a notice for
+ * a service that predates the endpoint.
+ */
+
+const json = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+function stubVersioning(answers: Array<() => Response>) {
+  const reads: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!/\/versioning-details$/.test(url)) return json(404, { detail: 'not found: ' + url });
+      const answer = answers[Math.min(reads.length, answers.length - 1)]!;
+      reads.push(url);
+      return answer();
+    }),
+  );
+  return reads;
+}
+
+const ok = (details: Record<string, unknown>) => () =>
+  json(200, {
+    environment_id: 'e1',
+    status: 'ok',
+    versioning_details: details,
+    error: null,
+    fetched_at: null,
+  });
+
+const client = newClient();
+const line = (
+  <Providers client={client}>
+    <EnvVersions env={envRecord({ name: 'Staging' })} projectId="p1" />
+  </Providers>
+);
+const renderLine = () => render(line);
+
+const row = () => document.querySelector('[data-env-version="e1"]') as HTMLElement;
+const value = (label: string) => {
+  const dt = within(row()).getByText(label, { selector: 'dt' });
+  return dt.nextElementSibling?.textContent;
+};
+const refresh = () => screen.getByRole('button', { name: 'Refresh versions of Staging' });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  client.clear();
+});
+
+describe('EnvVersions', () => {
+  it('reads the versions once, shows "not set" for a missing key and reads again only on Refresh', async () => {
+    const reads = stubVersioning([
+      ok({ agent_version: 'v2.4.0', kb_version: '4b0535c' }),
+      ok({ agent_version: 'v2.4.0', kb_version: '4b0535c', image_version: '2026.10.11' }),
+    ]);
+    const user = userEvent.setup();
+    const { rerender } = renderLine();
+    expect(row()).toHaveTextContent('Versions');
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    expect(value('agent')).toBe('v2.4.0');
+    expect(value('kb')).toBe('4b0535c');
+    expect(value('image')).toBe('not set');
+    expect(reads).toHaveLength(1);
+
+    rerender(line);
+    expect(reads).toHaveLength(1);
+
+    await user.click(refresh());
+    await waitFor(() => expect(value('image')).toBe('2026.10.11'));
+    expect(reads).toHaveLength(2);
+  });
+
+  it('says so for a service that predates the endpoint', async () => {
+    stubVersioning([
+      () =>
+        json(200, {
+          environment_id: 'e1',
+          status: 'unsupported',
+          versioning_details: {},
+          error: null,
+          fetched_at: null,
+        }),
+    ]);
+    renderLine();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'unsupported'));
+    expect(row()).toHaveTextContent('Not supported by this environment');
+  });
+
+  it('shows the service reason when it cannot be read', async () => {
+    stubVersioning([
+      () =>
+        json(200, {
+          environment_id: 'e1',
+          status: 'error',
+          versioning_details: {},
+          error: 'No API key configured',
+          fetched_at: null,
+        }),
+    ]);
+    renderLine();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'error'));
+    expect(row()).toHaveTextContent('Couldn’t read: No API key configured');
+  });
+
+  it('shows a failed request in place of the versions', async () => {
+    stubVersioning([() => json(500, { detail: 'boom' })]);
+    renderLine();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'error'));
+    expect(row()).toHaveTextContent('Couldn’t read:');
+  });
+
+  it('has one Refresh button named for its environment, no "Add versioning details" and no inputs (QA2-11, QA4-4)', async () => {
+    stubVersioning([ok({ agent_version: 'v1' })]);
+    renderLine();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    expect(within(row()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+    expect(refresh()).toHaveAccessibleName('Refresh versions of Staging');
+    expect(row()).not.toHaveTextContent('Add versioning details');
+    expect(row().querySelector('input, textarea, select, [contenteditable]')).toBeNull();
+  });
+
+  it('loads as the loaded layout: label, placeholders, aria-busy and a hidden status (QA4-7)', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
+    renderLine();
+    const list = row().querySelector('dl') as HTMLElement;
+    expect(list).toHaveAttribute('aria-busy', 'true');
+    // The hidden status is not a child of the definition list (axe: dl may hold only dt / dd groups).
+    expect(list.querySelector('[role="status"]')).toBeNull();
+    expect(within(list).getAllByText(/^(agent|image|kb)$/, { selector: 'dt' })).toHaveLength(3);
+    expect(list.querySelectorAll('dd')).toHaveLength(3);
+    expect(within(row()).getByRole('status')).toHaveTextContent('Reading…');
+  });
+
+  it('Refresh pressed twice while loading asks once more, not twice (QA4-11)', async () => {
+    const reads = stubVersioning([ok({ agent_version: 'v1' })]);
+    const user = userEvent.setup();
+    renderLine();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    await user.click(refresh());
+    await user.click(refresh());
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    expect(reads.length).toBeLessThanOrEqual(3);
+    expect(reads.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('a second instance reads nothing again (one query shared by home and step 1, QA4-6)', async () => {
+    const reads = stubVersioning([ok({ agent_version: 'v1' })]);
+    const { unmount } = renderLine();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    unmount();
+    render(line);
+    expect(row()).toHaveAttribute('data-status', 'ok');
+    expect(reads).toHaveLength(1);
+  });
+});

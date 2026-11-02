@@ -14,11 +14,64 @@ import typer
 
 from ._exit_codes import ExitCode
 from ._output import is_json_mode, output, output_error, err_console, status
-from ._platform_api import PlatformAPIClient, PlatformAPIError
+from ._platform_api import (
+    RUN_ORIGIN_CHOICES,
+    PlatformAPIClient,
+    PlatformAPIError,
+    normalize_run_origin,
+    parse_versioning_filters,
+    run_origin_of,
+)
 from ._legacy import load_function_from_file, load_multi_run_specs
 from ..utils.env import get_platform_url_env
+from ..utils.errors import DatasetNotFoundError
 
 run_app = typer.Typer(help="Manage evaluation runs.")
+
+
+def parse_versioning_details(
+    entries: Optional[List[str]] = None, details_json: Optional[str] = None
+) -> dict:
+    """``--versioning-details JSON`` and ``--versioning-detail KEY=VALUE`` -> a dict.
+
+    The JSON object is applied first; each ``KEY=VALUE`` (a string value, which
+    may contain ``=``) then sets or replaces its key. Raises ``ValueError`` for
+    invalid JSON, a non-object, an entry without ``=`` or an empty key, and for
+    anything :func:`qym.core.config.normalize_versioning_details` refuses.
+    """
+    from ..core.config import normalize_versioning_details
+
+    details: dict = {}
+    if details_json:
+        try:
+            parsed = json.loads(details_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid --versioning-details JSON: {exc}") from None
+        if not isinstance(parsed, dict):
+            raise ValueError("--versioning-details must be a JSON object")
+        details.update(parsed)
+    for entry in entries or []:
+        key, sep, value = str(entry).partition("=")
+        if not sep or not key.strip():
+            raise ValueError(
+                f"Invalid versioning detail: {entry!r} (expected KEY=VALUE)"
+            )
+        details[key.strip()] = value.strip()
+    return normalize_versioning_details(details)
+
+
+def _hold_local_viewer(ui_server: Any) -> None:
+    """Keep the viewer reachable after the run when a person is at the terminal."""
+    if is_json_mode() or not sys.stdin.isatty():
+        ui_server.stop()
+        return
+    err_console.print(f"[blue]Viewer still running:[/blue] {ui_server.url}  (Ctrl+C to exit)", soft_wrap=True)
+    try:
+        ui_server._stop.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        ui_server.stop()
 
 
 # ── qym run create ──────────────────────────────────────────
@@ -28,9 +81,18 @@ run_app = typer.Typer(help="Manage evaluation runs.")
 def run_create(
     task_file: Optional[str] = typer.Option(None, "--task-file", help="Python file containing the task function"),
     task_function: Optional[str] = typer.Option(None, "--task-function", help="Name of the function to evaluate"),
-    dataset: Optional[str] = typer.Option(None, "--dataset", help="qym platform dataset name or local dataset path"),
-    dataset_version: Optional[str] = typer.Option(None, "--dataset-version", help="qym platform dataset version"),
-    dataset_alias: Optional[str] = typer.Option(None, "--dataset-alias", help="qym platform dataset alias"),
+    dataset: Optional[List[str]] = typer.Option(
+        None,
+        "--dataset",
+        metavar="NAME[@VERSION|@alias:ALIAS]",
+        help=(
+            "qym platform dataset name or local dataset path. Repeat to evaluate several datasets "
+            "as one run; add @v3 for a version or @alias:production for an alias "
+            "(a suffix beats --dataset-version / --dataset-alias for its dataset)."
+        ),
+    ),
+    dataset_version: Optional[str] = typer.Option(None, "--dataset-version", help="qym platform dataset version (default for --dataset values without a suffix)"),
+    dataset_alias: Optional[str] = typer.Option(None, "--dataset-alias", help="qym platform dataset alias (default for --dataset values without a suffix)"),
     dataset_file: Optional[str] = typer.Option(None, "--dataset-file", help="Path to a local CSV or JSONL dataset file"),
     dataset_csv: Optional[str] = typer.Option(None, "--dataset-csv", help="Path to a local CSV dataset file"),
     metrics: Optional[str] = typer.Option(None, "--metrics", help="Comma-separated metric names"),
@@ -43,9 +105,10 @@ def run_create(
     samples: int = typer.Option(1, "--samples", min=1, help="Evaluate every item k times (k sequential passes) as one run; reports Pass@k, Pass^k, etc."),
     task_name: Optional[str] = typer.Option(None, "--task-name", help="Override auto-derived task name"),
     config_json: Optional[str] = typer.Option(None, "--config", help="JSON configuration string"),
-    no_ui: bool = typer.Option(False, "--no-ui", help="Disable local web UI"),
-    ui_port: int = typer.Option(0, "--ui-port", help="Port for local web UI (0 for auto)"),
-    no_open: bool = typer.Option(False, "--no-open", help="Do not open browser automatically"),
+    no_ui: bool = typer.Option(False, "--no-ui", help="Hide the live terminal table (the browser viewer is --local-ui)"),
+    local_ui: bool = typer.Option(False, "--local-ui", help="Serve the offline results viewer on localhost while the run executes"),
+    ui_port: int = typer.Option(0, "--ui-port", help="Port for --local-ui (0 for auto)"),
+    no_open: bool = typer.Option(False, "--no-open", help="Do not open the browser automatically"),
     output_file: Optional[str] = typer.Option(None, "--output", help="Save results to JSON file"),
     platform_url: Optional[str] = typer.Option(None, "--platform-url", help="Override platform base URL"),
     platform_api_key: Optional[str] = typer.Option(None, "--platform-api-key", help="Platform API key"),
@@ -56,15 +119,45 @@ def run_create(
     runs_config: Optional[str] = typer.Option(None, "--runs-config", help="Multi-run YAML/JSON config"),
     git_branch: Optional[str] = typer.Option(None, "--git-branch", help="Override auto-detected git branch"),
     git_commit: Optional[str] = typer.Option(None, "--git-commit", help="Override auto-detected git commit hash"),
+    versioning_detail: Optional[List[str]] = typer.Option(
+        None,
+        "--versioning-detail",
+        metavar="KEY=VALUE",
+        help="Record a versioning detail on the run (any key, string value); repeatable. Wins over --versioning-details.",
+    ),
+    versioning_details_json: Optional[str] = typer.Option(
+        None,
+        "--versioning-details",
+        metavar="JSON",
+        help='Versioning details as a JSON object, e.g. \'{"agent_version": "v2", "kb": 381}\'.',
+    ),
 ) -> None:
     """Execute an LLM evaluation run."""
     from ..core.evaluator import Evaluator, _graceful_interrupt_signals
     from ..core.multi_runner import MultiModelRunner
-    from ..core.dataset import CsvDataset, JsonlDataset
+    from ..core.dataset import (
+        MAX_RUN_DATASETS,
+        CsvDataset,
+        DatasetRef,
+        JsonlDataset,
+        dataset_label,
+    )
     from ..core.checkpoint import load_checkpoint_state
     from ..utils.text import arabic_display
 
     is_multi_run = bool(runs_config)
+
+    try:
+        cli_versioning_details = parse_versioning_details(
+            versioning_detail, versioning_details_json
+        )
+    except ValueError as exc:
+        output_error(
+            "usage_error",
+            str(exc),
+            suggestion="Use --versioning-detail KEY=VALUE or --versioning-details '{\"key\": \"value\"}'.",
+        )
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
 
     if is_multi_run and model:
         status("Ignoring --model because --runs-config is provided.")
@@ -91,6 +184,12 @@ def run_create(
         if not run_specs:
             output_error("failure", "Runs config is empty")
             raise typer.Exit(code=ExitCode.FAILURE)
+        if cli_versioning_details:
+            for spec in run_specs:
+                spec.config.versioning_details = {
+                    **(spec.config.versioning_details or {}),
+                    **cli_versioning_details,
+                }
 
         show_tui = not quiet and not no_progress and not no_ui
         runner = MultiModelRunner(run_specs, console=err_console)
@@ -144,8 +243,26 @@ def run_create(
 
     local_dataset_file = dataset_file or dataset_csv
     if bool(dataset) == bool(local_dataset_file):
-        output_error("usage_error", "Provide exactly one of --dataset or --dataset-file/--dataset-csv.")
+        if dataset and len(dataset) > 1:
+            output_error("usage_error", "Provide either --dataset (repeatable) or --dataset-file, not both.")
+        else:
+            output_error("usage_error", "Provide exactly one of --dataset or --dataset-file/--dataset-csv.")
         raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    if dataset and len(dataset) > MAX_RUN_DATASETS:
+        output_error("usage_error", f"at most {MAX_RUN_DATASETS} datasets per run")
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    # One --dataset without a suffix is exactly today's call (a plain string).
+    dataset_arg: Any = None
+    if dataset:
+        try:
+            parsed_refs = [DatasetRef.parse(value) for value in dataset]
+        except ValueError as exc:
+            output_error("usage_error", f"Invalid --dataset value: {exc}")
+            raise typer.Exit(code=ExitCode.USAGE_ERROR)
+        entries: List[Any] = [
+            ref if (ref.version or ref.alias) else ref.name for ref in parsed_refs
+        ]
+        dataset_arg = entries[0] if len(entries) == 1 and isinstance(entries[0], str) else entries
 
     try:
         status(f"Loading task function '{task_function}' from {task_file}")
@@ -176,6 +293,9 @@ def run_create(
             pass
 
         config["ui_port"] = ui_port
+        if local_ui:
+            config["local_ui"] = True
+            config["local_ui_open"] = not (no_open or quiet or is_json_mode())
         if samples and samples > 1:
             config["samples"] = samples
         if task_name:
@@ -201,9 +321,14 @@ def run_create(
             config["dataset_version"] = dataset_version
         if dataset_alias:
             config["dataset_alias"] = dataset_alias
+        if cli_versioning_details:
+            config["versioning_details"] = {
+                **dict(config.get("versioning_details") or {}),
+                **cli_versioning_details,
+            }
 
         # Build dataset
-        dataset_obj: Any = dataset
+        dataset_obj: Any = dataset_arg
         if local_dataset_file:
             md_cols: List[str] = []
             if csv_metadata_cols:
@@ -222,8 +347,11 @@ def run_create(
                     metadata_cols=md_cols,
                 )
 
-        dataset_label = getattr(dataset_obj, "name", None) or str(dataset_obj)
-        status(f"Setting up evaluation for dataset '{dataset_label}'")
+        if isinstance(dataset_obj, (list, DatasetRef)):
+            label = dataset_label(dataset_obj)
+        else:
+            label = getattr(dataset_obj, "name", None) or str(dataset_obj)
+        status(f"Setting up evaluation for dataset '{label}'")
 
         evaluator = Evaluator(
             task=fn,
@@ -236,7 +364,7 @@ def run_create(
         status("Starting evaluation...")
         show_progress = not no_progress and not quiet
         show_table = not no_ui
-        raw_results = evaluator.run(show_progress=show_progress, show_table=show_table)
+        raw_results = evaluator.run(show_tui=show_progress and show_table)
         run_results = raw_results if isinstance(raw_results, list) else [raw_results]
 
         # Output results
@@ -276,6 +404,10 @@ def run_create(
                 err_console.print(f"[yellow]Resume with: qym run create --resume-from {resume_path} ...[/yellow]")
             raise typer.Exit(code=ExitCode.FAILURE)
 
+        ui_server = getattr(evaluator, "_ui_server", None)
+        if ui_server is not None:
+            _hold_local_viewer(ui_server)
+
         try:
             if getattr(primary_result, "html_url", None) and not no_open and not quiet and not is_json_mode():
                 err_console.print(f"\n[blue]UI:[/blue] {primary_result.html_url}")
@@ -296,6 +428,19 @@ def run_create(
         err_console.print("\n[yellow]Evaluation interrupted by user[/yellow]")
         raise typer.Exit(code=ExitCode.FAILURE)
     except Exception as e:
+        several = isinstance(dataset_arg, list) and len(dataset_arg) > 1
+        if several and isinstance(e, ValueError) and (
+            str(e).endswith("is listed twice") or str(e).startswith("at most")
+        ):
+            output_error("usage_error", str(e))
+            raise typer.Exit(code=ExitCode.USAGE_ERROR)
+        if several and isinstance(e, DatasetNotFoundError):
+            text = str(e)
+            if "401" in text or "403" in text:
+                output_error("auth_denied", text)
+                raise typer.Exit(code=ExitCode.AUTH_DENIED)
+            output_error("not_found", text)
+            raise typer.Exit(code=ExitCode.NOT_FOUND)
         output_error("failure", str(e))
         raise typer.Exit(code=ExitCode.FAILURE)
 
@@ -333,19 +478,70 @@ def run_tasks() -> None:
 # ── qym run list ────────────────────────────────────────────
 
 
+def _run_has_dataset(run_summary: dict, name: str) -> bool:
+    """Whether a listed run evaluated the dataset ``name`` (any entry of a union run)."""
+    wanted = name.strip().lower()
+    names = [str(run_summary.get("dataset_name") or "")] + [
+        str(entry.get("dataset") or "")
+        for entry in (run_summary.get("datasets") or [])
+        if isinstance(entry, dict)
+    ]
+    return any(candidate.lower() == wanted for candidate in names if candidate)
+
+
 @run_app.command("list")
 def run_list(
     limit: int = typer.Option(50, "--limit", help="Max runs to return"),
     task: Optional[str] = typer.Option(None, "--task", help="Filter by task name"),
+    dataset_filter: Optional[str] = typer.Option(
+        None,
+        "--dataset",
+        help="Filter by dataset name (a run over several datasets matches when any of them does)",
+    ),
     model_filter: Optional[str] = typer.Option(None, "--model", help="Filter by model name"),
     status_filter: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
     user_filter: Optional[str] = typer.Option(None, "--user", help="Filter by run owner user"),
+    origin: Optional[str] = typer.Option(
+        None,
+        "--origin",
+        metavar="[official|local|all]",
+        help="Filter by run origin: official (dispatched by the platform), local, or all",
+    ),
+    versioning: Optional[List[str]] = typer.Option(
+        None,
+        "--versioning",
+        metavar="KEY=VALUE",
+        help=(
+            "Filter by the Evaluation Service's versioning_metadata, any key "
+            "(e.g. agent_version=v1.12). Repeat a key to match any of its values; "
+            "different keys must all match. KEY=__empty__ matches runs without it."
+        ),
+    ),
 ) -> None:
     """List recent evaluation runs from the platform."""
+    try:
+        origin_value = normalize_run_origin(origin)
+    except ValueError as exc:
+        output_error(
+            "usage_error",
+            str(exc),
+            suggestion="Use --origin " + "|".join(RUN_ORIGIN_CHOICES) + ".",
+        )
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    try:
+        parse_versioning_filters(versioning)
+    except ValueError as exc:
+        output_error(
+            "usage_error",
+            str(exc),
+            suggestion="Use --versioning KEY=VALUE, e.g. --versioning agent_version=v1.12.",
+        )
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+
     client = PlatformAPIClient()
 
     try:
-        data = client.list_runs()
+        data = client.list_runs(origin=origin_value, versioning=versioning)
     except PlatformAPIError as exc:
         output_error(
             error_type="connection_failed" if exc.status_code == 0 else "failure",
@@ -375,7 +571,16 @@ def run_list(
                     ]
                     if not any(user_filter.lower() in field.lower() for field in owner_fields):
                         continue
-                flat_runs.append(run_summary)
+                if dataset_filter and not _run_has_dataset(run_summary, dataset_filter):
+                    continue
+                row = dict(run_summary)
+                row.setdefault("dataset_count", 1)
+                row.setdefault("datasets", [])
+                row["origin"] = run_origin_of(row)
+                row.setdefault("experiment", None)
+                row.setdefault("versioning", {})
+                row.setdefault("versioning_details", {})
+                flat_runs.append(row)
 
     # Sort by timestamp descending, apply limit
     flat_runs.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
@@ -388,6 +593,7 @@ def run_list(
             err_console.print("[dim]No runs found.[/dim]")
             return
 
+        from rich.markup import escape as rich_escape
         from rich.table import Table
 
         table = Table(title=f"Recent Runs ({len(flat_runs)})")
@@ -397,11 +603,25 @@ def run_list(
         table.add_column("Status")
         table.add_column("Success Rate", justify="right")
         table.add_column("Items", justify="right")
+        table.add_column("Origin")
         table.add_column("Timestamp")
 
         for r in flat_runs:
             sr = r.get("success_rate")
             sr_str = f"{sr:.1%}" if sr is not None else "—"
+            if r["origin"] == "official":
+                experiment = r.get("experiment")
+                experiment_name = str(experiment.get("name") or "") if isinstance(experiment, dict) else ""
+                origin_str = "Official run"
+                if experiment_name:
+                    origin_str += f" · {rich_escape(experiment_name)}"
+                if (
+                    isinstance(experiment, dict)
+                    and experiment.get("latency_sensitive") is True
+                ):
+                    origin_str += " · latency-sensitive"
+            else:
+                origin_str = "Local"
             table.add_row(
                 str(r.get("run_id", ""))[:12],
                 r.get("task_name", ""),
@@ -409,6 +629,7 @@ def run_list(
                 r.get("status", ""),
                 sr_str,
                 str(r.get("total_items", "")),
+                origin_str,
                 r.get("timestamp", ""),
             )
         err_console.print(table)
@@ -452,6 +673,15 @@ def run_get(
         err_console.print(f"[bold]Status:[/bold] {run_info.get('status', '—')}")
         err_console.print(f"[bold]Items:[/bold] {len(items)}")
         err_console.print(f"[bold]Metrics:[/bold] {', '.join(run_info.get('metric_names', []))}")
+        details = run_info.get("versioning_details")
+        if isinstance(details, dict) and details:
+            from rich.markup import escape as rich_escape
+
+            err_console.print("[bold]Versioning details:[/bold]")
+            for key in sorted(details):
+                value = details[key]
+                text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+                err_console.print(f"  {rich_escape(str(key))}: {rich_escape(text)}")
 
         # Metric averages from snapshot
         if metrics:

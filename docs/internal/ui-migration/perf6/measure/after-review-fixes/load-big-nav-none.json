@@ -1,0 +1,152 @@
+{
+  "run": "big",
+  "kind": "nav",
+  "net": "none",
+  "median": {
+    "heroMs": 51,
+    "overviewMs": 316,
+    "rowsMs": 316,
+    "ttiMs": 316,
+    "tbtMs": 13,
+    "cls": 0.0087,
+    "requests": 11,
+    "jsChunks": 3,
+    "jsKB": 16.9,
+    "apiRequests": 4,
+    "apiKB": 87.7,
+    "compactKB": 55.9,
+    "compactTtfbMs": 169,
+    "compactDoneMs": 179
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 51,
+      "skeletonMs": 33,
+      "overviewMs": 330,
+      "rowsMs": 330,
+      "ttiMs": 330,
+      "tbtMs": 14,
+      "cls": 0.0087,
+      "reactCommits": 48,
+      "requests": 11,
+      "jsChunks": 3,
+      "jsKB": 16.9,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 178,
+      "compactDoneMs": 191,
+      "mountedAtOverview": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "LatencyTab-DobyeR1z.js 5.1kB @203-211ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @203-211ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @468-491ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @6-43ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @7-191ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @314-384ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @490-566ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 51,
+      "skeletonMs": 32,
+      "overviewMs": 235,
+      "rowsMs": 235,
+      "ttiMs": 235,
+      "tbtMs": 13,
+      "cls": 0.0087,
+      "reactCommits": 49,
+      "requests": 11,
+      "jsChunks": 3,
+      "jsKB": 16.9,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 89,
+      "compactDoneMs": 100,
+      "mountedAtOverview": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "LatencyTab-DobyeR1z.js 5.1kB @109-118ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @110-118ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @363-386ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @5-42ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @5-100ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @218-287ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @385-483ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 50,
+      "skeletonMs": 32,
+      "overviewMs": 316,
+      "rowsMs": 316,
+      "ttiMs": 316,
+      "tbtMs": 13,
+      "cls": 0.0087,
+      "reactCommits": 49,
+      "requests": 11,
+      "jsChunks": 3,
+      "jsKB": 16.9,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 169,
+      "compactDoneMs": 179,
+      "mountedAtOverview": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "LatencyTab-DobyeR1z.js 5.1kB @189-198ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @190-198ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @447-470ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @5-42ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @6-179ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @300-370ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @469-546ms"
+      ]
+    }
+  ]
+}

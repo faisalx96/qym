@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
@@ -22,8 +22,13 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.security import generate_temporary_password, hash_password
+from qym_platform.api.paging import DEFAULT_LIMIT, MAX_LIMIT, PAGE_FORMAT, decode_cursor, page_body
 from qym_platform.settings import PlatformSettings
 
+
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -78,23 +83,33 @@ def me(
 
 @router.get("/v1/users")
 def list_users(
+    limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    cursor: Optional[str] = Query(default=None, max_length=200),
+    format: str = PAGE_FORMAT,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-) -> list[Dict[str, Any]]:
+) -> Any:
+    """Active users by email. ``format=page`` pages them with the list contract (C160);
+    the default bare list (every user) stays for one release."""
     # The whole user directory is for admins. Project managers look people up
     # through GET /v1/projects/{id}/member-candidates instead.
     _require_admin(principal)
-    users = db.query(User).filter(User.is_active == True).order_by(User.email).all()
-    return [
-        {
+    query = db.query(User).filter(User.is_active == True).order_by(User.email, User.id)
+
+    def row(user: User) -> Dict[str, Any]:
+        return {
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
             "title": user.title,
             "role": user.role.value,
         }
-        for user in users
-    ]
+
+    if format != "page":
+        return [row(user) for user in query.all()]
+    offset = decode_cursor(cursor)
+    total = query.order_by(None).count()
+    return page_body([row(user) for user in query.offset(offset).limit(limit).all()], offset=offset, total=total)
 
 
 class CreateUserRequest(BaseModel):
@@ -134,9 +149,12 @@ def admin_list_users(
 @router.post("/v1/admin/users")
 def admin_create_user(
     req: CreateUserRequest,
+    response: Response,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
+    """Create a user. With email/password sign-in on, the user also gets a one-time password,
+    returned once (``temporary_password``): they choose a new one at first sign-in (C131)."""
     _require_admin(principal)
     email = req.email.strip().lower()
     existing = db.query(User).filter(User.email == email).first()
@@ -150,9 +168,20 @@ def admin_create_user(
         is_active=req.is_active,
     )
     db.add(user)
+    db.flush()
+    temporary_password = None
+    if local_auth_enabled(PlatformSettings()):
+        temporary_password = generate_temporary_password()
+        _store_temporary_password(db, user, principal.user.id, hash_password(temporary_password))
     db.commit()
     db.refresh(user)
-    return {"id": user.id, "email": user.email}
+    logger.info("User %s created by admin %s", user.id, principal.user.id)
+    body: Dict[str, Any] = {"id": user.id, "email": user.email}
+    if temporary_password is not None:
+        response.headers["Cache-Control"] = "no-store"
+        # Never logged: shown once in the admin's browser.
+        body["temporary_password"] = temporary_password
+    return body
 
 
 def _other_active_admins_locked(db: Session, user_id: str) -> List[str]:
@@ -229,6 +258,13 @@ def admin_update_user(
 
     db.commit()
     db.refresh(user)
+    logger.info(
+        "User %s updated by admin %s (role=%s, active=%s)",
+        user.id,
+        principal.user.id,
+        getattr(user.role, "value", user.role),
+        user.is_active,
+    )
     return {"id": user.id, "email": user.email, "ok": True}
 
 
@@ -301,8 +337,12 @@ def admin_reset_user_password(
         except IntegrityError:
             db.rollback()
             if attempt:
+                logger.exception("Password reset for user %s failed twice on the credential row", user.id)
                 raise
+            logger.debug("Concurrent password reset for user %s; retrying", user.id)
     response.headers["Cache-Control"] = "no-store"
+    # Never the temporary password.
+    logger.info("Password of user %s reset by admin %s", user.id, actor_id)
     return {"ok": True, "user_id": user.id, "temporary_password": temporary_password}
 
 
@@ -328,4 +368,5 @@ def admin_delete_user(
 
     db.delete(user)
     db.commit()
+    logger.info("User %s deleted by admin %s", user_id, principal.user.id)
     return {"ok": True, "deleted_id": user_id}

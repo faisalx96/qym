@@ -14,6 +14,10 @@ from qym_platform.deps import get_db
 from qym_platform.services import maintenance
 from qym_platform.settings import PlatformSettings
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 _STATS_CACHE: Dict[str, Any] = {"at": 0.0, "value": None}
@@ -25,18 +29,32 @@ def _require_admin(principal: Principal) -> None:
         raise HTTPException(status_code=403, detail="Admin only")
 
 
-def _worker_state(request: Request, settings: PlatformSettings) -> Dict[str, Any]:
-    if settings.role == "api":
+def _worker_state(request: Request, settings: PlatformSettings, db: Session | None = None) -> Dict[str, Any]:
+    state = request.app.state
+    runs_loops = getattr(state, "runs_loops", None)
+    if runs_loops is None:
+        runs_loops = settings.role != "api"
+    if not runs_loops:
         # This HTTP process runs no loops: a worker process does (the
-        # QYM_WEB_WORKERS launcher's loop process or a worker Deployment).
-        # Its liveness is not visible from here, so do not report "stopped".
+        # workers service, the QYM_WEB_WORKERS launcher's loop process or a
+        # worker Deployment). It reports through ``service_heartbeats``; with
+        # no heartbeat at all (an old worker image) do not report "stopped".
+        from qym_platform.api.service_status import heartbeat_summary
+
+        workers = heartbeat_summary(db.get_bind()) if db is not None else {"processes": []}
+        live = [p for p in workers.get("processes") or [] if p.get("alive")]
+        layout = getattr(state, "service_layout", None)
+        # An explicit split (QYM_SERVICE=main) expects a workers service that
+        # heartbeats: none at all means it is down, not unknown.
+        reported = bool(workers.get("processes")) or bool(layout is not None and layout.queues_jobs)
+        loops = (live[0].get("loops") or {}) if live else {}
         return {
             "loops": "separate",
-            "summary_worker_alive": None,
-            "maintenance_worker_alive": None,
-            "maintenance_current_job": None,
+            "summary_worker_alive": (bool(loops.get("dashboard_summary")) if reported else None),
+            "maintenance_worker_alive": (bool(loops.get("maintenance")) if reported else None),
+            "maintenance_current_job": live[0].get("maintenance_current_job") if live else None,
+            "workers_service": workers,
         }
-    state = request.app.state
     summary = getattr(state, "dashboard_summary_worker", None)
     maint = getattr(state, "maintenance_worker", None)
     return {
@@ -47,15 +65,8 @@ def _worker_state(request: Request, settings: PlatformSettings) -> Dict[str, Any
     }
 
 
-@router.get("/maintenance")
-def maintenance_overview(
-    request: Request,
-    refresh: bool = False,
-    db: Session = Depends(get_db),
-    principal: Principal = Depends(require_ui_principal),
-) -> Dict[str, Any]:
-    _require_admin(principal)
-    settings = PlatformSettings()
+def _db_stats(db: Session, refresh: bool) -> Dict[str, Any]:
+    """Cached database statistics (one collect per minute per process; they scan run_events, so they are slow)."""
     now = time.time()
     if refresh or _STATS_CACHE["value"] is None or now - _STATS_CACHE["at"] > _STATS_TTL_SECONDS:
         from qym_platform.tools.perf.db_stats import collect
@@ -63,24 +74,52 @@ def maintenance_overview(
         try:
             _STATS_CACHE["value"] = collect(db.get_bind(), top=12, sample_pct=1.0)
         except Exception as exc:  # noqa: BLE001 - stats are best effort (sqlite in tests)
+            logger.warning("Admin database stats unavailable", exc_info=True)
             _STATS_CACHE["value"] = {"error": str(exc).splitlines()[0]}
         _STATS_CACHE["at"] = now
+    return {"db_stats": _STATS_CACHE["value"], "db_stats_age_seconds": round(now - _STATS_CACHE["at"], 1)}
+
+
+@router.get("/maintenance")
+def maintenance_overview(
+    request: Request,
+    refresh: bool = False,
+    stats: bool = True,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Settings, workers, job kinds and jobs. ``stats=false`` leaves out the slow database statistics
+    (``db_stats`` and ``db_stats_age_seconds`` are then null): the UI reads them from ``/maintenance/db-stats``."""
+    _require_admin(principal)
+    settings = PlatformSettings()
     pool = db.get_bind().pool
     return {
         "settings": {
             "role": settings.role,
+            "service": getattr(getattr(request.app.state, "service_layout", None), "service", None),
             "maintenance_mode": settings.maintenance_mode,
             "event_log_mode": settings.event_log_mode,
             "span_retention_days": settings.span_retention_days,
             "deleted_run_grace_days": settings.deleted_run_grace_days,
+            "span_partition_days_ahead": settings.span_partition_days_ahead,
         },
-        "workers": _worker_state(request, settings),
+        "workers": _worker_state(request, settings, db),
         "pool": pool.status() if hasattr(pool, "status") else None,
-        "db_stats": _STATS_CACHE["value"],
-        "db_stats_age_seconds": round(now - _STATS_CACHE["at"], 1),
+        **(_db_stats(db, refresh) if stats else {"db_stats": None, "db_stats_age_seconds": None}),
         "job_kinds": maintenance.registry(),
         "jobs": [j.as_dict() for j in maintenance.list_jobs(db)],
     }
+
+
+@router.get("/maintenance/db-stats")
+def maintenance_db_stats(
+    refresh: bool = False,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Database statistics only (table sizes, run events by type), cached for a minute; ``refresh`` collects them now."""
+    _require_admin(principal)
+    return _db_stats(db, refresh)
 
 
 @router.get("/maintenance/jobs/{job_id}")
@@ -110,10 +149,16 @@ def maintenance_enqueue(
     if maintenance.is_irreversible(kind) and request.get("confirm") != kind:
         raise HTTPException(status_code=400, detail=f"Irreversible job: repeat the kind name in 'confirm' ({kind})")
     try:
+        # enqueue checks params against the job's declared keys before it stores anything.
         job = maintenance.enqueue(db, kind, params, requested_by=principal.user.id)
+    except maintenance.InvalidJobParams as exc:
+        logger.info("Maintenance job %s refused: %s", kind, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.info("Maintenance job %s not queued: %s", kind, exc)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()
+    logger.info("Maintenance job %s (%s) queued by admin %s", job.id, kind, principal.user.id)
     return job.as_dict()
 
 
@@ -124,6 +169,7 @@ def maintenance_start(job_id: str, db: Session = Depends(get_db), principal: Pri
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     db.commit()
+    logger.info("Maintenance job %s start requested by admin %s", job_id, principal.user.id)
     return job.as_dict()
 
 
@@ -134,4 +180,5 @@ def maintenance_cancel(job_id: str, db: Session = Depends(get_db), principal: Pr
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     db.commit()
+    logger.info("Maintenance job %s cancel requested by admin %s", job_id, principal.user.id)
     return job.as_dict()

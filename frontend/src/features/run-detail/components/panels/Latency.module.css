@@ -1,0 +1,15 @@
+/* Latency and traces section (round 10, legacy latency_traces.css): two subsections; the kind colours every block reads. */
+.root {
+  --k-llm: var(--accent-secondary);
+  --k-tool: var(--warning);
+  --k-retrieval: var(--chart-4);
+  --k-guard: var(--score-4);
+  --k-other: var(--text-muted);
+  --k-agent: var(--accent-primary);
+  --k-eval: var(--accent-tertiary-soft);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}

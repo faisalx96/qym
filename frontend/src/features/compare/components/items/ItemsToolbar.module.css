@@ -1,0 +1,55 @@
+/* One 24 px row at 1440 (search, Quick filters | count, Sort, Display, CSV); wraps to two rows below. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+  min-block-size: 24px;
+}
+
+.query {
+  display: flex;
+  flex: 1 1 24rem;
+  align-items: center;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.search {
+  flex: 1 1 12rem;
+  /* C217: at 390 px the field keeps room to type instead of shrinking to its icon */
+  min-inline-size: min(10rem, 100%);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.count {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.display {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  inline-size: 300px;
+  max-inline-size: 100%;
+  max-block-size: 24rem;
+  overflow-y: auto;
+  padding: var(--space-md);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

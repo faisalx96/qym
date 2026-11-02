@@ -1,0 +1,12 @@
+/* Recipe A "framed section": body on a --bg-surface panel (1px --border-subtle, --radius-md, 14px padding); head is a band inside it; inner cards move to --bg-elevated. 20px between panels. */
+section:is([data-report-section], :where(#run-items)) {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-md) !important;
+  margin-block-start: var(--space-lg) !important;
+}
+section:is([id^='compare-']) { margin-block-start: calc(var(--space-lg) - var(--space-md)) !important; } /* the compare page still has its 14px flex gap in this mock: panels end up 20 apart */
+section:is([data-report-section], :where(#run-items))[data-first] { margin-block-start: 0 !important; }
+section:is([data-report-section], :where(#run-items)) > :first-child { margin-block-start: 0 !important; padding-block-start: 0 !important; border-block-start: 0 !important; }
+section:is([data-report-section], :where(#run-items)) [data-level='xl'] { margin-block-start: 0 !important; padding-block-start: 0 !important; border-block-start: 0 !important; }

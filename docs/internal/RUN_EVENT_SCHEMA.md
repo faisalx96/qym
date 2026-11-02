@@ -48,7 +48,7 @@ All `pass_number` fields are 1-based and default to `1`, preserving compatibilit
 ### Run lifecycle
 
 - `run_started`: required `task`, `dataset`, `started_at`; optional `external_run_id`, `model`, `metrics`, `metric_specs`, `dataset_id`, `dataset_version_id`, `dataset_alias`, `total_items`, `run_metadata`, `run_config`.
-- `pass_completed`: repeat-run barrier with required `pass_number`, total `samples`, and optional aggregate `metrics`.
+- `pass_completed`: a repeat-run pass whose items are all scored, with required `pass_number`, total `samples`, and optional aggregate `metrics`. Scoring is decoupled from task execution, so it may arrive after item events of a later pass.
 - `run_completed`: required `ended_at`; optional `summary`; `final_status` is `COMPLETED`, `FAILED`, or `STOPPED`.
 - `run_heartbeat`: required `heartbeat_at`.
 - `metadata_update`: optional legacy Langfuse fields plus generic `extra`, which is merged into run metadata.

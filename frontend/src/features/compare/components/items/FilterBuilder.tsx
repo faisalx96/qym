@@ -1,0 +1,418 @@
+/** Composable rule builder (AND / OR groups) over aligned items; fields are evaluated across every compared run. */
+import {
+  Button,
+  IconButton,
+  MultiSelect,
+  ScopeChips,
+  SegmentedControl,
+  Select,
+  Text,
+  TextField,
+  Icon,
+} from '@/ui';
+import { useScope } from '../../hooks/useScope';
+import { useCompare } from '../../CompareContext';
+import { columnName } from '../../lib/columnName';
+import {
+  conditionHasValue,
+  emptyGroup,
+  filterRuleCountRaw,
+  isFilterGroup,
+  type FieldDef,
+  type FilterCondition,
+  type FilterGroup,
+  type FilterNode,
+} from '../../lib/filters';
+import styles from './FilterBuilder.module.css';
+
+const NUMBER_OPS: Array<[string, string]> = [
+  ['gte', '≥'],
+  ['gt', '>'],
+  ['lte', '≤'],
+  ['lt', '<'],
+  ['eq', '='],
+  ['neq', '≠'],
+];
+
+function defaultCondition(f: FieldDef | null): FilterCondition {
+  if (!f) return { field: '', oper: '', value: '' };
+  if (f.kind === 'enum') return { field: f.id, oper: 'in', value: [] };
+  if (f.kind === 'number') return { field: f.id, oper: 'gte', value: '' };
+  if (f.kind === 'bool') return { field: f.id, oper: 'is', value: '' };
+  return { field: f.id, oper: 'contains', value: '' };
+}
+
+function replaceAt(
+  root: FilterGroup,
+  path: number[],
+  fn: (node: FilterNode) => FilterNode | null,
+): FilterGroup {
+  if (!path.length) return (fn(root) as FilterGroup) ?? root;
+  const [head, ...rest] = path;
+  return {
+    ...root,
+    children: root.children.flatMap((child, i) => {
+      if (i !== head) return [child];
+      if (!rest.length) {
+        const next = fn(child);
+        return next ? [next] : [];
+      }
+      return [replaceAt(child as FilterGroup, rest, fn)];
+    }),
+  };
+}
+
+/** Pseudo field key: "Change vs baseline" is the page's baseline filter (per run and metric), edited in its own row. */
+const CHANGE_FIELD = '__change_vs_baseline';
+
+function Condition({
+  node,
+  path,
+  defs,
+  onChange,
+  onPickChange,
+}: {
+  node: FilterCondition;
+  path: number[];
+  defs: Map<string, FieldDef>;
+  onChange: (path: number[], fn: (n: FilterNode) => FilterNode | null) => void;
+  onPickChange: (path: number[]) => void;
+}) {
+  const field = defs.get(node.field) ?? null;
+  const list = Array.from(defs.values());
+  const set = (patch: Partial<FilterCondition>) =>
+    onChange(path, (n) => ({ ...(n as FilterCondition), ...patch }));
+  const shown =
+    field?.percent && node.value !== '' && !Number.isNaN(Number(node.value))
+      ? String(Number((Number(node.value) * 100).toFixed(4)))
+      : String(Array.isArray(node.value) ? '' : (node.value ?? ''));
+  return (
+    <div className={styles.cond} data-testid="filter-condition">
+      <Select
+        label="Field"
+        hideLabel
+        value={field?.id ?? null}
+        placeholder="Choose field"
+        searchable="auto"
+        onChange={(k) => {
+          if (!k) return;
+          if (String(k) === CHANGE_FIELD) onPickChange(path);
+          else onChange(path, () => defaultCondition(defs.get(String(k)) ?? null));
+        }}
+        items={[
+          ...list.map((d) => ({ key: d.id, label: `${d.group} · ${d.label}` })),
+          { key: CHANGE_FIELD, label: 'Comparison · Change vs baseline' },
+        ]}
+        width={200}
+      />
+      {field ? (
+        <>
+          {field.kind === 'number' ? (
+            <>
+              <Select
+                label="Operator"
+                hideLabel
+                value={node.oper}
+                onChange={(k) => k && set({ oper: String(k) })}
+                items={NUMBER_OPS.map(([key, label]) => ({ key, label }))}
+                width={72}
+              />
+              <TextField
+                label={`${field.label} value`}
+                hideLabel
+                inputMode="decimal"
+                value={shown}
+                width="9ch"
+                onChange={(v) =>
+                  set({
+                    value:
+                      field.percent && v !== '' && !Number.isNaN(Number(v)) ? String(Number(v) / 100) : v,
+                  })
+                }
+              />
+              {field.percent ? <span className={styles.unit}>%</span> : null}
+            </>
+          ) : null}
+          {field.kind === 'enum' ? (
+            <>
+              <Select
+                label="Operator"
+                hideLabel
+                value={node.oper}
+                onChange={(k) => k && set({ oper: String(k) })}
+                items={[
+                  { key: 'in', label: 'is any of' },
+                  { key: 'notin', label: 'is none of' },
+                ]}
+                width={120}
+              />
+              <MultiSelect
+                label="Values"
+                items={(field.choices ?? []).map((ch) => ({ key: ch.value, label: ch.label }))}
+                value={new Set(Array.isArray(node.value) ? node.value : [])}
+                onChange={(keys) => set({ value: Array.from(keys).map(String) })}
+                searchable
+                onlyAction
+                selectAll
+              />
+            </>
+          ) : null}
+          {field.kind === 'bool' ? (
+            <Select
+              label="State"
+              hideLabel
+              value={String(node.value) || null}
+              placeholder="Choose state"
+              onChange={(k) => k && set({ value: String(k) })}
+              items={[
+                { key: 'true', label: 'true' },
+                { key: 'false', label: 'false' },
+              ]}
+              width={120}
+            />
+          ) : null}
+          {field.kind === 'text' ? (
+            <>
+              <Select
+                label="Operator"
+                hideLabel
+                value={node.oper}
+                onChange={(k) => k && set({ oper: String(k) })}
+                items={[
+                  { key: 'contains', label: 'contains' },
+                  { key: 'notcontains', label: 'does not contain' },
+                ]}
+                width={160}
+              />
+              <TextField
+                label={`${field.label} text`}
+                hideLabel
+                value={String(node.value ?? '')}
+                onChange={(v) => set({ value: v })}
+                placeholder="Text"
+                width="20ch"
+              />
+            </>
+          ) : null}
+        </>
+      ) : null}
+      <IconButton
+        label="Delete condition"
+        icon="trash"
+        tone="danger"
+        onPress={() => onChange(path, () => null)}
+      />
+    </div>
+  );
+}
+
+function Group({
+  node,
+  path,
+  defs,
+  onChange,
+  onPickChange,
+}: {
+  node: FilterGroup;
+  path: number[];
+  defs: Map<string, FieldDef>;
+  onChange: (path: number[], fn: (n: FilterNode) => FilterNode | null) => void;
+  onPickChange: (path: number[]) => void;
+}) {
+  return (
+    <div
+      className={styles.group}
+      data-root={path.length === 0 || undefined}
+      role="group"
+      aria-label={path.length ? 'Rule group' : 'Rules'}
+    >
+      <div className={styles.groupHead}>
+        <SegmentedControl<'and' | 'or'>
+          label="Match mode"
+          value={node.op}
+          onChange={(op) => onChange(path, (n) => ({ ...(n as FilterGroup), op }))}
+          options={[
+            { value: 'and', label: 'AND' },
+            { value: 'or', label: 'OR' },
+          ]}
+        />
+        <Text variant="sm" tone="muted">
+          {node.op === 'and' ? 'every rule below must match' : 'any rule below may match'}
+        </Text>
+        {path.length ? (
+          <IconButton
+            label="Delete group"
+            icon="trash"
+            tone="danger"
+            onPress={() => onChange(path, () => null)}
+          />
+        ) : null}
+      </div>
+      {node.children.map((child, i) =>
+        isFilterGroup(child) ? (
+          <Group
+            key={i}
+            node={child}
+            path={[...path, i]}
+            defs={defs}
+            onChange={onChange}
+            onPickChange={onPickChange}
+          />
+        ) : (
+          <Condition
+            key={i}
+            node={child}
+            path={[...path, i]}
+            defs={defs}
+            onChange={onChange}
+            onPickChange={onPickChange}
+          />
+        ),
+      )}
+      <div className={styles.add}>
+        <Button
+          icon={<Icon name="plus" size={12} />}
+          size="sm"
+          variant="neutral"
+          onPress={() =>
+            onChange(path, (n) => ({
+              ...(n as FilterGroup),
+              children: [...(n as FilterGroup).children, defaultCondition(null)],
+            }))
+          }
+        >
+          Add condition
+        </Button>
+        <Button
+          icon={<Icon name="plus" size={12} />}
+          size="sm"
+          variant="ghost"
+          onPress={() =>
+            onChange(path, (n) => ({
+              ...(n as FilterGroup),
+              children: [...(n as FilterGroup).children, emptyGroup()],
+            }))
+          }
+        >
+          Add group
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** The "Change vs baseline" rule: which run, on which metric, improved / regressed / unchanged against the baseline. */
+function ChangeRow() {
+  const { c, model, columns, baseline } = useCompare();
+  const f = c.view.filters.baseline;
+  if (!f) return null;
+  const candidates = columns.filter((col) => col.key !== baseline.key);
+  const set = (patch: Partial<NonNullable<typeof f>>) =>
+    c.setView({ filters: { ...c.view.filters, baseline: { ...f, baselineKey: baseline.key, ...patch } } });
+  return (
+    <div
+      className={styles.cond}
+      data-testid="filter-change-rule"
+      role="group"
+      aria-label="Change vs baseline"
+    >
+      <Text variant="sm" tone="muted">
+        Change vs baseline
+      </Text>
+      <Select
+        label="Run"
+        hideLabel
+        value={f.columnKey}
+        onChange={(k) => k && set({ columnKey: String(k) })}
+        items={candidates.map((col) => ({ key: col.key, label: columnName(model, col) }))}
+        width={200}
+      />
+      <Select
+        label="Metric"
+        hideLabel
+        value={f.metric}
+        onChange={(k) => k && set({ metric: String(k) })}
+        items={model.metrics.map((m) => ({ key: m, label: m }))}
+        width={140}
+      />
+      <Select
+        label="Change"
+        hideLabel
+        value={f.kind}
+        onChange={(k) => k && set({ kind: String(k) as typeof f.kind })}
+        items={[
+          { key: 'improved', label: 'improved' },
+          { key: 'regressed', label: 'regressed' },
+          { key: 'same', label: 'unchanged' },
+        ]}
+        width={140}
+      />
+      <IconButton
+        label="Delete change rule"
+        icon="trash"
+        tone="danger"
+        onPress={() => c.setView({ filters: { ...c.view.filters, baseline: null } })}
+      />
+    </div>
+  );
+}
+
+export function FilterBuilder({ onClose }: { onClose?: () => void }) {
+  const { defs, c, columns, baseline, metric } = useCompare();
+  // The placeholder condition becomes the page's baseline filter in one update (two updates would overwrite each other).
+  const pickChange = (path: number[]) => {
+    const first = columns.find((col) => col.key !== baseline.key);
+    c.setView({
+      filters: {
+        ...c.view.filters,
+        rules: replaceAt(c.view.filters.rules, path, () => null),
+        baseline:
+          c.view.filters.baseline ??
+          (first ? { metric, columnKey: first.key, baselineKey: baseline.key, kind: 'improved' } : null),
+      },
+    });
+  };
+  const scope = useScope();
+  const map = new Map(defs.map((d) => [d.id, d]));
+  const rules = c.view.filters.rules;
+  const count = filterRuleCountRaw(rules, (x) => conditionHasValue(x) && map.has(x.field));
+  const onChange = (path: number[], fn: (n: FilterNode) => FilterNode | null) =>
+    c.setView({ filters: { ...c.view.filters, rules: replaceAt(rules, path, fn) } });
+  return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape closes the inline panel
+    <section
+      className={styles.builder}
+      aria-label="Filter rules"
+      data-testid="filter-builder"
+      data-part="filter-builder"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && onClose) {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div className={styles.head}>
+        <b className={styles.headTitle}>Filters</b>
+        <Text variant="sm" tone="muted">
+          {count ? `${count} rule${count === 1 ? '' : 's'} applied` : 'no rules yet'} {'·'} a rule matches an
+          item when any compared run matches it.
+        </Text>
+        {scope.chips.length ? (
+          <div className={styles.chips} role="group" aria-label="Filters set on the page">
+            <ScopeChips
+              chips={scope.chips.map((chip) => ({
+                key: chip.key,
+                label: chip.label,
+                onClear: () => scope.clearChip(chip),
+              }))}
+              maxChips={20}
+            />
+          </div>
+        ) : null}
+      </div>
+      <ChangeRow />
+      <Group node={rules} path={[]} defs={map} onChange={onChange} onPickChange={pickChange} />
+    </section>
+  );
+}

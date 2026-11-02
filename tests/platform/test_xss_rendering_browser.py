@@ -10,14 +10,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from test_dashboard_paging_browser import DashboardFixture, make_runs
-from test_performance_views_browser import ViewFixture
 
 pytestmark = pytest.mark.browser
 
+# The live pages are React (frontend/e2e/run-detail/cutover-xss.spec.ts renders the same payloads on
+# the Runs list, Charts, the run page and Compare). What is left here is the offline export and the
+# shared escaping layer it still ships (export_templates/run).
 STATIC = (
     Path(__file__).resolve().parents[2]
-    / "packages/platform/qym_platform/_static/dashboard"
+    / "packages/platform/qym_platform/export_templates/run"
 )
 SQL = "SELECT (n * sum_xy - sum_x * sum_y) * 1.0 AS slope FROM t WHERE name LIKE '*a*'"
 PROSE = 'Answer: **bold** and *soft*. See [docs](https://x.test/" onmouseover="window.__md=1" data-x=").'
@@ -42,179 +43,8 @@ def assert_inert(page):
     assert page.evaluate(INJECTED) == {"xss": None, "markers": []}
 
 
-def poisoned_runs(count: int = 3):
-    rows = make_runs(count)
-    for i, row in enumerate(rows):
-        row.update(
-            external_run_id=payload(f"run_name_{i}"),
-            run_name=payload(f"run_name_{i}"),
-            task_name=payload("task"),
-            model_name=payload("model"),
-            dataset_name=payload("dataset"),
-            owner={
-                "id": "owner",
-                "display_name": payload("owner_name"),
-                "email": payload("owner_email"),
-            },
-            git_branch=payload("git_branch"),
-            git_commit=payload("git_commit"),
-        )
-    return rows
-
-
-def test_runs_table_renders_stored_names_as_text(browser):
-    rows = poisoned_runs()
-    fixture = DashboardFixture(browser, runs=rows)
-    page = fixture.page
-    try:
-        page.goto("https://qym.test/projects/demo")
-        page.wait_for_function("__dashboardTest.state.flatRuns.length === 3")
-        row = page.locator('tr[data-file="run-000"]')
-        assert payload("run_name_0") in row.locator(".run-id").inner_text()
-        assert payload("dataset") in row.locator(".runs-dataset-tag").inner_text()
-        assert payload("owner_name") in row.locator(".owner-name").inner_text()
-        assert row.locator(".owner-name").get_attribute("title") == payload(
-            "owner_email"
-        )
-        assert row.locator(".tag.model").get_attribute("title") == payload("model")
-        version = row.locator(".version-badge")
-        assert version.inner_text() == payload("git_branch") + "/" + payload(
-            "git_commit"
-        )
-        assert_inert(page)
-    finally:
-        fixture.close()
-
-
-def test_charts_render_task_dataset_and_model_names_as_text(browser):
-    rows = poisoned_runs()
-    for row in rows:
-        row["metric_averages"] = {"accuracy": 0.5}
-    fixture = DashboardFixture(browser, view="charts", runs=rows)
-    page = fixture.page
-    try:
-        fixture.open()
-        tab = page.locator(".chart-dataset-tab").first
-        assert tab.get_attribute("data-dataset") == payload("dataset")
-        assert tab.get_attribute("data-task") == payload("task")
-        assert payload("dataset") in tab.inner_text()
-        assert page.locator(".chart-task-name").first.inner_text() == payload("task")
-        labels = page.locator(".chart-bar-label.clickable-run")
-        titles = labels.evaluate_all(
-            "nodes => nodes.map(node => node.getAttribute('title'))"
-        )
-        assert sorted(title.split("\n")[0] for title in titles) == [
-            "Run name: " + payload(f"run_name_{i}") for i in range(3)
-        ]
-        assert (
-            payload("git_branch") + "/" + payload("git_commit")
-            in labels.first.inner_text()
-        )
-        assert_inert(page)
-    finally:
-        fixture.close()
-
-
-def poison_view(fixture: ViewFixture):
-    for run_id, data in fixture.data.items():
-        data["run"].update(
-            run_name=payload(f"run_name_{run_id}"),
-            model_name=payload("model"),
-            task_name=payload("task"),
-            dataset_name=payload("dataset"),
-        )
-        for row in data["snapshot"]["rows"][:3]:
-            row["input"] = row["input_full"] = PROSE
-            row["expected"] = row["expected_full"] = SQL
-            row["output"] = row["output_full"] = (
-                SQL + "\n" + PROSE + "\n" + payload("output")
-            )
-            row["item_metadata"] = {
-                "complexity": payload("complexity"),
-                payload("meta_key"): payload("meta_value"),
-            }
-
-
-def test_run_page_shows_text_as_stored_with_opt_in_safe_rendering(browser):
-    fixture = ViewFixture(browser, "run", compact=False, count=6)
-    poison_view(fixture)
-    page = fixture.page
-    try:
-        page.add_init_script(
-            "try { localStorage.removeItem('qym.textMode'); } catch (e) {}"
-        )
-        fixture.goto()
-        page.locator(".item-header-expand").first.click()
-        card = page.locator(".item-card:not(.item-collapsed)").first
-        output = card.locator(".output-text .qym-text")
-        expected = card.locator(".expected-text .qym-text")
-        # Raw by default: SQL keeps every asterisk, markdown syntax stays visible.
-        assert page.evaluate("QymSafe.getTextMode()") == "raw"
-        assert SQL in expected.inner_text()
-        assert expected.get_attribute("class") == "qym-text qym-text--code"
-        assert "**bold**" in card.locator(".input-text .qym-text").inner_text()
-        assert (
-            card.locator(".input-text .qym-text").get_attribute("class")
-            == "qym-text qym-text--prose"
-        )
-        assert output.inner_text().startswith(SQL)
-        assert card.locator("em, strong, a.qym-text__link").count() == 0
-        assert_inert(page)
-
-        # Rendered is opt-in, remembered, and still safe.
-        page.locator("#btn-item-display").click()
-        page.locator('#item-text-mode [data-qym-text-mode="rendered"]').click()
-        page.wait_for_function("QymSafe.getTextMode() === 'rendered'")
-        card = page.locator(".item-card:not(.item-collapsed)").first
-        prose = card.locator(".input-text .qym-text")
-        assert prose.get_attribute("data-qym-text-mode") == "rendered"
-        assert prose.locator("strong").inner_text() == "bold"
-        assert prose.locator("em").inner_text() == "soft"
-        # A link whose target tries to add attributes is left as plain text.
-        assert prose.locator("a").count() == 0
-        assert '[docs](https://x.test/"' in prose.inner_text()
-        # SQL and code are never rewritten, even in Rendered mode.
-        assert SQL in card.locator(".expected-text .qym-text").inner_text()
-        assert card.locator(".expected-text em").count() == 0
-        assert card.locator(".output-text .qym-text").inner_text().startswith(SQL)
-        assert page.evaluate("localStorage.getItem('qym.textMode')") == "rendered"
-        assert_inert(page)
-    finally:
-        fixture.close()
-
-
-def test_compare_page_renders_run_names_and_outputs_as_text(browser):
-    fixture = ViewFixture(browser, "compare", compact=False, count=6)
-    poison_view(fixture)
-    page = fixture.page
-    try:
-        page.add_init_script(
-            "try { localStorage.removeItem('qym.textMode'); } catch (e) {}"
-        )
-        fixture.goto()
-        page.locator(".item-header-expand").first.click()
-        row = page.locator(".item-comparison-row:not(.item-collapsed)").first
-        assert SQL in row.locator(".expected-text .qym-text").inner_text()
-        assert row.locator(".output-text .qym-text").first.inner_text().startswith(SQL)
-        assert row.locator("em, strong").count() == 0
-        assert (
-            payload("run_name_run-1")
-            in page.locator(".compare-run-title").first.inner_text()
-        )
-        assert_inert(page)
-        page.locator("#btn-item-display").click()
-        page.locator('#item-text-mode [data-qym-text-mode="rendered"]').click()
-        page.wait_for_function("QymSafe.getTextMode() === 'rendered'")
-        row = page.locator(".item-comparison-row:not(.item-collapsed)").first
-        assert row.locator(".input-text strong").inner_text() == "bold"
-        assert SQL in row.locator(".expected-text .qym-text").inner_text()
-        assert_inert(page)
-    finally:
-        fixture.close()
-
-
 def test_run_html_export_inlines_the_shared_layer_and_opens_offline(browser, tmp_path):
-    from test_performance_views_browser import source_run_api
+    from _support_a2 import source_run_api
 
     with source_run_api(count=3) as client:
         response = client.get("/api/runs/run-1/export-html")
@@ -265,7 +95,7 @@ def open_offline(browser, target):
 
 def test_run_html_export_embeds_hostile_text_as_data(browser, tmp_path, monkeypatch):
     import qym_platform.api.runs as runs_api
-    from test_performance_views_browser import source_run_api
+    from _support_a2 import source_run_api
 
     build = runs_api._build_run_data
 
@@ -295,31 +125,47 @@ def test_run_html_export_embeds_hostile_text_as_data(browser, tmp_path, monkeypa
         context.close()
 
 
-def test_compare_share_export_embeds_hostile_text_as_data(browser, tmp_path):
-    fixture = ViewFixture(browser, "compare", compact=False, count=6)
-    for data in fixture.data.values():
+def test_compare_share_export_embeds_hostile_text_as_data(
+    browser, tmp_path, monkeypatch
+):
+    import qym_platform.api.runs as runs_api
+    from _support_a2 import source_run_api
+
+    build = runs_api._build_run_data
+
+    def hostile(db, run, *args, **kwargs):
+        data = build(db, run, *args, **kwargs)
         row = data["snapshot"]["rows"][0]
         row["output"] = row["output_full"] = EXPORT_TEXT
-    page = fixture.page
-    try:
-        fixture.goto()
-        with page.expect_download() as download:
-            page.locator("#export-share-btn").click()
-        target = tmp_path / "compare.html"
-        download.value.save_as(str(target))
-        html = target.read_text(encoding="utf-8")
-        assert "<!--<script>" not in html
-    finally:
-        fixture.close()
+        return data
+
+    monkeypatch.setattr(runs_api, "_build_run_data", hostile)
+    with source_run_api(count=6) as client:
+        response = client.get(
+            "/api/compare/export-html", params=[("files", "run-1"), ("files", "run-2")]
+        )
+    assert response.status_code == 200, response.text
+    assert "<!--<script>" not in response.text
+    target = tmp_path / "compare.html"
+    target.write_text(response.text, encoding="utf-8")
     context, page, errors = open_offline(browser, target)
     try:
-        page.wait_for_function("Boolean(window.__QYM_COMPARE_DATA__)")
-        outputs = page.evaluate(
-            "window.__QYM_COMPARE_DATA__.runs.map(r => r.snapshot.rows[0].output)"
-        )
+        # Each run is its own self-contained report inside a srcdoc frame.
+        page.wait_for_selector("iframe#run-0", state="attached")
+        page.wait_for_function("document.querySelectorAll('iframe').length === 2")
+        frames = [frame for frame in page.frames if frame != page.main_frame]
+        assert len(frames) == 2
+        outputs = []
+        for frame in frames:
+            frame.wait_for_function("Boolean(window.__QYM_EXPORT_DATA__)")
+            outputs.append(
+                frame.evaluate("window.__QYM_EXPORT_DATA__.snapshot.rows[0].output")
+            )
         assert outputs == [EXPORT_TEXT, EXPORT_TEXT]
         page.wait_for_timeout(500)
         assert_inert(page)
+        for frame in frames:
+            assert frame.evaluate(INJECTED) == {"xss": None, "markers": []}
     finally:
         context.close()
 

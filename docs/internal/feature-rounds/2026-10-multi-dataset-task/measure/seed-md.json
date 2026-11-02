@@ -1,0 +1,11 @@
+{
+  "slug": "design-md",
+  "project_id": "f3d0d2ef-5255-4b2c-9725-a0cf1f60998d",
+  "envs": {
+    "staging": "e12a6ede-f2fe-4cf8-b3eb-808b2dd82216",
+    "production": "d42359de-e799-4b21-b051-fbabdd27aa6a"
+  },
+  "experiments": {
+    "baseline": "c105aba1-016d-411e-95ec-d9ea2d1eda00"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "width": 1024,
+  "selectWidth": 339.5,
+  "singleFieldset": {
+    "width": 339.5,
+    "height": 117.2
+  },
+  "singleBox": {
+    "width": 339.5,
+    "height": 67
+  },
+  "trigger": {
+    "width": 97,
+    "height": 24
+  },
+  "composedFieldset": {
+    "width": 339.5,
+    "height": 283.4
+  },
+  "shape": {
+    "width": 339.5,
+    "height": 67.8
+  },
+  "shapeControl": {
+    "width": 339.5,
+    "height": 24
+  },
+  "prodTag": {
+    "width": 88.6,
+    "height": 20
+  },
+  "stagTag": {
+    "width": 229.2,
+    "height": 20
+  },
+  "envBoxes": {
+    "production": {
+      "width": 339.5,
+      "height": 191
+    },
+    "staging": {
+      "width": 339.5,
+      "height": 163
+    }
+  },
+  "homeBar": {
+    "width": 777,
+    "height": 56
+  },
+  "pageHeight": 1249
+}

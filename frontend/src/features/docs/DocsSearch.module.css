@@ -1,0 +1,64 @@
+/* Docs search popover: listbox under the shared SearchField. */
+.wrap {
+  position: relative;
+}
+
+.list {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + var(--space-xs));
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+  margin: 0;
+  padding: var(--space-xs);
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--control-radius);
+  cursor: pointer;
+}
+
+.option[data-active] {
+  background: var(--bg-hover);
+}
+
+.crumb {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.title {
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.excerpt {
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  padding: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-base);
+}
+
+.foot {
+  padding: var(--space-xs) var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}

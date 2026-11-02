@@ -8,12 +8,15 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import case, event, insert, or_, select
+from sqlalchemy import case, event, insert, or_, select, update
 from sqlalchemy.orm import Session
 
 from qym_platform.services.run_means import is_item_edit, is_metric_error
 
 _installed = False
+# Rows read (and change events inserted) per statement by a bulk source
+# UPDATE/DELETE; bounds memory and IN-list size for runs with many items.
+BULK_SNAPSHOT_CHUNK = 1000
 NUMERIC_FIELDS = (
     "observed",
     "terminal",
@@ -132,6 +135,72 @@ def execution_event_object(row):
             for key in ("item_id", "pass_number", "retry_count", "attempt_number")
         },
     )
+
+
+def source_snapshot_query(model):
+    """Select only the source fields ``snapshot`` reads, never large payloads.
+
+    RunItem input, expected and output, and event payloads beyond their
+    counters, can be large: a projection of the fields the outbox reads keeps
+    bulk mutations and backfill scans small.
+    """
+    from qym_platform.db.models import (
+        Run,
+        RunEvent,
+        RunItem,
+        RunItemAttempt,
+        RunItemPassScore,
+        RunItemScore,
+    )
+
+    if model is RunEvent:
+        return execution_event_query()
+    if model is Run:
+        return select(Run.id, Run.project_id, Run.deleted_at)
+    if model not in (RunItem, RunItemAttempt, RunItemScore, RunItemPassScore):
+        # Run-level sources (metric specs, approvals) only name their run.
+        return select(model.id, model.run_id)
+    columns = [model.id, model.run_id, model.item_id]
+    if model is RunItem:
+        columns.extend(
+            (
+                model.output.isnot(None).label("has_output"),
+                model.error.isnot(None).label("has_error"),
+                model.latency_ms,
+                model.retry_count,
+                model.item_metadata,
+            )
+        )
+    elif model is RunItemAttempt:
+        columns.extend(
+            (
+                model.pass_number,
+                model.attempt_number,
+                model.status,
+                model.latency_ms,
+                model.task_started_at_ms,
+                model.is_last_attempt,
+            )
+        )
+    else:
+        columns.extend((model.metric_name, model.score_numeric, model.meta))
+        if model is RunItemPassScore:
+            columns.append(model.pass_number)
+    return select(*columns)
+
+
+def source_snapshot_object(model, row):
+    """A transient source object holding the fields of ``source_snapshot_query``."""
+    from qym_platform.db.models import RunEvent, RunItem
+
+    if model is RunEvent:
+        return execution_event_object(row)
+    values = dict(row._mapping)
+    if model is RunItem:
+        # Preserve SQL NULL versus JSON null without materializing the output.
+        values["output"] = True if values.pop("has_output") else None
+        values["error"] = "error" if values.pop("has_error") else None
+    return model(**values)
 
 
 def _causes(value: Any, *, pass_score=False):
@@ -424,6 +493,16 @@ def _before_flush(session, flush_context, instances):
     changed = new.union(session.dirty).union(deleted)
     from qym_platform.db.models import RunEvent
 
+    from qym_platform.db.models import (
+        DatasetAlias,
+        DatasetVersion,
+        EvalExperimentJob,
+        Run,
+        User,
+    )
+    from sqlalchemy import inspect
+
+    status_changes = set()
     for obj in changed:
         if isinstance(obj, RunEvent) and obj in new:
             if not projects_execution_event(obj.type, obj.payload):
@@ -434,11 +513,17 @@ def _before_flush(session, flush_context, instances):
             or session.is_modified(obj, include_collections=False)
         ):
             pending.append((obj, obj in deleted, obj in new))
+            if isinstance(obj, Run) and obj not in new and obj not in deleted:
+                attrs = inspect(obj).attrs
+                if (
+                    attrs.status.history.has_changes()
+                    or attrs.status_reason.history.has_changes()
+                ):
+                    status_changes.add(obj.id)
     session.info["dashboard_source_changes"] = pending
-    from qym_platform.db.models import DatasetAlias, DatasetVersion, User
-    from sqlalchemy import inspect
+    session.info["dashboard_run_status_changes"] = status_changes
 
-    users, versions = set(), set()
+    users, versions, jobs = set(), set(), set()
     for obj in changed:
         if (
             obj not in new
@@ -453,18 +538,77 @@ def _before_flush(session, flush_context, instances):
         elif isinstance(obj, DatasetAlias):
             versions.add(obj.dataset_version_id)
             versions.update(inspect(obj).attrs.dataset_version_id.history.deleted)
-    session.info["dashboard_dimension_changes"] = (users, versions)
+        elif isinstance(obj, EvalExperimentJob) and obj not in new:
+            # The service reports versioning when the job finishes, usually
+            # after its run was published; republish the run's descriptor.
+            attrs = inspect(obj).attrs
+            if (
+                attrs.remote_versioning.history.has_changes()
+                or attrs.remote_result.history.has_changes()
+                or _enters_or_leaves_cancelling(attrs.status.history)
+            ):
+                jobs.add(obj.id)
+    session.info["dashboard_dimension_changes"] = (users, versions, jobs)
+
+
+def _enters_or_leaves_cancelling(history):
+    """A job status change into or out of ``CANCELLING`` ("Stopping…" runs)."""
+    from qym_platform.db.models import EvalJobStatus
+
+    return any(
+        value == EvalJobStatus.CANCELLING
+        for value in (*(history.added or ()), *(history.deleted or ()))
+    )
+
+
+def _run_descriptor_snapshots(rows):
+    """Run-level UPSERTs that republish each run's descriptor (no numbers)."""
+    return [
+        (
+            dict(
+                partition_key=run_id,
+                project_key=project,
+                record_key=run_id + ":run",
+                record_kind="run",
+                operation="UPSERT",
+            ),
+            [],
+        )
+        for run_id, project in rows
+    ]
+
+
+def enqueue_job_run_refresh(session, job_ids):
+    """Republish the runs of evaluation jobs changed by a bulk ``UPDATE``.
+
+    Guarded job updates (``eval_experiments.cancel_job``) bypass the flush
+    hooks; without this a run whose job a user is cancelling would not show
+    "Stopping…" in the runs list until something else touched the run.
+    """
+    from qym_platform.db.models import Run
+
+    ids = sorted({job_id for job_id in job_ids if job_id})
+    if not ids or session.info.get("dashboard_projection_worker"):
+        return
+    connection = session.connection()
+    rows = connection.execute(
+        select(Run.id, Run.project_id).where(Run.experiment_job_id.in_(ids))
+    ).all()
+    if rows:
+        enqueue_snapshots(connection, _run_descriptor_snapshots(rows))
 
 
 def _after_flush(session, flush_context):
     if session.info.get("dashboard_projection_worker"):
         return
-    from qym_platform.db.models import Approval, Run
+    from qym_platform.db.models import Approval, Run, RunDataset
 
     pending = session.info.pop("dashboard_source_changes", [])
-    users, versions = session.info.pop("dashboard_dimension_changes", (set(), set()))
+    users, versions, jobs = session.info.pop(
+        "dashboard_dimension_changes", (set(), set(), set())
+    )
     dimensions = []
-    if users or versions:
+    if users or versions or jobs:
         query = select(Run.id, Run.project_id).where(
             or_(
                 Run.owner_user_id.in_(users),
@@ -474,21 +618,16 @@ def _after_flush(session, flush_context):
                     )
                 ),
                 Run.dataset_version_id.in_(versions),
+                # Union runs: any entry whose version's aliases moved.
+                Run.id.in_(
+                    select(RunDataset.run_id).where(
+                        RunDataset.dataset_version_id.in_(versions)
+                    )
+                ),
+                Run.experiment_job_id.in_(jobs),
             )
         )
-        dimensions = [
-            (
-                dict(
-                    partition_key=run_id,
-                    project_key=project,
-                    record_key=run_id + ":run",
-                    record_kind="run",
-                    operation="UPSERT",
-                ),
-                [],
-            )
-            for run_id, project in session.connection().execute(query)
-        ]
+        dimensions = _run_descriptor_snapshots(session.connection().execute(query))
     if pending or dimensions:
         enqueue_snapshots(
             session.connection(),
@@ -496,6 +635,87 @@ def _after_flush(session, flush_context):
             fresh_runs={
                 obj.id for obj, _, fresh in pending if fresh and isinstance(obj, Run)
             },
+        )
+    publish_run_status(
+        session.connection(), session.info.pop("dashboard_run_status_changes", ())
+    )
+
+
+LIVE_RUN_STATUSES = ("RUNNING", "PENDING")
+
+
+def publish_run_status(connection, run_ids):
+    """Mirror a run's workflow status into its published list row at once.
+
+    ``Run.status`` moves synchronously (final event, lease timeout, force
+    stop, a cancelled job), but the runs list and overview read the published
+    dimension row, which the summary worker republishes later, after every
+    pending event of the run (and, for a terminal run, its whole backfill).
+    Until then the list said RUNNING while the run page said COMPLETED. Like
+    a review decision (``api.runs._publish_dashboard_review_state``), the
+    status is written to the row here, in the source transaction, after
+    ``enqueue_snapshots`` locked the partition row the worker serializes on;
+    the worker publishes the same value later. The status is a cheap, exact
+    dimension: the numbers keep their last publication.
+    """
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+    from qym_platform.db.models import EvalExperimentJob, EvalJobStatus, Run
+
+    ids = sorted(set(run_ids))
+    if not ids:
+        return
+    runs = {
+        run_id: (str(getattr(status, "value", status) or ""), reason, job_id)
+        for run_id, status, reason, job_id in connection.execute(
+            select(Run.id, Run.status, Run.status_reason, Run.experiment_job_id).where(
+                Run.id.in_(ids)
+            )
+        )
+    }
+    rows = connection.execute(
+        select(Dimension.run_key, Dimension.status, Dimension.descriptor)
+        .where(Dimension.run_key.in_(list(runs)))
+        .with_for_update()
+    ).all()
+    if not rows:
+        return
+    # A user cancelled the run's job; it stops once the Evaluation Service
+    # confirms (the runs list shows "Stopping…" meanwhile).
+    live_jobs = {
+        job_id
+        for status, _, job_id in runs.values()
+        if job_id and status in LIVE_RUN_STATUSES
+    }
+    cancelling = (
+        set(
+            connection.execute(
+                select(EvalExperimentJob.id).where(
+                    EvalExperimentJob.id.in_(live_jobs),
+                    EvalExperimentJob.status == EvalJobStatus.CANCELLING,
+                )
+            ).scalars()
+        )
+        if live_jobs
+        else set()
+    )
+    for run_key, published, descriptor in rows:
+        status, reason, job_id = runs[run_key]
+        fields = {
+            "status": status,
+            "status_reason": reason,
+            "stop_requested": bool(
+                status in LIVE_RUN_STATUSES and job_id and job_id in cancelling
+            ),
+        }
+        descriptor = descriptor or {}
+        if published == status and all(
+            descriptor.get(key) == value for key, value in fields.items()
+        ):
+            continue
+        connection.execute(
+            update(Dimension.__table__)
+            .where(Dimension.run_key == run_key)
+            .values(status=status, descriptor={**descriptor, **fields})
         )
 
 
@@ -507,41 +727,45 @@ def _bulk_source_mutation(state):
     mapper = state.bind_mapper
     if mapper is None or mapper.class_ not in _source_types():
         return
-    model = mapper.class_
-    statement = state.statement
-    where = statement.whereclause
-    from qym_platform.db.models import RunEvent
+    from qym_platform.db.models import Run
 
-    query = execution_event_query() if model is RunEvent else select(model)
+    model = mapper.class_
+    session = state.session
+    where = state.statement.whereclause
+    fields = source_snapshot_query(model)
+    matched = fields.with_only_columns(model.id)
     if where is not None:
-        query = query.where(where)
-    objects = (
-        [
-            execution_event_object(row)
-            for row in state.session.execute(query.with_for_update())
-        ]
-        if model is RunEvent
-        else list(state.session.scalars(query.with_for_update()))
-    )
-    if not objects:
+        matched = matched.where(where)
+    # Lock the affected rows by primary key only, then read the snapshot
+    # fields in bounded chunks: a run's bulk delete or retention never loads
+    # every row's input/output JSON (or ORM identity) into memory.
+    ids = list(session.execute(matched.with_for_update()).scalars())
+    if not ids:
         return
-    snapshots = [snapshot(obj, True) for obj in objects]
-    ids = [obj.id for obj in objects]
+
+    def snapshots(deleted):
+        found = []
+        for start in range(0, len(ids), BULK_SNAPSHOT_CHUNK):
+            chunk = ids[start : start + BULK_SNAPSHOT_CHUNK]
+            found.extend(
+                snapshot(source_snapshot_object(model, row), deleted)
+                for row in session.execute(fields.where(model.id.in_(chunk)))
+            )
+        return found
+
+    changes = snapshots(True)
     result = state.invoke_statement()
     if state.is_update:
-        state.session.expire_all()
-        objects = (
-            [
-                execution_event_object(row)
-                for row in state.session.execute(
-                    execution_event_query().where(model.id.in_(ids))
-                )
-            ]
-            if model is RunEvent
-            else state.session.scalars(select(model).where(model.id.in_(ids)))
-        )
-        snapshots = [snapshot(obj) for obj in objects]
-    enqueue_snapshots(state.session.connection(), snapshots)
+        session.expire_all()
+        changes = snapshots(False)
+    connection = session.connection()
+    for start in range(0, len(changes), BULK_SNAPSHOT_CHUNK):
+        enqueue_snapshots(connection, changes[start : start + BULK_SNAPSHOT_CHUNK])
+    if state.is_update and model is Run:
+        # A guarded bulk stop (eval_experiments.stop_linked_run): publish the
+        # new status now, like the ORM path does.
+        for start in range(0, len(ids), BULK_SNAPSHOT_CHUNK):
+            publish_run_status(connection, ids[start : start + BULK_SNAPSHOT_CHUNK])
     return result
 
 

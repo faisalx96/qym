@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
@@ -38,6 +40,7 @@ from qym_platform.db.models import (
     DatasetAlias,
     DatasetItem,
     DatasetItemRevision,
+    DatasetReadToken,
     DatasetVersion,
     DatasetVersionChange,
     DatasetVersionStatus,
@@ -140,6 +143,14 @@ def _create_project(client, session_factory, slug: str) -> str:
                 characters=4,
             )
         )
+        # One live and one revoked read token: both keep a foreign key.
+        for index, revoked in enumerate((None, datetime.utcnow())):
+            db.add(
+                DatasetReadToken(
+                    project_id=project_id, name=f"svc-{index}", prefix=f"qrt{index}{slug}"[:16],
+                    token_hash=b"x", created_by_user_id="admin", revoked_at=revoked,
+                )
+            )
         dataset = Dataset(id=f"ds-{slug}", project_id=project_id, name="golden", slug="golden", created_by_user_id="mgr")
         db.add(dataset)
         db.flush()
@@ -209,6 +220,9 @@ def _row_counts(session_factory, project_id: str) -> dict:
         return {
             "project": db.query(Project).filter(Project.id == project_id).count(),
             "keys": db.query(ApiKey).filter(ApiKey.project_id == project_id).count(),
+            "read_tokens": db.query(DatasetReadToken)
+            .filter(DatasetReadToken.project_id == project_id)
+            .count(),
             "members": db.query(ProjectMembership).filter(ProjectMembership.project_id == project_id).count(),
             "llm": db.query(ProjectLlmConnection).filter(ProjectLlmConnection.project_id == project_id).count(),
             "docs": db.query(AnalyzerDocument).filter(AnalyzerDocument.project_id == project_id).count(),
@@ -284,7 +298,7 @@ def test_delete_removes_datasets_llm_connections_and_settings(client, session_fa
     assert response.json()["deleted"] is True
     assert response.json()["counts"]["datasets"] == 1
     assert _row_counts(session_factory, project_id) == {
-        "project": 0, "keys": 0, "members": 0, "llm": 0, "docs": 0,
+        "project": 0, "keys": 0, "read_tokens": 0, "members": 0, "llm": 0, "docs": 0,
         "datasets": 0, "versions": 0, "rules": 0, "catalogs": 0,
     }
     with session_factory() as db:
@@ -309,7 +323,7 @@ def test_delete_is_refused_while_the_project_has_runs(client, session_factory, t
 
     preview = client.get(f"/v1/admin/projects/{project_id}/deletion", headers=ADMIN).json()
     assert preview["can_delete"] is False
-    assert ("in Trash" in preview["blocked_reason"]) is trashed
+    assert bool(re.search(r"\b1 deleted run\b", preview["blocked_reason"])) is trashed
 
     response = client.delete(f"/v1/admin/projects/{project_id}?confirm=has-runs", headers=ADMIN)
     assert response.status_code == 409
@@ -321,25 +335,19 @@ def test_delete_is_refused_while_the_project_has_runs(client, session_factory, t
 
 
 def test_blocked_delete_says_when_trash_stops_blocking(client, session_factory, monkeypatch):
-    """Deleting the runs is not enough: they block until Trash purges them."""
+    """Deleting the runs is not enough: they block until Deleted runs purges them (C178 names)."""
     project_id = _create_project(client, session_factory, "trash-wait")
     _add_run(session_factory, project_id, trashed=True)
     url = f"/v1/admin/projects/{project_id}/deletion"
 
     monkeypatch.setenv("QYM_DELETED_RUN_GRACE_DAYS", "7")
     reason = client.get(url, headers=ADMIN).json()["blocked_reason"]
-    assert "1 run in Trash" in reason
+    assert "1 deleted run" in reason and "Trash" not in reason
     assert "purged 7 days after deletion" in reason
 
     monkeypatch.setenv("QYM_DELETED_RUN_GRACE_DAYS", "0")
     reason = client.get(url, headers=ADMIN).json()["blocked_reason"]
-    assert "automatic Trash purging is turned off" in reason
-
-    settings = (
-        ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard" / "project_settings.html"
-    ).read_text(encoding="utf-8")
-    assert "delete its runs first" not in settings
-    assert "until its runs are deleted and purged from Trash" in settings
+    assert "Retention is Off on this platform, so deleted runs are kept until restored" in reason
 
 
 def test_patch_toggling_is_active_is_audited_like_archive(client, session_factory):
@@ -386,21 +394,3 @@ def test_project_lifecycle_endpoints_are_admin_only(client, session_factory):
     ):
         assert getattr(client, method)(url, headers=MANAGER).status_code == 403
     assert _row_counts(session_factory, project_id)["project"] == 1
-
-
-def test_danger_zone_buttons_call_their_own_endpoints() -> None:
-    dashboard = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-    settings = (dashboard / "project_settings.html").read_text(encoding="utf-8")
-    admin = (dashboard / "admin.html").read_text(encoding="utf-8")
-
-    assert "v1/admin/projects/${state.project.id}/archive" in settings
-    assert "v1/admin/projects/${state.project.id}/deletion" in settings
-    assert "v1/admin/projects/${state.project.id}?confirm=${encodeURIComponent(name)}" in settings
-    assert "backend will archive it instead" not in settings
-    assert "Runs and data are preserved" not in settings
-    assert "Permanently delete this project, all runs" not in settings
-    # Admin table: archive/unarchive only, via the shared dialog, never DELETE.
-    assert "data-project-unarchive" in admin
-    assert "${archived ? 'archive' : 'unarchive'}" in admin
-    assert "confirm('Archive this project?')" not in admin
-    assert "v1/admin/projects/${btn.dataset.projectDelete}" not in admin

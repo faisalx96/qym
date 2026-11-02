@@ -1,0 +1,362 @@
+/* Design tokens — carried over VERBATIM from
+   packages/platform/qym_platform/_static/dashboard/dashboard.css (:root, @font-face,
+   RTL leading). Usage rules: docs/DESIGN_LANGUAGE.md. Enforced by
+   src/__tests__/design-language.test.ts. Do not edit values here; add new tokens
+   in the "Added by the React migration" block at the end and log them in
+   docs/internal/ui-migration/decisions/foundation/OPEN_QUESTIONS.md. */
+:root {
+  /* The dashboard is dark only: tell the browser, so anything it draws
+     itself (form controls, <dialog>, scrollbars, popups) comes up dark too,
+     never a white box, even where a page stylesheet is missing or still
+     loading. */
+  color-scheme: dark;
+
+  /* Dark palette with better surface separation */
+  --bg-void: #101018;
+  --bg-base: #14141e;
+  --bg-surface: #1a1a28;
+  --bg-elevated: #222232;
+  --bg-hover: #2a2a3c;
+  --bg-active: #323244;
+
+  /* Text hierarchy — improved contrast.
+     Usage rules:
+     - primary: titles, key values, table content that matters
+     - secondary: body copy, table cells, descriptions
+     - muted: labels, meta, captions, table headers (min color for readable text)
+     - dim: decorative/disabled/placeholder ONLY — never headers, labels, or content */
+  --text-primary: #ededf0; /* 14.7:1 on --bg-surface */
+  --text-secondary: #a8a8ba; /* 7.3:1 on --bg-surface */
+  --text-muted: #9a9ab2; /* 6.3:1 on --bg-surface, 5.7:1 on --bg-elevated */
+  --text-dim: #6b6b80; /* 3.3:1 — below AA, decorative only */
+
+  /* Accent colors */
+  --accent-primary: #00d4aa;
+  --accent-secondary: #00a8ff;
+  --accent-tertiary: #a855f7;
+  --accent-tertiary-soft: #c084fc;
+
+  /* Semantic colors */
+  --success: #10b981;
+  --success-dim: #064e3b;
+  --warning: #f59e0b;
+  --warning-dim: #78350f;
+  --metric-error: #eab308;
+  --error: #ef4444;
+  --error-dim: #7f1d1d;
+  --info: #3b82f6;
+
+  /* 5-color score scale (red → orange → yellow → lime → green) */
+  --score-1: #ef4444; /* 0-39%: red */
+  --score-2: #f97316; /* 40-59%: orange */
+  --score-3: #facc15; /* 60-74%: yellow (brighter than the old #eab308 so it separates from lime under protan/deutan) */
+  --score-4: #4ade80; /* 75-89%: light green (was lime #84cc16, which collapsed into yellow for red-green colour blindness) */
+  --score-5: #10b981; /* 90-100%: green */
+
+  /* Chart colors */
+  /* Series palette (design pass): no teal (reserved for selection/links/primary action), no purple
+     (metadata tags), no red (errors); every hue clears 4.5:1 on surface and elevated. */
+  --chart-1: #38bdf8;
+  --chart-2: #f472b6;
+  --chart-3: #fb923c;
+  --chart-4: #fbbf24;
+  --chart-5: #818cf8;
+
+  /* Borders — more visible */
+  /* Hairlines were 1.14 / 1.40 / 2.0 : 1 on --bg-surface, so table rules and card edges vanished on
+     a dim screen; the design pass lifts them to 1.25 / 1.59 / 2.3 : 1. */
+  --border-subtle: #2b2b40;
+  --border-default: #3b3b54;
+  --border-strong: #52526c;
+
+  /* Spacing — more breathing room */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 14px;
+  --space-lg: 20px;
+  --space-xl: 32px;
+  /* Space on each side of the hairline between two sections (ui/Section). */
+  --section-gap: var(--space-xl);
+
+  /* Canonical interactive component geometry.
+     One aligned density is used across forms and analysis toolbars. */
+  --control-height: 24px;
+  --control-radius: 5px;
+  /* A field-like control's edge (text field, select, filter trigger, segmented control): a soft hairline at rest over
+     the --bg-elevated fill, one step stronger on hover; focus and an active filter use the accent (round 10: the
+     --border-default outlines read as too bold next to the borderless buttons). */
+  --control-edge: var(--border-subtle);
+  --control-edge-hover: var(--border-default);
+  --analysis-action-gap: 5px;
+  --analysis-icon-optical-offset: 0.25px;
+  --analysis-action-padding-start: 9px;
+  --analysis-action-padding-end: 11px;
+  --dropdown-radius: 7px;
+  --dropdown-option-height: 32px;
+  --tab-height: 34px;
+  --segment-height: 24px;
+  --badge-height: 20px;
+  --chip-height: 26px;
+  --stat-strip-min-height: 72px;
+  --overview-summary-max-width: 660px;
+  --analysis-matrix-max-width: 720px;
+  --info-marker-size: 12px;
+  --help-tooltip-width: 240px;
+  --status-bar-height: 38px;
+  /* Sticky bars, two heights across the app: the section/navigation bar of a report (run detail, compare) and the
+     action bar (launch bar, analysis action rail, items toolbar). */
+  --bar-nav-h: 44px;
+  /* The links-only jump nav of the compare page (round 8, owner decision H5). */
+  --bar-link-h: 36px;
+  --bar-action-h: 56px;
+  /* Auto-analysis action rail and reserved results slot (nothing may resize them on state change). */
+  --action-primary-width: 168px;
+  --results-slot-min-height: 160px;
+  --chars-tag-width: 96px;
+  --analysis-content-width: 1440px;
+
+  /* Auto-analysis extensions to the upstream component geometry. */
+  --dropdown-width: 240px;
+  --dropdown-max-height: 320px;
+  --example-filter-range-width: 88px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+  --transition-fast: 150ms ease;
+  --motion-step: 180ms;
+  --motion-step-out: 140ms;
+  --ease-standard: ease;
+  --page-max-w: 1233px; /* every report and settings page; the one page width */
+  --page-narrow-w: 1120px; /* text-first pages (profile): an explicit `narrow` container */
+  --settings-prompt-rail-width: 200px;
+  --settings-prompt-tab-width: 240px;
+  --settings-prompt-editor-min-height: 280px;
+
+  /* Type scale — every element maps to one role:
+     xs 10px badge/pill · sm 11px meta/caption/label/table-header ·
+     base 12px body/table-cell/code · md 13px card title/sub-header ·
+     lg 15px section header · xl 18px modal/empty-state title ·
+     title 22px page title · stat 26px stat/hero value.
+     Floor: nothing readable below 11px (10px reserved for badges). */
+  --font-xs: 10px;
+  --font-sm: 11px;
+  --font-base: 12px;
+  --font-md: 13px;
+  --font-lg: 15px;
+  --font-xl: 18px;
+  --font-title: 22px;
+  --font-stat: 26px;
+
+  /* Shared width for the charts view label/control column */
+
+  /* Typefaces (docs/internal/ui-migration/redesign2/typeface-study.md): one family, three scripts.
+     IBM Plex Sans (Latin), IBM Plex Sans Arabic and IBM Plex Mono, self-hosted as subsetted woff2
+     (src/styles/fonts, SIL OFL). Each stack lists the web face, the Arabic face (its unicode-range
+     keeps it to Arabic glyphs, so Latin never falls into it), a metric-matched local fallback that
+     stops the swap from moving layout, then the system faces. */
+  --font-sans: 'Qym Sans', 'Qym Arabic', 'Qym Sans Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Qym Mono', 'Qym Arabic', 'Qym Mono Fallback', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+/* Web faces. Latin and Arabic are split by unicode-range so a missing glyph never silently
+   borrows from the wrong script. Variable Latin covers 400-700 in one file; the Arabic and mono
+   faces are static cuts (Regular / Medium / SemiBold, the last also serving 650-700). */
+@font-face {
+  font-family: 'Qym Sans';
+  src: url('./fonts/plex-sans-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2010-2015,
+    U+2018-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2190-2193, U+2212,
+    U+2215, U+2248, U+2260, U+2264-2265, U+25CF;
+}
+
+@font-face {
+  font-family: 'Qym Arabic';
+  src: url('./fonts/plex-arabic-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200F, U+25CC, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: 'Qym Arabic';
+  src: url('./fonts/plex-arabic-medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200F, U+25CC, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: 'Qym Arabic';
+  src: url('./fonts/plex-arabic-semibold.woff2') format('woff2');
+  font-weight: 600 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200F, U+25CC, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: 'Qym Mono';
+  src: url('./fonts/plex-mono-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2010-2015,
+    U+2018-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2190-2193, U+2212,
+    U+2215, U+2248, U+2260, U+2264-2265, U+25CF;
+}
+
+@font-face {
+  font-family: 'Qym Mono';
+  src: url('./fonts/plex-mono-medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2010-2015,
+    U+2018-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2190-2193, U+2212,
+    U+2215, U+2248, U+2260, U+2264-2265, U+25CF;
+}
+
+@font-face {
+  font-family: 'Qym Mono';
+  src: url('./fonts/plex-mono-semibold.woff2') format('woff2');
+  font-weight: 600 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2010-2015,
+    U+2018-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2190-2193, U+2212,
+    U+2215, U+2248, U+2260, U+2264-2265, U+25CF;
+}
+
+/* Metric-matched fallbacks (Arial/Helvetica for sans, Menlo/Consolas/Liberation Mono for mono): they
+   take Plex's advance width and vertical metrics while the web face loads, so font-display: swap
+   moves neither line breaks nor row heights. Values derived from the hhea and advance tables:
+   sans size-adjust = Plex 0.471 em / Arial 0.459 em average advance. */
+@font-face {
+  font-family: 'Qym Sans Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Helvetica'), local('Liberation Sans');
+  size-adjust: 102.55%;
+  ascent-override: 99.9%;
+  descent-override: 26.8%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Qym Mono Fallback';
+  src: local('Menlo'), local('Consolas'), local('Liberation Mono'), local('Courier New');
+  size-adjust: 100%;
+  ascent-override: 102.5%;
+  descent-override: 27.5%;
+  line-gap-override: 0%;
+}
+
+/* RTL blocks (the renderers stamp dir="rtl" lang="ar" on detected Arabic
+   text, QymSafe.textDirAttrs) get the taller leading the script needs. The
+   :not(#…) adds ID weight so page rules such as `.formatted-string` or
+   `.item-title` (line-height 1.45–1.5) cannot win over it. Blocks that
+   start in Arabic under dir="auto" align to the right on their own. */
+[dir='rtl'],
+[dir='rtl'][lang='ar']:not(#qym-rtl-leading) {
+  line-height: 1.7;
+}
+
+/* ── Added by the React migration (brief 02 §4) ─────────────────────────── */
+:root {
+  --accent-primary-hover: #00e6b8;
+  --error-hover: #dc2626;
+  --focus-ring: 0 0 0 2px rgba(0, 212, 170, 0.15);
+  --shadow-popover: 0 12px 28px rgba(0, 0, 0, 0.38);
+  --shadow-dialog: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --z-dropdown: 100;
+  --z-dialog: 9998;
+  --z-toast: 9999;
+  --z-tooltip: 10000;
+  /* Decorative glyph sizes (empty-state icons, close glyphs): never readable text. */
+  --glyph-md: 20px;
+  --glyph-lg: 48px;
+  /* Skeleton/arrival timing (shell.css --qym-skeleton-wait). */
+  --skeleton-wait: 300ms;
+  --skeleton-min: 400ms;
+  --arrive-fade: 200ms;
+  /* Data table v2 (DESIGN_LANGUAGE §3 "Data table"): row heights per density,
+     header/group-band heights, selected-row tint. */
+  --row-compact: 32px;
+  --row-regular: 40px;
+  --row-comfortable: 52px;
+  --table-header-height: 34px;
+  --table-group-height: 24px;
+  --table-footer-height: 40px;
+  --bg-selected: rgba(0, 212, 170, 0.08);
+}
+
+/* ── Visual language (redesign round 2; DESIGN_LANGUAGE §3 "Colour as information") ──
+   Tint steps are percentages of a tone mixed into transparent; series 6..8 extend the
+   chart palette (legacy compare COLORS); rail/card/motion tokens feed Card and the chart kit. */
+:root {
+  --tint-faint: 6%; /* row/section wash (danger and live only) */
+  --tint-soft: 12%; /* Badge, Tag, Chip selected, score pill, icon tile fill */
+  --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
+  --error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary)); /* 5.15:1 on a 12% error tint */
+
+  --chart-6: #a3e635;
+  --chart-7: #22d3ee;
+  --chart-8: #cbd5e1;
+
+  --rail-width: 3px;
+  --field-label-width: 7.5rem; /* FieldRow label column */
+  --field-measure: 76ch; /* reading measure of prose bodies */
+  --card-padding: var(--space-md) var(--space-lg);
+  --card-padding-compact: var(--space-sm) var(--space-md);
+  --card-bg: var(--bg-surface); /* a card's fill; ReportSection bodies make it --bg-elevated (inset cards) */
+  --card-edge: var(--border-subtle); /* a card's outline; ReportSection bodies make it transparent (inset cards, owner decision H6) */
+  --shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.28);
+  --pin-shade: rgba(0, 0, 0, 0.4); /* inner edge of a frozen column while content is under it (DataTable) */
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-fill: 360ms; /* bars/rings/fills growing in or updating */
+  --motion-stagger: 24ms; /* per-mark delay, capped at 10 marks */
+  --motion-flash: 700ms; /* a live value changed */
+  --dim-opacity: 0.45; /* siblings of a hovered/selected mark */
+  --hover-brightness: 1.12;
+
+  /* Scrims and scrollbars (not tones: neutral shades of the void/ink). */
+  --scrim: rgba(10, 10, 16, 0.6);
+  --scrim-light: rgba(10, 10, 16, 0.5);
+  --scrim-heavy: rgba(4, 8, 18, 0.65); /* full-width drawers (trace) that should dim the page hard */
+  --scrollbar-track: rgba(255, 255, 255, 0.04);
+  --scrollbar-thumb-from: rgba(122, 122, 144, 0.82);
+  --scrollbar-thumb-to: rgba(80, 80, 94, 0.92);
+  --scrollbar-thumb-edge: rgba(16, 16, 24, 0.75);
+  --scrollbar-thumb-hover-from: rgba(0, 212, 170, 0.82);
+  --scrollbar-thumb-hover-to: rgba(0, 168, 255, 0.82);
+  --scrollbar-color: rgba(120, 120, 150, 0.55);
+}
+
+/* ── Docs prose scale (DESIGN_LANGUAGE.md §5, sanctioned exception) ─────────
+   Long-form reading pages keep a larger independent heading/body scale and a
+   brighter body colour; labels still use the shared ramp and code the shared
+   --code-* palette. Only features/docs may use these. */
+:root {
+  --docs-font-h1: 28px;
+  --docs-font-h2: 20px;
+  --docs-font-h3: 16px;
+  --docs-font-lead: 16px;
+  --docs-font-body: 15px;
+  --docs-font-small: 13px;
+  --docs-font-code: 13px;
+  --docs-body: #d3d3df;
+  --docs-label: var(--text-muted);
+  --docs-nav-width: 264px;
+  --docs-toc-width: 220px;
+  --docs-content-max: 780px;
+  /* Syntax palette (was scoped to .docs-page in docs.css). */
+  --code-comment: #8a8aa0;
+  --code-keyword: #c792ea;
+  --code-string: #98c379;
+  --code-number: #d19a66;
+  --code-builtin: #61afef;
+  --code-class: #e5c07b;
+}

@@ -14,7 +14,7 @@ from qym_platform.settings import PlatformSettings
 @pytest.mark.parametrize("prefix", ["", "/", "/qym", "/qym/"])
 def test_entrypoint_starts_and_stops_worker_once(monkeypatch, prefix):
     worker = Mock()
-    monkeypatch.setattr("qym_platform.app.DashboardSummaryWorker", lambda _: worker)
+    monkeypatch.setattr("qym_platform.app.DashboardSummaryWorker", lambda _, **kw: worker)
     settings = PlatformSettings(environment="test", auth_mode="none", root_path=prefix)
     monkeypatch.setattr(main, "PlatformSettings", lambda: settings)
     app = main.build_app()

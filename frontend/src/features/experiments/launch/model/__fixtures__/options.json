@@ -1,0 +1,56 @@
+{
+  "environment_id": "env-production",
+  "allow_connection_keys": true,
+  "temporary_keys_allowed": true,
+  "temporary_keys_reason": null,
+  "connections": [
+    {
+      "connection_id": "conn-prod",
+      "name": "gpt-4o prod",
+      "model": "gpt-4o",
+      "base_url": "https://api.example.com/v1",
+      "api_key_set": true,
+      "api_key_hint": "\u2022\u2022\u2022\u20227890",
+      "is_default": true,
+      "available": true,
+      "reason_code": null,
+      "reason": null,
+      "slots": {
+        "endpoint:primary": {
+          "available": true,
+          "reason_code": null,
+          "reason": null
+        },
+        "flat:VIZ_LLM": {
+          "available": true,
+          "reason_code": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "connection_id": "conn-mini",
+      "name": "gpt-4o mini",
+      "model": "gpt-4o-mini",
+      "base_url": "https://api.example.com/v1",
+      "api_key_set": true,
+      "api_key_hint": "\u2022\u2022\u2022\u20221111",
+      "is_default": false,
+      "available": true,
+      "reason_code": null,
+      "reason": null,
+      "slots": {
+        "endpoint:primary": {
+          "available": true,
+          "reason_code": null,
+          "reason": null
+        },
+        "flat:VIZ_LLM": {
+          "available": true,
+          "reason_code": null,
+          "reason": null
+        }
+      }
+    }
+  ]
+}

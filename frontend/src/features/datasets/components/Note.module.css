@@ -1,0 +1,51 @@
+/* The one note recipe: a 3px start rail on a tinted block (ConfirmDialog .warning), icon, title and lines. */
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-inline-start: var(--rail-width) solid var(--tone);
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
+  background: color-mix(in srgb, var(--tone) var(--tint-faint), transparent);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  line-height: 1.5;
+}
+
+.note[data-tone='warning'] {
+  --tone: var(--warning);
+}
+
+.note[data-tone='info'] {
+  --tone: var(--info);
+}
+
+.note[data-tone='danger'] {
+  --tone: var(--error);
+}
+
+.note > svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--tone);
+}
+
+.body {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.body strong {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.body span,
+.body p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

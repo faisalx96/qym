@@ -1,0 +1,50 @@
+/* Filter bar: the facet triggers row under the search / time / origin row, ending in `× Clear n`. */
+.facetRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+}
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.more {
+  flex: none;
+}
+.clear {
+  flex: none;
+}
+/* The count sits on its own red disc (round 10, as in the first qym bar): it reads as "n filters", not as part of the word. */
+.clearCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--error) 32%, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.morePanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 320px;
+  max-width: calc(100vw - 2 * var(--space-lg));
+  max-height: min(520px, calc(100vh - 160px));
+  overflow-y: auto;
+  padding: var(--space-sm);
+}
+.drawerPanel {
+  width: auto;
+  max-width: none;
+  max-height: none;
+}

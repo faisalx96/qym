@@ -1,0 +1,3253 @@
+{
+  "390": {
+    "_frameWidth": 279,
+    "da-catalog": [
+      {
+        "w": 279,
+        "h": 600.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-card-head": [
+      {
+        "w": 237,
+        "h": 76,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 96,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 96,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-card-name": [
+      {
+        "w": 155,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      },
+      {
+        "w": 155,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      },
+      {
+        "w": 155,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      }
+    ],
+    "da-card-badges": [
+      {
+        "w": 237,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "restricted-badge": [
+      {
+        "w": 98.7,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      },
+      {
+        "w": 98.7,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      }
+    ],
+    "access-section": [
+      {
+        "w": 279,
+        "h": 506.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 995.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 691.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 995.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 972.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 257.9,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-mode": [
+      {
+        "w": 237,
+        "h": 192.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 161.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 161.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 161.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 161.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-mode-project": [
+      {
+        "w": 237,
+        "h": 69,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 69,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 69,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 69,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 69,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-people": [
+      {
+        "w": 237,
+        "h": 505.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 201.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 505.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 505.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-grants-table": [],
+    "access-add": [
+      {
+        "w": 237,
+        "h": 75.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 75.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 75.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 75.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-save-bar": [
+      {
+        "w": 237,
+        "h": 56.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 56.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 56.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 56.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-summary": [
+      {
+        "w": 237,
+        "h": 58.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 58.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-empty-note": [
+      {
+        "w": 237,
+        "h": 91.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-viewer-hero": [
+      {
+        "w": 279,
+        "h": 120.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "view-only-badge": [
+      {
+        "w": 91.5,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      }
+    ],
+    "da-403": [
+      {
+        "w": 279,
+        "h": 229,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "restricted-dataset-banner": [
+      {
+        "w": 279,
+        "h": 127.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "run-item-redacted": [
+      {
+        "w": 279,
+        "h": 91.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "items-state": [
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "metadata-filter": [
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "items-search": [
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "filter-chips": [
+      {
+        "w": 261,
+        "h": 56,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 261,
+        "h": 56,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 261,
+        "h": 56,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "all-matching": [
+      {
+        "w": 108,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 108,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "batch-published-entry": [
+      {
+        "w": 179,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "meta-popover": [
+      {
+        "w": 279,
+        "h": 310.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 355.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 133.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 167.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 174.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "facet-values": [
+      {
+        "w": 249,
+        "h": 138,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 249,
+        "h": 138,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-pane": [
+      {
+        "w": 279,
+        "h": 300,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 421,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 268,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 427,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 227,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "disabled-banner": [
+      {
+        "w": 249,
+        "h": 75,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 249,
+        "h": 113,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 113,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 75,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "item-state-action": [
+      {
+        "w": 105,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 164,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 161,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 121,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      },
+      {
+        "w": 185,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      },
+      {
+        "w": 121,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      }
+    ],
+    "enable-item": [
+      {
+        "w": 64,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 72,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      }
+    ],
+    "pane-foot": [
+      {
+        "w": 277,
+        "h": 73,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 277,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 277,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 277,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-modal": [
+      {
+        "w": 279,
+        "h": 297.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 297.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 329.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 198.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 444.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 295.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "batch-numbers": [
+      {
+        "w": 237,
+        "h": 70,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 70,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 52,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 52,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 70,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "batch-ids": [
+      {
+        "w": 237,
+        "h": 44,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 44,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 44,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 237,
+        "h": 44,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "reason-counter": [
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 46.2,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      }
+    ],
+    "batch-typed": [
+      {
+        "w": 237,
+        "h": 44.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "meta-line": [
+      {
+        "w": 279,
+        "h": 37.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "version-row": [
+      {
+        "w": 279,
+        "h": 55.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "download-menu": [
+      {
+        "w": 240,
+        "h": 74,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "publish-disabled-note": [
+      {
+        "w": 237,
+        "h": 52,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "rev-disabled": [
+      {
+        "w": 279,
+        "h": 110.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "compare-summary": [
+      {
+        "w": 279,
+        "h": 197.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "state-diff": [
+      {
+        "w": 188.2,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "item-actions": [
+      {
+        "w": 279,
+        "h": 72,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 112,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 279,
+        "h": 72,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "toolbars": [
+      {
+        "w": 277,
+        "h": 161
+      },
+      {
+        "w": 277,
+        "h": 257
+      },
+      {
+        "w": 277,
+        "h": 321
+      },
+      {
+        "w": 277,
+        "h": 225
+      },
+      {
+        "w": 277,
+        "h": 129
+      },
+      {
+        "w": 277,
+        "h": 161
+      },
+      {
+        "w": 277,
+        "h": 161
+      }
+    ],
+    "segmented": [
+      {
+        "w": 202.9,
+        "h": 24
+      }
+    ],
+    "accessCols": [],
+    "tableRowHeights": [],
+    "itemRow": [],
+    "chips": [
+      {
+        "w": 114,
+        "h": 26
+      }
+    ],
+    "pageOverflow": false
+  },
+  "1024": {
+    "_frameWidth": 777,
+    "da-catalog": [
+      {
+        "w": 777,
+        "h": 386.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-card-head": [
+      {
+        "w": 339.5,
+        "h": 76,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 339.5,
+        "h": 96,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 339.5,
+        "h": 96,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-card-name": [
+      {
+        "w": 257.5,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      },
+      {
+        "w": 257.5,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      },
+      {
+        "w": 257.5,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      }
+    ],
+    "da-card-badges": [
+      {
+        "w": 339.5,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 339.5,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "restricted-badge": [
+      {
+        "w": 98.7,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      },
+      {
+        "w": 98.7,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      }
+    ],
+    "access-section": [
+      {
+        "w": 760,
+        "h": 388.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 618.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 520.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 618.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 618.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 223.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-mode": [
+      {
+        "w": 718,
+        "h": 130.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 115.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 115.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 115.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 115.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-mode-project": [
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-people": [
+      {
+        "w": 718,
+        "h": 231.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 133.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 231.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 231.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-grants-table": [],
+    "access-add": [
+      {
+        "w": 718,
+        "h": 43.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 43.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 43.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 43.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-save-bar": [
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-summary": [
+      {
+        "w": 718,
+        "h": 41.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 41.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-empty-note": [
+      {
+        "w": 718,
+        "h": 55.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-viewer-hero": [
+      {
+        "w": 777,
+        "h": 65.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "view-only-badge": [
+      {
+        "w": 91.5,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      }
+    ],
+    "da-403": [
+      {
+        "w": 777,
+        "h": 189,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "restricted-dataset-banner": [
+      {
+        "w": 777,
+        "h": 73.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "run-item-redacted": [
+      {
+        "w": 777,
+        "h": 74.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "items-state": [
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "metadata-filter": [
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "items-search": [
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "filter-chips": [
+      {
+        "w": 429,
+        "h": 26,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 429,
+        "h": 26,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 429,
+        "h": 26,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "all-matching": [
+      {
+        "w": 108,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 108,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "batch-published-entry": [
+      {
+        "w": 179,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "meta-popover": [
+      {
+        "w": 320,
+        "h": 310.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 320,
+        "h": 355.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 320,
+        "h": 133.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 320,
+        "h": 167.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 320,
+        "h": 174.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "facet-values": [
+      {
+        "w": 290,
+        "h": 138,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 290,
+        "h": 138,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-pane": [
+      {
+        "w": 460,
+        "h": 234.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 460,
+        "h": 335.9,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 460,
+        "h": 234.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 460,
+        "h": 323.9,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 460,
+        "h": 193.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "disabled-banner": [
+      {
+        "w": 430,
+        "h": 55.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 430,
+        "h": 75.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 777,
+        "h": 75.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 777,
+        "h": 55.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "item-state-action": [
+      {
+        "w": 105,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 164,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 161,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 121,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      },
+      {
+        "w": 185,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      },
+      {
+        "w": 121,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      }
+    ],
+    "enable-item": [
+      {
+        "w": 64,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 72,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      }
+    ],
+    "pane-foot": [
+      {
+        "w": 458,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 458,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 458,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 458,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-modal": [
+      {
+        "w": 440,
+        "h": 279.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 440,
+        "h": 279.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 440,
+        "h": 311.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 600,
+        "h": 198.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 600,
+        "h": 371.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 600,
+        "h": 246.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "batch-numbers": [
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "batch-ids": [
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "reason-counter": [
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 46.2,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      }
+    ],
+    "batch-typed": [
+      {
+        "w": 558,
+        "h": 44.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "meta-line": [
+      {
+        "w": 777,
+        "h": 16.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "version-row": [
+      {
+        "w": 360,
+        "h": 55.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "download-menu": [
+      {
+        "w": 240,
+        "h": 74,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "publish-disabled-note": [
+      {
+        "w": 398,
+        "h": 34,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "rev-disabled": [
+      {
+        "w": 777,
+        "h": 58.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "compare-summary": [
+      {
+        "w": 777,
+        "h": 60.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "state-diff": [
+      {
+        "w": 188.2,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "item-actions": [
+      {
+        "w": 358,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 507,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 358,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "toolbars": [
+      {
+        "w": 775,
+        "h": 65
+      },
+      {
+        "w": 775,
+        "h": 99
+      },
+      {
+        "w": 775,
+        "h": 131
+      },
+      {
+        "w": 775,
+        "h": 99
+      },
+      {
+        "w": 775,
+        "h": 65
+      },
+      {
+        "w": 775,
+        "h": 65
+      },
+      {
+        "w": 775,
+        "h": 65
+      }
+    ],
+    "segmented": [
+      {
+        "w": 202.9,
+        "h": 24
+      }
+    ],
+    "accessCols": [
+      {
+        "w": 360,
+        "h": 34
+      },
+      {
+        "w": 160,
+        "h": 34
+      },
+      {
+        "w": 150,
+        "h": 34
+      },
+      {
+        "w": 48,
+        "h": 34
+      }
+    ],
+    "tableRowHeights": [
+      {
+        "w": 718,
+        "h": 40
+      },
+      {
+        "w": 718,
+        "h": 40
+      },
+      {
+        "w": 718,
+        "h": 40
+      }
+    ],
+    "itemRow": [
+      {
+        "w": 934,
+        "h": 52
+      },
+      {
+        "w": 934,
+        "h": 52
+      },
+      {
+        "w": 934,
+        "h": 52
+      }
+    ],
+    "chips": [
+      {
+        "w": 114,
+        "h": 26
+      }
+    ],
+    "pageOverflow": false
+  },
+  "1440": {
+    "_frameWidth": 1163,
+    "da-catalog": [
+      {
+        "w": 1163,
+        "h": 186.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-card-head": [
+      {
+        "w": 336.3,
+        "h": 76,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 336.3,
+        "h": 96,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 336.3,
+        "h": 96,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-card-name": [
+      {
+        "w": 254.3,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      },
+      {
+        "w": 254.3,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      },
+      {
+        "w": 254.3,
+        "h": 21,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "15px/600"
+      }
+    ],
+    "da-card-badges": [
+      {
+        "w": 336.3,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 336.3,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "restricted-badge": [
+      {
+        "w": 98.7,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      },
+      {
+        "w": 98.7,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      }
+    ],
+    "access-section": [
+      {
+        "w": 760,
+        "h": 388.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 618.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 520.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 618.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 618.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 760,
+        "h": 223.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-mode": [
+      {
+        "w": 718,
+        "h": 130.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 115.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 115.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 115.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 115.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-mode-project": [
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 53.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-people": [
+      {
+        "w": 718,
+        "h": 231.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 133.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 231.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 231.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-grants-table": [],
+    "access-add": [
+      {
+        "w": 718,
+        "h": 43.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 43.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 43.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 43.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-save-bar": [
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 33,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-summary": [
+      {
+        "w": 718,
+        "h": 41.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 718,
+        "h": 41.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "access-empty-note": [
+      {
+        "w": 718,
+        "h": 55.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-viewer-hero": [
+      {
+        "w": 1163,
+        "h": 65.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "view-only-badge": [
+      {
+        "w": 91.5,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "10px/650"
+      }
+    ],
+    "da-403": [
+      {
+        "w": 1163,
+        "h": 189,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "restricted-dataset-banner": [
+      {
+        "w": 1163,
+        "h": 55.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "run-item-redacted": [
+      {
+        "w": 1163,
+        "h": 74.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "items-state": [
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 189.6,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 202.9,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "metadata-filter": [
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 98,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "items-search": [
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 260,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "filter-chips": [
+      {
+        "w": 429,
+        "h": 26,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 429,
+        "h": 26,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 429,
+        "h": 26,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "all-matching": [
+      {
+        "w": 108,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 108,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "batch-published-entry": [
+      {
+        "w": 179,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      }
+    ],
+    "meta-popover": [
+      {
+        "w": 320,
+        "h": 310.3,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 320,
+        "h": 355.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 320,
+        "h": 133.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 320,
+        "h": 167.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 320,
+        "h": 174.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "facet-values": [
+      {
+        "w": 290,
+        "h": 138,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 290,
+        "h": 138,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-pane": [
+      {
+        "w": 460,
+        "h": 234.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 460,
+        "h": 335.9,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 460,
+        "h": 234.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 460,
+        "h": 323.9,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 460,
+        "h": 193.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "disabled-banner": [
+      {
+        "w": 430,
+        "h": 55.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 430,
+        "h": 75.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 1163,
+        "h": 75.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 1163,
+        "h": 55.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "item-state-action": [
+      {
+        "w": 105,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 164,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 161,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 121,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      },
+      {
+        "w": 185,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      },
+      {
+        "w": 121,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      }
+    ],
+    "enable-item": [
+      {
+        "w": 64,
+        "h": 24,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/600"
+      },
+      {
+        "w": 72,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "13px/600"
+      }
+    ],
+    "pane-foot": [
+      {
+        "w": 458,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 458,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 458,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 458,
+        "h": 41,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "da-modal": [
+      {
+        "w": 440,
+        "h": 279.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 440,
+        "h": 279.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 440,
+        "h": 311.7,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 600,
+        "h": 198.2,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 600,
+        "h": 371.1,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 600,
+        "h": 246.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "batch-numbers": [
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 39,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "batch-ids": [
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 558,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "reason-counter": [
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 52.8,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      },
+      {
+        "w": 46.2,
+        "h": 14,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "11px/400"
+      }
+    ],
+    "batch-typed": [
+      {
+        "w": 558,
+        "h": 44.5,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "meta-line": [
+      {
+        "w": 1163,
+        "h": 16.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "version-row": [
+      {
+        "w": 360,
+        "h": 55.4,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "download-menu": [
+      {
+        "w": 240,
+        "h": 74,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "publish-disabled-note": [
+      {
+        "w": 398,
+        "h": 34,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "rev-disabled": [
+      {
+        "w": 1163,
+        "h": 58.8,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "compare-summary": [
+      {
+        "w": 1163,
+        "h": 60.6,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "state-diff": [
+      {
+        "w": 188.2,
+        "h": 20,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "item-actions": [
+      {
+        "w": 358,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 507,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      },
+      {
+        "w": 358,
+        "h": 32,
+        "overflowX": false,
+        "ellipsis": false,
+        "font": "12px/400"
+      }
+    ],
+    "toolbars": [
+      {
+        "w": 1161,
+        "h": 40
+      },
+      {
+        "w": 1161,
+        "h": 67
+      },
+      {
+        "w": 1161,
+        "h": 99
+      },
+      {
+        "w": 1161,
+        "h": 67
+      },
+      {
+        "w": 1161,
+        "h": 40
+      },
+      {
+        "w": 1161,
+        "h": 40
+      },
+      {
+        "w": 1161,
+        "h": 40
+      }
+    ],
+    "segmented": [
+      {
+        "w": 202.9,
+        "h": 24
+      }
+    ],
+    "accessCols": [
+      {
+        "w": 360,
+        "h": 34
+      },
+      {
+        "w": 160,
+        "h": 34
+      },
+      {
+        "w": 150,
+        "h": 34
+      },
+      {
+        "w": 48,
+        "h": 34
+      }
+    ],
+    "tableRowHeights": [
+      {
+        "w": 718,
+        "h": 40
+      },
+      {
+        "w": 718,
+        "h": 40
+      },
+      {
+        "w": 718,
+        "h": 40
+      }
+    ],
+    "itemRow": [
+      {
+        "w": 1161,
+        "h": 52
+      },
+      {
+        "w": 1161,
+        "h": 52
+      },
+      {
+        "w": 1161,
+        "h": 52
+      }
+    ],
+    "chips": [
+      {
+        "w": 114,
+        "h": 26
+      }
+    ],
+    "pageOverflow": false
+  }
+}

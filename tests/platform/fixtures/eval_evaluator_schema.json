@@ -1,0 +1,297 @@
+{
+  "$defs": {
+    "EvaluatorRequestConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "run_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Name"
+        },
+        "task_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task Name"
+        },
+        "max_concurrency": {
+          "default": 10,
+          "minimum": 1,
+          "title": "Max Concurrency",
+          "type": "integer"
+        },
+        "metric_concurrency": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metric Concurrency"
+        },
+        "max_metric_concurrency": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Max Metric Concurrency",
+          "type": "integer"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 300,
+          "title": "Timeout"
+        },
+        "metric_timeout": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 180.0,
+          "title": "Metric Timeout"
+        },
+        "metric_max_retries": {
+          "default": 2,
+          "minimum": 0,
+          "title": "Metric Max Retries",
+          "type": "integer"
+        },
+        "max_retries": {
+          "default": 2,
+          "minimum": 0,
+          "title": "Max Retries",
+          "type": "integer"
+        },
+        "samples": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Samples",
+          "type": "integer"
+        },
+        "report_k": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Report K"
+        },
+        "run_metadata": {
+          "additionalProperties": true,
+          "title": "Run Metadata",
+          "type": "object"
+        },
+        "versioning_details": {
+          "additionalProperties": true,
+          "title": "Versioning Details",
+          "type": "object"
+        },
+        "git_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Branch"
+        },
+        "git_commit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Commit"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "model_full": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Full"
+        },
+        "models": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Models"
+        },
+        "force_model_override": {
+          "default": false,
+          "title": "Force Model Override",
+          "type": "boolean"
+        },
+        "dataset_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset Version"
+        },
+        "dataset_alias": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset Alias"
+        },
+        "live_mode": {
+          "default": "platform",
+          "enum": [
+            "local",
+            "platform",
+            "auto"
+          ],
+          "title": "Live Mode",
+          "type": "string"
+        }
+      },
+      "title": "EvaluatorRequestConfig",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "dataset": {
+      "title": "Dataset",
+      "type": "string"
+    },
+    "dataset_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset Version"
+    },
+    "config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvaluatorRequestConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "model": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "report_k": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Report K"
+    }
+  },
+  "required": [
+    "dataset"
+  ],
+  "title": "EvaluatorInputs",
+  "type": "object"
+}

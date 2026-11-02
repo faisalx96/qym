@@ -28,7 +28,7 @@ qym is the Python SDK for evaluating LLM applications with repeatable datasets, 
 
 You can run evaluations from Python or the CLI, score outputs with built-in and LLM-as-judge metrics, and optionally stream runs to a qym platform deployment for shared review and comparison.
 
-Datasets come from the qym platform (versioned) or from local CSV/JSONL files for lightweight offline evaluation. Traces use OpenTelemetry and stream to the qym platform.
+Datasets come from the qym platform (versioned; items disabled in a draft are skipped, the SDK asks for `state=active`) or from local CSV/JSONL files for lightweight offline evaluation. Traces use OpenTelemetry and stream to the qym platform.
 
 ## Features
 

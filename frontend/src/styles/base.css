@@ -1,0 +1,130 @@
+/* Base reset and document styles (dashboard.css 160-211). Tokens only. */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  background: var(--bg-void);
+  color: var(--text-primary);
+  line-height: 1.4;
+  /* Text clarity (round 10, owner review of the run page): Plex Sans at 400 drew thinner than the old Segoe UI under
+     Windows ClearType, so body text is 450 (the face is variable, 400 to 700); explicit weights are unchanged. Font
+     hinting stays on: geometricPrecision turned it off in Chromium, which blurred 11-13px text on Windows. */
+  font-weight: 450;
+  -webkit-font-smoothing: antialiased;
+  font-kerning: normal;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-color) var(--scrollbar-track);
+  overflow: hidden; /* the shell content area is the only page scroller */
+}
+
+#root {
+  height: 100%;
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-color) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: var(--radius-pill);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb-from) 0%, var(--scrollbar-thumb-to) 100%);
+  border: 2px solid var(--scrollbar-thumb-edge);
+  border-radius: var(--radius-pill);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    var(--scrollbar-thumb-hover-from) 0%,
+    var(--scrollbar-thumb-hover-to) 100%
+  );
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+/* An underline on hover is for running text. A link that is a box (a card, a boxed button, a link with tags) opts out
+   with data-link="block" and keeps its own hover treatment (QD13). :where() keeps the selector at the old specificity
+   (0,1,1), so a component's own `.x:hover { text-decoration: none }` still wins (a bare :not([data-link]) would add 0,1,0
+   and silently beat every one of them). */
+a:hover:where(:not([data-link='block'])) {
+  text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+::placeholder {
+  color: var(--text-dim); /* decorative: placeholder */
+}
+
+/* The dialog container takes focus on open but draws no ring (brief 02 §1d). */
+[aria-modal='true'][tabindex='-1']:focus {
+  outline: none;
+}
+
+/* Uniform keyboard focus ring: 2px accent at 2px offset (brief 02 §7.15).
+   React Aria exposes data-focus-visible; native controls use :focus-visible. */
+:focus-visible,
+[data-focus-visible='true'] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* A field the user was sent to (a clicked problem): a static outline for 1.2s, set by the launch form. */
+[data-flash='true'] {
+  outline: 2px solid var(--warning);
+  outline-offset: 2px;
+  border-radius: var(--control-radius);
+}
+
+/* Numbers line up in every table: Plex Sans has real tabular figures, so columns of scores, counts and
+   latencies stay vertically aligned without switching those cells to the mono face. */
+table,
+[role='grid'],
+[role='treegrid'] {
+  font-variant-numeric: tabular-nums;
+}

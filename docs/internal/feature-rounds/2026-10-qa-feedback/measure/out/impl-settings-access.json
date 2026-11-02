@@ -1,0 +1,1264 @@
+{
+  "390": {
+    "settings": {
+      "[data-testid=settings-layout]": {
+        "x": 76,
+        "y": 373.8,
+        "w": 279,
+        "h": 805.1,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general]": {
+        "x": 76,
+        "y": 373.8,
+        "w": 279,
+        "h": 428.4,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-visibility]": {
+        "x": 76,
+        "y": 816.2,
+        "w": 279,
+        "h": 180.6,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-danger]": {
+        "x": 76,
+        "y": 1010.8,
+        "w": 279,
+        "h": 168.1,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general] [data-testid=card-head]": {
+        "x": 97,
+        "y": 388.8,
+        "w": 237,
+        "h": 19.5,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general] h2": {
+        "x": 97,
+        "y": 388.8,
+        "w": 54.8,
+        "h": 19.5,
+        "font": "15px/600"
+      },
+      "[data-testid=settings-general] input": {
+        "x": 97,
+        "y": 469.8,
+        "w": 223,
+        "h": 24,
+        "font": "11px/400"
+      },
+      "[data-testid=settings-general] textarea": {
+        "x": 97,
+        "y": 535.3,
+        "w": 223,
+        "h": 72,
+        "font": "12px/400"
+      }
+    },
+    "settingsTexts": [
+      {
+        "h": 77,
+        "over": false,
+        "ellipsis": "clip"
+      },
+      {
+        "h": 61.6,
+        "over": false,
+        "ellipsis": "clip"
+      }
+    ],
+    "settingsOverflow": [
+      279,
+      279,
+      390,
+      390
+    ],
+    "access-project": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 76,
+          "y": 373.8,
+          "w": 279,
+          "h": 389.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 76,
+          "y": 373.8,
+          "w": 279,
+          "h": 319.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 97,
+          "y": 472.1,
+          "w": 237,
+          "h": 161.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 97,
+          "y": 647.4,
+          "w": 237,
+          "h": 30.8,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": null,
+        "[data-testid=access-add]": null,
+        "[data-testid=access-grants-table]": null,
+        "[data-testid=access-save-bar]": {
+          "x": 76,
+          "y": 707.2,
+          "w": 279,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 97,
+          "y": 388.8,
+          "w": 237,
+          "h": 54.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 97,
+          "y": 388.8,
+          "w": 237,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [],
+      "overflow": [
+        279,
+        279
+      ],
+      "tab": {
+        "text": "Access",
+        "w": 66.8,
+        "h": 34
+      }
+    },
+    "access-twelve": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 76,
+          "y": 401.8,
+          "w": 279,
+          "h": 2068.7,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 76,
+          "y": 401.8,
+          "w": 279,
+          "h": 319.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 97,
+          "y": 500.1,
+          "w": 237,
+          "h": 161.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 97,
+          "y": 675.4,
+          "w": 237,
+          "h": 30.8,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 76,
+          "y": 735.2,
+          "w": 279,
+          "h": 1665.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 97,
+          "y": 798.7,
+          "w": 237,
+          "h": 75.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": {
+          "x": 97,
+          "y": 888.1,
+          "w": 237,
+          "h": 1497.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-save-bar]": {
+          "x": 76,
+          "y": 1244,
+          "w": 279,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 97,
+          "y": 416.8,
+          "w": 237,
+          "h": 54.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 97,
+          "y": 416.8,
+          "w": 237,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [],
+      "overflow": [
+        279,
+        279
+      ],
+      "tab": {
+        "text": "Access12",
+        "w": 92,
+        "h": 34
+      }
+    },
+    "access-one": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 76,
+          "y": 432.2,
+          "w": 279,
+          "h": 696.1,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 76,
+          "y": 432.2,
+          "w": 279,
+          "h": 319.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 97,
+          "y": 530.5,
+          "w": 237,
+          "h": 161.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 97,
+          "y": 705.8,
+          "w": 237,
+          "h": 30.8,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 76,
+          "y": 765.6,
+          "w": 279,
+          "h": 292.7,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 97,
+          "y": 829.1,
+          "w": 237,
+          "h": 75.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": {
+          "x": 97,
+          "y": 918.5,
+          "w": 237,
+          "h": 124.8,
+          "font": "12px/400"
+        },
+        "[data-testid=access-save-bar]": {
+          "x": 76,
+          "y": 1072.2,
+          "w": 279,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 97,
+          "y": 447.2,
+          "w": 237,
+          "h": 54.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 97,
+          "y": 447.2,
+          "w": 237,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [],
+      "overflow": [
+        279,
+        279
+      ],
+      "tab": {
+        "text": "Access1",
+        "w": 85.5,
+        "h": 34
+      }
+    },
+    "access-none": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 76,
+          "y": 401.8,
+          "w": 279,
+          "h": 662.8,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 76,
+          "y": 401.8,
+          "w": 279,
+          "h": 319.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 97,
+          "y": 500.1,
+          "w": 237,
+          "h": 161.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 97,
+          "y": 675.4,
+          "w": 237,
+          "h": 30.8,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 76,
+          "y": 735.2,
+          "w": 279,
+          "h": 259.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 97,
+          "y": 798.7,
+          "w": 237,
+          "h": 75.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": null,
+        "[data-testid=access-save-bar]": {
+          "x": 76,
+          "y": 1008.6,
+          "w": 279,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": {
+          "x": 97,
+          "y": 888.1,
+          "w": 237,
+          "h": 91.5,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 97,
+          "y": 416.8,
+          "w": 237,
+          "h": 54.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 97,
+          "y": 416.8,
+          "w": 237,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [],
+      "overflow": [
+        279,
+        279
+      ],
+      "tab": {
+        "text": "Access0",
+        "w": 85.5,
+        "h": 34
+      }
+    }
+  },
+  "1024": {
+    "settings": {
+      "[data-testid=settings-layout]": {
+        "x": 212,
+        "y": 247,
+        "w": 777,
+        "h": 654.6,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general]": {
+        "x": 212,
+        "y": 247,
+        "w": 777,
+        "h": 354.9,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-visibility]": {
+        "x": 212,
+        "y": 615.9,
+        "w": 777,
+        "h": 134.5,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-danger]": {
+        "x": 212,
+        "y": 764.3,
+        "w": 777,
+        "h": 137.3,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general] [data-testid=card-head]": {
+        "x": 233,
+        "y": 262,
+        "w": 735,
+        "h": 19.5,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general] h2": {
+        "x": 233,
+        "y": 262,
+        "w": 54.8,
+        "h": 19.5,
+        "font": "15px/600"
+      },
+      "[data-testid=settings-general] input": {
+        "x": 367,
+        "y": 318.5,
+        "w": 587,
+        "h": 24,
+        "font": "11px/400"
+      },
+      "[data-testid=settings-general] textarea": {
+        "x": 367,
+        "y": 359.5,
+        "w": 587,
+        "h": 72,
+        "font": "12px/400"
+      }
+    },
+    "settingsTexts": [
+      {
+        "h": 30.8,
+        "over": false,
+        "ellipsis": "clip"
+      },
+      {
+        "h": 30.8,
+        "over": false,
+        "ellipsis": "clip"
+      }
+    ],
+    "settingsOverflow": [
+      777,
+      777,
+      1024,
+      1024
+    ],
+    "access-project": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 212,
+          "y": 247,
+          "w": 777,
+          "h": 266.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 212,
+          "y": 247,
+          "w": 777,
+          "h": 196.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 233,
+          "y": 329.9,
+          "w": 735,
+          "h": 69,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 233,
+          "y": 412.8,
+          "w": 735,
+          "h": 15.4,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": null,
+        "[data-testid=access-add]": null,
+        "[data-testid=access-grants-table]": null,
+        "[data-testid=access-save-bar]": {
+          "x": 212,
+          "y": 457.2,
+          "w": 777,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 233,
+          "y": 262,
+          "w": 735,
+          "h": 38.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 233,
+          "y": 262,
+          "w": 300.7,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [],
+      "overflow": [
+        777,
+        777
+      ],
+      "tab": {
+        "text": "Access",
+        "w": 66.8,
+        "h": 34
+      }
+    },
+    "access-twelve": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 212,
+          "y": 247,
+          "w": 777,
+          "h": 930.1,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 212,
+          "y": 247,
+          "w": 777,
+          "h": 196.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 233,
+          "y": 329.9,
+          "w": 735,
+          "h": 69,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 233,
+          "y": 412.8,
+          "w": 735,
+          "h": 15.4,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 212,
+          "y": 457.2,
+          "w": 777,
+          "h": 649.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 233,
+          "y": 520.7,
+          "w": 735,
+          "h": 43.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": {
+          "x": 233,
+          "y": 578.1,
+          "w": 735,
+          "h": 514,
+          "font": "12px/400"
+        },
+        "[data-testid=access-save-bar]": {
+          "x": 212,
+          "y": 1121.1,
+          "w": 777,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 233,
+          "y": 262,
+          "w": 735,
+          "h": 38.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 233,
+          "y": 262,
+          "w": 300.7,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [
+        34,
+        40,
+        40
+      ],
+      "overflow": [
+        777,
+        777
+      ],
+      "tab": {
+        "text": "Access12",
+        "w": 92,
+        "h": 34
+      }
+    },
+    "access-one": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 212,
+          "y": 247,
+          "w": 777,
+          "h": 490.1,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 212,
+          "y": 247,
+          "w": 777,
+          "h": 196.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 233,
+          "y": 329.9,
+          "w": 735,
+          "h": 69,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 233,
+          "y": 412.8,
+          "w": 735,
+          "h": 15.4,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 212,
+          "y": 457.2,
+          "w": 777,
+          "h": 209.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 233,
+          "y": 520.7,
+          "w": 735,
+          "h": 43.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": {
+          "x": 233,
+          "y": 578.1,
+          "w": 735,
+          "h": 74,
+          "font": "12px/400"
+        },
+        "[data-testid=access-save-bar]": {
+          "x": 212,
+          "y": 681.1,
+          "w": 777,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 233,
+          "y": 262,
+          "w": 735,
+          "h": 38.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 233,
+          "y": 262,
+          "w": 300.7,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [
+        34,
+        40
+      ],
+      "overflow": [
+        777,
+        777
+      ],
+      "tab": {
+        "text": "Access1",
+        "w": 85.5,
+        "h": 34
+      }
+    },
+    "access-none": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 212,
+          "y": 247,
+          "w": 777,
+          "h": 471.6,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 212,
+          "y": 247,
+          "w": 777,
+          "h": 196.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 233,
+          "y": 329.9,
+          "w": 735,
+          "h": 69,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 233,
+          "y": 412.8,
+          "w": 735,
+          "h": 15.4,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 212,
+          "y": 457.2,
+          "w": 777,
+          "h": 191.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 233,
+          "y": 520.7,
+          "w": 735,
+          "h": 43.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": null,
+        "[data-testid=access-save-bar]": {
+          "x": 212,
+          "y": 662.6,
+          "w": 777,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": {
+          "x": 233,
+          "y": 578.1,
+          "w": 735,
+          "h": 55.5,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 233,
+          "y": 262,
+          "w": 735,
+          "h": 38.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 233,
+          "y": 262,
+          "w": 300.7,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [],
+      "overflow": [
+        777,
+        777
+      ],
+      "tab": {
+        "text": "Access0",
+        "w": 85.5,
+        "h": 34
+      }
+    }
+  },
+  "1440": {
+    "settings": {
+      "[data-testid=settings-layout]": {
+        "x": 212,
+        "y": 205.4,
+        "w": 1193,
+        "h": 354.9,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general]": {
+        "x": 212,
+        "y": 205.4,
+        "w": 819,
+        "h": 354.9,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-visibility]": {
+        "x": 1045,
+        "y": 205.4,
+        "w": 360,
+        "h": 165.3,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-danger]": {
+        "x": 1045,
+        "y": 384.6,
+        "w": 360,
+        "h": 152.7,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general] [data-testid=card-head]": {
+        "x": 233,
+        "y": 220.4,
+        "w": 777,
+        "h": 19.5,
+        "font": "12px/400"
+      },
+      "[data-testid=settings-general] h2": {
+        "x": 233,
+        "y": 220.4,
+        "w": 54.8,
+        "h": 19.5,
+        "font": "15px/600"
+      },
+      "[data-testid=settings-general] input": {
+        "x": 367,
+        "y": 276.9,
+        "w": 629,
+        "h": 24,
+        "font": "11px/400"
+      },
+      "[data-testid=settings-general] textarea": {
+        "x": 367,
+        "y": 317.9,
+        "w": 629,
+        "h": 72,
+        "font": "12px/400"
+      }
+    },
+    "settingsTexts": [
+      {
+        "h": 61.6,
+        "over": false,
+        "ellipsis": "clip"
+      },
+      {
+        "h": 46.2,
+        "over": false,
+        "ellipsis": "clip"
+      }
+    ],
+    "settingsOverflow": [
+      1193,
+      1193,
+      1440,
+      1440
+    ],
+    "access-project": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 212,
+          "y": 205.4,
+          "w": 1193,
+          "h": 250.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 212,
+          "y": 205.4,
+          "w": 1193,
+          "h": 180.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 233,
+          "y": 288.3,
+          "w": 1151,
+          "h": 53.6,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 233,
+          "y": 355.9,
+          "w": 1151,
+          "h": 15.4,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": null,
+        "[data-testid=access-add]": null,
+        "[data-testid=access-grants-table]": null,
+        "[data-testid=access-save-bar]": {
+          "x": 212,
+          "y": 400.3,
+          "w": 1193,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 233,
+          "y": 220.4,
+          "w": 1151,
+          "h": 38.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 233,
+          "y": 220.4,
+          "w": 300.7,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [],
+      "overflow": [
+        1193,
+        1193
+      ],
+      "tab": {
+        "text": "Access",
+        "w": 66.8,
+        "h": 34
+      }
+    },
+    "access-twelve": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 212,
+          "y": 205.4,
+          "w": 1193,
+          "h": 914.8,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 212,
+          "y": 205.4,
+          "w": 1193,
+          "h": 180.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 233,
+          "y": 288.3,
+          "w": 1151,
+          "h": 53.6,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 233,
+          "y": 355.9,
+          "w": 1151,
+          "h": 15.4,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 212,
+          "y": 400.3,
+          "w": 1193,
+          "h": 649.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 233,
+          "y": 463.8,
+          "w": 1151,
+          "h": 43.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": {
+          "x": 233,
+          "y": 521.1,
+          "w": 1151,
+          "h": 514,
+          "font": "12px/400"
+        },
+        "[data-testid=access-save-bar]": {
+          "x": 212,
+          "y": 1064.1,
+          "w": 1193,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 233,
+          "y": 220.4,
+          "w": 1151,
+          "h": 38.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 233,
+          "y": 220.4,
+          "w": 300.7,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [
+        34,
+        40,
+        40
+      ],
+      "overflow": [
+        1193,
+        1193
+      ],
+      "tab": {
+        "text": "Access12",
+        "w": 92,
+        "h": 34
+      }
+    },
+    "access-one": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 212,
+          "y": 205.4,
+          "w": 1193,
+          "h": 474.8,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 212,
+          "y": 205.4,
+          "w": 1193,
+          "h": 180.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 233,
+          "y": 288.3,
+          "w": 1151,
+          "h": 53.6,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 233,
+          "y": 355.9,
+          "w": 1151,
+          "h": 15.4,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 212,
+          "y": 400.3,
+          "w": 1193,
+          "h": 209.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 233,
+          "y": 463.8,
+          "w": 1151,
+          "h": 43.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": {
+          "x": 233,
+          "y": 521.1,
+          "w": 1151,
+          "h": 74,
+          "font": "12px/400"
+        },
+        "[data-testid=access-save-bar]": {
+          "x": 212,
+          "y": 624.1,
+          "w": 1193,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": null,
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 233,
+          "y": 220.4,
+          "w": 1151,
+          "h": 38.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 233,
+          "y": 220.4,
+          "w": 300.7,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [
+        34,
+        40
+      ],
+      "overflow": [
+        1193,
+        1193
+      ],
+      "tab": {
+        "text": "Access1",
+        "w": 85.5,
+        "h": 34
+      }
+    },
+    "access-none": {
+      "boxes": {
+        "[data-testid=access-tab]": {
+          "x": 212,
+          "y": 205.4,
+          "w": 1193,
+          "h": 456.3,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card]": {
+          "x": 212,
+          "y": 205.4,
+          "w": 1193,
+          "h": 180.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode]": {
+          "x": 233,
+          "y": 288.3,
+          "w": 1151,
+          "h": 53.6,
+          "font": "12px/400"
+        },
+        "[data-testid=access-always]": {
+          "x": 233,
+          "y": 355.9,
+          "w": 1151,
+          "h": 15.4,
+          "font": "11px/400"
+        },
+        "[data-testid=access-people]": {
+          "x": 212,
+          "y": 400.3,
+          "w": 1193,
+          "h": 191.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-add]": {
+          "x": 233,
+          "y": 463.8,
+          "w": 1151,
+          "h": 43.4,
+          "font": "12px/400"
+        },
+        "[data-testid=access-grants-table]": null,
+        "[data-testid=access-save-bar]": {
+          "x": 212,
+          "y": 605.6,
+          "w": 1193,
+          "h": 56,
+          "font": "12px/400"
+        },
+        "[data-testid=access-empty-note]": {
+          "x": 233,
+          "y": 521.1,
+          "w": 1151,
+          "h": 55.5,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] [data-testid=card-head]": {
+          "x": 233,
+          "y": 220.4,
+          "w": 1151,
+          "h": 38.9,
+          "font": "12px/400"
+        },
+        "[data-testid=access-mode-card] h2": {
+          "x": 233,
+          "y": 220.4,
+          "w": 300.7,
+          "h": 19.5,
+          "font": "15px/600"
+        },
+        "[data-testid=access-summary]": null
+      },
+      "requests": [
+        "GET"
+      ],
+      "rows": [],
+      "overflow": [
+        1193,
+        1193
+      ],
+      "tab": {
+        "text": "Access0",
+        "w": 85.5,
+        "h": 34
+      }
+    }
+  }
+}

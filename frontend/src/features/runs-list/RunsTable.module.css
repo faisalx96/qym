@@ -1,0 +1,22 @@
+/* Runs table host: a height-capped flex column so the DataTable body scrolls inside it. */
+.host {
+  display: flex;
+  flex-direction: column;
+}
+
+.host > * {
+  min-height: 0;
+}
+
+.childNote {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.childError {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--error);
+}

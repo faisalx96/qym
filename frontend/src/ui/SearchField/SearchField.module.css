@@ -1,0 +1,42 @@
+/* Search control companions. */
+.search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search[data-empty] .clear {
+  display: none;
+}
+
+.search[data-empty] .hint {
+  display: inline-flex;
+}
+
+.hint {
+  display: none;
+  align-items: center;
+  height: 16px;
+  padding: 0 var(--space-xs);
+  margin-inline-end: var(--space-xs);
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+}
+
+.clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.clear[data-hovered] {
+  color: var(--accent-primary);
+}

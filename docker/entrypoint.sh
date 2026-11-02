@@ -8,7 +8,13 @@ if [ -z "${FORWARDED_ALLOW_IPS:-}" ]; then
 fi
 
 # Optional worker containers (QYM_ROLE=worker) run alongside API pods that
-# already applied the schema; skip the migration step there.
+# already applied the schema; skip the migration step there. With several
+# replicas, prefer one migration job (this image, command
+# `alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head`)
+# and QYM_SKIP_MIGRATIONS=1 on every replica. Replicas that do migrate take
+# turns (PostgreSQL advisory lock) and each DDL waits at most
+# QYM_MIGRATION_LOCK_TIMEOUT (default 10s) for its locks; on a timeout the
+# container exits and restarts instead of stalling traffic behind the DDL.
 if [ "${QYM_SKIP_MIGRATIONS:-0}" = "1" ]; then
   echo "Skipping migrations (QYM_SKIP_MIGRATIONS=1)"
 else
@@ -20,7 +26,16 @@ if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
 
-if [ "${QYM_ROLE:-all}" = "worker" ]; then
+# Service split (docs/internal/OPERATIONS.md, "Service split deployment"):
+# QYM_SERVICE=workers runs the loops and the job executor in one uvicorn
+# process (its small HTTP app serves /healthz and ${QYM_WORKERS_PREFIX}/status);
+# main and ingestion continue below like the API (QYM_WEB_WORKERS applies).
+if [ "${QYM_SERVICE:-}" = "workers" ]; then
+  echo "Starting workers service..."
+  exec uvicorn qym_platform.main:app --host 0.0.0.0 --port 8000 ${QYM_UVICORN_ARGS:-}
+fi
+
+if [ -z "${QYM_SERVICE:-}" ] && [ "${QYM_ROLE:-all}" = "worker" ]; then
   echo "Starting worker..."
   exec python -m qym_platform.worker
 fi

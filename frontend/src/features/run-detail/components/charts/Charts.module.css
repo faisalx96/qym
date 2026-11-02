@@ -1,0 +1,531 @@
+/* Marks for the analysis panel (tokens only, 2px surface gaps, rounded data ends). */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.dot,
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--space-xs);
+  border-radius: 2px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* A curve's key: a 16px line sample in the series colour, dashed for a dashed series; the CI key is the band's fill. */
+.lineKey {
+  display: inline-block;
+  width: 16px;
+  margin-inline-end: var(--space-xs);
+  border-block-start: 2px solid currentcolor;
+}
+
+.lineKey[data-dash] {
+  border-block-start-style: dashed;
+}
+
+.ciKey {
+  display: inline-block;
+  width: 14px;
+  height: 8px;
+  margin-inline-end: var(--space-xs);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-muted) 30%, transparent);
+}
+
+/* ───────── Bar plot (round 3 P1): every bar chart uses one column recipe ───────── */
+.plotBox {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plot {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 4px;
+  /* the wells overshoot their column by 2px to bridge the gaps; this padding keeps the drawn axis inside the plot box */
+  padding-inline: 2px;
+  min-height: 146px;
+}
+
+/* Dense plot (columns narrower than their counts): room for the raised count tier. */
+.plot[data-dense] {
+  padding-block-start: 18px;
+}
+
+.plot[data-dense='3'] {
+  padding-block-start: 36px;
+}
+
+/* Round 5 R1, well and foot. A column is two grid rows: the well (spacer, count, bar) and a foot of one constant height
+   (--foot, set per plot), so a thinned axis label can never make a column end higher than its neighbour. */
+.col {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(
+    0,
+    1fr
+  ); /* a label wider than its column must not widen the well (the axis would overshoot the plot) */
+  grid-template-rows: minmax(0, 1fr) var(--foot, 18px);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+/* The well's bottom border IS the x axis; the inline margins make neighbouring borders touch across the 4px gaps.
+   The spacer takes (1 - p) and the bar p of the free height, so the count sits directly on top of its bar. */
+.well {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  margin-inline: -2px;
+  padding-inline: 2px;
+  border-block-end: 1px solid var(--border-default);
+}
+
+.well::before {
+  content: '';
+  flex: calc(1 - var(--p, 0)) 1 0%;
+}
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block-start: var(--space-xs);
+}
+
+.count,
+.axis,
+.axisSub {
+  flex: none;
+  white-space: nowrap;
+}
+
+.count::before,
+.axis::before,
+.axisSub::before {
+  content: attr(data-text);
+}
+
+.count {
+  min-height: 16px;
+  margin-bottom: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  color: var(--text-secondary);
+}
+
+.count[data-zero] {
+  color: var(--text-muted);
+}
+
+/* Dense plots: every second count sits one tier higher (no layout change, bars keep their height). */
+.col[data-tier='2'] .count {
+  position: relative;
+  inset-block-start: -18px;
+}
+
+.col[data-tier='3'] .count {
+  position: relative;
+  inset-block-start: -36px;
+}
+
+.bar {
+  position: relative;
+  display: flex;
+  flex: var(--p, 0) 1 0%;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: min(100%, 44px);
+  min-height: 3px;
+  border-radius: 4px 4px 0 0;
+  overflow: hidden;
+  transform-origin: bottom;
+}
+
+/* A column with no items draws no bar (the count above it says 0, or nothing for a histogram bucket). */
+.col[data-zero] .bar {
+  min-height: 0;
+}
+
+.axis {
+  font-size: var(--font-sm);
+  line-height: 14px;
+  color: var(--text-muted);
+}
+
+.axisNote {
+  flex: none;
+  font-size: var(--font-sm);
+  line-height: 14px;
+  color: var(--text-muted);
+}
+
+.axisSub {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 14px;
+  color: var(--text-muted);
+}
+
+.col[data-out] {
+  opacity: 0.35;
+}
+
+.col:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.col:disabled .bar {
+  opacity: 0.6;
+}
+
+.barErr {
+  display: block;
+  width: 100%;
+  background: repeating-linear-gradient(45deg, var(--bg-void) 0 2px, transparent 2px 4px);
+}
+
+/* Entrance (M2): bars rise from the baseline and the count fades in with the same duration and stagger, so a count never
+   hangs over empty space. Nothing animates under prefers-reduced-motion. */
+.bar[data-enter] {
+  animation: bar-rise var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+.count[data-enter] {
+  animation: count-in var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes count-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar[data-enter],
+  .count[data-enter] {
+    animation: none;
+  }
+}
+
+.bandValue {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bandValue[data-band],
+.bandValue[data-tone] {
+  color: var(--tone-text);
+}
+
+.rate {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.rateFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--tone, var(--text-muted));
+  transition: width var(--motion-fill) var(--ease-out);
+}
+
+.rateFill[data-enter] {
+  animation: rate-grow var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes rate-grow {
+  from {
+    width: 0;
+  }
+}
+
+.scatter,
+.curve svg {
+  /* Drawn at the measured width (width/height attributes): text and marks keep their size at any column width. */
+  display: block;
+  max-width: 100%;
+}
+
+.chartBox {
+  min-width: 0;
+  width: 100%;
+}
+
+.grid {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.tick {
+  font-size: var(--font-sm);
+  fill: var(--text-muted);
+}
+
+.axisTitle {
+  font-size: var(--font-sm);
+  fill: var(--text-secondary);
+}
+
+.dotMark {
+  outline: 0;
+}
+
+.dotHit {
+  fill: transparent;
+}
+
+/* Dots are coloured by outcome: pass = band 5, fail = band 1, task error = open ring; none = neutral. */
+.dot2 {
+  fill: var(--text-muted);
+  fill-opacity: 0.7;
+  stroke: var(--card-bg);
+  stroke-width: 1;
+  transition:
+    fill-opacity var(--transition-fast),
+    r var(--transition-fast);
+}
+
+.dot2[data-outcome='pass'] {
+  fill: var(--score-5);
+}
+
+.dot2[data-outcome='fail'] {
+  fill: var(--score-1);
+}
+
+.dot2[data-outcome='error'] {
+  fill: none;
+  fill-opacity: 1;
+  stroke: var(--error);
+  stroke-width: 1.5;
+}
+
+/* A dot in its model's colour (the Charts scatter, C052). */
+.dot2[data-series='1'] {
+  fill: var(--chart-1);
+}
+
+.dot2[data-series='2'] {
+  fill: var(--chart-2);
+}
+
+.dot2[data-series='3'] {
+  fill: var(--chart-3);
+}
+
+.dot2[data-series='4'] {
+  fill: var(--chart-4);
+}
+
+.dot2[data-series='5'] {
+  fill: var(--chart-5);
+}
+
+.dot2[data-series='6'] {
+  fill: var(--chart-6);
+}
+
+.dot2[data-series='7'] {
+  fill: var(--chart-7);
+}
+
+.dot2[data-series='8'] {
+  fill: var(--chart-8);
+}
+
+.dot2[data-enter] {
+  animation: dot-in var(--motion-fill) var(--ease-out) backwards;
+}
+
+@keyframes dot-in {
+  from {
+    fill-opacity: 0;
+  }
+}
+
+/* after the rule it overrides: equal specificity, the later one wins */
+@media (prefers-reduced-motion: reduce) {
+  .dot2[data-enter] {
+    animation: none;
+  }
+}
+
+.dotMark[data-interactive]:hover .dot2,
+.dotMark:focus-visible .dot2 {
+  fill-opacity: 1;
+  r: 5;
+}
+
+.quadGood {
+  fill: color-mix(in srgb, var(--success) var(--tint-faint), transparent);
+}
+
+.quadBad {
+  fill: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
+}
+
+.quadKey {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: var(--space-xs);
+  border-radius: 2px;
+  border: 1px solid var(--border-subtle);
+}
+
+.quadKey[data-q='good'] {
+  background: color-mix(in srgb, var(--success) var(--tint-soft), transparent);
+}
+
+.quadKey[data-q='bad'] {
+  background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
+}
+
+.outcomeKey {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--text-muted);
+}
+
+.outcomeKey[data-outcome='pass'] {
+  background: var(--score-5);
+}
+
+.outcomeKey[data-outcome='fail'] {
+  background: var(--score-1);
+}
+
+.outcomeKey[data-outcome='error'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--error);
+}
+
+.curve {
+  margin: 0;
+}
+
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.band {
+  fill-opacity: 0.14;
+}
+
+.marker {
+  fill: var(--card-bg);
+  stroke-width: 2;
+}
+
+/* A value label on a curve point: --font-sm mono with a 3px surface halo so it stays legible over the line. */
+.pointLabel {
+  paint-order: stroke;
+  stroke: var(--card-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  fill: var(--text-secondary);
+}
+
+/* Correlation matrix: square cells of clamp(20px, column / (n + 1), 44px); it scrolls inside its card, never wider than it. */
+.matrixBox {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.matrixCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: outline-color var(--transition-fast);
+}
+
+.matrixCell:hover:not(:disabled) {
+  outline: 1px solid var(--text-primary);
+}
+
+.matrixCell:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.matrixCell[aria-pressed='true'] {
+  outline: 2px solid var(--text-primary);
+}
+
+/* Column labels are rotated -60 degrees from the cell's bottom-left corner. */
+.matrixColHead {
+  position: relative;
+  min-width: 0;
+  height: 84px;
+}
+
+.matrixColText {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  max-width: 96px;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  transform: rotate(-60deg);
+  transform-origin: left bottom;
+}

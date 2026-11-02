@@ -1,0 +1,659 @@
+/**
+ * /projects/:slug/datasets/:ref — hero + Items/Runs/Lineage/Access/Settings tabs,
+ * or the item page when `?item=` (brief 07 §2.4). Version resolution:
+ * `?v=` alias → label → production → newest published → newest; the URL is
+ * normalised to always carry `?v=`.
+ */
+import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  downloadUrl,
+  prefetchDatasetAccess,
+  useDataset,
+  useDatasetVersions,
+  useSetProduction,
+  type Dataset,
+  type DatasetVersion,
+  useCreateVersion,
+} from '@/api/datasets';
+import { ApiError } from '@/lib/http';
+import { projectPath } from '@/app/routes';
+import { useDelayedPending } from '@/lib/pending';
+import { platformUrl } from '@/lib/runtime';
+import { useCrumbLabel } from '@/lib/crumb-label';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
+import { fullWidth } from '@/features/shell/layout';
+import {
+  Button,
+  ConfirmDialog,
+  DropdownMenu,
+  HelpMarker,
+  ErrorState,
+  Icon,
+  IconButton,
+  Identicon,
+  PageHeader,
+  Skeleton,
+  TabPanel,
+  Tabs,
+  Tag,
+  Text,
+  Tooltip,
+  useToast,
+  Flag,
+} from '@/ui';
+import { AddItemDialog, CreateDraftDialog, NameVersionDialog, PublishDialog } from '../components/dialogs';
+import { VersionSwitcher } from '../components/VersionSwitcher';
+import { catalogPath, comparePath, datasetPath, parseDatasetRoute, type DetailTab } from '../lib/route';
+import { PRODUCTION_RULE, isProduction, resolveActiveVersion } from '../lib/versions';
+import { UploadWizard, type WizardMode } from '../wizard/UploadWizard';
+import { ItemsWorkspace } from './ItemsWorkspace';
+import { LineageTab } from './LineageTab';
+import { RunsTab } from './RunsTab';
+import { RunOnVersionLink, useCanLaunch } from './RunOnVersion';
+import { AccessTab } from './AccessTab';
+import { SettingsTab } from './SettingsTab';
+import { ItemPage } from '../item/ItemPage';
+import styles from './DatasetDetailPage.module.css';
+
+export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
+  const { slug, project, readOnly } = useProjectContext();
+  const [search] = useSearchParams();
+  const route = parseDatasetRoute(datasetRef, search);
+  const navigate = useNavigate();
+  const dsQuery = useDataset(slug, datasetRef);
+  const versionsQuery = useDatasetVersions(slug, datasetRef, Boolean(dsQuery.data));
+  const dataset = dsQuery.data;
+  const versions = useMemo(() => versionsQuery.data ?? [], [versionsQuery.data]);
+  const active = useMemo(() => resolveActiveVersion(versions, route.version), [versions, route.version]);
+  const pending = dsQuery.isPending || (Boolean(dataset) && versionsQuery.isPending);
+  const showSkeleton = useDelayedPending(pending);
+  useCrumbLabel(dataset?.name);
+  const forbidden = dsQuery.error instanceof ApiError && isDatasetForbidden(dsQuery.error);
+  useDocumentTitle(
+    forbidden
+      ? 'Datasets'
+      : dataset
+        ? `${dataset.name}${route.itemId ? ` · ${route.itemId}` : ''}`
+        : `${project.name} · Datasets`,
+  );
+
+  // Normalise the URL: canonical slug, `?v=` always present, legacy tab=versions → lineage.
+  useEffect(() => {
+    if (!dataset || !versionsQuery.data) return;
+    const next = new URLSearchParams(search);
+    let changed = false;
+    if (active && next.get('v') !== active.version) {
+      next.set('v', active.version);
+      changed = true;
+    }
+    if (!active && next.has('v')) {
+      next.delete('v');
+      changed = true;
+    }
+    if (route.legacyTab) {
+      next.set('tab', 'lineage');
+      changed = true;
+    }
+    if (!route.itemId && !next.get('tab')) {
+      next.set('tab', 'items');
+      changed = true;
+    }
+    const canonicalRef = dataset.slug !== datasetRef;
+    if (changed || canonicalRef) {
+      navigate(
+        {
+          pathname: canonicalRef ? datasetPath(slug, dataset.slug) : undefined,
+          search: `?${next.toString()}`,
+        },
+        { replace: true },
+      );
+    }
+  }, [
+    dataset,
+    versionsQuery.data,
+    active,
+    search,
+    route.legacyTab,
+    route.itemId,
+    navigate,
+    slug,
+    datasetRef,
+  ]);
+
+  if (showSkeleton && !dataset)
+    return (
+      <div className={fullWidth}>
+        <Skeleton kind="lines" rows={3} label="Loading dataset" />
+      </div>
+    );
+  if (forbidden) {
+    return (
+      <div className={fullWidth} data-testid="da-403">
+        <ErrorState
+          error={dsQuery.error}
+          title="You don’t have access to this dataset"
+          message="Ask a project manager to add you. Its runs stay listed with item contents hidden."
+          action={
+            <Button variant="neutral" onPress={() => navigate(catalogPath(slug))}>
+              Back to datasets
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+  if (dsQuery.isError) {
+    return (
+      <div className={fullWidth}>
+        <ErrorState
+          error={dsQuery.error}
+          title="Couldn’t load this dataset"
+          notFoundTitle="Dataset not found"
+          notFoundMessage="No dataset with this name or slug exists in the project. It may have been deleted."
+          onRetry={() => void dsQuery.refetch()}
+          parent={{ to: projectPath(slug, 'datasets'), label: 'Datasets' }}
+        />
+      </div>
+    );
+  }
+  if (versionsQuery.isError) {
+    return (
+      <div className={fullWidth}>
+        <ErrorState
+          error={versionsQuery.error}
+          title="Couldn’t load versions"
+          onRetry={() => void versionsQuery.refetch()}
+        />
+      </div>
+    );
+  }
+  if (!dataset || !versionsQuery.data) return null;
+
+  if (route.itemId && active) {
+    return (
+      <ItemPage
+        slug={slug}
+        dataset={dataset}
+        versions={versions}
+        version={active}
+        itemId={route.itemId}
+        readOnly={readOnly || !dataset.permissions.can_modify}
+      />
+    );
+  }
+
+  return (
+    <DetailBody
+      slug={slug}
+      dataset={dataset}
+      versions={versions}
+      active={active}
+      tab={route.tab}
+      archived={readOnly}
+    />
+  );
+}
+
+function DetailBody({
+  slug,
+  dataset,
+  versions,
+  active,
+  tab,
+  archived,
+}: {
+  slug: string;
+  dataset: Dataset;
+  versions: DatasetVersion[];
+  active: DatasetVersion | null;
+  tab: DetailTab;
+  /** the project is archived (the whole project is read-only) */
+  archived: boolean;
+}) {
+  // Read-only for an archived project, and per dataset for a viewer (A1-25): edit
+  // affordances are hidden, not disabled.
+  const readOnly = archived || !dataset.permissions.can_modify;
+  const navigate = useNavigate();
+  const [search] = useSearchParams();
+  const toast = useToast();
+  const setProduction = useSetProduction(slug, dataset.slug);
+  const [dialog, setDialog] = useState<'draft' | 'publish' | 'name' | null>(null);
+  const [wizard, setWizard] = useState<WizardMode | null>(null);
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  // the draft that the first Add item just made: its item toast says so (C116)
+  const [newDraft, setNewDraft] = useState<DatasetVersion | null>(null);
+  const createVersion = useCreateVersion(slug, dataset.slug);
+  const [accessDirty, setAccessDirty] = useState(false);
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
+  const qc = useQueryClient();
+  // An item whose state the reader wants to change on a published version: it opens in the new draft.
+  const [draftForItem, setDraftForItem] = useState<string | null>(null);
+  const ref = dataset.slug;
+  // Load by default: once the items tab has painted, warm the Access tab's query during idle time (QA5-23).
+  // Only on the items tab: the Settings tab makes no access request at all (QA5-14).
+  useEffect(() => {
+    if (tab !== 'items' || !active) return undefined;
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (conn?.saveData) return undefined;
+    const run = () => void prefetchDatasetAccess(qc, slug, ref);
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(run, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(run, 300);
+    return () => clearTimeout(id);
+  }, [tab, active, qc, slug, ref]);
+  const isDraft = active?.status === 'draft';
+  const canWrite = !readOnly;
+  const contentAccess = dataset.items_visible;
+  const canSetProd = dataset.permissions.can_set_production;
+
+  const hrefFor = (v: DatasetVersion) => {
+    const next = new URLSearchParams(search);
+    next.set('v', v.version);
+    next.delete('page');
+    return `${datasetPath(slug, ref)}?${next.toString()}`;
+  };
+
+  async function onSetProduction() {
+    if (!active) return;
+    try {
+      await setProduction.mutateAsync(active.version);
+      toast.show(`${active.version} is now production`, { tone: 'success' });
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t set production', {
+        tone: 'error',
+      });
+    }
+  }
+
+  // A dataset with no versions: the first Add item makes draft v1 itself (C116), no separate draft step.
+  async function addFirstItem() {
+    try {
+      const r = await createVersion.mutateAsync({});
+      setNewDraft(r.version);
+      navigate(datasetPath(slug, ref, { tab: 'items', v: r.version.version }));
+      setAddItemOpen(true);
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t create the draft', {
+        tone: 'error',
+      });
+    }
+  }
+
+  // C130: with an active environment, a published version offers 'Run experiment on v2' (any member who can launch)
+  const { project } = useProjectContext();
+  const canLaunch = useCanLaunch(project.id) === true && !archived;
+  const launchable = canLaunch && active?.status === 'published';
+  const primaryActions =
+    !canWrite || !contentAccess ? null : !active ? (
+      <>
+        <Button
+          variant="neutral"
+          icon={<Icon name="plus" size={12} />}
+          onPress={() => void addFirstItem()}
+          loading={createVersion.isPending}
+          data-testid="add-item"
+        >
+          Add item
+        </Button>
+        <Button variant="neutral" onPress={() => setWizard('new-version')} data-testid="import-draft">
+          Import
+        </Button>
+      </>
+    ) : isDraft ? (
+      <>
+        <Button
+          variant="neutral"
+          icon={<Icon name="plus" size={12} />}
+          onPress={() => setAddItemOpen(true)}
+          data-testid="add-item"
+        >
+          Add item
+        </Button>
+        <Button variant="neutral" onPress={() => setWizard('add-to-draft')} data-testid="import-draft">
+          Import
+        </Button>
+        <Button variant="primary" onPress={() => setDialog('publish')} data-testid="publish">
+          Publish
+        </Button>
+      </>
+    ) : (
+      <>
+        {!isProduction(active) ? (
+          canSetProd ? (
+            <Button
+              variant="accent"
+              onPress={() => void onSetProduction()}
+              loading={setProduction.isPending}
+              data-testid="set-production"
+            >
+              Set as production
+            </Button>
+          ) : (
+            <Tooltip content={PRODUCTION_RULE}>
+              <Button
+                variant="neutral"
+                aria-disabled="true"
+                onPress={() => toast.show(PRODUCTION_RULE, { tone: 'info' })}
+              >
+                Set as production
+              </Button>
+            </Tooltip>
+          )
+        ) : null}
+        <Button
+          variant="primary"
+          icon={<Icon name="plus" size={12} />}
+          onPress={() => setDialog('draft')}
+          data-testid="create-draft"
+        >
+          Create draft
+        </Button>
+      </>
+    );
+
+  const tabItems = [
+    // the active items: disabled ones are left out of runs (C042)
+    {
+      id: 'items',
+      label: 'Items',
+      count: active ? active.item_count - (active.disabled_count ?? 0) : undefined,
+    },
+    { id: 'runs', label: 'Runs', count: active?.run_count },
+    { id: 'lineage', label: 'Lineage', count: versions.length },
+    // the grant count shows for a restricted dataset only: "0" on a project-wide one would read as "nobody" (QD10)
+    {
+      id: 'access',
+      label: 'Access',
+      count: dataset.access_mode === 'restricted' ? dataset.grant_count : undefined,
+    },
+    { id: 'settings', label: 'Settings' },
+  ];
+
+  return (
+    <div className={fullWidth} data-dataset-detail={ref}>
+      <PageHeader
+        leading={<Identicon seed={ref} chip />}
+        title={
+          <span className={styles.titleRow}>
+            <span dir="auto">{dataset.name}</span>
+            {dataset.private_test_set ? (
+              <Flag tone="warning" icon="eye-off">
+                Private test set
+              </Flag>
+            ) : null}
+            {dataset.access_mode === 'restricted' ? (
+              <Flag icon="lock" data-testid="restricted-badge">
+                Restricted
+              </Flag>
+            ) : null}
+            {!archived && dataset.permissions.access_level === 'view' ? (
+              <>
+                <Flag icon="eye" data-testid="view-only-badge">
+                  View only
+                </Flag>
+                <HelpMarker label="About view only access">
+                  You can open this dataset but not change it. Ask a project manager for modify access.
+                </HelpMarker>
+              </>
+            ) : null}
+          </span>
+        }
+        // Plain text: Settings › General is the one place to edit the name and description (C169).
+        description={
+          dataset.description ? (
+            <span dir="auto">{dataset.description}</span>
+          ) : canWrite ? (
+            <Link to={datasetPath(slug, ref, { tab: 'settings' })} className={styles.addDescription}>
+              Add a description
+            </Link>
+          ) : undefined
+        }
+        // The header holds the name, description, version switcher and actions only; counts stay on the state
+        // filter, the pager and the Items tab, and provenance is on the Lineage card (C042).
+        actions={
+          <div className={styles.heroActions}>
+            {active ? (
+              <VersionSwitcher versions={versions} active={active} hrefFor={hrefFor} />
+            ) : (
+              <Tag>no versions</Tag>
+            )}
+            {launchable && active ? (
+              <RunOnVersionLink slug={slug} datasetName={dataset.name} version={active.version} />
+            ) : null}
+            {primaryActions}
+            {active ? (
+              <DropdownMenu
+                label="More actions"
+                trigger={<IconButton label="More actions" icon="more" data-testid="hero-more" />}
+                items={[
+                  ...(canWrite ? [{ id: 'name', label: 'Name version' }] : []),
+                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare versions' }] : []),
+                  ...(dataset.items_visible
+                    ? [
+                        {
+                          id: 'download',
+                          label: '↓ Download JSONL',
+                          href: platformUrl(downloadUrl(slug, ref, active.version)),
+                        },
+                        ...(active.disabled_count > 0
+                          ? [
+                              {
+                                id: 'download-all',
+                                label: '↓ Download JSONL with disabled items',
+                                href: platformUrl(downloadUrl(slug, ref, active.version, true)),
+                              },
+                            ]
+                          : []),
+                      ]
+                    : []),
+                  ...(canWrite
+                    ? [
+                        {
+                          id: 'upload',
+                          label: 'Upload file as new version',
+                          icon: <Icon name="upload" size={12} />,
+                          separatorBefore: true,
+                        },
+                      ]
+                    : []),
+                ]}
+                onAction={(id) => {
+                  if (id === 'name') setDialog('name');
+                  else if (id === 'compare') {
+                    const other = versions.find((v) => v.id !== active.id);
+                    navigate(
+                      comparePath(slug, ref, {
+                        base: other?.version ?? active.version,
+                        head: active.version,
+                      }),
+                    );
+                  } else if (id === 'upload') setWizard('new-version');
+                }}
+              />
+            ) : null}
+          </div>
+        }
+      />
+      <Tabs
+        label="Dataset sections"
+        items={tabItems}
+        selected={tab}
+        onSelect={(id) => {
+          // unsaved access edits are lost when the tab leaves (QA5-62): ask first
+          if (tab === 'access' && id !== 'access' && accessDirty) setLeaveTo(id);
+          else navigate({ search: `?${withTab(search, id)}` });
+        }}
+      >
+        <TabPanel id="items">
+          {active ? (
+            <ItemsWorkspace
+              slug={slug}
+              dataset={dataset}
+              version={active}
+              readOnly={readOnly}
+              onAddItem={() => setAddItemOpen(true)}
+              onImport={() => setWizard('add-to-draft')}
+              onCreateDraft={(itemId) => {
+                setDraftForItem(itemId ?? null);
+                setDialog('draft');
+              }}
+            />
+          ) : (
+            <NoVersions
+              canWrite={canWrite}
+              onCreate={() => setDialog('draft')}
+              onImport={() => setWizard('new-version')}
+            />
+          )}
+        </TabPanel>
+        <TabPanel id="runs">
+          <RunsTab
+            slug={slug}
+            datasetRef={ref}
+            datasetName={dataset.name}
+            version={active}
+            canLaunch={canLaunch}
+          />
+        </TabPanel>
+        <TabPanel id="lineage">
+          <LineageTab slug={slug} datasetRef={ref} />
+        </TabPanel>
+        <TabPanel id="access">
+          <AccessTab slug={slug} dataset={dataset} archived={archived} onDirtyChange={setAccessDirty} />
+        </TabPanel>
+        <TabPanel id="settings">
+          <SettingsTab slug={slug} dataset={dataset} readOnly={readOnly} archived={archived} />
+        </TabPanel>
+      </Tabs>
+      <ConfirmDialog
+        open={leaveTo !== null}
+        onOpenChange={(o) => !o && setLeaveTo(null)}
+        title="Discard access changes?"
+        description="You have unsaved changes to who can access this dataset. They are lost if you leave this tab."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        tone="danger"
+        onConfirm={() => {
+          const next = leaveTo;
+          setLeaveTo(null);
+          setAccessDirty(false);
+          if (next) navigate({ search: `?${withTab(search, next)}` });
+        }}
+      />
+
+      <CreateDraftDialog
+        open={dialog === 'draft'}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDialog(null);
+            setDraftForItem(null);
+          }
+        }}
+        slug={slug}
+        dataset={dataset}
+        versions={versions}
+        current={active}
+        onCreated={(v) =>
+          navigate(
+            draftForItem
+              ? datasetPath(slug, ref, { v: v.version, item: draftForItem })
+              : datasetPath(slug, ref, { tab: 'items', v: v.version }),
+          )
+        }
+      />
+      {active ? (
+        <PublishDialog
+          open={dialog === 'publish'}
+          onOpenChange={(o) => !o && setDialog(null)}
+          slug={slug}
+          dataset={dataset}
+          version={active}
+          canSetProduction={canSetProd}
+        />
+      ) : null}
+      {active ? (
+        <NameVersionDialog
+          open={dialog === 'name'}
+          onOpenChange={(o) => !o && setDialog(null)}
+          slug={slug}
+          dataset={dataset}
+          version={active}
+        />
+      ) : null}
+      {active && isDraft ? (
+        <AddItemDialog
+          open={addItemOpen}
+          onOpenChange={(o) => {
+            setAddItemOpen(o);
+            if (!o) setNewDraft(null);
+          }}
+          slug={slug}
+          dataset={dataset}
+          version={active}
+          newDraft={newDraft?.id === active.id}
+        />
+      ) : null}
+      <UploadWizard
+        open={wizard !== null}
+        onOpenChange={(o) => !o && setWizard(null)}
+        slug={slug}
+        mode={wizard ?? 'new-version'}
+        target={dataset}
+        draft={isDraft ? active : null}
+        latestVersion={versions[0]?.version ?? null}
+        canSetProduction={canSetProd}
+        onDone={(r) => {
+          if (r.mode === 'new-version' && r.version)
+            navigate(datasetPath(slug, ref, { tab: 'items', v: r.version.version }));
+        }}
+      />
+    </div>
+  );
+}
+
+/** The dataset 403 ("You don't have access to this dataset"), as opposed to a project-level refusal. */
+export function isDatasetForbidden(e: ApiError): boolean {
+  return e.status === 403 && /access to this dataset/i.test(e.detail || e.message || '');
+}
+
+function withTab(search: URLSearchParams, tab: string): string {
+  const next = new URLSearchParams(search);
+  next.set('tab', tab);
+  next.delete('page');
+  return next.toString();
+}
+
+function NoVersions({
+  canWrite,
+  onCreate,
+  onImport,
+}: {
+  canWrite: boolean;
+  onCreate: () => void;
+  onImport: () => void;
+}) {
+  return (
+    <div className={styles.noVersions}>
+      <Text variant="xl" as="h2">
+        No versions yet
+      </Text>
+      <Text variant="md" tone="muted">
+        Create a draft to add items by hand, or import a file as the first version.
+      </Text>
+      {canWrite ? (
+        <div className={styles.noVersionsActions}>
+          <Button icon={<Icon name="plus" size={12} />} variant="primary" onPress={onCreate}>
+            Create first draft
+          </Button>
+          <Button variant="neutral" onPress={onImport}>
+            Import a file
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}

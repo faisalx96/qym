@@ -11,12 +11,23 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 - `projects`: project access boundary and active/archive state. `archived_at` (`0065`) records when the project was archived (NULL while active); Trash purging of its deleted runs pauses from then until the unarchive.
 - `project_memberships`: one `MEMBER` / `MANAGER` role per user and project.
 - `api_keys`: project-bound key prefix, PBKDF2 hash, creator, recorded scopes, and revocation time. Scopes are stored but are not currently enforced.
-- `project_llm_connections`: encrypted OpenAI-compatible connection settings and the project default.
+- `project_llm_connections`: encrypted OpenAI-compatible connection settings, the project default, and `available_for_experiments` (whether the experiment model picker offers it).
 - `platform_settings`: retained settings storage; current operator configuration primarily comes from environment variables.
+
+## Evaluation Service environments and experiments
+
+- `eval_environments`: remote Evaluation Service deployments per project (unique name per project), with a normalized `base_url`, encrypted API key + `last4`, default/max priority (`LOW` / `NORMAL` / `HIGH`), the `allow_connection_keys` opt-in, best-run ranking defaults, health fields, and `is_active` soft-disable. A partial unique index keeps an active `base_url` in exactly one project across the platform.
+- `eval_environment_schemas`: immutable `env-overrides` JSON Schema history, unique per `(environment, schema_hash)`, with the cached form descriptor. `eval_environments.current_schema_id` points at the current row.
+- `eval_model_slots`: proposed / confirmed / stale LLM field groupings (`endpoint` or `flat`) per schema, unique per `(schema, slot_key)`, with JSON-pointer `field_map` and `transport_fields`.
+- `eval_experiments`: one launch (a sweep over one or more environments) with `environment_ids`, `base_source`, the config `spec` (secrets only as refs), Fernet-encrypted temporary-model secrets, priority (`LOW` / `NORMAL` / `HIGH`) and preemption acknowledgement, aggregate status (`QUEUED` / `RUNNING` / `COMPLETED` / `PARTIAL` / `FAILED` / `CANCELLED`), `job_count`, and cancellation fields. Deleting the project cascades.
+- `eval_experiment_jobs`: one combination x one environment, unique per `(experiment, environment, combo_index)`, pinned to the schema it was validated against. Holds the redacted `params` and `request_body`, the launch-token hash, remote job id/status/result/versioning, the platform status (`QUEUED` / `SUBMITTING` / `SUBMITTED` / `RUNNING` / `SUCCEEDED` / `FAILED` / `BLOCKED` / `CANCELLING` / `CANCELLED` / `TIMED_OUT`), dispatcher lease and backoff (`lease_owner`, `lease_until`, `submit_attempts`, `next_attempt_at`), `wait_reason`, and the cancel request. Indexed on `(status, next_attempt_at)` for the dispatcher and `(environment, status)` for the queue view. `run_id` (unique, `ON DELETE SET NULL`) is set when ingest links the run. Jobs cascade with their experiment, environment and schema; the API soft-disables referenced environments instead of deleting them.
+- `eval_remote_queue_snapshots`: latest redacted view of each environment's remote `PENDING` / `RUNNING` queue (one row per environment), with `fetched_at` and `fetch_error`.
+- `eval_config_presets`: named config presets per environment, `kind` `official` (manager-published defaults) or `saved`, with `current_version_id` (`ON DELETE SET NULL`) and creator. A partial unique index allows at most one `official` preset per environment. Presets cascade with their environment; the API soft-disables an environment that has presets instead of deleting it.
+- `eval_config_preset_versions`: immutable preset versions, unique per `(preset, version)` with `version >= 1`, holding the `schema_id` the config was authored against, the `config` document (no sweeps, secret-free `env_overrides`, `slot_bindings`), release `notes`, and `published_by_user_id` / `published_at`. Versions cascade with their preset and schema, so a project hard-delete removes them.
 
 ## Runs and repeat executions
 
-- `runs`: project, owner, task/dataset/model, workflow state, metadata/config, progress, soft deletion, and `samples` (default `1`). `purge_clock_started_at` (`0065`) is when a deleted run's Trash grace period started counting (NULL: `deleted_at`); unarchiving its project moves it forward by the time the project spent archived.
+- `runs`: project, owner, task/dataset/model, workflow state, metadata/config, progress, soft deletion, `samples` (default `1`), `origin` (`local` / `official`, default `local`, indexed; `official` only for runs linked to an experiment job at ingest), and `experiment_job_id` (`ON DELETE SET NULL`). `purge_clock_started_at` (`0065`) is when a deleted run's Trash grace period started counting (NULL: `deleted_at`); unarchiving its project moves it forward by the time the project spent archived.
 - `run_items`: one representative row per `(run, item)` with input, expected, latest output/error, metadata, latency, and trace links.
 - `run_metric_specs`: immutable score semantics and display order per run/metric. `direction` (`maximize` / `minimize`) is nullable since `0063`: NULL means the metric declared none and is shown neutrally. `is_primary` marks the run's declared headline metric.
 - `run_item_scores`: one reduced row per `(run, item, metric)`. For repeat runs, the numeric value is the mean across stored passes, unless a reviewer scored the item as a whole (`meta.item_edit`).
@@ -29,18 +40,27 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 
 ## Datasets
 
-- `datasets`: project-scoped dataset identity, description/tags, and soft deletion.
+- `datasets`: project-scoped dataset identity, description/tags, and soft deletion. `access_mode` (`0087`; `project` default = every member, `restricted` = managers, admins, the creator and granted users).
+- `dataset_grants` (`0087`): per-user `view` / `modify` grants on a dataset, unique `(dataset_id, user_id)`, `ON DELETE CASCADE` on dataset and user; kept when the mode is switched back to `project`.
 - `dataset_versions`: immutable `vN` identifier, optional display name, draft/published state, parent version, item count, and content hash.
 - `dataset_aliases`: project-dataset aliases such as `production`, restricted to published versions.
-- `dataset_items`: items keyed by `(version, item_id)` with input, expected output, metadata, labels, and fingerprint.
+- `dataset_items`: items keyed by `(version, item_id)` with input, expected output, metadata, labels, and fingerprint. `disabled_at`, `disabled_by_user_id`, `disabled_reason` (`0087`, index `(dataset_version_id, disabled_at)`) mark an item left out of runs; edited in drafts only, copied into later drafts, part of `content_hash`.
 - `dataset_item_revisions`: append-only before/after item edits.
 - `dataset_version_changes`: version creation, publishing, upload, clone, and alias history.
 
 ## Traces and review
 
-- `spans`: normalized OpenTelemetry spans, unique per `(run, span_id)`.
+- `spans`: normalized OpenTelemetry spans, unique per `(run, span_id)`. On PostgreSQL range-partitioned by `run_created_at`: daily partitions `spans_yYYYYmMMdDD` (from migration `0085`), monthly `spans_yYYYYmMM` ones created earlier, and `spans_default`; raw-trace retention drops whole partitions (see `OPERATIONS.md`, "Span partitions").
 - `run_trace_aggregates`: cached per-trace timing, token, cost, type, and error summaries.
 - `root_cause_revisions`: append-only item-level root-cause/solution revisions.
 - `review_corrections`: active review candidates, snapshots, confidence, source, review status/comment, and supersession links.
 
 Published dataset versions and historical review revisions are immutable. Runs, datasets, projects, and API keys use archive, soft-delete, or revocation fields where recovery/auditability matters.
+
+## Experiment dataset read token and latency-sensitive runs (migration 0088)
+
+- `eval_experiments.dataset_read_token_id` (FK `dataset_read_tokens.id`, `ON DELETE SET NULL`, indexed; the id outlives revocation) and `dataset_read_token_encrypted` (the raw token, Fernet-encrypted like `qym_api_key_encrypted`, cleared on revocation). The service is `services/eval_dataset_tokens.py`; the experiment's token is minted at launch, injected as `env_overrides.QYM_DATASET_READ_TOKEN` only when the job's schema declares that key, and revoked with the API key once every job is terminal.
+- `eval_experiments.latency_sensitive` (boolean, default false): the launch flag, immutable after launch, sent as the top-level `latency_sensitive` body field only when true.
+- `dataset_read_tokens.kind` (`admin` default | `experiment`, check `ck_dataset_read_tokens_kind`) and `dataset_read_tokens.experiment_id` (FK `eval_experiments.id`, `ON DELETE SET NULL`, indexed): the token list tells admin tokens from experiment tokens and links to the experiment.
+- `eval_environments.latency_sensitive_min_role` (`member` default | `manager`, check `ck_eval_environments_latency_min_role`): who may launch latency-sensitive runs on the environment.
+- `eval_experiment_jobs.admitted_at`, `deferrals` (default 0), `deferral_reason` (500 characters) and `contaminated_attempts` (default 0): the Evaluation Service's admission state of the job, copied from every poll.

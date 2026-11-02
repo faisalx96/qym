@@ -1,0 +1,58 @@
+{
+  "net": "none",
+  "width": 1440,
+  "settle": true,
+  "open": 1,
+  "run": "r300",
+  "median": {
+    "firstGroupPlaceholdersMs": 41,
+    "firstGroupRowsMs": 2903,
+    "firstGroupStripMs": 2903,
+    "requestsAfterClick": 2,
+    "apiKB": 2.32,
+    "cls": 0.1371
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "7426d2f3-93ce-4e31-84b6-42eab8fa41a5",
+          "placeholdersMs": 41,
+          "rowsMs": 2903,
+          "stripMs": 2903,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 2,
+      "passesRequests": 1,
+      "groupMetricsRequests": 1,
+      "apiKB": 2.32,
+      "passesKB": 1.25,
+      "passesTtfbMs": [
+        2844
+      ],
+      "passesDoneMs": [
+        2890
+      ],
+      "groupTtfbMs": [
+        2683
+      ],
+      "groupDoneMs": [
+        2728
+      ],
+      "cls": 0.1371,
+      "requestList": [
+        "93ce-4e31-84b6-42eab8fa41a5/passes @44-2890ms ttfb 2844 1.2kB",
+        "31-84b6-42eab8fa41a5/group-metrics?metric=correct&threshold=0.8 @44-2728ms ttfb 2683 1.1kB"
+      ]
+    }
+  ]
+}

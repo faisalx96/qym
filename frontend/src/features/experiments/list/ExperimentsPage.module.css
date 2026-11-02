@@ -1,0 +1,92 @@
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-md);
+}
+
+.truncate {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Jobs column (C139): one track split by outcome, then "5/6 · 1 failed" */
+.jobs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.jobsTrack {
+  display: inline-flex;
+  flex: 0 0 64px;
+  inline-size: 64px;
+  block-size: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.jobsPart {
+  display: block;
+  block-size: 100%;
+}
+
+.jobsPart[data-part='ok'] {
+  background: var(--success);
+}
+
+.jobsPart[data-part='failed'] {
+  background: var(--error);
+}
+
+.jobsPart[data-part='cancelled'] {
+  background: var(--warning);
+}
+
+.jobsPart[data-part='running'] {
+  background: var(--info);
+}
+
+.jobsText {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.linkButton:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Name and the Latency-sensitive tag: the tag wraps under a long name (the name is never cut). */
+.nameLine {
+  /* The name wraps, never truncated (QA3-35): TwoLine's primary line is nowrap, this block restores wrapping. */
+  display: flex;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}

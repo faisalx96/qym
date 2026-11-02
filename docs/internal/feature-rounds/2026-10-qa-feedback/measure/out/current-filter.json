@@ -1,0 +1,284 @@
+{
+  "390": {
+    "button": {
+      "[data-testid=metadata-filter]": {
+        "x": 85,
+        "y": 410.8,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      }
+    },
+    "popover": {
+      "[data-testid=metadata-filter]": {
+        "x": 85,
+        "y": 410.8,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      },
+      "[data-testid=meta-popover]": {
+        "x": 57,
+        "y": 441,
+        "w": 320,
+        "h": 248.3,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] h3": {
+        "x": 71,
+        "y": 455,
+        "w": 292,
+        "h": 17.5,
+        "font": "13px/600"
+      },
+      "[data-testid=facet-values]": {
+        "x": 71,
+        "y": 563.3,
+        "w": 292,
+        "h": 74,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 76,
+        "y": 568.3,
+        "w": 282,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=filter-chips]": null,
+      "[data-testid=filter-chips] button": null,
+      "[data-testid=items-toolbar]": null
+    },
+    "keys": "channels2 values",
+    "keyOptions": [
+      "chat43",
+      "email43",
+      "channels2 values",
+      "difficulty3 values",
+      "domain4 values",
+      "source.channel2 values",
+      "source.region.code4 values"
+    ],
+    "chips": {
+      "[data-testid=metadata-filter]": {
+        "x": 85,
+        "y": 410.8,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      },
+      "[data-testid=meta-popover]": null,
+      "[data-testid=meta-popover] h3": null,
+      "[data-testid=facet-values]": null,
+      "[data-testid=meta-popover] [role=option]": null,
+      "[data-testid=filter-chips]": {
+        "x": 85,
+        "y": 474.8,
+        "w": 261,
+        "h": 86,
+        "font": "12px/400"
+      },
+      "[data-testid=filter-chips] button": {
+        "x": 85,
+        "y": 474.8,
+        "w": 114,
+        "h": 26,
+        "font": "11px/600"
+      },
+      "[data-testid=items-toolbar]": null
+    },
+    "chipTexts": [
+      "domain: finance 136.0x26.0",
+      "source.channel: chat 162.0x26.0",
+      "source.region.code: sa 173.0x26.0"
+    ]
+  },
+  "1024": {
+    "button": {
+      "[data-testid=metadata-filter]": {
+        "x": 489,
+        "y": 252,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      }
+    },
+    "popover": {
+      "[data-testid=metadata-filter]": {
+        "x": 489,
+        "y": 252,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      },
+      "[data-testid=meta-popover]": {
+        "x": 490,
+        "y": 282,
+        "w": 320,
+        "h": 248.3,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] h3": {
+        "x": 504,
+        "y": 296,
+        "w": 292,
+        "h": 17.5,
+        "font": "13px/600"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 404.3,
+        "w": 292,
+        "h": 74,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 409.3,
+        "w": 282,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=filter-chips]": null,
+      "[data-testid=filter-chips] button": null,
+      "[data-testid=items-toolbar]": null
+    },
+    "keys": "channels2 values",
+    "keyOptions": [
+      "chat43",
+      "email43",
+      "channels2 values",
+      "difficulty3 values",
+      "domain4 values",
+      "source.channel2 values",
+      "source.region.code4 values"
+    ],
+    "chips": {
+      "[data-testid=metadata-filter]": {
+        "x": 489,
+        "y": 252,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      },
+      "[data-testid=meta-popover]": null,
+      "[data-testid=meta-popover] h3": null,
+      "[data-testid=facet-values]": null,
+      "[data-testid=meta-popover] [role=option]": null,
+      "[data-testid=filter-chips]": {
+        "x": 221,
+        "y": 284,
+        "w": 479,
+        "h": 26,
+        "font": "12px/400"
+      },
+      "[data-testid=filter-chips] button": {
+        "x": 221,
+        "y": 284,
+        "w": 114,
+        "h": 26,
+        "font": "11px/600"
+      },
+      "[data-testid=items-toolbar]": null
+    },
+    "chipTexts": [
+      "domain: finance 136.0x26.0",
+      "source.channel: chat 162.0x26.0",
+      "source.region.code: sa 173.0x26.0"
+    ]
+  },
+  "1440": {
+    "button": {
+      "[data-testid=metadata-filter]": {
+        "x": 489,
+        "y": 213.9,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      }
+    },
+    "popover": {
+      "[data-testid=metadata-filter]": {
+        "x": 489,
+        "y": 213.9,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      },
+      "[data-testid=meta-popover]": {
+        "x": 490,
+        "y": 244,
+        "w": 320,
+        "h": 248.3,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] h3": {
+        "x": 504,
+        "y": 258,
+        "w": 292,
+        "h": 17.5,
+        "font": "13px/600"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 366.3,
+        "w": 292,
+        "h": 74,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 371.3,
+        "w": 282,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=filter-chips]": null,
+      "[data-testid=filter-chips] button": null,
+      "[data-testid=items-toolbar]": null
+    },
+    "keys": "channels2 values",
+    "keyOptions": [
+      "chat43",
+      "email43",
+      "channels2 values",
+      "difficulty3 values",
+      "domain4 values",
+      "source.channel2 values",
+      "source.region.code4 values"
+    ],
+    "chips": {
+      "[data-testid=metadata-filter]": {
+        "x": 489,
+        "y": 211.4,
+        "w": 98,
+        "h": 24,
+        "font": "11px/600"
+      },
+      "[data-testid=meta-popover]": null,
+      "[data-testid=meta-popover] h3": null,
+      "[data-testid=facet-values]": null,
+      "[data-testid=meta-popover] [role=option]": null,
+      "[data-testid=filter-chips]": {
+        "x": 779.5,
+        "y": 210.4,
+        "w": 479,
+        "h": 26,
+        "font": "12px/400"
+      },
+      "[data-testid=filter-chips] button": {
+        "x": 779.5,
+        "y": 210.4,
+        "w": 114,
+        "h": 26,
+        "font": "11px/600"
+      },
+      "[data-testid=items-toolbar]": null
+    },
+    "chipTexts": [
+      "domain: finance 136.0x26.0",
+      "source.channel: chat 162.0x26.0",
+      "source.region.code: sa 173.0x26.0"
+    ]
+  }
+}

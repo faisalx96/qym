@@ -1,0 +1,12 @@
+/* A labelled person: the label, then the shared UserName (C144). */
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}

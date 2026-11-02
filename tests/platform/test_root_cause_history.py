@@ -57,6 +57,7 @@ from qym_platform.api.analysis import (
     merge_project_analysis_rule_versions,
     permanently_delete_project_analysis_rule_version,
     publish_project_analysis_rule_version,
+    restore_project_analysis_rule_version,
     update_analysis_context,
     upload_analysis_document,
 )
@@ -4552,9 +4553,10 @@ def test_publishing_without_promotion_keeps_existing_production(
     assert second["version"]["id"] != history["production_version_id"]
 
 
-def test_run_owner_can_delete_analysis_rule_version(
+def test_run_owner_who_is_a_member_cannot_delete_analysis_rule_version(
     db_session: Session,
 ) -> None:
+    """C002: deleting a rule version needs a manager, not run ownership."""
     actor, _manager, run, _ = _seed_run(db_session)
     version = _create_analysis_rule_version(
         db_session,
@@ -4574,24 +4576,83 @@ def test_run_owner_can_delete_analysis_rule_version(
         parent=version,
     )
     db_session.commit()
+    member = Principal(user=actor, auth_type="session")
 
-    history = list_project_analysis_rule_versions(
-        run.id,
-        False,
+    history = list_project_analysis_rule_versions(run.id, False, db_session, member)
+    assert history["can_delete"] is False
+
+    with pytest.raises(HTTPException) as exc_info:
+        delete_project_analysis_rule_version(run.id, version.id, db_session, member)
+
+    assert exc_info.value.status_code == 403
+    stored = db_session.get(ProjectAnalysisRuleVersion, version.id)
+    assert stored is not None
+    assert stored.deleted_at is None
+
+
+def test_manager_soft_deletes_analysis_rule_version_and_admin_restores_it(
+    db_session: Session,
+) -> None:
+    actor, manager, run, _ = _seed_run(db_session)
+    version = _create_analysis_rule_version(
         db_session,
-        Principal(user=actor, auth_type="session"),
+        project_id=run.project_id,
+        rules=[{"title": "Evidence", "instruction": "Use supplied evidence."}],
+        source="manual",
+        actor_user_id=actor.id,
+        force_new=True,
     )
-    assert history["can_delete"] is True
+    child = _create_analysis_rule_version(
+        db_session,
+        project_id=run.project_id,
+        rules=[{"title": "Keep", "instruction": "Keep one version alive."}],
+        source="manual",
+        actor_user_id=actor.id,
+        force_new=True,
+        parent=version,
+    )
+    db_session.commit()
+    manager_principal = Principal(user=manager, auth_type="session")
+    assert (
+        list_project_analysis_rule_versions(
+            run.id, False, db_session, manager_principal
+        )["can_delete"]
+        is True
+    )
 
     deleted = delete_project_analysis_rule_version(
-        run.id,
-        version.id,
-        db_session,
-        Principal(user=actor, auth_type="session"),
+        run.id, version.id, db_session, manager_principal
     )
 
     assert deleted["deleted_version_id"] == version.id
-    assert db_session.get(ProjectAnalysisRuleVersion, version.id) is None
+    stored = db_session.get(ProjectAnalysisRuleVersion, version.id)
+    assert stored is not None
+    assert stored.deleted_at is not None
+    assert stored.deleted_by_user_id == manager.id
+    # The lineage stays, so a restore puts the version back in place.
+    assert (
+        db_session.get(ProjectAnalysisRuleVersion, child.id).parent_version_id
+        == version.id
+    )
+    listed = list_project_analysis_rule_versions(
+        run.id, False, db_session, manager_principal
+    )
+    assert version.id not in {v["id"] for v in listed["versions"]}
+
+    with pytest.raises(HTTPException) as again:
+        delete_project_analysis_rule_version(
+            run.id, version.id, db_session, manager_principal
+        )
+    assert again.value.status_code == 409
+
+    admin = User(id="admin-1", email="admin@example.com", role=UserRole.ADMIN)
+    db_session.add(admin)
+    db_session.commit()
+    restored = restore_project_analysis_rule_version(
+        run.id, version.id, db_session, Principal(user=admin, auth_type="session")
+    )
+    assert restored["restored_version"]["id"] == version.id
+    assert db_session.get(ProjectAnalysisRuleVersion, version.id).deleted_at is None
 
 
 def test_rule_version_merge_previews_conflicts_and_merges_into_draft(
@@ -4786,9 +4847,10 @@ def test_merging_into_published_rule_version_creates_child_draft(
     assert db_session.get(ProjectAnalysisRuleVersion, base_id).status.value == "published"
 
 
-def test_deleting_production_rule_uses_another_non_deleted_published_version(
+def test_live_rule_version_cannot_be_deleted(
     db_session: Session,
 ) -> None:
+    """C002: the server refuses to delete the production version, as the menu does."""
     _, manager, run, _ = _seed_run(db_session)
     principal = Principal(user=manager, auth_type="session")
     first = update_analysis_context(
@@ -4822,39 +4884,25 @@ def test_deleting_production_rule_uses_another_non_deleted_published_version(
         db_session,
         principal,
     )
+    first_id = first["rule_version"]["id"]
 
-    deleted = delete_project_analysis_rule_version(
-        run.id, first["rule_version"]["id"], db_session, principal
-    )
+    with pytest.raises(HTTPException) as exc_info:
+        delete_project_analysis_rule_version(run.id, first_id, db_session, principal)
 
-    assert deleted["active_version"]["id"] == second["version"]["id"]
-    assert (
-        db_session.get(
-            ProjectAnalysisRuleVersion,
-            first["rule_version"]["id"],
-        )
-        is None
-    )
-    remaining = db_session.get(ProjectAnalysisRuleVersion, second["version"]["id"])
-    assert remaining is not None
-    assert remaining.parent_version_id is None
-    assert remaining.base_version_id is None
-    assert (
-        db_session.query(ProjectAnalysisRuleAlias)
-        .filter(
-            ProjectAnalysisRuleAlias.project_id == run.project_id,
-            ProjectAnalysisRuleAlias.alias == "production",
-        )
-        .first()
-        is None
-    )
+    assert exc_info.value.status_code == 409
+    assert db_session.get(ProjectAnalysisRuleVersion, first_id).deleted_at is None
     assert (
         _resolve_analysis_rule_version(db_session, run.project_id, "production").id
-        == second["version"]["id"]
+        == first_id
     )
 
+    deleted = delete_project_analysis_rule_version(
+        run.id, second["version"]["id"], db_session, principal
+    )
+    assert deleted["active_version"]["id"] == first_id
 
-def test_deleted_draft_is_removed_and_cannot_be_resolved_or_edited(
+
+def test_deleted_draft_is_hidden_and_cannot_be_resolved_or_edited(
     db_session: Session,
 ) -> None:
     _, manager, run, _ = _seed_run(db_session)
@@ -4882,7 +4930,7 @@ def test_deleted_draft_is_removed_and_cannot_be_resolved_or_edited(
     )
     db_session.commit()
     delete_project_analysis_rule_version(run.id, version_id, db_session, principal)
-    assert db_session.get(ProjectAnalysisRuleVersion, version_id) is None
+    assert db_session.get(ProjectAnalysisRuleVersion, version_id).deleted_at is not None
 
     with pytest.raises(HTTPException) as resolve_error:
         _resolve_analysis_rule_version(db_session, run.project_id, version_id)
@@ -4901,7 +4949,7 @@ def test_deleted_draft_is_removed_and_cannot_be_resolved_or_edited(
             db_session,
             principal,
         )
-    assert update_error.value.status_code == 404
+    assert update_error.value.status_code == 409
 
 
 def test_last_live_rule_version_cannot_be_deleted(db_session: Session) -> None:
@@ -5968,6 +6016,113 @@ def test_approved_example_picker_is_paged_and_filters_by_user(
     assert [example["id"] for example in selected_payload["examples"]] == [
         corrections[0].id
     ]
+
+
+def test_approved_example_picker_pages_and_facets_in_sql(
+    db_session: Session,
+) -> None:
+    from qym_platform.services.llm_analyzer import (
+        estimate_rule_writer_example_characters,
+    )
+
+    actor, manager, run, _ = _seed_run(db_session)
+    run.model = "openai/gpt-4o"
+    run.run_config = {"run_name": "Named run"}
+    other_run = Run(
+        id="run-sql-picker-other",
+        project_id=run.project_id,
+        created_by_user_id=actor.id,
+        owner_user_id=actor.id,
+        external_run_id="external-other",
+        task=run.task,
+        dataset="dataset-other",
+        model="gpt-4o-mini",
+        metrics=["accuracy"],
+        status=RunWorkflowStatus.COMPLETED,
+    )
+    db_session.add(other_run)
+    corrections = [
+        ReviewCorrection(
+            run_id=run.id if index % 2 == 0 else other_run.id,
+            item_id=f"sql-item-{index}",
+            metric_name="accuracy",
+            task=run.task,
+            input_snapshot={"question": "q" * (index + 1)},
+            expected_snapshot={"answer": f"Expected {index}"},
+            output_snapshot={"answer": f"Actual {index}"},
+            scores_snapshot={},
+            ai_root_cause="Reasoning Error",
+            human_root_cause="Reasoning Error",
+            corrected_by_user_id=actor.id if index % 2 == 0 else None,
+            reviewed_by_user_id=manager.id,
+            ai_confidence=0.8,
+            created_at=datetime(2026, 1, 1, 0, index),
+            status=CorrectionStatus.APPROVED,
+            is_active=True,
+        )
+        for index in range(7)
+    ]
+    db_session.add_all(corrections)
+    db_session.commit()
+
+    def listing(**overrides: Any) -> dict:
+        params: dict[str, Any] = dict(
+            scope_id=run.id,
+            page=1,
+            page_size=3,
+            task=None,
+            dataset=None,
+            model=None,
+            run_name=None,
+            user_id=None,
+            source=None,
+            conf_min=0,
+            conf_max=100,
+            search="sql-item",
+            selected_ids=None,
+            db=db_session,
+            principal=Principal(user=manager, auth_type="none"),
+        )
+        params.update(overrides)
+        return _list_analysis_examples(**params)
+
+    newest_first = [
+        c.id for c in sorted(corrections, key=lambda c: c.created_at, reverse=True)
+    ]
+    payload = listing(page=2, selected_ids=[corrections[1].id, corrections[2].id])
+    assert payload["total"] == 7
+    assert payload["page_count"] == 3
+    assert payload["matching_ids"] == newest_first
+    assert [row["id"] for row in payload["examples"]] == newest_first[3:6]
+    assert payload["matching_characters"] == sum(
+        estimate_rule_writer_example_characters(c) for c in corrections
+    )
+    assert sorted(payload["selected_ids"]) == sorted(
+        [corrections[1].id, corrections[2].id]
+    )
+    assert payload["selected_count"] == 2
+    assert payload["selected_characters"] == sum(
+        estimate_rule_writer_example_characters(c) for c in corrections[1:3]
+    )
+    facets = payload["facets"]
+    assert facets["tasks"] == [run.task]
+    assert set(facets["datasets"]) == {run.dataset, "dataset-other"}
+    assert facets["models"] == ["gpt-4o", "gpt-4o-mini"]
+    assert facets["run_names"] == ["Named run", "external-other"]
+    assert {user["id"] for user in facets["users"]} == {actor.id, manager.id}
+
+    # The last page is short; a page past the end is empty but keeps totals.
+    assert len(listing(page=3)["examples"]) == 1
+    beyond = listing(page=9)
+    assert beyond["examples"] == [] and beyond["total"] == 7
+
+    # A facet ignores its own filter but honours the others.
+    narrowed = listing(dataset=["dataset-other"])
+    assert narrowed["total"] == 3
+    assert set(narrowed["facets"]["datasets"]) == {run.dataset, "dataset-other"}
+    assert narrowed["facets"]["models"] == ["gpt-4o-mini"]
+    assert narrowed["facets"]["run_names"] == ["external-other"]
+    assert {user["id"] for user in narrowed["facets"]["users"]} == {manager.id}
 
 
 def test_build_analysis_prompt_projects_nested_output_mapping() -> None:

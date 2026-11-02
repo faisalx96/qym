@@ -9,22 +9,28 @@ import json
 import math
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import and_, case, false, func, or_, select, true
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, case, false, func, or_, select, true, union
+from sqlalchemy.orm import Session, aliased
 
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.db.dashboard_models import (
     DashboardRunDimension as Dimension,
     DashboardRunSummary as Summary,
 )
-from qym_platform.db.models import Project, ProjectMembership, UserRole
+from qym_platform.db.models import Project, ProjectMembership, RunDataset, UserRole
 from qym_platform.deps import get_db
+from qym_platform.db.dashboard_models import DashboardRunVersion as RunVersion
 from qym_platform.permissions import project_for_read_by_slug
 from qym_platform.settings import PlatformSettings
 from qym_platform.services.dashboard_cache import DashboardSnapshotCache
+from qym_platform.services.run_versioning import (
+    EMPTY as VERSIONING_EMPTY,
+    parse_versioning_filter,
+    versioning_conditions,
+)
 
 # Entries are keyed by the catalog revision, which moves with every published
 # change, so the TTL only bounds how long an idle entry holds memory.
@@ -44,7 +50,12 @@ _FILTER_COLUMNS = {
     "statuses": Dimension.status,
     "versions": Dimension.version,
     "users": Dimension.owner,
+    # Descriptors published before origin existed are local runs.
+    "origins": func.coalesce(Dimension.descriptor["origin"].as_string(), "local"),
 }
+_ORIGIN_FILTER_VALUES = {"official", "local", "__none__"}
+# Values listed per versioning key in the facets, newest first.
+_VERSIONING_FACET_LIMIT = 500
 
 
 _MAX_SEARCH_LENGTH = 200
@@ -56,9 +67,16 @@ def _parse_filters(raw: Optional[str]) -> dict:
     except (ValueError, TypeError):
         raise HTTPException(400, "Invalid dashboard filters") from None
     if not isinstance(value, dict) or set(value) - (
-        set(_FILTER_COLUMNS) | {"since", "until", "q"}
+        set(_FILTER_COLUMNS) | {"since", "until", "versioning", "q"}
     ):
         raise HTTPException(400, "Invalid dashboard filters")
+    try:
+        # ``{key: [values]}`` over any versioning_metadata key; see run_versioning.
+        value["versioning"] = parse_versioning_filter(value.get("versioning"))
+    except ValueError:
+        raise HTTPException(400, "Invalid versioning filter") from None
+    if not value["versioning"]:
+        value.pop("versioning")
     if "q" in value:
         if value["q"] is not None and (
             not isinstance(value["q"], str) or len(value["q"]) > _MAX_SEARCH_LENGTH
@@ -77,6 +95,8 @@ def _parse_filters(raw: Optional[str]) -> dict:
             or any(not isinstance(item, str) or len(item) > 1000 for item in values)
         ):
             raise HTTPException(400, f"Invalid {key} filter")
+    if set(value.get("origins", [])) - _ORIGIN_FILTER_VALUES:
+        raise HTTPException(400, "Invalid origins filter")
     for key in ("since", "until"):
         if value.get(key) is not None:
             try:
@@ -193,8 +213,27 @@ def _base_conditions(project):
     return conditions
 
 
-def _filter_conditions(filters, *, skip=None, facets=False):
-    conditions = []
+def _union_member_value():
+    """``name`` + U+241F + ``version``: the value a single-dataset run filters on."""
+    return case(
+        (
+            RunDataset.version.isnot(None),
+            RunDataset.dataset + "\u241f" + RunDataset.version,
+        ),
+        else_=RunDataset.dataset,
+    )
+
+
+def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False):
+    conditions = versioning_conditions(
+        Dimension.run_key,
+        {
+            key: values
+            for key, values in (filters.get("versioning") or {}).items()
+            if key != skip_versioning
+        },
+        facets=facets,
+    )
     for name, column in _FILTER_COLUMNS.items():
         values = filters.get(name, [])
         if name == skip or not values:
@@ -206,6 +245,18 @@ def _filter_conditions(filters, *, skip=None, facets=False):
             continue
         ordinary = [value for value in values if value != "__empty__"]
         terms = [column.in_(ordinary)] if ordinary else []
+        if name == "datasets" and ordinary:
+            # A union run matches when any of its datasets does (QC-66).
+            terms.append(
+                Dimension.run_key.in_(
+                    select(RunDataset.run_id).where(
+                        or_(
+                            _union_member_value().in_(ordinary),
+                            RunDataset.dataset.in_(ordinary),
+                        )
+                    )
+                )
+            )
         if "__empty__" in values:
             terms.append(or_(column.is_(None), func.trim(column) == ""))
         conditions.append(or_(*terms))
@@ -214,7 +265,7 @@ def _filter_conditions(filters, *, skip=None, facets=False):
     if filters.get("until") is not None:
         conditions.append(Dimension.timestamp < filters["until"])
     if filters.get("q"):
-        conditions.append(_search_condition(filters["q"]))
+        conditions.append(search_semijoin(filters["q"]))
     return conditions
 
 
@@ -252,6 +303,29 @@ def _descriptor_search_text(table=Dimension):
     ``search_text`` existed that the job has not filled yet."""
     return func.lower(
         _search_name(table, "external_run_id") + "\n" + _search_name(table, "run_name")
+    )
+
+
+def search_semijoin(text):
+    """The Runs search as a semi-join: the stored text's index serves one arm, a union run is
+    found by the name of any of its datasets (QC-66) in another, and a single-dataset run by
+    its dataset name in the third (C069: 'Search run or dataset names'). A plain OR with the
+    dataset subqueries would keep the planner from using the trigram index."""
+    searched = aliased(Dimension)
+    by_dataset = aliased(Dimension)
+    needle = text.lower()
+    return Dimension.run_key.in_(
+        union(
+            select(searched.run_key).where(_search_condition(text, searched)),
+            select(RunDataset.run_id).where(
+                func.lower(RunDataset.dataset).contains(needle, autoescape=True)
+            ),
+            # `dataset` is the name, then U+241F and the version for a versioned run; a search
+            # holds no U+241F, so a match is always inside the name or the version label.
+            select(by_dataset.run_key).where(
+                func.lower(by_dataset.dataset).contains(needle, autoescape=True)
+            ),
+        )
     )
 
 
@@ -481,22 +555,113 @@ def _freshness(db, project):
     return copy.deepcopy(db.info[key])
 
 
+def _facet_values(db, base, filters, name, column):
+    """The sorted values of one facet among the runs matching the other filters."""
+    conditions = [*base, *_filter_conditions(filters, skip=name, facets=True)]
+    if name == "datasets":
+        # Real dataset names: a union run lists its members, never its label.
+        values = list(
+            db.scalars(
+                _query(column)
+                .where(
+                    *conditions,
+                    Dimension.run_key.notin_(select(RunDataset.run_id)),
+                )
+                .distinct()
+            )
+        ) + list(
+            db.scalars(
+                select(_union_member_value())
+                .select_from(RunDataset)
+                .join(Dimension, Dimension.run_key == RunDataset.run_id)
+                .join(Summary, Summary.run_key == Dimension.run_key)
+                .where(*conditions)
+                .distinct()
+            )
+        )
+    else:
+        values = db.scalars(_query(column).where(*conditions).distinct())
+    normalized = {
+        str(value) if value is not None and str(value).strip() else "__empty__"
+        for value in values
+    }
+    return sorted(normalized - {"__empty__"}, key=str.casefold) + (
+        ["__empty__"] if "__empty__" in normalized else []
+    )
+
+
+def dataset_facet_values(db, base, filters):
+    """The ``datasets`` facet (the PostgreSQL overview computes the others in one statement)."""
+    return _facet_values(db, base, filters, "datasets", _FILTER_COLUMNS["datasets"])
+
+
 def _facets(db, base, filters):
-    result = {}
-    for name, column in _FILTER_COLUMNS.items():
-        values = db.scalars(
-            _query(column)
-            .where(*base, *_filter_conditions(filters, skip=name, facets=True))
-            .distinct()
-        )
-        normalized = {
-            str(value) if value is not None and str(value).strip() else "__empty__"
-            for value in values
-        }
-        result[name] = sorted(normalized - {"__empty__"}, key=str.casefold) + (
-            ["__empty__"] if "__empty__" in normalized else []
-        )
+    result = {
+        name: _facet_values(db, base, filters, name, column)
+        for name, column in _FILTER_COLUMNS.items()
+    }
+    result["versioning"] = _versioning_facets(db, base, filters)
     return result
+
+
+def _versioning_facet_values(db, conditions, key=None):
+    """``{key: [values]}`` among runs matching ``conditions``, newest first.
+
+    ``__empty__`` is appended when some matching run lacks the key.
+    """
+    query = (
+        _query(RunVersion.key, RunVersion.value, func.max(Dimension.timestamp))
+        .join(RunVersion, RunVersion.run_key == Dimension.run_key)
+        .where(*conditions)
+        .group_by(RunVersion.key, RunVersion.value)
+    )
+    if key is not None:
+        query = query.where(RunVersion.key == key)
+    latest = {}
+    for name, value, at in db.execute(query):
+        latest.setdefault(name, []).append((at, value))
+    if not latest:
+        return {}
+    total = db.scalar(_query(func.count()).where(*conditions)) or 0
+    counts = dict(
+        db.execute(
+            _query(RunVersion.key, func.count())
+            .join(RunVersion, RunVersion.run_key == Dimension.run_key)
+            .where(*conditions, RunVersion.key.in_(list(latest)))
+            .group_by(RunVersion.key)
+        ).all()
+    )
+    result = {}
+    for name, entries in latest.items():
+        entries.sort(
+            key=lambda entry: (entry[0] or datetime.min, entry[1]), reverse=True
+        )
+        values = [value for _, value in entries[:_VERSIONING_FACET_LIMIT]]
+        if counts.get(name, 0) < total:
+            values.append(VERSIONING_EMPTY)
+        result[name] = values
+    return result
+
+
+def _versioning_facets(db, base, filters):
+    """Versioning facet values, each key computed without its own selection."""
+    selected = filters.get("versioning") or {}
+    result = {
+        name: values
+        for name, values in _versioning_facet_values(
+            db, base + _filter_conditions(filters, facets=True)
+        ).items()
+        if name not in selected
+    }
+    for name in selected:
+        values = _versioning_facet_values(
+            db,
+            base + _filter_conditions(filters, skip_versioning=name, facets=True),
+            key=name,
+        ).get(name)
+        if values:
+            result[name] = values
+    return dict(sorted(result.items(), key=lambda item: item[0].casefold()))
 
 
 def _kpis(db, conditions, *, filtered):
@@ -971,7 +1136,7 @@ def dashboard_runs(
     collation: Optional[str] = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+) -> Dict[str, Any]:
     project, parsed, requested = (
         _project(db, principal, project_slug),
         _parse_filters(filters),
@@ -1263,7 +1428,7 @@ def dashboard_runs_query(
     payload: dict = Body(...),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+) -> Dict[str, Any]:
     args = _body_parameters(
         payload,
         {

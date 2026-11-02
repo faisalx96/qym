@@ -1,0 +1,723 @@
+/* Shared layout for the report sections. Grids answer to the section body (container-type: inline-size). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.metricStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.cardInfo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plain {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* The one-line note under a card's value (errors and how they count): never wraps, so card plots in one row stay level. */
+.slotEmpty {
+  margin: auto;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.badge {
+  flex: none;
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.errorNote {
+  display: block;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rowHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.detail {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.stat {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-base);
+}
+
+.table th {
+  padding: var(--space-xs);
+  text-align: start;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--bg-elevated);
+}
+
+.table td {
+  padding: var(--space-xs);
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.table a {
+  color: var(--accent-primary);
+}
+
+.matrix {
+  display: grid;
+  gap: 2px;
+  align-items: center;
+  width: max-content;
+}
+
+.matrixHead {
+  overflow: hidden;
+  padding-inline-end: var(--space-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.showMore {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.showMore:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+/* A wide table scrolls inside the panel instead of widening it. */
+.tableScroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Cards: 1 column, then 2 / 3 / 4 as the section widens (3 per row at 1280 with no scope, 2 with the sidebar). */
+.cards,
+.cardsDense,
+.twoUp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+@container (min-width: 640px) {
+  .cards,
+  .cardsDense {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 960px) {
+  .cards,
+  .cardsDense {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1400px) {
+  .cards,
+  .cardsDense {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Chart cards (round 3 P1): auto-fit grid, a card is never narrower than 260px (4 / 3 / 2 / 1 per row from wide to compact),
+   and a row's cards share one height (the plot inside takes the spare). */
+.overviewStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Overview metric card (round 10, the first qym's card): ring and mean, then the name and the error note, the
+   scored count at the top end, the plot below. No header band, no side rail. */
+.metricCard {
+  min-width: 0;
+}
+
+.metricHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.ring {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin-block-start: 2px;
+}
+
+.ringTrack {
+  fill: none;
+  stroke: var(--bg-active);
+  stroke-width: 4;
+}
+
+.ringFill {
+  fill: none;
+  stroke: var(--tone, var(--text-muted));
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.metricTitle {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.metricName {
+  overflow: hidden;
+  font-size: var(--font-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.metricSub {
+  font-weight: 450;
+  color: var(--text-muted);
+}
+
+.metricEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* The error note: a warning glyph, the counts, and the key of the hatch the bars draw for those items. */
+/* C012: the error note and the hatch key on one line under the card head, the width of the card. */
+.cardNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-xs);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.cardNote > svg {
+  flex: none;
+  color: var(--warning);
+}
+
+.hatchKey {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: var(--space-md);
+  white-space: nowrap;
+}
+
+.hatchSwatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(45deg, var(--bg-void) 0 2px, transparent 2px 4px), var(--text-muted);
+}
+
+.metricPlot {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  min-height: 146px;
+  margin-block-start: var(--space-md);
+}
+
+/* A plain-number card: Total, Min, Median and Max on one line over the box plot. */
+.numberFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+  margin: var(--space-md) 0 0;
+}
+
+.numberFact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.numberFact dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.numberFact dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.metricBox {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  margin-block-start: var(--space-sm);
+}
+
+/* Overview metric cards: three in a row at 1440 (the first qym's width), so the note fits in two lines. */
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+/* Category values are short: one more column than the metric cards. */
+@container (min-width: 1100px) {
+  .cardsDense {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Paired charts (latency histogram and scatter, correlation and relationship) sit side by side. */
+@container (min-width: 760px) {
+  .twoUp {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* One visual per row (Deep analysis, Repeat): sections stack at full width. */
+.single {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+/* Deep analysis (round 10): subsections; the correlation matrix beside the relationship scatter from 1000px. */
+.deepRoot {
+  min-width: 0;
+}
+
+.deepPair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+@container (min-width: 1000px) {
+  .deepPair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.deepCell {
+  display: flex;
+  min-width: 0;
+}
+
+.deepCell > * {
+  flex: 1;
+}
+
+.axisPick {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.rValue {
+  margin-inline-start: var(--space-xs);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.rValue b {
+  color: var(--text-primary);
+}
+
+.relationIntro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+}
+
+/* A pair whose columns share one height (latency histogram beside the scatter). */
+.pair {
+  align-items: stretch;
+}
+
+/* Metric cards in a row share one height. */
+.cards > article {
+  height: 100%;
+}
+
+/* Four metrics read as 2x2 (or one row of four when wide), never three plus an orphan. */
+@container (min-width: 960px) {
+  .cards[data-count='4'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1400px) {
+  .cards[data-count='4'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Repeat analysis: full-width visuals capped for wide screens, verdict line, best/worst cell tags. */
+.visuals {
+  max-inline-size: var(--page-max-w);
+}
+
+.verdict {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.cellTag {
+  margin-inline-start: var(--space-xs);
+}
+
+.table th[data-selected],
+.table td[data-selected] {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.table td[data-tone='danger'] {
+  color: var(--error-text);
+}
+
+/* Errors as rows: severity glyph (colour and shape), message, items, count. */
+.sev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--error);
+  font-size: var(--font-base);
+}
+
+.sev[data-kind='metric'] {
+  color: var(--metric-error);
+}
+
+.sev[data-kind='trace'] {
+  color: var(--warning);
+}
+
+.sev[data-kind='analysis'] {
+  color: var(--info);
+}
+
+.errMsg {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.errTitle {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.errDetail {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Errors (round 10): one group per kind, the kind's colour on its icon tile and total, message cards in a grid. */
+.errGroups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.errGroup {
+  --err: var(--error);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.errGroup[data-kind='metric'] {
+  --err: var(--metric-error);
+}
+
+.errGroup[data-kind='trace'] {
+  --err: var(--warning);
+}
+
+.errGroup[data-kind='analysis'] {
+  --err: var(--accent-tertiary);
+}
+
+.errHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.errIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--err) var(--tint-soft), transparent);
+  color: var(--err);
+}
+
+.errKind {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 650;
+  color: var(--err);
+}
+
+.errMeaning {
+  flex: 1 1 24rem;
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.errGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: var(--space-sm);
+}
+
+.errCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.errCard:hover {
+  background: var(--bg-hover);
+}
+
+.errCard[data-selected] {
+  box-shadow: inset 0 0 0 1px var(--err);
+}
+
+.errCard:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.errText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.errNums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.errCount {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--err);
+}
+
+.errUnit {
+  font-size: var(--font-sm);
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+/* its share of the kind's errors */
+.errShare {
+  grid-column: 1 / -1;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-active);
+}
+
+.errShare > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--err);
+}
+
+/* C067: rejected issues are left out of a category's count; the card says how many */
+.rejectedNote {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* C167: the correlation matrix's blank diagonal and its |r| key */
+.matrixSelf {
+  display: block;
+  inline-size: 100%;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 4px;
+}
+
+.rampKey {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-block-start: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.rampScale {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  inline-size: 120px;
+}
+
+.rampBar {
+  display: block;
+  block-size: 8px;
+  border-radius: 4px;
+}
+
+.rampTicks {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}

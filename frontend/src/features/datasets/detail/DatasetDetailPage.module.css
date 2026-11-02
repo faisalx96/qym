@@ -1,0 +1,43 @@
+/* Dataset hero extras: composes PageHeader/VersionSwitcher/Button/IconButton. */
+.titleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+/* No description yet: a link to Settings › General, the one place to edit it (C169) */
+.addDescription {
+  color: var(--accent-secondary);
+  text-decoration: underline; /* a link inside running text must not rely on colour alone */
+}
+
+.inlineLink {
+  font-family: var(--font-mono);
+  color: var(--accent-secondary);
+  text-decoration: underline; /* a link inside running text must not rely on colour alone */
+}
+
+.noVersions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xl) var(--space-lg);
+  text-align: center;
+}
+
+.noVersionsActions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}

@@ -55,7 +55,6 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 
-DASHBOARD = ROOT / "packages/platform/qym_platform/_static/dashboard"
 ENDED_AT = datetime(2026, 9, 1, 12, 0, 0)
 
 OWNER = "owner@example.com"
@@ -404,41 +403,10 @@ def test_passes_of_a_reviewed_run_cannot_be_deleted(client, session_factory, sta
         assert "Unapprove the run before deleting passes" in response.json()["detail"]
 
 
-def test_runs_list_offers_no_pass_deletion_on_reviewed_runs():
-    """The row's pass delete icon and the bulk Delete follow the server's
-    409 on submitted and approved runs instead of offering a refused action."""
-    js = (DASHBOARD / "dashboard.js").read_text(encoding="utf-8")
-    assert (
-        "data-can-delete-pass=\"${canDelete && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED']"
-        ".includes(status) ? 'true' : 'false'}\"" in js
-    )
-    assert "&& !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(run.status || ''));" in js
-
-
-def test_run_page_locks_scores_and_offers_reset_and_equal_editor_actions():
-    run_html = (DASHBOARD / "run.html").read_text(encoding="utf-8")
-    compare_html = (DASHBOARD / "compare.html").read_text(encoding="utf-8")
-    assert "body.run-scores-locked .metric-edit-open" in run_html
-    assert "function applyScoreLockMode()" in run_html
-    assert "applyScoreLockMode();" in run_html
-    assert "metric-reset-btn" in run_html and "reset: true" in run_html
-    assert "scoreEditBadge(passMetricMeta" in run_html
-    assert "scoreEditBadge(fullMetricMeta" in run_html
-    # The chip editor's save button no longer has its own smaller size: save
-    # and cancel share the .qym-metric-edit-action square.
-    assert ".chip-edit .metric-edit-save {" not in run_html
-    assert "compareRunScoresLocked(runIdx)" in compare_html
-    assert "scoreEditTitle(score.meta)" in compare_html
-    # Edit bookkeeping is not listed as score metadata.
-    assert "['modified', 'original_score']" not in run_html + compare_html
-
-
 def test_edit_record_stays_in_the_lean_run_index():
     from qym_platform.services.run_payloads import _keep_index_meta_value
 
     assert _keep_index_meta_value("last_edit", {"by": "x" * 300})
-    details_js = (DASHBOARD / "run_details.js").read_text(encoding="utf-8")
-    assert "new Set(['error', 'status', 'task_error', 'last_edit'])" in details_js
 
 
 # ---------------------------------------------------------------------------
@@ -559,18 +527,6 @@ def test_managers_transfer_ownership(client, session_factory):
     # The new owner now submits it; the old one no longer can.
     assert client.post("/v1/runs/r1/submit", headers=_ui(OWNER)).status_code == 403
     _ok(client.post("/v1/runs/r1/submit", headers=_ui(MEMBER)))
-
-
-def test_runs_list_confirms_submission_and_offers_manager_actions():
-    js = (DASHBOARD / "dashboard.js").read_text(encoding="utf-8")
-    index = (DASHBOARD / "index.html").read_text(encoding="utf-8")
-    # The row icon and the bulk button open the confirmation, never POST directly.
-    assert "showWorkflowModal('submit', run.run_id, name, { runs: [run] });" in js
-    assert "showWorkflowModal('submit', null, '', { runs: selectedRuns });" in js
-    assert "apiUrl('v1/runs/submit')" in js
-    assert "for (const run of submittable)" not in js
-    assert "canSubmit = writable && (isOwner || isProjectManager)" in js
-    assert "Transfer ownership" in js and 'id="transfer-modal"' in index
 
 
 # ---------------------------------------------------------------------------
@@ -800,18 +756,55 @@ def test_editing_an_approved_correction_returns_it_to_pending(client, session_fa
         assert (old.reviewed_by_user_id, old.review_comment) == ("manager-1", "Checked the trace, correct")
 
 
-def test_reviews_page_disables_blocked_decisions_with_the_rule_and_equal_buttons():
-    html = (DASHBOARD / "reviews.html").read_text(encoding="utf-8")
-    assert "function renderDecisionActions(c, st, block)" in html
-    assert "review-decision-rule" in html and "title=\"${escapeHtml(block)}\"" in html
-    assert "Self-approved" in html
-    assert "refuseBlockedSelection(ids)" in html
-    # Approve and reject are the same square with the same icon size.
-    assert "&#10003;</button>" not in html and "&#10007;</button>" not in html
-    assert ".card-actions .review-decision {" in html
-    settings = (DASHBOARD / "project_settings.html").read_text(encoding="utf-8")
-    assert 'id="review-approvers"' in settings and 'id="review-different-reviewer"' in settings
-    assert "v1/projects/${state.project.id}/review-rules" in settings
+def test_a_link_to_an_edited_correction_opens_its_current_revision(client, session_factory):
+    """C213: every edit stores a new id; an old ?id= link follows it."""
+    with session_factory() as db:
+        _run(db, "r1")
+        old = _correction(db, author="member-1")
+    edited = _ok(client.put(f"/api/corrections/{old}", json={"human_root_cause": "Metric bug"}, headers=_ui(MEMBER)))
+    assert edited["id"] != old
+    opened = _ok(client.get(f"/api/corrections/{old}", headers=_ui(MEMBER)))
+    assert opened["id"] == edited["id"]
+
+
+def test_editing_a_decided_diagnosis_needs_the_decision_right(client, session_factory):
+    """C054: an edit withdraws the decision, so the managers-only rule covers it too (Reviews and run page)."""
+    with session_factory() as db:
+        _run(db, "r1")
+        approved = _correction(db, author="owner-1", status=CorrectionStatus.APPROVED, reviewer="manager-1")
+    _ok(_rules(client, correction_approvers="managers"))
+    response = client.put(
+        f"/api/corrections/{approved}", json={"human_root_cause": "Metric bug"}, headers=_ui(MEMBER)
+    )
+    assert response.status_code == 403, response.text
+    assert "Only project managers and admins" in response.json()["detail"]
+    assert _correction_status(session_factory, approved) == CorrectionStatus.APPROVED
+    # A manager may still send the decided one back to review.
+    edited = _ok(
+        client.put(f"/api/corrections/{approved}", json={"human_root_cause": "Metric bug"}, headers=_ui(MANAGER))
+    )
+    assert edited["status"] == "pending"
+
+    # The run page's issue edit follows the same rule for an approved issue.
+    with session_factory() as db:
+        item = db.query(RunItem).filter_by(run_id="r1").one()
+        item.item_metadata = {
+            "metric_analyses": {
+                "accuracy": {
+                    "root_cause_issues": [
+                        {"issue_id": "i1", "category": "Retrieval miss", "finding": "x", "review_status": "approved"}
+                    ]
+                }
+            }
+        }
+        db.commit()
+    body = {
+        "run_id": "r1", "item_id": "item-1", "metric_name": "accuracy", "action": "edit", "issue_id": "i1",
+        "issue": {"category": "Metric bug", "finding": "y"},
+    }
+    response = client.post("/api/runs/update_root_cause_issue", json=body, headers=_ui(OWNER))
+    assert response.status_code == 403, response.text
+    assert "Only project managers and admins" in response.json()["detail"]
 
 
 def test_review_rules_migration_is_quick_ddl_and_reversible(monkeypatch):
@@ -1164,3 +1157,36 @@ def test_reset_of_an_edit_made_before_numbers_were_saved(client, session_factory
     response = _reset(client, "r1")
     assert response.status_code == 409, response.text
     assert _score(session_factory, "r1") == (pytest.approx(0.3), {"modified": "true", "original_score": "pass"})
+
+
+def test_only_managers_save_a_metric_direction_and_every_project_payload_carries_it(client, session_factory):
+    """C129: a metric that declares no direction gets one per project and metric (platform_settings, no migration)."""
+    assert _ok(client.get("/v1/projects/by-slug/project", headers=_ui(MEMBER)))["metric_directions"] == {}
+
+    def _set(email, **body):
+        return client.patch("/v1/projects/project-1/metric-directions", json=body, headers=_ui(email))
+
+    assert _set(MEMBER, metric="correctness", direction="minimize").status_code == 403
+    assert _set(MANAGER, metric="correctness", direction="sideways").status_code == 422
+    assert _set(MANAGER, metric="  ", direction="minimize").status_code == 422
+    body = _ok(_set(MANAGER, metric="correctness", direction="minimize"))
+    assert body == {"project_id": "project-1", "metric_directions": {"correctness": "minimize"}}
+    _ok(_set(ADMIN, metric="tone", direction="maximize"))
+    project = _ok(client.get("/v1/projects/by-slug/project", headers=_ui(MEMBER)))
+    assert project["metric_directions"] == {"correctness": "minimize", "tone": "maximize"}
+    me = _ok(client.get("/v1/me", headers=_ui(MEMBER)))
+    assert next(p for p in me["projects"] if p["id"] == "project-1")["metric_directions"] == project["metric_directions"]
+    with session_factory() as db:
+        audit = db.query(AuditLog).filter_by(action="project.metric_direction_updated").order_by(AuditLog.id).first()
+        assert audit.before == {"metric_directions": {}}
+        assert audit.after == {"metric_directions": {"correctness": "minimize"}}
+    assert _ok(_set(MANAGER, metric="correctness", direction=None))["metric_directions"] == {"tone": "maximize"}
+
+
+def test_metric_direction_storage_ignores_bad_values():
+    from qym_platform.services.metric_directions import _parse
+
+    assert _parse(None) == {}
+    assert _parse("not json") == {}
+    assert _parse("[1, 2]") == {}
+    assert _parse('{"a": "minimize", "b": "up", "c": null}') == {"a": "minimize"}

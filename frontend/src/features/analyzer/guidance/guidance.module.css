@@ -1,0 +1,87 @@
+/* Recipe: DESIGN_LANGUAGE §3 "Card / section" — project guidance panels (documents, diagnosis, rules). */
+.docs,
+.diag,
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-lg);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.dropzone[data-dragging] {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+.docList {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.doc {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+}
+
+.doc:last-child {
+  border-bottom: 0;
+}
+
+.docMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.banner[data-tone='danger'] {
+  border-color: var(--error);
+}
+
+.banner[data-tone='warning'] {
+  border-color: var(--warning);
+}
+
+.bannerText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.spacer {
+  flex: 1;
+}

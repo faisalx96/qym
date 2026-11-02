@@ -84,7 +84,8 @@ class TestDirectoryStructure:
     def test_sdk_server(self):
         srv = SDK_ROOT / "qym" / "server"
         assert (srv / "app.py").exists()
-        assert (srv / "dashboard_server.py").exists()
+        assert (srv / "live.py").exists()
+        assert not (srv / "dashboard_server.py").exists()
 
     def test_sdk_utils(self):
         utils = SDK_ROOT / "qym" / "utils"
@@ -169,6 +170,9 @@ class TestDirectoryStructure:
 
     def test_entrypoint_exists(self):
         assert (REPO / "docker" / "entrypoint.sh").exists()
+
+    def test_frontend_dockerfile_exists(self):
+        assert (REPO / "docker" / "Dockerfile.frontend").exists()
 
     def test_docker_compose_exists(self):
         assert (REPO / "docker" / "docker-compose.yml").exists()
@@ -556,7 +560,11 @@ class TestPyprojectToml:
 
     def test_platform_package_data(self, platform_toml):
         pkg_data = platform_toml["tool"]["setuptools"]["package-data"]["qym_platform"]
-        assert "_static/dashboard/*" in pkg_data
+        # The React app is a build output (frontend/, npm run build) shipped from _static/app;
+        # the export-html page templates ship as package data too.
+        assert "_static/app/**/*" in pkg_data
+        assert "export_templates/run/*" in pkg_data
+        assert "_static/dashboard/*" not in pkg_data
         assert "migrations/*" in pkg_data
 
 
@@ -576,6 +584,17 @@ class TestDockerFiles:
         assert "COPY setup.py" not in text
         assert "COPY qym " not in text
         assert "llm_eval_platform" not in text
+
+    def test_dockerfile_takes_the_frontend_from_the_assets_image(self):
+        text = (REPO / "docker" / "Dockerfile").read_text()
+        assert "ARG FRONTEND_IMAGE=" in text
+        assert "FROM ${FRONTEND_IMAGE} AS frontend-build" in text
+        assert "COPY --from=frontend-build /dist/app " in text
+        assert "COPY --from=frontend-build /dist/ui " in text
+        assert "npm " not in text  # Node lives only in Dockerfile.frontend
+        frontend = (REPO / "docker" / "Dockerfile.frontend").read_text()
+        assert "npm run build && npm run build:sdk" in frontend
+        assert "/dist/app" in frontend and "/dist/ui" in frontend
 
     def test_entrypoint_uses_new_paths(self):
         text = (REPO / "docker" / "entrypoint.sh").read_text()
@@ -633,18 +652,35 @@ class TestStaticAssets:
         """The dashboard static bundle lives only in the platform package."""
         assert not (SDK_ROOT / "qym" / "_static" / "dashboard").exists()
 
-    def test_sdk_ui_has_index(self):
-        assert (SDK_ROOT / "qym" / "_static" / "ui" / "index.html").exists()
+    def test_sdk_ui_is_a_build_output(self):
+        """The viewer is built from frontend/ (npm run build:sdk) into the gitignored
+        _static/ui; the sources and the flat-output config are what is tracked."""
+        assert (REPO / "frontend" / "vite.sdk.config.ts").exists()
+        built = SDK_ROOT / "qym" / "_static" / "ui"
+        if built.exists():
+            assert (built / "index.html").exists()
+            assert {p.name for p in built.iterdir() if p.is_dir()} == set()
 
-    def test_platform_dashboard_has_index(self):
-        assert (
-            PLATFORM_ROOT / "qym_platform" / "_static" / "dashboard" / "index.html"
-        ).exists()
+    def test_platform_app_is_a_build_output_and_the_vanilla_dashboard_is_gone(self):
+        """The React app is built from frontend/ into the gitignored _static/app; the
+        export templates are tracked in the package."""
+        static = PLATFORM_ROOT / "qym_platform" / "_static"
+        assert not (static / "dashboard").exists()
+        built = static / "app"
+        if built.exists():
+            assert (built / "index.html").exists()
+        assert (PLATFORM_ROOT / "qym_platform" / "export_templates" / "run" / "run.html").exists()
 
-    def test_platform_ui_has_index(self):
-        assert (
-            PLATFORM_ROOT / "qym_platform" / "_static" / "ui" / "index.html"
-        ).exists()
+    def test_platform_has_no_ui_copy(self):
+        """The dead platform /ui viewer is gone; the SDK owns the local viewer."""
+        assert not (PLATFORM_ROOT / "qym_platform" / "_static" / "ui").exists()
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+        toml = tomllib.loads((PLATFORM_ROOT / "pyproject.toml").read_text())
+        data = toml["tool"]["setuptools"]["package-data"]["qym_platform"]
+        assert "_static/ui/*" not in data
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -1,0 +1,65 @@
+{
+  "cases": [
+    {
+      "width": 1440,
+      "item": "j-01",
+      "keys": 35,
+      "mismatches": [],
+      "upperCaseKeys": 0,
+      "eyebrows": [
+        {
+          "source": "reasoning",
+          "rendered": "REASONING"
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "item": "j-03",
+      "keys": 19,
+      "mismatches": [],
+      "upperCaseKeys": 0,
+      "eyebrows": [
+        {
+          "source": "reasoning",
+          "rendered": "REASONING"
+        },
+        {
+          "source": "explanation",
+          "rendered": "EXPLANATION"
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "item": "j-01",
+      "keys": 35,
+      "mismatches": [],
+      "upperCaseKeys": 0,
+      "eyebrows": [
+        {
+          "source": "reasoning",
+          "rendered": "REASONING"
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "item": "j-03",
+      "keys": 19,
+      "mismatches": [],
+      "upperCaseKeys": 0,
+      "eyebrows": [
+        {
+          "source": "reasoning",
+          "rendered": "REASONING"
+        },
+        {
+          "source": "explanation",
+          "rendered": "EXPLANATION"
+        }
+      ]
+    }
+  ],
+  "mismatchesTotal": 0
+}

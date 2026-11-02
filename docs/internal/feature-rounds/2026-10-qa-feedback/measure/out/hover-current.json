@@ -1,0 +1,274 @@
+{
+  "project-card-1440": {
+    "rest": {
+      "w": 287.8,
+      "h": 127.4,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 8,
+      "border": "rgb(43, 43, 64)",
+      "bg": "rgb(26, 26, 40)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 287.8,
+      "h": 127.4,
+      "deco": "underline",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 8,
+      "border": "rgb(59, 59, 84)",
+      "bg": "rgb(34, 34, 50)",
+      "shadow": "yes",
+      "color": "rgb(237, 237, 240)"
+    }
+  },
+  "dataset-card-1440": {
+    "rest": {
+      "w": 388.3,
+      "h": 226.4,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 13,
+      "border": "rgb(43, 43, 64)",
+      "bg": "rgb(26, 26, 40)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 388.3,
+      "h": 226.4,
+      "deco": "underline",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 13,
+      "border": "rgb(59, 59, 84)",
+      "bg": "rgb(34, 34, 50)",
+      "shadow": "yes",
+      "color": "rgb(237, 237, 240)"
+    }
+  },
+  "docs-pager-1440": {
+    "rest": {
+      "w": 321.1,
+      "h": 32,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 2,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgb(50, 50, 68)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    },
+    "hover": {
+      "w": 321.1,
+      "h": 32,
+      "deco": "underline",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 2,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgb(42, 42, 60)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  },
+  "run-meta-link-1440": {
+    "rest": {
+      "w": 152.1,
+      "h": 15,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 3,
+      "border": "rgb(237, 237, 240)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 152.1,
+      "h": 15,
+      "deco": "underline",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 3,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  },
+  "inline-link-1440": {
+    "rest": {
+      "w": 78.9,
+      "h": 16.2,
+      "deco": "none",
+      "kidsDeco": [],
+      "textKids": 0,
+      "border": "rgb(237, 237, 240)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 78.9,
+      "h": 16.2,
+      "deco": "underline",
+      "kidsDeco": [],
+      "textKids": 0,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  },
+  "project-card-390": {
+    "rest": {
+      "w": 279,
+      "h": 127.4,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 8,
+      "border": "rgb(43, 43, 64)",
+      "bg": "rgb(26, 26, 40)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 279,
+      "h": 127.4,
+      "deco": "underline",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 8,
+      "border": "rgb(59, 59, 84)",
+      "bg": "rgb(34, 34, 50)",
+      "shadow": "yes",
+      "color": "rgb(237, 237, 240)"
+    }
+  },
+  "dataset-card-390": {
+    "rest": {
+      "w": 300,
+      "h": 206.4,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 13,
+      "border": "rgb(43, 43, 64)",
+      "bg": "rgb(26, 26, 40)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 300,
+      "h": 206.4,
+      "deco": "underline",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 13,
+      "border": "rgb(59, 59, 84)",
+      "bg": "rgb(34, 34, 50)",
+      "shadow": "yes",
+      "color": "rgb(237, 237, 240)"
+    }
+  },
+  "docs-pager-390": {
+    "rest": {
+      "w": 179.6,
+      "h": 32,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 2,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgb(50, 50, 68)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    },
+    "hover": {
+      "w": 179.6,
+      "h": 32,
+      "deco": "underline",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 2,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgb(42, 42, 60)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  },
+  "run-meta-link-390": {
+    "rest": {
+      "w": 110.5,
+      "h": 15,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 3,
+      "border": "rgb(237, 237, 240)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 110.5,
+      "h": 15,
+      "deco": "underline",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 3,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  },
+  "inline-link-390": {
+    "rest": {
+      "w": 78.9,
+      "h": 16.8,
+      "deco": "none",
+      "kidsDeco": [],
+      "textKids": 0,
+      "border": "rgb(237, 237, 240)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 78.9,
+      "h": 16.8,
+      "deco": "underline",
+      "kidsDeco": [],
+      "textKids": 0,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  }
+}

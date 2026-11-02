@@ -275,6 +275,58 @@ def test_delete_repeat_pass_reindexes_and_repairs_run_state():
     assert summary["duration_ms"] == pytest.approx(1000.0)
 
 
+def test_passes_payload_carries_the_revision_a_delete_must_echo():
+    app, SessionLocal = _make_env()
+    with SessionLocal() as session:
+        _seed(session)
+
+    with TestClient(app) as client:
+        before = client.get(f"/api/runs/{RUN_ID}/passes", headers=HEADERS).json()
+        assert before["pass_revision"] == 0
+        first = client.delete(
+            f"/api/runs/{RUN_ID}/passes/3?expected_pass_version=0", headers=HEADERS
+        )
+        assert first.status_code == 200
+        after = client.get(f"/api/runs/{RUN_ID}/passes", headers=HEADERS).json()
+        assert after["pass_revision"] == 1
+        stale = client.delete(
+            f"/api/runs/{RUN_ID}/passes/2?expected_pass_version=0", headers=HEADERS
+        )
+        assert stale.status_code == 409
+        fresh = client.delete(
+            f"/api/runs/{RUN_ID}/passes/2?expected_pass_version=1", headers=HEADERS
+        )
+        assert fresh.status_code == 200
+
+
+def test_delete_repeat_pass_refreshes_item_trace_stats():
+    """Trace stats of items are rebuilt from the remaining aggregates."""
+    from qym_platform.db.models import RunTraceAggregate
+
+    app, SessionLocal = _make_env()
+    with SessionLocal() as session:
+        _seed(session)
+        run = session.get(Run, RUN_ID)
+        run.run_metadata = {**(run.run_metadata or {}), "trace_stats": {"stale": 1}}
+        item = session.query(RunItem).filter(RunItem.run_id == RUN_ID).one()
+        item.item_metadata = {**item.item_metadata, "trace_stats": {"stale": 1}}
+        session.add(
+            RunTraceAggregate(run_id=RUN_ID, trace_id="trace-pass-2", span_count=0)
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        response = client.delete(f"/api/runs/{RUN_ID}/passes/2", headers=HEADERS)
+    assert response.status_code == 200, response.text
+
+    with SessionLocal() as session:
+        item = session.query(RunItem).filter(RunItem.run_id == RUN_ID).one()
+        assert "trace_stats" not in item.item_metadata
+        assert item.item_metadata["task_started_at_ms"] == 3000
+        run = session.get(Run, RUN_ID)
+        assert run.run_metadata["trace_stats"] != {"stale": 1}
+
+
 def test_delete_multiple_passes_uses_original_numbers_and_is_atomic():
     app, SessionLocal = _make_env()
     with SessionLocal() as session:

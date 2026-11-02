@@ -1,0 +1,44 @@
+/* Disclosure body: grid-template-rows 0fr -> 1fr (never a px height), inner clip, inert + hidden when closed. */
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--motion-step-out) var(--ease-standard),
+    visibility 0s linear var(--motion-step-out);
+}
+
+.collapse[data-open='true'] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition:
+    grid-template-rows var(--motion-step) var(--ease-standard),
+    visibility 0s linear 0s;
+}
+
+.inner {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--motion-step-out) var(--ease-standard);
+}
+
+.collapse[data-open='true'] > .inner {
+  opacity: 1;
+  transition-duration: var(--motion-step);
+}
+
+/* Once opened the clip is removed so focus rings and shadows at the edges are not cut off. */
+.collapse[data-settled='true'] > .inner {
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse,
+  .collapse[data-open='true'],
+  .inner,
+  .collapse[data-open='true'] > .inner {
+    transition: none;
+  }
+}

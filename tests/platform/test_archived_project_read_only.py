@@ -344,6 +344,13 @@ REFUSED = [
         {"json": {"correction_approvers": "managers"}},
         MGR,
     ),
+    (
+        "PATCH",
+        "/v1/projects/{project_id}/metric-directions",
+        "/v1/projects/pa/metric-directions",
+        {"json": {"metric": "quality", "direction": "minimize"}},
+        MGR,
+    ),
     ("POST", "/v1/projects/{project_id}/llm-connections", "/v1/projects/pa/llm-connections", {"json": {"name": "b"}}, MGR),
     (
         "PUT",
@@ -380,9 +387,68 @@ REFUSED = [
         {"json": {"value": "b"}},
         MGR,
     ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/dataset-read-tokens",
+        "/v1/projects/pa/dataset-read-tokens",
+        {"json": {"name": "svc"}},
+        ADMIN,
+    ),
+    # Evaluation Service environments, presets and experiments.
+    (
+        "POST",
+        "/v1/projects/{project_id}/eval-environments",
+        "/v1/projects/pa/eval-environments",
+        {"json": {"name": "env", "base_url": "https://eval.example.com", "api_key": "k"}},
+        MGR,
+    ),
+    ("PUT", "/v1/projects/{project_id}/eval-environments/{env_id}", "/v1/projects/pa/eval-environments/e1", {"json": {}}, MGR),
+    ("DELETE", "/v1/projects/{project_id}/eval-environments/{env_id}", "/v1/projects/pa/eval-environments/e1", None, MGR),
+    (
+        "POST",
+        "/v1/projects/{project_id}/eval-environments/{env_id}/schema/refresh",
+        "/v1/projects/pa/eval-environments/e1/schema/refresh",
+        None,
+        MGR,
+    ),
+    (
+        "PUT",
+        "/v1/projects/{project_id}/eval-environments/{env_id}/model-slots",
+        "/v1/projects/pa/eval-environments/e1/model-slots",
+        {"json": {"slots": []}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/eval-environments/{env_id}/presets",
+        "/v1/projects/pa/eval-environments/e1/presets",
+        {"json": {"config": {}}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/eval-environments/{env_id}/presets/{preset_id}/versions",
+        "/v1/projects/pa/eval-environments/e1/presets/p1/versions",
+        {"json": {"config": {}}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/experiments",
+        "/v1/projects/pa/experiments",
+        {"json": {"name": "x", "environment_ids": ["e1"], "spec": {}}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/experiments/{experiment_id}/jobs/{job_id}/retry",
+        "/v1/projects/pa/experiments/x1/jobs/j1/retry",
+        None,
+        MGR,
+    ),
 ]
 
-_P = "/api/projects/{project_slug}"
+_P ="/api/projects/{project_slug}"
 _Q = "?project_slug=pa"
 # Project-slug writes. The archived project is readable to its members, so
 # its writes reach the shared 409 like every other write.
@@ -518,6 +584,34 @@ DATASET_WRITES = [
     ),
     (
         "POST",
+        "/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}:disable",
+        "/v1/datasets/golden/versions/v1/items/i1:disable" + _Q,
+        {"json": {}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}:enable",
+        "/v1/datasets/golden/versions/v1/items/i1:enable" + _Q,
+        {"json": {}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/datasets/{dataset_ref}/versions/{version_ref}/items:batch",
+        "/v1/datasets/golden/versions/v1/items:batch" + _Q,
+        {"json": {"filter": {"search": "q"}, "action": "disable"}},
+        MGR,
+    ),
+    (
+        "PUT",
+        "/v1/datasets/{dataset_ref}/access",
+        "/v1/datasets/golden/access" + _Q,
+        {"json": {"access_mode": "project", "grants": []}},
+        MGR,
+    ),
+    (
+        "POST",
         "/v1/datasets:upload",
         "/v1/datasets:upload",
         {"data": {"name": "n", "project_slug": "pa"}, "files": {"file": ("d.csv", b"input\nq\n", "text/csv")}},
@@ -537,6 +631,15 @@ KEY_ONLY = [
         "/v1/runs:upload",
         {"data": {"task": "t", "dataset": "d"}, "files": {"file": ("r.csv", b"input\nq\n", "text/csv")}},
     ),
+    # The same ingest routes under QYM_INGESTION_PREFIX (service split alias).
+    ("POST", "/ingestion/v1/runs", "/ingestion/v1/runs", {"json": {"task": "t", "dataset": "d"}}),
+    ("POST", "/ingestion/v1/runs/{run_id}/events", "/ingestion/v1/runs/r1/events", {"content": b""}),
+    (
+        "POST",
+        "/ingestion/v1/runs:upload",
+        "/ingestion/v1/runs:upload",
+        {"data": {"task": "t", "dataset": "d"}, "files": {"file": ("r.csv", b"input\nq\n", "text/csv")}},
+    ),
     ("POST", "/v1/product-evals", "/v1/product-evals", {"json": {}}),
     ("POST", "/v1/product-evals/jobs/{job_id}/stop", "/v1/product-evals/jobs/j1/stop", None),
     ("POST", "/v1/product-evals/{identifier}/stop", "/v1/product-evals/r1/stop", None),
@@ -544,6 +647,21 @@ KEY_ONLY = [
 
 # Allowed on purpose, with the reason.
 ALLOWED = {
+    # An administrator's permanent delete of Deleted runs ignores the archive pause on purpose: with retention Off it is
+    # the one way to empty a project's Deleted runs before the project is deleted (C118, X1).
+    ("POST", "/api/runs/purge"): "deleted runs: admin permanent delete (ignores the archive pause by design)",
+    # Feedback is platform-level (one list for everyone, administrators triage); a product request names a project the
+    # person can access but stores no project data, so an archived project does not refuse it.
+    ("POST", "/v1/feedback"): "feedback: a new draft",
+    ("POST", "/v1/feedback/{ref}/messages"): "feedback: a message to the assistant",
+    ("POST", "/v1/feedback/{ref}/turn"): "feedback: the assistant's turn",
+    ("POST", "/v1/feedback/{ref}/stop"): "feedback: stops the assistant's turn",
+    ("POST", "/v1/feedback/{ref}/confirm"): "feedback: submits a proposal",
+    ("DELETE", "/v1/feedback/{ref}"): "feedback: deletes the caller's draft",
+    ("PATCH", "/v1/feedback/{ref}/triage"): "feedback: administrator triage",
+    ("PUT", "/v1/admin/feedback-agent"): "feedback: the assistant's connection (platform admin)",
+    ("DELETE", "/v1/admin/feedback-agent"): "feedback: removes the assistant's connection (platform admin)",
+    ("POST", "/v1/admin/feedback-agent/test"): "feedback: tests the connection (platform admin)",
     # Not project data: sign-in, users, new projects, platform maintenance.
     ("POST", "/v1/auth/login/password"): "sign-in",
     ("POST", "/v1/auth/signup/password"): "sign-up",
@@ -566,6 +684,7 @@ ALLOWED = {
     ("DELETE", "/v1/admin/projects/{project_id}"): "admin lifecycle",
     # Reads sent as POST (large filters and id lists).
     ("POST", "/api/projects/{project_slug}/analysis-examples"): "read",
+    ("POST", "/api/analysis-jobs/active-runs"): "read (which of these runs have an analysis in flight)",
     ("POST", "/api/dashboard/models"): "read",
     ("POST", "/api/dashboard/runs"): "read",
     ("POST", "/api/dashboard/overview"): "read",
@@ -582,10 +701,18 @@ ALLOWED = {
     # Dry runs that store nothing.
     ("POST", "/api/runs/{run_id:path}/analyze-test"): "dry run, stores nothing",
     ("POST", "/v1/projects/{project_id}/llm-connections/{connection_id}/test"): "dry run, stores nothing",
+    ("POST", "/v1/projects/{project_id}/llm-connections/test"): "dry run of unsaved values, stores nothing",
+    ("POST", "/v1/projects/{project_id}/eval-environments/{env_id}/test"): "health probe, stores only its result",
+    ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/clone"): "launch-form prefill, stores nothing",
     # Taking access or work away stays possible without unarchiving (which
     # would switch the project's API keys back on).
     ("DELETE", "/v1/projects/{project_id}/members/{user_id}"): "removes access",
     ("DELETE", "/v1/projects/{project_id}/api-keys/{key_id}"): "revokes a key",
+    ("DELETE", "/v1/projects/{project_id}/dataset-read-tokens/{token_id}"): "revokes a token",
+    ("POST", "/v1/projects/{project_id}/eval-queue/cancel"): "stops a running job",
+    ("POST", "/v1/projects/{project_id}/eval-queue/remote/cancel"): "stops a running job",
+    ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/cancel"): "stops a running job",
+    ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/jobs/{job_id}/cancel"): "stops a running job",
     ("POST", "/api/runs/{run_id:path}/analysis-jobs/{job_id}/cancel"): "stops a running job",
     ("POST", "/api/runs/{run_id:path}/analysis-rule-jobs/{job_id}/cancel"): "stops a running job",
     ("POST", "/api/projects/{project_slug}/analysis-rule-jobs/{job_id}/cancel"): "stops a running job",
@@ -989,60 +1116,7 @@ def test_rule_inference_saves_nothing_once_the_project_is_archived(client, sessi
         assert db.query(ProjectAnalysisRuleVersion).filter_by(project_id="pa").count() == 0
 
 
-# ── Run links of an archived project ─────────────────────────────────────────
-
-
-_READABLE_PAGES = (
-    "/projects/pa",
-    "/projects/pa/overview",
-    "/projects/pa/charts",
-    "/projects/pa/models",
-    "/projects/pa/datasets",
-    "/projects/pa/datasets/golden",
-    "/projects/pa/datasets/golden/compare",
-    "/projects/pa/settings",
-    "/projects/pa/runs/r1",
-)
-# Pages that exist to change things stay hidden while the project is archived.
-_HIDDEN_PAGES = (
-    "/projects/pa/reviews",
-    "/projects/pa/analysis",
-    "/projects/pa/runs/r1/analyzer",
-)
-
-
-@pytest.mark.parametrize("headers", [ADMIN, MGR, MEMBER], ids=["admin", "manager", "member"])
-def test_project_pages_of_an_archived_project_open_read_only(archived, headers):
-    for path in _READABLE_PAGES:
-        response = archived.get(path, headers=headers, follow_redirects=False)
-        assert response.status_code == 200, (path, response.status_code)
-    for path in _HIDDEN_PAGES:
-        response = archived.get(path, headers=headers, follow_redirects=False)
-        assert response.status_code == 404, (path, response.status_code)
-        assert "Project not found" in response.text
-
-
-def test_project_pages_of_an_archived_project_stay_not_found_to_non_members(archived):
-    """A non-member learns nothing new: "Project not found", as before."""
-    for path in _READABLE_PAGES + _HIDDEN_PAGES:
-        response = archived.get(path, headers=OUTSIDER, follow_redirects=False)
-        assert response.status_code == 404, (path, response.status_code)
-        assert "Project not found" in response.text
-    # An active project answers a non-member "Access denied", unchanged.
-    archived.post("/v1/admin/projects/pa/unarchive", headers=ADMIN)
-    assert archived.get("/projects/pa/settings", headers=OUTSIDER).status_code == 403
-
-
-def test_project_run_links_of_an_archived_project_open_the_run_page(archived):
-    """SDK live links and bookmarks use /projects/{slug}/runs/{id}; the run page
-    opens there, in the project's read-only context."""
-    response = archived.get("/projects/pa/runs/r1?pass=1", headers=MGR, follow_redirects=False)
-    assert response.status_code == 200, response.text
-    assert 'id="run-content"' in response.text
-    assert archived.get("/run/r1", headers=MGR).status_code == 200
-    response = archived.get("/projects/pa/runs/r1", headers=OUTSIDER, follow_redirects=False)
-    assert response.status_code == 404
-    assert "Project not found" in response.text
+# ── Project data of an archived project (the pages themselves are SPA routes) ──
 
 
 _SLUG_READS = [
@@ -1112,12 +1186,6 @@ def test_archived_projects_stay_out_of_the_project_switcher(archived):
     assert [(p["slug"], p["is_active"]) for p in listed] == [("pa", False)]
 
 
-def test_project_run_links_of_an_active_project_are_unchanged(client):
-    response = client.get("/projects/pa/runs/r1", headers=MGR, follow_redirects=False)
-    assert response.status_code == 200
-    assert 'id="run-content"' in response.text
-
-
 # ── Archive preview (runs that would lose results) ───────────────────────────
 
 
@@ -1175,30 +1243,9 @@ def test_archive_preview_is_admin_only(client):
     assert client.get("/v1/admin/projects/pa/archive-preview", headers=MGR).status_code == 403
 
 
-def test_archive_dialogs_fetch_the_preview_before_archiving() -> None:
-    dashboard = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-    shell = (dashboard / "shell.js").read_text(encoding="utf-8")
-    for page in ("project_settings.html", "admin.html"):
-        source = (dashboard / page).read_text(encoding="utf-8")
-        assert "confirmArchiveProject" in source, page
-    assert "/archive-preview" in shell
-    assert "remaining results will be lost" in shell
-
-
-def test_unarchive_dialogs_name_the_keys_first() -> None:
-    dashboard = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-    shell = (dashboard / "shell.js").read_text(encoding="utf-8")
-    for page in ("project_settings.html", "admin.html"):
-        source = (dashboard / page).read_text(encoding="utf-8")
-        assert "confirmUnarchiveProject" in source, page
-        assert "revokeFirst" in source, page
-    assert "/unarchive-preview" in shell
-    assert "start working again" in shell
-
-
 def test_docs_describe_archived_projects_as_decided() -> None:
     """Readable read-only, security actions kept, purge paused, reset signs out."""
-    docs = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard" / "docs"
+    docs = ROOT / "frontend" / "src" / "features" / "docs" / "partials"
     guide = " ".join((docs / "platform-guide" / "projects-data-review.html").read_text(encoding="utf-8").split())
     assert "stay readable under a read-only notice" in guide
     assert "admins and managers revoke API keys and remove members" in guide

@@ -1,0 +1,310 @@
+/* DataTable cell kit: score bars, deltas, two-line, ids, tags, progress (DESIGN_LANGUAGE §3 "Data table"). */
+.scoreBar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.scoreBar[data-band],
+.scoreBar[data-series] {
+  --bar: var(--tone);
+}
+
+.scoreBar[data-band] .scoreText,
+.scoreBar[data-series] .scoreText {
+  color: var(--tone-text);
+}
+
+.scoreBar[data-error] {
+  color: var(--text-muted);
+}
+
+.errGlyph {
+  color: var(--metric-error);
+}
+
+.scoreBar[data-error='task'] .errGlyph {
+  color: var(--error);
+}
+
+.track {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 var(--track-w, 48px);
+  inline-size: var(--track-w, 48px);
+  block-size: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.scoreBar[data-size='md'] .track {
+  block-size: 10px;
+}
+
+/* Baseline tick: a 2px bar in the primary text colour across the track. */
+.marker {
+  position: absolute;
+  inset-block: 0;
+  z-index: 1;
+  inline-size: 2px;
+  margin-inline-start: -1px;
+  background: var(--text-primary);
+  pointer-events: none;
+}
+
+.fill {
+  display: block;
+  position: relative;
+  block-size: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--bar, var(--text-muted));
+  overflow: hidden;
+  /* M3: a changed value morphs; M2: the entrance below runs once (data-enter, useFirstMount). */
+  transition:
+    inline-size var(--motion-fill) var(--ease-out),
+    background-color var(--transition-fast);
+}
+
+.fill[data-enter] {
+  animation: fill-grow var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes fill-grow {
+  from {
+    inline-size: 0;
+  }
+}
+
+/* Large bar: the value sits inside the bar, dark on the fill and primary on the track (two clipped copies). */
+.scoreBar[data-size='lg'] {
+  display: flex;
+  width: 100%;
+}
+
+.scoreBar[data-size='lg'] .track {
+  flex: 1 1 auto;
+  inline-size: var(--track-w, 100%);
+  container-type: inline-size;
+  block-size: 16px;
+  border-radius: var(--control-radius);
+}
+
+.scoreBar[data-size='lg'] .fill {
+  border-radius: var(--control-radius);
+}
+
+.inText,
+.onFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  padding-inline-start: var(--space-sm);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.inText {
+  inline-size: 100%;
+  color: var(--text-primary);
+}
+
+.onFill {
+  inline-size: 100cqw; /* the track's width, so the clipped copy lines up with the primary-coloured one */
+  color: var(--bg-void);
+}
+
+.scoreBar[data-changed] {
+  animation: value-flash var(--motion-flash) var(--ease-out);
+}
+
+@keyframes value-flash {
+  from {
+    background: color-mix(in srgb, var(--accent-secondary) var(--tint-soft), transparent);
+  }
+}
+
+.fill[data-plain] {
+  background: var(--accent-primary);
+}
+
+.scoreText {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.scoreBar[data-empty] .scoreText {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.delta[data-verdict='good'] {
+  color: var(--score-5);
+}
+.delta[data-verdict='bad'] {
+  color: var(--score-1);
+}
+.delta[data-verdict='flat'] {
+  color: var(--text-muted);
+}
+
+.delta[data-pill] {
+  min-block-size: 20px;
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+  color: var(--tone-text);
+  font-weight: 650;
+}
+
+.delta[data-pill][data-verdict='good'] {
+  --tone: var(--score-5);
+  --tone-text: var(--score-5);
+}
+
+.delta[data-pill][data-verdict='bad'] {
+  --tone: var(--score-1);
+  --tone-text: var(--error-text);
+}
+
+.deltaEmpty {
+  color: var(--text-muted);
+}
+
+.twoLine {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.primary,
+.secondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primary {
+  color: var(--text-primary);
+}
+
+.secondary {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.id {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  max-width: 100%;
+  font-family: var(--font-mono);
+}
+
+.idText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.idCopy {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+tr:hover .idCopy,
+tr:focus-within .idCopy,
+.idCopy:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .idCopy {
+    opacity: 1;
+  }
+}
+
+.tags {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.more {
+  border: 0;
+  background: transparent;
+  padding: 0 var(--space-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  border-radius: var(--control-radius);
+}
+
+.more[data-hovered] {
+  color: var(--text-primary);
+}
+
+.more[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.tagPop {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  max-width: 260px;
+  padding: var(--space-sm);
+}
+
+.user {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.userName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idCopy {
+    transition: none;
+  }
+}

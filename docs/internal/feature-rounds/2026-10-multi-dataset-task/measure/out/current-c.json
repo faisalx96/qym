@@ -1,0 +1,744 @@
+{
+  "390": {
+    "hero": {
+      "x": 76,
+      "y": 64,
+      "w": 279,
+      "h": 305.8,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    },
+    "heroFacts": {
+      "x": 99,
+      "y": 169,
+      "w": 235,
+      "h": 185.8,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    },
+    "heroContext": null,
+    "factBoxes": [
+      [
+        "Task",
+        99,
+        110.5,
+        39.2
+      ],
+      [
+        "Dataset",
+        224,
+        110.5,
+        39.2
+      ],
+      [
+        "Model",
+        99,
+        110.5,
+        37.4
+      ],
+      [
+        "Owner",
+        224,
+        110.5,
+        37.4
+      ],
+      [
+        "Project",
+        99,
+        110.5,
+        51
+      ],
+      [
+        "Started",
+        224,
+        110.5,
+        51
+      ],
+      [
+        "Runtime",
+        99,
+        110.5,
+        34.2
+      ]
+    ],
+    "sections": [
+      [
+        "run-section-reviews",
+        0,
+        0
+      ],
+      [
+        "run-section-overview",
+        442,
+        984
+      ],
+      [
+        "run-section-overview-title",
+        456,
+        23
+      ],
+      [
+        "run-section-latency",
+        1426,
+        506
+      ],
+      [
+        "run-section-latency-title",
+        1495,
+        23
+      ],
+      [
+        "run-section-deep",
+        1931,
+        408
+      ],
+      [
+        "run-section-deep-title",
+        2000,
+        23
+      ],
+      [
+        "run-section-categories",
+        2339,
+        428
+      ],
+      [
+        "run-section-categories-title",
+        2408,
+        23
+      ],
+      [
+        "run-section-errors",
+        2767,
+        161
+      ],
+      [
+        "run-section-errors-title",
+        2836,
+        23
+      ],
+      [
+        "run-items",
+        2928,
+        3410
+      ]
+    ],
+    "metricCards": [
+      [
+        279,
+        262.2
+      ],
+      [
+        279,
+        262.2
+      ],
+      [
+        279,
+        262.2
+      ]
+    ],
+    "itemsHeaders": [],
+    "listHeaders": [],
+    "listRow": null,
+    "compareCards": {
+      "x": 76,
+      "y": 545,
+      "w": 279,
+      "h": 489.1,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    }
+  },
+  "1024": {
+    "hero": {
+      "x": 212,
+      "y": 64,
+      "w": 777,
+      "h": 151.4,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    },
+    "heroFacts": {
+      "x": 235,
+      "y": 119,
+      "w": 733,
+      "h": 81.4,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    },
+    "heroContext": null,
+    "factBoxes": [
+      [
+        "Task",
+        235,
+        172.8,
+        39.2
+      ],
+      [
+        "Dataset",
+        422,
+        172.8,
+        39.2
+      ],
+      [
+        "Model",
+        609,
+        172.8,
+        39.2
+      ],
+      [
+        "Owner",
+        795,
+        172.8,
+        39.2
+      ],
+      [
+        "Project",
+        235,
+        172.8,
+        34.2
+      ],
+      [
+        "Started",
+        422,
+        172.8,
+        34.2
+      ],
+      [
+        "Runtime",
+        609,
+        172.8,
+        34.2
+      ]
+    ],
+    "sections": [
+      [
+        "run-section-reviews",
+        0,
+        0
+      ],
+      [
+        "run-section-overview",
+        287,
+        611
+      ],
+      [
+        "run-section-overview-title",
+        301,
+        23
+      ],
+      [
+        "run-section-latency",
+        898,
+        528
+      ],
+      [
+        "run-section-latency-title",
+        967,
+        23
+      ],
+      [
+        "run-section-deep",
+        1426,
+        408
+      ],
+      [
+        "run-section-deep-title",
+        1495,
+        23
+      ],
+      [
+        "run-section-categories",
+        1834,
+        361
+      ],
+      [
+        "run-section-categories-title",
+        1903,
+        23
+      ],
+      [
+        "run-section-errors",
+        2195,
+        143
+      ],
+      [
+        "run-section-errors-title",
+        2264,
+        23
+      ],
+      [
+        "run-items",
+        2338,
+        1366
+      ]
+    ],
+    "metricCards": [
+      [
+        381.5,
+        262.2
+      ],
+      [
+        381.5,
+        262.2
+      ],
+      [
+        381.5,
+        262.2
+      ]
+    ],
+    "itemsHeaders": [
+      "Metrics",
+      "System",
+      "Expand",
+      "#↑",
+      "Status",
+      "Input",
+      "Reason · answer_correctness",
+      "answer_correctness↕",
+      "faithfulness",
+      "tone",
+      "Latency↕"
+    ],
+    "listHeaders": [
+      [
+        "Overview",
+        260
+      ],
+      [
+        "",
+        144
+      ],
+      [
+        "Overview",
+        77
+      ],
+      [
+        "Context",
+        552
+      ],
+      [
+        "Scores",
+        187
+      ],
+      [
+        "Context",
+        380
+      ],
+      [
+        "Scores",
+        300
+      ],
+      [
+        "System",
+        314
+      ],
+      [
+        "Trace",
+        552
+      ],
+      [
+        "System",
+        101
+      ],
+      [
+        "",
+        104
+      ],
+      [
+        "Run↕",
+        260
+      ],
+      [
+        "Status↕",
+        144
+      ],
+      [
+        "Signals",
+        77
+      ],
+      [
+        "Task↕",
+        90
+      ],
+      [
+        "Model↕",
+        132
+      ],
+      [
+        "Dataset↕",
+        110
+      ],
+      [
+        "Date↓",
+        120
+      ],
+      [
+        "Analysis",
+        100
+      ],
+      [
+        "answer correctness↕",
+        187
+      ],
+      [
+        "Owner↕",
+        120
+      ],
+      [
+        "Experiment",
+        110
+      ],
+      [
+        "Version↕",
+        150
+      ],
+      [
+        "faithfulness↕",
+        150
+      ],
+      [
+        "tone↕",
+        150
+      ],
+      [
+        "⚡ Avg latency↕",
+        144
+      ],
+      [
+        "⚡ Median latency↕",
+        170
+      ],
+      [
+        "⚡ Avg tokens↕",
+        136
+      ],
+      [
+        "⚡ LLM calls↕",
+        127
+      ],
+      [
+        "⚡ Tool calls↕",
+        136
+      ],
+      [
+        "⚡ Tool success↕",
+        153
+      ],
+      [
+        "Duration↕",
+        101
+      ],
+      [
+        "Actions",
+        104
+      ]
+    ],
+    "listRow": [
+      2971,
+      34
+    ],
+    "compareCards": {
+      "x": 212,
+      "y": 354,
+      "w": 777,
+      "h": 240.5,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    }
+  },
+  "1440": {
+    "hero": {
+      "x": 212,
+      "y": 64,
+      "w": 1193,
+      "h": 109.2,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    },
+    "heroFacts": {
+      "x": 235,
+      "y": 119,
+      "w": 1149,
+      "h": 39.2,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    },
+    "heroContext": null,
+    "factBoxes": [
+      [
+        "Task",
+        235,
+        152.1,
+        39.2
+      ],
+      [
+        "Dataset",
+        401,
+        152.1,
+        39.2
+      ],
+      [
+        "Model",
+        567,
+        152.1,
+        39.2
+      ],
+      [
+        "Owner",
+        733,
+        152.1,
+        39.2
+      ],
+      [
+        "Project",
+        900,
+        152.1,
+        39.2
+      ],
+      [
+        "Started",
+        1066,
+        152.1,
+        39.2
+      ],
+      [
+        "Runtime",
+        1232,
+        152.1,
+        39.2
+      ]
+    ],
+    "sections": [
+      [
+        "run-section-reviews",
+        0,
+        0
+      ],
+      [
+        "run-section-overview",
+        245,
+        335
+      ],
+      [
+        "run-section-overview-title",
+        259,
+        23
+      ],
+      [
+        "run-section-latency",
+        580,
+        533
+      ],
+      [
+        "run-section-latency-title",
+        649,
+        23
+      ],
+      [
+        "run-section-deep",
+        1113,
+        408
+      ],
+      [
+        "run-section-deep-title",
+        1182,
+        23
+      ],
+      [
+        "run-section-categories",
+        1520,
+        361
+      ],
+      [
+        "run-section-categories-title",
+        1589,
+        23
+      ],
+      [
+        "run-section-errors",
+        1882,
+        143
+      ],
+      [
+        "run-section-errors-title",
+        1951,
+        23
+      ],
+      [
+        "run-items",
+        2024,
+        1352
+      ]
+    ],
+    "metricCards": [
+      [
+        388.3,
+        262.2
+      ],
+      [
+        388.3,
+        262.2
+      ],
+      [
+        388.3,
+        262.2
+      ]
+    ],
+    "itemsHeaders": [
+      "Metrics",
+      "System",
+      "Expand",
+      "#↑",
+      "Status",
+      "Input",
+      "Reason · answer_correctness",
+      "answer_correctness↕",
+      "faithfulness",
+      "tone",
+      "Latency↕"
+    ],
+    "listHeaders": [
+      [
+        "Overview",
+        404
+      ],
+      [
+        "",
+        77
+      ],
+      [
+        "Context",
+        552
+      ],
+      [
+        "Scores",
+        187
+      ],
+      [
+        "Context",
+        380
+      ],
+      [
+        "Scores",
+        300
+      ],
+      [
+        "System",
+        314
+      ],
+      [
+        "Trace",
+        552
+      ],
+      [
+        "System",
+        101
+      ],
+      [
+        "",
+        104
+      ],
+      [
+        "Run↕",
+        260
+      ],
+      [
+        "Status↕",
+        144
+      ],
+      [
+        "Signals",
+        77
+      ],
+      [
+        "Task↕",
+        90
+      ],
+      [
+        "Model↕",
+        132
+      ],
+      [
+        "Dataset↕",
+        110
+      ],
+      [
+        "Date↓",
+        120
+      ],
+      [
+        "Analysis",
+        100
+      ],
+      [
+        "answer correctness↕",
+        187
+      ],
+      [
+        "Owner↕",
+        120
+      ],
+      [
+        "Experiment",
+        110
+      ],
+      [
+        "Version↕",
+        150
+      ],
+      [
+        "faithfulness↕",
+        150
+      ],
+      [
+        "tone↕",
+        150
+      ],
+      [
+        "⚡ Avg latency↕",
+        144
+      ],
+      [
+        "⚡ Median latency↕",
+        170
+      ],
+      [
+        "⚡ Avg tokens↕",
+        136
+      ],
+      [
+        "⚡ LLM calls↕",
+        127
+      ],
+      [
+        "⚡ Tool calls↕",
+        136
+      ],
+      [
+        "⚡ Tool success↕",
+        153
+      ],
+      [
+        "Duration↕",
+        101
+      ],
+      [
+        "Actions",
+        104
+      ]
+    ],
+    "listRow": [
+      2971,
+      34
+    ],
+    "compareCards": {
+      "x": 212,
+      "y": 354,
+      "w": 1193,
+      "h": 240.5,
+      "font": "12px/400",
+      "family": "Qym Sans"
+    }
+  }
+}

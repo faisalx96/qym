@@ -1,0 +1,188 @@
+/* Dataset catalog: entity card grid (.dsx-card) composed from Identicon/Badge/Text. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-md);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fill {
+  height: 100%;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  height: 100%;
+}
+
+.cardWrap {
+  container-type: inline-size;
+}
+
+.cardHead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'icon title badges';
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  min-width: 0;
+}
+
+.cardIcon {
+  grid-area: icon;
+}
+
+.cardTitle {
+  grid-area: title;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* a name wraps at its words, never an ellipsis (DESIGN_LANGUAGE §7) */
+.cardName {
+  overflow-wrap: anywhere;
+}
+
+.badges {
+  grid-area: badges;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-xs);
+}
+
+/* under 440px of card width the cluster drops under the title (the name keeps the full line) */
+@container (max-width: 440px) {
+  .cardHead {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'icon title'
+      'badges badges';
+  }
+
+  .badges {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+/* The version line: each version with its own status mark (C168) */
+.state {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.stateVersion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.stateLabel {
+  font-family: var(--font-mono);
+}
+
+.description {
+  display: -webkit-box;
+  margin: 0;
+  min-height: calc(2 * 1.5em);
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: start;
+}
+
+.noDescription {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.stats {
+  display: flex;
+  gap: var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.stats strong {
+  font-family: var(--font-mono);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: auto;
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.dates {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.emptyActions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* Used by runs, not registered (C030) */
+.unregistered {
+  margin-top: var(--space-lg);
+}
+
+.unregisteredHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.unregisteredList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.unregisteredRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xs) 0;
+}
+
+.unregisteredRow + .unregisteredRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.unregisteredName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}

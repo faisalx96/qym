@@ -1,0 +1,136 @@
+.box {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+.grow {
+  flex: 1;
+}
+.big {
+  font-family: var(--font-mono);
+  font-size: var(--font-stat);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.of {
+  font-family: var(--font-sans);
+  font-size: var(--font-md);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+.legend i {
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: 2px;
+  margin-inline-start: var(--space-sm);
+}
+.stat {
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  color: var(--text-primary);
+}
+.k {
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+.stats {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+.stats div {
+  display: flex;
+  flex-direction: column;
+}
+.stats dt {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stats dd {
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  max-height: 6.5rem;
+  overflow-y: auto;
+  padding: 2px;
+}
+.tick {
+  width: var(--space-md);
+  height: var(--space-md);
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.tick:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+.tick[data-sel] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.tick[data-dim] {
+  opacity: 0.25;
+}
+.tick[data-s='completed'],
+.legend i[data-s='completed'] {
+  background: var(--success);
+}
+.tick[data-s='error'],
+.legend i[data-s='error'] {
+  background: var(--error);
+}
+.tick[data-s='in_progress'],
+.legend i[data-s='in_progress'] {
+  background: var(--accent-secondary);
+}
+.tick[data-s='pending'],
+.legend i[data-s='pending'] {
+  background: var(--bg-active);
+  border: 1px solid var(--border-strong);
+}
+.tick[data-s='in_progress'] {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tick[data-s='in_progress'] {
+    animation: none;
+  }
+}

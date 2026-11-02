@@ -1,0 +1,91 @@
+{
+ "expected": {
+  "means": {
+   "q": 0.75
+  },
+  "run_counts": {
+   "completed": 2,
+   "errors": 0,
+   "notReceived": 1,
+   "total": 3
+  },
+  "statuses": {
+   "q": {
+    "a": "pass",
+    "b": "fail",
+    "c": "not_received"
+   }
+  }
+ },
+ "kind": "run_page",
+ "samples": 1,
+ "snapshot": {
+  "metric_names": [
+   "q"
+  ],
+  "metric_specs": {
+   "q": {
+    "direction": "maximize",
+    "pass_threshold": null,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   }
+  },
+  "rows": [
+   {
+    "error": "",
+    "index": 0,
+    "item_id": "a",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {},
+    "metric_values": [
+     1.0
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 1,
+    "item_id": "b",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {},
+    "metric_values": [
+     0.5
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 2,
+    "item_id": "c",
+    "item_metadata": {},
+    "latency_ms": 0,
+    "metric_meta": {},
+    "metric_values": [
+     0.0
+    ],
+    "output_received": false,
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "not_received"
+   }
+  ]
+ }
+}

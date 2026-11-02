@@ -5,13 +5,14 @@ from __future__ import annotations
 import bisect
 import hashlib
 import json
-import logging
 import time
 import math
 import threading
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+
+from sqlalchemy.exc import OperationalError
 
 from qym_platform.db.dashboard_models import DashboardBucketRollup as Bucket
 from qym_platform.db.dashboard_models import DashboardChangeEvent as Change
@@ -29,10 +30,12 @@ from qym_platform.services.dashboard_outbox import (
     enqueue_snapshots,
     snapshot,
     execution_event_numbers,
-    execution_event_query,
-    execution_event_object,
+    source_snapshot_object,
+    source_snapshot_query,
 )
 from qym_platform.services.ingest_completeness import runs_list_ingest_flag
+from qym_platform.services.run_lifecycle import is_run_stop_requested
+from qym_platform.services.run_datasets import entries_by_run
 from qym_platform.services.metric_semantics import declared_direction, primary_metric
 from qym_platform.services.run_means import (
     MetricTotals,
@@ -45,6 +48,9 @@ from qym_platform.services.run_means import (
 )
 from sqlalchemy import and_, case, delete, func, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session, aliased
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
 
 MAX_LATE_EVENT_AGE = timedelta(days=30)
 MAX_EVENT_ATTEMPTS = 5
@@ -153,8 +159,30 @@ def _bucket_keys(project, hour):
     )
 
 
-def _lock_buckets(db, project, hours):
-    """Take shared bucket locks in one order, including timestamp corrections."""
+# PostgreSQL: a row lock that was not free under ``NOWAIT`` (55P03, also the
+# ``lock_timeout`` cancel) or a deadlock the server resolved against us (40P01).
+_LOCK_BUSY_CODES = frozenset({"55P03", "40P01"})
+
+
+def is_lock_busy(exc: BaseException) -> bool:
+    """Whether ``exc`` means a row we wanted was held by another transaction.
+
+    Such a failure is not an error of ours: the work is retried on a later
+    tick. psycopg2 exposes the SQLSTATE as ``pgcode``, psycopg 3 as ``sqlstate``.
+    """
+    if not isinstance(exc, OperationalError):
+        return False
+    orig = getattr(exc, "orig", None)
+    code = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+    return code in _LOCK_BUSY_CODES
+
+
+def _lock_buckets(db, project, hours, *, nowait=False):
+    """Take shared bucket locks in one order, including timestamp corrections.
+
+    ``nowait`` (PostgreSQL) fails at once with 55P03 instead of waiting up to
+    ``lock_timeout`` when another transaction holds a bucket; SQLite ignores it.
+    """
     for key in sorted({key for hour in hours for key in _bucket_keys(project, hour)}):
         identity = dict(
             zip(("project_key", "slice_key", "bucket_key", "granularity"), key)
@@ -163,7 +191,7 @@ def _lock_buckets(db, project, hours):
         db.scalar(
             select(Bucket)
             .where(*(getattr(Bucket, k) == v for k, v in identity.items()))
-            .with_for_update()
+            .with_for_update(nowait=nowait)
         )
 
 
@@ -627,6 +655,21 @@ def _move_numeric_records(
 
 
 def _median(db, query, column):
+    """The median of ``column`` over ``query`` (mean of the middle two)."""
+    if db.get_bind().dialect.name == "postgresql":
+        # One aggregate pass instead of a COUNT plus an OFFSET scan. The lower
+        # and upper middle values (the same one for an odd count) are averaged
+        # in Python, so the result is bit-identical to the fallback below
+        # (percentile_cont interpolates as a + (b - a) * 0.5 instead).
+        lower, upper = db.execute(
+            query.order_by(None).with_only_columns(
+                func.percentile_disc(0.5).within_group(column),
+                func.percentile_disc(0.5).within_group(column.desc()),
+            )
+        ).one()
+        if lower is None:
+            return 0.0
+        return sum((lower, upper)) / 2
     count = (
         db.scalar(select(func.count()).select_from(query.order_by(None).subquery()))
         or 0
@@ -831,11 +874,17 @@ def repair_extrema(db, project_key, bucket_key, granularity="hour"):
         for hour in hours:
             if hour.extrema_state != "valid":
                 repair_extrema(db, project_key, hour.bucket_key, "hour")
+
         def _fold(attr, pick):
             values = [getattr(h, attr) for h in hours if getattr(h, attr) is not None]
             return pick(values) if values else None
-        bucket.latency_min, bucket.latency_max = _fold("latency_min", min), _fold("latency_max", max)
-        bucket.score_min, bucket.score_max = _fold("score_min", min), _fold("score_max", max)
+
+        bucket.latency_min, bucket.latency_max = _fold("latency_min", min), _fold(
+            "latency_max", max
+        )
+        bucket.score_min, bucket.score_max = _fold("score_min", min), _fold(
+            "score_max", max
+        )
     else:
         # Soft deletion preserves records for restore. Only records whose run
         # is currently visible may contribute to the bucket's extrema.
@@ -911,6 +960,11 @@ def _sync_dimension(db, run_id, version):
         _strip_model_provider,
     )
     from qym_platform.db.models import Approval, Run, User
+    from qym_platform.services.run_origin import (
+        experiment_refs_for_jobs,
+        run_origin_fields,
+    )
+    from qym_platform.services.run_versioning import run_versioning, sync_run_versions
 
     run = db.get(Run, run_id)
     dimension = db.get(Dimension, run_id)
@@ -968,8 +1022,19 @@ def _sync_dimension(db, run_id, version):
         "reasoning" if has_reasoning else "plain"
     )
     dataset_version = str(dataset.get("dataset_version") or "").strip()
+    # A union run (several dataset versions) is its own combo, keyed by its label:
+    # it never mixes into the first dataset's trend or charts (QC-77).
+    dataset_count = int(run.dataset_count or 1)
+    union_entries = (
+        [
+            {"dataset": row.dataset, "version": row.version}
+            for row in entries_by_run(db, [run.id]).get(run.id, [])
+        ]
+        if dataset_count > 1
+        else []
+    )
     dimension.dataset = run.dataset + (
-        "\u241f" + dataset_version if dataset_version else ""
+        "\u241f" + dataset_version if dataset_version and dataset_count <= 1 else ""
     )
     branch, commit = (
         str(config.get("git_branch") or "").strip(),
@@ -985,6 +1050,7 @@ def _sync_dimension(db, run_id, version):
     )
     dimension.present = run.deleted_at is None
     dimension.hidden_at = dimension.hidden_at if run.deleted_at is not None else None
+    versioning = run_versioning(db, run.experiment_job_id)
     dimension.descriptor = {
         "run_id": run.id,
         "run_name": config.get("run_name") or run.external_run_id or "",
@@ -1011,13 +1077,22 @@ def _sync_dimension(db, run_id, version):
         "owner": owner_info,
         "approval": approval_info,
         "status": dimension.status,
+        "status_reason": run.status_reason,
+        # A user cancelled the run's job; it stops once the Evaluation
+        # Service confirms (the runs list shows "Stopping…" meanwhile).
+        "stop_requested": is_run_stop_requested(db, run),
         "trace_stats": trace,
         "product_eval": metadata.get("product_eval"),
         "langfuse_url": metadata.get("langfuse_url"),
         "langfuse_dataset_id": metadata.get("langfuse_dataset_id"),
         "langfuse_run_id": metadata.get("langfuse_run_id"),
         "ingest_incomplete": runs_list_ingest_flag(metadata),
+        **run_origin_fields(run, experiment_refs_for_jobs(db, [run.experiment_job_id])),
+        "versioning": versioning,
+        "versioning_details": dict(run.versioning_details or {}),
         **dataset,
+        "dataset_count": dataset_count,
+        **({"datasets": union_entries} if union_entries else {}),
     }
     # Unchanged unless a name changes, so the search index over it keeps
     # this row's descriptor-only updates HOT.
@@ -1026,6 +1101,7 @@ def _sync_dimension(db, run_id, version):
     )
     if created:
         db.add(dimension)
+    sync_run_versions(db, run.id, run.project_id, versioning)
     db.flush()
     new_hour = _hour(dimension.timestamp)
     if old_visible != dimension.present or old_hour != new_hour or created:
@@ -1062,7 +1138,14 @@ def ensure_pending_summary(db, run_id, version):
     if run is None or dimension is None:
         return
     if db.get(Summary, run_id) is None:
-        db.add(Summary(run_key=run_id, project_key=run.project_id, data={}, projection_revision=0))
+        db.add(
+            Summary(
+                run_key=run_id,
+                project_key=run.project_id,
+                data={},
+                projection_revision=0,
+            )
+        )
         db.flush()
         _store_overview_inputs(db, run_id)
 
@@ -1082,8 +1165,13 @@ def _store_overview_inputs(db, run_id):
 # execution success counts repeat-run item passes; 5: repeat-run means judge
 # task errors per pass, not by the pass that arrived last, and a completed
 # run's items never received are counted apart and left out of Execution
-# success and the means).
-SUMMARY_SHAPE = 5
+# success and the means; 6: a finished repeat run carries its pass rows and the
+# group set of each metric, so the runs list opens it with no request, C023).
+SUMMARY_SHAPE = 6
+
+# Run statuses whose passes no longer change: their pass rows and group sets are
+# stored with the summary (C023).
+_SETTLED_STATUSES = {"COMPLETED", "FAILED", "STOPPED"}
 
 
 def _outdated_shape(data):
@@ -1100,9 +1188,7 @@ def _task_failed_passes(run_id):
     """
     number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
     return (
-        select(
-            Record.record_key.label("record_key"), number.label("pass_number")
-        )
+        select(Record.record_key.label("record_key"), number.label("pass_number"))
         .where(
             Record.run_key == run_id,
             Record.present,
@@ -1281,6 +1367,220 @@ def _metric_totals_statement(run_id, run, *, exclude_not_received=False, outcome
     )
 
 
+def _latency_stats(values):
+    """avg, median and p95 of ``values``, by the rule of the /passes route."""
+    if not values:
+        return None, None, None
+    ordered = sorted(values)
+    n = len(ordered)
+    median = ordered[n // 2] if n % 2 else (ordered[n // 2 - 1] + ordered[n // 2]) / 2.0
+    p95 = ordered[min(n - 1, max(0, int(round(0.95 * n)) - 1))]
+    return sum(ordered) / n, median, p95
+
+
+def _api_time(ms):
+    from qym_platform.api.runs import to_api_timestamp
+
+    return to_api_timestamp(datetime.fromtimestamp(ms / 1000.0, timezone.utc))
+
+
+def _settled_pass_detail(db, run_id, run, metric_specs, directions, expected):
+    """The pass rows and group sets of a finished repeat run (C023).
+
+    Read from projection records alone, by the rules of the /passes and
+    /group-metrics routes: every metric's mean per pass (the run-mean rule),
+    the item counts, latency and timing per pass, and each metric's Pass@k,
+    Pass^k, Avg@k, Consistency and Reliability at its default threshold (the
+    declared pass threshold, else 0.8, or 0.2 when lower is better). The runs
+    list then opens the run with no request. Per-pass trace stats are not in
+    the projection, so ``trace_stats`` stays None.
+    """
+    from qym.core.reducers import group_stats
+
+    samples = int(run.samples or 1)
+    metrics = list(run.metrics or [])
+    errored = Record.error > 0
+    scores = select(Record).where(
+        Record.run_key == run_id, Record.record_kind == "pass_score", Record.present
+    )
+    totals = {}
+    for number, metric, total, count, error_total, error_count, unscored in db.execute(
+        scores.with_only_columns(
+            Record.pass_number,
+            Record.metric_key,
+            func.sum(Record.score),
+            func.count(Record.score),
+            func.sum(case((errored, Record.score))),
+            func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+            func.count(case((and_(errored, Record.score.is_(None)), 1))),
+        )
+        .where(or_(Record.score.isnot(None), errored))
+        .group_by(Record.pass_number, Record.metric_key)
+    ).all():
+        totals[(number, metric)] = MetricTotals(
+            score_sum=float(total or 0.0),
+            score_count=int(count or 0),
+            error_score_sum=float(error_total or 0.0),
+            error_score_count=int(error_count or 0),
+            unscored_errors=int(unscored or 0),
+            direction=directions.get(metric),
+        )
+    left_out = [m for m in metrics if errors_left_out(directions.get(m))]
+    failed = _task_failed_passes(run_id)
+    if left_out:
+        for number, metric, total, count in db.execute(
+            scores.with_only_columns(
+                Record.pass_number,
+                Record.metric_key,
+                func.sum(Record.score),
+                func.count(Record.score),
+            )
+            .join(
+                failed,
+                and_(
+                    failed.c.record_key == Record.record_key,
+                    failed.c.pass_number == Record.pass_number,
+                ),
+            )
+            .where(
+                Record.metric_key.in_(left_out),
+                Record.error == 0,
+                Record.success == 0,
+            )
+            .group_by(Record.pass_number, Record.metric_key)
+        ).all():
+            if (number, metric) in totals:
+                totals[(number, metric)].task_error_score_sum = float(total or 0.0)
+                totals[(number, metric)].task_error_score_count = int(count or 0)
+    means, scored = defaultdict(dict), {}
+    for (number, metric), metric_totals in totals.items():
+        means[number][metric] = run_metric_mean(metric_totals, 0)
+        scored[number] = max(
+            scored.get(number, 0),
+            metric_totals.score_count + metric_totals.unscored_errors,
+        )
+    attempts = select(Record).where(
+        Record.run_key == run_id,
+        Record.record_kind == "attempt",
+        Record.present,
+        Record.is_last.is_(True),
+    )
+    # An item counts in its pass once it has an attempt or an outcome there,
+    # as /passes counts it (last attempts, outcome events and scores).
+    completed = dict(
+        db.execute(
+            select(Record.pass_number, func.count(func.distinct(Record.record_key)))
+            .where(
+                Record.run_key == run_id,
+                Record.record_kind.in_(("attempt", "pass_score")),
+                Record.present,
+                Record.pass_number > 0,
+            )
+            .group_by(Record.pass_number)
+        ).all()
+    )
+    latencies = defaultdict(list)
+    for number, latency in db.execute(
+        attempts.with_only_columns(Record.pass_number, Record.latency_ms).where(
+            Record.latency_ms.isnot(None)
+        )
+    ):
+        latencies[number].append(float(latency))
+    bounds = {
+        number: (start, end)
+        for number, start, end in db.execute(
+            attempts.with_only_columns(
+                Record.pass_number,
+                func.min(Record.started_at_ms),
+                func.max(Record.started_at_ms + Record.latency_ms),
+            )
+            .where(Record.started_at_ms.isnot(None), Record.latency_ms.isnot(None))
+            .group_by(Record.pass_number)
+        )
+    }
+    detail = {}
+    for number in range(1, samples + 1):
+        avg, median, p95 = _latency_stats(latencies.get(number))
+        start, end = bounds.get(number, (None, None))
+        detail[number] = {
+            "metric_means": means.get(number, {}),
+            "items_scored": scored.get(number, 0),
+            "items_total": int(expected or 0),
+            "completed_count": int(completed.get(number, 0)),
+            "avg_latency_ms": avg,
+            "median_latency_ms": median,
+            "p95_latency_ms": p95,
+            "started_at": _api_time(start) if start is not None else None,
+            "ended_at": _api_time(end) if end is not None else None,
+            "duration_ms": (
+                float(end - start) if start is not None and end is not None else None
+            ),
+            "trace_stats": None,
+        }
+    run_config = run.run_config if isinstance(run.run_config, dict) else {}
+    raw_report_k = run_config.get("report_k")
+    report_k = (
+        int(raw_report_k)
+        if isinstance(raw_report_k, (int, float)) and 1 <= int(raw_report_k) <= samples
+        else None
+    )
+    failed_pairs = None
+    groups = {}
+    for metric in metrics:
+        spec = metric_specs.get(metric) if isinstance(metric_specs, dict) else None
+        direction = directions.get(metric)
+        declared = spec.get("pass_threshold") if isinstance(spec, dict) else None
+        threshold = (
+            float(declared)
+            if declared is not None
+            else (0.2 if direction == "minimize" else 0.8)
+        )
+        metric_left_out = errors_left_out(direction)
+        read_errors = metric_left_out or threshold <= 0
+        if read_errors and failed_pairs is None:
+            failed_pairs = set(
+                db.execute(select(failed.c.record_key, failed.c.pass_number)).all()
+            )
+        items_scores, eligible, values = {}, {}, []
+        for key, number, score, error in db.execute(
+            scores.with_only_columns(
+                Record.record_key, Record.pass_number, Record.score, Record.error
+            )
+            .where(Record.metric_key == metric)
+            .order_by(Record.record_key, Record.pass_number)
+        ):
+            is_error = False
+            if read_errors:
+                is_error = (error or 0) > 0 or (key, number) in failed_pairs
+                if is_error:
+                    numeric = (
+                        None
+                        if metric_left_out
+                        else float(score) if score is not None else 0.0
+                    )
+                elif score is None:
+                    continue
+                else:
+                    numeric = float(score)
+            else:
+                numeric = float(score) if score is not None else 0.0
+            items_scores.setdefault(key, []).append(numeric)
+            eligible.setdefault(key, []).append(not is_error)
+            values.append(numeric)
+        stats = group_stats(
+            items_scores,
+            threshold=threshold,
+            k=samples,
+            report_k=report_k,
+            direction=direction or "maximize",
+            eligible=eligible,
+        )
+        if metric_left_out and all(value is None for value in values):
+            stats["avg_at_k"] = stats["max_at_k"] = None
+        groups[metric] = {"threshold": threshold, "group": stats}
+    return detail, groups
+
+
 def refresh_run_summary(db, run_id, version):
     """Build display numbers from numeric state and current small dimensions."""
     dimension, run = _sync_dimension(db, run_id, version)
@@ -1383,6 +1683,7 @@ def refresh_run_summary(db, run_id, version):
         or 0
     )
     passes = None
+    pass_details = pass_groups = None
     total_retries = summary.retry_sum
     if int(run.samples or 1) > 1:
         from qym_platform.api.runs import _repeat_pass_status
@@ -1529,6 +1830,22 @@ def refresh_run_summary(db, run_id, version):
         ]
         if sum(pass_causes.values()):
             causes = sum(pass_causes.values())
+        # A finished run's pass rows, and the group set of each metric at its
+        # default threshold, travel with the summary: the runs list opens the
+        # run with no request (C023). A live run changes with every pass, so
+        # the list asks /passes and /group-metrics for it.
+        if str(dimension.status or "").upper() in _SETTLED_STATUSES:
+            detail, pass_groups = _settled_pass_detail(
+                db,
+                run_id,
+                run,
+                metric_specs,
+                directions,
+                expected if expected is not None else summary.count,
+            )
+            pass_details = [
+                {"pass_number": number, **detail[number]} for number in sorted(detail)
+            ]
     # Execution success: one unit per item, or per item pass in a repeat run
     # (its RunItem reflects only the pass that arrived last).
     success_count = summary.success_count - not_received
@@ -1568,6 +1885,8 @@ def refresh_run_summary(db, run_id, version):
         "median_latency_ms": median_latency,
         "duration_ms": duration,
         "pass_summaries": passes,
+        "pass_details": pass_details,
+        "pass_groups": pass_groups,
         "analysis_cause_count": causes,
     }
     summary.projection_revision += 1
@@ -1595,8 +1914,53 @@ def refresh_run_summary(db, run_id, version):
     _store_overview_inputs(db, run_id)
 
 
-def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
-    """Serialize one partition; commit snapshot, deltas and watermark together."""
+def _descriptor_origin_stale(run, dimension):
+    """An official run whose descriptor predates ``origin``, ``versioning`` or
+    ``experiment.latency_sensitive``.
+
+    ``versioning`` matters only for runs linked to an experiment job: republishing
+    fills the descriptor and the run's ``dashboard_run_versions`` rows (0078).
+    The experiment reference gained ``latency_sensitive`` (QA3-3); a descriptor with
+    no experiment reference at all is not stale (nothing to fill).
+    """
+    from qym_platform.db.models import RunOrigin
+
+    if run is None or dimension is None:
+        return False
+    descriptor = dimension.descriptor or {}
+    experiment = descriptor.get("experiment")
+    return (
+        (run.origin == RunOrigin.OFFICIAL and "origin" not in descriptor)
+        or (run.experiment_job_id is not None and "versioning" not in descriptor)
+        or (
+            run.experiment_job_id is not None
+            and isinstance(experiment, dict)
+            and "latency_sensitive" not in experiment
+        )
+    )
+
+
+def _note_live_refresh(db, run_id, state):
+    """Tell the worker how this transaction published a run's summary.
+
+    ``refreshed``: a live run's summary was rebuilt here; ``deferred``: its
+    rebuild was left to ``refresh_live_summary`` after commit; ``final``: the
+    run is terminal or deleted and needs no further live rebuilds.
+    """
+    db.info.setdefault("dashboard_live_refresh", {})[run_id] = state
+
+
+def process_partition(
+    db: Session, run_id: str, *, max_events=500, owner=None, defer_live_refresh=False
+):
+    """Serialize one partition; commit snapshot, deltas and watermark together.
+
+    With ``defer_live_refresh`` a live (running or pending) run's summary is
+    not rebuilt under the partition lock: ingest waits on that lock, and the
+    rebuild runs a dozen aggregate queries. The caller publishes it after
+    commit with ``refresh_live_summary`` (see ``DashboardSummaryWorker``).
+    Terminal publication stays here, with its watermark.
+    """
     from qym_platform.db.models import Run
 
     db.info["dashboard_projection_worker"] = True
@@ -1623,6 +1987,7 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
         dimension = db.get(Dimension, run_id)
         if dimension is not None and dimension.present:
             refresh_run_summary(db, run_id, partition.last_applied_version)
+        _note_live_refresh(db, run_id, "final")
         partition.queue_state = "deleted"
         partition.oldest_pending_event = None
         partition.lease_owner = partition.lease_until = None
@@ -1656,14 +2021,17 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
             # Empty stages and removed source runs must not monopolize the
             # oldest queue slots indefinitely. Existing publications stay intact.
             if partition.backfill_complete:
+                dimension = db.get(Dimension, run_id)
                 if run is None or (
                     summary is not None
-                    and _outdated_shape(summary.data)
                     and partition.queue_state != "repair_required"
+                    and (
+                        _outdated_shape(summary.data)
+                        or _descriptor_origin_stale(run, dimension)
+                    )
                 ):
                     # Upgrade the published shape from numeric projection rows.
                     # Migrations 0058/0060 queue existing summaries without replaying history.
-                    dimension = db.get(Dimension, run_id)
                     hours = {_hour(dimension.timestamp)} if dimension else set()
                     if run:
                         hours.add(_hour(run.started_at or run.created_at))
@@ -1689,6 +2057,12 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
             apply_events(db, events)
         accepted = events
     except Exception:
+        logger.warning(
+            "Dashboard batch apply failed for partition %s; applying %d events one by one",
+            run_id,
+            len(events),
+            exc_info=True,
+        )
         accepted = []
         for event in events:
             try:
@@ -1718,7 +2092,20 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
                     )
                     event.published_at = now
                     partition.queue_state = "repair_required"
+                    logger.warning(
+                        "Dashboard event %s of partition %s dead-lettered after %d attempts",
+                        event.event_id,
+                        run_id,
+                        event.attempt_count,
+                        exc_info=True,
+                    )
                 else:
+                    logger.debug(
+                        "Dashboard event %s of partition %s failed; will retry",
+                        event.event_id,
+                        run_id,
+                        exc_info=True,
+                    )
                     break
             accepted.append(event)
     db.flush()
@@ -1735,9 +2122,16 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
         }
         # A terminal source row may be newer than this bounded event batch.
         # Retain the last published descriptor/numbers until all its committed
-        # events are applied. Source commits wait on our partition row lock.
-        if (remaining is None and partition.backfill_complete) or not terminal:
+        # events are applied (the workflow status itself is mirrored into the
+        # dimension row by the source transaction: dashboard_outbox
+        # .publish_run_status). Source commits wait on our partition row lock,
+        # so a live run's rebuild may be deferred until after commit.
+        if not terminal and defer_live_refresh:
+            ensure_pending_summary(db, run_id, version)
+            _note_live_refresh(db, run_id, "deferred")
+        elif (remaining is None and partition.backfill_complete) or not terminal:
             refresh_run_summary(db, run_id, version)
+            _note_live_refresh(db, run_id, "final" if terminal else "refreshed")
         else:
             ensure_pending_summary(db, run_id, version)
         partition.last_applied_version = max(partition.last_applied_version, version)
@@ -1751,6 +2145,53 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
     partition.lease_owner = partition.lease_until = None
     partition.updated_at = now
     return len(accepted)
+
+
+def refresh_live_summary(db, run_id, *, nowait=False):
+    """Rebuild a live run's summary without the partition lock.
+
+    Runs in its own short transaction after ``process_partition`` committed
+    the run's events and watermark. Takes the shared bucket locks and the
+    summary row only (the same order as ``process_partition``), never the
+    partition row ingest waits on. The watermark is read first, so the
+    numeric records read after the locks are at least that new. A terminal or
+    deleted run is skipped: its final publication belongs to the partition
+    transaction. Returns whether a summary was rebuilt.
+
+    With ``nowait`` (PostgreSQL) a bucket or summary row held by another
+    transaction raises at once (``is_lock_busy``) instead of stalling the
+    worker for ``lock_timeout``; the caller keeps the rebuild pending.
+    """
+    from qym_platform.db.models import Run
+
+    db.info["dashboard_projection_worker"] = True
+    partition = db.get(Partition, run_id)
+    if partition is None or partition.queue_state == "deleted":
+        return False
+    version = partition.last_applied_version
+    run = db.get(Run, run_id)
+    if run is None or db.get(Summary, run_id) is None:
+        return False
+    dimension = db.get(Dimension, run_id)
+    hours = {_hour(run.started_at or run.created_at)}
+    if dimension is not None:
+        hours.add(_hour(dimension.timestamp))
+    _lock_buckets(db, partition.project_key, hours, nowait=nowait)
+    db.execute(
+        select(Summary)
+        .where(Summary.run_key == run_id)
+        .with_for_update(nowait=nowait)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    run = db.get(Run, run_id, populate_existing=True)
+    if (
+        run is None
+        or run.deleted_at is not None
+        or getattr(run.status, "value", run.status) not in {"RUNNING", "PENDING"}
+    ):
+        return False
+    refresh_run_summary(db, run_id, version)
+    return True
 
 
 def bootstrap_partitions(db, *, limit=100):
@@ -1773,8 +2214,35 @@ def bootstrap_partitions(db, *, limit=100):
 
 def reconcile_summary_shapes(db, *, limit=100):
     """Recover upgrades consumed by an older worker during rolling deployment."""
-    from qym_platform.db.models import Run
+    from qym_platform.db.models import Run, RunOrigin
 
+    # Official runs published before descriptors carried ``origin`` would list
+    # as local, and runs linked to an experiment job published before
+    # ``versioning`` (0078) would not match versioning filters; only those few
+    # are requeued (``origin`` and ``experiment_job_id`` are indexed).
+    stale_origin = (
+        select(Dimension.run_key)
+        .join(Run, Run.id == Dimension.run_key)
+        .where(
+            or_(
+                and_(
+                    Run.origin == RunOrigin.OFFICIAL,
+                    Dimension.descriptor["origin"].as_string().is_(None),
+                ),
+                and_(
+                    Run.experiment_job_id.isnot(None),
+                    Dimension.descriptor["versioning"].as_string().is_(None),
+                ),
+                and_(
+                    Run.experiment_job_id.isnot(None),
+                    Dimension.descriptor[("experiment", "id")].as_string().isnot(None),
+                    Dimension.descriptor[("experiment", "latency_sensitive")]
+                    .as_string()
+                    .is_(None),
+                ),
+            )
+        )
+    )
     outdated = (
         select(Summary.run_key)
         .join(Run, Run.id == Summary.run_key)
@@ -1785,6 +2253,7 @@ def reconcile_summary_shapes(db, *, limit=100):
                 Summary.data["task_error_count"].as_integer().is_(None),
                 Summary.data["summary_shape"].as_integer().is_(None),
                 Summary.data["summary_shape"].as_integer() < SUMMARY_SHAPE,
+                Summary.run_key.in_(stale_origin),
             ),
         )
     )
@@ -1815,59 +2284,6 @@ def reconcile_summary_shapes(db, *, limit=100):
         .execution_options(synchronize_session=False)
     )
     return result.rowcount
-
-
-def _backfill_source_query(model):
-    """Select only the fields consumed by numeric snapshots."""
-    from qym_platform.db.models import (
-        RunEvent,
-        RunItem,
-        RunItemAttempt,
-        RunItemPassScore,
-    )
-
-    if model is RunEvent:
-        return execution_event_query()
-    columns = [model.id, model.run_id, model.item_id]
-    if model is RunItem:
-        columns.extend(
-            (
-                model.output.isnot(None).label("has_output"),
-                model.error.isnot(None).label("has_error"),
-                model.latency_ms,
-                model.retry_count,
-                model.item_metadata,
-            )
-        )
-    elif model is RunItemAttempt:
-        columns.extend(
-            (
-                model.pass_number,
-                model.attempt_number,
-                model.status,
-                model.latency_ms,
-                model.task_started_at_ms,
-                model.is_last_attempt,
-            )
-        )
-    else:
-        columns.extend((model.metric_name, model.score_numeric, model.meta))
-        if model is RunItemPassScore:
-            columns.append(model.pass_number)
-    return select(*columns)
-
-
-def _backfill_source_object(model, row):
-    from qym_platform.db.models import RunEvent, RunItem
-
-    if model is RunEvent:
-        return execution_event_object(row)
-    values = dict(row._mapping)
-    if model is RunItem:
-        # Preserve SQL NULL versus JSON null without materializing the output.
-        values["output"] = True if values.pop("has_output") else None
-        values["error"] = "error" if values.pop("has_error") else None
-    return model(**values)
 
 
 def backfill_partition(db, run_id, *, chunk_size=500):
@@ -1910,7 +2326,7 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         0,
     )
     kind, model = source_types[position]
-    query = _backfill_source_query(model)
+    query = source_snapshot_query(model)
     # Reuse the existing (run_id, sequence) event index for bounded keyset scans.
     cursor_column = RunEvent.sequence if model is RunEvent else model.id
     query = (
@@ -1922,7 +2338,7 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         # The cost is bounded: 500 rows per chunk, once per historical run.
         .with_for_update()
     )
-    rows = [_backfill_source_object(model, row) for row in db.execute(query)]
+    rows = [source_snapshot_object(model, row) for row in db.execute(query)]
     next_position = position
     if len(rows) < chunk_size:
         next_position += 1
@@ -2018,17 +2434,27 @@ def prune_dashboard_state(db, *, before=None, limit=1000):
 
 
 def prune_dashboard_events(db, *, before=None, limit=1000):
-    """Bounded retention of published outbox rows behind settled watermarks."""
+    """Bounded retention of published outbox rows behind settled watermarks.
+
+    Published rows of a deleted run's partition go too, at any age (C074):
+    deletion removes the publication, and a restore rebuilds from source instead
+    of replaying them, so nothing reads them again. Without this they stayed
+    until the run purge, which never comes with retention off, and every prune
+    rescanned them.
+    """
     before = before or datetime.utcnow() - MAX_LATE_EVENT_AGE
+    settled = and_(
+        Partition.queue_state == "ready",
+        Partition.last_applied_version >= Change.source_version,
+        Change.created_at < before,
+    )
     versions = list(
         db.scalars(
             select(Change.source_version)
             .join(Partition, Partition.partition_key == Change.partition_key)
             .where(
                 Change.published_at.isnot(None),
-                Change.created_at < before,
-                Partition.last_applied_version >= Change.source_version,
-                Partition.queue_state == "ready",
+                or_(settled, Partition.queue_state == "deleted"),
                 Partition.lease_until.is_(None),
             )
             .order_by(Change.source_version)
@@ -2050,6 +2476,7 @@ def dashboard_freshness(db, project_ids):
         func.coalesce(Summary.projection_revision, 0) == 0,
         Dimension.present.is_(False),
     )
+
     # Include membership, including revision-zero pending runs. A sum alone
     # misses their insertion and can collide after a purge and publication.
     # Review actions and deletes change the list row's status and visibility
@@ -2119,7 +2546,13 @@ def dashboard_freshness(db, project_ids):
             revision += int(published_revision or 0)
             catalog_hash.update(
                 json.dumps(
-                    [run_key, published_revision, present, status, hidden_at is not None],
+                    [
+                        run_key,
+                        published_revision,
+                        present,
+                        status,
+                        hidden_at is not None,
+                    ],
                     separators=(",", ":"),
                 ).encode()
             )
@@ -2410,29 +2843,65 @@ def scheduled_partitions(db, *, limit=20):
     return selected
 
 
+# A rolling deploy finishes within this many seconds of a worker start (C184).
+SHAPE_CHECK_WINDOW = 30 * 60
+SHAPE_CHECK_INTERVAL = 60 * 60
+
+
 class DashboardSummaryWorker:
     """A restart-safe polling worker with bounded transactions and owned sessions.
 
     The database is the queue. Multiple application processes may run a worker;
     partition row locks and shared bucket lock ordering serialize their updates.
     Each tick commits partitions separately so a noisy run cannot delay others.
+
+    Ingest's outbox waits on the partition row and source rows this worker
+    locks, so each lock is held briefly: a backfill chunk (source row locks)
+    commits before the partition's events are applied, and a live run's
+    summary is rebuilt after that commit, in its own transaction, at most once
+    per ``live_refresh_interval`` seconds (the first rebuild this process sees
+    for a run, and every terminal publication, stay in the partition
+    transaction).
     """
 
+    # Live runs whose last rebuild time this process remembers.
+    LIVE_REFRESH_MAX_RUNS = 1024
+    # Seconds between two outbox retention passes (C074).
+    EVENT_PRUNE_INTERVAL = 60.0
+
     def __init__(
-        self, session_factory, *, interval=1.0, max_partitions=20, max_events=500
+        self,
+        session_factory,
+        *,
+        interval=1.0,
+        max_partitions=20,
+        max_events=500,
+        backfill_chunk=200,
+        live_refresh_interval=2.0,
     ):
         self.session_factory = session_factory
         self.interval = interval
         self.max_partitions = max_partitions
         self.max_events = max_events
+        # Source rows locked per backfill transaction.
+        self.backfill_chunk = max(1, min(backfill_chunk, max_events))
+        self.live_refresh_interval = live_refresh_interval
+        # Rebuilds skipped because a row was busy (diagnostics; see _refresh_live_summaries).
+        self.live_refresh_busy = 0
+        # run_id -> [monotonic time of the last rebuild, rebuild pending]
+        self._live_refresh = OrderedDict()
         self._stop = threading.Event()
         self._thread = None
         self._lock = threading.Lock()
-        self._logger = logging.getLogger(__name__)
+        self._logger = get_logger(__name__)
         self._made_progress = False
         # Discovery/reconcile scans are cheap but need not run 20x per second.
         self._next_reconcile = 0.0
         self._next_bootstrap = 0.0
+        self._started = time.monotonic()
+        self._next_shape_check = 0.0
+        # Outbox retention needs no 1 s cadence: it runs at most once a minute (C074).
+        self._next_event_prune = 0.0
 
     def start(self):
         with self._lock:
@@ -2467,10 +2936,19 @@ class DashboardSummaryWorker:
             # number of unregistered runs instead of leaving them invisible.
             if now >= self._next_bootstrap:
                 found = bootstrap_partitions(db, limit=self.max_partitions * 5)
-                found += reconcile_summary_shapes(db, limit=self.max_partitions * 5)
                 db.commit()
                 # Keep discovering quickly while there is a backlog; otherwise every 30 s.
                 self._next_bootstrap = now + (0.0 if found else 30.0)
+            if now >= self._next_shape_check:
+                # Old-shape summaries come from an older worker during a rolling
+                # deploy, so the full rescan runs every 30 s only in the first
+                # SHAPE_CHECK_WINDOW after this worker starts, then hourly (C184).
+                reshaped = reconcile_summary_shapes(db, limit=self.max_partitions * 5)
+                db.commit()
+                after_deploy = now - self._started < SHAPE_CHECK_WINDOW
+                self._next_shape_check = now + (
+                    0.0 if reshaped else 30.0 if after_deploy else SHAPE_CHECK_INTERVAL
+                )
             partitions = scheduled_partitions(db, limit=self.max_partitions)
         processed = 0
         failed = False
@@ -2480,9 +2958,23 @@ class DashboardSummaryWorker:
             try:
                 with self.session_factory() as db:
                     db.info["dashboard_projection_worker"] = True
-                    scanned = backfill_partition(db, run_id, chunk_size=self.max_events)
-                    applied = process_partition(db, run_id, max_events=self.max_events)
+                    scanned = backfill_partition(
+                        db, run_id, chunk_size=self.backfill_chunk
+                    )
+                    # Release the source row locks before taking the partition
+                    # and bucket locks; each step is idempotent on its own.
                     db.commit()
+                    applied = process_partition(
+                        db,
+                        run_id,
+                        max_events=self.max_events,
+                        defer_live_refresh=run_id in self._live_refresh,
+                    )
+                    live = db.info.pop("dashboard_live_refresh", {})
+                    db.commit()
+                    self._note_live(live)
+                    if applied:
+                        self._store_step_latency(run_id)
                     processed += applied
                     self._made_progress |= bool(scanned or applied)
             except Exception as exc:
@@ -2535,14 +3027,108 @@ class DashboardSummaryWorker:
                         db.commit()
                 except Exception:
                     self._logger.exception("Could not persist dashboard worker failure")
+        self._refresh_live_summaries()
         with self.session_factory() as db:
             db.info["dashboard_projection_worker"] = True
             repair_dirty_buckets(db, limit=self.max_partitions)
             prune_dashboard_state(db, limit=self.max_events)
-            prune_dashboard_events(db, limit=self.max_events)
+            now = time.monotonic()
+            if now >= self._next_event_prune:
+                self._next_event_prune = now + self.EVENT_PRUNE_INTERVAL
+                prune_dashboard_events(db, limit=self.max_events)
             db.commit()
         self._made_progress &= not failed
         return processed
+
+    def _note_live(self, states):
+        """Record what a committed partition transaction published."""
+        now = time.monotonic()
+        for run_id, state in states.items():
+            if state == "final":
+                self._live_refresh.pop(run_id, None)
+            elif state == "refreshed":
+                self._live_refresh[run_id] = [now, False]
+                self._live_refresh.move_to_end(run_id)
+            elif state == "deferred":
+                entry = self._live_refresh.setdefault(run_id, [now, True])
+                entry[1] = True
+        # Bound the map: forget the oldest runs with no rebuild pending. A
+        # forgotten live run's next batch rebuilds inside its partition
+        # transaction again, so nothing is lost.
+        if len(self._live_refresh) > self.LIVE_REFRESH_MAX_RUNS:
+            for run_id in [
+                key for key, (_, pending) in self._live_refresh.items() if not pending
+            ][: len(self._live_refresh) - self.LIVE_REFRESH_MAX_RUNS]:
+                del self._live_refresh[run_id]
+
+    def _store_step_latency(self, run_id):
+        """Keep the run page's step-latency summary stored after this worker published the run (C022).
+
+        Its own short transaction after the partition commit, so the span scan never holds the partition lock.
+        A finished run is built once (its fingerprint then holds); a live one at most every
+        ``LIVE_SUMMARY_REBUILD``. A failure is logged: the run page then builds the summary on read.
+        """
+        from qym_platform.api.step_latency import refresh_stored_summary
+        from qym_platform.db.models import Run
+
+        try:
+            with self.session_factory() as db:
+                db.info["dashboard_projection_worker"] = True
+                run = db.get(Run, run_id)
+                if run is None or run.deleted_at is not None:
+                    return
+                refresh_stored_summary(db, run)
+                db.commit()
+        except Exception:
+            self._logger.exception(
+                "Step-latency summary refresh failed for run %s", run_id
+            )
+
+    def _refresh_live_summaries(self, *, force=False):
+        """Rebuild deferred live summaries whose throttle interval elapsed.
+
+        Each rebuild is its own short transaction without the partition lock.
+        A failed rebuild stays pending and is retried after the interval. A
+        bucket or summary row held by another transaction (an API write, a
+        second loop process) is not waited for: the rebuild is skipped for
+        this tick and counted in ``live_refresh_busy``, so one busy row never
+        stalls the loop for ``lock_timeout``.
+        """
+        now = time.monotonic()
+        due = [
+            run_id
+            for run_id, (last, pending) in self._live_refresh.items()
+            if pending and (force or now - last >= self.live_refresh_interval)
+        ]
+        for run_id in due:
+            if self._stop.is_set() and not force:
+                break
+            entry = self._live_refresh.get(run_id)
+            if entry is None:
+                continue
+            entry[0] = time.monotonic()
+            try:
+                with self.session_factory() as db:
+                    db.info["dashboard_projection_worker"] = True
+                    rebuilt = refresh_live_summary(db, run_id, nowait=True)
+                    db.commit()
+                if rebuilt:
+                    self._store_step_latency(run_id)
+                entry[1] = False
+                self._live_refresh.move_to_end(run_id)
+            except Exception as exc:
+                if is_lock_busy(exc):
+                    self.live_refresh_busy += 1
+                    self._logger.debug(
+                        "Dashboard live summary refresh for partition %s skipped: "
+                        "a row is held by another transaction; retried in %.1fs",
+                        run_id,
+                        self.live_refresh_interval,
+                    )
+                    continue
+                self._logger.exception(
+                    "Dashboard live summary refresh failed for partition %s", run_id
+                )
 
     def _run(self):
         while not self._stop.is_set():

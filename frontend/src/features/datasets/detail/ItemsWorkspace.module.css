@@ -1,0 +1,22 @@
+/* Items workspace: table + docked pane. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.layout[data-has-pane] {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+}
+
+@media (max-width: 1000px) {
+  .layout[data-has-pane] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.table {
+  position: relative;
+  min-width: 0;
+}

@@ -1,0 +1,150 @@
+import { EmptyState, Skeleton, Tag, Text, Flag } from '@/ui';
+import type { AnalysisResultPayload } from '@/api/analysis';
+import { rootCauseIssues } from '../model/rootCause';
+import type { RunWorkspace } from '../workspace/useRunWorkspace';
+import s from './blocks.module.css';
+
+function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: string[]; ws: RunWorkspace }) {
+  const issues = r.error ? [] : rootCauseIssues(r);
+  const row = ws.rowById.get(r.item_id);
+  const context = row
+    ? JSON.stringify(
+        {
+          input: row.input_full ?? row.input,
+          expected: row.expected_full ?? row.expected,
+          output: row.output_full ?? row.output,
+        },
+        null,
+        2,
+      )
+    : '';
+  const confidence = issues[0]?.confidence ?? r.confidence ?? null;
+  return (
+    <article className={s.result} aria-label={`Test result for item ${r.item_id}`}>
+      <header className={s.resultHead}>
+        <Text variant="md" weight={600} as="span">
+          {r.item_id} · <span className={s.mono}>{r.metric_name}</span>
+        </Text>
+        {r.error ? (
+          <Flag tone="danger" icon="warning">
+            {r.error_code || 'Error'}
+          </Flag>
+        ) : (
+          <Flag tone={issues.length ? 'info' : 'warning'}>
+            {issues.length && confidence != null
+              ? `${Math.round(confidence * 100)}% confidence`
+              : issues.length
+                ? 'Diagnosed'
+                : 'No diagnosis'}
+          </Flag>
+        )}
+        {r.retry_count ? (
+          <Text variant="sm" tone="muted" as="span">
+            {`${r.retry_count} ${r.retry_count === 1 ? 'retry' : 'retries'}${r.retry_reason ? `: ${r.retry_reason}` : ''}`}
+          </Text>
+        ) : null}
+      </header>
+      {r.error ? (
+        <Text variant="base" tone="danger" as="p" role="alert">
+          {r.error}
+        </Text>
+      ) : null}
+      {r.warning ? (
+        <Text variant="base" tone="warning" as="p">
+          {r.warning}
+        </Text>
+      ) : null}
+      <ol className={s.issues}>
+        {issues.map((i, idx) => (
+          <li key={idx} className={s.issue}>
+            <div className={s.issueTags}>
+              <Tag kind="role">{i.category || 'Uncategorized'}</Tag>
+              {i.subcategory ? <Tag kind="data">{i.subcategory}</Tag> : null}
+              {i.confidence != null ? (
+                <Text
+                  variant="sm"
+                  mono
+                  tone="muted"
+                  as="span"
+                  aria-label={`confidence ${Math.round(i.confidence * 100)} percent`}
+                >
+                  {`${Math.round(i.confidence * 100)}%`}
+                </Text>
+              ) : null}
+            </div>
+            <Text variant="base" tone="secondary" as="p" dir="auto">
+              {i.finding}
+            </Text>
+            {i.category_reason ? (
+              <details className={s.details}>
+                <summary>Why this category</summary>
+                <Text variant="base" tone="secondary" as="p" dir="auto">
+                  {i.category_reason}
+                </Text>
+              </details>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+      <div className={s.previewFoot}>
+        <Text variant="sm" tone="muted" as="span">
+          Fields sent:
+        </Text>
+        {fields.map((f) => (
+          <Tag key={f} kind="data">
+            {f}
+          </Tag>
+        ))}
+      </div>
+      {context ? (
+        <details className={s.details}>
+          <summary>Item context</summary>
+          <pre className={s.messageBody} dir="auto">
+            {context}
+          </pre>
+        </details>
+      ) : null}
+    </article>
+  );
+}
+
+/** Test result cards: issues with category / subcategory / finding / confidence, fields sent. */
+export function TestResults({ ws, quiet }: { ws: RunWorkspace; quiet?: boolean }) {
+  const { test } = ws;
+  if (test.testing) {
+    const rows = Math.min(3, Math.max(1, ws.testKeys.length));
+    return (
+      <div className={s.stack}>
+        <Text variant="base" tone="muted" as="p" role="status">
+          Testing against the connection… Nothing is saved and no job is created.
+        </Text>
+        <Skeleton kind="rows" rows={rows} rowHeight={96} label="Testing targets" />
+      </div>
+    );
+  }
+  if (test.error) {
+    return (
+      <Text variant="base" tone="danger" as="p" role="alert">
+        {test.error}
+      </Text>
+    );
+  }
+  if (!test.outcome) {
+    if (quiet) return null;
+    return (
+      <EmptyState
+        compact
+        title="Test or analyze to see results here"
+        body="Test up to 3 targets to see the diagnosis first; a test saves nothing."
+      />
+    );
+  }
+  const { results, fields } = test.outcome;
+  return (
+    <div className={s.stack}>
+      {results.map((r) => (
+        <ResultCard key={`${r.item_id}-${r.metric_name}`} r={r} fields={fields} ws={ws} />
+      ))}
+    </div>
+  );
+}

@@ -1,0 +1,625 @@
+{
+  "widths": [
+    1440,
+    1024
+  ],
+  "cases": [
+    {
+      "width": 1440,
+      "case": "runs-current",
+      "scrollLeft": 560,
+      "pins": [
+        400.015625,
+        96
+      ],
+      "cueElementsLive": 4,
+      "lines": {
+        "start": {
+          "cells": 7,
+          "top": 26639,
+          "bottom": 26910,
+          "gaps": [
+            45
+          ],
+          "x": 540,
+          "shadow": "rgb(43, 43, 64) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 7,
+          "top": 26639,
+          "bottom": 26910,
+          "gaps": [
+            45
+          ],
+          "x": 1205,
+          "shadow": "rgb(43, 43, 64) 1px 0px 0px 0px inset"
+        }
+      },
+      "overlapSummary": {
+        "textNodesOverCue": 7,
+        "totalPx": 172,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "detail": 1,
+          "row": 6
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Reliability",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 6.9,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Oct 1 · 15:00",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Oct 1 · 15:00",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Oct 1 · 14:59",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Oct 1 · 14:60",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ],
+      "details": [
+        {
+          "h": 45,
+          "strip": false
+        }
+      ],
+      "rowsBox": {
+        "top": 26615,
+        "bottom": 26910
+      }
+    },
+    {
+      "width": 1440,
+      "case": "runs-specified",
+      "scrollLeft": 560,
+      "pins": [
+        400.015625,
+        96
+      ],
+      "cueElementsLive": 0,
+      "lines": {
+        "start": {
+          "cells": 7,
+          "top": 26982,
+          "bottom": 27253,
+          "gaps": [
+            45
+          ],
+          "x": 540,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 7,
+          "top": 26982,
+          "bottom": 27253,
+          "gaps": [
+            45
+          ],
+          "x": 1205,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": [],
+      "details": [
+        {
+          "h": 45,
+          "strip": false
+        }
+      ],
+      "rowsBox": {
+        "top": 26958,
+        "bottom": 27253
+      }
+    },
+    {
+      "width": 1440,
+      "case": "items-current",
+      "scrollLeft": 173,
+      "pins": [
+        96,
+        48
+      ],
+      "cueElementsLive": 4,
+      "lines": {
+        "start": {
+          "cells": 7,
+          "top": 27392,
+          "bottom": 27961,
+          "gaps": [
+            224
+          ],
+          "x": 236,
+          "shadow": "rgb(43, 43, 64) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 7,
+          "top": 27392,
+          "bottom": 27961,
+          "gaps": [
+            224
+          ],
+          "x": 1253,
+          "shadow": "rgb(43, 43, 64) 1px 0px 0px 0px inset"
+        }
+      },
+      "overlapSummary": {
+        "textNodesOverCue": 19,
+        "totalPx": 409,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "row": 12,
+          "detail": 7
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 0: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 0: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 1: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 1: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 1: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        }
+      ],
+      "details": [
+        {
+          "h": 224,
+          "strip": false
+        }
+      ],
+      "rowsBox": {
+        "top": 27368,
+        "bottom": 27961
+      }
+    },
+    {
+      "width": 1440,
+      "case": "items-specified",
+      "scrollLeft": 173,
+      "pins": [
+        96,
+        48
+      ],
+      "cueElementsLive": 0,
+      "lines": {
+        "start": {
+          "cells": 7,
+          "top": 28033,
+          "bottom": 28603,
+          "gaps": [
+            224
+          ],
+          "x": 236,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 7,
+          "top": 28033,
+          "bottom": 28603,
+          "gaps": [
+            224
+          ],
+          "x": 1253,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": [],
+      "details": [
+        {
+          "h": 224,
+          "strip": false
+        }
+      ],
+      "rowsBox": {
+        "top": 28009,
+        "bottom": 28603
+      }
+    },
+    {
+      "width": 1024,
+      "case": "runs-current",
+      "scrollLeft": 560,
+      "pins": [
+        400.015625,
+        96
+      ],
+      "cueElementsLive": 4,
+      "lines": {
+        "start": {
+          "cells": 7,
+          "top": 29046,
+          "bottom": 29328,
+          "gaps": [
+            56
+          ],
+          "x": 436,
+          "shadow": "rgb(43, 43, 64) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 7,
+          "top": 29046,
+          "bottom": 29328,
+          "gaps": [
+            56
+          ],
+          "x": 715,
+          "shadow": "rgb(43, 43, 64) 1px 0px 0px 0px inset"
+        }
+      },
+      "overlapSummary": {
+        "textNodesOverCue": 10,
+        "totalPx": 189.5,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "detail": 3,
+          "row": 6,
+          "header": 1
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Reliability",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 6.9,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Oct 1 · 15:00",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Oct 1 · 15:00",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Oct 1 · 14:59",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Oct 1 · 14:60",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ],
+      "details": [
+        {
+          "h": 56,
+          "strip": false
+        }
+      ],
+      "rowsBox": {
+        "top": 29022,
+        "bottom": 29328
+      }
+    },
+    {
+      "width": 1024,
+      "case": "runs-specified",
+      "scrollLeft": 560,
+      "pins": [
+        400.015625,
+        96
+      ],
+      "cueElementsLive": 0,
+      "lines": {
+        "start": {
+          "cells": 7,
+          "top": 29400,
+          "bottom": 29682,
+          "gaps": [
+            56
+          ],
+          "x": 436,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 7,
+          "top": 29400,
+          "bottom": 29682,
+          "gaps": [
+            56
+          ],
+          "x": 715,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": [],
+      "details": [
+        {
+          "h": 56,
+          "strip": false
+        }
+      ],
+      "rowsBox": {
+        "top": 29376,
+        "bottom": 29682
+      }
+    },
+    {
+      "width": 1024,
+      "case": "items-current",
+      "scrollLeft": 260,
+      "pins": [
+        96,
+        48
+      ],
+      "cueElementsLive": 4,
+      "lines": {
+        "start": {
+          "cells": 7,
+          "top": 29821,
+          "bottom": 30391,
+          "gaps": [
+            224
+          ],
+          "x": 132,
+          "shadow": "rgb(43, 43, 64) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 7,
+          "top": 29821,
+          "bottom": 30391,
+          "gaps": [
+            224
+          ],
+          "x": 763,
+          "shadow": "rgb(43, 43, 64) 1px 0px 0px 0px inset"
+        }
+      },
+      "overlapSummary": {
+        "textNodesOverCue": 21,
+        "totalPx": 453.5,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "row": 12,
+          "detail": 9
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 0: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 0: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 1: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 1: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 1: is the customer ",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        }
+      ],
+      "details": [
+        {
+          "h": 224,
+          "strip": false
+        }
+      ],
+      "rowsBox": {
+        "top": 29797,
+        "bottom": 30391
+      }
+    },
+    {
+      "width": 1024,
+      "case": "items-specified",
+      "scrollLeft": 260,
+      "pins": [
+        96,
+        48
+      ],
+      "cueElementsLive": 0,
+      "lines": {
+        "start": {
+          "cells": 7,
+          "top": 30462,
+          "bottom": 31032,
+          "gaps": [
+            224
+          ],
+          "x": 132,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 7,
+          "top": 30462,
+          "bottom": 31032,
+          "gaps": [
+            224
+          ],
+          "x": 763,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": [],
+      "details": [
+        {
+          "h": 224,
+          "strip": false
+        }
+      ],
+      "rowsBox": {
+        "top": 30438,
+        "bottom": 31032
+      }
+    }
+  ]
+}

@@ -34,8 +34,13 @@ cannot identify a published snapshot because transactions can commit out of
 sequence. Run publication counters therefore advance separately, and filtered
 view revisions derive from the relevant run counters. A terminal run's previous
 published descriptor and numerical values remain visible until its pending
-outbox and all backfill source kinds have completed. New terminal historical
-runs are published only when their complete numerical snapshot is ready.
+outbox and all backfill source kinds have completed, except the workflow
+status: a change of `Run.status` (final event, lease timeout, force stop,
+cancelled job) is mirrored into the run's dimension row by the source
+transaction itself (`dashboard_outbox.publish_run_status`), so the runs list,
+overview and run page never disagree on it while the worker catches up. New
+terminal historical runs are published only when their complete numerical
+snapshot is ready.
 
 The catalog revision hashes every run's publication counter, presence, list
 status and hidden flag; on PostgreSQL the hash is computed in the database, and a request reads it once for its page,

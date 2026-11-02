@@ -1,0 +1,155 @@
+{
+  "run": "wide",
+  "kind": "nav",
+  "net": "none",
+  "median": {
+    "heroMs": 288,
+    "overviewMs": 288,
+    "rowsMs": 288,
+    "ttiMs": 288,
+    "tbtMs": 131,
+    "cls": 0.0057,
+    "requests": 16,
+    "jsChunks": 6,
+    "jsKB": 103.3,
+    "apiRequests": 4,
+    "apiKB": 38.2,
+    "compactKB": 34.8,
+    "compactTtfbMs": 56,
+    "compactDoneMs": 99
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 362,
+      "skeletonMs": 37,
+      "overviewMs": 362,
+      "rowsMs": 362,
+      "ttiMs": 362,
+      "tbtMs": 131,
+      "cls": 0.0057,
+      "reactCommits": 91,
+      "requests": 16,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 129,
+      "compactDoneMs": 174,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @9-38ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @10-37ms",
+        "TextBlock-DBLChdZy.js 0.9kB @10-38ms",
+        "Collapse-POnQeTmm.js 1.0kB @10-38ms",
+        "structured-Bv4atLAx.js 1.4kB @11-38ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @11-38ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @42-174ms",
+        "/api/dashboard/neighbors 0.7kB @266-404ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @266-404ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @330-404ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 277,
+      "skeletonMs": 36,
+      "overviewMs": 277,
+      "rowsMs": 277,
+      "ttiMs": 277,
+      "tbtMs": 125,
+      "cls": 0.0057,
+      "reactCommits": 341,
+      "requests": 16,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 51,
+      "compactDoneMs": 96,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @13-39ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @13-39ms",
+        "TextBlock-DBLChdZy.js 0.9kB @13-39ms",
+        "Collapse-POnQeTmm.js 1.0kB @14-39ms",
+        "structured-Bv4atLAx.js 1.4kB @14-39ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @14-40ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @42-96ms",
+        "/api/dashboard/neighbors 0.7kB @183-318ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @184-318ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @247-318ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 288,
+      "skeletonMs": 35,
+      "overviewMs": 288,
+      "rowsMs": 288,
+      "ttiMs": 288,
+      "tbtMs": 133,
+      "cls": 0.0057,
+      "reactCommits": 339,
+      "requests": 16,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 56,
+      "compactDoneMs": 99,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @10-37ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @11-36ms",
+        "TextBlock-DBLChdZy.js 0.9kB @11-36ms",
+        "Collapse-POnQeTmm.js 1.0kB @12-36ms",
+        "structured-Bv4atLAx.js 1.4kB @12-37ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @12-37ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @40-99ms",
+        "/api/dashboard/neighbors 0.7kB @187-328ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @187-328ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @259-328ms"
+      ]
+    }
+  ]
+}

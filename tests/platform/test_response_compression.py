@@ -20,7 +20,8 @@ STATIC = (
     / "platform"
     / "qym_platform"
     / "_static"
-    / "dashboard"
+    / "app"
+    / "assets"
 )
 
 
@@ -35,7 +36,7 @@ def test_dynamic_responses_use_a_balanced_gzip_level() -> None:
 
 def test_static_mounts_serve_precompressed_assets() -> None:
     app = create_app()
-    mounts = {route.path: route.app for route in app.routes if getattr(route, "path", None) in {"/static", "/ui"}}
+    mounts = {route.path: route.app for route in app.routes if getattr(route, "path", None) in {"/assets"}}
     assert mounts and all(isinstance(m, PrecompressedStaticFiles) for m in mounts.values())
 
 
@@ -129,12 +130,13 @@ def test_small_and_binary_assets_are_left_alone(asset_dir: Path) -> None:
     assert mount._gz_cache == {}
 
 
-def test_real_dashboard_bundle_round_trips() -> None:
+def test_real_app_bundle_round_trips() -> None:
     client = _client(STATIC)
-    response = client.get("/static/dashboard.js", headers={"Accept-Encoding": "gzip"})
+    bundle = max(STATIC.glob("*.js"), key=lambda path: path.stat().st_size)
+    response = client.get(f"/static/{bundle.name}", headers={"Accept-Encoding": "gzip"})
     assert response.status_code == 200
     assert response.headers["content-encoding"] == "gzip"
-    assert response.content == (STATIC / "dashboard.js").read_bytes()
+    assert response.content == bundle.read_bytes()
 
 
 def test_dynamic_responses_are_gzipped_and_static_ones_once(asset_dir: Path) -> None:

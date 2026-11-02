@@ -1,0 +1,82 @@
+/* Reviews page: toolbar, reserved bulk bar, rows + sticky detail pane. */
+.progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.bar {
+  display: inline-block;
+  width: 120px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--accent-primary);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+}
+
+.grow {
+  flex: 1;
+}
+
+.bulk {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 40px;
+  margin-bottom: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.bulk[data-active] {
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.layout[data-has-pane] {
+  grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr);
+}
+
+@media (max-width: 1000px) {
+  .layout[data-has-pane] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  min-width: 0;
+}
+
+.more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-sm);
+}

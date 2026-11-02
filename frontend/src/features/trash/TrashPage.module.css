@@ -1,0 +1,58 @@
+/* Trash page: toolbar + DataTable cells; composes SearchField/Select/Button/Badge/Tag. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-bottom: var(--space-sm);
+}
+
+.grow {
+  flex: 1;
+}
+
+.runCell,
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.runId,
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.mono {
+  color: var(--text-secondary);
+}
+
+.sub {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.stack[data-soon] {
+  border-inline-start: 2px solid var(--warning);
+  padding-inline-start: var(--space-xs);
+}
+
+/* The Restore column is pinned to the table's end so it stays in view when the table scrolls sideways. */
+.table th:last-child,
+.table td:last-child {
+  position: sticky;
+  inset-inline-end: 0;
+  z-index: 1;
+  background: var(--bg-base);
+}
+.table th:last-child {
+  background: var(--bg-elevated);
+  z-index: 2;
+}

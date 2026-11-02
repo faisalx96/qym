@@ -1,0 +1,49 @@
+/* Quick-filter group: muted label over a wrapping row of filter chips (Chip recipe). */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+}
+
+.option[data-tone='danger'] {
+  border-inline-start: 2px solid var(--error);
+  padding-inline-start: var(--space-xs);
+}
+
+.option[data-tone='warning'] {
+  border-inline-start: 2px solid var(--warning);
+  padding-inline-start: var(--space-xs);
+}
+
+.option[data-tone='success'] {
+  border-inline-start: 2px solid var(--success);
+  padding-inline-start: var(--space-xs);
+}
+
+/* "Only" appears with hover or keyboard focus so a chip row stays quiet. */
+.only {
+  opacity: 0;
+}
+
+.option:hover .only,
+.option:focus-within .only {
+  opacity: 1;
+}

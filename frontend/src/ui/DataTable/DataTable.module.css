@@ -1,0 +1,1602 @@
+/* .qdt-table reference table recipe, v2 (DESIGN_LANGUAGE §3 "Data table"): density rows, zebra, bands, pins, cues. */
+.card {
+  --row-h: var(--row-regular);
+  /* Row separators are a faint hairline, and none where zebra stripes already separate the rows: a full-strength line
+     on every row read as a grid of boxes (round 10). */
+  --row-line: color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+}
+
+.card[data-density='compact'] {
+  --row-h: var(--row-compact);
+}
+.card[data-density='comfortable'] {
+  --row-h: var(--row-comfortable);
+}
+
+.card[data-zebra] {
+  --row-line: transparent;
+}
+
+.card[data-variant='embedded'] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.bodyHost {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.scroller {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  flex: 1 1 auto;
+  outline: none;
+}
+
+.scroller:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+/* The mirrored rail replaces the native horizontal scrollbar. */
+.scroller[data-rail] {
+  scrollbar-width: none;
+}
+.scroller[data-rail]::-webkit-scrollbar {
+  display: none;
+}
+
+/* `flex: none`: the card is a height-capped flex column, and a shrinkable rail was squeezed to 5.3 to 5.6 px whenever the
+   rows overflowed (50 rows), so the only overflow cue was half the 12px the design language gives it (round 7, Q1-8). */
+.rail {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  flex: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--card-bg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-dim) var(--card-bg); /* decorative scroll thumb */
+}
+
+.rail::-webkit-scrollbar {
+  height: 8px;
+}
+
+.rail::-webkit-scrollbar-thumb {
+  background: var(--text-dim); /* decorative scroll thumb */
+  border-radius: var(--radius-pill);
+}
+
+.railInner {
+  height: 1px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  outline: none;
+}
+
+.thead th {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 650;
+  text-align: start;
+  padding: 0 var(--space-sm);
+  height: var(--table-header-height);
+  border-bottom: 1px solid var(--border-subtle);
+  position: relative;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.table[data-sticky] .thead {
+  /* one sticky element for the whole header (it held a sticky layer per cell: 60+ on a wide table);
+     only the frozen cells stay sticky, and only horizontally */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.table[data-sticky] .thead th {
+  z-index: 3;
+}
+.table[data-sticky] .thead th[data-pin] {
+  z-index: 4;
+}
+
+/* Page-scroller sticky header: cells are translated by --head-shift (set from the scroll handler). */
+.card .card .table .tbody > tr > td {
+  /* a table inside an expanded detail keeps its own density: the outer table's tall rule must not widen its rows */
+  height: var(--row-h);
+}
+
+.card .card .table[data-tall] .tbody > tr > td {
+  height: max(var(--row-h), var(--row-comfortable));
+}
+
+.table:not([data-shift]) {
+  /* a table nested in an expanded detail must not inherit the outer header's sticky shift */
+  --head-shift: 0px;
+}
+
+.table[data-shift] .thead {
+  /* one moving element instead of every header cell, and --head-shift is written on it, so a scroll event
+     re-styles the header cells only, not the table body */
+  position: relative;
+  z-index: 4;
+  transform: translateY(var(--head-shift, 0px));
+}
+.table[data-shift][data-stuck] .thead {
+  will-change: transform;
+}
+.table[data-shift] .thead th {
+  z-index: 3;
+}
+.table[data-shift] .thead th[data-pin] {
+  z-index: 4;
+}
+/* The line left an expanded detail: the header is back at once; the opacity fade is the only motion (none under reduced motion). */
+.table[data-resumed] .thead th {
+  animation: head-resume 150ms var(--ease-out);
+}
+
+@keyframes head-resume {
+  from {
+    opacity: 0;
+  }
+}
+
+.table[data-stuck] .thead th {
+  border-bottom-color: var(--border-default);
+}
+
+.th[data-align='end'] {
+  text-align: end;
+}
+
+.th[data-align='center'] {
+  text-align: center;
+}
+
+.th[data-sorted] {
+  color: var(--accent-primary);
+}
+
+.th[data-pseudo] {
+  padding-inline: var(--space-xs);
+  text-align: center;
+}
+
+.th[data-pin] {
+  position: sticky;
+  z-index: 4;
+}
+
+.th:hover,
+.th:focus-within {
+  color: var(--text-primary);
+}
+.th[data-sorted]:hover {
+  color: var(--accent-primary);
+}
+
+.bandRow th,
+.thead th.bandCell {
+  height: var(--table-group-height);
+  padding: 0 var(--space-sm);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  text-align: start;
+  border-bottom: 0;
+}
+
+.thead th.bandCell[data-pin] {
+  position: sticky;
+  z-index: 4;
+}
+
+.bandCell[data-labelled] {
+  box-shadow: inset 0 -1px 0 var(--border-default);
+}
+
+.thInner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  height: 100%;
+}
+
+.th[data-align='end'] .thInner {
+  justify-content: flex-end;
+}
+
+.th[data-align='center'] .thInner {
+  justify-content: center;
+}
+
+.th[data-align='end'] .sortButton {
+  flex-direction: row-reverse;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.sortButton::after {
+  content: '';
+  position: absolute;
+  inset: 0; /* the whole header cell sorts, not only the label */
+}
+
+.sortButton[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.thLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thLabel[data-hidden] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* Sort glyph: hidden at rest, faint on header hover/focus, accent when active. */
+.sortGlyph {
+  color: var(--text-dim); /* decorative sort hint */
+  font-size: var(--font-sm);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.th:hover .sortGlyph,
+.th:focus-within .sortGlyph {
+  opacity: 1;
+}
+.sortGlyph[data-active] {
+  color: var(--accent-primary);
+  opacity: 1;
+}
+
+.filterDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-primary);
+}
+
+.kebab {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  inset-inline-end: 2px;
+  display: flex;
+  align-items: center;
+  background: var(--bg-elevated);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.th:hover .kebab,
+.th:focus-within .kebab {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .kebab {
+    opacity: 1;
+  }
+}
+
+/* Resize handle: divider only on hover/focus/drag. */
+.resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: -6px;
+  width: 13px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+  outline: none;
+}
+
+/* The last header cell has no neighbour to straddle: keep its handle inside the table so it never adds scroll width. */
+.th:last-child .resizer {
+  inset-inline-end: 0;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: 1px;
+  background: var(--border-default);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.th:hover .resizer::after,
+.resizer:hover::after,
+.resizer:focus-visible::after {
+  opacity: 1;
+}
+.resizer:hover::after,
+.resizer:focus-visible::after {
+  background: var(--accent-primary);
+  width: 2px;
+}
+
+.tbody td {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  padding: 0 var(--space-sm);
+  height: var(--row-h);
+  border-bottom: 1px solid var(--row-line);
+  background:
+    linear-gradient(var(--row-tint, transparent), var(--row-tint, transparent)),
+    var(--row-base, var(--bg-base));
+  overflow: hidden;
+  white-space: nowrap;
+  outline: none;
+  text-align: start;
+  vertical-align: middle;
+}
+
+/* The frame closes the last row: its own line would double the frame's bottom edge at the rounded corners. */
+.tbody > tr:last-child > td {
+  border-bottom-color: transparent;
+}
+
+.table[data-tall] .tbody td {
+  height: max(var(--row-h), var(--row-comfortable));
+}
+
+.cell {
+  line-height: 1.35; /* one line box for sans and mono cells so values share a baseline */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* C090: room for a control's full 2px focus ring (offset up to 2px) inside the clip, with no change to the row */
+  padding-block: var(--space-xs);
+  margin-block: calc(-1 * var(--space-xs));
+}
+
+/* Content fit: for one measuring pass every cell and header label takes its max-content width (DataTable.tsx). */
+.table[data-measure] .cell,
+.table[data-measure] [data-th-label]:not([data-hidden]) {
+  width: max-content;
+  max-width: none;
+}
+
+.cell[data-wrap] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--lines, 2);
+  line-clamp: var(--lines, 2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.twoLine {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.primaryLine,
+.secondaryLine {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primaryLine {
+  color: var(--text-primary);
+}
+
+.secondaryLine {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.td[data-align='end'] {
+  text-align: end;
+}
+
+.td[data-align='center'] {
+  text-align: center;
+}
+
+.td[data-mono] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.td[data-pseudo] {
+  padding-inline: var(--space-xs);
+  text-align: center;
+}
+
+/* The reserved select column while select mode is off (C020): in the table, 0px wide, empty. */
+.th[data-collapsed],
+.td[data-collapsed] {
+  padding: 0;
+  border-inline-width: 0;
+  overflow: hidden;
+}
+
+.td[data-pin] {
+  position: sticky;
+  z-index: 2;
+}
+
+/* The boundary of the frozen columns (round 9): no line. While content is scrolled under a frozen edge, the frozen
+   cells darken softly toward that edge: an 8px (`--space-sm`, inside the cell padding) `--pin-shade` gradient on the
+   cell's own ::after. It stays inside the frozen cell, so nothing is painted over the scrolling content and no glyph
+   is under it (owner rule, round 7). The start edge shades when the scroller has left its start (`data-scrolled-x`),
+   the end edge while columns remain past the end (`data-scrolled-end`). Both flags are written only when they change,
+   never per scroll event, and the shade has no transition (perf round 6, A12). A table that does not scroll
+   sideways, or is scrolled fully to that side, shows nothing. A fold column (the runs Actions column) never shades.
+   `--pin-line` stays as an empty shadow so a row rail (state, selection, open group, focus ring) can keep adding it. */
+:is(.th, .td, .bandCell)[data-pin-edge] {
+  --pin-line: 0 0 0 transparent;
+}
+.th[data-pin-edge]::after,
+.td[data-pin-edge]::after,
+.bandCell[data-pin-edge]::after {
+  content: '';
+  position: absolute;
+  inset-block: 0 -1px;
+  inline-size: var(--space-sm);
+  pointer-events: none;
+  opacity: 0;
+}
+.th[data-pin-edge='start']::after,
+.td[data-pin-edge='start']::after,
+.bandCell[data-pin-edge='start']::after {
+  inset-inline-end: 0;
+  background: linear-gradient(to right, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='end']::after,
+.td[data-pin-edge='end']::after,
+.bandCell[data-pin-edge='end']::after {
+  inset-inline-start: 0;
+  background: linear-gradient(to left, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='start']:dir(rtl)::after,
+.td[data-pin-edge='start']:dir(rtl)::after,
+.bandCell[data-pin-edge='start']:dir(rtl)::after {
+  background: linear-gradient(to left, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='end']:dir(rtl)::after,
+.td[data-pin-edge='end']:dir(rtl)::after,
+.bandCell[data-pin-edge='end']:dir(rtl)::after {
+  background: linear-gradient(to right, transparent, var(--pin-shade));
+}
+.scroller[data-scrolled-x] [data-pin-edge='start']::after,
+.scroller[data-scrolled-end] [data-pin-edge='end']:not([data-fold])::after {
+  opacity: 1;
+}
+.th[data-pin-edge],
+.td[data-pin-edge],
+.bandCell[data-pin-edge] {
+  box-shadow: var(--pin-line);
+}
+/* the group band keeps its underline when it is also the cell next to the freeze line */
+.bandCell[data-labelled][data-pin-edge] {
+  box-shadow:
+    var(--pin-line),
+    inset 0 -1px 0 var(--border-default);
+}
+
+/* Fold column (`Column.foldLabel`, the runs Actions column). While the scroller has columns past its end edge
+   (`data-scroll-end` on the body host) the pinned end cell is one small handle: the rest of the cell is see-through,
+   draws no freeze line and lets clicks pass, so it covers nothing but the handle. The handle opens the cell for its
+   row (the usual opaque cell). Scrolled to the end, or with no overflow, the column renders as usual. */
+.fold {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.foldBody {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.foldHandle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.foldHandle:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.foldHandle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+/* Round 10: the handle shows on the row under the pointer, the focused row and an open cell only, so at rest no handle
+   covers the scores scrolling under the column (a touch screen, with no hover, keeps every handle). */
+.bodyHost[data-scroll-end] .foldHandle {
+  display: inline-flex;
+  pointer-events: auto;
+  opacity: 0;
+}
+.bodyHost[data-scroll-end] .tr:hover .foldHandle,
+.bodyHost[data-scroll-end] .tr[data-focused] .foldHandle,
+.bodyHost[data-scroll-end] .fold[data-open] .foldHandle,
+.bodyHost[data-scroll-end] .foldHandle:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .bodyHost[data-scroll-end] .foldHandle {
+    opacity: 1;
+  }
+}
+
+.bodyHost[data-scroll-end] .fold:not([data-open]) .foldBody {
+  display: none;
+}
+
+/* Row menu (`RowMenu` in a `Column.menuColumn` cell, the runs Actions column, owner decision Nov 1): the cell is a
+   fold column with no body (see-through while columns remain past the end, through `data-fold`), and its one handle
+   shows on the hovered or focused row and while its menu is open (every row on a touch screen), so at rest no handle
+   covers the scores under the column. */
+.rowMenu {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rowMenuHandle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--badge-height);
+  height: var(--badge-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: auto;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.rowMenuHandle[data-hovered],
+.rowMenuHandle[data-pressed],
+.rowMenuHandle[aria-expanded='true'] {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.rowMenuHandle[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.tr:hover .rowMenuHandle,
+.tr[data-focused] .rowMenuHandle,
+.card2:hover .rowMenuHandle,
+.card2:focus-within .rowMenuHandle,
+.rowMenuHandle[aria-expanded='true'],
+.rowMenuHandle[data-focus-visible] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .rowMenuHandle {
+    opacity: 1;
+  }
+}
+
+/* folded: the title is clipped out of sight but keeps the column's accessible name; the header menu is hidden */
+.bodyHost[data-scroll-end] .th[data-fold] .thInner > * {
+  visibility: hidden;
+}
+.bodyHost[data-scroll-end] .th[data-fold] .thLabel {
+  visibility: visible;
+  clip-path: inset(50%);
+}
+
+.bodyHost[data-scroll-end] .th[data-fold],
+.bodyHost[data-scroll-end] .td[data-fold]:not(:has(.fold[data-open])) {
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.tr {
+  scroll-margin-top: var(--table-header-height);
+  --row-base: var(--bg-base);
+  outline: none;
+}
+
+.tr[data-zebra] {
+  --row-base: var(--card-bg);
+}
+
+.tr[data-clickable] {
+  cursor: pointer;
+}
+
+.tr:hover {
+  --row-base: var(--bg-hover);
+}
+
+/* hoverEdge: the row under the pointer draws an accent hairline above and below it and a 2px accent edge at its start */
+.card[data-hover-edge] .tr:hover > .td {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent);
+}
+
+.card[data-hover-edge] .tr:hover > .td:first-child {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent);
+}
+
+.tr[data-focused] {
+  --row-base: var(--bg-hover);
+}
+
+.tr[data-state='error'] {
+  --row-tint: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
+}
+
+.tr[data-state='live'] {
+  --row-tint: color-mix(in srgb, var(--accent-secondary) var(--tint-faint), transparent);
+}
+
+.tr[data-selected] {
+  --row-tint: var(--bg-selected);
+}
+
+.tr[data-selected] td:first-child,
+.tr[data-selected] td[data-pseudo='select'] {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+.tr[aria-expanded='true'] {
+  --row-base: var(--card-bg);
+}
+
+/* Row state rail on the first cell. */
+.tr[data-state='error'] td:first-child {
+  box-shadow:
+    inset 3px 0 0 var(--error),
+    var(--pin-line, 0 0 0 transparent);
+}
+.tr[data-state='warn'] td:first-child {
+  box-shadow:
+    inset 3px 0 0 var(--warning),
+    var(--pin-line, 0 0 0 transparent);
+}
+.tr[data-state='live'] td:first-child {
+  box-shadow:
+    inset 3px 0 0 var(--info),
+    var(--pin-line, 0 0 0 transparent);
+}
+.tr[data-state='new'] td:first-child {
+  box-shadow:
+    inset 3px 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+/* A focused row reads as one framed band (2px top and bottom on every cell, the ends closed), also over a state rail. */
+.tr:focus-visible td {
+  box-shadow:
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+.tr:focus-visible td:first-child {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+.tr:focus-visible td:last-child {
+  box-shadow:
+    inset -2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+.selectionCluster {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  padding-inline-end: var(--space-sm);
+  border-inline-end: 1px solid var(--border-default);
+}
+
+/* The selection line of a toolbar with facet rows: the full width, a hairline under it. */
+.selectionLine {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding-block-end: var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.selectionLine > .selectionCluster {
+  padding-inline-end: 0;
+  border-inline-end: 0;
+}
+
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  width: 100%;
+  opacity: 0.6; /* resting state: present, quiet; full strength on hover/focus/selection */
+  transition: opacity var(--transition-fast);
+}
+.tr[data-selected] .rowActions,
+.tr:hover .rowActions,
+.tr:focus-within .rowActions,
+.rowActions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .rowActions {
+    opacity: 1;
+  }
+}
+
+.detailRow > td {
+  padding: 0;
+  height: auto;
+  white-space: normal;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.detailCell {
+  position: relative;
+}
+/* `clip` (not `hidden`) so a sticky panel inside still sticks to the scroller. */
+.tbody td.detailCell {
+  overflow: clip;
+}
+
+/* detailFit="viewport": the expanded detail is as wide as the visible scroller and stays put while the columns scroll sideways */
+.detailHold {
+  position: sticky;
+  /* `contain: layout` makes this a stacking context: it must sit above the plain cells (1) as a whole */
+  z-index: 2;
+  inset-inline-start: 0;
+  inline-size: var(--scroller-w, 100%);
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  contain: layout;
+}
+
+/* One continuous rail above the nested cards (an inset shadow is painted under their backgrounds). */
+.detailCell::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 2px;
+  background: var(--accent-primary);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.groupRow td {
+  height: var(--table-group-height);
+  min-height: 32px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-weight: 650;
+  padding: 0 var(--space-sm);
+}
+.groupRow td[data-align='end'] {
+  text-align: end;
+}
+.groupRow td[data-align='center'] {
+  text-align: center;
+}
+.groupRow td[data-mono] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.groupInner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 32px;
+}
+.groupToggle {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--control-radius);
+}
+.groupToggle[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+}
+.groupCount {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-weight: 400;
+}
+
+.tfoot td {
+  background: var(--card-bg);
+  font-weight: 650;
+  height: var(--row-compact);
+  padding: 0 var(--space-sm);
+  border-top: 1px solid var(--border-default);
+}
+
+.bone {
+  display: inline-block;
+  height: 10px;
+  min-width: 24px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--bg-elevated) 0%, var(--bg-hover) 40%, var(--bg-elevated) 80%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.state {
+  position: sticky;
+  inset-inline-start: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: var(--space-lg);
+  color: var(--text-muted);
+}
+
+.progress {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  height: 2px;
+  z-index: 7;
+  overflow: hidden;
+  background: transparent;
+}
+.progress::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  width: 30%;
+  background: var(--accent-primary);
+  animation: slide 1.1s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    inset-inline-start: -30%;
+  }
+  to {
+    inset-inline-start: 100%;
+  }
+}
+
+/* singleTabStop (runs list C089): the first Tab into the table shows this at its top start; it moves focus to the pager. */
+.skipLink {
+  position: absolute;
+  z-index: 6;
+  inset-block-start: var(--space-xs);
+  inset-inline-start: var(--space-sm);
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.skipLink:focus-visible {
+  width: auto;
+  height: auto;
+  padding: var(--space-xs) var(--space-sm);
+  overflow: visible;
+  clip-path: none;
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* Toolbar and footer sit inside the card on --bg-surface with 1px separators. */
+.toolbar,
+.footer,
+.banner {
+  flex: none;
+}
+
+.toolbar,
+.footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--card-bg);
+}
+
+.toolbar {
+  min-height: var(--table-footer-height);
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+/* selectionReplaces (C228): the selection actions sit over the toolbar's own controls, which keep its height */
+.toolbar[data-selection-replaces] {
+  position: relative;
+  background: var(--bg-elevated);
+}
+
+.selectionOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: inherit;
+}
+
+.selectionOverlay > .selectionCluster {
+  border-inline-end: 0;
+}
+
+.toolbarHidden {
+  display: contents;
+  visibility: hidden;
+}
+
+.toolbar[data-selection-bar] {
+  background: var(--bg-elevated);
+}
+
+/* A toolbar with facet rows (the runs filter bar) is two control lines: 8px above and below them instead of 4, so the
+   filter row does not sit on the column headers (round 10). */
+.toolbar:has(> .toolbarStart) {
+  padding-block: var(--space-sm);
+}
+
+.footer {
+  min-height: var(--table-footer-height);
+  justify-content: space-between;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.toolbarMain,
+.toolbarEnd,
+.footerStart,
+.footerEnd {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.toolbarMain {
+  flex: 1 1 auto;
+}
+
+/* With facet rows: the main line and the rows stack on the start side, the end controls centre on the stack. */
+.toolbarStart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toolbarLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  min-width: 0;
+}
+
+.toolbarEnd {
+  margin-inline-start: auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.count,
+.selCount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.selCount {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  background: var(--bg-selected);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Columns menu */
+.colMenu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: var(--dropdown-width);
+  padding: var(--space-sm);
+}
+.colMenuBulk {
+  display: flex;
+  gap: var(--space-xs);
+}
+.colMenuList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: var(--dropdown-max-height);
+  overflow: auto;
+}
+.colMenuGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.colMenuLegend {
+  padding: 0;
+  margin-bottom: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+.colMenuEmpty {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+/* Card layout below 640px */
+.cardsHost {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+.cardSort {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cardSortLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+.cardSortSelect {
+  height: var(--control-height);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-base);
+}
+.cards {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.card2 {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+}
+.card2[data-selected] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+.card2[data-state='error'] {
+  box-shadow: inset 3px 0 0 var(--error);
+}
+.card2[data-clickable] {
+  cursor: pointer;
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.cardTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+.cardGrid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  font-size: var(--font-base);
+}
+.cardGrid dt {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.cardGrid dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+}
+.cardGroup {
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+.cardGroupHead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.cardGroupSums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  margin-top: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 400;
+}
+.cardGroupSumLabel {
+  color: var(--text-muted);
+}
+.cardDetail {
+  background: var(--card-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sortGlyph,
+  .kebab,
+  .rowActions,
+  .resizer::after {
+    transition: none;
+  }
+  .bone,
+  .progress::after {
+    animation: none;
+  }
+}
+
+.thead th:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+/* Virtualization spacer rows carry the height of the rows that are not mounted. */
+.tbody .spacer td {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* Columns menu v2 (reorderable): handle, visibility, freeze toggle, freeze line */
+.colMenu[data-columns-reorder] {
+  width: 340px;
+  max-width: calc(100vw - 2 * var(--space-lg));
+}
+.colFrozenHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.colFrozenHead:has(+ [role='list'] [data-frozen]) {
+  margin-bottom: calc(-1 * var(--space-xs));
+}
+.colMenuReset {
+  margin-inline-start: auto;
+}
+.colDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: var(--space-xs);
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+.colRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--control-height);
+  padding-inline: var(--space-xs);
+  border-radius: var(--radius);
+}
+.colRow:hover {
+  background: var(--bg-hover);
+}
+.colRow[data-lifted] {
+  background: var(--bg-selected);
+  outline: 1px solid var(--accent-primary);
+}
+.colCheck {
+  flex: 1;
+  min-width: 0;
+}
+.colGroup {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+.colHandle,
+.colPin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.colPin {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.colHandle:hover,
+.colPin:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.colHandle:active {
+  cursor: grabbing;
+}
+/* While a row is dragged: no text selection anywhere in the list and the grabbing cursor over every row. */
+.colMenuList[data-dragging] {
+  cursor: grabbing;
+  user-select: none;
+}
+.colHandle:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.colHandle:focus-visible,
+.colPin:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+.colPin[aria-pressed='true'] {
+  color: var(--accent-primary);
+}
+.colLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.colLineNote {
+  font-weight: 400;
+}
+.colLineRule {
+  margin-inline-start: auto;
+  font-weight: 400;
+}
+
+@media (width < 640px) {
+  .colHandle,
+  .colPin,
+  .colLine {
+    display: none;
+  }
+}
+
+.toolbarRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+.toolbarRows:empty {
+  display: none;
+}
+
+/* Child rows (round 4): rows of the same table under an open parent; one 3 px group rail, surface step, no wash. */
+.childRow {
+  --row-base: var(--bg-void);
+  animation: child-in 120ms var(--ease-out);
+  transition: opacity 120ms var(--ease-out);
+}
+
+.childRow:hover,
+.childRow[data-focused] {
+  --row-base: var(--bg-hover);
+}
+
+.childRow > td {
+  color: var(--text-secondary);
+}
+
+.tr[data-group-open]:not([data-state]) > td:first-child,
+.childRow > td:first-child {
+  box-shadow:
+    inset var(--rail-width) 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+.tr[data-group-open] > td,
+.tr[data-group-open] > td a {
+  font-weight: 600;
+}
+
+.childRow[data-selected] > td:first-child,
+.childRow[data-selected] > td[data-pseudo='select'] {
+  box-shadow:
+    inset var(--rail-width) 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+@keyframes child-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The full-width block after the children carries its own rail and surface. */
+.detailGroup td {
+  background: var(--bg-void);
+}
+
+.detailGroup .detailCell::before {
+  content: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .childRow {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Card mode: pass lines inside the run card */
+.card2[data-group-open] {
+  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+}
+
+.cardPasses {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.cardPass {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0 var(--space-sm);
+  min-block-size: var(--row-compact);
+  max-block-size: 56px;
+  box-sizing: border-box;
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+}
+
+.cardPass[data-selected] {
+  background: var(--bg-selected);
+}
+
+.cardPassHead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.cardPassActions {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cardScore {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
+  min-inline-size: 0;
+}
+
+.cardScoreLabel {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.cardStrip {
+  margin-inline: calc(-1 * var(--space-sm));
+  margin-block-end: calc(-1 * var(--space-sm));
+}
+
+.cardPassesGroup {
+  display: block;
+}
+
+/* C202: the row '>' handle has a 24x24 hit area (drawn 20px) and is 32px on a touch screen */
+.rowMenuHandle::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+
+@media (pointer: coarse) {
+  .rowMenuHandle {
+    width: 32px;
+    height: 32px;
+  }
+}

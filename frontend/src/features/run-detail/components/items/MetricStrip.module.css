@@ -1,0 +1,253 @@
+/* Metric chips of an item card (outlined, wrapping), full-width detail panels, inline score editor. */
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.strip {
+  padding-block-end: var(--space-xs);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  padding-inline: var(--space-sm);
+  min-height: var(--chip-height);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: transparent;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.chip:hover {
+  border-color: var(--border-default);
+}
+
+.chip[data-open] {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.chip[data-selected] {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.chipMain {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chipMain[data-static] {
+  cursor: default;
+}
+
+.chipMain:hover .name {
+  color: var(--accent-primary);
+}
+
+.chipMain[data-static]:hover .name {
+  color: var(--text-primary);
+}
+
+.chipMain:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.caret {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.name {
+  min-width: 0;
+  max-inline-size: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+}
+
+.panelTitle {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.metaBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+/* Label stacked above the text: no side by side columns, so a label can never overlap its text. The label wraps, it is never cut. */
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.eyebrow {
+  max-inline-size: 100%;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.eyebrowRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.muted {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.proseText {
+  inline-size: fit-content;
+  max-inline-size: min(100%, 76ch);
+  font-size: var(--font-md);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.proseText[data-primary] {
+  color: var(--text-primary);
+}
+
+.proseText .proseInner {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.proseText:has([lang='ar']) {
+  line-height: 1.7;
+}
+
+/* Facts: key | value rows. The key column is as wide as the longest key of the row up to 40% of it (at least
+   --field-label-width); a longer key wraps there, it is never cut (round 7, D2). */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  column-gap: var(--space-lg);
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: fit-content(40%) minmax(0, 1fr);
+  column-gap: var(--space-md);
+  align-items: baseline;
+  padding-block: var(--space-xs);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+/* a data key keeps its case; it wraps, and its `dir` sits on the inner span so the label stays left-anchored */
+.fact dt {
+  min-inline-size: var(--field-label-width);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+.fact dd {
+  justify-self: start;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  margin: 0;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.fact dd[data-mono] {
+  font-family: var(--font-mono);
+}
+
+@container (max-width: 420px) {
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+
+  .fact dt {
+    min-inline-size: 0;
+  }
+}
+
+.tableBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.moreRows {
+  align-self: flex-start;
+}
+
+.editor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.error {
+  flex-basis: 100%;
+  font-size: var(--font-sm);
+  color: var(--error);
+}
+
+.metaEmpty {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

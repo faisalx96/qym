@@ -1,0 +1,46 @@
+{
+  "page": {
+    "x": 56,
+    "y": 50,
+    "w": 319,
+    "h": 719.9,
+    "font": "12px/400",
+    "family": "Qym Sans",
+    "color": "rgb(237, 237, 240)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "gap": "normal",
+    "pad": "20px 20px 32px",
+    "scrollW": 319,
+    "clientW": 319
+  },
+  "tabs": {
+    "x": 76,
+    "y": 138,
+    "w": 279,
+    "h": 34,
+    "font": "12px/400",
+    "family": "Qym Sans",
+    "color": "rgb(237, 237, 240)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "gap": "4px",
+    "pad": "0px",
+    "scrollW": 338,
+    "clientW": 279
+  },
+  "panel": {
+    "x": 76,
+    "y": 172,
+    "w": 279,
+    "h": 565.5,
+    "font": "12px/400",
+    "family": "Qym Sans",
+    "color": "rgb(237, 237, 240)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "gap": "normal",
+    "pad": "14px 0px 0px",
+    "scrollW": 279,
+    "clientW": 279
+  },
+  "table": null,
+  "rows": []
+}

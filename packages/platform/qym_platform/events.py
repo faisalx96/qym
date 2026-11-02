@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from qym_platform.services.run_datasets import RunDatasetEntry
+
 
 RunEventType = Literal[
     "run_started",
@@ -33,6 +35,8 @@ class RunStartedPayload(BaseModel):
     dataset_id: Optional[str] = None
     dataset_version_id: Optional[str] = None
     dataset_alias: Optional[str] = None
+    # Union runs (two or more entries): the dataset versions the run evaluates.
+    datasets: Optional[list[RunDatasetEntry]] = None
     # Optional hint to enable progress % in list views.
     total_items: Optional[int] = Field(default=None, ge=0)
     run_metadata: Dict[str, Any] = Field(default_factory=dict)

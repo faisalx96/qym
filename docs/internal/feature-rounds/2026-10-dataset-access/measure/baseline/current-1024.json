@@ -1,0 +1,686 @@
+{
+  "width": 1024,
+  "launchCard": [
+    {
+      "x": 212,
+      "y": 223,
+      "w": 777,
+      "h": 192.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Experiment namePriorityEnvironment defau"
+    }
+  ],
+  "launchFields": [
+    {
+      "x": 233,
+      "y": 238,
+      "w": 476.7,
+      "h": 15.4,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Experiment name"
+    },
+    {
+      "x": 233,
+      "y": 257,
+      "w": 476.7,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": ""
+    },
+    {
+      "x": 730,
+      "y": 257,
+      "w": 238.3,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "Environment default (NORMAL)"
+    },
+    {
+      "x": 211,
+      "y": 163,
+      "w": 192,
+      "h": 15,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Environment default (NORMAL)LOWNORMALHIG"
+    },
+    {
+      "x": 233,
+      "y": 289,
+      "w": 735,
+      "h": 15.4,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Versioning details"
+    },
+    {
+      "x": 233,
+      "y": 308,
+      "w": 735,
+      "h": 72,
+      "font": "12px/400",
+      "family": "Qym Mono",
+      "text": ""
+    }
+  ],
+  "reviewPane": [
+    {
+      "x": 212,
+      "y": 683,
+      "w": 777,
+      "h": 490,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Review1 problemEnvironmentsstagingDatase"
+    }
+  ],
+  "reviewSummaryRows": [
+    {
+      "x": 233,
+      "y": 732,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Environmentsstaging"
+    },
+    {
+      "x": 233,
+      "y": 776,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Datasetgolden"
+    },
+    {
+      "x": 233,
+      "y": 820,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Start fromDefault preset v1"
+    },
+    {
+      "x": 233,
+      "y": 864,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "PriorityEnvironment default"
+    },
+    {
+      "x": 233,
+      "y": 908,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Versionsagent-1.4.2 · img-20261001 · kb-"
+    }
+  ],
+  "detailHeader": [
+    {
+      "x": 212,
+      "y": 101,
+      "w": 777,
+      "h": 69.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "timeout sweeprunningTimeout 10/30/60dev@"
+    },
+    {
+      "x": 212,
+      "y": 101,
+      "w": 372,
+      "h": 26.4,
+      "font": "22px/650",
+      "family": "Qym Sans",
+      "text": "timeout sweeprunning"
+    },
+    {
+      "x": 212,
+      "y": 153,
+      "w": 372,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "dev@local6 min agoPriority NormalBase: B"
+    },
+    {
+      "x": 212,
+      "y": 153,
+      "w": 55.8,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "dev@local"
+    },
+    {
+      "x": 268,
+      "y": 153,
+      "w": 72.5,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "6 min ago"
+    },
+    {
+      "x": 340,
+      "y": 153,
+      "w": 101.4,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Priority Normal"
+    },
+    {
+      "x": 442,
+      "y": 153,
+      "w": 83.6,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Base: Blank"
+    },
+    {
+      "x": 525,
+      "y": 153,
+      "w": 58.8,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "staging"
+    }
+  ],
+  "detailActions": [
+    {
+      "x": 212,
+      "y": 210,
+      "w": 125,
+      "h": 32,
+      "font": "13px/600",
+      "family": "Qym Sans",
+      "text": "Retry failed (1)"
+    },
+    {
+      "x": 345,
+      "y": 210,
+      "w": 150,
+      "h": 32,
+      "font": "13px/600",
+      "family": "Qym Sans",
+      "text": "Cancel experiment"
+    }
+  ],
+  "detailJobsCard": [
+    {
+      "x": 212,
+      "y": 1222,
+      "w": 777,
+      "h": 379.5,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Job historyRefreshing automatically whil"
+    }
+  ],
+  "detailJobsHeaders": [
+    {
+      "x": 234,
+      "y": 1380,
+      "w": 80,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Combo"
+    },
+    {
+      "x": 314,
+      "y": 1380,
+      "w": 150,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Environment"
+    },
+    {
+      "x": 464,
+      "y": 1380,
+      "w": 148,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Params"
+    },
+    {
+      "x": 612,
+      "y": 1380,
+      "w": 200,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Status"
+    },
+    {
+      "x": 812,
+      "y": 1380,
+      "w": 90,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Attempt"
+    },
+    {
+      "x": 902,
+      "y": 1380,
+      "w": 180,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Run"
+    },
+    {
+      "x": 1082,
+      "y": 1380,
+      "w": 110,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Updated"
+    },
+    {
+      "x": 925,
+      "y": 1380,
+      "w": 42,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Actions"
+    }
+  ],
+  "detailJobsRows": [
+    {
+      "x": 234,
+      "y": 1380,
+      "w": 1000,
+      "h": 34,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "ComboEnvironmentParamsStatusAttemptRunUp"
+    },
+    {
+      "x": 234,
+      "y": 1414,
+      "w": 1000,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "#0stagingtimeout=10succeeded1—timeout sw"
+    },
+    {
+      "x": 234,
+      "y": 1454,
+      "w": 1000,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "#1stagingtimeout=30failedtimeout1—timeou"
+    },
+    {
+      "x": 234,
+      "y": 1494,
+      "w": 1000,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "#2stagingtimeout=60running1—timeout swee"
+    }
+  ],
+  "detailJobsStatusCells": [
+    {
+      "x": 612,
+      "y": 1414,
+      "w": 200,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "succeeded"
+    },
+    {
+      "x": 612,
+      "y": 1454,
+      "w": 200,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "failedtimeout"
+    },
+    {
+      "x": 612,
+      "y": 1494,
+      "w": 200,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "running"
+    }
+  ],
+  "listFilters": [
+    {
+      "x": 221,
+      "y": 192,
+      "w": 264.1,
+      "h": 43.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "StatusAll statuses All statusesqueuedrun"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 88,
+      "h": 15,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "All statusesqueuedrunningcompletedpartia"
+    },
+    {
+      "x": 385,
+      "y": 219,
+      "w": 100.1,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Created by me"
+    }
+  ],
+  "listRows": [
+    {
+      "x": 213,
+      "y": 241,
+      "w": 1378,
+      "h": 34,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "NameStatusProgressEnvironmentsBaseJobsCr"
+    },
+    {
+      "x": 213,
+      "y": 275,
+      "w": 1378,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "urgent checkrunning0/1stagingBlank✓ 0✗ 0"
+    },
+    {
+      "x": 213,
+      "y": 315,
+      "w": 1378,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "timeout sweepTimeout 10/30/60running2/3s"
+    },
+    {
+      "x": 213,
+      "y": 355,
+      "w": 1378,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "staging vs prodrunning0/2staging, produc"
+    },
+    {
+      "x": 213,
+      "y": 395,
+      "w": 1378,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "baseline runcompleted1/1stagingBlank✓ 1✗"
+    }
+  ],
+  "listNameCells": [],
+  "queueRows": [
+    {
+      "x": 213,
+      "y": 467,
+      "w": 1082,
+      "h": 34,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "PositionExperimentEnvironmentPrioritySta"
+    },
+    {
+      "x": 213,
+      "y": 501,
+      "w": 1082,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "—staging vs prod #0stagingNormalRUNNING6"
+    },
+    {
+      "x": 213,
+      "y": 541,
+      "w": 1082,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "—staging vs prod #0productionNormalRUNNI"
+    },
+    {
+      "x": 213,
+      "y": 581,
+      "w": 1082,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "—timeout sweep #2timeout=60stagingNormal"
+    },
+    {
+      "x": 213,
+      "y": 621,
+      "w": 1082,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "—urgent check #0HIGHstagingHighRUNNING6m"
+    }
+  ],
+  "queueEnvCards": [
+    {
+      "x": 212,
+      "y": 187,
+      "w": 381.5,
+      "h": 146.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "productionHealthy1In flight0Queued0Block"
+    },
+    {
+      "x": 608,
+      "y": 187,
+      "w": 381.5,
+      "h": 146.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "stagingHealthy3In flight0Queued0BlockedA"
+    }
+  ],
+  "queueNameCells": [
+    {
+      "x": 343,
+      "y": 501,
+      "w": 200,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "staging vs prod #0"
+    },
+    {
+      "x": 343,
+      "y": 541,
+      "w": 200,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "staging vs prod #0"
+    },
+    {
+      "x": 343,
+      "y": 581,
+      "w": 200,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "timeout sweep #2timeout=60"
+    },
+    {
+      "x": 343,
+      "y": 621,
+      "w": 200,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "urgent check #0HIGH"
+    }
+  ],
+  "envPolicies": [
+    {
+      "x": 212,
+      "y": 1529,
+      "w": 777,
+      "h": 228.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "PoliciesLimits applied to experiments la"
+    },
+    {
+      "x": 233,
+      "y": 1567,
+      "w": 298.3,
+      "h": 15.4,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "Limits applied to experiments launched o"
+    },
+    {
+      "x": 233,
+      "y": 1616,
+      "w": 360.5,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "HIGH"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 71,
+      "h": 15,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "LOWNORMALHIGH"
+    },
+    {
+      "x": 608,
+      "y": 1616,
+      "w": 360.5,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "NORMAL"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 71,
+      "h": 15,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "LOWNORMALHIGH"
+    },
+    {
+      "x": 233,
+      "y": 1703,
+      "w": 141.8,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Allow connection keys"
+    },
+    {
+      "x": 233,
+      "y": 1727,
+      "w": 735,
+      "h": 15.4,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "Send project LLM connection API keys to "
+    }
+  ],
+  "tokensCard": [
+    {
+      "x": 212,
+      "y": 589,
+      "w": 777,
+      "h": 289.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Dataset read tokensAdmin-issued; lets a "
+    },
+    {
+      "x": 234,
+      "y": 726,
+      "w": 183,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Name"
+    },
+    {
+      "x": 417,
+      "y": 726,
+      "w": 140,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Prefix"
+    },
+    {
+      "x": 557,
+      "y": 726,
+      "w": 180,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Created by"
+    },
+    {
+      "x": 737,
+      "y": 726,
+      "w": 130,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Created"
+    },
+    {
+      "x": 867,
+      "y": 726,
+      "w": 100,
+      "h": 34,
+      "font": "11px/650",
+      "family": "Qym Sans",
+      "text": "Status"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+/* Section header recipe (DESIGN_LANGUAGE §3 "Section"): title, description, controls. It draws no divider and no lead-in:
+   the spacing and the hairline between sections belong to ui/Section. */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+}
+.description {
+  margin: 0;
+}
+
+.aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: none;
+}
+
+/* Phone: the controls drop under the title instead of widening the page. */
+@media (max-width: 640px) {
+  .head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-sm);
+  }
+
+  /* Descriptions wrap on a phone instead of ending in an ellipsis. */
+  .description[data-truncate] {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .aside {
+    flex: initial;
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+}

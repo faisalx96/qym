@@ -1,0 +1,474 @@
+{
+  "width": 1024,
+  "homeCards": [
+    {
+      "x": 212,
+      "y": 146,
+      "w": 777,
+      "h": 239.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "EnvironmentsproductionHealthyPriority up to HIGHDe"
+    },
+    {
+      "x": 212,
+      "y": 400,
+      "w": 777,
+      "h": 131,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Evaluation Service versionsWhat a run started now "
+    },
+    {
+      "x": 212,
+      "y": 545,
+      "w": 777,
+      "h": 432.3,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Start fromRecommendedDefault preset v1What this en"
+    },
+    {
+      "x": 212,
+      "y": 844,
+      "w": 777,
+      "h": 56,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Experiment name1 problem to fixName the experiment"
+    }
+  ],
+  "homeEnvCard": [
+    {
+      "x": 233,
+      "y": 161,
+      "w": 339.5,
+      "h": 209.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "EnvironmentsproductionHealthyPriority up to HIGHDe"
+    }
+  ],
+  "homeVersions": [
+    {
+      "x": 212,
+      "y": 400,
+      "w": 777,
+      "h": 131,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Evaluation Service versionsWhat a run started now "
+    },
+    {
+      "x": 235,
+      "y": 468,
+      "w": 733,
+      "h": 20,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "stagingagentagent-1.4.2imageimg-20261001kbkb-77"
+    },
+    {
+      "x": 377,
+      "y": 468,
+      "w": 332.3,
+      "h": 20,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "agentagent-1.4.2imageimg-20261001kbkb-77"
+    },
+    {
+      "x": 377,
+      "y": 468,
+      "w": 116.3,
+      "h": 20,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "agentagent-1.4.2"
+    },
+    {
+      "x": 411,
+      "y": 468,
+      "w": 82,
+      "h": 20,
+      "font": "10px/650",
+      "family": "Qym Mono",
+      "text": "agent-1.4.2"
+    },
+    {
+      "x": 507,
+      "y": 468,
+      "w": 124.8,
+      "h": 20,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "imageimg-20261001"
+    },
+    {
+      "x": 544,
+      "y": 468,
+      "w": 88,
+      "h": 20,
+      "font": "10px/650",
+      "family": "Qym Mono",
+      "text": "img-20261001"
+    },
+    {
+      "x": 646,
+      "y": 468,
+      "w": 63.3,
+      "h": 20,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "kbkb-77"
+    }
+  ],
+  "homeVersionsHead": [
+    {
+      "x": 235,
+      "y": 418,
+      "w": 165.2,
+      "h": 17.5,
+      "font": "13px/600",
+      "family": "Qym Sans",
+      "text": "Evaluation Service versions"
+    },
+    {
+      "x": 414,
+      "y": 419,
+      "w": 275.2,
+      "h": 15.4,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "What a run started now records as its versioning d"
+    },
+    {
+      "x": 747,
+      "y": 415,
+      "w": 221,
+      "h": 24,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Add versioning detailsRefresh"
+    },
+    {
+      "x": 747,
+      "y": 415,
+      "w": 147,
+      "h": 24,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Add versioning details"
+    },
+    {
+      "x": 761,
+      "y": 422,
+      "w": 119,
+      "h": 11,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Add versioning details"
+    },
+    {
+      "x": 898,
+      "y": 415,
+      "w": 70,
+      "h": 24,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Refresh"
+    },
+    {
+      "x": 912,
+      "y": 422,
+      "w": 42,
+      "h": 11,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Refresh"
+    },
+    {
+      "x": 235,
+      "y": 470,
+      "w": 128,
+      "h": 16.8,
+      "font": "12px/600",
+      "family": "Qym Sans",
+      "text": "staging"
+    }
+  ],
+  "homeLatencyControl": [],
+  "homeBar": [
+    {
+      "x": 212,
+      "y": 844,
+      "w": 777,
+      "h": 56,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Experiment name1 problem to fixName the experiment"
+    },
+    {
+      "x": 227,
+      "y": 860,
+      "w": 320,
+      "h": 24,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Experiment name"
+    },
+    {
+      "x": 227,
+      "y": 860,
+      "w": 1,
+      "h": 1,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Experiment name"
+    },
+    {
+      "x": 227,
+      "y": 860,
+      "w": 320,
+      "h": 24,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": ""
+    },
+    {
+      "x": 227,
+      "y": 860,
+      "w": 320,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": ""
+    },
+    {
+      "x": 561,
+      "y": 840,
+      "w": 200,
+      "h": 65,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "1 problem to fixName the experiment.Show2 runs to "
+    },
+    {
+      "x": 561,
+      "y": 840,
+      "w": 84.8,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "1 problem to fix"
+    },
+    {
+      "x": 561,
+      "y": 865,
+      "w": 110.1,
+      "h": 15.4,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "Name the experiment."
+    },
+    {
+      "x": 679,
+      "y": 864,
+      "w": 31,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Show"
+    },
+    {
+      "x": 561,
+      "y": 889,
+      "w": 79.4,
+      "h": 15.4,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "2 runs to launch"
+    },
+    {
+      "x": 775,
+      "y": 860,
+      "w": 199,
+      "h": 24,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Launch as isCustomize →"
+    },
+    {
+      "x": 775,
+      "y": 860,
+      "w": 93,
+      "h": 24,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Launch as is"
+    }
+  ],
+  "step1Cards": [
+    {
+      "x": 212,
+      "y": 98,
+      "w": 777,
+      "h": 251.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Experiment namePriorityEnvironment default (NORMAL"
+    },
+    {
+      "x": 212,
+      "y": 363,
+      "w": 777,
+      "h": 239.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "EnvironmentsproductionHealthyPriority up to HIGHDe"
+    }
+  ],
+  "step1Env": [
+    {
+      "x": 233,
+      "y": 378,
+      "w": 339.5,
+      "h": 209.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "EnvironmentsproductionHealthyPriority up to HIGHDe"
+    },
+    {
+      "x": 233,
+      "y": 397,
+      "w": 339.5,
+      "h": 58,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "productionHealthyPriority up to HIGHDetails"
+    },
+    {
+      "x": 233,
+      "y": 459,
+      "w": 339.5,
+      "h": 58,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "stagingHealthyPriority up to HIGHDefault preset v1"
+    }
+  ],
+  "step1Runs": [
+    {
+      "x": 212,
+      "y": 98,
+      "w": 777,
+      "h": 251.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Experiment namePriorityEnvironment default (NORMAL"
+    },
+    {
+      "x": 233,
+      "y": 132,
+      "w": 476.7,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": ""
+    },
+    {
+      "x": 233,
+      "y": 164,
+      "w": 735,
+      "h": 51.6,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Latency-sensitive runStarts only when the gateway "
+    },
+    {
+      "x": 232,
+      "y": 172,
+      "w": 13,
+      "h": 13,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": ""
+    },
+    {
+      "x": 233,
+      "y": 185,
+      "w": 735,
+      "h": 30.8,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "Starts only when the gateway is quiet, makes other"
+    },
+    {
+      "x": 233,
+      "y": 243,
+      "w": 735,
+      "h": 72,
+      "font": "12px/400",
+      "family": "Qym Mono",
+      "text": ""
+    }
+  ],
+  "step1Versions": [],
+  "review": [
+    {
+      "x": 212,
+      "y": 617,
+      "w": 777,
+      "h": 555,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Review1 problemEnvironmentsstaging, productionData"
+    },
+    {
+      "x": 233,
+      "y": 666,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Environmentsstaging, production"
+    },
+    {
+      "x": 233,
+      "y": 710,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Datasetgolden"
+    },
+    {
+      "x": 233,
+      "y": 754,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Start fromDefault preset v1 · staging"
+    },
+    {
+      "x": 233,
+      "y": 799,
+      "w": 735,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "PriorityEnvironment default"
+    },
+    {
+      "x": 233,
+      "y": 843,
+      "w": 735,
+      "h": 55,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Versionsstaging: agent-1.4.2 · img-20261001 · kb-7"
+    }
+  ],
+  "modelsHasVersions": 0
+}

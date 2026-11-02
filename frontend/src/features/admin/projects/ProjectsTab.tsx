@@ -1,0 +1,41 @@
+import { useAllProjects } from '@/api/admin';
+import { CreateProjectDialog } from '@/features/shell/dialogs';
+import { useDelayedPending } from '@/lib/pending';
+import { Button, ErrorState, Icon, Section, Skeleton } from '@/ui';
+import { useState } from 'react';
+import { ProjectsTable } from './ProjectsTable';
+
+export function ProjectsTab() {
+  const projects = useAllProjects();
+  const [creating, setCreating] = useState(false);
+  const skeleton = useDelayedPending(projects.isPending);
+  return (
+    <Section
+      title="Projects"
+      description={projects.data ? `${projects.data.length} projects, including archived` : undefined}
+      actions={
+        <Button
+          variant="primary"
+          icon={<Icon name="plus" size={12} />}
+          onPress={() => setCreating(true)}
+          data-new-project
+        >
+          New project
+        </Button>
+      }
+    >
+      {projects.isError ? (
+        <ErrorState error={projects.error} onRetry={() => projects.refetch()} compact />
+      ) : projects.isPending ? (
+        skeleton ? (
+          <Skeleton kind="table" rows={3} label="Loading projects" />
+        ) : null
+      ) : (
+        <>
+          <ProjectsTable projects={projects.data} />
+        </>
+      )}
+      <CreateProjectDialog open={creating} onOpenChange={setCreating} />
+    </Section>
+  );
+}

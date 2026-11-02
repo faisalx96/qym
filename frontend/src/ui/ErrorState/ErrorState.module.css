@@ -1,0 +1,33 @@
+/* .qym-error-state */
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-sm);
+  padding: var(--space-xl) var(--space-lg);
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.error[data-compact] {
+  padding: var(--space-md);
+  align-items: flex-start;
+  text-align: start;
+}
+
+.title {
+  margin: 0;
+}
+.body {
+  margin: 0;
+  line-height: 1.5;
+}
+.detail {
+  margin: 0;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.actions {
+  margin-top: var(--space-xs);
+}

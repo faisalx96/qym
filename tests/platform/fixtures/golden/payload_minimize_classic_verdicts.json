@@ -1,0 +1,156 @@
+{
+ "expected": {
+  "status_counts": {
+   "h": {
+    "error": 3,
+    "fail": 1,
+    "pass": 1
+   },
+   "q": {
+    "error": 2,
+    "fail": 1,
+    "pass": 2
+   }
+  }
+ },
+ "kind": "run_page",
+ "samples": 1,
+ "snapshot": {
+  "metric_names": [
+   "h",
+   "q",
+   "u"
+  ],
+  "metric_specs": {
+   "h": {
+    "direction": "minimize",
+    "pass_threshold": 0.3,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   },
+   "q": {
+    "direction": "maximize",
+    "pass_threshold": null,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   }
+  },
+  "rows": [
+   {
+    "error": "",
+    "index": 0,
+    "item_id": "a",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {},
+    "metric_values": [
+     0.2,
+     1.0,
+     0.5
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 1,
+    "item_id": "b",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {},
+    "metric_values": [
+     0.6,
+     0.5,
+     0.5
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 2,
+    "item_id": "c",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "error": "judge 429",
+      "status": "error"
+     },
+     "u": {
+      "status": "error"
+     }
+    },
+    "metric_values": [
+     0.0,
+     0.8,
+     null
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 3,
+    "item_id": "d",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "status": "timeout"
+     },
+     "q": {
+      "status": "error"
+     }
+    },
+    "metric_values": [
+     null,
+     0.0,
+     1.0
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "boom",
+    "index": 4,
+    "item_id": "e",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {},
+    "metric_values": [
+     "",
+     "",
+     ""
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "error"
+   }
+  ]
+ }
+}

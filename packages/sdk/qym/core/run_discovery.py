@@ -969,6 +969,25 @@ class RunDiscovery:
             },
         })
 
+    def is_editable(self, file_path: str) -> bool:
+        """Whether update_metric_score would accept this file (a CSV inside results_dir)."""
+        path = Path(file_path)
+        if not path.exists() and self.results_dir.exists():
+            alt_path = self.results_dir.parent / file_path
+            if alt_path.exists():
+                path = alt_path
+            else:
+                results_name = self.results_dir.name
+                if file_path.startswith(results_name + "/"):
+                    alt_path = self.results_dir / file_path[len(results_name) + 1 :]
+                    if alt_path.exists():
+                        path = alt_path
+        if not path.exists() or path.suffix.lower() == ".xlsx":
+            return False
+        results_abs = os.path.abspath(self.results_dir)
+        resolved = os.path.abspath(path)
+        return resolved == results_abs or resolved.startswith(results_abs + os.sep)
+
     def update_metric_score(
         self, file_path: str, row_index: int, metric_name: str, new_score: Any
     ) -> Dict[str, Any]:

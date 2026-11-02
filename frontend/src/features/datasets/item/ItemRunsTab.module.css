@@ -1,0 +1,39 @@
+/* Item runs tab: composes StatStrip/DataTable/ScoreValue. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.runLink {
+  color: var(--accent-secondary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.runLink:hover {
+  text-decoration: underline;
+}
+
+.runLink:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.outputHead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.outputFull {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+}

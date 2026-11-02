@@ -1,0 +1,41 @@
+/* Number input: the 24px control with mono digits and stacked steppers. */
+.group {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+}
+
+.input {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  padding-inline-end: 20px;
+}
+
+.steppers {
+  position: absolute;
+  inset-inline-end: 1px;
+  top: 1px;
+  bottom: 1px;
+  display: flex;
+  flex-direction: column;
+  width: 16px;
+}
+
+.step {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.step[data-hovered] {
+  color: var(--accent-primary);
+}
+.step[data-disabled] {
+  opacity: 0.4;
+}

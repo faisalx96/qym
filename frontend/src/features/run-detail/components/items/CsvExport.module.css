@@ -1,0 +1,33 @@
+/* CSV column picker. */
+.tools {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.group summary {
+  cursor: pointer;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.count {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-xs) var(--space-md);
+  padding: var(--space-sm) 0;
+}

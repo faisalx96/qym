@@ -1,0 +1,149 @@
+{
+  "run": "wide",
+  "kind": "nav",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 20,
+    "overviewMs": 862,
+    "rowsMs": 862,
+    "ttiMs": 862,
+    "tbtMs": 17,
+    "cls": 0.0059,
+    "requests": 17,
+    "jsChunks": 8,
+    "jsKB": 28.9,
+    "apiRequests": 3,
+    "apiKB": 37.9,
+    "compactKB": 34.5,
+    "compactTtfbMs": 573,
+    "compactDoneMs": 768
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 18,
+      "skeletonMs": 18,
+      "overviewMs": 866,
+      "rowsMs": 866,
+      "ttiMs": 866,
+      "tbtMs": 14,
+      "cls": 0.0059,
+      "reactCommits": 52,
+      "requests": 17,
+      "jsChunks": 8,
+      "jsKB": 28.9,
+      "apiRequests": 3,
+      "apiKB": 37.9,
+      "compactKB": 34.5,
+      "compactTtfbMs": 573,
+      "compactDoneMs": 768,
+      "mountedAtOverview": [
+        "overview"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-BroX0Mu_.js 2.9kB @773-1393ms",
+        "ErrorsTab-BpdVkgqa.js 1.5kB @773-1419ms",
+        "TraceHost-BclRaSRE.js 5.2kB @773-1451ms",
+        "SpanDetail-BSAnQkvO.js 3.8kB @773-1444ms",
+        "LatencyTab-BmikoFl4.js 5.1kB @1420-2043ms",
+        "DeepTab-Dbic1vfF.js 2.0kB @2043-2635ms",
+        "RepeatTab-BjJk5WnC.js 6.7kB @2635-3251ms",
+        "RootCauseTab-CU1R5WYQ.js 1.7kB @3251-3826ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @2-768ms",
+        "/api/runs/step-latency?run_ids=9b10bd03-3d3b-42be-a00c-4b754921 0.5kB @951-1959ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=text 2.9kB @966-1992ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 20,
+      "skeletonMs": 20,
+      "overviewMs": 862,
+      "rowsMs": 862,
+      "ttiMs": 862,
+      "tbtMs": 17,
+      "cls": 0.0059,
+      "reactCommits": 55,
+      "requests": 17,
+      "jsChunks": 8,
+      "jsKB": 28.9,
+      "apiRequests": 3,
+      "apiKB": 37.9,
+      "compactKB": 34.5,
+      "compactTtfbMs": 564,
+      "compactDoneMs": 761,
+      "mountedAtOverview": [
+        "overview"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-BroX0Mu_.js 2.9kB @765-1387ms",
+        "ErrorsTab-BpdVkgqa.js 1.5kB @766-1420ms",
+        "TraceHost-BclRaSRE.js 5.2kB @766-1445ms",
+        "SpanDetail-BSAnQkvO.js 3.8kB @766-1440ms",
+        "LatencyTab-BmikoFl4.js 5.1kB @1420-2034ms",
+        "DeepTab-Dbic1vfF.js 2.0kB @2034-2626ms",
+        "RepeatTab-BjJk5WnC.js 6.7kB @2626-3243ms",
+        "RootCauseTab-CU1R5WYQ.js 1.7kB @3243-3818ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @2-761ms",
+        "/api/runs/step-latency?run_ids=9b10bd03-3d3b-42be-a00c-4b754921 0.5kB @914-1951ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=text 2.9kB @930-1975ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 143,
+      "skeletonMs": 143,
+      "overviewMs": 143,
+      "rowsMs": 143,
+      "ttiMs": 143,
+      "tbtMs": 60,
+      "cls": 0.0057,
+      "reactCommits": 49,
+      "requests": 9,
+      "jsChunks": 4,
+      "jsKB": 15.6,
+      "apiRequests": 2,
+      "apiKB": 3.4,
+      "compactKB": 2.9,
+      "compactTtfbMs": 596,
+      "compactDoneMs": 809,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "LatencyTab-BmikoFl4.js 5.1kB @183-825ms",
+        "DeepTab-Dbic1vfF.js 2.0kB @834-1426ms",
+        "RepeatTab-BjJk5WnC.js 6.7kB @1426-2043ms",
+        "RootCauseTab-CU1R5WYQ.js 1.7kB @2043-2618ms"
+      ],
+      "apiList": [
+        "/api/runs/step-latency?run_ids=9b10bd03-3d3b-42be-a00c-4b754921 0.5kB @183-768ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=text 2.9kB @196-809ms"
+      ]
+    }
+  ]
+}

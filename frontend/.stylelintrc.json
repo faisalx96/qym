@@ -1,0 +1,51 @@
+{
+  "extends": [
+    "stylelint-config-standard"
+  ],
+  "ignoreFiles": [
+    "src/styles/tokens.css"
+  ],
+  "rules": {
+    "selector-class-pattern": null,
+    "custom-property-pattern": null,
+    "declaration-property-value-disallowed-list": {
+      "font-size": [
+        "/^\\d+(\\.\\d+)?px$/"
+      ],
+      "/^(color|background|background-color)$/": [
+        "/^#[0-9a-fA-F]{3,8}$/",
+        "white",
+        "#fff"
+      ]
+    },
+    "declaration-property-value-no-unknown": null,
+    "no-descending-specificity": null,
+    "color-function-notation": null,
+    "alpha-value-notation": null,
+    "media-feature-range-notation": null,
+    "property-no-vendor-prefix": null,
+    "value-keyword-case": null,
+    "font-family-name-quotes": null,
+    "comment-empty-line-before": null,
+    "declaration-empty-line-before": null,
+    "rule-empty-line-before": null,
+    "custom-property-empty-line-before": null,
+    "selector-not-notation": null,
+    "shorthand-property-no-redundant-values": null,
+    "declaration-block-no-redundant-longhand-properties": null,
+    "keyframes-name-pattern": null,
+    "length-zero-no-unit": null,
+    "import-notation": null,
+    "at-rule-no-unknown": null,
+    "declaration-block-single-line-max-declarations": null,
+    "color-function-alias-notation": null,
+    "selector-pseudo-class-no-unknown": [
+      true,
+      {
+        "ignorePseudoClasses": [
+          "global"
+        ]
+      }
+    ]
+  }
+}

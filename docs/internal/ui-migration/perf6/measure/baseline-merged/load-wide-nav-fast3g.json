@@ -1,0 +1,155 @@
+{
+  "run": "wide",
+  "kind": "nav",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 2368,
+    "overviewMs": 2368,
+    "rowsMs": 2368,
+    "ttiMs": 2368,
+    "tbtMs": 128,
+    "cls": 0.0057,
+    "requests": 16,
+    "jsChunks": 6,
+    "jsKB": 103.3,
+    "apiRequests": 4,
+    "apiKB": 38.2,
+    "compactKB": 34.8,
+    "compactTtfbMs": 565,
+    "compactDoneMs": 2185
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 2368,
+      "skeletonMs": 36,
+      "overviewMs": 2368,
+      "rowsMs": 2368,
+      "ttiMs": 2368,
+      "tbtMs": 128,
+      "cls": 0.0057,
+      "reactCommits": 343,
+      "requests": 16,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 564,
+      "compactDoneMs": 2185,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @14-1228ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @14-861ms",
+        "TextBlock-DBLChdZy.js 0.9kB @14-601ms",
+        "Collapse-POnQeTmm.js 1.0kB @15-618ms",
+        "structured-Bv4atLAx.js 1.4kB @15-1218ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @15-1427ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @1428-2185ms",
+        "/api/dashboard/neighbors 0.7kB @2274-2851ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @2274-2843ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @2338-2918ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 2370,
+      "skeletonMs": 29,
+      "overviewMs": 2370,
+      "rowsMs": 2370,
+      "ttiMs": 2370,
+      "tbtMs": 129,
+      "cls": 0.0057,
+      "reactCommits": 96,
+      "requests": 16,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 572,
+      "compactDoneMs": 2185,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @9-1227ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @9-851ms",
+        "TextBlock-DBLChdZy.js 0.9kB @10-584ms",
+        "Collapse-POnQeTmm.js 1.0kB @10-601ms",
+        "structured-Bv4atLAx.js 1.4kB @10-1201ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @10-1417ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @1419-2185ms",
+        "/api/dashboard/neighbors 0.7kB @2274-2856ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @2274-2843ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @2339-2924ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 2355,
+      "skeletonMs": 29,
+      "overviewMs": 2355,
+      "rowsMs": 2355,
+      "ttiMs": 2355,
+      "tbtMs": 122,
+      "cls": 0.0057,
+      "reactCommits": 97,
+      "requests": 16,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 565,
+      "compactDoneMs": 2176,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @9-1227ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @9-852ms",
+        "TextBlock-DBLChdZy.js 0.9kB @9-592ms",
+        "Collapse-POnQeTmm.js 1.0kB @10-600ms",
+        "structured-Bv4atLAx.js 1.4kB @10-1201ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @10-1418ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @1419-2176ms",
+        "/api/dashboard/neighbors 0.7kB @2260-2842ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @2260-2826ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @2324-2900ms"
+      ]
+    }
+  ]
+}

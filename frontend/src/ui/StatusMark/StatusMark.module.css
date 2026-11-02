@@ -1,0 +1,41 @@
+/* Status mark: a 3 x 3 pixel figure in the status tone and the word in sentence case; no pill, no outline, no fill. */
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--badge-height);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--tone-text);
+}
+
+.figure {
+  flex: none;
+  color: var(--tone);
+}
+
+.figure rect {
+  fill: currentcolor;
+  opacity: 0.22;
+}
+
+.figure rect[data-on] {
+  opacity: 1;
+}
+
+/* Waiting to start: the ring is drawn, the centre stays empty. */
+.mark[data-shape='ring'] rect[data-ring] {
+  opacity: 0.6;
+}
+
+/* Running: the ring with its first pixel lit. Still: an infinite animation would never let the page settle. */
+.mark[data-shape='orbit'] rect[data-ring] {
+  opacity: 0.6;
+}
+
+.mark[data-shape='orbit'] rect[data-ring]:first-child {
+  opacity: 1;
+}

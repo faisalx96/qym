@@ -1,0 +1,299 @@
+/* Project settings: cards, add bars, tables (project_settings.html recipes). */
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.cardAction {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.addBar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+/* A name and its tags (an LLM connection and its default tag): room between them (round 11). */
+.inlineActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.dangerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: var(--space-md) 0;
+}
+
+.dangerRow + .dangerRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.dangerAction {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Why Delete is off, next to the button: a lock and the counts in the warning colour (C118). */
+.blocker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.promptLayout {
+  display: grid;
+  grid-template-columns: var(--settings-prompt-tab-width) minmax(0, 1fr);
+  gap: var(--space-lg);
+}
+
+.promptRail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* A prompt type: icon tile, name and default/custom on one line, what it does under them (the old list, round 10). */
+.promptTab {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon label state'
+    'icon desc .';
+  align-items: center;
+  column-gap: var(--space-md);
+  row-gap: 2px;
+  min-height: var(--tab-height);
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  border-inline-start: 2px solid transparent;
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.promptTab:hover {
+  background: var(--bg-hover);
+}
+
+.promptTab[aria-selected='true'] {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background: var(--bg-elevated);
+}
+
+.promptIcon {
+  grid-area: icon;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--badge-height);
+  height: var(--badge-height);
+  border-radius: var(--control-radius);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+
+.promptTab[aria-selected='true'] .promptIcon {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+}
+
+.promptLabel {
+  grid-area: label;
+  min-width: 0;
+}
+
+.promptState {
+  grid-area: state;
+}
+
+.promptDesc {
+  grid-area: desc;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 400;
+}
+
+.promptPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.promptEditor {
+  min-height: var(--settings-prompt-editor-min-height);
+  font-family: var(--font-mono);
+}
+
+.saveFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.saveState {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.saveState [data-dirty] {
+  color: var(--warning);
+}
+
+.diff {
+  max-height: 360px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+}
+
+.diff ins {
+  text-decoration: none;
+  background: color-mix(in srgb, var(--success) var(--tint-strong), transparent);
+  color: var(--success);
+}
+
+.diff del {
+  background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
+  color: var(--error);
+}
+
+.combo {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+
+.comboList {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  width: 100%;
+  max-height: var(--dropdown-max-height);
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-xs);
+  list-style: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+}
+
+/* A candidate: the person (disc and name) with the email after it, one per roomy row (round 11). */
+.comboOption {
+  display: flex;
+  align-items: center;
+  min-height: var(--row-regular);
+  padding: 0 var(--space-sm);
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  font-size: var(--font-base);
+  cursor: pointer;
+}
+
+.comboOption[aria-selected='true'],
+.comboOption:hover {
+  background: var(--bg-hover);
+}
+
+@media (max-width: 800px) {
+  .promptLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.comboHint {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  width: 100%;
+  padding: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  z-index: var(--z-dropdown);
+}
+
+.comboHintRow {
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+/* What each project role can do (C033), under the add-member bar. */
+.roleHelp {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+/* Experiment tokens: the name wraps (never cut) and the kind tag follows it. */
+.tokenName {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}
+
+.tokenLink {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.tokenLink:hover {
+  text-decoration: underline;
+}

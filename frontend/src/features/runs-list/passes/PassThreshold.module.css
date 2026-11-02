@@ -1,0 +1,5 @@
+/* Inline pass threshold in the passes strip: a fixed-width track so the statistics after it do not move. */
+.slider {
+  inline-size: 220px;
+  max-inline-size: 100%;
+}

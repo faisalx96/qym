@@ -1,0 +1,20 @@
+/* Page containers (DESIGN_LANGUAGE §4). */
+.constrained {
+  width: 100%;
+  max-width: var(--page-max-w);
+  margin: 0 auto;
+  padding: var(--space-lg) var(--space-lg) var(--space-xl);
+}
+
+/* Text-first pages (profile) stay narrower, by asking for it. */
+.narrow {
+  width: 100%;
+  max-width: var(--page-narrow-w);
+  margin: 0 auto;
+  padding: var(--space-lg) var(--space-lg) var(--space-xl);
+}
+
+.fullWidth {
+  width: 100%;
+  padding: var(--space-md) var(--space-lg) var(--space-xl);
+}

@@ -1,0 +1,431 @@
+/** Hero derivations (run.html renderSummary / runEntityLinks / buildExecutionContextSectionHtml). */
+import { projectPath } from '@/app/routes';
+import { formatDuration } from '@/lib/format';
+import type { RunErrorTally } from './overviewModel';
+import { stringify } from './rowErrors';
+import type { IngestIncomplete, PassSummary, Run, RunDatasetEntry } from '../types';
+import { formatHeaderDate, toDate } from '@/lib/dates';
+
+const HIDDEN_CONFIG_KEYS = new Set([
+  'run_name',
+  'task_name',
+  'task',
+  'git_branch',
+  'git_commit',
+  'model',
+  'model_name',
+  'dataset',
+  'dataset_name',
+  'samples',
+  'max_metric_concurrency',
+  'MAX_METRIC_CONCURRENCY',
+]);
+const HIDDEN_METADATA_KEYS = new Set([
+  'langfuse_url',
+  'langfuse_host',
+  'langfuse_project_id',
+  'trace_stats',
+  'snapshot',
+  'rows',
+  'metric_names',
+  'task_name',
+  'model',
+  'model_name',
+  'dataset',
+  'dataset_name',
+  'total_items',
+  'samples',
+  'last_completed_pass',
+  'git_branch',
+  'git_commit',
+  'ingest_incomplete',
+  'ingest_rejected',
+  // the SDK's per-dataset list: the hero's Datasets group shows it
+  'datasets',
+  'pass_revision',
+  'analysis_aggregation',
+  'has_repeat_pass_context',
+]);
+
+export interface ContextEntry {
+  key: string;
+  label: string;
+  group: 'Config' | 'Metadata';
+  value: string;
+  raw: unknown;
+  /** Objects, arrays and JSON-looking strings open the JSON viewer. */
+  json: boolean;
+}
+
+export function formatFieldLabel(key: string): string {
+  return key.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function looksJson(value: unknown): boolean {
+  if (value !== null && typeof value === 'object') return true;
+  if (typeof value !== 'string') return false;
+  const t = value.trim();
+  if (!((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']')))) return false;
+  try {
+    const parsed: unknown = JSON.parse(t);
+    return typeof parsed === 'object' && parsed !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function executionContextEntries(run: Run): ContextEntry[] {
+  const config = run.config ?? {};
+  const metadata = run.metadata ?? {};
+  const hiddenMeta = new Set(HIDDEN_METADATA_KEYS);
+  if (run.experiment) {
+    hiddenMeta.add('qym_config');
+    hiddenMeta.add('qym_launch');
+  }
+  const entries: ContextEntry[] = [];
+  const seen = new Set<string>();
+  Object.entries(config).forEach(([key, value]) => {
+    if (HIDDEN_CONFIG_KEYS.has(key) || value == null || value === '') return;
+    seen.add(key.toLowerCase());
+    entries.push({
+      key,
+      label: formatFieldLabel(key),
+      group: 'Config',
+      value: stringify(value),
+      raw: value,
+      json: looksJson(value),
+    });
+  });
+  Object.entries(metadata).forEach(([key, value]) => {
+    if (hiddenMeta.has(key) || value == null || value === '') return;
+    if (seen.has(key.toLowerCase())) return;
+    entries.push({
+      key,
+      label: formatFieldLabel(key),
+      group: 'Metadata',
+      value: stringify(value),
+      raw: value,
+      json: looksJson(value),
+    });
+  });
+  return entries;
+}
+
+export interface EntityLinks {
+  task: string | null;
+  dataset: string | null;
+  datasetTitle: string;
+  model: string | null;
+  owner: string | null;
+  project: string | null;
+}
+
+/** Links into the Runs list facets (and the dataset page when the run names a dataset slug). */
+export function runEntityLinks(run: Run, slug: string | undefined): EntityLinks {
+  if (!slug) return { task: null, dataset: null, datasetTitle: '', model: null, owner: null, project: null };
+  const runs = projectPath(slug);
+  const filtered = (param: string, value: string | null | undefined) =>
+    value ? runs + '?' + new URLSearchParams([[param, value]]).toString() : null;
+  const datasetName = run.dataset_name ?? '';
+  const datasetValue =
+    datasetName && run.dataset_version ? `${datasetName}␟${run.dataset_version}` : datasetName;
+  let dataset: string | null = null;
+  let datasetTitle = '';
+  if (run.dataset_slug) {
+    const params = new URLSearchParams([['tab', 'runs']]);
+    if (run.dataset_version) params.set('v', String(run.dataset_version));
+    dataset = projectPath(slug, `datasets/${encodeURIComponent(run.dataset_slug)}`) + '?' + params.toString();
+    datasetTitle = `Open dataset ${datasetName} (runs on it)`;
+  } else if (datasetValue) {
+    dataset = filtered('dataset', datasetValue);
+    datasetTitle = `Runs on dataset ${datasetName}`;
+  }
+  const taskName = run.task_name ?? '';
+  const modelName = run.model_name ?? '';
+  return {
+    task: taskName ? filtered('task', taskName) : null,
+    dataset,
+    datasetTitle,
+    model: modelName ? filtered('model', modelName) : null,
+    owner: run.owner?.id ? filtered('owner', run.owner.id) : null,
+    project: runs,
+  };
+}
+
+/** The one duration format (C164): lib/format. */
+export function formatDurationMs(ms: number | null | undefined): string {
+  return formatDuration(ms);
+}
+
+/** Header form 'Sep 14, 2026, 19:05' (lib/dates, C048). */
+export function formatIsoDateTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return toDate(iso) ? formatHeaderDate(iso) : String(iso);
+}
+
+export function isLiveStatus(status: string | null | undefined): boolean {
+  const s = String(status ?? '').toUpperCase();
+  return s === 'RUNNING' || s === 'PENDING';
+}
+
+export interface HeroTiming {
+  startedAt: string;
+  endedAt: string;
+  /** null = unknown; `ticking` = derive from now − startedAt each second. */
+  runtimeMs: number | null;
+  ticking: boolean;
+}
+
+export function heroTiming(run: Run, pass: PassSummary | null, now = Date.now()): HeroTiming {
+  const startedAt = pass ? (pass.started_at ?? '') : (run.started_at ?? run.created_at ?? '');
+  const endedAt = pass ? (pass.ended_at ?? '') : (run.ended_at ?? '');
+  let runtimeMs: number | null = pass ? (pass.duration_ms ?? null) : (run.duration_ms ?? null);
+  let ticking = false;
+  const passRunning = !!pass && String(pass.status ?? '').toLowerCase() === 'running';
+  if ((passRunning || runtimeMs == null) && startedAt && !endedAt) {
+    const t = new Date(startedAt).getTime();
+    if (!Number.isNaN(t)) {
+      runtimeMs = now - t;
+      ticking = isLiveStatus(run.status) || passRunning;
+    }
+  }
+  return { startedAt, endedAt, runtimeMs, ticking };
+}
+
+export interface IngestWarning {
+  expected: number;
+  received: number;
+  missing: number;
+  rejectedCount: number;
+  rejected: NonNullable<IngestIncomplete['rejected']>;
+  moreCount: number;
+}
+
+export function ingestWarning(run: Run): IngestWarning | null {
+  const flag = run.metadata?.ingest_incomplete;
+  if (!flag || typeof flag !== 'object') return null;
+  const expected = parseInt(String(flag.expected_items ?? 0), 10) || 0;
+  const received = parseInt(String(flag.received_items ?? 0), 10) || 0;
+  const missing = expected ? Math.max(expected - received, 0) : 0;
+  const rejectedCount = parseInt(String(flag.rejected_events ?? 0), 10) || 0;
+  const rejected = (Array.isArray(flag.rejected) ? flag.rejected : []).filter(
+    (r) => r && typeof r === 'object',
+  );
+  if (missing <= 0 && rejectedCount <= 0) return null;
+  return {
+    expected,
+    received,
+    missing,
+    rejectedCount,
+    rejected,
+    moreCount: Math.max(0, rejectedCount - rejected.length),
+  };
+}
+
+export const SCORE_LOCK_COPY: Record<string, { lead: string; body: string }> = {
+  SUBMITTED: {
+    lead: 'Scores are locked.',
+    body: 'This run is submitted for approval, so its scores cannot be edited or reset. A project manager can reject it to reopen score edits.',
+  },
+  APPROVED: {
+    lead: 'Scores are locked.',
+    body: 'This run is approved, so its scores cannot be edited or reset. A project manager can unapprove it to reopen score edits.',
+  },
+};
+
+export const READ_ONLY_COPY = {
+  lead: 'Read-only.',
+  body: 'This run belongs to an archived project. You can view and export it, but scores, diagnoses and reviews cannot be changed until an admin unarchives the project.',
+};
+
+export function scoresLocked(run: Run): boolean {
+  return !!SCORE_LOCK_COPY[String(run.status ?? '').toUpperCase()];
+}
+
+/** Model name without its provider prefix ("openai/gpt-5" → "gpt-5"), as the vanilla label does. */
+export function shortModelName(name: string | null | undefined): string {
+  const value = String(name ?? '');
+  const slash = value.indexOf('/');
+  return slash > 0 ? value.slice(slash + 1) : value;
+}
+
+/* ── round 3 P6: the chips of the run header (versioning, config, metadata) ── */
+
+/** Longest key and value a header chip prints; the full `key: value` is in its title. */
+export const CHIP_KEY_MAX = 20;
+export const CHIP_VALUE_MAX = 30;
+
+export function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, Math.max(1, max - 1))}…` : text;
+}
+
+export interface HeaderChip {
+  /** The dataset a Datasets-group chip stands for (it renders as a dataset chip, not a key/value tag). */
+  dataset?: RunDatasetEntry;
+  key: string;
+  /** Clipped key (at most 20 characters). */
+  label: string;
+  /** Clipped value (at most 30 characters) or a one-token summary: `{ 3 keys }`, `[ 4 items ]`. */
+  text: string;
+  /** Full `key: value` for the tooltip (compact JSON for an object). */
+  title: string;
+  /** The raw value when it is an object or array (the expanded view opens it through JsonPreview). */
+  raw?: unknown;
+}
+
+export interface HeaderChipGroup {
+  label: 'Datasets' | 'Versioning' | 'Config' | 'Metadata';
+  chips: HeaderChip[];
+}
+
+/** A run over several dataset versions (SDK 2.1.0 lists, `dataset_count` above 1). */
+export function isUnionRun(run: Pick<Run, 'dataset_count'>): boolean {
+  return (run.dataset_count ?? 1) > 1;
+}
+
+/** `name vN` of every dataset entry, comma separated: the title of the Datasets fact. */
+export function datasetsTitle(entries: RunDatasetEntry[]): string {
+  return entries.map((e) => (e.version ? `${e.dataset} ${e.version}` : e.dataset)).join(', ');
+}
+
+/** Link of a dataset chip to that version's page; null for a deleted dataset or a local file. */
+export function datasetEntryLink(slug: string | undefined, e: RunDatasetEntry): string | null {
+  if (!slug || e.deleted || !e.dataset_slug) return null;
+  const base = projectPath(slug, `datasets/${encodeURIComponent(e.dataset_slug)}`);
+  return e.version ? `${base}?v=${encodeURIComponent(e.version)}` : base;
+}
+
+function parsedObject(value: unknown): unknown {
+  if (value !== null && typeof value === 'object') return value;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+      try {
+        const parsed: unknown = JSON.parse(t);
+        if (parsed !== null && typeof parsed === 'object') return parsed;
+      } catch {
+        /* a string that only looks like JSON stays text */
+      }
+    }
+  }
+  return undefined;
+}
+
+/** One chip for a key and value: scalars print clipped, objects and arrays a one-token summary. */
+export function headerChip(key: string, value: unknown): HeaderChip {
+  const obj = parsedObject(value);
+  if (obj !== undefined) {
+    const n = Array.isArray(obj) ? obj.length : Object.keys(obj as object).length;
+    const text = Array.isArray(obj)
+      ? `[ ${n} ${n === 1 ? 'item' : 'items'} ]`
+      : `{ ${n} ${n === 1 ? 'key' : 'keys'} }`;
+    return { key, label: clip(key, CHIP_KEY_MAX), text, title: `${key}: ${JSON.stringify(obj)}`, raw: obj };
+  }
+  const full = stringify(value);
+  return { key, label: clip(key, CHIP_KEY_MAX), text: clip(full, CHIP_VALUE_MAX), title: `${key}: ${full}` };
+}
+
+/**
+ * The header chip groups in priority order: Versioning (the run's versioning_details by key, then the git chip), Config,
+ * Metadata. Empty groups are left out, so a run with none of them has no band 3.
+ */
+export function headerChips(run: Run): HeaderChipGroup[] {
+  const versioning: HeaderChip[] = Object.entries(run.versioning_details ?? {})
+    .filter(([, v]) => v != null && v !== '')
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => headerChip(k, v));
+  const git = [run.git_branch, run.git_commit].filter(Boolean).join(' • ');
+  if (git) versioning.push(headerChip('git', git));
+  const context = executionContextEntries(run);
+  const config = context.filter((c) => c.group === 'Config').map((c) => headerChip(c.key, c.raw));
+  const metadata = context.filter((c) => c.group === 'Metadata').map((c) => headerChip(c.key, c.raw));
+  // A run over several dataset versions: the Datasets group leads the band, one chip per entry.
+  const datasets: HeaderChip[] = isUnionRun(run)
+    ? (run.datasets ?? []).map((e) => ({
+        dataset: e,
+        key: `dataset:${e.position}`,
+        label: e.dataset,
+        text: e.version ?? '',
+        title: `${e.dataset}${e.version ? ` ${e.version}` : ''}`,
+      }))
+    : [];
+  return (
+    [
+      { label: 'Datasets', chips: datasets },
+      { label: 'Versioning', chips: versioning },
+      { label: 'Config', chips: config },
+      { label: 'Metadata', chips: metadata },
+    ] as HeaderChipGroup[]
+  ).filter((g) => g.chips.length > 0);
+}
+
+/** "Stopped: reason" / "Failed: reason" for a run that ended without completing and has a reason; null otherwise. */
+/** The items the run planned (the SDK's `total_items`), or null when it did not say. */
+export function plannedItems(run: Run): number | null {
+  const n = Number(run.metadata?.total_items);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** The notice under a failed or stopped run's name (RF2, C097). */
+export interface RunNotice {
+  tone: 'danger' | 'warning';
+  /** "Failed." / "Failed:" / "Stopped." / "Stopped:" */
+  lead: string;
+  text: string;
+  /** The line ends with a link to the Errors section. */
+  errorsLink: boolean;
+}
+
+const asSentence = (s: string) => (/[.!?]$/.test(s) ? s : `${s}.`);
+
+/**
+ * A failed run says what the client reported and how many items had a task error; a stopped run says why it stopped
+ * and how much of the dataset it covers. `received` is the number of items that reached the platform; `errors` is
+ * known once the rows are in.
+ */
+export function runNotice(
+  run: Run,
+  { received = null, errors = null }: { received?: number | null; errors?: RunErrorTally | null } = {},
+): RunNotice | null {
+  const status = String(run.status ?? '').toUpperCase();
+  const reason = String(run.status_reason_label ?? '').trim();
+  if (status === 'FAILED') {
+    const tally =
+      errors && errors.items > 0
+        ? `${errors.items} of ${errors.total} items had a task error${
+            errors.repeat
+              ? ` in at least one pass (${errors.passes} errored ${errors.passes === 1 ? 'pass' : 'passes'})`
+              : ''
+          }.`
+        : '';
+    if (reason)
+      return {
+        tone: 'danger',
+        lead: 'Failed:',
+        text: tally ? `${asSentence(reason)} ${tally}` : reason,
+        errorsLink: !!tally,
+      };
+    return {
+      tone: 'danger',
+      lead: 'Failed.',
+      text: `The client reported the run as failed.${tally ? ` ${tally}` : ''}`,
+      errorsLink: !!tally,
+    };
+  }
+  if (status === 'STOPPED') {
+    const planned = plannedItems(run);
+    const cover =
+      planned && received != null && received < planned
+        ? `Covers ${Math.round((received / planned) * 100)}% of the dataset (${received} of ${planned} items).`
+        : '';
+    if (reason)
+      return {
+        tone: 'warning',
+        lead: 'Stopped:',
+        text: cover ? `${asSentence(reason)} ${cover}` : reason,
+        errorsLink: false,
+      };
+    return cover ? { tone: 'warning', lead: 'Stopped.', text: cover, errorsLink: false } : null;
+  }
+  return null;
+}

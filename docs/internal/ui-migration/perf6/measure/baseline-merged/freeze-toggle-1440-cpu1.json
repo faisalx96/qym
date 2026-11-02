@@ -1,0 +1,260 @@
+{
+  "width": 1440,
+  "cpu": 1,
+  "median": [
+    {
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 32,
+      "commits": 1,
+      "layouts": 0,
+      "scriptMs": 53.1,
+      "longestFrameMs": 61,
+      "cssTransitionsStarted": 1
+    },
+    {
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 416,
+      "commits": 3,
+      "layouts": 2,
+      "scriptMs": 75.8,
+      "longestFrameMs": 131,
+      "cssTransitionsStarted": 1
+    },
+    {
+      "step": "unfreeze it",
+      "msToSettled": 142,
+      "commits": 3,
+      "layouts": 2,
+      "scriptMs": 55.9,
+      "longestFrameMs": 92,
+      "cssTransitionsStarted": 0
+    }
+  ],
+  "runs": [
+    {
+      "rep": 0,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 36,
+      "commits": 1,
+      "cssTransitionsStarted": 1,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 48.3,
+      "longestFrameMs": 57,
+      "loaf": [
+        {
+          "dur": 57,
+          "top": {
+            "d": 46.799999952316284,
+            "fn": "pe",
+            "inv": "MessagePort.onmessage",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 0,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 384,
+      "commits": 3,
+      "cssTransitionsStarted": 1,
+      "layouts": 2,
+      "layoutMs": 9.4,
+      "scriptMs": 75.8,
+      "longestFrameMs": 129,
+      "loaf": [
+        {
+          "dur": 83,
+          "top": {
+            "d": 54.89999997615814,
+            "fn": "zd",
+            "inv": "DIV#root.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        },
+        {
+          "dur": 129,
+          "top": {
+            "d": 111.5,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 0,
+      "step": "unfreeze it",
+      "msToSettled": 142,
+      "commits": 3,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 4.3,
+      "scriptMs": 55.9,
+      "longestFrameMs": 92,
+      "loaf": [
+        {
+          "dur": 92,
+          "top": {
+            "d": 81.70000004768372,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 31,
+      "commits": 1,
+      "cssTransitionsStarted": 1,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 53.1,
+      "longestFrameMs": 61,
+      "loaf": [
+        {
+          "dur": 61,
+          "top": {
+            "d": 51.60000002384186,
+            "fn": "pe",
+            "inv": "MessagePort.onmessage",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 416,
+      "commits": 3,
+      "cssTransitionsStarted": 1,
+      "layouts": 2,
+      "layoutMs": 11.8,
+      "scriptMs": 68,
+      "longestFrameMs": 131,
+      "loaf": [
+        {
+          "dur": 91,
+          "top": {
+            "d": 60,
+            "fn": "zd",
+            "inv": "DIV#root.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        },
+        {
+          "dur": 131,
+          "top": {
+            "d": 106.39999997615814,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "step": "unfreeze it",
+      "msToSettled": 138,
+      "commits": 3,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 3.1,
+      "scriptMs": 55.6,
+      "longestFrameMs": 90,
+      "loaf": [
+        {
+          "dur": 90,
+          "top": {
+            "d": 81.5,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "step": "first scroll flips the scrolled state",
+      "msToSettled": 32,
+      "commits": 246,
+      "cssTransitionsStarted": 1,
+      "layouts": 0,
+      "layoutMs": 0,
+      "scriptMs": 70.6,
+      "longestFrameMs": 66,
+      "loaf": [
+        {
+          "dur": 66,
+          "top": {
+            "d": 55.60000002384186,
+            "fn": "pe",
+            "inv": "MessagePort.onmessage",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "step": "freeze a metric column (Columns menu)",
+      "msToSettled": 470,
+      "commits": 3,
+      "cssTransitionsStarted": 1,
+      "layouts": 2,
+      "layoutMs": 10.5,
+      "scriptMs": 120.8,
+      "longestFrameMs": 187,
+      "loaf": [
+        {
+          "dur": 93,
+          "top": {
+            "d": 62.89999997615814,
+            "fn": "zd",
+            "inv": "DIV#root.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        },
+        {
+          "dur": 187,
+          "top": {
+            "d": 166.60000002384186,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "step": "unfreeze it",
+      "msToSettled": 170,
+      "commits": 3,
+      "cssTransitionsStarted": 0,
+      "layouts": 2,
+      "layoutMs": 3.5,
+      "scriptMs": 68,
+      "longestFrameMs": 101,
+      "loaf": [
+        {
+          "dur": 101,
+          "top": {
+            "d": 88.20000004768372,
+            "fn": "zd",
+            "inv": "BODY.onclick",
+            "url": "react-zBDCKe32.js"
+          }
+        }
+      ]
+    }
+  ]
+}

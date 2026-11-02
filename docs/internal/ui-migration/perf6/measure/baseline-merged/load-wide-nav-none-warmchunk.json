@@ -1,0 +1,119 @@
+{
+  "run": "wide",
+  "kind": "nav",
+  "net": "none",
+  "median": {
+    "heroMs": 167,
+    "overviewMs": 167,
+    "rowsMs": 167,
+    "ttiMs": 167,
+    "tbtMs": 80,
+    "cls": 0.0057,
+    "requests": 0,
+    "jsChunks": 0,
+    "jsKB": 0,
+    "apiRequests": 0,
+    "apiKB": 0,
+    "compactKB": null,
+    "compactTtfbMs": null,
+    "compactDoneMs": null
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 167,
+      "skeletonMs": null,
+      "overviewMs": 167,
+      "rowsMs": 167,
+      "ttiMs": 167,
+      "tbtMs": 80,
+      "cls": 0.0057,
+      "reactCommits": 350,
+      "requests": 0,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 0,
+      "apiKB": 0,
+      "compactKB": null,
+      "compactTtfbMs": null,
+      "compactDoneMs": null,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [],
+      "apiList": []
+    },
+    {
+      "rep": 1,
+      "heroMs": 164,
+      "skeletonMs": null,
+      "overviewMs": 164,
+      "rowsMs": 164,
+      "ttiMs": 164,
+      "tbtMs": 79,
+      "cls": 0.0057,
+      "reactCommits": 351,
+      "requests": 0,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 0,
+      "apiKB": 0,
+      "compactKB": null,
+      "compactTtfbMs": null,
+      "compactDoneMs": null,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [],
+      "apiList": []
+    },
+    {
+      "rep": 2,
+      "heroMs": 171,
+      "skeletonMs": null,
+      "overviewMs": 171,
+      "rowsMs": 171,
+      "ttiMs": 171,
+      "tbtMs": 85,
+      "cls": 0.0057,
+      "reactCommits": 347,
+      "requests": 0,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 0,
+      "apiKB": 0,
+      "compactKB": null,
+      "compactTtfbMs": null,
+      "compactDoneMs": null,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [],
+      "apiList": []
+    }
+  ]
+}

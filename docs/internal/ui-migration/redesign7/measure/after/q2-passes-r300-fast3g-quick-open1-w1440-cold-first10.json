@@ -1,0 +1,176 @@
+{
+  "net": "fast3g",
+  "width": 1440,
+  "settle": false,
+  "open": 1,
+  "run": "r300",
+  "median": {
+    "firstGroupPlaceholdersMs": 67,
+    "firstGroupRowsMs": 659,
+    "firstGroupStripMs": 633,
+    "requestsAfterClick": 6,
+    "apiKB": 1.77,
+    "cls": 0.1033
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "6f36f0e2-a749-41a5-b6ec-c9f7d6f7f717",
+          "placeholdersMs": 67,
+          "rowsMs": 659,
+          "stripMs": 633,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 6
+        }
+      ],
+      "requestsAfterClick": 6,
+      "passesRequests": 3,
+      "groupMetricsRequests": 3,
+      "apiKB": 1.77,
+      "passesKB": 1.25,
+      "passesTtfbMs": [
+        578,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        684,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        569,
+        null,
+        null
+      ],
+      "groupDoneMs": [
+        675,
+        null,
+        null
+      ],
+      "cls": 0.0958,
+      "requestList": [
+        "a749-41a5-b6ec-c9f7d6f7f717/passes @104-684ms ttfb 578 1.3kB",
+        "a5-b6ec-c9f7d6f7f717/group-metrics?metric=correct&threshold=0.8&view=group @105-675ms ttfb 569 0.5kB",
+        "60a3-43a0-94f0-00a24e1094a4/passes @684-NaNms ttfb NaN 0.0kB",
+        "a0-94f0-00a24e1094a4/group-metrics?metric=correct&threshold=0.8&view=group @684-NaNms ttfb NaN 0.0kB",
+        "8c35-4099-9077-bb54b2c6ad69/passes @684-NaNms ttfb NaN 0.0kB",
+        "99-9077-bb54b2c6ad69/group-metrics?metric=correct&threshold=0.8&view=group @685-NaNms ttfb NaN 0.0kB"
+      ]
+    },
+    {
+      "rep": 1,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "6f36f0e2-a749-41a5-b6ec-c9f7d6f7f717",
+          "placeholdersMs": 53,
+          "rowsMs": 644,
+          "stripMs": 618,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 6
+        }
+      ],
+      "requestsAfterClick": 6,
+      "passesRequests": 3,
+      "groupMetricsRequests": 3,
+      "apiKB": 1.77,
+      "passesKB": 1.25,
+      "passesTtfbMs": [
+        575,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        661,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        566,
+        null,
+        null
+      ],
+      "groupDoneMs": [
+        653,
+        null,
+        null
+      ],
+      "cls": 0.1033,
+      "requestList": [
+        "a749-41a5-b6ec-c9f7d6f7f717/passes @86-661ms ttfb 575 1.3kB",
+        "a5-b6ec-c9f7d6f7f717/group-metrics?metric=correct&threshold=0.8&view=group @86-653ms ttfb 566 0.5kB",
+        "60a3-43a0-94f0-00a24e1094a4/passes @665-NaNms ttfb NaN 0.0kB",
+        "a0-94f0-00a24e1094a4/group-metrics?metric=correct&threshold=0.8&view=group @666-NaNms ttfb NaN 0.0kB",
+        "8c35-4099-9077-bb54b2c6ad69/passes @666-NaNms ttfb NaN 0.0kB",
+        "99-9077-bb54b2c6ad69/group-metrics?metric=correct&threshold=0.8&view=group @666-NaNms ttfb NaN 0.0kB"
+      ]
+    },
+    {
+      "rep": 2,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "6f36f0e2-a749-41a5-b6ec-c9f7d6f7f717",
+          "placeholdersMs": 70,
+          "rowsMs": 664,
+          "stripMs": 637,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 6
+        }
+      ],
+      "requestsAfterClick": 6,
+      "passesRequests": 3,
+      "groupMetricsRequests": 3,
+      "apiKB": 1.77,
+      "passesKB": 1.25,
+      "passesTtfbMs": [
+        579,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        720,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        571,
+        null,
+        null
+      ],
+      "groupDoneMs": [
+        712,
+        null,
+        null
+      ],
+      "cls": 0.1033,
+      "requestList": [
+        "a749-41a5-b6ec-c9f7d6f7f717/passes @140-720ms ttfb 579 1.3kB",
+        "a5-b6ec-c9f7d6f7f717/group-metrics?metric=correct&threshold=0.8&view=group @140-712ms ttfb 571 0.5kB",
+        "60a3-43a0-94f0-00a24e1094a4/passes @721-NaNms ttfb NaN 0.0kB",
+        "a0-94f0-00a24e1094a4/group-metrics?metric=correct&threshold=0.8&view=group @721-NaNms ttfb NaN 0.0kB",
+        "8c35-4099-9077-bb54b2c6ad69/passes @721-NaNms ttfb NaN 0.0kB",
+        "99-9077-bb54b2c6ad69/group-metrics?metric=correct&threshold=0.8&view=group @721-NaNms ttfb NaN 0.0kB"
+      ]
+    }
+  ]
+}

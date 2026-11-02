@@ -1,0 +1,32 @@
+{
+  "a": [
+    {
+      "w": 87,
+      "ff": "\"Qym Sans\", \"Qym Arabic\", \"Qym Sans Fallback\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+      "fv": "normal",
+      "fs": "10px",
+      "fw": "650",
+      "fst": "100%",
+      "ls": "normal",
+      "ws": "0px",
+      "tr": "geometricprecision",
+      "kern": "normal",
+      "ctx": "option"
+    }
+  ],
+  "b": [
+    {
+      "w": 99,
+      "ff": "\"Qym Sans\", \"Qym Arabic\", \"Qym Sans Fallback\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+      "fv": "normal",
+      "fs": "10px",
+      "fw": "650",
+      "fst": "100%",
+      "ls": "normal",
+      "ws": "0px",
+      "tr": "auto",
+      "kern": "normal",
+      "ctx": "trigger"
+    }
+  ]
+}

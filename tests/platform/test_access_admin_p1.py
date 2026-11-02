@@ -268,7 +268,8 @@ def test_unknown_email_costs_a_password_hash_like_a_known_one(local, monkeypatch
         unknown = _login(client, "nobody@x.com", "wrong-password")
         known = _login(client, "person@x.com", "wrong-password")
     assert unknown.status_code == known.status_code == 401
-    assert unknown.json() == known.json() == {"detail": "Invalid email or password"}
+    assert unknown.json()["detail"] == known.json()["detail"] == "Invalid email or password"
+    assert unknown.json()["error"]["code"] == known.json()["error"]["code"]
     assert len(calls) == 2 and all(stored for stored in calls)
 
 
@@ -335,8 +336,6 @@ def test_signup_is_off_once_an_admin_exists_unless_enabled(local, monkeypatch):
         refused = client.post("/v1/auth/signup/password", json=payload, headers=ORIGIN)
         assert refused.status_code == 403
         assert "Ask an admin" in refused.json()["detail"]
-        page = client.get("/login")
-        assert '"signup_enabled": false' in page.text
     monkeypatch.setenv("QYM_AUTH_LOCAL_SIGNUP", "true")
     with _client(local) as client:
         assert client.get("/v1/auth/providers").json()["local_auth"]["signup_enabled"] is True
@@ -532,6 +531,29 @@ def test_trash_pages_through_every_deleted_run(trash):
     assert (first["project_id"], first["project_name"], first["project_slug"]) == ("pa", "Project A", "pa")
     assert client.get("/api/runs/trash?limit=201", headers=ADMIN).status_code == 422
     assert client.get("/api/runs/trash", headers=MGR).status_code == 403
+
+
+def test_trash_and_users_follow_the_list_contract(trash):
+    """C160: format=page gives {data, has_more, next_cursor, total}; a cursor walks every row once."""
+    client, _ = trash
+    seen, cursor = [], None
+    while True:
+        url = "/api/runs/trash?limit=3&format=page" + (f"&cursor={cursor}" if cursor else "")
+        body = client.get(url, headers=ADMIN).json()
+        assert set(body) == {"data", "has_more", "next_cursor", "total"} and body["total"] == 8
+        seen.extend(row["id"] for row in body["data"])
+        if not body["has_more"]:
+            assert body["next_cursor"] is None
+            break
+        cursor = body["next_cursor"]
+    assert seen == [f"run-{i}" for i in range(7)] + ["run-arch"]
+    # The bare list stays the default for one release.
+    assert isinstance(client.get("/api/runs/trash?limit=1", headers=ADMIN).json(), list)
+    assert client.get("/api/runs/trash?format=page&cursor=bogus", headers=ADMIN).status_code == 422
+
+    users = client.get("/v1/users?format=page&limit=1", headers=ADMIN).json()
+    assert users["total"] >= 1 and len(users["data"]) == 1
+    assert isinstance(client.get("/v1/users", headers=ADMIN).json(), list)
 
 
 def test_trash_filters_by_project_and_name(trash):

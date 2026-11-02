@@ -1,0 +1,291 @@
+/* Round 4 runs-list mocks (visual contract for docs/internal/ui-migration/redesign4/runs-passes.md). Tokens only. */
+.mono {
+  font-family: var(--font-mono);
+}
+
+.none {
+  color: var(--text-muted);
+}
+
+.mutedSm {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.errText {
+  font-size: var(--font-sm);
+  color: var(--error);
+}
+
+/* real widths of the runs table scroller: 1203 px at a 1440 viewport, 289 px of card list at 390 */
+.d1440 {
+  inline-size: 1203px;
+  max-inline-size: 100%;
+}
+
+.m390 {
+  inline-size: 289px;
+  max-inline-size: 100%;
+}
+
+.host {
+  min-inline-size: 0;
+}
+
+.runName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.chevronSpacer {
+  display: inline-block;
+  inline-size: 24px;
+  flex: none;
+}
+
+.runLink {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+/* a pass sits at the run name's x: chevron slot width plus the gap */
+.passName {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding-inline-start: calc(24px + var(--space-xs));
+}
+
+.passLink {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.passLink:hover {
+  text-decoration: underline;
+}
+
+.statusCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.issues {
+  display: inline-flex;
+  gap: var(--space-sm);
+}
+
+.issue {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-sm);
+}
+
+.issue[data-tone='danger'] {
+  color: var(--error);
+}
+
+.issue[data-tone='warning'] {
+  color: var(--warning);
+}
+
+.issue[data-tone='info'] {
+  color: var(--info);
+}
+
+.analyze {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* ───────── group marker: one 3 px rail down the open run, its passes and the strip; surface step, no wash ───────── */
+.host tr[data-run-open] > td:first-child,
+.host tr[data-kind='pass'] > td:first-child,
+.host tr[data-kind='queued'] > td:first-child,
+.host tr[data-kind='loading'] > td:first-child,
+.host tr[data-kind='error'] > td:first-child {
+  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+}
+
+.host tr[data-kind='pass'] > td,
+.host tr[data-kind='queued'] > td,
+.host tr[data-kind='loading'] > td,
+.host tr[data-kind='error'] > td {
+  background: var(--bg-void);
+}
+
+.child td {
+  color: var(--text-secondary);
+}
+
+.parentOpen td {
+  font-weight: 600;
+}
+
+/* ───────── the strip: one full-width row, sticky to the scroller start (the table's detail row) ───────── */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  min-block-size: 44px;
+  box-sizing: border-box;
+  padding: var(--space-xs) var(--space-md);
+  padding-inline-start: calc(var(--space-md) + var(--rail-width));
+  border-block-start: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+}
+
+.strip[data-dim] {
+  opacity: var(--dim-opacity);
+}
+
+.stripTitle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  margin-inline-start: auto;
+}
+
+.stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.stat dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.stat dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+/* ───────── card mode ───────── */
+.cards {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runCard {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.runCard[data-open] {
+  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+}
+
+.cardTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.cardFacts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.cardFacts dd {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.cardPasses {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.cardPass {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0 var(--space-sm);
+  min-block-size: var(--row-compact);
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+}
+
+.cardPass[data-selected] {
+  background: var(--bg-selected);
+}
+
+.cardScore {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
+}
+
+.cardPass .passLink {
+  white-space: nowrap;
+}
+
+.cardPass input[type='checkbox'] {
+  margin: 0;
+}
+
+.m390 .strip {
+  align-items: stretch;
+}
+
+.m390 .stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  inline-size: 100%;
+  margin-inline-start: 0;
+}
+
+.cardPassHead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}

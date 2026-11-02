@@ -170,7 +170,7 @@ def test_dataset_upload_publish_alias_draft_compare_and_item_runs(client_and_ses
     versions_by_label = {v["version"]: v for v in lineage.json()["versions"]}
     assert versions_by_label["v1"]["created_by"]["display_name"] == "Dev"
     assert versions_by_label["v1"]["published_by"]["email"] == "dev@local"
-    assert versions_by_label["v1"]["change_counts"] == {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0}
+    assert versions_by_label["v1"]["change_counts"] == {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0, "disabled": 0, "enabled": 0}
     assert versions_by_label["v2"]["change_counts"]["added"] == 1
     assert versions_by_label["v2"]["change_counts"]["modified"] == 1
     assert versions_by_label["v2"]["change_counts"]["deleted"] == 0

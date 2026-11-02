@@ -28,7 +28,15 @@ from .core.observers import (
 )
 from .core.results import EvaluationResult
 from .core.config import RunSpec
-from .core.dataset import CsvDataset, InMemoryDataset, JsonlDataset, QymDataset
+from .core.dataset import (
+    CsvDataset,
+    DatasetLike,
+    DatasetRef,
+    InMemoryDataset,
+    JsonlDataset,
+    QymDataset,
+    UnionDataset,
+)
 from .metrics import Metric, MetricSpec, builtin_metrics, list_available_metrics
 from .utils.errors import BusinessRuleError, NonRetryableError
 
@@ -46,9 +54,12 @@ __all__ = [
     "BusinessRuleError",
     "NonRetryableError",
     "CsvDataset",
+    "DatasetLike",
+    "DatasetRef",
     "InMemoryDataset",
     "JsonlDataset",
     "QymDataset",
+    "UnionDataset",
     "analyze_group_runs",
     "builtin_metrics",
     "compare_group_runs",

@@ -1,5 +1,16 @@
 # syntax=docker/dockerfile:1.7
 ARG BASE_IMAGE=python:3.11-slim
+# The UI bundles come from a prebuilt assets image (docker/Dockerfile.frontend):
+# /dist/app is the platform SPA, /dist/ui the SDK's offline viewer. Pass a
+# registry reference to reuse a published build, or leave the default and
+# build it first (docker/build.sh does both):
+#
+#   podman build -f docker/Dockerfile.frontend -t qym-frontend:local .
+#   podman build --build-arg FRONTEND_IMAGE=qym-frontend:local -f docker/Dockerfile .
+ARG FRONTEND_IMAGE=qym-frontend:local
+
+FROM ${FRONTEND_IMAGE} AS frontend-build
+
 
 FROM ${BASE_IMAGE} AS python-base
 
@@ -37,6 +48,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY packages/sdk /app/packages/sdk
 COPY packages/platform /app/packages/platform
+COPY --from=frontend-build /dist/app /app/packages/platform/qym_platform/_static/app
+COPY --from=frontend-build /dist/ui /app/packages/sdk/qym/_static/ui
 COPY insightor_eval.py /app/insightor_eval.py
 COPY tools /app/tools
 
@@ -52,6 +65,8 @@ FROM python-base AS runtime-base
 
 COPY packages/sdk /app/packages/sdk
 COPY packages/platform /app/packages/platform
+COPY --from=frontend-build /dist/app /app/packages/platform/qym_platform/_static/app
+COPY --from=frontend-build /dist/ui /app/packages/sdk/qym/_static/ui
 COPY insightor_eval.py /app/insightor_eval.py
 COPY examples /app/examples
 COPY tools /app/tools
@@ -61,6 +76,17 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Run unprivileged: /app stays root-owned and read-only to the process, so
+# nothing is written into the image layer. Deployments also mount the root
+# filesystem read-only with a small tmpfs at /tmp (docker-compose.yml).
+RUN groupadd --system --gid 10001 qym \
+    && useradd --system --uid 10001 --gid qym --no-create-home --shell /usr/sbin/nologin qym
+# HOME points at the tmpfs so a library cache never reaches the image layer;
+# platform event streams never spill to disk (events wait in memory instead).
+ENV HOME=/tmp \
+    QYM_PLATFORM_EVENT_SPILL_BYTES=0
+USER qym
 
 EXPOSE 8000
 

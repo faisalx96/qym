@@ -75,6 +75,13 @@ class DashboardChangeEvent(NumericContribution, Base):
             "published_at",
             "source_version",
         ),
+        # Outbox retention walks published rows in source order (C074, migration 0093).
+        Index(
+            "ix_dashboard_event_published",
+            "source_version",
+            postgresql_where=text("published_at IS NOT NULL"),
+            sqlite_where=text("published_at IS NOT NULL"),
+        ),
         {"sqlite_autoincrement": True},
     )
 
@@ -184,6 +191,25 @@ class DashboardRunDimension(Base):
     # run's descriptor rewrites HOT. NULL until the build_runs_search_index
     # job (migration 0071) fills a row written before the column existed.
     search_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class DashboardRunVersion(Base):
+    """One filterable ``versioning_metadata`` entry of a run (any key).
+
+    Maintained with the run's dimension by the projection worker
+    (``services/run_versioning.py``), so filters are indexed lookups instead of
+    scans of JSON descriptors.
+    """
+
+    __tablename__ = "dashboard_run_versions"
+    __table_args__ = (
+        Index("ix_dashboard_run_versions_key_value", "key", "value"),
+        Index("ix_dashboard_run_versions_project_key", "project_key", "key", "value"),
+    )
+    run_key: Mapped[str] = mapped_column(String(36), primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    project_key: Mapped[str] = mapped_column(String(36), nullable=False)
+    value: Mapped[str] = mapped_column(String(500), nullable=False)
 
 
 class RollupNumbers:

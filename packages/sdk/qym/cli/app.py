@@ -73,6 +73,105 @@ def dashboard(
             err_console.print(f"[yellow]Could not open browser: {e}[/yellow]")
 
 
+@app.command("ui")
+def ui(
+    file: Optional[str] = typer.Argument(None, help="Saved results file (.csv or .xlsx) to open; omit to serve an empty viewer"),
+    port: int = typer.Option(0, "--port", help="Port to listen on (0 for auto)"),
+    results_dir: Optional[str] = typer.Option(None, "--results-dir", help="Directory holding saved results (default: qym_results, or FILE's folder when FILE lies outside it)"),
+    no_open: bool = typer.Option(False, "--no-open", help="Do not open the browser"),
+) -> None:
+    """Open a saved results file in the offline local viewer (no platform needed)."""
+    from urllib.parse import quote
+    from ..server import UIServer
+    from ..server.app import RESULT_FILE_SUFFIXES
+
+    if file and not Path(file).is_file():
+        output_error("not_found", f"File not found: {file}")
+        raise typer.Exit(code=ExitCode.NOT_FOUND)
+    if file and not file.lower().endswith(RESULT_FILE_SUFFIXES):
+        output_error("usage", f"The viewer opens .csv and .xlsx results files, not {Path(file).suffix or 'this file'}: {file}")
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    if results_dir is None:
+        results_dir = "qym_results"
+        if file:
+            resolved = Path(file).resolve()
+            default_abs = Path(results_dir).resolve()
+            if default_abs != resolved.parent and default_abs not in resolved.parents:
+                # Outside the default folder: allow editing it by serving its own folder.
+                results_dir = str(resolved.parent)
+    server = UIServer(port=port, results_dir=results_dir)
+    server.expects_live = bool(file)
+    if not server.has_viewer():
+        output_error(
+            "failure",
+            "The local viewer is not built in this install.",
+            suggestion="From a checkout run: cd frontend && npm ci && npm run build:sdk",
+        )
+        raise typer.Exit(code=ExitCode.FAILURE)
+    try:
+        server.start()
+    except OSError as exc:
+        where = f"port {port}" if port else "a free port"
+        output_error(
+            "failure",
+            f"Could not start the viewer on {where}: {exc}",
+            suggestion="Pick another port with --port, or omit it to use a free one.",
+        )
+        raise typer.Exit(code=ExitCode.FAILURE)
+    url = server.url + (f"run/{quote(str(Path(file).resolve()), safe='')}" if file else "")
+    if is_json_mode():
+        output({"viewer_url": url})
+    else:
+        err_console.print(f"[bold]qym viewer:[/bold] {url}  (Ctrl+C to exit)", soft_wrap=True)
+    if not no_open and not is_json_mode():
+        webbrowser.open(url)
+    try:
+        server._stop.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop()
+
+
+def _datasets_of_results_file(name: str, raw: bytes) -> list:
+    """The datasets of a union run's results file (rows tagged ``qym_dataset_*``), else ``[]``."""
+    import csv
+    import io
+
+    entries: dict = {}
+    seen: set = set()
+    try:
+        text = raw.decode("utf-8")
+        if name.lower().endswith(".json"):
+            listed = (json.loads(text) or {}).get("datasets")
+            return [e for e in listed if isinstance(e, dict)] if isinstance(listed, list) else []
+        if not name.lower().endswith(".csv"):
+            return []
+        for row in csv.DictReader(io.StringIO(text)):
+            meta = json.loads(row.get("item_metadata") or "{}")
+            index = meta.get("qym_dataset_index") if isinstance(meta, dict) else None
+            if not isinstance(index, int) or isinstance(index, bool):
+                continue
+            entry = entries.setdefault(
+                index,
+                {
+                    "dataset": meta.get("qym_dataset") or "",
+                    "dataset_id": None,
+                    "dataset_version_id": meta.get("qym_dataset_version_id"),
+                    "version": meta.get("qym_dataset_version"),
+                    "alias": None,
+                    "items": 0,
+                    "disabled_items": 0,
+                },
+            )
+            if row.get("item_id") not in seen:
+                seen.add(row.get("item_id"))
+                entry["items"] += 1
+    except Exception:
+        return []
+    return [entries[i] for i in sorted(entries)]
+
+
 @app.command("submit")
 def submit(
     file: str = typer.Option(..., "--file", help="Path to results file (.csv or .json)"),
@@ -98,8 +197,14 @@ def submit(
     raw = file_path.read_bytes()
     ctype = mimetypes.guess_type(str(file_path.name))[0] or "application/octet-stream"
 
+    fields = {"task": task, "dataset": dataset, "model": model_name or ""}
+    datasets = _datasets_of_results_file(file_path.name, raw)
+    if len(datasets) >= 2:
+        # A union run's file: its datasets, so the platform shows the breakdown.
+        fields["datasets"] = json.dumps(datasets)
+
     body, boundary = _encode_multipart_formdata(
-        fields={"task": task, "dataset": dataset, "model": model_name or ""},
+        fields=fields,
         files={"file": (file_path.name, raw, ctype)},
     )
 

@@ -1,0 +1,313 @@
+/* WP-B mocks (visual contract for docs/internal/feature-rounds/2026-10-dataset-access/spec-b.md). Tokens only.
+   Frames use the real column widths: launch step-1 card 821 / 777 / 279 px, review pane 352 / 777 / 279 px,
+   report column 1193 / 777 / 279 px (1440 / 1024 / 390). The CSS here is the proposed recipe for the real components. */
+
+.col,
+.aside,
+.report {
+  inline-size: min(100%, var(--ef-w));
+}
+
+.col {
+  --ef-w: 821px;
+}
+
+.aside {
+  --ef-w: 352px;
+}
+
+.report {
+  --ef-w: 1193px;
+}
+
+@media (width <= 1100px) {
+  .col,
+  .aside,
+  .report {
+    --ef-w: 777px;
+  }
+}
+
+@media (width <= 480px) {
+  .col,
+  .aside,
+  .report {
+    --ef-w: 279px;
+  }
+}
+
+.label {
+  margin-block: var(--space-md) var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.label[data-kind='spec'] {
+  color: var(--accent-primary);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.sm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.copy {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.copy code {
+  font-family: var(--font-mono);
+}
+
+/* ───────── B5 launch: Run settings ───────── */
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+@media (width <= 480px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The checkbox, its helper and its reason are one block; the helper sits under the label like "Allow connection keys". */
+.latency {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.checkHelp {
+  margin: 0;
+  padding-inline-start: calc(var(--space-lg) + var(--space-xs));
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.checkReason {
+  margin: 0;
+  padding-inline-start: calc(var(--space-lg) + var(--space-xs));
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.checkReason strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.callout {
+  margin-inline-start: calc(var(--space-lg) + var(--space-xs));
+}
+
+/* ───────── review pane ───────── */
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.runs {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.runsValue {
+  font-family: var(--font-mono);
+  font-size: var(--font-stat);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.calloutRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+/* ───────── B4 dataset picker ───────── */
+
+.options {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-xs);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  margin: 0;
+  list-style: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-block-size: var(--dropdown-option-height);
+  padding-inline: var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.option[data-selected] {
+  color: var(--text-primary);
+}
+
+.optionName {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ───────── B4 / B5 experiment detail ───────── */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.titleRow {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* The Credentials row: one line of "name + badge" pairs after an eyebrow; wraps at 390 without clipping a name. */
+.creds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+}
+
+.credItem {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  margin: 0;
+  min-width: 0;
+}
+
+.credName {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.credValue {
+  margin: 0;
+  display: inline-flex;
+}
+
+.credList {
+  display: contents;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.jobTitle {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}
+
+.link {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.errorText {
+  color: var(--error);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-md);
+  padding-block: var(--space-sm);
+}
+
+.envCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.note {
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border-default));
+  border-radius: var(--control-radius);
+  font-size: var(--font-sm);
+  color: var(--warning);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14em, 1fr));
+  gap: var(--space-md);
+}
+
+.dialogCopy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+@media (width <= 480px) {
+  .creds > :first-child {
+    flex-basis: 100%;
+  }
+}

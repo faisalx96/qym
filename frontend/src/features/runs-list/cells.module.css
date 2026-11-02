@@ -1,0 +1,249 @@
+/* Cell recipes for the runs-list mocks (DESIGN_LANGUAGE §3 data table). */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--text-muted);
+}
+
+.date {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.modelMark {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chart-1);
+}
+
+.modelMark[data-size='md'] {
+  width: 10px;
+  height: 10px;
+}
+
+.modelMark[data-shape='square'] {
+  border-radius: 2px;
+}
+
+.modelMark[data-shape='diamond'] {
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.85);
+}
+
+.modelMark[data-series='1'] {
+  background: var(--chart-1);
+}
+.modelMark[data-series='2'] {
+  background: var(--chart-2);
+}
+.modelMark[data-series='3'] {
+  background: var(--chart-3);
+}
+.modelMark[data-series='4'] {
+  background: var(--chart-4);
+}
+.modelMark[data-series='5'] {
+  background: var(--chart-5);
+}
+.modelMark[data-series='6'] {
+  background: var(--chart-6);
+}
+.modelMark[data-series='7'] {
+  background: var(--chart-7);
+}
+.modelMark[data-series='8'] {
+  background: var(--chart-8);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.progressTrack {
+  display: inline-block;
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  background: var(--info);
+}
+
+/* Status, then the signals (C028): the signals sit in a second column, so they line up from row to row. */
+.statusRow {
+  display: inline-grid;
+  grid-template-columns: minmax(92px, max-content) auto;
+  align-items: center;
+  column-gap: var(--space-sm);
+  min-width: 0;
+}
+
+.signals {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* each signal links to the Errors section of its run or pass (C115) */
+.signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-xs);
+  height: 20px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.signal:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.signal[data-tone='error'] {
+  color: var(--error);
+}
+.signal[data-tone='metric'] {
+  color: var(--metric-error);
+}
+.signal[data-tone='info'] {
+  color: var(--info);
+}
+.signal[data-tone='warning'] {
+  color: var(--warning);
+}
+
+.metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.metricError {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  font-size: var(--font-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.metricError[data-tone='error'] {
+  color: var(--error);
+}
+
+.metricError[data-tone='metric'] {
+  color: var(--metric-error);
+}
+
+.metricError:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.numeric {
+  display: inline-flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.runName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chevron {
+  flex: none;
+}
+
+/* Every element beside the name keeps its size; only the name gives way (QA3-26). */
+.runName > span {
+  flex: none;
+}
+
+/* The leading slot of a run without passes: the chevron spacer's box (inline-block, 24 px, no height) with the
+   latency tag centred in it, so the head's line box (the card layout baseline-aligns it) and the name do not move. */
+.leadSlot {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: var(--control-height);
+}
+
+.leadSlot > .runLatencyTag {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: calc((var(--control-height) - var(--badge-height)) / 2);
+  transform: translateY(-50%);
+}
+
+.runLatencyTag {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--badge-height);
+  padding: 0;
+}
+
+.chevronSpacer {
+  display: inline-block;
+  flex: none;
+  width: var(--control-height);
+}
+
+.runLink {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 2px;
+}
+
+.runLink:hover {
+  color: var(--accent-primary);
+  text-decoration: none; /* the colour step is the hover cue: no underline */
+}
+
+.runLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

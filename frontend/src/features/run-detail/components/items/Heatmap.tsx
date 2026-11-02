@@ -1,0 +1,138 @@
+/** Item × pass heatmap of the analysis metric for repeat runs, virtualized (brief 04 J4). */
+import { useMemo, useRef, useState } from 'react';
+import { Button, useStickyShift } from '@/ui';
+import { useScrollMargin, useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { metricBand } from '@/lib/metrics';
+import { scopeRowToPass } from '../../lib/passScope';
+import { metricCell } from '../../lib/rowDisplay';
+import type { FilteredItem } from '../../lib/filterRules';
+import { useRunPage } from '../../RunContext';
+import styles from './Heatmap.module.css';
+
+const ROW = 32;
+/** Rows shown before "Show more": a heatmap reads as a picture, so it stays a screen or two long. */
+const PAGE = 30;
+const ITEM_COL = 280;
+const PASS_COL = 72;
+
+export function Heatmap({
+  items: all,
+  onOpen,
+}: {
+  items: FilteredItem[];
+  onOpen: (itemId: string, pass: number) => void;
+}) {
+  const { model, api } = useRunPage();
+  const [limit, setLimit] = useState(PAGE);
+  const items = useMemo(() => all.slice(0, limit), [all, limit]);
+  const metric = api.selectedMetric;
+  const passes = useMemo(() => Array.from({ length: model.samples }, (_, i) => i + 1), [model.samples]);
+  const scroller = useShellScroller();
+  const listRef = useRef<HTMLDivElement>(null);
+  const margin = useScrollMargin(listRef, scroller);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const stickyOffset = useStickyOffset();
+  useStickyShift({
+    container: gridRef,
+    head: (g) => g.querySelector<HTMLElement>('[data-heat-head]'),
+    parent: scroller,
+    top: stickyOffset,
+  });
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scroller,
+    estimateSize: () => ROW,
+    overscan: 14,
+    scrollMargin: margin,
+    getItemKey: (i) => items[i]?.row.item_id ?? i,
+  });
+  if (!metric) return null;
+  const cols = `minmax(160px, ${ITEM_COL}px) repeat(${passes.length}, ${PASS_COL}px)`;
+  // the block is as wide as its columns (an item column of a few hundred px, then the cells), never the page
+  const blockWidth = ITEM_COL + (PASS_COL + 4) * passes.length + 24;
+  return (
+    <div className={styles.wrap}>
+      <div className={styles.scroll}>
+        <div
+          ref={gridRef}
+          className={styles.grid}
+          role="grid"
+          aria-label={`${metric} by item and pass`}
+          aria-rowcount={all.length + 1}
+          aria-colcount={passes.length + 1}
+          style={{ width: blockWidth, minWidth: 364 + 72 * passes.length }}
+        >
+          <div className={styles.row} data-heat-head="" role="row" style={{ gridTemplateColumns: cols }}>
+            <span role="columnheader" className={styles.th}>
+              Item
+            </span>
+            {passes.map((p) => (
+              <span role="columnheader" key={p} className={styles.th}>
+                Pass {p}
+              </span>
+            ))}
+          </div>
+          <div ref={listRef} className={styles.body} style={{ height: virtualizer.getTotalSize() }}>
+            {virtualizer.getVirtualItems().map((v) => {
+              const item = items[v.index]!;
+              return (
+                <div
+                  key={v.key}
+                  role="row"
+                  aria-rowindex={v.index + 2}
+                  className={styles.row}
+                  data-heat-row=""
+                  style={{
+                    gridTemplateColumns: cols,
+                    height: ROW,
+                    transform: `translateY(${v.start - virtualizer.options.scrollMargin}px)`,
+                  }}
+                >
+                  <span role="gridcell" className={styles.label} title={item.row.item_id}>
+                    #{item.row.index + 1} <span className={styles.id}>{item.row.item_id}</span>
+                  </span>
+                  {passes.map((p) => {
+                    const cell = metricCell(api.ctx, scopeRowToPass(item.row, model.metricNames, p), metric);
+                    const band = cell.error ? null : metricBand(cell.value, cell.type, cell.direction);
+                    return (
+                      <span role="gridcell" key={p}>
+                        <button
+                          type="button"
+                          className={styles.cell}
+                          data-band={band ?? undefined}
+                          data-error={cell.error ?? undefined}
+                          aria-label={`Item #${item.row.index + 1} pass ${p}: ${cell.error ? 'error' : cell.text}`}
+                          onClick={() => onOpen(item.row.item_id, p)}
+                        >
+                          {cell.error ? '⚠' : cell.text}
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      {all.length > PAGE ? (
+        <div className={styles.more}>
+          <span>
+            Showing {items.length.toLocaleString('en-US')} of {all.length.toLocaleString('en-US')} items
+          </span>
+          {items.length < all.length ? (
+            <Button size="sm" variant="ghost" onPress={() => setLimit((n) => n + PAGE)}>
+              Show {Math.min(PAGE, all.length - items.length)} more
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onPress={() => setLimit(PAGE)}>
+              Show fewer
+            </Button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}

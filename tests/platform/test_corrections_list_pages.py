@@ -342,6 +342,14 @@ def test_model_filter_matches_literally(env):
     assert _get(client, model=["acme/gptx4o"])["total"] == 6
 
 
+def test_source_filter_runs_on_every_backend(env):
+    client, _make, _ = env
+    # The source filter trims text columns; the SQL function must exist on SQLite and Postgres.
+    for source in ("ai_only", "human_only", "corrected"):
+        page = _get(client, source=source)
+        assert isinstance(page["total"], int)
+
+
 def test_list_reads_stay_bounded(env):
     client, _make, engine = env
     with record_queries(engine) as log:

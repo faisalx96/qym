@@ -1,0 +1,155 @@
+{
+  "/projects/access-demo/runs/32743aff-aae1-4ef9-93c3-6ff3a5f8004b": [
+    {
+      "sel": "a._button_uux7y_2",
+      "text": "Export HTML",
+      "w": 111,
+      "h": 24,
+      "href": "/api/runs/32743aff-aae1-4ef9-93c3-6ff3a5f8004b/export-html",
+      "kids": 1,
+      "idx": 16,
+      "rest": {
+        "deco": "none",
+        "border": "rgb(0,",
+        "bg": "color(srgb 0 0.831373 0.666667 / 0.12)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "none",
+        "border": "rgb(0,",
+        "bg": "color(srgb 0 0.831373 0.666667 / 0.2)",
+        "shadow": "none"
+      }
+    },
+    {
+      "sel": "a._metaLink_15ltg_104",
+      "text": "faq",
+      "w": 34,
+      "h": 15,
+      "href": "/projects/access-demo?task=faq",
+      "kids": 1,
+      "idx": 18,
+      "rest": {
+        "deco": "none",
+        "border": "rgb(237,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "underline",
+        "border": "rgb(0,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      }
+    },
+    {
+      "sel": "a._metaLink_15ltg_104",
+      "text": "support-faqv1production",
+      "w": 152,
+      "h": 15,
+      "href": "/projects/access-demo/datasets/support-faq?tab=runs&v=v1",
+      "kids": 3,
+      "idx": 19,
+      "rest": {
+        "deco": "none",
+        "border": "rgb(237,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "underline",
+        "border": "rgb(0,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      }
+    },
+    {
+      "sel": "a._button_uux7y_2",
+      "text": "Auto-analyze",
+      "w": 112,
+      "h": 24,
+      "href": "/projects/access-demo/runs/32743aff-aae1-4ef9-93c3-6ff3a5f8004b/analyzer",
+      "kids": 1,
+      "idx": 30,
+      "rest": {
+        "deco": "none",
+        "border": "rgb(237,",
+        "bg": "rgb(50, 50, 68)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "none",
+        "border": "rgb(237,",
+        "bg": "rgb(42, 42, 60)",
+        "shadow": "none"
+      }
+    }
+  ],
+  "/projects/access-demo/compare?runs=32743aff-aae1-4ef9-93c3-6ff3a5f8004b,52b0e35f-a153-4728-9d14-1c3f9b0257c1": [
+    {
+      "sel": "a.",
+      "text": "← Back to runs",
+      "w": 80,
+      "h": 15,
+      "href": "/projects/access-demo",
+      "kids": 0,
+      "idx": 15,
+      "rest": {
+        "deco": "none",
+        "border": "rgb(0,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "underline",
+        "border": "rgb(0,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      }
+    }
+  ],
+  "/docs/get-started/first-run": [
+    {
+      "sel": "a._anchor_aq3po_56",
+      "text": "#",
+      "w": 11,
+      "h": 20,
+      "href": "/docs/get-started/first-run#1-a-tiny-dataset",
+      "kids": 1,
+      "idx": 39,
+      "rest": {
+        "deco": "none",
+        "border": "rgb(0,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "underline",
+        "border": "rgb(0,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      }
+    },
+    {
+      "sel": "a.",
+      "text": "Link your repo & create API keys",
+      "w": 218,
+      "h": 19,
+      "href": "/docs/get-started/api-keys",
+      "kids": 0,
+      "idx": 44,
+      "rest": {
+        "deco": "underline",
+        "border": "rgb(0,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      },
+      "hover": {
+        "deco": "underline",
+        "border": "rgb(0,",
+        "bg": "rgba(0, 0, 0, 0)",
+        "shadow": "none"
+      }
+    }
+  ]
+}

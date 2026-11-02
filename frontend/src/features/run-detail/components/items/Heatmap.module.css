@@ -1,0 +1,131 @@
+/* Item × pass heatmap. */
+.wrap {
+  min-width: 0;
+}
+
+.scroll {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+}
+
+.row {
+  display: grid;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0 var(--space-sm);
+}
+
+.grid {
+  --head-shift: 0px;
+}
+
+.row[data-heat-head] {
+  position: relative;
+  z-index: 2;
+  transform: translateY(var(--head-shift));
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.th {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-xs) 0;
+}
+
+.body {
+  position: relative;
+}
+
+.body .row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  border-radius: var(--control-radius);
+  transition: background-color var(--transition-fast);
+}
+
+/* the row guide: the hovered or focused row lights up across the item label and its cells */
+.body .row:hover,
+.body .row:focus-within {
+  background: var(--bg-hover);
+}
+
+.body .row:hover .label,
+.body .row:focus-within .label {
+  color: var(--text-primary);
+}
+
+.more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.id {
+  color: var(--text-muted);
+}
+
+.cell {
+  width: 100%;
+  height: 24px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.cell:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+.cell[data-band='1'] {
+  background: color-mix(in srgb, var(--score-1) 35%, var(--bg-elevated));
+}
+.cell[data-band='2'] {
+  background: color-mix(in srgb, var(--score-2) 35%, var(--bg-elevated));
+}
+.cell[data-band='3'] {
+  background: color-mix(in srgb, var(--score-3) 35%, var(--bg-elevated));
+}
+.cell[data-band='4'] {
+  background: color-mix(in srgb, var(--score-4) 35%, var(--bg-elevated));
+}
+.cell[data-band='5'] {
+  background: color-mix(in srgb, var(--score-5) 35%, var(--bg-elevated));
+}
+
+.cell[data-error='task'] {
+  color: var(--error);
+}
+
+.cell[data-error='metric'] {
+  color: var(--metric-error);
+}
+
+.cell:hover {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}

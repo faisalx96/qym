@@ -1,0 +1,10 @@
+.sdk {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: 100%;
+}
+
+.sdk code {
+  overflow-wrap: anywhere;
+}

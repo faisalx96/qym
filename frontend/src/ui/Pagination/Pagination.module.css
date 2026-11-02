@@ -1,0 +1,70 @@
+/* .qym-pagination: borderless icon buttons around a digit-aware page input. */
+.pagination {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap; /* narrow bars: the summary wraps above the controls, never clips them */
+  gap: var(--space-xs) var(--space-md);
+  max-width: 100%;
+}
+
+.summary {
+  min-width: 160px;
+  /* C218: '1–50 of 271 runs' is a sentence: sans with tabular figures (mono is for data) */
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.controls {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.input {
+  width: max(28px, calc(var(--qym-page-digits, 1) * 1ch + 12px));
+  height: var(--control-height);
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-sm);
+  text-align: center;
+  appearance: textfield;
+  outline: none;
+}
+
+.input::-webkit-inner-spin-button,
+.input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.input:focus-visible {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.total {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  padding: 0 var(--space-xs);
+  white-space: nowrap;
+}
+
+.size {
+  height: var(--control-height);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}

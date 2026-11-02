@@ -1,0 +1,974 @@
+{
+  "ae-page-list": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 2108.1,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 2012.1,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 121.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 69.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/600",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32
+    ],
+    "drafts": {
+      "x": 120,
+      "w": 249,
+      "h": 175.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "table": {
+      "x": 106,
+      "w": 277,
+      "h": 1442.5,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "rows": [],
+    "filterRow": {
+      "x": 114,
+      "w": 261,
+      "h": 120,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "facets": [
+      "96x24",
+      "96x24",
+      "96x24",
+      "96x24",
+      "96x24"
+    ],
+    "newForm": null,
+    "textarea": [],
+    "radios": [],
+    "chat": null,
+    "log": null,
+    "msgs": [],
+    "composer": null,
+    "checklist": null,
+    "checkItems": [],
+    "proposal": null,
+    "proposalFields": [],
+    "related": null,
+    "relatedItems": [],
+    "requestCard": null,
+    "history": null,
+    "triage": null,
+    "triageControls": [],
+    "tabs": null,
+    "transcript": null,
+    "connection": null,
+    "connInputs": [],
+    "stat": null,
+    "empty": null,
+    "pageOverflow": 62
+  },
+  "ae-page-new": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 1020.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 924.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/600",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32
+    ],
+    "drafts": null,
+    "table": null,
+    "rows": [],
+    "filterRow": null,
+    "facets": [],
+    "newForm": {
+      "x": 105,
+      "w": 279,
+      "h": 514.3,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "textarea": [
+      "237x108"
+    ],
+    "radios": [],
+    "chat": null,
+    "log": null,
+    "msgs": [],
+    "composer": null,
+    "checklist": null,
+    "checkItems": [],
+    "proposal": null,
+    "proposalFields": [],
+    "related": null,
+    "relatedItems": [],
+    "requestCard": null,
+    "history": null,
+    "triage": null,
+    "triageControls": [],
+    "tabs": null,
+    "transcript": null,
+    "connection": null,
+    "connInputs": [],
+    "stat": null,
+    "empty": null,
+    "pageOverflow": 62
+  },
+  "ae-page-chat": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 1130.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 1034.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 145.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 93.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/600",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32
+    ],
+    "drafts": null,
+    "table": null,
+    "rows": [],
+    "filterRow": null,
+    "facets": [],
+    "newForm": null,
+    "textarea": [
+      "237x72"
+    ],
+    "radios": [],
+    "chat": {
+      "x": 105,
+      "w": 279,
+      "h": 640,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "log": {
+      "x": 106,
+      "w": 277,
+      "h": 428.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "msgs": [
+      94.1,
+      46.2,
+      113.3,
+      113.3,
+      151.7
+    ],
+    "composer": {
+      "x": 106,
+      "w": 277,
+      "h": 174.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "checklist": {
+      "x": 105,
+      "w": 279,
+      "h": 201,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "checkItems": [
+      17,
+      17,
+      17,
+      17,
+      17,
+      17
+    ],
+    "proposal": null,
+    "proposalFields": [],
+    "related": null,
+    "relatedItems": [],
+    "requestCard": null,
+    "history": null,
+    "triage": null,
+    "triageControls": [],
+    "tabs": null,
+    "transcript": null,
+    "connection": null,
+    "connInputs": [],
+    "stat": null,
+    "empty": null,
+    "pageOverflow": 62
+  },
+  "ae-page-proposal": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 2249.1,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 2153.1,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 145.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 93.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/600",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32
+    ],
+    "drafts": null,
+    "table": null,
+    "rows": [],
+    "filterRow": null,
+    "facets": [],
+    "newForm": null,
+    "textarea": [
+      "237x72",
+      "235x108"
+    ],
+    "radios": [],
+    "chat": {
+      "x": 105,
+      "w": 279,
+      "h": 300,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "log": {
+      "x": 106,
+      "w": 277,
+      "h": 88.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "msgs": [
+      94.1,
+      46.2,
+      151.7
+    ],
+    "composer": {
+      "x": 106,
+      "w": 277,
+      "h": 174.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "checklist": {
+      "x": 105,
+      "w": 279,
+      "h": 201,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "checkItems": [
+      17,
+      17,
+      17,
+      17,
+      17,
+      17
+    ],
+    "proposal": {
+      "x": 105,
+      "w": 279,
+      "h": 1444.9,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "proposalFields": [
+      ":235x24",
+      "Add a one-click PDF export to :235x108",
+      "High:235x24",
+      "M · about a week:235x24",
+      "Keep talking:95x24",
+      "Submit as a possible duplicate:194x24"
+    ],
+    "related": {
+      "x": 128,
+      "w": 235,
+      "h": 292.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "relatedItems": [
+      106.8,
+      150.6
+    ],
+    "requestCard": null,
+    "history": null,
+    "triage": null,
+    "triageControls": [],
+    "tabs": null,
+    "transcript": null,
+    "connection": null,
+    "connInputs": [],
+    "stat": null,
+    "empty": null,
+    "pageOverflow": 62
+  },
+  "ae-page-request": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 1780.7,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 1684.7,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 119.6,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 119.6,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/600",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32
+    ],
+    "drafts": null,
+    "table": null,
+    "rows": [],
+    "filterRow": null,
+    "facets": [],
+    "newForm": null,
+    "textarea": [],
+    "radios": [],
+    "chat": null,
+    "log": null,
+    "msgs": [],
+    "composer": null,
+    "checklist": null,
+    "checkItems": [],
+    "proposal": null,
+    "proposalFields": [],
+    "related": {
+      "x": 126,
+      "w": 237,
+      "h": 355.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "relatedItems": [
+      106.8,
+      150.6,
+      97.8
+    ],
+    "requestCard": {
+      "x": 105,
+      "w": 279,
+      "h": 471,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "history": {
+      "x": 105,
+      "w": 279,
+      "h": 282.9,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "triage": null,
+    "triageControls": [],
+    "tabs": {
+      "x": 105,
+      "w": 279,
+      "h": 34,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "transcript": null,
+    "connection": null,
+    "connInputs": [],
+    "stat": {
+      "x": 105,
+      "w": 279,
+      "h": 135.5,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "empty": null,
+    "pageOverflow": 62
+  },
+  "ae-page-conversation": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 993.5,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 897.5,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 119.6,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 119.6,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/600",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32
+    ],
+    "drafts": null,
+    "table": null,
+    "rows": [],
+    "filterRow": null,
+    "facets": [],
+    "newForm": null,
+    "textarea": [],
+    "radios": [],
+    "chat": null,
+    "log": null,
+    "msgs": [],
+    "composer": null,
+    "checklist": null,
+    "checkItems": [],
+    "proposal": null,
+    "proposalFields": [],
+    "related": null,
+    "relatedItems": [],
+    "requestCard": null,
+    "history": null,
+    "triage": null,
+    "triageControls": [],
+    "tabs": {
+      "x": 105,
+      "w": 279,
+      "h": 34,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "transcript": {
+      "x": 105,
+      "w": 279,
+      "h": 575.9,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "connection": null,
+    "connInputs": [],
+    "stat": null,
+    "empty": null,
+    "pageOverflow": 62
+  },
+  "ae-page-triage": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 2297.8,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 2201.8,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 119.6,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 119.6,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/600",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32,
+      32,
+      32
+    ],
+    "drafts": null,
+    "table": null,
+    "rows": [],
+    "filterRow": null,
+    "facets": [],
+    "newForm": null,
+    "textarea": [
+      "237x72"
+    ],
+    "radios": [],
+    "chat": null,
+    "log": null,
+    "msgs": [],
+    "composer": null,
+    "checklist": null,
+    "checkItems": [],
+    "proposal": null,
+    "proposalFields": [],
+    "related": {
+      "x": 126,
+      "w": 237,
+      "h": 355.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "relatedItems": [
+      106.8,
+      150.6,
+      97.8
+    ],
+    "requestCard": {
+      "x": 105,
+      "w": 279,
+      "h": 471,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "history": {
+      "x": 105,
+      "w": 279,
+      "h": 282.9,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "triage": {
+      "x": 105,
+      "w": 279,
+      "h": 503.1,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "triageControls": [
+      "New:237x24",
+      "High:237x24",
+      "M · about a week:237x24",
+      "FB-0031 · Export run compariso:237x24",
+      ":237x72",
+      "Reset:60x24",
+      "Save changes:102x24"
+    ],
+    "tabs": {
+      "x": 105,
+      "w": 279,
+      "h": 34,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "transcript": null,
+    "connection": null,
+    "connInputs": [],
+    "stat": {
+      "x": 105,
+      "w": 279,
+      "h": 135.5,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "empty": null,
+    "pageOverflow": 62
+  },
+  "ae-page-admin": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 1219,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 1123,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/500",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32,
+      32,
+      32
+    ],
+    "drafts": null,
+    "table": null,
+    "rows": [],
+    "filterRow": null,
+    "facets": [],
+    "newForm": null,
+    "textarea": [],
+    "radios": [],
+    "chat": null,
+    "log": null,
+    "msgs": [],
+    "composer": null,
+    "checklist": null,
+    "checkItems": [],
+    "proposal": null,
+    "proposalFields": [],
+    "related": null,
+    "relatedItems": [],
+    "requestCard": null,
+    "history": null,
+    "triage": null,
+    "triageControls": [],
+    "tabs": {
+      "x": 105,
+      "w": 279,
+      "h": 34,
+      "font": "12px/400",
+      "overflowX": 193
+    },
+    "transcript": null,
+    "connection": {
+      "x": 105,
+      "w": 279,
+      "h": 479.5,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "connInputs": [
+      "240x24",
+      "240x24",
+      "240x24"
+    ],
+    "stat": {
+      "x": 105,
+      "w": 279,
+      "h": 185.1,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "empty": null,
+    "pageOverflow": 62
+  },
+  "ae-page-unconfigured": {
+    "shell": {
+      "x": 35,
+      "w": 390,
+      "h": 900,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "col": {
+      "x": 105,
+      "w": 279,
+      "h": 393,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "header": {
+      "x": 105,
+      "w": 279,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "title": {
+      "x": 105,
+      "w": 279,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "navFeedback": {
+      "x": 43,
+      "w": 39,
+      "h": 32,
+      "font": "13px/600",
+      "overflowX": 0
+    },
+    "navItems": [
+      32,
+      32,
+      32
+    ],
+    "drafts": null,
+    "table": null,
+    "rows": [],
+    "filterRow": null,
+    "facets": [],
+    "newForm": null,
+    "textarea": [],
+    "radios": [],
+    "chat": null,
+    "log": null,
+    "msgs": [],
+    "composer": null,
+    "checklist": null,
+    "checkItems": [],
+    "proposal": null,
+    "proposalFields": [],
+    "related": null,
+    "relatedItems": [],
+    "requestCard": null,
+    "history": null,
+    "triage": null,
+    "triageControls": [],
+    "tabs": null,
+    "transcript": null,
+    "connection": null,
+    "connInputs": [],
+    "stat": null,
+    "empty": {
+      "x": 126,
+      "w": 237,
+      "h": 280.6,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "pageOverflow": 62
+  },
+  "loadingFrame": {
+    "loading": {
+      "x": 35,
+      "w": 279,
+      "h": 203.2,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "loadedTable": {
+      "x": 106,
+      "w": 277,
+      "h": 1442.5,
+      "font": "12px/400",
+      "overflowX": 0
+    }
+  },
+  "sheets": {
+    "ae-s-list": {
+      "x": 20,
+      "w": 350,
+      "h": 1194.9,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "ae-s-chat": {
+      "x": 20,
+      "w": 350,
+      "h": 1378.6,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "ae-s-proposal": {
+      "x": 20,
+      "w": 350,
+      "h": 2673.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "ae-s-request": {
+      "x": 20,
+      "w": 350,
+      "h": 1478.8,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "ae-s-admin": {
+      "x": 20,
+      "w": 350,
+      "h": 1594.5,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "ae-s-new-product": {
+      "x": 20,
+      "w": 350,
+      "h": 1151.8,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "ae-s-unconfigured-admin": {
+      "x": 20,
+      "w": 350,
+      "h": 479.4,
+      "font": "12px/400",
+      "overflowX": 0
+    },
+    "ae-s-nav": {
+      "x": 20,
+      "w": 350,
+      "h": 1985,
+      "font": "12px/400",
+      "overflowX": 56
+    }
+  }
+}

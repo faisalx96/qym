@@ -1,0 +1,58 @@
+{
+  "net": "fast3g",
+  "width": 1440,
+  "settle": true,
+  "open": 1,
+  "run": "r300",
+  "median": {
+    "firstGroupPlaceholdersMs": 41,
+    "firstGroupRowsMs": 2823,
+    "firstGroupStripMs": 2823,
+    "requestsAfterClick": 2,
+    "apiKB": 2.33,
+    "cls": 0.0965
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "185b3b3b-2416-4a65-bab7-ec6608fb8eaa",
+          "placeholdersMs": 41,
+          "rowsMs": 2823,
+          "stripMs": 2823,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 2,
+      "passesRequests": 1,
+      "groupMetricsRequests": 1,
+      "apiKB": 2.33,
+      "passesKB": 1.25,
+      "passesTtfbMs": [
+        2765
+      ],
+      "passesDoneMs": [
+        2809
+      ],
+      "groupTtfbMs": [
+        2724
+      ],
+      "groupDoneMs": [
+        2768
+      ],
+      "cls": 0.0965,
+      "requestList": [
+        "2416-4a65-bab7-ec6608fb8eaa/passes @43-2809ms ttfb 2765 1.2kB",
+        "65-bab7-ec6608fb8eaa/group-metrics?metric=correct&threshold=0.8 @43-2768ms ttfb 2724 1.1kB"
+      ]
+    }
+  ]
+}

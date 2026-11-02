@@ -10,6 +10,9 @@ from urllib.parse import urlparse
 import httpcore
 import httpx
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
 
 DNS_RESOLUTION_TIMEOUT_SECONDS = 5.0
 
@@ -28,10 +31,12 @@ def _resolve_public_address(hostname: str, port: int, *, allow_private: bool) ->
             for *_, sockaddr in socket.getaddrinfo(hostname, port)
         }
     except (OSError, ValueError) as exc:
+        logger.warning("LLM base URL hostname %s could not be resolved", hostname, exc_info=True)
         raise LlmEndpointValidationError(
             "LLM base URL hostname could not be resolved"
         ) from exc
     if not addresses or any(not address.is_global for address in addresses):
+        logger.warning("refused LLM base URL hostname %s: resolves to a non-public address", hostname)
         raise LlmEndpointValidationError(
             "LLM base URL resolves to a non-public address. Set "
             "QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true only for trusted local providers."
@@ -65,6 +70,57 @@ def validate_llm_base_url(value: str, *, allow_private: bool) -> str:
     return normalized
 
 
+_DEFAULT_PORTS = {"https": 443, "http": 80}
+# Platform default when a connection has no base URL (the OpenAI client default).
+DEFAULT_LLM_BASE_URL = "https://api.openai.com/v1"
+KEY_FOR_NEW_HOST_MESSAGE = "Enter the API key again for the new host"
+
+
+def _key_origin(value: object) -> tuple[str, str, int | None]:
+    """The (scheme, host, port) of a URL, with the default port filled in."""
+    parts = urlparse(str(value or "").strip())
+    scheme = parts.scheme.lower()
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    return scheme, (parts.hostname or "").lower(), port or _DEFAULT_PORTS.get(scheme)
+
+
+def key_host_changed(stored_url: object, new_url: object) -> bool:
+    """Whether a base URL edit moves a stored API key to another server.
+
+    A stored key is bound to the scheme, host and port it was entered for. A new
+    path on the same host keeps the key. Any other change needs the key again, so
+    an edit of the base URL alone cannot send a stored key to a new host.
+    """
+    return _key_origin(stored_url) != _key_origin(new_url)
+
+
+HTTPS_REQUIRED_CODE = "https_required"
+EXPERIMENT_HTTPS_REQUIRED_MESSAGE = (
+    "Experiments need an https:// base URL. Set "
+    "QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true only for local development."
+)
+
+
+def experiment_base_url_needs_https(value: object, *, allow_private: bool) -> bool:
+    """Whether a model URL must be refused for experiments: not ``https://``.
+
+    Experiments hand the model (and possibly its key) to a remote worker, so its base
+    URL must be HTTPS, the same rule as environment URLs. ``allow_private``
+    (``QYM_ALLOW_PRIVATE_LLM_BASE_URLS``) lifts it for local development. An empty URL
+    sends none (the worker keeps its default), so it passes. Analyzer connections are
+    not subject to this rule.
+    """
+    if allow_private:
+        return False
+    text = str(value or "").strip()
+    if not text:
+        return False
+    return urlparse(text).scheme.lower() != "https"
+
+
 async def _resolve_public_address_async(
     hostname: str,
     port: int,
@@ -86,6 +142,7 @@ async def _resolve_public_address_async(
             timeout=timeout or DNS_RESOLUTION_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
+        logger.warning("LLM base URL hostname resolution timed out")
         raise LlmEndpointValidationError("LLM base URL hostname resolution timed out") from exc
 
 

@@ -1,0 +1,167 @@
+{
+  "run": "wide",
+  "kind": "deep",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 6453,
+    "overviewMs": 6453,
+    "rowsMs": 6453,
+    "ttiMs": 6453,
+    "tbtMs": 157,
+    "cls": 0.0001,
+    "requests": 29,
+    "jsChunks": 10,
+    "jsKB": 417,
+    "apiRequests": 4,
+    "apiKB": 38.2,
+    "compactKB": 34.8,
+    "compactTtfbMs": 565,
+    "compactDoneMs": 6236
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 6453,
+      "skeletonMs": 3412,
+      "overviewMs": 6453,
+      "rowsMs": 6453,
+      "ttiMs": 6453,
+      "tbtMs": 160,
+      "cls": 0.0001,
+      "reactCommits": 76,
+      "requests": 29,
+      "jsChunks": 10,
+      "jsKB": 417,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 565,
+      "compactDoneMs": 6236,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "index-DZY9ssDm.js 139.2kB @578-3096ms",
+        "query-CtpzV822.js 14.5kB @578-1552ms",
+        "react-zBDCKe32.js 73.4kB @578-2645ms",
+        "aria-CowIKC9-.js 86.6kB @578-2787ms",
+        "RunDetailPage-BSM3yvqY.js 77.6kB @3692-4911ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @3693-4535ms",
+        "TextBlock-DBLChdZy.js 0.9kB @3693-4285ms",
+        "Collapse-POnQeTmm.js 1.0kB @3693-4259ms",
+        "structured-Bv4atLAx.js 1.4kB @3693-5467ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @3693-5475ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @5476-6236ms",
+        "/api/dashboard/neighbors 0.7kB @6346-6925ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @6346-6919ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @6411-6986ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 6446,
+      "skeletonMs": 3417,
+      "overviewMs": 6446,
+      "rowsMs": 6446,
+      "ttiMs": 6446,
+      "tbtMs": 153,
+      "cls": 0.0001,
+      "reactCommits": 80,
+      "requests": 29,
+      "jsChunks": 10,
+      "jsKB": 417,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 564,
+      "compactDoneMs": 6236,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "index-DZY9ssDm.js 139.2kB @569-3089ms",
+        "query-CtpzV822.js 14.5kB @570-1528ms",
+        "react-zBDCKe32.js 73.4kB @570-2628ms",
+        "aria-CowIKC9-.js 86.6kB @570-2787ms",
+        "RunDetailPage-BSM3yvqY.js 77.6kB @3688-4911ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @3688-4527ms",
+        "TextBlock-DBLChdZy.js 0.9kB @3688-4260ms",
+        "Collapse-POnQeTmm.js 1.0kB @3688-4267ms",
+        "structured-Bv4atLAx.js 1.4kB @3688-5468ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @3689-5476ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @5478-6236ms",
+        "/api/dashboard/neighbors 0.7kB @6336-6918ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @6336-6905ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @6400-6976ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 6454,
+      "skeletonMs": 3419,
+      "overviewMs": 6454,
+      "rowsMs": 6454,
+      "ttiMs": 6454,
+      "tbtMs": 157,
+      "cls": 0.0001,
+      "reactCommits": 78,
+      "requests": 29,
+      "jsChunks": 10,
+      "jsKB": 417,
+      "apiRequests": 4,
+      "apiKB": 38.2,
+      "compactKB": 34.8,
+      "compactTtfbMs": 565,
+      "compactDoneMs": 6236,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "index-DZY9ssDm.js 139.2kB @570-3088ms",
+        "query-CtpzV822.js 14.5kB @570-1553ms",
+        "react-zBDCKe32.js 73.4kB @570-2636ms",
+        "aria-CowIKC9-.js 86.6kB @570-2787ms",
+        "RunDetailPage-BSM3yvqY.js 77.6kB @3688-4912ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @3689-4527ms",
+        "TextBlock-DBLChdZy.js 0.9kB @3689-4276ms",
+        "Collapse-POnQeTmm.js 1.0kB @3689-4268ms",
+        "structured-Bv4atLAx.js 1.4kB @3693-5460ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @3693-5476ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact 34.8kB @5477-6236ms",
+        "/api/dashboard/neighbors 0.7kB @6336-6918ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @6336-6901ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @6400-6976ms"
+      ]
+    }
+  ]
+}

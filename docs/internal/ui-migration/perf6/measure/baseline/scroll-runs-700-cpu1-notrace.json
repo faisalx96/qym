@@ -1,0 +1,157 @@
+{
+  "table": "runs",
+  "width": 700,
+  "touch": false,
+  "cpu": 1,
+  "median": {
+    "fpsMedian": null,
+    "stickyElements": 179,
+    "stuckFrames": 0,
+    "droppedFrames": 0,
+    "maxLagPx": 0,
+    "framesLagOver1px": 0,
+    "maxHeaderCellMisalignPx": 0,
+    "reactCommitsDuringScroll": 0,
+    "longTasksOver50ms": 3,
+    "layoutCountDelta": 0,
+    "scriptMsDelta": 12.7,
+    "taskMsDelta": 47.1
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "probe": {
+        "scrollable": 9546,
+        "stickyCellsInFirstRow": 1,
+        "stickyElements": 179,
+        "cards": false
+      },
+      "stickyElements": 179,
+      "stuckFrames": 0,
+      "heldFrames": 0,
+      "scrollPx": 0,
+      "elapsedMs": 4300,
+      "frames": 0,
+      "fpsMedian": null,
+      "fpsP5": null,
+      "droppedFrames": 0,
+      "worstFrameMs": 0,
+      "maxLagPx": 0,
+      "framesLagOver1px": 0,
+      "maxHeaderCellMisalignPx": 0,
+      "reactCommitsDuringScroll": 0,
+      "commitsPerScrollSecond": 0,
+      "longTasksOver50ms": 3,
+      "layoutCountDelta": 0,
+      "recalcStyleDelta": 0,
+      "layoutMsDelta": 0,
+      "scriptMsDelta": 12.7,
+      "taskMsDelta": 47.1,
+      "trace": {
+        "layouts": -1,
+        "layoutsInScrollDispatch": -1,
+        "layoutsWithStack": -1,
+        "recalcStyle": -1,
+        "scrollDispatches": 0,
+        "scrollDispatchMs": {
+          "n": 0,
+          "median": null,
+          "p95": null,
+          "max": 0
+        },
+        "beginMainFrames": 0,
+        "byName": {}
+      }
+    },
+    {
+      "rep": 1,
+      "probe": {
+        "scrollable": 9546,
+        "stickyCellsInFirstRow": 1,
+        "stickyElements": 179,
+        "cards": false
+      },
+      "stickyElements": 179,
+      "stuckFrames": 0,
+      "heldFrames": 0,
+      "scrollPx": 0,
+      "elapsedMs": 4253,
+      "frames": 0,
+      "fpsMedian": null,
+      "fpsP5": null,
+      "droppedFrames": 0,
+      "worstFrameMs": 0,
+      "maxLagPx": 0,
+      "framesLagOver1px": 0,
+      "maxHeaderCellMisalignPx": 0,
+      "reactCommitsDuringScroll": 241,
+      "commitsPerScrollSecond": 56.7,
+      "longTasksOver50ms": 3,
+      "layoutCountDelta": 0,
+      "recalcStyleDelta": 0,
+      "layoutMsDelta": 0,
+      "scriptMsDelta": 21.8,
+      "taskMsDelta": 53,
+      "trace": {
+        "layouts": -1,
+        "layoutsInScrollDispatch": -1,
+        "layoutsWithStack": -1,
+        "recalcStyle": -1,
+        "scrollDispatches": 0,
+        "scrollDispatchMs": {
+          "n": 0,
+          "median": null,
+          "p95": null,
+          "max": 0
+        },
+        "beginMainFrames": 0,
+        "byName": {}
+      }
+    },
+    {
+      "rep": 2,
+      "probe": {
+        "scrollable": 9546,
+        "stickyCellsInFirstRow": 1,
+        "stickyElements": 179,
+        "cards": false
+      },
+      "stickyElements": 179,
+      "stuckFrames": 0,
+      "heldFrames": 0,
+      "scrollPx": 0,
+      "elapsedMs": 4243,
+      "frames": 0,
+      "fpsMedian": null,
+      "fpsP5": null,
+      "droppedFrames": 0,
+      "worstFrameMs": 0,
+      "maxLagPx": 0,
+      "framesLagOver1px": 0,
+      "maxHeaderCellMisalignPx": 0,
+      "reactCommitsDuringScroll": 0,
+      "commitsPerScrollSecond": 0,
+      "longTasksOver50ms": 3,
+      "layoutCountDelta": 0,
+      "recalcStyleDelta": 0,
+      "layoutMsDelta": 0,
+      "scriptMsDelta": 12,
+      "taskMsDelta": 43.4,
+      "trace": {
+        "layouts": -1,
+        "layoutsInScrollDispatch": -1,
+        "layoutsWithStack": -1,
+        "recalcStyle": -1,
+        "scrollDispatches": 0,
+        "scrollDispatchMs": {
+          "n": 0,
+          "median": null,
+          "p95": null,
+          "max": 0
+        },
+        "beginMainFrames": 0,
+        "byName": {}
+      }
+    }
+  ]
+}

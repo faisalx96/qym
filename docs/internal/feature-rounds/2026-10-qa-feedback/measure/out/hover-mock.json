@@ -1,0 +1,218 @@
+{
+  "card-1440": {
+    "rest": {
+      "w": 280.3,
+      "h": 126.3,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 4,
+      "border": "rgb(43, 43, 64)",
+      "bg": "rgb(26, 26, 40)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 280.3,
+      "h": 126.3,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 4,
+      "border": "rgb(59, 59, 84)",
+      "bg": "rgb(34, 34, 50)",
+      "shadow": "yes",
+      "color": "rgb(237, 237, 240)"
+    }
+  },
+  "pager-1440": {
+    "rest": {
+      "w": 307.2,
+      "h": 32,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 2,
+      "border": "rgb(237, 237, 240)",
+      "bg": "rgb(50, 50, 68)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 307.2,
+      "h": 32,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 2,
+      "border": "rgb(237, 237, 240)",
+      "bg": "rgb(42, 42, 60)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    }
+  },
+  "meta-link-1440": {
+    "rest": {
+      "w": 166,
+      "h": 20,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 3,
+      "border": "rgb(168, 168, 186)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(168, 168, 186)"
+    },
+    "hover": {
+      "w": 166,
+      "h": 20,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 3,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  },
+  "plain-link-1440": {
+    "rest": {
+      "w": 96.8,
+      "h": 15,
+      "deco": "none",
+      "kidsDeco": [],
+      "textKids": 0,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    },
+    "hover": {
+      "w": 96.8,
+      "h": 15,
+      "deco": "underline",
+      "kidsDeco": [],
+      "textKids": 0,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  },
+  "card-390": {
+    "rest": {
+      "w": 279,
+      "h": 108.3,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 4,
+      "border": "rgb(43, 43, 64)",
+      "bg": "rgb(26, 26, 40)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 279,
+      "h": 108.3,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 4,
+      "border": "rgb(59, 59, 84)",
+      "bg": "rgb(34, 34, 50)",
+      "shadow": "yes",
+      "color": "rgb(237, 237, 240)"
+    }
+  },
+  "pager-390": {
+    "rest": {
+      "w": 133.9,
+      "h": 32,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 2,
+      "border": "rgb(237, 237, 240)",
+      "bg": "rgb(50, 50, 68)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    },
+    "hover": {
+      "w": 133.9,
+      "h": 32,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 2,
+      "border": "rgb(237, 237, 240)",
+      "bg": "rgb(42, 42, 60)",
+      "shadow": "none",
+      "color": "rgb(237, 237, 240)"
+    }
+  },
+  "meta-link-390": {
+    "rest": {
+      "w": 166,
+      "h": 20,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 3,
+      "border": "rgb(168, 168, 186)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(168, 168, 186)"
+    },
+    "hover": {
+      "w": 166,
+      "h": 20,
+      "deco": "none",
+      "kidsDeco": [
+        "none"
+      ],
+      "textKids": 3,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  },
+  "plain-link-390": {
+    "rest": {
+      "w": 96.8,
+      "h": 15,
+      "deco": "none",
+      "kidsDeco": [],
+      "textKids": 0,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    },
+    "hover": {
+      "w": 96.8,
+      "h": 15,
+      "deco": "underline",
+      "kidsDeco": [],
+      "textKids": 0,
+      "border": "rgb(0, 212, 170)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "shadow": "none",
+      "color": "rgb(0, 212, 170)"
+    }
+  }
+}

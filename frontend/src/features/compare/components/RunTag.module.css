@@ -1,0 +1,54 @@
+/* Run identity (RunName): swatch + letter badge (the run's position, owner decision H1) + name. The name wraps, never cut. */
+.tag {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-primary);
+  font-size: var(--font-base);
+  line-height: 1.55;
+  vertical-align: middle;
+}
+
+.tag[data-compact] {
+  font-size: var(--font-sm);
+}
+
+.swatch {
+  flex: none;
+  align-self: flex-start;
+  margin-block-start: 0.4em;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 2px;
+}
+
+/* 16x16 badge, mono --font-xs, text in the run colour on a faint tint of it */
+.letter {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  block-size: 16px;
+  margin-block-start: 0.1em;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--run) 16%, transparent);
+  color: var(--run);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 650;
+}
+
+.name[data-id] {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}

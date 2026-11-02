@@ -1,0 +1,132 @@
+/* Trend chart chrome (the app's own SVG, C082): recessive grid, muted axis ink, tokenised readout. */
+.figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.panel {
+  position: relative;
+}
+
+.plot {
+  display: block;
+  overflow: visible;
+  border-radius: var(--control-radius);
+}
+
+.plot:focus {
+  outline: none;
+}
+
+.plot:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.grid {
+  stroke: var(--border-subtle);
+}
+
+.axis {
+  stroke: var(--border-default);
+}
+
+.tick {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.cursor {
+  stroke: var(--border-strong);
+}
+
+.line {
+  fill: none;
+  stroke: var(--chart-1);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.dot {
+  fill: var(--chart-1);
+  stroke: var(--bg-surface);
+  stroke-width: 2;
+}
+
+.bar {
+  fill: var(--border-strong);
+}
+
+.bar[data-active] {
+  fill: var(--text-muted);
+}
+
+.panelLabel {
+  margin-bottom: 2px;
+}
+
+.caption {
+  margin-top: var(--space-xs);
+}
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  min-width: 160px;
+  pointer-events: none;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.tipDate {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 1px 0;
+}
+
+.tipRow strong {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.tipKey {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--chart-1);
+}
+
+.tipKey[data-series='bar'] {
+  height: 8px;
+  width: 8px;
+  background: var(--border-strong);
+}
+
+.tipKey[data-series='none'] {
+  background: transparent;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

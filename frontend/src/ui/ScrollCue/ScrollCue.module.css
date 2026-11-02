@@ -1,0 +1,17 @@
+/* Edge fade on a horizontally scrolling region: the side that still has content fades out, the side at the end
+   stays crisp. State comes from `useScrollCue` (data-cue-start, data-cue-end); no cue when nothing overflows. */
+.cue[data-cue-end]:not([data-cue-start]) {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+.cue[data-cue-start]:not([data-cue-end]) {
+  mask-image: linear-gradient(to right, transparent, #000 28px);
+}
+
+.cue[data-cue-start][data-cue-end] {
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+[dir='rtl'] .cue[data-cue-end]:not([data-cue-start]) {
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}

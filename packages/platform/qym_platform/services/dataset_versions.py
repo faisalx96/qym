@@ -1,4 +1,5 @@
-"""Lineage counts of dataset versions (added / modified / deleted / unchanged).
+"""Lineage counts of dataset versions (added / modified / deleted / unchanged, plus
+shared items disabled / enabled).
 
 A version's counts compare its items with its parent's. Once both versions are
 published their items never change, so the counts are computed once and stored
@@ -27,28 +28,29 @@ def _is_published(version: Optional[DatasetVersion]) -> bool:
 
 
 def _item_rows(db: Session, version_id: str) -> Dict[str, tuple]:
-    # Fingerprint and labels only: the same rule as the Compare view, so the
-    # two never disagree and no item body is loaded.
+    # Fingerprint, labels and the disabled flag only: the same rule as the
+    # Compare view, so the two never disagree and no item body is loaded.
     rows = db.query(
         DatasetItem.item_id,
         DatasetItem.fingerprint,
         DatasetItem.labels,
+        DatasetItem.disabled_at.isnot(None),
     ).filter(DatasetItem.dataset_version_id == version_id)
-    return {row[0]: tuple(row[1:]) for row in rows}
+    return {row[0]: (row[1], row[2], bool(row[3])) for row in rows}
 
 
 def _changed(a: tuple, b: tuple) -> bool:
-    """Modified when the identity fingerprint or the labels differ (as Compare)."""
-    fingerprint_a, labels_a = a
-    fingerprint_b, labels_b = b
-    return fingerprint_a != fingerprint_b or (labels_a or []) != (labels_b or [])
+    """Modified when the identity fingerprint, the labels or the state differ (as Compare)."""
+    fingerprint_a, labels_a, disabled_a = a
+    fingerprint_b, labels_b, disabled_b = b
+    return fingerprint_a != fingerprint_b or (labels_a or []) != (labels_b or []) or disabled_a != disabled_b
 
 
 def compute_change_counts(db: Session, version: DatasetVersion) -> Dict[str, int]:
     """Diff a version's items against its parent's (light columns only)."""
     if not version.parent_version_id:
         count = db.query(DatasetItem.id).filter(DatasetItem.dataset_version_id == version.id).count()
-        return {"added": int(count), "modified": 0, "deleted": 0, "unchanged": 0}
+        return {"added": int(count), "modified": 0, "deleted": 0, "unchanged": 0, "disabled": 0, "enabled": 0}
     current = _item_rows(db, version.id)
     parent = _item_rows(db, version.parent_version_id)
     shared = current.keys() & parent.keys()
@@ -58,6 +60,9 @@ def compute_change_counts(db: Session, version: DatasetVersion) -> Dict[str, int
         "modified": modified,
         "deleted": len(parent.keys() - current.keys()),
         "unchanged": len(shared) - modified,
+        # Shared items whose state flipped (they also count as modified).
+        "disabled": sum(1 for item_id in shared if not parent[item_id][2] and current[item_id][2]),
+        "enabled": sum(1 for item_id in shared if parent[item_id][2] and not current[item_id][2]),
     }
 
 

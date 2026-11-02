@@ -98,7 +98,7 @@ Settings are read from environment variables or `.env`.
 | Variable | Default | Purpose |
 |---|---:|---|
 | `QYM_DATABASE_URL` | required | PostgreSQL SQLAlchemy URL. |
-| `QYM_ENVIRONMENT` | `dev` | Runtime label; session cookies are secure outside `dev`, `test`, and `local`. |
+| `QYM_ENVIRONMENT` | `dev` | Runtime label; session cookies are secure outside `dev`, `test`, and `local`. Outside `dev`, `development`, `local`, `test` and `testing`, the platform does not start with an open auth configuration (see Authentication). Set a deployment to another value, for example `production`. |
 | `QYM_BASE_URL` | `http://localhost:8000` | Public origin used for generated links, OIDC callbacks, and same-origin checks. |
 | `QYM_ROOT_PATH` | empty | Mount prefix when served below a reverse-proxy path, such as `/qym`. |
 | `QYM_HIDDEN_TASKS` | empty | Comma-separated task names hidden from run listings. |
@@ -120,9 +120,10 @@ For SDK streaming and platform-launched SDK work against a private HTTPS origin,
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `QYM_AUTH_MODE` | `none` | `none`, `proxy_headers`, or `oidc`. |
+| `QYM_AUTH_MODE` | `none` | `none`, `proxy_headers`, or `oidc`. `none` makes every visitor an admin: it starts only when `QYM_ENVIRONMENT` is `dev`, `development`, `local`, `test` or `testing`, and so does an empty or unknown mode. |
+| `QYM_PROXY_SHARED_SECRET` | empty | `proxy_headers` only. The authentication proxy sends this value in the `X-Qym-Proxy-Secret` header. Identity headers on a request without it are ignored. Required outside dev, test and local. |
 | `QYM_ADMIN_BOOTSTRAP_TOKEN` | empty | One-time token for promoting the first admin. |
-| `QYM_AUTO_PROVISION_USERS` | `true` | Create unknown users received from trusted proxy headers. |
+| `QYM_AUTO_PROVISION_USERS` | `true` | Create unknown users received from trusted proxy headers (requests that carry the shared secret). |
 | `QYM_AUTH_SESSION_SECRET` | empty | Required whenever OIDC or local password auth enables browser sessions. |
 | `QYM_AUTH_LOCAL_ENABLED` | `false` | Enable email/password login when auth mode is not `none`. |
 | `QYM_AUTH_LOCAL_SIGNUP` | `false` | Let anyone who can reach `/login` create a `MEMBER` account. Off: admins add people in Admin > Users. Sign-up stays open while no active admin exists, so the first person can create an account and claim admin. |
@@ -254,6 +255,7 @@ Parsed records are written to PostgreSQL; source files are not retained as perma
 ## Related Documentation
 
 - [Platform User Guide](docs/USER_GUIDE.md)
+- [Operations runbook](../../docs/internal/OPERATIONS.md) (including [Evaluation Service experiments](../../docs/internal/OPERATIONS.md#evaluation-service-experiments))
 - [Product Evaluation API Guide](docs/PRODUCT_EVAL_API_GUIDE.md)
 - [Product Evaluation Client Guide](docs/PRODUCT_EVAL_API_CLIENT_GUIDE.md)
 - [LLM analyzer branch changes](../../docs/BRANCH_CHANGES_LLM_ANALYZER.md)

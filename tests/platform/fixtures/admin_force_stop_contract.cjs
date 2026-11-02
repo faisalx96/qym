@@ -111,49 +111,11 @@ async function failure(browser) {
   await page.close();
 }
 
-async function runPolling(browser, terminalCode) {
-  const page = await browser.newPage();
-  await page.addInitScript(() => {
-    const schedule = window.setTimeout;
-    // The checks below must span several polling intervals. Keep the actual
-    // scheduling code, but accelerate its two-second interval for this test.
-    window.setTimeout = (fn, ms, ...args) => schedule(fn, ms === 2000 ? 100 : ms, ...args);
-  });
-  const uiDir = path.join(root, 'packages/platform/qym_platform/_static/ui');
-  let reads = 0;
-  let release;
-  const payload = status => ({
-    run: { run_id: 'r', status, run_name: 'Coder evaluation', metric_names: [] },
-    snapshot: { rows: [], stats: { total: 1, pending: 0, in_progress: 1 } },
-  });
-  await page.route('http://qym.test/**', async route => {
-    const pathname = new URL(route.request().url()).pathname;
-    if (pathname === '/qym/run/r') return route.fulfill({ path: path.join(uiDir, 'index.html') });
-    if (pathname.startsWith('/qym/ui/')) return route.fulfill({ path: path.join(uiDir, pathname.slice('/qym/ui/'.length)) });
-    if (pathname === '/qym/api/runs/r') {
-      reads++;
-      if (reads === 1) return route.fulfill({ json: payload('RUNNING') });
-      await new Promise(resolve => { release = resolve; });
-      return route.fulfill({ status: terminalCode, json: terminalCode === 200 ? payload('STOPPED') : { detail: 'Closed' } });
-    }
-    return route.fulfill({ status: 404, body: '' });
-  });
-  await page.goto('http://qym.test/qym/run/r');
-  while (!release) await page.waitForTimeout(20);
-  await page.waitForTimeout(750);
-  assert.equal(reads, 2, 'A slow poll must not overlap the next poll');
-  release();
-  await page.waitForTimeout(850);
-  assert.equal(reads, 2, 'Terminal state must end polling even with unfinished items');
-  await page.close();
-}
-
 (async () => {
   const browser = await chromium.launch({ headless: true });
   try {
     await success(browser);
     await failure(browser);
-    for (const terminalCode of [200, 401, 410]) await runPolling(browser, terminalCode);
   }
   finally { await browser.close(); }
   console.log('Admin force-stop browser contracts passed');

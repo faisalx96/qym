@@ -1,0 +1,69 @@
+/* Scope strip: item count, removable filter chips, Clear / View / sidebar toggle. */
+.bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  animation: scope-in var(--transition-fast);
+}
+
+.count {
+  margin: 0;
+}
+
+.chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  /* Two lines of chips at most; the rest folds into "+N". */
+  max-height: calc(2 * var(--chip-height) + var(--space-xs));
+  overflow: hidden;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+/* Under 1200px the bar stays under the nav while a section is read; on a phone it scrolls away. */
+@media (max-width: 1199px) {
+  .bar {
+    position: sticky;
+    top: var(--report-nav-h, 0px);
+    z-index: 4;
+  }
+}
+
+@media (max-width: 767px) {
+  .bar {
+    position: static;
+  }
+}
+
+@keyframes scope-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar {
+    animation: none;
+  }
+}

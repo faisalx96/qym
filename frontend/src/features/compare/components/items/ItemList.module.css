@@ -1,0 +1,229 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  border: 1px solid var(--card-edge);
+  border-radius: 8px;
+  background: var(--card-bg);
+  scroll-margin-block-start: calc(var(--bar-link-h) + var(--space-md));
+}
+
+.item[data-error] {
+  border-color: var(--error);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  min-block-size: 52px;
+  padding: 0 var(--space-md);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.head:hover {
+  background: var(--bg-hover);
+}
+
+.head:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.chev {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 26px;
+  block-size: 26px;
+  color: var(--text-muted);
+}
+
+.no {
+  flex: none;
+  min-inline-size: 2.5ch;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+.title {
+  display: -webkit-box;
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.chips {
+  display: flex;
+  flex: 0 1 auto;
+  max-inline-size: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+/* swatch + letter + value: self-describing without a column header (owner decision H1) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-inline-size: 68px;
+  block-size: 22px;
+  padding-inline: 6px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--score, var(--border-strong)) 12%, var(--bg-elevated));
+  color: var(--score, var(--text-secondary));
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip[data-band='1'] {
+  --score: var(--score-1);
+  color: var(--error-text);
+}
+
+.chip[data-band='2'] {
+  --score: var(--score-2);
+}
+
+.chip[data-band='3'] {
+  --score: var(--score-3);
+}
+
+.chip[data-band='4'] {
+  --score: var(--score-4);
+}
+
+.chip[data-band='5'] {
+  --score: var(--score-5);
+}
+
+/* K3 (C029): the baseline chip is neutral; a run chip takes the colour of its change against the baseline */
+.chip[data-baseline] {
+  --score: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.chip[data-move='improved'] {
+  --score: var(--success);
+}
+
+.chip[data-move='regressed'] {
+  --score: var(--error);
+  color: var(--error-text);
+}
+
+.chip[data-move='same'] {
+  --score: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.delta {
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.chip[data-state='error'] {
+  justify-content: flex-start;
+  border: 1px solid var(--error);
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error-text);
+}
+
+.swatch {
+  flex: none;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 2px;
+  background: var(--run);
+}
+
+.letter {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--run) 16%, transparent);
+  color: var(--run);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pager {
+  display: flex;
+  justify-content: center;
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.detailHold {
+  min-inline-size: 0;
+}
+
+/* 390: four chips with a swatch AND a letter measure 292 px in a 247 px row; the letter badge keeps the run colour, the swatch steps aside */
+@media (max-width: 640px) {
+  .chip {
+    min-inline-size: 0;
+    padding-inline: 3px;
+    gap: 3px;
+  }
+
+  .title {
+    flex-basis: 6rem;
+  }
+
+  .head {
+    padding-block: var(--space-sm);
+  }
+
+  .chip .swatch {
+    display: none;
+  }
+
+  .chips {
+    justify-content: flex-start;
+    flex-basis: 100%;
+    gap: 2px;
+    margin-inline-start: 0;
+  }
+}

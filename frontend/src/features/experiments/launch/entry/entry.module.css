@@ -1,0 +1,726 @@
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.legend {
+  padding: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.envList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.env {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-base);
+}
+
+.env[data-selected='true'] {
+  border-color: var(--accent-primary);
+}
+
+.envTags {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.envActions {
+  grid-column: 2;
+  grid-row: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.help {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* Start-from cards: three big choices, then compact saved presets and scratch. */
+.startStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.startGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.startGridCompact {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.startSub {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  /* the Card recipe (role=radio keeps this local class): 1px outline, --card-padding, a --rail-width rail when chosen */
+  padding: var(--card-padding);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  min-width: 0;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.cardCompact {
+  padding: var(--card-padding-compact);
+}
+
+.card:hover:not([aria-disabled='true']) {
+  border-color: var(--border-default);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.card[aria-checked='true'] {
+  border-color: var(--accent-primary);
+  border-inline-start: var(--rail-width) solid var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-surface));
+}
+
+.card[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-color: var(--accent-primary);
+}
+
+.cardEyebrow {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.card[aria-checked='true'] .cardEyebrow {
+  color: var(--accent-primary);
+}
+
+.cardTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  font-size: var(--font-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cardCompact .cardTitle {
+  font-size: var(--font-md);
+}
+
+.cardHint {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.cardMeta {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.statusText {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.statusActions {
+  margin-inline-start: auto;
+  display: inline-flex;
+  gap: var(--space-xs);
+}
+
+.notes {
+  white-space: pre-wrap;
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .startGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .startGridCompact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .two,
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-base);
+  cursor: pointer;
+}
+
+.disclosure:hover {
+  color: var(--text-primary);
+}
+
+.disclosure:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.chevron {
+  display: inline-flex;
+  color: var(--text-dim); /* decorative glyph */
+  transition: transform var(--transition-fast);
+}
+
+.chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+/* Home view */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+  padding-bottom: var(--space-md);
+}
+
+.where {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+.homeBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  min-height: var(--bar-action-h);
+  box-sizing: border-box;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+}
+
+.homeName {
+  flex: 0 1 320px;
+  min-width: 12rem;
+}
+
+.homeStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.homeStatusText {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.homeStatusText[data-tone='problem'] {
+  /* --error alone is 4.15:1 on the elevated bar; lift it to clear AA at this size */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+}
+
+.homeShow {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: var(--font-base);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.homeShow:hover {
+  color: var(--accent-primary-hover);
+}
+
+.homeShow:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.homeRuns {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.homeActions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-inline-start: auto;
+}
+
+/* Wide: one --bar-action-h row exactly (the name field's label is visually hidden; its placeholder is the hint). */
+@media (min-width: 961px) {
+  .homeBar {
+    flex-wrap: nowrap;
+    height: var(--bar-action-h);
+  }
+}
+
+@media (max-width: 960px) {
+  .where {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .homeName {
+    flex: 1 1 100%;
+  }
+
+  .homeActions {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+
+  .homeActions > * {
+    flex: 1 1 0;
+  }
+
+  .homeRuns {
+    display: none;
+  }
+
+  .homeBar {
+    gap: var(--space-xs) var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+  }
+}
+
+.homeIssue {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* Evaluation Service versions inside a ticked environment box (home view and step 1):
+   row 1 = label | Refresh, then the values in a grid whose column count depends on the box width
+   only (never on the values), so the loading placeholders and the loaded tags wrap identically and
+   the box keeps its height when it fills (rule 7). */
+.versionLine {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  padding-block-start: var(--space-xs);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.versionLabel {
+  grid-row: 1;
+  grid-column: 1;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  line-height: var(--badge-height);
+  color: var(--text-secondary);
+}
+
+.versionRefresh {
+  grid-row: 1;
+  grid-column: 2;
+  display: inline-flex;
+  justify-self: end;
+}
+
+.versionLine .versionList {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--space-xs) var(--space-md);
+}
+
+.versionLine .versionItem {
+  min-width: 0;
+  /* A loaded row is exactly the placeholder's height: the key's line box matches the tag, and the
+     value cell is a flex box so the inline tag adds no descender space. */
+  line-height: var(--badge-height);
+}
+
+.versionLine .versionItem dd {
+  display: flex;
+  min-width: 0;
+}
+
+.versionState {
+  grid-column: 1 / -1;
+  min-width: 0;
+  line-height: var(--badge-height);
+}
+
+/* The gallery mocks of the earlier block design (QaExperimentsMocks) keep these recipes. */
+.versionsHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.versionsActions {
+  display: inline-flex;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.versionRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.versionRow {
+  display: flex;
+  align-items: baseline;
+  min-height: var(--badge-height);
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.versionName {
+  min-width: 8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: var(--font-base);
+}
+
+.versionList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin: 0;
+}
+
+.versionItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-base);
+}
+
+.versionItem dt {
+  color: var(--text-muted);
+}
+
+.versionItem dd {
+  margin: 0;
+}
+
+.versionItem dd[data-unset] {
+  color: var(--text-muted);
+}
+
+.errorText {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--error);
+}
+
+.versionSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  /* The card's links sit on their own row, aligned to the card edge. */
+  .versionsActions {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+    justify-content: flex-start;
+    gap: var(--space-md);
+  }
+}
+
+/* The Latency-sensitive checkbox, its helper and its reason are one block (spec-b B5-23 to B5-28). */
+.latency {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.checkHelp {
+  margin: 0;
+  padding-inline-start: calc(var(--space-lg) + var(--space-xs));
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.checkReason {
+  margin: 0;
+  padding-inline-start: calc(var(--space-lg) + var(--space-xs));
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.latencyCallout {
+  margin-inline-start: calc(var(--space-lg) + var(--space-xs));
+}
+
+/* Dataset name and badge: the name wraps (never truncated), the badge follows it. */
+.datasetName {
+  /* The popover renders text with geometricprecision, which widens the badge by 12 px (B4-22). */
+  text-rendering: auto;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}
+
+.datasetLabel {
+  overflow-wrap: anywhere;
+}
+
+/* The latency control under the environment list on the home view (QA3-11). */
+.latencyBlock {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* A loading version row is the loaded DOM with a placeholder per value (QA4-7). */
+.skelValue {
+  display: block;
+  inline-size: 64px;
+  block-size: var(--badge-height);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The Datasets card (several dataset versions). A dataset box is an environment box without the selected outline. */
+.dsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.dsBox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-base);
+}
+
+.dsName {
+  grid-row: 1;
+  grid-column: 1;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  min-inline-size: 0;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.dsRemove {
+  grid-row: 1;
+  grid-column: 2;
+  display: inline-flex;
+}
+
+.dsRefs {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  padding-block-start: var(--space-xs);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.refTags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.dsFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.shapeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-block-start: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* The task row of an environment box: label, then the select on the control height. */
+.taskLine {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  min-block-size: var(--control-height);
+}
+
+.taskSkel {
+  display: block;
+  inline-size: 100%;
+  block-size: var(--control-height);
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
+}
+
+.taskError {
+  min-block-size: var(--control-height);
+  display: flex;
+  align-items: center;
+}

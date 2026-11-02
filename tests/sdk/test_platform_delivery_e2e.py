@@ -180,6 +180,10 @@ async def test_sdk_repeats_metrics_traces_and_final_status_reach_platform(
     monkeypatch.setattr(PlatformEventStream, "MAX_BATCH_EVENTS", 5)
     monkeypatch.setattr(PlatformEventStream, "FLUSH_INTERVAL", 0.005)
     monkeypatch.setattr(PlatformEventStream, "RETRY_BACKOFF_BASE", 0.005)
+    # Span events are best-effort (bounded wait, then dropped). This backlog
+    # is deliberately tiny to exercise backpressure, so give spans room to
+    # wait for it instead of being skipped.
+    monkeypatch.setattr(PlatformEventStream, "SPAN_ENQUEUE_TIMEOUT", 5.0)
     counts = defaultdict(int)
 
     async def task(input):
@@ -234,6 +238,7 @@ async def test_sdk_repeats_metrics_traces_and_final_status_reach_platform(
             stream._q.peak_memory_bytes <= 2000 and stream._q.peak_disk_bytes <= 12000
         )
         assert stream._q.spool_path is None
+        assert stream.dropped_spans == 0
         assert terminal_counts and terminal_counts[0][0:2] == (6, 18)
         assert terminal_counts[0][2] > 0
         with Session(engine) as db:

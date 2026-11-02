@@ -1,0 +1,82 @@
+/* Compact icon actions — quiet surfaces; only the glyph changes on hover. */
+.iconAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.iconAction[data-hovered] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-primary);
+}
+
+.iconAction[data-active] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-primary);
+}
+
+.iconAction[data-focus-visible] {
+  background: transparent;
+  box-shadow: none;
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.iconAction[data-tone='danger'][data-hovered],
+.iconAction[data-tone='reject'] {
+  color: var(--error);
+}
+.iconAction[data-tone='approve'] {
+  color: var(--success);
+}
+.iconAction[data-tone='reject'][data-hovered] {
+  color: var(--error-hover);
+}
+
+/* Row action tile (`tile`): a 20px square like the fold handle and badges, the tone's soft tint at rest, its strong
+   tint on hover; the glyph (12px) keeps the tone. */
+.iconAction[data-tile] {
+  --tile-tone: var(--accent-primary);
+  width: var(--badge-height);
+  height: var(--badge-height);
+  background: color-mix(in srgb, var(--tile-tone) var(--tint-soft), transparent);
+  color: var(--tile-tone);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+.iconAction[data-tile][data-tone='danger'],
+.iconAction[data-tile][data-tone='reject'] {
+  --tile-tone: var(--error);
+}
+/* auto-analysis keeps its purple (owner decision, Nov 1) */
+.iconAction[data-tile][data-tone='meta'] {
+  --tile-tone: var(--accent-tertiary);
+}
+/* ActionTile: the glyph of a row menu item, not a control */
+.iconAction[data-static] {
+  flex: none;
+  cursor: inherit;
+}
+.iconAction[data-tile][data-hovered],
+.iconAction[data-tile][data-pressed],
+.iconAction[data-tile][data-focus-visible] {
+  background: color-mix(in srgb, var(--tile-tone) var(--tint-strong), transparent);
+  color: var(--tile-tone);
+}
+
+.iconAction[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

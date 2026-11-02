@@ -1,0 +1,62 @@
+/* Segmented control: 24px inset box; the selected option is an accent wash with accent text at 600 (C136). A solid
+   accent fill is for primary buttons only. The wash is the option's own background, so nothing is measured (C020). */
+.segmented {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  height: var(--control-height);
+  padding: 2px;
+  border: 1px solid var(--control-edge);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  isolation: isolate;
+}
+
+.option {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 var(--space-sm);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+  outline: none;
+}
+
+.option[data-hovered] {
+  color: var(--text-primary);
+}
+
+.option[data-selected] {
+  color: var(--accent-primary);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
+}
+
+.option[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.option[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Inside a narrow report column (the phone, after the 30px of the section panel) the options give up half their padding so a four-option control still fits a card. */
+@container (max-width: 300px) {
+  .option {
+    padding: 0 var(--space-xs);
+  }
+}

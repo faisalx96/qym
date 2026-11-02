@@ -1,0 +1,21 @@
+/* Chart kit: the host positions a role=tooltip (elevated surface, --font-sm) over marks; mark states live in styles/marks.css. */
+.host {
+  position: relative;
+  min-width: 0;
+}
+
+.tip {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  max-width: 260px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: normal;
+}

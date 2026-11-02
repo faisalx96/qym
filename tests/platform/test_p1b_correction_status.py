@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -34,10 +33,7 @@ from test_review_rules import (  # noqa: F401  (fixtures)
     client,
     session_factory,
 )
-from test_root_cause_issue_javascript import _function, _run_javascript
 
-ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages/platform/qym_platform/_static/dashboard"
 DECIDED_AT = datetime(2026, 9, 2)
 
 
@@ -327,36 +323,6 @@ def test_metric_analysis_approval_refuses_a_decided_review(client, session_facto
 # ---------------------------------------------------------------------------
 
 
-def test_reviews_bulk_buttons_send_only_the_rows_they_fit():
-    source = (DASHBOARD / "reviews.html").read_text(encoding="utf-8")
-    assert "approve: { label: 'Approve', fits: c => c.status === 'pending'" in source
-    assert "reset: { label: 'Reset', fits: c => c.status === 'approved' || c.status === 'rejected'" in source
-    for action in ("approve", "reject", "reset"):
-        handler = source[source.index(f"const pick = bulkSelection('{action}');") :][:1600]
-        assert f"if (refuseUnfitSelection('{action}', pick)) return;" in handler
-        assert "const ids = pick.ids;" in handler
-        assert f"skippedNote('{action}', pick.skipped, true)" in handler
-
-
-def test_run_page_offers_approve_only_on_pending_issues():
-    functions = "\n".join(_function("run", name) for name in ("rootCauseIssues", "renderMetricRootCauseIssues"))
-    _run_javascript(functions + r"""
-        const escapeHtml = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-        const escapeAttr = escapeHtml;
-        const rootCauseColor = () => 'var(--warning)';
-        const IS_EXPORT = false;
-        const render = status => renderMetricRootCauseIssues(
-          {root_cause_issues: [{issue_id: 'i1', category: 'Retrieval', review_status: status}]}, 'item-1', 'accuracy');
-        assert.ok(render('pending').includes('data-approve-issue="0"'));
-        assert.ok(render('pending').includes('Pending review'));
-        // A rejected issue is reset on Reviews before it can be approved.
-        assert.ok(!render('rejected').includes('data-approve-issue'));
-        assert.ok(render('rejected').includes('>Rejected</span>'));
-        assert.ok(render('rejected').includes('Reset it to pending on Reviews'));
-        assert.ok(!render('approved').includes('data-approve-issue'));
-    """)
-
-
 # ---------------------------------------------------------------------------
 # Run page: each issue's review status comes from its correction (leftover)
 # ---------------------------------------------------------------------------
@@ -532,54 +498,3 @@ def test_pass_statuses_read_each_review_row_once_without_its_snapshots(db_sessio
         assert column not in pass_queries[0]
     # Each pass review row's issues are normalized once.
     assert len(normalized) == pass_rows and len(set(normalized)) == pass_rows
-
-
-def test_run_page_offers_approve_by_the_issue_review_status():
-    functions = "\n".join(
-        _function("run", name)
-        for name in ("rootCauseIssues", "renderMetricRootCauseIssues", "scopedPassAttempt",
-                     "scopedPassMetricMeta", "scopedPassItemMetadata", "scopeRowToPass")
-    )
-    _run_javascript(functions + r"""
-        const escapeHtml = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-        const escapeAttr = escapeHtml;
-        const rootCauseColor = () => 'var(--warning)';
-        const IS_EXPORT = false;
-        const analysis = {review_status: 'pending', root_cause_issues: [
-          {issue_id: 'i1', category: 'Retrieval', review_status: 'pending'},
-          {issue_id: 'i2', category: 'Prompt', review_status: 'pending'},
-        ]};
-        const render = (statuses, value = analysis) => renderMetricRootCauseIssues(value, 'item-1', 'accuracy', {}, statuses);
-        const approveButtons = html => (html.match(/data-approve-issue="/g) || []).length;
-        // The JSON says pending; the issues' own reviews are decided.
-        const decided = render([{issue_id: 'i2', status: 'rejected'}, {issue_id: 'i1', status: 'approved'}]);
-        assert.equal(approveButtons(decided), 0);
-        assert.ok(decided.includes('rc-status-pill approved">Approved</span>'));
-        assert.ok(decided.includes('>Rejected</span>'));
-        // The review status wins over the JSON either way.
-        const pending = render([{issue_id: 'i1', status: 'pending'}, {issue_id: 'i2', status: 'pending'}],
-          {root_cause_issues: analysis.root_cause_issues.map(issue => ({...issue, review_status: 'approved'}))});
-        assert.equal(approveButtons(pending), 2);
-        // Without statuses (an exported page) the JSON still decides.
-        assert.equal(approveButtons(render(undefined)), 2);
-        // An issue without an ID goes by position, never by another issue's entry.
-        const legacy = {root_cause_issues: [{category: 'Retrieval'}]};
-        assert.equal(approveButtons(render([{issue_id: '', status: 'approved'}], legacy)), 0);
-        assert.equal(approveButtons(render([{issue_id: 'i9', status: 'approved'}], legacy)), 1);
-
-        // A pass view reads that pass's statuses.
-        const row = {
-          item_id: 'item-1', item_metadata: {},
-          pass_metric_analyses: {accuracy: [analysis, analysis]},
-          pass_review_issue_statuses: {accuracy: [
-            [{issue_id: 'i1', status: 'pending'}, {issue_id: 'i2', status: 'pending'}],
-            [{issue_id: 'i1', status: 'approved'}, {issue_id: 'i2', status: 'pending'}],
-          ]},
-        };
-        for (const [pass, buttons] of [[1, 2], [2, 1]]) {
-          const scoped = scopeRowToPass(row, ['accuracy'], pass);
-          const html = renderMetricRootCauseIssues(scoped.item_metadata.metric_analyses.accuracy, 'item-1', 'accuracy',
-            scoped.review_corrections.accuracy, scoped.review_issue_statuses.accuracy);
-          assert.equal(approveButtons(html), buttons, 'pass ' + pass);
-        }
-    """)

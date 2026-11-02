@@ -1,0 +1,118 @@
+{
+ "metric": "q",
+ "rows": [
+  {
+   "error": "",
+   "index": 0,
+   "item_id": "a",
+   "item_metadata": {},
+   "latency_ms": 10.0,
+   "metric_meta": {
+    "q": {
+     "sample_reducer": "mean",
+     "samples_observed": 3
+    }
+   },
+   "metric_values": [
+    0.6666666666666666
+   ],
+   "pass_attempts": [
+    null,
+    null,
+    null
+   ],
+   "pass_metric_meta": {
+    "q": [
+     null,
+     {
+      "error": "judge 429",
+      "status": "error"
+     },
+     null
+    ]
+   },
+   "pass_scores": {
+    "q": [
+     1.0,
+     0.0,
+     1.0
+    ]
+   },
+   "retry_count": 0,
+   "status": "completed"
+  },
+  {
+   "error": "",
+   "index": 1,
+   "item_id": "b",
+   "item_metadata": {},
+   "latency_ms": 10.0,
+   "metric_meta": {
+    "q": {
+     "sample_reducer": "mean",
+     "samples_observed": 3
+    }
+   },
+   "metric_values": [
+    0.8000000000000002
+   ],
+   "pass_attempts": [
+    null,
+    null,
+    null
+   ],
+   "pass_metric_meta": null,
+   "pass_scores": {
+    "q": [
+     0.8,
+     0.8,
+     0.8
+    ]
+   },
+   "retry_count": 0,
+   "status": "completed"
+  },
+  {
+   "error": "",
+   "index": 2,
+   "item_id": "c",
+   "item_metadata": {},
+   "latency_ms": 10.0,
+   "metric_meta": {
+    "q": {
+     "sample_reducer": "mean",
+     "samples_observed": 2
+    }
+   },
+   "metric_values": [
+    0.19999999999999998
+   ],
+   "pass_attempts": [
+    null,
+    null,
+    null
+   ],
+   "pass_metric_meta": {
+    "q": [
+     {
+      "error": "judge 429",
+      "status": "error"
+     },
+     {
+      "status": "timeout"
+     },
+     null
+    ]
+   },
+   "pass_scores": {
+    "q": [
+     null,
+     0.0,
+     0.6
+    ]
+   },
+   "retry_count": 0,
+   "status": "completed"
+  }
+ ]
+}

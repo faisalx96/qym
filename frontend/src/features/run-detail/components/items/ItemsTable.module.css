@@ -1,0 +1,22 @@
+/* Run items table: the DataTable card plus the retry and highlight details. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.retry {
+  color: var(--info);
+  font-size: var(--font-sm);
+}
+
+.highlight td {
+  box-shadow:
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary);
+}
+
+.noTrace {
+  color: var(--text-dim); /* decorative placeholder: this item has no trace */
+}

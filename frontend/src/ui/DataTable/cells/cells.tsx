@@ -1,0 +1,312 @@
+import type { ReactNode } from 'react';
+import { Button as AriaButton } from 'react-aria-components';
+import { formatDurationMs, formatNumericValue, formatRelative } from '@/lib/format';
+import { metricBand, type MetricDirection, type MetricType } from '@/lib/metrics';
+import { CopyButton } from '../../CopyButton';
+import { staggerIndex, useEntrance, useFlashOnChange } from '../../motion';
+import { Identicon } from '../../Identicon';
+import { Popover } from '../../Popover';
+import { RunStatusBadge } from '../../RunStatusBadge';
+import { Tag } from '../../Tag';
+import { middleTruncate } from '../model';
+import styles from './cells.module.css';
+import { formatHeaderDate, toDate } from '@/lib/dates';
+
+/* ── ScoreBar ──────────────────────────────────────────────────────────── */
+
+export interface ScoreBarProps {
+  /** 0..1 for rates; any number when `max` is given (relative scale). */
+  value: number | null | undefined;
+  type?: MetricType;
+  direction?: MetricDirection | 'higher' | 'lower' | 'none';
+  /** Relative scale for non-percent values (latency, tokens): bar = value / max. */
+  max?: number;
+  /** Displayed text override (defaults to a percent, or a number with `max`). */
+  text?: string;
+  error?: 'task' | 'metric' | null;
+  /** Fixed bar colour (a CSS colour or token) for series that are not score bands, e.g. a model colour. */
+  color?: string;
+  /** Track width in px (default 48; 96 for size 'lg'). */
+  width?: number;
+  /** Series 1..8 colour for the fill instead of a band (a run, a model, a category group). */
+  series?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  /** 'sm' (default, 6px track, value beside it) or 'lg' (14px track, value inside the bar). */
+  size?: 'sm' | 'lg';
+  /** Position among sibling marks: staggers the grow-in by 24ms each (capped at 10). */
+  index?: number;
+  /** Flash a faint tint when the value changes (a live value on a running run). */
+  live?: boolean;
+  /** A baseline tick on the track in the same units as `value` (the baseline to beat, or a category table's overall average). */
+  marker?: number | null;
+  /** Accessible/hover name of the marker (default "Overall average"). */
+  markerLabel?: string;
+  /** Track thickness for 'sm' bars: 'sm' = 6px (default), 'md' = 10px. */
+  height?: 'sm' | 'md';
+}
+
+function normDirection(d: ScoreBarProps['direction']): MetricDirection {
+  if (d === 'higher' || d === 'maximize') return 'maximize';
+  if (d === 'lower' || d === 'minimize') return 'minimize';
+  return null;
+}
+
+function markerPct(marker: number, max: number | undefined): number {
+  const ratio = max === undefined ? marker : max > 0 ? marker / max : 0;
+  return Math.max(0, Math.min(1, ratio)) * 100;
+}
+
+/** Track + fill + value. Errors show the warning glyph, never a bar. */
+export function ScoreBar({
+  value,
+  type,
+  direction,
+  max,
+  text,
+  error,
+  color,
+  width,
+  series,
+  size = 'sm',
+  index,
+  live,
+  marker,
+  height = 'sm',
+  markerLabel = 'Overall average',
+}: ScoreBarProps) {
+  const enter = useEntrance();
+  const flash = useFlashOnChange(value, live === true);
+  if (error) {
+    return (
+      <span className={styles.scoreBar} data-error={error}>
+        <span
+          className={styles.errGlyph}
+          role="img"
+          aria-label={error === 'task' ? 'Task error' : 'Metric error'}
+        >
+          ⚠
+        </span>
+        <span className={styles.scoreText}>Error</span>
+      </span>
+    );
+  }
+  if (value === null || value === undefined || Number.isNaN(value))
+    return (
+      <span className={styles.scoreBar} data-empty="">
+        <span className={styles.scoreText}>—</span>
+      </span>
+    );
+  const dir = normDirection(direction);
+  const band = max === undefined ? metricBand(value, type, dir) : null;
+  const ratio = max === undefined ? value : max > 0 ? value / max : 0;
+  const pct = Math.max(0, Math.min(1, ratio)) * 100;
+  const label = text ?? (max === undefined ? `${Math.round(value * 100)}%` : formatNumericValue(value));
+  return (
+    <span
+      className={styles.scoreBar}
+      data-band={band ?? undefined}
+      data-series={band ? undefined : series}
+      data-size={size === 'lg' ? 'lg' : height === 'md' ? 'md' : undefined}
+      data-changed={flash ? '' : undefined}
+      style={
+        color || width
+          ? ({
+              ...(color ? { '--bar': color } : {}),
+              ...(width ? { '--track-w': `${width}px` } : {}),
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
+      <span className={styles.track} aria-hidden={size === 'lg' ? undefined : 'true'}>
+        {size === 'lg' ? (
+          <span className={styles.inText} aria-hidden="true">
+            {label}
+          </span>
+        ) : null}
+        {marker !== null && marker !== undefined && Number.isFinite(marker) ? (
+          <span
+            className={styles.marker}
+            style={{ insetInlineStart: `${markerPct(marker, max)}%` }}
+            title={markerLabel}
+            aria-hidden="true"
+            data-testid="score-marker"
+          />
+        ) : null}
+        <span
+          className={styles.fill}
+          data-enter={enter ? '' : undefined}
+          style={{ inlineSize: `${pct}%`, '--i': staggerIndex(index) } as React.CSSProperties}
+        >
+          {size === 'lg' ? <span className={styles.onFill}>{label}</span> : null}
+        </span>
+      </span>
+      {size === 'lg' ? null : <span className={styles.scoreText}>{label}</span>}
+    </span>
+  );
+}
+
+/* ── DeltaCell ─────────────────────────────────────────────────────────── */
+
+export interface DeltaCellProps {
+  value: number | null | undefined;
+  direction?: MetricDirection | 'higher' | 'lower' | 'none';
+  /** Treat changes within this magnitude as unchanged. */
+  noise?: number;
+  /** Formatter for the magnitude (default points: value * 100). */
+  format?: (abs: number) => string;
+  /** Pill variant: a tinted fill in the verdict colour (change beyond the noise band); flat and neutral stay plain. */
+  emphasis?: boolean;
+}
+
+export function DeltaCell({ value, direction, noise = 0, format, emphasis }: DeltaCellProps) {
+  if (value === null || value === undefined || Number.isNaN(value))
+    return <span className={styles.deltaEmpty}>—</span>;
+  const dir = normDirection(direction);
+  const flat = Math.abs(value) <= noise;
+  const up = value > 0;
+  const good = flat || !dir ? null : dir === 'maximize' ? up : !up;
+  const mag = format ? format(Math.abs(value)) : `${(Math.abs(value) * 100).toFixed(1)}`;
+  return (
+    <span
+      className={styles.delta}
+      data-verdict={flat ? 'flat' : good === null ? 'neutral' : good ? 'good' : 'bad'}
+      data-pill={emphasis && !flat && good !== null ? '' : undefined}
+    >
+      <span aria-hidden="true">{flat ? '–' : up ? '▲' : '▼'}</span>
+      <span>
+        {flat ? '' : up ? '+' : '-'}
+        {mag}
+      </span>
+    </span>
+  );
+}
+
+/* ── TwoLine ───────────────────────────────────────────────────────────── */
+
+export function TwoLine({ primary, secondary }: { primary: ReactNode; secondary?: ReactNode }) {
+  return (
+    <span className={styles.twoLine}>
+      <span className={styles.primary}>{primary}</span>
+      {secondary ? <span className={styles.secondary}>{secondary}</span> : null}
+    </span>
+  );
+}
+
+/* ── IdCell ────────────────────────────────────────────────────────────── */
+
+export function IdCell({ value, keep = 8, copy = true }: { value: string; keep?: number; copy?: boolean }) {
+  const short = middleTruncate(value, keep);
+  return (
+    <span className={styles.id}>
+      <span className={styles.idText} title={short === value ? undefined : value}>
+        {short}
+      </span>
+      {copy ? <CopyButton text={value} label={`Copy ${value}`} className={styles.idCopy} /> : null}
+    </span>
+  );
+}
+
+/* ── RelativeTime ──────────────────────────────────────────────────────── */
+
+export function RelativeTime({ iso, now }: { iso: string | null | undefined; now?: Date }) {
+  if (!iso) return <span>—</span>;
+  if (!toDate(iso)) return <span>—</span>;
+  return (
+    <time dateTime={iso} title={formatHeaderDate(iso)}>
+      {formatRelative(iso, now)}
+    </time>
+  );
+}
+
+/* ── TagsCell ──────────────────────────────────────────────────────────── */
+
+export function TagsCell({
+  tags,
+  max = 2,
+  label = 'tags',
+}: {
+  tags: readonly string[] | null | undefined;
+  max?: number;
+  label?: string;
+}) {
+  const list = tags ?? [];
+  if (list.length === 0) return <span>—</span>;
+  const shown = list.slice(0, max);
+  const rest = list.slice(max);
+  return (
+    <span className={styles.tags}>
+      {shown.map((t) => (
+        <Tag key={t} kind="data">
+          {t}
+        </Tag>
+      ))}
+      {rest.length ? (
+        <Popover
+          label={`More ${label}`}
+          trigger={
+            <AriaButton className={styles.more} aria-label={`${rest.length} more ${label}`}>
+              +{rest.length}
+            </AriaButton>
+          }
+        >
+          <span className={styles.tagPop}>
+            {rest.map((t) => (
+              <Tag key={t} kind="data">
+                {t}
+              </Tag>
+            ))}
+          </span>
+        </Popover>
+      ) : null}
+    </span>
+  );
+}
+
+/* ── UserCell ──────────────────────────────────────────────────────────── */
+
+export function UserCell({ name, seed }: { name: string | null | undefined; seed?: string }) {
+  if (!name) return <span>—</span>;
+  return (
+    <span className={styles.user}>
+      <Identicon seed={seed ?? name} cell={4} gap={1} />
+      <span className={styles.userName}>{name}</span>
+    </span>
+  );
+}
+
+/* ── ProgressCell ──────────────────────────────────────────────────────── */
+
+export function ProgressCell({ done, total }: { done: number; total: number }) {
+  const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+  return (
+    <span className={styles.progress}>
+      <span
+        className={styles.track}
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={done}
+        aria-label="Progress"
+      >
+        <span className={styles.fill} style={{ inlineSize: `${pct}%` }} data-plain="" />
+      </span>
+      <span className={styles.scoreText}>
+        {done}/{total}
+      </span>
+    </span>
+  );
+}
+
+/* ── StatusCell / NumberCell / DurationCell ────────────────────────────── */
+
+export function StatusCell({ status }: { status: string | null | undefined }) {
+  if (!status) return <span>—</span>;
+  return <RunStatusBadge status={status} />;
+}
+
+export function NumberCell({ value, decimals = 1 }: { value: number | null | undefined; decimals?: number }) {
+  return <span className={styles.num}>{formatNumericValue(value, decimals)}</span>;
+}
+
+export function DurationCell({ ms }: { ms: number | null | undefined }) {
+  return <span className={styles.num}>{formatDurationMs(ms)}</span>;
+}

@@ -1,0 +1,182 @@
+{
+  "run": "big",
+  "kind": "deep",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 4892,
+    "overviewMs": 4957,
+    "rowsMs": 6464,
+    "ttiMs": 4957,
+    "tbtMs": 0,
+    "cls": 0.0002,
+    "requests": 38,
+    "jsChunks": 14,
+    "jsKB": 441.1,
+    "apiRequests": 4,
+    "apiKB": 87.7,
+    "compactKB": 55.9,
+    "compactTtfbMs": 590,
+    "compactDoneMs": 4397
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 4410,
+      "skeletonMs": 3501,
+      "overviewMs": 4986,
+      "rowsMs": 6537,
+      "ttiMs": 4986,
+      "tbtMs": 0,
+      "cls": 0.0032,
+      "reactCommits": 43,
+      "requests": 38,
+      "jsChunks": 14,
+      "jsKB": 441.1,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 574,
+      "compactDoneMs": 4405,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "index-PNmd5vjo.js 149.6kB @578-3155ms",
+        "query-DIxyvbKV.js 14.5kB @578-1561ms",
+        "react-Dy3GpWEd.js 73.4kB @579-2644ms",
+        "aria-DlC_sIEk.js 86.6kB @579-2795ms",
+        "RootCauseTab-DYmq7Oa3.js 36.0kB @3177-4277ms",
+        "ScoreEditor-C_mmWXx8.js 9.4kB @3177-3976ms",
+        "OverviewTab-Cfc4WoZD.js 6.6kB @4277-4942ms",
+        "DeepTab-BXCrBWXK.js 7.1kB @4278-4959ms",
+        "ItemsSection-FbLeIdWq.js 21.6kB @4278-6269ms",
+        "SpanDetail-DkJzhta-.js 11.7kB @4278-6476ms",
+        "run-detail-ADHfvyxJ.js 7.9kB @4279-6434ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @4425-6650ms",
+        "LatencyTab-DobyeR1z.js 5.1kB @4433-6859ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @6477-7076ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @3176-3792ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @3177-4405ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @4455-7000ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @6523-7376ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 4892,
+      "skeletonMs": 3471,
+      "overviewMs": 4942,
+      "rowsMs": 6441,
+      "ttiMs": 4942,
+      "tbtMs": 0,
+      "cls": 0.0002,
+      "reactCommits": 36,
+      "requests": 38,
+      "jsChunks": 14,
+      "jsKB": 441.1,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 590,
+      "compactDoneMs": 4388,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "index-PNmd5vjo.js 149.6kB @570-3147ms",
+        "query-DIxyvbKV.js 14.5kB @570-1536ms",
+        "react-Dy3GpWEd.js 73.4kB @570-2636ms",
+        "aria-DlC_sIEk.js 86.6kB @570-2787ms",
+        "RootCauseTab-DYmq7Oa3.js 36.0kB @3161-4252ms",
+        "ScoreEditor-C_mmWXx8.js 9.4kB @3161-3951ms",
+        "OverviewTab-Cfc4WoZD.js 6.6kB @4252-4918ms",
+        "DeepTab-BXCrBWXK.js 7.1kB @4253-4926ms",
+        "ItemsSection-FbLeIdWq.js 21.6kB @4254-6209ms",
+        "SpanDetail-DkJzhta-.js 11.7kB @4254-6368ms",
+        "run-detail-ADHfvyxJ.js 7.9kB @4254-6384ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @4418-6376ms",
+        "LatencyTab-DobyeR1z.js 5.1kB @4895-6834ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @6385-7001ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @3161-3793ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @3161-4388ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @4895-6955ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @6426-7196ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 4900,
+      "skeletonMs": 3487,
+      "overviewMs": 4957,
+      "rowsMs": 6464,
+      "ttiMs": 4957,
+      "tbtMs": 0,
+      "cls": 0.0002,
+      "reactCommits": 36,
+      "requests": 38,
+      "jsChunks": 14,
+      "jsKB": 441.1,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 613,
+      "compactDoneMs": 4397,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "index-PNmd5vjo.js 149.6kB @571-3148ms",
+        "query-DIxyvbKV.js 14.5kB @571-1543ms",
+        "react-Dy3GpWEd.js 73.4kB @571-2627ms",
+        "aria-DlC_sIEk.js 86.6kB @571-2787ms",
+        "RootCauseTab-DYmq7Oa3.js 36.0kB @3163-4262ms",
+        "ScoreEditor-C_mmWXx8.js 9.4kB @3163-3952ms",
+        "OverviewTab-Cfc4WoZD.js 6.6kB @4262-4927ms",
+        "DeepTab-BXCrBWXK.js 7.1kB @4264-4935ms",
+        "ItemsSection-FbLeIdWq.js 21.6kB @4264-6218ms",
+        "SpanDetail-DkJzhta-.js 11.7kB @4264-6377ms",
+        "run-detail-ADHfvyxJ.js 7.9kB @4264-6402ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @4419-6385ms",
+        "LatencyTab-DobyeR1z.js 5.1kB @4902-6843ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @6402-7019ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @3162-3817ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @3163-4397ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @4903-6963ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @6447-7202ms"
+      ]
+    }
+  ]
+}

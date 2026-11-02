@@ -1461,3 +1461,84 @@ def test_job_manager_records_background_failure(monkeypatch, tmp_path) -> None:
 
     assert job.status == "FAILED"
     assert "Function 'insightor_api' not found" in (job.error or "")
+
+
+def test_job_manager_unloads_preset_module_after_job(monkeypatch, tmp_path) -> None:
+    """Each job's preset script must not stay in sys.modules once it ends."""
+    script = tmp_path / "leaky_insightor_eval.py"
+    script.write_text("BIG = list(range(10))\n", encoding="utf-8")
+    monkeypatch.setenv("QYM_INSIGHTOR_EVAL_SCRIPT", str(script))
+    monkeypatch.setenv("QYM_DATABASE_URL", "sqlite:///:memory:")
+    before = {name for name in sys.modules if "leaky_insightor_eval" in name}
+
+    manager = ProductEvalJobManager(max_workers=1)
+    for _ in range(3):
+        job = manager.submit(
+            preset_name="insightor",
+            api_key="token",
+            run_name=None,
+            task_name=None,
+            dataset_name="dataset-1",
+            runtime_inputs=ProductEvalRuntimeInputs(
+                insightor_url="https://insightor.example.com",
+                refresh_token="refresh-token-1",
+            ),
+            model=None,
+            metadata={},
+            platform_url="http://testserver",
+        )
+        assert job._future is not None
+        job._future.result(timeout=5)
+        # The script loaded (the failure is the missing task function).
+        assert "Function 'insightor_api' not found" in (job.error or "")
+
+    after = {name for name in sys.modules if "leaky_insightor_eval" in name}
+    assert after == before
+    manager._executor.shutdown(wait=False, cancel_futures=True)
+
+
+def test_job_manager_prunes_finished_jobs(monkeypatch) -> None:
+    manager = ProductEvalJobManager(max_workers=1, max_retained_jobs=3)
+
+    def finish(job, *args):
+        job.mark(status="COMPLETED")
+
+    monkeypatch.setattr(manager, "_run_job", finish)
+    ids = []
+    for _ in range(6):
+        job = manager.submit(
+            preset_name="test",
+            api_key="token",
+            run_name=None,
+            task_name=None,
+            dataset_name=None,
+            runtime_inputs=None,
+            model=None,
+            metadata={},
+            platform_url="http://testserver",
+        )
+        assert job._future is not None
+        job._future.result(timeout=5)
+        ids.append(job.job_id)
+
+    # Pruning runs before each insert: the cap plus the newest job at most.
+    assert len(manager._jobs) <= 4
+    assert ids[-1] in manager._jobs
+    assert ids[0] not in manager._jobs
+    manager._executor.shutdown(wait=False, cancel_futures=True)
+
+
+def test_job_manager_never_prunes_unfinished_jobs() -> None:
+    manager = ProductEvalJobManager(max_workers=5, max_retained_jobs=1)
+    running = [ProductEvalJob(job_id=f"eval_{i}", preset="test") for i in range(3)]
+    for job in running:
+        job.status = "RUNNING"
+        manager._jobs[job.job_id] = job
+    done = ProductEvalJob(job_id="eval_done", preset="test", status="COMPLETED")
+    manager._jobs[done.job_id] = done
+
+    with manager._lock:
+        manager._prune_locked()
+
+    assert set(manager._jobs) == {job.job_id for job in running}
+    manager._executor.shutdown(wait=False, cancel_futures=True)

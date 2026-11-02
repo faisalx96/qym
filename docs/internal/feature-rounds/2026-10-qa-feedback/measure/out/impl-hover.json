@@ -1,0 +1,94 @@
+{
+  "project-card-1440": {
+    "w": 287.8,
+    "h": 127.4,
+    "deco": "none",
+    "inside": [
+      "none"
+    ],
+    "border": "rgb(59, 59, 84)",
+    "bg": "rgb(34, 34, 50)",
+    "shadow": "yes",
+    "transform": "none"
+  },
+  "dataset-card-1440": {
+    "w": 388.3,
+    "h": 226.4,
+    "deco": "none",
+    "inside": [
+      "none"
+    ],
+    "border": "rgb(59, 59, 84)",
+    "bg": "rgb(34, 34, 50)",
+    "shadow": "yes",
+    "transform": "none"
+  },
+  "docs-pager-1440": {
+    "w": 321.1,
+    "h": 32,
+    "deco": "none",
+    "inside": [
+      "none"
+    ],
+    "border": "rgb(0, 212, 170)",
+    "bg": "rgb(42, 42, 60)",
+    "shadow": "none",
+    "transform": "none"
+  },
+  "plain-docs-link-1440": {
+    "w": 217.8,
+    "h": 19,
+    "deco": "underline",
+    "inside": [],
+    "border": "rgb(0, 212, 170)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "shadow": "none",
+    "transform": "none"
+  },
+  "project-card-390": {
+    "w": 279,
+    "h": 127.4,
+    "deco": "none",
+    "inside": [
+      "none"
+    ],
+    "border": "rgb(59, 59, 84)",
+    "bg": "rgb(34, 34, 50)",
+    "shadow": "yes",
+    "transform": "none"
+  },
+  "dataset-card-390": {
+    "w": 300,
+    "h": 206.4,
+    "deco": "none",
+    "inside": [
+      "none"
+    ],
+    "border": "rgb(59, 59, 84)",
+    "bg": "rgb(34, 34, 50)",
+    "shadow": "yes",
+    "transform": "none"
+  },
+  "docs-pager-390": {
+    "w": 179.6,
+    "h": 32,
+    "deco": "none",
+    "inside": [
+      "none"
+    ],
+    "border": "rgb(0, 212, 170)",
+    "bg": "rgb(42, 42, 60)",
+    "shadow": "none",
+    "transform": "none"
+  },
+  "plain-docs-link-390": {
+    "w": 217.8,
+    "h": 19,
+    "deco": "underline",
+    "inside": [],
+    "border": "rgb(0, 212, 170)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "shadow": "none",
+    "transform": "none"
+  }
+}

@@ -16,6 +16,10 @@ from uuid import uuid4
 
 import sqlalchemy as sa
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 DEFAULT_INLINE_BYTES = 1 * 1024 * 1024 * 1024  # 1 GiB
 
 
@@ -45,6 +49,7 @@ def enqueue_job(bind, kind: str, params: Optional[Dict[str, Any]] = None, *, not
         ),
         {"id": job_id, "kind": kind, "status": "paused" if paused else "queued", "params": json.dumps(params or {}), "log": note, "now": now},
     )
+    logger.info("migration queued maintenance job %s (kind=%s, %s)", job_id, kind, "paused" if paused else "queued")
     return job_id
 
 
@@ -74,3 +79,44 @@ def column_type_statements(table: str, *, downgrade: bool = False) -> list:
     if table in ID_SEQUENCES:
         stmts.append(f"ALTER SEQUENCE IF EXISTS {ID_SEQUENCES[table]} AS {'integer' if downgrade else 'bigint'}")
     return stmts
+
+
+# Covering indexes of migration 0096 (C073). Pass-score and span reads need only
+# these columns, so with the index (and the visibility map of finished
+# partitions) they become index-only scans instead of reading wide heap rows.
+COVERING_SCORE_INDEX: Dict[str, Any] = {
+    "name": "ix_run_item_pass_scores_cover",
+    "table": "run_item_pass_scores",
+    # The order of the group-metrics read (run, metric, then item and pass);
+    # a read of every metric of a run uses the run_id prefix.
+    "columns": ["run_id", "metric_name", "item_id", "pass_number"],
+    "include": ["score_numeric"],
+    # An index-only scan needs the visibility map: vacuum after the build.
+    "vacuum": True,
+}
+COVERING_SPAN_INDEX: Dict[str, Any] = {
+    "name": "ix_span_run_start_cover",
+    "table": "spans",
+    "columns": ["run_id", "start_time_ns"],
+    # Every column api/step_latency._project_spans reads, plus the partition key.
+    "include": [
+        "id",
+        "run_created_at",
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "name",
+        "duration_ms",
+        "end_time_ns",
+        "status",
+        "oi_kind",
+        "usage_scope",
+        "model_name",
+        "tool_name",
+        "token_total",
+        "token_prompt",
+        "token_completion",
+    ],
+    "partitioned": True,
+    "suffix": "run_start_cover",
+}

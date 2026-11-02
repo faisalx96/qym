@@ -1,0 +1,64 @@
+{
+  "note": "Server-side measurements on the seeded SQLite DB (round 7 seed), quiet machine, loopback. Prototypes are scratch code, not product code.",
+  "passes_endpoint": {
+    "r300x10": {
+      "http_ms_median": 65.7,
+      "handler_ms": 57.9,
+      "sql_statements": 28,
+      "sql_ms": 8.0,
+      "payload_bytes": 9868,
+      "gzip_bytes": 1260
+    },
+    "r1200x10": {
+      "http_ms_median": 321.9,
+      "handler_ms": 299.6,
+      "sql_statements": 28,
+      "sql_ms": 35.9,
+      "payload_bytes": 9899,
+      "gzip_bytes": 1270
+    },
+    "cost_model": "about 22 us (300 items) to 25 us (1,200 items) of Python per item-pass; statements per request constant (28): no N+1",
+    "profile_1200": "RunTraceAggregate ORM entities 12,005 (InstanceState.__init__ 64 ms, JSON decode of raw_bucket 12,004 calls 49 ms), _build_run_trace_stats 62 ms, _repeat_pass_event_state 48 ms, pass_metric_totals 22 ms, _execution_error_pairs_for_runs 10 ms, handler loops 59 ms (profiler overhead included)",
+    "prototype_core_select_instead_of_orm_for_trace_aggregates_ms": {
+      "orm_load_and_merge": 169.5,
+      "core_load_and_merge": 146.9,
+      "fetch_trace_id_and_raw_bucket_only": 51.0
+    }
+  },
+  "group_metrics_endpoint": {
+    "first_request_per_run_metric_threshold_ms": {
+      "r300x10": [
+        2635,
+        2624,
+        2627,
+        2800,
+        2805,
+        2828
+      ],
+      "r1200x10": [
+        10900,
+        11225
+      ]
+    },
+    "repeat_request_ms": {
+      "r300x10": 9.6
+    },
+    "payload_bytes": 3626,
+    "gzip_bytes": 1100,
+    "cause": "cached_repeat_analysis() -> build_repeat_analysis(): pure-Python item bootstrap (2,000 iterations x 30 intervals, mean_ci), 18,000,000 random.choice calls = 15.5 s under cProfile for 300x10; the result (band, distribution, uncertainty) is persisted per (run, metric, threshold) in run_metric_analyses and is not displayed by the runs-table strip, which shows only `group`",
+    "group_stats_alone_ms": {
+      "r300x10": 0.4
+    },
+    "prototype_group_only_sql_plus_group_stats_ms": {
+      "r300x10": {
+        "median": 3.3,
+        "max": 17.9
+      },
+      "r1200x10": {
+        "median": 12.7,
+        "max": 13.0
+      }
+    },
+    "side_effect": "while the bootstrap runs (GIL) the passes request of the same click waits: passes TTFB 2,749-2,844 ms (76 ms alone), rows painted at 2,805-2,903 ms"
+  }
+}

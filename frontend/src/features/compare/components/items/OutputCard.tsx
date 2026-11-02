@@ -1,0 +1,479 @@
+/** One run's (or pass') answer to an item: verdict, latency, trace, output, metric chips and root-cause issues. */
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { runPath } from '@/app/routes';
+import { formatLatency, isInternalMetaKey, metricMetaDisplayKey } from '@/lib/metrics';
+import {
+  Button,
+  CopyButton,
+  Icon,
+  IconButton,
+  JsonPreview,
+  LinkButton,
+  ScoreValue,
+  Tag,
+  TextBlock,
+} from '@/ui';
+import type { Row, RootCauseIssue } from '@/features/run-detail/types';
+import { bodyText } from '@/features/run-detail/lib/itemText';
+import {
+  getRowRootCauseAnalyses,
+  itemMetadataDisplayValue,
+  rootCauseIssues,
+} from '@/features/run-detail/lib/rowMeta';
+import { buildLangfuseTraceUrl } from '@/features/run-detail/lib/traceTree';
+import { wordDiff, diffSide } from '@/features/datasets/lib/wordDiff';
+import { textDirAttrs } from '@/lib/text';
+import { runColor, useCompare } from '../../CompareContext';
+import { chipDelta, deltaKind } from '../../lib/baseline';
+import { useRowPatch } from '../../hooks/useRowPatch';
+import { metricCellFor, pillState, runReadOnly, runScoresLocked } from '../../lib/rowCells';
+import { runShortName } from '../../lib/labels';
+import type { CompareRun } from '../../lib/model';
+import { CompareScoreEditor } from '../rd/CompareScoreEditor';
+import { IssueDialog } from '../rd/IssueDialog';
+import { RunTag, useRunMark } from '../RunTag';
+import { useItemsUi } from './ItemsUi';
+import styles from './OutputCard.module.css';
+
+export function Collapsible({ text, lines = 12 }: { text: string; lines?: number }) {
+  const { textMode } = useItemsUi();
+  const [open, setOpen] = useState(false);
+  const long = text.length > 600 || text.split('\n').length > lines;
+  return (
+    <div>
+      <div
+        className={long && !open ? styles.clamped : undefined}
+        style={long && !open ? ({ ['--lines' as string]: lines } as React.CSSProperties) : undefined}
+      >
+        <TextBlock text={text} mode={textMode} />
+      </div>
+      {long ? (
+        <button type="button" className={styles.more} aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidden: Set<string> }) {
+  const entries = Object.entries(meta).filter(
+    ([k, v]) => !isInternalMetaKey(k) && !hidden.has(k) && v !== null && v !== undefined && v !== '',
+  );
+  if (!entries.length) return <div className={styles.muted}>No judge metadata recorded.</div>;
+  return (
+    <dl className={styles.metaList}>
+      {entries.map(([k, v]) => (
+        <div key={k} className={styles.metaRow}>
+          <dt>{metricMetaDisplayKey(k, meta)}</dt>
+          <dd>
+            {v !== null && typeof v === 'object' ? (
+              <JsonPreview value={v} title={k} compact />
+            ) : (
+              itemMetadataDisplayValue(v)
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * The output with the words that are not in the baseline's output marked (C141 'Diff vs baseline'). Past the diff
+ * budget the text shows without marks.
+ */
+function OutputDiff({ text, base }: { text: string; base: string }) {
+  const ops = wordDiff(base, text);
+  if (!ops) return <Collapsible text={text} />;
+  return (
+    <pre className={styles.diff} data-part="output-diff" {...textDirAttrs(text)}>
+      {diffSide(ops, 'after').map((op, i) =>
+        op.kind === 'same' ? (
+          op.text
+        ) : (
+          <mark key={i} className={styles.added}>
+            {op.text}
+          </mark>
+        ),
+      )}
+    </pre>
+  );
+}
+
+function MetricChips({
+  run,
+  row,
+  itemId,
+  open,
+  onOpen,
+  baseRun,
+  baseRow,
+}: {
+  run: CompareRun;
+  row: Row;
+  itemId: string;
+  /** The metric whose details are open under every run (shared by the whole item). */
+  open: string | null;
+  onOpen: (metric: string | null) => void;
+  /** The baseline run and its row on this item; null on the baseline's own card. */
+  baseRun: CompareRun | null;
+  baseRow: Row | null;
+}) {
+  const { model, c } = useCompare();
+  const patch = useRowPatch();
+  const [editing, setEditing] = useState<string | null>(null);
+  const canEdit =
+    !runReadOnly(run) &&
+    !runScoresLocked(run) &&
+    !run.run.items_restricted &&
+    String(row.status) !== 'not_received';
+  void c;
+  return (
+    <div className={styles.metrics} role="list" aria-label="Metrics" data-part="metric-rows">
+      {model.metrics.map((metric) => {
+        const idx = run.metricIndex[metric];
+        const cell = idx === undefined ? null : metricCellFor(model, run, row, metric);
+        // C141: every card lists every metric in the Averages order; a metric the run did not score is one muted row
+        if (!cell || (cell.value === null && !cell.error))
+          return (
+            <div key={metric} role="listitem" className={styles.chip} data-metric={metric} data-not-scored="">
+              <div className={styles.chipHead}>
+                <span className={styles.metricName}>{metric}</span>
+                <span className={styles.notScored}>not scored</span>
+              </div>
+            </div>
+          );
+        const baseCell =
+          baseRun && baseRow && baseRun.metricIndex[metric] !== undefined
+            ? metricCellFor(model, baseRun, baseRow, metric)
+            : null;
+        const delta =
+          baseCell && baseCell.value !== null && cell.value !== null && !cell.error && !baseCell.error
+            ? cell.value - baseCell.value
+            : null;
+        const meta = (row.metric_meta?.[metric] ?? {}) as Record<string, unknown>;
+        const isEditing = editing === metric;
+        return (
+          <div key={metric} role="listitem" className={styles.chip} data-metric={metric}>
+            <div className={styles.chipHead} data-open={open === metric ? '' : undefined}>
+              <button
+                type="button"
+                className={styles.caret}
+                aria-expanded={open === metric}
+                aria-label={`${open === metric ? 'Hide' : 'Show'} ${metric} details`}
+                onClick={() => onOpen(open === metric ? null : metric)}
+              >
+                <Icon name={open === metric ? 'chevron-down' : 'chevron-right'} size={12} />
+                <span className={styles.metricName}>{metric}</span>
+              </button>
+              <span className={styles.metricValue}>
+                <ScoreValue
+                  value={cell.value}
+                  type={cell.type}
+                  direction={cell.direction}
+                  error={cell.error}
+                  text={cell.text}
+                />
+              </span>
+              {delta !== null ? (
+                <span
+                  className={styles.metricDelta}
+                  data-part="metric-delta"
+                  data-move={deltaKind(delta, cell.direction)}
+                  title={`Change against the baseline on ${metric}`}
+                >
+                  {chipDelta(delta, cell.type)}
+                </span>
+              ) : null}
+              {cell.edited ? (
+                <Tag
+                  kind="accent"
+                  tone="warning"
+                  title={`Edited${meta.original_score !== undefined ? `; scorer value ${String(meta.original_score)}` : ''}`}
+                >
+                  edited
+                </Tag>
+              ) : null}
+              {canEdit ? (
+                <IconButton
+                  label={`Edit ${metric} score of ${run.label}`}
+                  icon="edit"
+                  onPress={() => setEditing(isEditing ? null : metric)}
+                />
+              ) : null}
+            </div>
+            {isEditing ? (
+              <CompareScoreEditor
+                runId={run.base}
+                filePath={run.base}
+                row={row}
+                metric={metric}
+                spec={model.specs[metric]}
+                initial={
+                  cell.value === null
+                    ? ''
+                    : cell.type === 'score'
+                      ? `${Math.round(cell.value * 1000) / 10}%`
+                      : String(cell.value)
+                }
+                passNumber={run.pass}
+                passVersion={Number(run.run.metadata?.pass_revision ?? 0)}
+                edited={cell.edited}
+                onDone={(updated) => {
+                  setEditing(null);
+                  patch(run.base, updated);
+                }}
+              />
+            ) : null}
+          </div>
+        );
+      })}
+      <span className={styles.srOnly}>{itemId}</span>
+    </div>
+  );
+}
+
+function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metricIdsOnly?: undefined }) {
+  const { model, slug } = useCompare();
+  const patch = useRowPatch();
+  const [dialog, setDialog] = useState<{ metric: string; issue: RootCauseIssue | null } | null>(null);
+  void metricIdsOnly;
+  const canEdit = !runReadOnly(run) && !runScoresLocked(run) && !run.run.items_restricted;
+  const analyses = getRowRootCauseAnalyses(row, 'all', false);
+  const byMetric = model.metrics
+    .map((metric) => ({
+      metric,
+      issues: analyses.filter((a) => a.metric_name === metric).flatMap((a) => rootCauseIssues(a, false)),
+    }))
+    .filter((x) => x.issues.length);
+  const { metric: pageMetric } = useCompare();
+  const own = model.metrics.filter((m) => run.metricIndex[m] !== undefined);
+  // New issues target the metric the page is on, not whichever the run lists first.
+  const first = own.includes(pageMetric) ? pageMetric : own[0];
+  return (
+    <section className={styles.issues} aria-label={`Root-cause issues for ${run.label}`}>
+      <header className={styles.issuesHead}>
+        <span className={styles.label}>Root-cause issues</span>
+        {canEdit && first ? (
+          <Button size="sm" variant="neutral" onPress={() => setDialog({ metric: first, issue: null })}>
+            Add issue
+          </Button>
+        ) : null}
+      </header>
+      {byMetric.length === 0 ? <p className={styles.muted}>No root-cause issues assigned.</p> : null}
+      {byMetric.map(({ metric, issues }) => (
+        <ul key={metric} className={styles.issueList}>
+          {issues.map((issue, i) => (
+            <li key={issue.issue_id ?? i} className={styles.issue}>
+              <Tag kind="accent">{issue.category || 'Uncategorized'}</Tag>
+              {issue.subcategory ? <span className={styles.muted}>{issue.subcategory}</span> : null}
+              <span className={styles.muted}>{metric}</span>
+              {issue.finding ? <span className={styles.finding}>{issue.finding}</span> : null}
+              {issue.category_reason ? (
+                <span className={styles.finding} data-field="reason">
+                  <span className={styles.label}>Why: </span>
+                  {issue.category_reason}
+                </span>
+              ) : null}
+              {issue.solution ? (
+                <span className={styles.finding} data-field="solution">
+                  <span className={styles.label}>Solution: </span>
+                  {issue.solution}
+                  {issue.solution_note ? <span className={styles.muted}> {issue.solution_note}</span> : null}
+                </span>
+              ) : null}
+              {canEdit ? (
+                <Button size="sm" variant="ghost" onPress={() => setDialog({ metric, issue })}>
+                  Edit
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ))}
+      {dialog ? (
+        <IssueDialog
+          open
+          onOpenChange={(o) => !o && setDialog(null)}
+          row={row}
+          metric={dialog.metric}
+          metrics={own}
+          issue={dialog.issue}
+          passNumber={run.pass}
+          runId={run.base}
+          slug={slug ?? run.run.project?.slug}
+          passRevision={Number(run.run.metadata?.pass_revision ?? 0)}
+          onSaved={(updated) => patch(run.base, updated)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+export function OutputCard({
+  run,
+  runIndex,
+  row,
+  itemId,
+  openMetric,
+  onOpenMetric,
+  best,
+  baseRun = null,
+  baseRow = null,
+  diffAgainst = null,
+}: {
+  run: CompareRun;
+  runIndex: number;
+  row: Row;
+  itemId: string;
+  openMetric: string | null;
+  onOpenMetric: (metric: string | null) => void;
+  /** This run has the unique best score on the item. */
+  best?: boolean;
+  /** The baseline run and its row on this item (null on the baseline's own card): each metric shows its change. */
+  baseRun?: CompareRun | null;
+  baseRow?: Row | null;
+  /** 'Diff vs baseline' is on: the baseline's output, to mark the words this output adds. */
+  diffAgainst?: string | null;
+}) {
+  const { ctx, model } = useCompare();
+  const ui = useItemsUi();
+  const pill = pillState(run, row, ctx);
+  const failed = String(row.status) === 'error' || !!row.error;
+  const output = failed
+    ? `ERROR: ${row.error || row.__execution_error || 'The task failed'}`
+    : bodyText(row.output_full ?? row.output);
+  const langfuse =
+    row.trace_url ||
+    buildLangfuseTraceUrl(
+      model.langfuseHost || run.run.langfuse_host,
+      model.langfuseProjectId || run.run.langfuse_project_id,
+      row.trace_id,
+    );
+  const slug = run.run.project?.slug;
+  const mark = useRunMark(runIndex);
+  const meta = (openMetric ? (row.metric_meta?.[openMetric] ?? {}) : {}) as Record<string, unknown>;
+  const metaEntries = Object.entries(meta).filter(
+    ([k, v]) => !isInternalMetaKey(k) && !ui.hiddenFields.has(k) && v !== null && v !== undefined && v !== '',
+  );
+  return (
+    <article
+      className={styles.card}
+      style={{ '--run': runColor(runIndex) } as React.CSSProperties}
+      data-testid="output-card"
+      data-part="output-card"
+      data-run={run.ref}
+      data-state={pill.state}
+      {...mark}
+    >
+      <header className={styles.head} data-part="output-card-head">
+        <span className={styles.nameRow}>
+          <RunTag index={runIndex} showName={false} bare />
+          {slug ? (
+            <Link
+              className={styles.runLink}
+              to={`${runPath(slug, run.base)}?item=${encodeURIComponent(row.item_id)}${run.pass ? `&pass=${run.pass}` : ''}`}
+              title={run.title}
+            >
+              {runShortName(run)}
+            </Link>
+          ) : (
+            <span className={styles.runLink} title={run.title}>
+              {runShortName(run)}
+            </span>
+          )}
+        </span>
+        <span className={styles.facts}>
+          <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
+            {pill.state === 'pass'
+              ? '✓ Pass'
+              : pill.state === 'fail'
+                ? '✗ Fail'
+                : pill.state === 'error'
+                  ? '⚠ Error'
+                  : '—'}
+          </Tag>
+          {best ? (
+            <Tag kind="data" tone="success" title="Highest score on this item">
+              ★ Best
+            </Tag>
+          ) : null}
+          {row.latency_ms != null ? (
+            <span className={styles.meta}>
+              {row.latency_ms === 0 ? '0ms' : formatLatency(row.latency_ms)}
+            </span>
+          ) : null}
+          <span className={styles.actions}>
+            {row.trace_id ? (
+              <Button
+                size="sm"
+                variant="neutral"
+                icon={<Icon name="trace" size={12} />}
+                onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}
+              >
+                Trace
+              </Button>
+            ) : null}
+            {langfuse ? (
+              <LinkButton
+                size="sm"
+                variant="neutral"
+                href={langfuse}
+                target="_blank"
+                rel="noopener noreferrer"
+                icon={<Icon name="external" size={12} />}
+              >
+                Langfuse
+              </LinkButton>
+            ) : null}
+            <CopyButton text={output} label={`Copy output of ${run.label}`} />
+          </span>
+        </span>
+      </header>
+      <div className={styles.text} data-part="output-text">
+        {row.output_received === false ? (
+          <p className={styles.note} role="note">
+            Output not received: this item’s outcome event never reached the platform.
+          </p>
+        ) : run.run.items_restricted ? (
+          <p className={styles.note}>
+            {run.run.items_restricted_reason === 'dataset_access'
+              ? 'Hidden: you don’t have access to this dataset’s items.'
+              : 'Item bodies are visible to admins only on a private test set.'}
+          </p>
+        ) : diffAgainst !== null && !failed ? (
+          <OutputDiff text={output} base={diffAgainst} />
+        ) : (
+          <Collapsible text={output} />
+        )}
+      </div>
+      <MetricChips
+        run={run}
+        row={row}
+        itemId={itemId}
+        open={openMetric}
+        onOpen={onOpenMetric}
+        baseRun={baseRun}
+        baseRow={baseRow}
+      />
+      <div className={styles.details} data-part="metric-details" data-open={openMetric ? '' : undefined}>
+        {openMetric ? (
+          <section
+            className={styles.reason}
+            data-testid="metric-panel-cell"
+            aria-label={`${openMetric} details of ${runShortName(run)}`}
+          >
+            {metaEntries.length ? (
+              <MetaList meta={meta} hidden={ui.hiddenFields} />
+            ) : (
+              <em className={styles.muted}>No details available.</em>
+            )}
+          </section>
+        ) : null}
+      </div>
+      <Issues run={run} row={row} />
+    </article>
+  );
+}

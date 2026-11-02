@@ -1,0 +1,373 @@
+/** Pure DataTable logic (sort, order, pins, grouping, range selection, persisted state). Unit-tested. */
+import { KEYS, readJson, writeJson } from '@/lib/storage';
+import type {
+  CellType,
+  ChildRows,
+  Column,
+  Density,
+  DisplayRow,
+  GroupByConfig,
+  Key,
+  SortState,
+} from './types';
+
+export const NUMERIC_TYPES: ReadonlySet<CellType> = new Set(['number', 'delta', 'duration']);
+export const MONO_TYPES: ReadonlySet<CellType> = new Set(['id', 'number', 'score', 'delta', 'duration']);
+export const DEFAULT_MIN_WIDTH = 44;
+export const FLEX_MIN_WIDTH = 120;
+export const SELECT_COL_WIDTH = 40;
+/** Content fit: cell padding plus room for the header's sort glyph, added to a measured content width. */
+export const FIT_PAD = 28;
+/** Content fit: no column asks for more than this before the spare width is shared (long text ellipsises). */
+export const FIT_MAX_WIDTH = 480;
+/** Content fit: cells that fill their column (bars, deltas) have no content width, so their declared width counts. */
+export const DECLARED_WIDTH_TYPES: ReadonlySet<CellType> = new Set(['score', 'delta', 'actions']);
+
+export function sortKeyOf<R>(col: Column<R>): string | undefined {
+  if (typeof col.sort === 'string') return col.sort;
+  return col.sort?.key;
+}
+
+export function alignOf<R>(col: Column<R>): 'start' | 'center' | 'end' {
+  if (col.align) return col.align;
+  // C236: numeric columns are centred, header and values, in every table.
+  return col.type && NUMERIC_TYPES.has(col.type) ? 'center' : 'start';
+}
+
+export function isMono<R>(col: Column<R>): boolean {
+  return col.mono ?? (col.type ? MONO_TYPES.has(col.type) : false);
+}
+
+export function headerOf<R>(col: Column<R>) {
+  return col.header;
+}
+
+export function headerText<R>(col: Column<R>): string {
+  if (col.label) return col.label;
+  const h = headerOf(col);
+  return typeof h === 'string' || typeof h === 'number' ? String(h) : col.id;
+}
+
+/** Click cycle: first direction, the opposite one, then (optionally) unsorted. */
+export function nextSort<R>(
+  current: SortState | null | undefined,
+  col: Column<R>,
+  allowUnsorted: boolean,
+): SortState | null {
+  const key = sortKeyOf(col);
+  if (!key) return current ?? null;
+  const first = typeof col.sort === 'object' ? (col.sort.first ?? 'asc') : 'asc';
+  const second = first === 'asc' ? 'desc' : 'asc';
+  if (!current || current.key !== key) return { key, direction: first };
+  if (current.direction === first) return { key, direction: second };
+  return allowUnsorted ? null : { key, direction: first };
+}
+
+export function sortRows<R>(rows: R[], columns: Column<R>[], sort: SortState | null): R[] {
+  if (!sort) return rows;
+  const col = columns.find((c) => sortKeyOf(c) === sort.key || c.id === sort.key);
+  if (!col) return rows;
+  const custom = typeof col.sort === 'object' ? col.sort.compare : undefined;
+  const value = (r: R): unknown => (col.accessor ? col.accessor(r) : (r as Record<string, unknown>)[col.id]);
+  const cmp =
+    custom ??
+    ((a: R, b: R) => {
+      const x = value(a);
+      const y = value(b);
+      if (x === y) return 0;
+      if (x === null || x === undefined || x === '') return 1;
+      if (y === null || y === undefined || y === '') return -1;
+      if (typeof x === 'number' && typeof y === 'number') return x - y;
+      return String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: 'base' });
+    });
+  const dir = sort.direction === 'asc' ? 1 : -1;
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => cmp(a.r, b.r) * dir || a.i - b.i)
+    .map((x) => x.r);
+}
+
+/**
+ * Applies a saved display order: ids in `order` sort by their index; columns missing from it (new metrics)
+ * keep their declared position, right after the nearest preceding declared column; unknown ids are dropped.
+ * Locked columns (`lockOrder`) never move.
+ */
+export function applyOrder<R>(cols: Column<R>[], order: string[] | null | undefined): Column<R>[] {
+  if (!order || order.length === 0) return cols;
+  const index = new Map(order.map((id, i) => [id, i]));
+  const movable = (c: Column<R>) => index.has(c.id) && !c.lockOrder;
+  const out = cols.filter(movable).sort((a, b) => index.get(a.id)! - index.get(b.id)!);
+  let front = 0;
+  cols.forEach((c, i) => {
+    if (movable(c)) return;
+    let at = -1;
+    for (let j = i - 1; j >= 0 && at < 0; j--) at = out.indexOf(cols[j]!);
+    if (at < 0) out.splice(front++, 0, c);
+    else out.splice(at + 1, 0, c);
+  });
+  return out;
+}
+
+/**
+ * Display order: the saved `order` first, then a stable partition (pinned-start, free, pinned-end) so pinning a
+ * column never reshuffles the order the user chose inside each block.
+ */
+export function orderColumns<R>(
+  cols: Column<R>[],
+  pins: Record<string, 'start' | 'end' | null>,
+  order?: string[] | null,
+): Column<R>[] {
+  const pinOf = (c: Column<R>) => (c.id in pins ? pins[c.id] : (c.pin ?? null));
+  const ordered = applyOrder(cols, order);
+  return [
+    ...ordered.filter((c) => pinOf(c) === 'start'),
+    ...ordered.filter((c) => !pinOf(c)),
+    ...ordered.filter((c) => pinOf(c) === 'end'),
+  ];
+}
+
+/** Pinned-start columns that do not fit `share` of the scroller are suspended (rendered unpinned). The first stays. */
+export function suspendedPins(
+  startIds: string[],
+  widthOf: (id: string) => number,
+  scrollerWidth: number,
+  share: number,
+  leading = 0,
+): string[] {
+  if (!(scrollerWidth > 0) || startIds.length < 2) return [];
+  const cap = scrollerWidth * share;
+  let sum = leading + widthOf(startIds[0]!);
+  const out: string[] = [];
+  for (const id of startIds.slice(1)) {
+    sum += widthOf(id);
+    if (sum > cap) out.push(id);
+  }
+  return out;
+}
+
+export function effectivePin<R>(
+  col: Column<R>,
+  pins: Record<string, 'start' | 'end' | null>,
+): 'start' | 'end' | null {
+  return col.id in pins ? pins[col.id]! : (col.pin ?? null);
+}
+
+/** Cumulative sticky offsets from measured/declared widths. */
+export function pinOffsets<R>(
+  ordered: Column<R>[],
+  widthOf: (id: string) => number,
+  pins: Record<string, 'start' | 'end' | null>,
+  leading = 0,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  let start = leading;
+  for (const c of ordered) {
+    if (effectivePin(c, pins) === 'start') {
+      out[c.id] = start;
+      start += widthOf(c.id);
+    }
+  }
+  let end = 0;
+  for (const c of [...ordered].reverse()) {
+    if (effectivePin(c, pins) === 'end') {
+      out[c.id] = end;
+      end += widthOf(c.id);
+    }
+  }
+  return out;
+}
+
+export interface Band {
+  label: string | null;
+  span: number;
+  key: string;
+  /** Frozen side of the first column; a band never mixes frozen and scrolling columns, so it can stay put too. */
+  pin: 'start' | 'end' | null;
+  firstId: string;
+  lastId: string;
+  /** Second half of a group split by the freeze line: its label is shown on the first half only. */
+  continued: boolean;
+}
+
+/**
+ * Header bands: consecutive columns sharing a `group` merge into one span. With `pinOf`, a band is also cut at the
+ * freeze line so a frozen band can stick with its columns.
+ */
+export function groupBands<R>(cols: Column<R>[], pinOf?: (c: Column<R>) => 'start' | 'end' | null): Band[] {
+  const bands: Band[] = [];
+  for (const c of cols) {
+    const label = c.group ?? null;
+    const pin = pinOf?.(c) ?? null;
+    const last = bands[bands.length - 1];
+    if (last && last.label === label && label !== null && last.pin === pin) {
+      last.span += 1;
+      last.lastId = c.id;
+    } else {
+      const continued = Boolean(last && label !== null && last.label === label);
+      bands.push({
+        label: continued ? null : label,
+        span: 1,
+        key: `${label ?? '_'}-${c.id}`,
+        pin,
+        firstId: c.id,
+        lastId: c.id,
+        continued,
+      });
+    }
+  }
+  return bands;
+}
+
+export function buildDisplayRows<R>(
+  rows: R[],
+  rowKey: (r: R) => Key,
+  opts: {
+    groupBy?: GroupByConfig<R>;
+    collapsed: Set<string>;
+    expanded: Set<Key>;
+    canExpand: boolean;
+    /** Child rows of an expanded row (undefined = none: the row only gets its detail block). */
+    children?: (row: R) => ChildRows<R> | undefined;
+  },
+): DisplayRow<R>[] {
+  const out: DisplayRow<R>[] = [];
+  let index = 0;
+  const push = (row: R) => {
+    const key = rowKey(row);
+    const at = index++;
+    out.push({ kind: 'row', id: `r:${String(key)}`, key, row, index: at });
+    if (!opts.expanded.has(key)) return;
+    const kids = opts.children?.(row);
+    kids?.rows.forEach((child, i) => {
+      const ck = rowKey(child);
+      out.push({
+        kind: 'child',
+        id: `c:${String(ck)}`,
+        key: ck,
+        row: child,
+        index: at,
+        parentKey: key,
+        parentRow: row,
+        posinset: i + 1,
+        setsize: kids.setsize ?? kids.rows.length,
+      });
+    });
+    if (opts.canExpand && (!kids || kids.detail !== false))
+      out.push({ kind: 'detail', id: `d:${String(key)}`, key, row });
+  };
+  if (!opts.groupBy) {
+    rows.forEach(push);
+    return out;
+  }
+  const groups = new Map<string, R[]>();
+  for (const r of rows) {
+    const k = opts.groupBy.key(r);
+    const list = groups.get(k);
+    if (list) list.push(r);
+    else groups.set(k, [r]);
+  }
+  for (const [groupKey, list] of groups) {
+    const collapsed = Boolean(opts.groupBy.collapsible) && opts.collapsed.has(groupKey);
+    out.push({ kind: 'group', id: `g:${groupKey}`, groupKey, rows: list, collapsed });
+    if (!collapsed) list.forEach(push);
+  }
+  return out;
+}
+
+/** Keys between two rows (inclusive), in display order, honouring disabled rows. */
+export function rangeKeys(order: Key[], from: Key, to: Key): Key[] {
+  const a = order.indexOf(from);
+  const b = order.indexOf(to);
+  if (a < 0 || b < 0) return [to];
+  const [lo, hi] = a < b ? [a, b] : [b, a];
+  return order.slice(lo, hi + 1);
+}
+
+export interface PersistedState {
+  widths: Record<string, number>;
+  hidden: string[] | null;
+  pins: Record<string, 'start' | 'end' | null>;
+  /** Column ids in display order; null = declared order. */
+  order: string[] | null;
+  density: Density | null;
+  collapsed: string[];
+}
+
+export const EMPTY_STATE: PersistedState = {
+  widths: {},
+  hidden: null,
+  pins: {},
+  order: null,
+  density: null,
+  collapsed: [],
+};
+
+export function readPersisted(storageKey: string | undefined, scope?: string): PersistedState {
+  if (!storageKey) return EMPTY_STATE;
+  let v2 = readJson<Partial<PersistedState> | null>(KEYS.dataTableState(storageKey, scope), null);
+  if (!v2 && scope) {
+    // A layout saved before the table was scoped per user: adopt it once (the unscoped copy stays).
+    v2 = readJson<Partial<PersistedState> | null>(KEYS.dataTableState(storageKey), null);
+    if (v2) writeJson(KEYS.dataTableState(storageKey, scope), v2);
+  }
+  // v1 stored only {id: px} widths; keep honouring them.
+  const widths = v2?.widths ?? readJson<Record<string, number>>(KEYS.dataTableWidths(storageKey), {});
+  return { ...EMPTY_STATE, ...v2, widths };
+}
+
+export function clampWidth<R>(col: Column<R>, w: number): number {
+  const min = col.minWidth ?? DEFAULT_MIN_WIDTH;
+  const max = col.maxWidth ?? 1200;
+  return Math.round(Math.min(Math.max(w, min), max));
+}
+
+/** Truncate in the middle ("q-0…9f3a") for ids. */
+export function middleTruncate(text: string, keep = 8): string {
+  if (text.length <= keep * 2 + 1) return text;
+  return `${text.slice(0, keep)}…${text.slice(-keep)}`;
+}
+
+/** Narrowest width at which the header text is not clipped: uppercase 11px text plus padding and the sort glyph. */
+export function headerMinWidth<R>(col: Column<R>, sortable: boolean): number {
+  if (col.hideLabel) return DEFAULT_MIN_WIDTH;
+  const text = headerText(col);
+  const label = typeof headerOf(col) === 'string' || typeof headerOf(col) === 'number' ? text.length : 0;
+  if (!label) return DEFAULT_MIN_WIDTH;
+  return Math.ceil(label * 8.6) + 16 + (sortable ? 16 : 0);
+}
+
+/**
+ * Content fit: each column gets its wanted (content) width plus a share of the spare width in proportion to it, the
+ * way an auto table layout spreads it. When the wanted widths are a little too wide, the flexible columns (`min` set)
+ * give width back down to their `min`, in proportion to what each can give. Widths are whole pixels and add up to
+ * `available` exactly (the rounding rest goes to the widest column). When even that does not fit, every column keeps
+ * its content width and the table scrolls sideways: a declared width narrower than the content would cut it with an
+ * ellipsis (owner review round 10). Null only when there is nothing to fit.
+ */
+export function fitColumnWidths(
+  want: { id: string; w: number; min?: number }[],
+  available: number,
+): Record<string, number> | null {
+  const sum = want.reduce((n, x) => n + x.w, 0);
+  if (!want.length || sum <= 0) return null;
+  let cols = want;
+  if (sum > available) {
+    const deficit = sum - available;
+    const give = want.reduce((n, x) => n + (x.min !== undefined ? Math.max(0, x.w - x.min) : 0), 0);
+    if (give < deficit) return Object.fromEntries(want.map((x) => [x.id, Math.ceil(x.w)]));
+    cols = want.map((x) =>
+      x.min !== undefined && x.w > x.min ? { ...x, w: x.w - (deficit * (x.w - x.min)) / give } : x,
+    );
+  }
+  const total = cols.reduce((n, x) => n + x.w, 0);
+  const spare = Math.max(0, available - total);
+  const out: Record<string, number> = {};
+  let used = 0;
+  for (const x of cols) {
+    out[x.id] = Math.floor(x.w + (spare * x.w) / total);
+    used += out[x.id]!;
+  }
+  const widest = cols.reduce((a, b) => (b.w > a.w ? b : a));
+  out[widest.id]! += Math.round(available - used);
+  return out;
+}

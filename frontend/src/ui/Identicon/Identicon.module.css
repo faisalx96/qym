@@ -1,0 +1,19 @@
+/* Entity identicon mark (colours are per-seed hsl(), computed in JS). */
+.mark {
+  display: inline-grid;
+  flex: none;
+}
+
+.mark i {
+  display: block;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: var(--control-radius);
+  /* No fill of its own: the mark sits flush on whatever surface holds it (card, row, popover). */
+  background: transparent;
+}

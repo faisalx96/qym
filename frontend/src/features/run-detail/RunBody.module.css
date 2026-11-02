@@ -1,0 +1,13 @@
+/* Report page: hero and notices, the sticky nav, then the stacked report (ReportLayout). */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* R9 (C019): the one panel in place of the report when the rows request fails; framed like a report section. */
+.rowsError {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}

@@ -1,0 +1,39 @@
+/* .exq-progress-track / -fill: thin run progress bar. */
+.track {
+  width: 100%;
+  min-width: 6rem;
+  height: var(--space-sm);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+}
+
+.fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent-primary);
+  transition: width 200ms ease;
+}
+
+.track[data-indeterminate] .fill {
+  width: 35%;
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track[data-indeterminate] .fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
+}

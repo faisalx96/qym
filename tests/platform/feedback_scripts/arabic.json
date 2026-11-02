@@ -1,0 +1,25 @@
+{
+ "turns": [
+  [
+   {
+    "tool_calls": [
+     {
+      "name": "update_checklist",
+      "arguments": {
+       "items": [
+        {
+         "key": "business_need",
+         "state": "filled",
+         "value": "مشاركة نتائج المقارنة"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "text": "شكرًا، فهمت أنك تريد مشاركة نتائج المقارنة. من يتأثر بهذا الأمر وكم مرة يحدث؟"
+   }
+  ]
+ ]
+}

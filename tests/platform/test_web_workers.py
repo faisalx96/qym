@@ -285,6 +285,70 @@ async def test_finished_result_is_visible_to_other_processes(shared_db, managers
 
 
 @pytest.mark.asyncio
+async def test_owner_releases_a_persisted_result_but_still_serves_it(
+    shared_db, managers
+) -> None:
+    owner, _ = managers
+    big = {
+        "total_analyzed": 2,
+        "results": [{"item_id": f"i{n}", "summary": "x" * 50} for n in range(2)],
+    }
+
+    async def runner(job):
+        return big
+
+    job, _ = await owner.submit(
+        run_id="run-r",
+        user_id="u",
+        auth_type="none",
+        request_payload={"pass_number": 3, "item_ids": ["a", "b"]},
+        progress={},
+        runner=runner,
+        store_bind=shared_db,
+    )
+    await asyncio.wait_for(asyncio.wrap_future(job.future), timeout=5)
+    # The full result now lives in background_jobs, not in this process.
+    assert job.released is True
+    assert job.result is None
+    assert job.request_payload == {"pass_number": 3}
+    with Session(shared_db) as db:
+        seen = owner.get(job.job_id, db=db)
+        snap = owner.snapshot(seen)
+        assert snap["status"] == "completed"
+        assert snap["result"] == big
+        assert snap["pass_number"] == 3
+
+
+@pytest.mark.asyncio
+async def test_unshared_database_keeps_results_in_bounded_memory() -> None:
+    manager = AnalysisJobManager(max_retained_jobs=2)
+    try:
+        jobs = []
+        for n in range(4):
+
+            async def runner(job, n=n):
+                return {"n": n}
+
+            job, _ = await manager.submit(
+                run_id=f"run-{n}",
+                user_id="u",
+                auth_type="none",
+                request_payload={},
+                progress={},
+                runner=runner,
+            )
+            await asyncio.wait_for(asyncio.wrap_future(job.future), timeout=5)
+            jobs.append(job)
+        # No shared database: nothing is released, only the newest are retained.
+        assert manager.get(jobs[-1].job_id).result == {"n": 3}
+        assert manager.get(jobs[0].job_id) is None
+        assert len(manager._jobs) <= 2
+    finally:
+        manager.clear()
+        manager.shutdown(wait=True)
+
+
+@pytest.mark.asyncio
 async def test_job_of_a_stopped_process_reads_as_failed(shared_db, managers) -> None:
     owner, other = managers
 

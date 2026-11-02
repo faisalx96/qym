@@ -23,7 +23,9 @@ import logging
 import os
 import pkgutil
 import re
+import threading
 import time
+import weakref
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..utils.env import load_cwd_dotenv
@@ -103,20 +105,40 @@ def _make_qym_span_processor_class():
         _Base = object
 
     class QymSpanProcessor(_Base):
-        """Captures completed OTEL spans and streams them to the qym platform."""
+        """Captures completed OTEL spans and streams them to the qym platform.
+
+        One instance is installed per TracerProvider (see
+        ``_install_qym_processor``). It never owns a stream: spans route to the
+        platform stream bound in the current context (``_active_qym_stream``),
+        so a finished run's stream is not kept alive by the global provider.
+        """
+
+        # LLM span ids kept for nested-duplicate detection; bounded so a long
+        # process cannot grow it without limit.
+        MAX_TRACKED_LLM_SPANS = 10000
 
         def __init__(self):
-            self._stream = None
+            # Legacy single-stream binding (``set_stream``) held weakly so the
+            # processor never pins a finished stream in memory.
+            self._stream_ref: Optional["weakref.ReferenceType[Any]"] = None
             # Track LLM span IDs seen during on_start so on_end can detect
             # nested LLM spans (provider inside framework = duplicate).
             self._llm_span_ids: set = set()
 
         def set_stream(self, stream):
-            self._stream = stream
+            """Deprecated: remember a default stream for ``activate_stream()``."""
+            if stream is None:
+                self._stream_ref = None
+                return
+            try:
+                self._stream_ref = weakref.ref(stream)
+            except TypeError:
+                self._stream_ref = None
 
         def activate_stream(self, stream=None):
-            target = self._stream if stream is None else stream
-            return _active_qym_stream.set(target)
+            if stream is None and self._stream_ref is not None:
+                stream = self._stream_ref()
+            return _active_qym_stream.set(stream)
 
         def reset_stream(self, token) -> None:
             _active_qym_stream.reset(token)
@@ -128,6 +150,10 @@ def _make_qym_span_processor_class():
                     span.set_attribute("qym.usage_scope", usage_scope)
                 except Exception:
                     pass
+            # Spans outside a streamed evaluation are never emitted, so there
+            # is nothing to deduplicate: do not track them.
+            if _active_qym_stream.get(None) is None:
+                return
 
             # Record LLM spans at start time so on_end can detect nested
             # duplicates.  Check both attributes and span name since
@@ -144,9 +170,9 @@ def _make_qym_span_processor_class():
                 is_llm = True
             if is_llm:
                 ctx = span.get_span_context()
-                self._llm_span_ids.add(format(ctx.span_id, "016x"))
-                if len(self._llm_span_ids) > 10000:
+                if len(self._llm_span_ids) >= self.MAX_TRACKED_LLM_SPANS:
                     self._llm_span_ids.clear()
+                self._llm_span_ids.add(format(ctx.span_id, "016x"))
 
         _NOISE_SPAN_NAMES = frozenset({"connect", "dns.resolve", "tls.handshake"})
 
@@ -160,10 +186,13 @@ def _make_qym_span_processor_class():
             return kind == "LLM"
 
         def on_end(self, span):
-            if not self._stream:
+            stream = _active_qym_stream.get(None)
+            if stream is None:
                 return
-            if _active_qym_stream.get(None) is not self._stream:
-                return
+            if self._is_llm_span(span):
+                # Forget the id whatever happens below: on_end is its last use.
+                ctx = span.get_span_context()
+                self._llm_span_ids.discard(format(ctx.span_id, "016x"))
             if span.name in self._NOISE_SPAN_NAMES:
                 return
 
@@ -198,7 +227,8 @@ def _make_qym_span_processor_class():
                 if usage_scope and "qym.usage_scope" not in attributes:
                     attributes["qym.usage_scope"] = usage_scope
 
-                self._stream.emit(
+                _emit_span(
+                    stream,
                     "span_completed",
                     {
                         "trace_id": format(ctx.trace_id, "032x"),
@@ -243,6 +273,51 @@ def _make_qym_span_processor_class():
 
 
 QymSpanProcessor = _make_qym_span_processor_class()
+
+
+def _emit_span(stream: Any, type_: str, payload: Dict[str, Any]) -> None:
+    """Hand a span event to ``stream`` without blocking the span's thread.
+
+    Platform streams expose ``emit_nowait`` (bounded wait, counted drop when
+    the upload backlog is full); stream substitutes fall back to ``emit``.
+    """
+    emit_nowait = getattr(stream, "emit_nowait", None)
+    if callable(emit_nowait):
+        emit_nowait(type_, payload)
+    else:
+        stream.emit(type_, payload)
+
+
+# One QymSpanProcessor per TracerProvider. Providers are process-global and
+# never drop processors, so adding one per Evaluator leaked a processor (and
+# the stream it held) for every run in a long-lived process.
+_processor_lock = threading.Lock()
+_installed_processors: "weakref.WeakKeyDictionary[Any, Any]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _install_qym_processor(provider: Any) -> Optional[Any]:
+    """Return the provider's QymSpanProcessor, adding it on first use."""
+    if not hasattr(provider, "add_span_processor"):
+        return None
+    with _processor_lock:
+        try:
+            existing = _installed_processors.get(provider)
+        except TypeError:  # provider not weak-referenceable
+            existing = getattr(provider, "_qym_span_processor", None)
+        if existing is not None:
+            return existing
+        processor = QymSpanProcessor()
+        provider.add_span_processor(processor)
+        try:
+            _installed_processors[provider] = processor
+        except TypeError:
+            try:
+                setattr(provider, "_qym_span_processor", processor)
+            except Exception:
+                pass
+        return processor
 
 
 class OtelManager:
@@ -292,14 +367,22 @@ class OtelManager:
         _qym_usage_scope.reset(token)
 
     def shutdown(self):
+        """Flush exporters at the end of a run.
+
+        The provider is process-global and shared by later runs in the same
+        process (the platform runs evaluations in-process), so it is flushed,
+        not shut down: shutting it down stopped exporters such as Phoenix's
+        BatchSpanProcessor for every later run. The SDK's atexit hook still
+        shuts the provider down when the process exits.
+        """
         try:
             from opentelemetry import trace
 
             provider = trace.get_tracer_provider()
-            if hasattr(provider, "shutdown"):
-                provider.shutdown()
+            if hasattr(provider, "force_flush"):
+                provider.force_flush()
         except Exception as e:
-            logger.debug(f"OTEL shutdown error: {e}")
+            logger.debug(f"OTEL flush error: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -1268,8 +1351,6 @@ def create_otel_manager(config) -> Any:
         logger.debug("opentelemetry-sdk not installed — auto-instrumentation disabled")
         return NullOtelManager()
 
-    qym_processor = QymSpanProcessor()
-
     if not _initialized:
         try:
             # Create a real TracerProvider
@@ -1333,10 +1414,9 @@ def create_otel_manager(config) -> Any:
             logger.warning(f"Failed to initialize OTEL auto-instrumentation: {e}")
             return NullOtelManager()
 
-    # Register QymSpanProcessor on the provider
-    provider = trace.get_tracer_provider()
-    if hasattr(provider, "add_span_processor"):
-        provider.add_span_processor(qym_processor)
+    # Exactly one QymSpanProcessor per provider, shared by every Evaluator;
+    # each run binds its stream through the _active_qym_stream contextvar.
+    qym_processor = _install_qym_processor(trace.get_tracer_provider())
 
     tracer = trace.get_tracer("qym")
     return OtelManager(

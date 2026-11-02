@@ -153,8 +153,15 @@ def _legacy_metric_result(raw: str) -> Optional[Dict[str, Any]]:
     return {"score": float(score), "metadata": meta}
 
 
-def build_checkpoint_header(metrics: Sequence[str]) -> List[str]:
+#: Union runs (several datasets) write these two columns right after ``item_id``.
+UNION_FIELDS = ["dataset", "dataset_version"]
+
+
+def build_checkpoint_header(metrics: Sequence[str], union: bool = False) -> List[str]:
     header = list(BASE_FIELDS)
+    if union:
+        at = header.index("item_id") + 1
+        header[at:at] = UNION_FIELDS
     for metric in metrics:
         header.append(f"{metric}_score")
         header.append(f"{metric}__meta__json")
@@ -178,6 +185,8 @@ def serialize_checkpoint_row(
     scores: Dict[str, Any],
     metric_meta: Optional[Dict[str, Dict[str, Any]]] = None,
     pass_number: int = 1,
+    dataset: Optional[str] = None,
+    dataset_version: Optional[str] = None,
 ) -> Dict[str, Any]:
     row: Dict[str, Any] = {
         "dataset_name": dataset_name,
@@ -196,6 +205,10 @@ def serialize_checkpoint_row(
         "time": time_seconds,
         "task_started_at_ms": task_started_at_ms if task_started_at_ms is not None else "",
     }
+    if dataset is not None:
+        # Union run: the item's source dataset, as tagged (QC-22).
+        row["dataset"] = dataset
+        row["dataset_version"] = dataset_version or ""
 
     metric_meta = metric_meta or {}
     for metric, score in scores.items():
@@ -232,9 +245,11 @@ class CheckpointWriter:
         metrics: Sequence[str],
         flush_each_item: bool = True,
         fsync: bool = False,
+        union: bool = False,
     ) -> None:
         self.path = path
         self.metrics = list(metrics)
+        self.union = union
         self.flush_each_item = flush_each_item
         self.fsync = fsync
         self._file = None
@@ -243,7 +258,7 @@ class CheckpointWriter:
     def open(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         file_exists = os.path.exists(self.path) and os.path.getsize(self.path) > 0
-        header = build_checkpoint_header(self.metrics)
+        header = build_checkpoint_header(self.metrics, self.union)
         if file_exists:
             # Appending (resume): reuse the file's existing header so rows stay
             # aligned — a legacy file without pass_number keeps its old format

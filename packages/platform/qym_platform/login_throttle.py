@@ -38,7 +38,10 @@ from typing import Callable, Deque, Dict, List, Mapping, Optional, Set, Tuple
 
 from fastapi import HTTPException, Request
 
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger(__name__)
 
 _MAX_TRACKED_KEYS = 50_000
 
@@ -240,6 +243,8 @@ class LoginThrottle:
 
 
 def _too_many(wait: int) -> HTTPException:
+    # Neither the email nor the client address: the limit itself is the signal.
+    logger.warning("sign-in attempts throttled (retry after %ds)", wait)
     return HTTPException(
         status_code=429,
         detail=f"Too many sign-in attempts. Try again in {_describe_wait(wait)}.",

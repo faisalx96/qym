@@ -1,0 +1,183 @@
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
+import { useAuth } from '../AuthContext';
+import { useDocumentTitle } from '../hooks';
+import { narrow } from '../layout';
+import { projectPath } from '@/app/routes';
+import { api, ApiError } from '@/lib/http';
+import {
+  Button,
+  DataTable,
+  Identicon,
+  KeyValueGrid,
+  PageHeader,
+  Section,
+  Tag,
+  Text,
+  TextField,
+  useToast,
+  type Column,
+  Card,
+} from '@/ui';
+import type { Project } from '@/api/types';
+import styles from './ProfilePage.module.css';
+
+const COLUMNS: Column<Project>[] = [
+  {
+    id: 'name',
+    header: 'Project',
+    flex: true,
+    minWidth: 160,
+    pin: 'start',
+    hideable: false,
+    priority: 1,
+    cell: (p) => (
+      <span className={styles.projectCell}>
+        <Identicon seed={p.slug} cell={5} gap={2} chip />
+        <Link to={projectPath(p.slug)}>{p.name}</Link>
+      </span>
+    ),
+  },
+  { id: 'slug', header: 'Slug', type: 'id', width: 160, priority: 2, cell: (p) => p.slug },
+  {
+    id: 'role',
+    header: 'Role',
+    width: 110,
+    priority: 1,
+    cell: (p) => <Tag kind="role">{p.role || 'member'}</Tag>,
+  },
+  { id: 'runs', header: 'Runs', type: 'number', width: 80, priority: 2, cell: (p) => p.run_count },
+];
+
+export function ProfilePage() {
+  const { me, isAdmin, refetch } = useAuth();
+  const navigate = useNavigate();
+  useDocumentTitle('Profile');
+  return (
+    <div className={narrow} data-profile-page>
+      <PageHeader title="Profile" description="Your account and the projects you belong to." />
+      <Section title="Account">
+        <Card>
+          <KeyValueGrid
+            aria-label="Account"
+            columns={2}
+            items={[
+              { key: 'display_name', label: 'Display name', value: me.display_name || '—' },
+              { key: 'email', label: 'Email', value: me.email, mono: true },
+              { key: 'role', label: 'Global role', value: <Tag kind="role">{me.role}</Tag> },
+              {
+                key: 'default',
+                label: 'Default project',
+                value: me.default_project ? (
+                  <Link to={projectPath(me.default_project.slug)}>{me.default_project.name}</Link>
+                ) : (
+                  '—'
+                ),
+              },
+              { key: 'auth', label: 'Sign-in method', value: me.auth_type?.replace(/_/g, ' ') ?? '—' },
+            ]}
+          />
+        </Card>
+      </Section>
+      {me.can_bootstrap_admin && !isAdmin ? <BootstrapAdminPanel onGranted={refetch} /> : null}
+      <Section
+        title="Projects"
+        description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'}`}
+      >
+        <DataTable<Project>
+          density="regular"
+          onRowOpen={(p) => navigate(projectPath(p.slug))}
+          rowActions={(p) => [
+            {
+              id: 'open',
+              label: `Open ${p.name}`,
+              icon: 'external',
+              primary: true,
+              onPress: () => navigate(projectPath(p.slug)),
+            },
+            {
+              id: 'settings',
+              label: `Settings for ${p.name}`,
+              icon: 'settings',
+              primary: true,
+              onPress: () => navigate(projectPath(p.slug, 'settings')),
+            },
+          ]}
+          aria-label="Your projects"
+          columns={COLUMNS}
+          rows={me.projects}
+          rowKey={(p) => p.id}
+          storageKey="profile-projects"
+          empty="You are not a member of any project yet."
+        />
+      </Section>
+    </div>
+  );
+}
+
+function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
+  const [token, setToken] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  const grant = useMutation({
+    mutationFn: () =>
+      api.post<{ ok: boolean; role: string }>('/v1/auth/bootstrap-admin', { bootstrap_token: token }),
+    onSuccess: () => {
+      toast.show('Admin access granted. Refreshing…', { tone: 'success' });
+      setTimeout(() => window.location.reload(), 600);
+      onGranted();
+    },
+    onError: (e) =>
+      setError(
+        e instanceof ApiError
+          ? e.detail || (e.status === 409 ? 'An admin already exists.' : 'Invalid token.')
+          : String(e),
+      ),
+  });
+  return (
+    <Section
+      data-bootstrap-admin
+      title="Grant admin access"
+      description="Enter the bootstrap token from QYM_ADMIN_BOOTSTRAP_TOKEN to become the first administrator."
+    >
+      <form
+        className={styles.bootstrapForm}
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          if (!grant.isPending) grant.mutate();
+        }}
+      >
+        <TextField
+          label="Bootstrap token"
+          hideLabel
+          placeholder="Bootstrap token"
+          value={token}
+          onChange={(v) => {
+            setToken(v);
+            if (error) setError(null);
+          }}
+          type="password"
+          autoComplete="one-time-code"
+          mono
+          width={320}
+        />
+        <Button
+          type="submit"
+          variant="primary"
+          isDisabled={!token.trim()}
+          disabledReason="Enter the admin token first"
+          loading={grant.isPending}
+        >
+          Grant admin
+        </Button>
+      </form>
+      {error ? (
+        <Text variant="sm" tone="danger" role="alert">
+          {error}
+        </Text>
+      ) : null}
+    </Section>
+  );
+}

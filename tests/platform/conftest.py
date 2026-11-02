@@ -227,3 +227,15 @@ def postgres(request, monkeypatch):
 
     request.addfinalizer(cleanup)
     return engine, config
+
+
+# --------------------------------------------------------------------------------------- feedback
+
+
+@pytest.fixture(scope="module")
+def feedback_stub_url():
+    """Base URL of the scripted OpenAI-compatible stub (``model='feedback:<script>'``)."""
+    from feedback_stub import stub_server
+
+    with stub_server() as url:
+        yield url

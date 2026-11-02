@@ -1,0 +1,175 @@
+/* Admin maintenance: summary grid, stats tables, enqueue form, jobs table, log drawer. */
+.dbBody,
+.jobsBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* One row of 24px controls on one bottom line: Job, Params (takes the rest), the confirm field, the button. */
+.jobForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.jobFields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.params {
+  flex: 1 1 260px;
+  min-width: 200px;
+}
+
+.jobHelp {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--badge-height);
+}
+
+/* The keys the picked job takes: one line each, key in mono, then type, default and meaning. */
+.paramKeys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.summaryCard {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+/* Worker state: the word says it, a 6px dot repeats it in the status colour. */
+.worker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+}
+
+.workerDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.worker[data-state='running'] .workerDot {
+  background: var(--success);
+}
+
+.worker[data-state='stopped'] .workerDot {
+  background: var(--error);
+}
+
+.worker[data-state='stopped'] {
+  color: var(--error-text);
+}
+
+.modeOn {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+/* Statistics tables: names and non-zero values in primary text, zeros stay quiet. */
+.name,
+.value {
+  color: var(--text-primary);
+}
+
+.zero {
+  color: var(--text-muted);
+}
+
+.statsError {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border-subtle);
+  border-inline-start: 3px solid var(--warning);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.statsError code {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+/* Each table is as tall as its rows: the short event list does not stretch to the long table list. Side by side only
+   where both fit their content (a 1100px body); narrower, they stack with the short event list first. */
+.dbBody {
+  container-type: inline-size;
+}
+
+.tables {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-lg);
+}
+
+@container (min-width: 1100px) {
+  .tables {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+
+  .tables > :first-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+.log {
+  margin: 0;
+  padding: var(--space-md);
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.logMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: var(--space-xs);
+}
+
+.polling {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.errorText {
+  color: var(--error);
+}
+
+.workers {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+}

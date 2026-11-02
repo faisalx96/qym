@@ -6,6 +6,10 @@ import hmac
 import os
 import secrets
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 
 _PBKDF2_PREFIX = "pbkdf2_sha256"
 _PBKDF2_ITERATIONS = 600_000
@@ -50,6 +54,7 @@ def _verify_pbkdf2(secret: str, stored_hash: bytes, prefix: str) -> bool:
             salt = base64.urlsafe_b64decode(salt_raw.encode("ascii"))
             expected = base64.urlsafe_b64decode(derived_raw.encode("ascii"))
         except Exception:
+            logger.warning("stored API key hash is malformed; refusing the key", exc_info=True)
             return False
         actual = hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"), salt, iterations)
         return hmac.compare_digest(actual, expected)
@@ -58,6 +63,17 @@ def _verify_pbkdf2(secret: str, stored_hash: bytes, prefix: str) -> bool:
 
 def hash_api_key(token: str) -> bytes:
     return _encode_pbkdf2(token, _PBKDF2_PREFIX)
+
+
+def generate_api_key() -> tuple[str, str, bytes]:
+    """A new platform API key: ``(token, prefix, key_hash)``.
+
+    The one generator for every ``ApiKey`` row (project keys and the per-experiment
+    Evaluation Service keys), so the token, prefix and hash formats never drift.
+    The token is returned once and must never be stored or logged.
+    """
+    token = secrets.token_urlsafe(32)
+    return token, api_key_prefix(token), hash_api_key(token)
 
 
 def verify_api_key(token: str, stored_hash: bytes) -> bool:

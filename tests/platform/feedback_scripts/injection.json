@@ -1,0 +1,36 @@
+{
+ "turns": [
+  [
+   {
+    "tool_calls": [
+     {
+      "name": "update_checklist",
+      "arguments": {
+       "items": [
+        {
+         "key": "business_need",
+         "state": "partial",
+         "value": "Asked to ignore instructions"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "tool_calls": [
+     {
+      "name": "set_status",
+      "arguments": {
+       "request_id": "FB-0001",
+       "status": "done"
+      }
+     }
+    ]
+   },
+   {
+    "text": "I can only help you describe a request. What problem are you trying to solve?"
+   }
+  ]
+ ]
+}

@@ -1,0 +1,173 @@
+/* QymJsonViewer — compact preview button, collapsible tree, modal.
+   Tokens only (docs/DESIGN_LANGUAGE.md). JSON is data: mono throughout. */
+
+/* Compact preview: sits where a scalar value would. */
+.qjv-preview {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: inherit; /* takes the size of the value slot it replaces */
+  line-height: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.qjv-preview__count {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+.qjv-preview__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  unicode-bidi: plaintext;
+}
+.qjv-preview:hover .qjv-preview__text,
+.qjv-preview:focus-visible .qjv-preview__text {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+.qjv-preview:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Modal: the shell modal, widened for data. */
+.qjv-modal {
+  width: 760px;
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+}
+.qjv-modal__header {
+  gap: var(--space-md);
+}
+.qjv-modal__heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+.qjv-modal__title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qjv-modal__meta {
+  flex-shrink: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.qjv-modal__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+.qjv-copy svg { width: 14px; height: 14px; }
+.qjv-modal__body {
+  overflow: auto;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-elevated);
+  border-radius: 0 0 10px 10px;
+}
+
+/* Tree */
+.qjv-tree {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.qjv-line {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  min-width: 0;
+  unicode-bidi: plaintext;
+}
+.qjv-children {
+  display: none;
+  padding-inline-start: var(--space-lg);
+  border-inline-start: 1px solid var(--border-subtle);
+  margin-inline-start: 7px;
+}
+.qjv-close { display: none; }
+.qjv-open > .qjv-children { display: block; }
+.qjv-open > .qjv-close { display: flex; }
+.qjv-open > .qjv-line > .qjv-collapsed { display: none; }
+
+.qjv-toggle,
+.qjv-toggle-spacer {
+  flex-shrink: 0;
+  width: 16px;
+  height: 19px;
+}
+.qjv-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.qjv-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform var(--transition-fast);
+}
+.qjv-open > .qjv-line > .qjv-toggle svg { transform: rotate(90deg); }
+.qjv-toggle:hover,
+.qjv-toggle:focus-visible { color: var(--accent-primary); }
+.qjv-toggle:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  border-radius: 2px;
+}
+
+.qjv-collapsed {
+  display: inline-flex;
+  align-items: baseline;
+  cursor: pointer;
+}
+.qjv-ellipsis {
+  padding: 0 2px;
+  color: var(--text-muted);
+}
+.qjv-count {
+  margin-inline-start: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.qjv-key { color: var(--accent-secondary); }
+.qjv-index { color: var(--text-muted); }
+.qjv-punct { color: var(--text-muted); white-space: pre; }
+.qjv-string {
+  color: var(--accent-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-width: 0;
+}
+.qjv-number { color: var(--chart-5); }
+.qjv-boolean { color: var(--accent-tertiary-soft); }
+.qjv-null { color: var(--text-muted); font-style: italic; }
+
+@media (prefers-reduced-motion: reduce) {
+  .qjv-toggle svg { transition: none; }
+}

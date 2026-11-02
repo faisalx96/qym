@@ -1,0 +1,219 @@
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.runs {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.runsValue {
+  font-family: var(--font-mono);
+  font-size: var(--font-stat);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.runsValue[data-over='true'] {
+  color: var(--error);
+}
+
+.math {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.change {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.names {
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+/* The wizard's single bottom bar (settings step and narrow layouts): one --bar-action-h row. */
+.wizardBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  height: var(--bar-action-h);
+  box-sizing: border-box;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+}
+
+.wizardNav,
+.wizardActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.wizardStatus {
+  display: flex;
+  flex: 1 1 0;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wizardStatus .problemLink {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barTitle {
+  flex: none;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* The long button labels give way before the bar can overflow (a tablet has less room than a desktop). */
+@media (max-width: 1100px) {
+  .long {
+    display: none;
+  }
+}
+
+/* Phone: the run count stays in the DOM for assistive tech; the Launch label carries it visually. */
+@media (max-width: 760px) {
+  .wizardBar {
+    gap: var(--space-xs);
+    padding: 0 var(--space-sm);
+  }
+
+  .wizardNav,
+  .wizardActions {
+    gap: var(--space-xs);
+  }
+
+  .barTitle[data-compact] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .long {
+    display: none;
+  }
+}
+
+.problemLink {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  /* --error alone is 4.15:1 on the elevated bar; lift it to clear AA at this size */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+  font: inherit;
+  font-size: var(--font-sm);
+  text-align: start;
+  text-decoration: underline;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.problemLink:hover {
+  color: var(--text-primary);
+}
+
+.problemLink:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ok {
+  font-size: var(--font-sm);
+  color: var(--success);
+}
+
+/* Environments and Datasets rows of the summary when several dataset versions or a task are chosen. */
+.envLines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.envLine {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.envLineName {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.envLineDetail {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.pairLines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
