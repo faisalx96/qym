@@ -1,5 +1,5 @@
 /** Cell renderers for the runs table (brief 03 §3 "Runs table"). */
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button as AriaButton } from 'react-aria-components';
 import type { RunPass, RunRow } from '@/api/dashboardTypes';
@@ -17,6 +17,7 @@ import {
   Tag,
   Tooltip,
   UserName,
+  useRowArmed,
   type MenuItemSpec,
 } from '@/ui';
 import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
@@ -256,16 +257,25 @@ export function passSignalItems(
  * dialog (C115).
  */
 export function SignalMarkers({ items, href }: { items: SignalItem[]; href: string }) {
+  // Lean rows (C020): the tooltips mount when the row is first hovered or focused; the links are there from the start.
+  const { armed, ref } = useRowArmed<HTMLSpanElement>();
   return (
-    <span className={styles.signals}>
-      {items.map((it) => (
-        <Tooltip key={it.key} content={it.text}>
+    <span className={styles.signals} ref={ref}>
+      {items.map((it) => {
+        const link = (
           <Link className={styles.signal} data-tone={it.tone} aria-label={it.text} to={href}>
             {it.count ? <span className={styles.mono}>{it.count}</span> : null}
             <span aria-hidden="true">{it.glyph}</span>
           </Link>
-        </Tooltip>
-      ))}
+        );
+        return armed ? (
+          <Tooltip key={it.key} content={it.text}>
+            {link}
+          </Tooltip>
+        ) : (
+          <Fragment key={it.key}>{link}</Fragment>
+        );
+      })}
     </span>
   );
 }
