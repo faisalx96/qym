@@ -76,6 +76,13 @@ describe('LaunchBar (round 10, point 1)', () => {
     expect(view.onBack).toHaveBeenCalledTimes(1);
   });
 
+  it('editor: Back from the first step names the environment page (review O1)', async () => {
+    const view = bar('where', WIZARD_STEPS, { action: 'publish' });
+    expect(screen.queryByRole('button', { name: 'Back to the start' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to the environment' }));
+    expect(view.onBack).toHaveBeenCalledTimes(1);
+  });
+
   it('Skip jumps to the last step, Cancel and the last step’s launch call their handlers', async () => {
     const view = bar('models');
     await userEvent.click(screen.getByRole('button', { name: 'Skip to review and launch' }));

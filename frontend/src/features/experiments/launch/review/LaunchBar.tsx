@@ -91,7 +91,9 @@ export function StepsBar({ steps, step, onBack, onGo, onCancel, primary, action 
         <BarButton
           part="bar-back"
           variant="neutral"
-          aria-label={prev ? `Back to ${prev.label.toLowerCase()}` : 'Back to the start'}
+          aria-label={
+            prev ? `Back to ${prev.label.toLowerCase()}` : action === 'publish' ? 'Back to the environment' : 'Back to the start'
+          }
           onPress={() => (prev ? onGo(prev.id) : onBack())}
         >
           Back

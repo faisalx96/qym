@@ -124,18 +124,26 @@ test.describe('1440', () => {
     await expect(bar.locator('[data-part="bar-launch"]')).toHaveCount(0);
     await expect(bar.locator('[data-part="bar-status"]')).toBeVisible();
     await expect(bar.getByRole('button', { name: /^(Launch|Publish)/ })).toHaveCount(0);
-    // nothing else is stuck to the bottom edge above the bar: the only region at the foot is the bar
+    // round 10 (C-4-1, C-4-2): the bar is sticky and follows the content: on this short step it sits one --space-md (14 px)
+    // under the step, not at the viewport bottom; nothing else in the lower half of the viewport is sticky.
+    await expect(bar).toHaveCSS('position', 'sticky');
+    const gap = await bar.evaluate((el) => {
+      const prev = el.previousElementSibling as HTMLElement | null;
+      return prev ? el.getBoundingClientRect().top - prev.getBoundingClientRect().bottom : NaN;
+    });
+    expect(gap, 'bar top - content bottom').toBeGreaterThanOrEqual(13);
+    expect(gap, 'bar top - content bottom').toBeLessThanOrEqual(15);
     const stuck = await page.evaluate(() => {
       const out: string[] = [];
       for (const el of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
         if (getComputedStyle(el).position !== 'sticky') continue;
         const r = el.getBoundingClientRect();
-        if (r.height > 0 && r.bottom > window.innerHeight - 140 && r.top > window.innerHeight / 2)
+        if (r.height > 0 && r.top > window.innerHeight / 2 && el.getAttribute('aria-label') !== 'Launch')
           out.push(el.getAttribute('aria-label') ?? el.className);
       }
       return out;
     });
-    expect(stuck, 'sticky elements in the bottom 140px').toHaveLength(1);
+    expect(stuck, 'sticky elements in the lower half other than the bar').toHaveLength(0);
   });
 
   test('sweep: sections use the 18px H2 and the compare tabs rhythm', async ({ page }) => {
