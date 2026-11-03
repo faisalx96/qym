@@ -3,22 +3,19 @@
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
-  /* The page fills the scroller, so the bottom bar (margin-block-start: auto) sits at the viewport bottom on a short
-     step too: it never rides up under the content (DESIGN_LANGUAGE section 7). */
-  min-block-size: 100%;
+  /* Round 10, point 4: the page is as tall as its content (no min-block-size): the bottom bar follows the content
+     (14 px under the last card) and is sticky only while the content is taller than the viewport. */
 }
 
-/* Customize and the preset editor: one column, full width; the bottom bar is the only thing beside the step. */
+/* Customize and the preset editor: one column, full width; the bottom bar is the next sibling of the step. */
 .layout {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
 }
 
 .main {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
