@@ -64,7 +64,7 @@ const probe = () => {
         out.push({ w, h, view: name, ...r });
         if (name.startsWith('home (prod') || name.startsWith('home (default') || name === 'step start') {
           const tag = name.startsWith('home (prod') ? 'create-home-short' : name.startsWith('home (default') ? 'create-home-empty' : 'step-start';
-          await page.screenshot({ path: `${SHOTS}/current-${tag}-${w}x${h}.png` });
+          await page.screenshot({ path: `${SHOTS}/${process.env.R10_SHOTS ?? 'current'}-${tag}-${w}x${h}.png` });
         }
       }
     }

@@ -165,8 +165,14 @@ export const dialog = (page: Page): Locator => page.locator('[role="dialog"],[ro
 export const review = (page: Page): Locator => page.getByTestId('review-step').or(page.getByTestId('publish-review'));
 /** The one bottom bar (home view and every step). */
 export const launchBar = (page: Page): Locator => page.locator('[data-part=launch-bar]');
-/** The Launch button of the bar (home: "Launch as is"; steps: "Launch N runs"; editor: "Publish vN"). */
-export const launchButton = (page: Page): Locator => page.locator('[data-part=bar-launch]');
+/**
+ * The launch of the bar: home "Launch as is" (`bar-launch`); the last step's primary slot "Launch N runs" or, in the editor,
+ * "Publish vN" (`bar-continue` with `data-action`). Round 10: earlier steps have no launch, go to the review first (`toReview`).
+ */
+export const launchButton = (page: Page): Locator =>
+  page.locator(
+    '[data-part=bar-launch], [data-part=bar-continue][data-action=launch], [data-part=bar-continue][data-action=publish]',
+  );
 
 /** Opens the Review step (the last one) through the rail and waits for its content. */
 export async function toReview(page: Page): Promise<void> {

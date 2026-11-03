@@ -81,9 +81,9 @@ const probe = () => {
       await page.waitForTimeout(3000);
       console.log(w, JSON.stringify(await page.evaluate(probe), null, 1));
       if (w === 1440 && dry) console.log('dry-run axes', JSON.stringify(dry.axes), 'job0', JSON.stringify({ label: dry.jobs?.[0]?.label, params: dry.jobs?.[0]?.params }));
-      await page.screenshot({ path: `${SHOTS}/current-review-two-axis-${w}.png`, fullPage: true });
+      await page.screenshot({ path: `${SHOTS}/${process.env.R10_SHOTS ?? 'current'}-review-two-axis-${w}.png`, fullPage: true });
       const runs = page.locator('[data-part=review-runs]');
-      await runs.screenshot({ path: `${SHOTS}/current-review-two-axis-runs-${w}.png` });
+      await runs.screenshot({ path: `${SHOTS}/${process.env.R10_SHOTS ?? 'current'}-review-two-axis-runs-${w}.png` });
     }
     await browser.close();
   }

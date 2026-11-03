@@ -65,7 +65,9 @@ test.describe('wizard', () => {
     await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible();
     // On the last step the review fills the main column (one pane) and Raw JSON sits under it.
     await expect(review(page)).toHaveCount(1);
-    await expect(page.locator('[data-part=bar-continue]')).toBeDisabled();
+    // round 10, C-1-3 / C-1-4: Skip is disabled in place; the primary slot is the launch
+    await expect(page.locator('[data-part=bar-continue]')).toHaveAttribute('data-action', 'launch');
+    await expect(page.locator('[data-part=bar-continue]')).toHaveText(/^Launch/);
     await expect(page.locator('[data-part=bar-skip]')).toBeDisabled();
     await expect(page.getByRole('region', { name: /^Raw JSON/ })).toBeVisible();
     await expectReady(page);

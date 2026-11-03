@@ -5,6 +5,7 @@ a second LLM connection and a 2-axis sweep over both environments: a linked pair
     python docs/internal/ui-migration/redesign10/measure/seed_r10.py
 """
 import json
+import os
 import sys
 
 import httpx
@@ -12,12 +13,14 @@ import httpx
 sys.path.insert(0, "frontend/scripts")
 from seed_experiments import PRIMARY, seed  # noqa: E402
 
-BASE = "http://127.0.0.1:8998"
+# Ports: the design stage's defaults; the implementation stage sets R10_PLATFORM_PORT / R10_FAKE_PORTS (e.g. 8970, "9070,9071").
+BASE = f"http://127.0.0.1:{os.environ.get('R10_PLATFORM_PORT', '8998')}"
+STAGING_PORT, PRODUCTION_PORT = (int(p) for p in os.environ.get("R10_FAKE_PORTS", "9098,9099").split(","))
 SLUG = "exp-demo"
 for port, tasks in (
-    (9098, [{"id": "answer-ticket", "name": "Answer ticket", "description": "Reply to a support ticket", "default": True},
+    (STAGING_PORT, [{"id": "answer-ticket", "name": "Answer ticket", "description": "Reply to a support ticket", "default": True},
             {"id": "classify-intent", "name": "Classify intent", "description": "Route a message to a queue", "default": False}]),
-    (9099, [{"id": "answer-ticket", "name": "Answer ticket", "description": "Reply to a support ticket", "default": True}]),
+    (PRODUCTION_PORT, [{"id": "answer-ticket", "name": "Answer ticket", "description": "Reply to a support ticket", "default": True}]),
 ):
     httpx.post(f"http://127.0.0.1:{port}/__control/tasks", json={"tasks": tasks}).raise_for_status()
 c = httpx.Client(base_url=BASE, timeout=60)
@@ -34,7 +37,7 @@ for name, vers in (("support-tickets", 3), ("billing-faq", 2), ("golden", 1)):
         c.post(f"/v1/datasets/{name}/versions?project_slug={SLUG}", json={"from_version": f"v{v-1}"} if v > 1 else {}).raise_for_status()
         c.post(f"/v1/datasets/{name}/versions/v{v}/items:bulk?project_slug={SLUG}", json={"upserts": items(6 + v, name[:3])}).raise_for_status()
         c.post(f"/v1/datasets/{name}/versions/v{v}:publish?project_slug={SLUG}", json={"set_alias": "production"} if v == vers else {}).raise_for_status()
-out = seed(BASE, SLUG, "http://127.0.0.1:9098", "http://127.0.0.1:9099")
+out = seed(BASE, SLUG, f"http://127.0.0.1:{STAGING_PORT}", f"http://127.0.0.1:{PRODUCTION_PORT}")
 pid = out["project_id"]
 second = c.post(
     f"/v1/projects/{pid}/llm-connections",

@@ -72,7 +72,9 @@ test.describe('evaluation inputs and run metadata', () => {
     await expectReady(page);
     await ev.getByRole('textbox', { name: 'Metadata key 1' }).fill('qym_secret');
     await expect(ev.getByText('Keys starting with qym_ are reserved for the platform').last()).toBeVisible();
-    await expect(launchButton(page)).toBeDisabled();
+    // round 10, C-1-6: no launch on this step; the bar names the problem
+    await expect(launchButton(page)).toHaveCount(0);
+    await expect(launchBar(page)).toContainText(/problem/);
 
     // Leave the step, click the problem (listed on the Review step): it brings the step back and focuses the key field.
     await goStep(page, 'review');
@@ -84,6 +86,7 @@ test.describe('evaluation inputs and run metadata', () => {
 
     await page.getByRole('textbox', { name: 'Metadata key 1' }).fill('ticket');
     await expectReady(page);
+    await toReview(page);
     await expect(launchButton(page)).toBeEnabled();
   });
 });
@@ -115,6 +118,7 @@ test.describe('Raw JSON', () => {
     await openSection(page, 'Evaluation configurations');
     await expect(page.getByRole('textbox', { name: 'Samples' })).toHaveValue('7');
     await expectReady(page);
+    await toReview(page);
     await expect(launchButton(page)).toBeEnabled();
   });
 

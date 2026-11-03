@@ -9,6 +9,7 @@ import {
   axeSeriousViolations,
   createEnvironment,
   describeViolations,
+  FAKE_A,
   FAKE_B,
   resetFakes,
   setFakeVersioning,
@@ -106,9 +107,9 @@ test.describe('versions inside the environment box on step 1', () => {
       expect(round(liBox.width - b.width)).toBeCloseTo(32, 0);
       // Row 1 = label | Refresh (24 px), then the values grid: two columns in the 343 px box (two
       // rows), one column at 390 (three rows); 4 px top gap + 1 px rule.
-      // One inline row (label + pairs, 25 px with its rule and gap); the pairs wrap to a second row in a narrow box.
-      expect(b.height).toBeGreaterThanOrEqual(25);
-      expect(b.height).toBeLessThanOrEqual(50);
+      // Round 10 (C-3-3, C-3-7, amends QA4-3): the "Versions" label on its own line, then key-over-value cells; the fake's
+      // three keys fit one row at 1440 and 1024 (61.8 px with the rule and gaps) and take two rows in the 237 px box at 390.
+      expect(Math.abs(b.height - (width === 390 ? 103.2 : 61.8)), `line height ${b.height}`).toBeLessThanOrEqual(2);
       expect(await overflowing(boxOf(page, 'Alpha'))).toEqual([]);
       expect(await overflowing(boxOf(page, 'Other'))).toEqual([]);
       // QA4-4: copy, one Refresh button per line, no input, no block title.
@@ -201,8 +202,11 @@ test.describe('versions inside the environment box on step 1', () => {
   });
 
   for (const width of WIDTHS) {
-    test(`the loading frame is the loaded height at ${width}px (QA4-7)`, async ({ page }) => {
+    test(`the loading frame is the loaded height at ${width}px (QA4-7, R10 C-3-4)`, async ({ page, request }) => {
       await page.setViewportSize({ width, height: 900 });
+      // R10 L1: at 390 one or two keys keep the loading frame's one row (three keys add a row once, the price of no
+      // permanent empty band); at 1440 and 1024 one to three keys do
+      if (width === 390) await setFakeVersioning(request, FAKE_A, { agent_version: 'agent-1.4.2', kb_version: 'kb-77' });
       let release: () => void = () => undefined;
       const gate = new Promise<void>((r) => (release = r));
       await page.route('**/versioning-details', async (route) => {
@@ -210,8 +214,9 @@ test.describe('versions inside the environment box on step 1', () => {
         await route.continue();
       });
       await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
-      const list = page.locator('dl[aria-busy="true"]');
+      const list = lineOf(page, 'Alpha').locator('[aria-busy="true"]');
       await expect(list).toHaveCount(1);
+      await expect(list.locator('[data-part=version-placeholder]')).toHaveCount(3);
       await expect(lineOf(page, 'Alpha').getByRole('status')).toHaveText('Reading…');
       // The line, not the whole box: the box's "Checking schema…" tag comes and goes on its own clock.
       const loading = await box(lineOf(page, 'Alpha'));
@@ -254,10 +259,12 @@ test.describe('versions inside the environment box on step 1', () => {
     );
     const err = page.locator(`[data-env-version="${third.id}"]`);
     await expect(err).toContainText('Couldn’t read: kb offline');
-    expect(await err.locator('[class*="errorText"]').evaluate((el) => getComputedStyle(el).color)).not.toBe('');
+    expect(await err.locator('[class*="vError"]').evaluate((el) => getComputedStyle(el).color)).not.toBe('');
     const ok = page.locator(`[data-env-version="${f.env.id}"]`);
-    await expect(ok.locator('[data-unset]')).toHaveCount(1);
-    await expect(ok.locator('[data-unset]')).toHaveText('not set');
+    // R10 C-3-1: a key the service does not report (null) is not drawn: no "not set"
+    await expect(ok.locator('[data-unset]')).toHaveCount(0);
+    await expect(ok).not.toContainText('not set');
+    expect(await ok.locator('[data-part=version-key]').allInnerTexts()).toEqual(['agent_version', 'kb_version']);
     for (const name of ['Alpha', 'Other', 'Third']) expect(await overflowing(boxOf(page, name))).toEqual([]);
     expect(describeViolations(await axeSeriousViolations(page))).toBe('');
     // The states are informational: typing keeps them, and no problem item mentions versions.

@@ -4,7 +4,7 @@
 // Usage: node m_versions.cjs [current|mock]
 const { open, ids, base, PROJ, SHOTS } = require('./pw.cjs');
 const mode = process.argv[2] ?? 'current';
-const FAKE = 'http://127.0.0.1:9099';
+const FAKE = process.env.R10_FAKE ?? 'http://127.0.0.1:9099';
 const STATES = {
   three: { agent_version: 'agent-1.4.2', image_version: 'img-20261001', kb_version: 'kb-77' },
   two: { agent_version: 'agent-1.5.0', kb_version: 'kb-81' },
@@ -85,7 +85,7 @@ const probe = () => {
       console.log(w, name, 'loading', JSON.stringify(loading));
       console.log(w, name, 'loaded ', JSON.stringify(loaded), 'shift', Math.round((loaded.boxH - loading.boxH) * 10) / 10);
       const box = page.locator('[data-env-version]').first().locator('xpath=ancestor::li[1]');
-      await box.screenshot({ path: `${SHOTS}/current-env-versions-${name}-${w}.png` });
+      await box.screenshot({ path: `${SHOTS}/${process.env.R10_SHOTS ?? 'current'}-env-versions-${name}-${w}.png` });
     }
     await page.request.post(`${FAKE}/__control/versioning`, { data: STATES.three });
     await browser.close();

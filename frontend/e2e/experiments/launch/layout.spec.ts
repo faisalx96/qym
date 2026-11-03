@@ -39,7 +39,7 @@ test.describe('390px', () => {
         await expectNoPageOverflow(page);
       }
     }
-    await openSection(page, 'Models'); // the sticky launch bar is hidden on the review step
+    // Round 10: the launch is the review step's primary slot (Raw JSON, the last section above, is on that step).
     // Scroll to the very bottom: the sticky bar is still in the viewport with an enabled Launch.
     await page.mouse.move(200, 300);
     await page.mouse.wheel(0, 100000);

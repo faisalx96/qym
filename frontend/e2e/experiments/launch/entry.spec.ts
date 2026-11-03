@@ -117,17 +117,19 @@ test.describe('home', () => {
 });
 
 test.describe('entry', () => {
-  test('an environment with a default preset auto-selects it; Launch as is enables once the dry run is Ready', async ({
+  test('an environment with a default preset auto-selects it; the launch enables once the dry run is Ready', async ({
     page,
   }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'start');
     await expect(page.getByRole('radio', { name: /Default preset v1/ })).toBeChecked();
     await expect(page.getByRole('status').filter({ hasText: 'Based on' })).toContainText('Default preset v1');
-    await expect(launchButton(page)).toBeDisabled();
+    // round 10, C-1-6: no launch before the review step; the bar names the problem
+    await expect(launchButton(page)).toHaveCount(0);
     await expect(launchBar(page)).toContainText('Fix 1 problem first: Name');
     await goStep(page, 'where');
     await nameBox(page).fill('entry run');
     await expectReady(page);
+    await toReview(page);
     await expect(launchButton(page)).toBeEnabled();
     await expect(launchBar(page)).toContainText(/1\s*run to launch/);
   });
@@ -153,6 +155,7 @@ test.describe('entry', () => {
       .click();
     await page.getByRole('option', { name: 'golden' }).click();
     await expectReady(page);
+    await toReview(page);
     await expect(launchButton(page)).toBeEnabled();
   });
 
