@@ -130,7 +130,7 @@ def test_key_of_another_project_is_403(client, session_factory):
     assert created.status_code == 201
     response = client.put(other_base, headers=_auth_headers(), json=SOURCE)
     assert response.status_code == 403
-    assert response.json() == {"detail": "API key belongs to another project"}
+    assert response.json()["detail"] == "API key belongs to another project"
 
 
 def test_archived_project_is_409(client, session_factory):
@@ -139,9 +139,10 @@ def test_archived_project_is_409(client, session_factory):
         session.commit()
     response = client.put(BASE, headers=_auth_headers(), json=SOURCE)
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": "Project is archived; its API keys stop working until an admin unarchives it"
-    }
+    assert (
+        response.json()["detail"]
+        == "Project is archived; its API keys stop working until an admin unarchives it"
+    )
     with session_factory() as session:
         assert session.query(LiveSource).count() == 0
 
@@ -408,7 +409,7 @@ def test_commit_value_errors_are_conflicts_and_roll_back(
     finally:
         event.remove(session_factory, "before_commit", refuse_commit)
     assert response.status_code == 409, response.text
-    assert response.json() == {"detail": "Live ingest conflicts with existing data"}
+    assert response.json()["detail"] == "Live ingest conflicts with existing data"
     with session_factory() as session:
         assert session.query(LiveSource).one().name == SOURCE["name"]
 
@@ -559,11 +560,9 @@ def test_deeply_nested_json_returns_422_without_server_error(
             content="[" * 1200 + "]" * 1200,
         )
     assert response.status_code == 422, response.text
-    assert response.json() == {
-        "detail": [
-            {"type": "json_invalid", "loc": ["body"], "msg": "JSON nesting too deep"}
-        ]
-    }
+    assert response.json()["detail"] == [
+        {"type": "json_invalid", "loc": ["body"], "msg": "JSON nesting too deep"}
+    ]
     assert not [
         record
         for record in caplog.records

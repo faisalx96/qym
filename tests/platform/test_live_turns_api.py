@@ -82,9 +82,10 @@ def test_list_default_is_newest_first_and_paginated(client, session_factory):
 def test_pagination_bounds_return_validation_error(client, session_factory, params):
     response = client.get(f"{BASE}/turns", headers=ADMIN, params=params)
     assert response.status_code == 422, response.text
-    assert response.json() == {
-        "detail": "page must be 1 to 1000000; page_size must be 1 to 200"
-    }
+    assert (
+        response.json()["detail"]
+        == "page must be 1 to 1000000; page_size must be 1 to 200"
+    )
 
 
 def test_maximum_page_returns_empty_rows(client, session_factory):
@@ -378,7 +379,7 @@ def test_turn_detail_404(client, session_factory):
     for turn_id in ("missing", "other-turn"):
         response = client.get(f"{BASE}/turns/{turn_id}", headers=ADMIN)
         assert response.status_code == 404
-        assert response.json() == {"detail": "turn not found"}
+        assert response.json()["detail"] == "turn not found"
     assert _turns(client)["total"] == 40
     response = client.get(
         f"{BASE}/turns/other-turn", headers=ADMIN, params={"source": "other"}

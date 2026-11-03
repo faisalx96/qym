@@ -1,10 +1,7 @@
-import { useMemo } from 'react';
 import { overviewFrames, useCachedOverview, useLiveOverview } from './lib/overview';
 import { useProjectContext } from '@/features/shell/ProjectContext';
-import { useTopbarStats } from '@/features/shell/TopbarStats';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
-import { formatPercentValue } from '@/lib/format';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
 import { ErrorState, PageHeader, Skeleton } from '@/ui';
@@ -32,18 +29,6 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
   const showSkeleton = useDelayedPending(query.isPending);
   const overview = query.data;
   const cachedOverview = useCachedOverview(slug, source);
-  const stats = useMemo(() => {
-    if (!overview) return null;
-    const primary = overview.specs.find((spec) => spec.metric_name === overview.primary_metric);
-    const mean = overview.day.metric_means.find(
-      (metric) => metric.metric_name === overview.primary_metric,
-    )?.mean;
-    return [
-      { label: 'turns', value: overview.day.row?.turns_seen ?? overview.day.in_qym },
-      { label: primary?.label ?? 'Primary metric', value: formatPercentValue(mean, 0) },
-    ];
-  }, [overview]);
-  useTopbarStats(stats);
   const linkTo = (filters: Record<string, string> = {}) =>
     `/projects/${encodeURIComponent(slug)}/live/turns?${new URLSearchParams({ day, source, ...filters })}`;
 

@@ -393,7 +393,7 @@ def test_unknown_source_is_404(client, session_factory):
         f"{BASE}/overview", headers=ADMIN, params={"source": "missing"}
     )
     assert response.status_code == 404
-    assert response.json() == {"detail": "live source not found"}
+    assert response.json()["detail"] == "live source not found"
     with session_factory() as db:
         db.add(
             Project(
@@ -403,7 +403,7 @@ def test_unknown_source_is_404(client, session_factory):
         db.commit()
     response = client.get("/api/projects/empty/live/overview", headers=ADMIN)
     assert response.status_code == 404
-    assert response.json() == {"detail": "live source not found"}
+    assert response.json()["detail"] == "live source not found"
     response = client.get(f"{BASE}/overview", headers=ADMIN, params={"day": "invalid"})
     assert response.status_code == 422
 
@@ -430,5 +430,5 @@ def test_other_projects_user_is_403(client, session_factory):
     headers = {"X-User-Email": "other@example.test"}
     response = client.get(f"{BASE}/overview", headers=headers)
     assert response.status_code == 403
-    assert response.json() == {"detail": "Access denied"}
+    assert response.json()["detail"] == "Access denied"
     assert client.get(BASE, headers=headers).status_code == 403

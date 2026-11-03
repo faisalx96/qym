@@ -12,6 +12,7 @@ import { liveOverview, liveTurnDetail } from '@/features/dev/liveFixtures';
 
 vi.mock('@/features/shell/ProjectContext', () => ({
   useProjectContext: () => ({ project: { name: 'Demo project' }, slug: 'demo' }),
+  useOptionalProject: () => ({ project: { name: 'Demo project' }, slug: 'demo' }),
 }));
 
 const primary: LiveMetricSpec = {

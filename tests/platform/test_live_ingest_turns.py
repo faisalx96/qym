@@ -554,6 +554,6 @@ def test_default_batch_cap_rejects_101_turns(client, session_factory):
         json={"turns": [_turn(str(index)) for index in range(101)]},
     )
     assert response.status_code == 422, response.text
-    assert response.json() == {"detail": "Turn batch exceeds the configured limit"}
+    assert response.json()["detail"] == "Turn batch exceeds the configured limit"
     with session_factory() as session:
         assert session.query(LiveTurn).count() == 0

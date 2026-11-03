@@ -10,6 +10,7 @@ import { LiveTurnsPage } from '../LiveTurnsPage';
 
 vi.mock('@/features/shell/ProjectContext', () => ({
   useProjectContext: () => ({ project: { name: 'Demo project' }, slug: 'demo' }),
+  useOptionalProject: () => ({ project: { name: 'Demo project' }, slug: 'demo' }),
 }));
 
 const source = liveOverview.status.key;
