@@ -13,6 +13,7 @@ key so the previous keys can be dropped. Columns covered:
   key of live experiments; rewriting it only changes the blob, never the key)
 - ``eval_experiments.dataset_read_token_encrypted`` (the experiment's dataset read
   token of live experiments, same rule)
+- ``live_worker_settings.secrets_encrypted`` (each worker secret in every version)
 
 It is idempotent: values that already decrypt with the current key are left alone,
 so re-running it rewrites nothing. Each batch is committed separately, and a row is
@@ -43,7 +44,12 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from qym_platform.db.feedback_models import FeedbackAgentConnection
-from qym_platform.db.models import EvalEnvironment, EvalExperiment, ProjectLlmConnection
+from qym_platform.db.models import (
+    EvalEnvironment,
+    EvalExperiment,
+    LiveWorkerSettings,
+    ProjectLlmConnection,
+)
 from qym_platform.secrets import (
     encryption_available,
     is_encrypted_with_current_key,
@@ -66,6 +72,7 @@ ENCRYPTED_COLUMNS: Tuple[Tuple[str, Any, str], ...] = (
         EvalExperiment,
         "dataset_read_token_encrypted",
     ),
+    ("live_worker_settings.secrets_encrypted", LiveWorkerSettings, "secrets_encrypted"),
 )
 
 _MAX_FAILED_IDS = 50
@@ -94,21 +101,37 @@ def reencrypt_column(
     """Re-encrypt one column in id-ordered batches, committing after each batch."""
     stats = _empty_stats()
     column = getattr(model, attr)
+    is_secret_map = model is LiveWorkerSettings and attr == "secrets_encrypted"
     last_id: Optional[str] = None
     while True:
-        query = select(model.id, column).where(column.isnot(None), column != "")
+        query = select(model.id, column).where(column.isnot(None))
+        if not is_secret_map:
+            query = query.where(column != "")
         if last_id is not None:
             query = query.where(model.id > last_id)
         rows = db.execute(query.order_by(model.id).limit(batch_size)).all()
         if not rows:
             break
         for row_id, value in rows:
+            if is_secret_map and not value:
+                continue
             stats["scanned"] += 1
-            if is_encrypted_with_current_key(value, settings):
+            tokens = value.values() if is_secret_map else (value,)
+            if all(is_encrypted_with_current_key(token, settings) for token in tokens):
                 stats["already_current"] += 1
                 continue
             try:
-                new_value = reencrypt_llm_api_key(value, settings)
+                if is_secret_map:
+                    new_value = {
+                        name: (
+                            token
+                            if is_encrypted_with_current_key(token, settings)
+                            else reencrypt_llm_api_key(token, settings)
+                        )
+                        for name, token in value.items()
+                    }
+                else:
+                    new_value = reencrypt_llm_api_key(value, settings)
             except RuntimeError:
                 logger.warning("could not re-encrypt stored LLM key (row %s); left unchanged", row_id)
                 stats["failed"] += 1

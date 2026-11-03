@@ -225,6 +225,11 @@ class PlatformSettings(BaseSettings):
     live_ingest_max_body_bytes: int = Field(default=64 * 1024 * 1024, ge=1_048_576)
     live_chart_image_max_bytes: int = Field(default=2 * 1024 * 1024, ge=65536)
     live_chart_images_per_turn: int = Field(default=10, ge=1, le=100)
+    live_jobs_retention_days: int = Field(default=90, ge=1)
+    live_events_retention_days: int = Field(default=30, ge=1)
+    live_job_max_days: int = Field(default=31, ge=1)
+    live_job_max_limit: int = Field(default=2000, ge=1)
+    live_events_batch_max: int = Field(default=100, ge=1)
 
     # Evaluation Service experiments: launches per user per window (0 disables).
     # Dry-run previews are not counted.

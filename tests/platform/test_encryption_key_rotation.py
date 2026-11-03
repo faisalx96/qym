@@ -24,6 +24,8 @@ from qym_platform.db.base import Base
 from qym_platform.db.models import (
     EvalEnvironment,
     EvalExperiment,
+    LiveSource,
+    LiveWorkerSettings,
     Project,
     ProjectLlmConnection,
     User,
@@ -42,12 +44,14 @@ from qym_platform.services.eval_experiments import (
     launch_token_for_job,
 )
 from qym_platform.services.eval_temporary_models import decrypt_secrets, encrypt_secrets
+from qym_platform.services.live_worker_settings import resolved_secrets
 from qym_platform.settings import PlatformSettings
 from qym_platform.tools import reencrypt_llm_keys
 
 CONN_KEY = "sk-conn-secret-AAAA1111"
 ENV_KEY = "env-service-secret-BBBB2222"
 TEMP_KEY = "sk-temp-secret-CCCC3333"
+WORKER_SECRETS = {"langfuse_secret_key": "lf-secret", "database_password": "db-secret"}
 
 
 def _key() -> str:
@@ -200,6 +204,23 @@ def _seed(sessions, settings: PlatformSettings, *, connections: int = 3) -> dict
                 project_id=project.id, created_by_user_id=user.id, name="settled"
             )
         )
+        source = LiveSource(
+            project_id=project.id, key="worker", name="Worker", environment="test"
+        )
+        db.add(source)
+        db.flush()
+        connection = db.query(ProjectLlmConnection).filter_by(name="c0").one()
+        db.add(
+            LiveWorkerSettings(
+                source_id=source.id,
+                version=1,
+                values={"models": {"connection_id": connection.id}},
+                secrets_encrypted={
+                    name: encrypt_llm_api_key(value, settings)
+                    for name, value in WORKER_SECRETS.items()
+                },
+            )
+        )
         db.commit()
     return {}
 
@@ -210,6 +231,11 @@ def _stored(sessions) -> list[str]:
             *(c.llm_api_key_encrypted for c in db.query(ProjectLlmConnection).all()),
             *(e.api_key_encrypted for e in db.query(EvalEnvironment).all()),
             *(x.secrets_encrypted for x in db.query(EvalExperiment).all()),
+            *(
+                token
+                for row in db.query(LiveWorkerSettings).all()
+                for token in row.secrets_encrypted.values()
+            ),
         ]
 
 
@@ -220,7 +246,7 @@ def _run_tool(sessions, settings, argv, capsys):
 
 
 def _assert_no_secrets(text: str, *keys: str) -> None:
-    for secret in (CONN_KEY, ENV_KEY, TEMP_KEY, *keys):
+    for secret in (CONN_KEY, ENV_KEY, TEMP_KEY, *WORKER_SECRETS.values(), *keys):
         assert secret not in text
 
 
@@ -234,11 +260,12 @@ def test_tool_dry_run_counts_and_writes_nothing(sessions, capsys):
 
     assert code == 0
     assert stats["dry_run"] is True
-    assert stats["totals"]["reencrypted"] == 5
-    assert stats["totals"]["scanned"] == 5
+    assert stats["totals"]["reencrypted"] == 6
+    assert stats["totals"]["scanned"] == 6
     assert stats["columns"]["project_llm_connections.llm_api_key_encrypted"]["reencrypted"] == 3
     assert stats["columns"]["eval_environments.api_key_encrypted"]["reencrypted"] == 1
     assert stats["columns"]["eval_experiments.secrets_encrypted"]["reencrypted"] == 1
+    assert stats["columns"]["live_worker_settings.secrets_encrypted"]["reencrypted"] == 1
     assert _stored(sessions) == before
     _assert_no_secrets(text, old, current)
     for value in before:
@@ -246,19 +273,21 @@ def test_tool_dry_run_counts_and_writes_nothing(sessions, capsys):
             assert value not in text
 
 
-def test_tool_rotates_everything_and_is_idempotent(sessions, capsys):
+def test_tool_rotates_everything_and_is_idempotent(sessions, capsys, monkeypatch):
     old, current = _key(), _key()
     _seed(sessions, _settings(old))
     rotated = _settings(current, old)
 
     code, stats, text = _run_tool(sessions, rotated, ["--batch-size", "2"], capsys)
     assert code == 0
-    assert stats["totals"]["reencrypted"] == 5
+    assert stats["totals"]["reencrypted"] == 6
     assert stats["totals"]["failed"] == 0
     _assert_no_secrets(text, old, current)
 
     # Everything now reads with the current key alone.
     only_current = _settings(current)
+    monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", current)
+    monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS", "")
     with sessions() as db:
         for conn in db.query(ProjectLlmConnection).filter(ProjectLlmConnection.name != "empty"):
             assert decrypt_llm_api_key(conn.llm_api_key_encrypted, only_current) == CONN_KEY
@@ -266,12 +295,21 @@ def test_tool_rotates_everything_and_is_idempotent(sessions, capsys):
         assert decrypt_llm_api_key(env.api_key_encrypted, only_current) == ENV_KEY
         exp = db.query(EvalExperiment).filter_by(name="exp").one()
         assert decrypt_secrets(exp.secrets_encrypted, only_current) == {"ref-1": TEMP_KEY}
+        row = db.query(LiveWorkerSettings).one()
+        source = db.get(LiveSource, row.source_id)
+        resolved, errors = resolved_secrets(db, source, row)
+        assert errors == []
+        assert resolved == {
+            **WORKER_SECRETS,
+            "gateway_base_url": "https://api.example.com/v1",
+            "gateway_api_key": CONN_KEY,
+        }
 
     after_first = _stored(sessions)
     code, stats, _ = _run_tool(sessions, rotated, [], capsys)
     assert code == 0
     assert stats["totals"]["reencrypted"] == 0
-    assert stats["totals"]["already_current"] == 5
+    assert stats["totals"]["already_current"] == 6
     assert _stored(sessions) == after_first
 
 
@@ -282,7 +320,7 @@ def test_tool_reports_unreadable_values_without_secrets(sessions, capsys):
     code, stats, text = _run_tool(sessions, _settings(current), [], capsys)
 
     assert code == 1
-    assert stats["totals"]["failed"] == 3
+    assert stats["totals"]["failed"] == 4
     assert stats["totals"]["reencrypted"] == 0
     assert len(stats["columns"]["project_llm_connections.llm_api_key_encrypted"]["failed_ids"]) == 1
     _assert_no_secrets(text, lost, current)

@@ -2145,10 +2145,79 @@ class LiveSource(Base):
     worker: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
     day_key_timezone: Mapped[str] = mapped_column(String(40), default="UTC")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    desired_state: Mapped[str] = mapped_column(String(10), default="running", server_default="running")
+    state_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    state_changed_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    worker_key_id: Mapped[Optional[str]] = mapped_column(ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True)
+    worker_key_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    worker_key_changed_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    settings_versions: Mapped[list["LiveWorkerSettings"]] = relationship(cascade="all, delete-orphan")
+    jobs: Mapped[list["LiveJob"]] = relationship(cascade="all, delete-orphan")
+    events: Mapped[list["LiveWorkerEvent"]] = relationship(cascade="all, delete-orphan")
+
     __table_args__ = (UniqueConstraint("project_id", "key", name="uq_live_source_key"),)
+
+
+class LiveWorkerSettings(Base):
+    __tablename__ = "live_worker_settings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_id: Mapped[str] = mapped_column(ForeignKey("live_sources.id", ondelete="CASCADE"))
+    version: Mapped[int] = mapped_column(Integer)
+    values: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    secrets_encrypted: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    secret_hints: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    note: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("source_id", "version", name="uq_live_worker_settings_version"),
+    )
+
+
+class LiveJob(Base):
+    __tablename__ = "live_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_id: Mapped[str] = mapped_column(ForeignKey("live_sources.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(30))
+    params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20))
+    progress: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    requested_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    cancel_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (Index("ix_live_jobs_source_status", "source_id", "status"),)
+
+
+class LiveWorkerEvent(Base):
+    __tablename__ = "live_worker_events"
+
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("live_sources.id", ondelete="CASCADE"))
+    level: Mapped[str] = mapped_column(String(10))
+    component: Mapped[str] = mapped_column(String(30))
+    code: Mapped[str] = mapped_column(String(60))
+    message: Mapped[str] = mapped_column(Text)
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    count: Mapped[int] = mapped_column(Integer, default=1)
+    first_at: Mapped[datetime] = mapped_column(DateTime)
+    last_at: Mapped[datetime] = mapped_column(DateTime)
+
+    __table_args__ = (
+        Index("ix_live_worker_events_source_last", "source_id", "last_at"),
+        Index("ix_live_worker_events_source_fp", "source_id", "fingerprint"),
+    )
 
 
 class LiveMetricSpec(Base):

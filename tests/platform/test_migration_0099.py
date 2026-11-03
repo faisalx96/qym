@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -12,10 +13,10 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from alembic.script import ScriptDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = ROOT / "packages/platform/qym_platform/migrations"
+FILE = MIGRATIONS / "versions/0099_live_chart_images.py"
 
 
 @pytest.fixture(params=["sqlite", "postgres"])
@@ -45,7 +46,7 @@ def engine(request, tmp_path, monkeypatch):
             eng,
             tables=[
                 Base.metadata.tables[name]
-                for name in ("users", "projects", "live_sources", "live_turns")
+                for name in ("users", "projects", "api_keys", "live_sources", "live_turns")
             ],
         )
         yield eng
@@ -58,10 +59,10 @@ def engine(request, tmp_path, monkeypatch):
 
 
 def test_revision_chain_names_0098() -> None:
-    config = Config()
-    config.set_main_option("script_location", str(MIGRATIONS))
-    head = ScriptDirectory.from_config(config).get_revision("head")
-    assert (head.revision, head.down_revision) == ("0099", "0098")
+    spec = importlib.util.spec_from_file_location("migration_0099", FILE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert (module.revision, module.down_revision) == ("0099", "0098")
 
 
 def test_matches_models_and_round_trips(engine) -> None:
@@ -76,7 +77,7 @@ def test_matches_models_and_round_trips(engine) -> None:
 
     # Seed 0098 prerequisites; older migrations contain PostgreSQL-only DDL.
     command.stamp(config, "0098")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0099")
     with engine.connect() as connection:
         inspector = sa.inspect(connection)
         assert "live_chart_images" in inspector.get_table_names()
@@ -101,5 +102,5 @@ def test_matches_models_and_round_trips(engine) -> None:
 
     command.downgrade(config, "0098")
     assert "live_chart_images" not in sa.inspect(engine).get_table_names()
-    command.upgrade(config, "head")
+    command.upgrade(config, "0099")
     assert "live_chart_images" in sa.inspect(engine).get_table_names()

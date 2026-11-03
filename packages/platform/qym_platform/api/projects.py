@@ -26,10 +26,13 @@ from qym_platform.db.models import (
     LiveCanaryResult,
     LiveChartImage,
     LiveDay,
+    LiveJob,
     LiveMetricSpec,
     LiveSource,
     LiveTurn,
     LiveTurnScore,
+    LiveWorkerEvent,
+    LiveWorkerSettings,
     Project,
     ProjectAnalysisCategoryCatalogVersion,
     ProjectAnalysisPromptSettings,
@@ -1892,6 +1895,19 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
     db.query(LiveMetricSpec).filter(LiveMetricSpec.source_id.in_(live_source_ids)).delete(
         synchronize_session=False
     )
+    for model in (LiveJob, LiveWorkerEvent, LiveWorkerSettings):
+        while True:
+            ids = (
+                select(model.id)
+                .where(model.source_id.in_(live_source_ids))
+                .order_by(model.id)
+                .limit(batch_size)
+            )
+            deleted = db.query(model).filter(model.id.in_(ids)).delete(
+                synchronize_session=False
+            )
+            if deleted < batch_size:
+                break
     db.query(LiveSource).filter(LiveSource.project_id == project_id).delete(
         synchronize_session=False
     )

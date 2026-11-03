@@ -72,8 +72,24 @@ def test_matches_models_and_round_trips(engine, monkeypatch) -> None:
 
     module = _load()
 
+    later_source_columns = {  # added by 0100
+        "desired_state",
+        "state_changed_at",
+        "state_changed_by_user_id",
+        "worker_key_id",
+        "worker_key_changed_at",
+        "worker_key_changed_by_user_id",
+    }
+
     def include(obj, name, kind, reflected, compare_to):
         table = obj if kind == "table" else getattr(obj, "table", None)
+        if table is not None and table.name == "live_sources":
+            if kind == "column" and name in later_source_columns:
+                return False
+            if kind in ("foreign_key_constraint", "index") and any(
+                column.name in later_source_columns for column in obj.columns
+            ):
+                return False
         return table is not None and table.name in LIVE_TABLES
 
     with engine.begin() as connection:
