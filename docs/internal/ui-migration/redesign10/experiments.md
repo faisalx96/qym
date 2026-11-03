@@ -215,9 +215,11 @@ Versions row:
   (`data-wide`), so long values do not wrap inside a 90 px cell.
 * A key the service does not report is not drawn: no "not set" (the endpoint already drops `null` values).
 * `ok` with `{}`: one line "No versioning details reported" (11 px muted). `unsupported` and `error`: today's lines, under the label.
-* Loading: three placeholder cells without labels (a 5rem key bar and a 64 px value bar), `aria-busy`. The grid always lays out at least
-  three cells (loaded cells first, then empty spacers with the cell's own DOM, `aria-hidden`), so 1, 2 or 3 keys have the loading frame's
-  height at every width. At 390 one or two keys therefore keep a second, empty row (37 px): the price of 0 layout shift, recorded here.
+* Loading: three placeholder cells without labels (a 4rem key bar and a 3.5rem value bar) in one flex row that fits one line at every
+  box width (3 x 64 px + gaps < 237 px), `aria-busy`. **Orchestrator amendment L1 (2026-11-03):** the loaded grid is NOT padded with
+  empty spacer cells; it takes the height of its keys. At 1440 and 1024 one to three keys fit one row, so the loading frame and the loaded
+  box have the same height; at 390 one or two keys fit one row (same height as the loading frame) and three keys add one row (37 px, a
+  one-time shift on load, recorded as the price of no permanent empty band: the owner's point 4 outranks rule 7 here).
 * Review row: per ticked environment, the environment name (6rem column, 12 px 600) then the same grid; one environment: no name column.
 
 Mock numbers (`m_versions.cjs mock`, box heights): 1440 and 1024: loading 124.6, one 124.6, two 124.6, three 124.6 (0 px shift), five 248.8 /
@@ -228,10 +230,10 @@ Mock numbers (`m_versions.cjs mock`, box heights): 1440 and 1024: loading 124.6,
 | C-3-1 | `env-versions` (`[data-env-version]`, status ok) | all | one `version-key` per key of `versioning_details`, in response order; key text = the key exactly (`agent_version`, not "agent"); with `{agent_version, kb_version}` exactly 2 cells and 0 elements reading "image" or "not set" (today "image not set"); with the 5-key payload the keys read `agent_version, kb_version, prompt_set, model_routing, build` in that order (today alphabetical after a fixed three) |
 | C-3-2 | `version-value` | all | string -> `Tag kind="version"` whose text equals the value; number / boolean -> mono 12 px text; object / array -> compact JSON mono, > 48 chars shows 48 chars + "…" and `title` = the full JSON; `data-wide` on cells whose value is > 16 chars or an object / array, spanning all columns |
 | C-3-3 | grid | 1440 / 1024 / 390 | label line "Versions" above the grid; columns 5 / 3 / 2 at box widths 547 / 339 / 237; every key `scrollWidth <= clientWidth`, never ellipsis; 0 overlap between cells |
-| C-3-4 | loading frame | 1440 / 1024 / 390 | 3 placeholder cells, no label text, `aria-busy="true"`; the box height at the loading frame equals the loaded height for 1, 2 and 3 keys, 0 +- 1 px (mock 124.6 / 124.6 / 166) |
+| C-3-4 | loading frame | 1440 / 1024 / 390 | 3 placeholder cells on one row, no label text, `aria-busy="true"`; the box height at the loading frame equals the loaded height for 1, 2 and 3 keys at 1440 and 1024 and for 1 and 2 keys at 390, 0 +- 1 px; 0 empty spacer cells in the loaded DOM (L1) |
 | C-3-5 | empty | all | status ok with `{}`: the line "No versioning details reported" (11 px `--text-muted`), 0 cells; box 107.2 +- 2 |
 | C-3-6 | unsupported, error | all | texts unchanged ("Not supported by this environment (its Evaluation Service is older than v1.2).", "Couldn’t read: <reason>"), under the "Versions" label |
-| C-3-7 | `env-box` heights | 1440 / 1024 / 390 | a ticked box with 1 to 3 reported keys: 124.6 +- 2 at 1440 and 1024, 166 +- 2 at 390 (amends round 9 C-1-7: 87.8 / 111.8; the label line and the key-over-value cells cost 37 px at 1440 and 54 at 390, for keys that are readable as written) |
+| C-3-7 | `env-box` heights | 1440 / 1024 / 390 | a ticked box with 1 to 3 reported keys: 124.6 +- 2 at 1440 and 1024; at 390 129 +- 3 for 1 or 2 keys and 166 +- 2 for 3 keys (L1: no empty row under 1 or 2 keys; amends round 9 C-1-7: 87.8 / 111.8) |
 | C-3-8 | review `Versions` row | 1440 / 390 | the same `VersionsGrid` per environment with the environment name when >= 2 environments; production `{agent_version, kb_version}` shows exactly those 2 keys and staging the 3 of its payload; row height 106.8 +- 4 at 1440 for the seed; 0 keys dropped (today only the fixed three are printed) |
 | C-3-9 | no fixed key list | n/a | `grep -rnE "agent_version|image_version|kb_version" frontend/src` outside `__tests__`, `*.test.*`, `__fixtures__` and `features/dev` returns 0 lines (today `VersionsBlock.tsx` and `model/bestRun.ts`); `VERSION_KEYS` and both `VERSION_LABELS` are deleted |
 | C-3-10 | other surfaces | 1440 | best-run header and the best-run table's Versions column (`versionText`) print `key value` pairs with the key as reported, in payload order, objects as compact JSON (today "agent v1.12 / kb 381", objects dropped); drift lines read `<key>: <run value> in this run, <latest> now` with the key as reported; the Experiments list versioning filters and the best-run scope Selects are labelled with the key as reported, first item "All values" / "Any value" (today "KB version", "All KB versions") |
@@ -360,7 +362,7 @@ two-axis sweep through the API as in `seed_r10.py`, the fake's `/__control/versi
 | D10-3 | The status content is centred between the two groups | K1 says "centre"; a start-aligned status next to Cancel would read as Cancel's caption |
 | D10-4 | "Swept settings" is a Summary row, not a line above the table | it is a fact of the experiment like Dataset and Priority; the table stays one fact per cell |
 | D10-5 | The swept column header is the last segment of the form label, with the section only on duplicates | K2; "Endpoints › primary › Timeout" on every header would triple the header height for one setting |
-| D10-6 | Versions: label line + key-over-value cells, at least three cells, wide values span the row | K3's no-shift rule for 1 to 3 keys at every width; keys as written need more width than "agent" did |
+| D10-6 | Versions: label line + key-over-value cells, wide values span the row; ~~at least three cells~~ (overturned by L1: no spacer cells, the grid takes the height of its keys; the 3 loading placeholders sit on one row) | keys as written need more width than "agent" did; an empty row under 1 or 2 keys is the empty band of point 4 again |
 | D10-7 | The filter and scope labels show the key as written ("kb_version", "All values") | K3's "present them as is" applies to every surface that names a versioning key; the humanizer invented "KB version" |
 | D10-8 | `headerMinWidth` measures the drawn header string | the 102 px `#` column takes 54 px from the swept columns; a label is the accessible name, not drawn text |
 
