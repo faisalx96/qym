@@ -10,10 +10,13 @@ from qym_platform.db.models import (
     LiveCanaryResult,
     LiveChartImage,
     LiveDay,
+    LiveJob,
     LiveTurn,
     LiveTurnScore,
+    LiveWorkerEvent,
 )
 from qym_platform.log import get_logger
+from qym_platform.settings import PlatformSettings
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -66,9 +69,18 @@ def _purge_turns(db: Session, cutoff: date) -> tuple[int, int, int]:
 def purge_live(
     session_factory: Callable[[], Session], *, retention_days: int, now: datetime
 ) -> dict[str, int]:
-    """Purge expired turns and canaries, retaining daily rows for 730 days."""
+    """Purge expired live data, jobs and events in committed batches."""
     cutoff = now - timedelta(days=retention_days)
-    counts = {"turns": 0, "scores": 0, "chart_images": 0, "canaries": 0, "days": 0}
+    settings = PlatformSettings()
+    counts = {
+        "turns": 0,
+        "scores": 0,
+        "chart_images": 0,
+        "canaries": 0,
+        "days": 0,
+        "jobs": 0,
+        "events": 0,
+    }
     with session_factory() as db:
         counts["turns"], counts["scores"], counts["chart_images"] = _purge_turns(
             db, cutoff.date()
@@ -92,6 +104,40 @@ def purge_live(
                 db.commit()
                 counts[name] += deleted
                 if deleted < BATCH_SIZE:
+                    break
+        for name, model, condition in (
+            (
+                "jobs",
+                LiveJob,
+                LiveJob.finished_at
+                < now - timedelta(days=settings.live_jobs_retention_days),
+            ),
+            (
+                "events",
+                LiveWorkerEvent,
+                LiveWorkerEvent.last_at
+                < now - timedelta(days=settings.live_events_retention_days),
+            ),
+        ):
+            while True:
+                ids = [
+                    row[0]
+                    for row in db.execute(
+                        select(model.id)
+                        .where(condition)
+                        .order_by(model.id)
+                        .limit(BATCH_SIZE)
+                        .with_for_update(skip_locked=True)
+                    ).all()
+                ]
+                deleted = (
+                    db.query(model)
+                    .filter(model.id.in_(ids), condition)
+                    .delete(synchronize_session=False)
+                )
+                db.commit()
+                counts[name] += deleted
+                if len(ids) < BATCH_SIZE:
                     break
         if any(counts.values()):
             db.add(

@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from _live_support import seed_week
 from qym_platform.db.models import (
+    ApiKey,
     LiveDay,
     LiveMetricSpec,
     LiveSource,
@@ -49,6 +50,9 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["default_source"] == "worker-1"
+    assert body["sources"][0]["desired_state"] == "running"
+    assert body["sources"][0]["worker_key_set"] is False
+    assert body["sources"][0]["errors_last_hour"] == 0
     assert body["sources"][0]["stale"] is True
     assert body["sources"][0]["seconds_since_heartbeat"] is None
 
@@ -59,6 +63,16 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     with session_factory() as db:
         source = db.query(LiveSource).one()
         source.last_heartbeat_at = now - timedelta(seconds=10)
+        db.add(
+            ApiKey(
+                id="worker-key", project_id="p", user_id="u", name="Worker",
+                prefix="worker", key_hash=b"hash",
+            )
+        )
+        db.flush()
+        source.worker_key_id = "worker-key"
+        source.desired_state = "paused"
+        source.worker = {**source.worker, "control": {"errors_last_hour": 3}}
         db.add(
             LiveSource(
                 project_id="p",
@@ -73,6 +87,9 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     body = client.get(BASE, headers=ADMIN).json()
     assert body["default_source"] == "worker-1"
     source = next(row for row in body["sources"] if row["key"] == "worker-1")
+    assert source["desired_state"] == "paused"
+    assert source["worker_key_set"] is True
+    assert source["errors_last_hour"] == 3
     assert source["stale"] is False
     assert source["seconds_since_heartbeat"] == 10
     assert source["last_heartbeat_at"] == "2026-11-01T11:59:50Z"
@@ -93,6 +110,30 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
         db.commit()
     assert client.get(BASE, headers=ADMIN).json()["default_source"] is None
     assert _overview(client, source="worker-1")["status"]["key"] == "worker-1"
+
+
+@pytest.mark.parametrize(
+    "control",
+    [
+        "legacy",
+        {"errors_last_hour": "unknown"},
+        {"errors_last_hour": "3"},
+        {"errors_last_hour": True},
+        {"errors_last_hour": -1},
+        {"errors_last_hour": 1.5},
+    ],
+)
+def test_sources_malformed_heartbeat_control(client, session_factory, control):
+    from qym_platform.services.live_ingest import record_heartbeat
+
+    now = datetime(2026, 11, 3, 12)
+    with session_factory() as db:
+        source = db.query(LiveSource).one()
+        record_heartbeat(db, source, now, None, None, {"control": control}, now)
+        db.commit()
+    response = client.get(BASE, headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.json()["sources"][0]["errors_last_hour"] == 0
 
 
 def test_overview_label_mix_and_in_qym_match_rows(client, session_factory):

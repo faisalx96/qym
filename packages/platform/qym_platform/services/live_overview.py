@@ -39,7 +39,17 @@ def source_status(
         if source.last_heartbeat_at is not None
         else None
     )
+    worker = source.worker if isinstance(source.worker, dict) else {}
+    control = worker.get("control") if isinstance(worker.get("control"), dict) else {}
+    errors_last_hour = control.get("errors_last_hour")
     return {
+        "desired_state": source.desired_state,
+        "worker_key_set": source.worker_key_id is not None,
+        "errors_last_hour": (
+            errors_last_hour
+            if type(errors_last_hour) is int and errors_last_hour >= 0
+            else 0
+        ),
         "id": source.id,
         "key": source.key,
         "name": source.name,

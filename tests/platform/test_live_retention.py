@@ -104,7 +104,7 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(
     counts = purge_live(session_factory, retention_days=180, now=NOW)
 
     assert counts == {
-        "turns": 16, "scores": 96, "chart_images": 16, "canaries": 2, "days": 0
+        "turns": 16, "scores": 96, "chart_images": 16, "canaries": 2, "days": 0, "jobs": 0, "events": 0
     }
     with session_factory() as db:
         assert {row.id for row in db.query(LiveTurn)} == kept_turn_ids
@@ -146,6 +146,8 @@ def test_purge_deletes_old_turns_scores_and_canaries_only(
         "chart_images": 0,
         "canaries": 0,
         "days": 0,
+        "jobs": 0,
+        "events": 0,
     }
     with session_factory() as db:
         assert db.query(AuditLog).filter_by(action="live_retention").count() == 1
@@ -247,7 +249,7 @@ def test_sqlite_repush_after_batch_selection_survives_purge(tmp_path):
             chart = db.query(LiveChartImage).one()
             assert chart.turn_pk == kept.id and chart.image == image
         assert counts == {
-            "turns": 1, "scores": 1, "chart_images": 1, "canaries": 0, "days": 0
+            "turns": 1, "scores": 1, "chart_images": 1, "canaries": 0, "days": 0, "jobs": 0, "events": 0
         }
     finally:
         engine.dispose()
@@ -306,3 +308,47 @@ def test_maintenance_loop_calls_purge_live(session_factory, database, monkeypatc
     worker._maybe_run_retention()
 
     assert calls == ["feedback", (session_factory, 180, NOW)]
+
+
+def test_purge_removes_old_jobs_and_events(session_factory, monkeypatch):
+    from qym_platform.db.models import LiveJob, LiveWorkerEvent
+    from qym_platform.services.live_retention import purge_live
+
+    monkeypatch.setenv("QYM_LIVE_JOBS_RETENTION_DAYS", "90")
+    monkeypatch.setenv("QYM_LIVE_EVENTS_RETENTION_DAYS", "30")
+    monkeypatch.setattr("qym_platform.services.live_retention.BATCH_SIZE", 1)
+    with session_factory() as db:
+        source = db.query(LiveSource).one()
+        for job_id, status, finished in (
+            ("old", "done", NOW - timedelta(days=91)),
+            ("boundary", "done", NOW - timedelta(days=90)),
+            ("running", "running", None),
+        ):
+            db.add(
+                LiveJob(
+                    id=job_id,
+                    source_id=source.id,
+                    kind="backfill",
+                    status=status,
+                    finished_at=finished,
+                )
+            )
+        for age in (31, 30, 1):
+            db.add(
+                LiveWorkerEvent(
+                    source_id=source.id,
+                    level="error",
+                    component="database",
+                    code="connect",
+                    message=str(age),
+                    fingerprint=str(age),
+                    first_at=NOW - timedelta(days=age),
+                    last_at=NOW - timedelta(days=age),
+                )
+            )
+        db.commit()
+    counts = purge_live(session_factory, retention_days=180, now=NOW)
+    assert counts["jobs"] == counts["events"] == 1
+    with session_factory() as db:
+        assert {job.id for job in db.query(LiveJob)} == {"boundary", "running"}
+        assert {row.message for row in db.query(LiveWorkerEvent)} == {"30", "1"}

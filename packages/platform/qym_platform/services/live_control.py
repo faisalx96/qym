@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy.orm import Session, object_session
 
@@ -34,7 +34,10 @@ def _user_name(db: Optional[Session], user_id: Optional[str]) -> Optional[str]:
     return user.display_name if user is not None else None
 
 
-def job_dict(job: LiveJob) -> dict:
+def job_dict(
+    job: LiveJob,
+    user_name: Optional[Callable[[Optional[str]], Optional[str]]] = None,
+) -> dict:
     """Serialize a job attached to a session, resolving its requester's name."""
     return {
         "id": job.id,
@@ -43,7 +46,11 @@ def job_dict(job: LiveJob) -> dict:
         "status": job.status,
         "progress": job.progress,
         "error": job.error,
-        "requested_by": _user_name(object_session(job), job.requested_by_user_id),
+        "requested_by": (
+            user_name(job.requested_by_user_id)
+            if user_name is not None
+            else _user_name(object_session(job), job.requested_by_user_id)
+        ),
         "requested_at": to_api_timestamp(job.requested_at),
         "started_at": to_api_timestamp(job.started_at),
         "finished_at": to_api_timestamp(job.finished_at),

@@ -116,6 +116,14 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False),
     )
     op.create_index("ix_live_jobs_source_status", "live_jobs", ["source_id", "status"])
+    op.create_index(
+        "uq_live_jobs_active",
+        "live_jobs",
+        ["source_id", "kind"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('queued','running')"),
+        sqlite_where=sa.text("status IN ('queued','running')"),
+    )
     op.create_table(
         "live_worker_events",
         sa.Column("id", _big_id(), primary_key=True, autoincrement=True),
@@ -151,6 +159,7 @@ def downgrade() -> None:
     op.drop_index("ix_live_worker_events_source_fp", table_name="live_worker_events")
     op.drop_index("ix_live_worker_events_source_last", table_name="live_worker_events")
     op.drop_table("live_worker_events")
+    op.drop_index("uq_live_jobs_active", table_name="live_jobs")
     op.drop_index("ix_live_jobs_source_status", table_name="live_jobs")
     op.drop_table("live_jobs")
     op.drop_table("live_worker_settings")

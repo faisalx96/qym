@@ -99,6 +99,12 @@ def test_matches_models_and_round_trips(engine) -> None:
     with engine.connect() as connection:
         inspector = sa.inspect(connection)
         assert TABLES <= set(inspector.get_table_names())
+        indexes = {index["name"]: index for index in inspector.get_indexes("live_jobs")}
+        active = indexes["uq_live_jobs_active"]
+        assert active["unique"]
+        assert active["column_names"] == ["source_id", "kind"]
+        predicate = str(active["dialect_options"][engine.dialect.name + "_where"])
+        assert "status" in predicate and "queued" in predicate and "running" in predicate
         columns = {
             column["name"]: column for column in inspector.get_columns("live_sources")
         }

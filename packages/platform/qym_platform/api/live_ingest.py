@@ -78,23 +78,6 @@ class JobProgressBody(BaseModel):
             raise ValueError("progress must be finite JSON") from None
 
 
-def _event_details(value: Any) -> Any:
-    """Drop credential keys at every depth while preserving other JSON values."""
-    if isinstance(value, dict):
-        secret_names = ("api_key", "password", "secret", "token")
-        return {
-            key: _event_details(item)
-            for key, item in value.items()
-            if not any(
-                key.lower() == name or key.lower().endswith("_" + name)
-                for name in secret_names
-            )
-        }
-    if isinstance(value, list):
-        return [_event_details(item) for item in value]
-    return value
-
-
 class EventBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -110,7 +93,7 @@ class EventBody(BaseModel):
     def _safe_details(cls, value: dict[str, Any]) -> dict[str, Any]:
         try:
             json.dumps(value, allow_nan=False)
-            return _event_details(value)
+            return live_events.redact_details(value)
         except (TypeError, ValueError, RecursionError):
             raise ValueError("details must be JSON-serialisable") from None
 

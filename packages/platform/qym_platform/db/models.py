@@ -2196,7 +2196,17 @@ class LiveJob(Base):
     cancel_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    __table_args__ = (Index("ix_live_jobs_source_status", "source_id", "status"),)
+    __table_args__ = (
+        Index("ix_live_jobs_source_status", "source_id", "status"),
+        Index(
+            "uq_live_jobs_active",
+            "source_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("status IN ('queued','running')"),
+            sqlite_where=text("status IN ('queued','running')"),
+        ),
+    )
 
 
 class LiveWorkerEvent(Base):

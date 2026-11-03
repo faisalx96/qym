@@ -5,11 +5,35 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from qym_platform.datetime_utils import to_storage_utc
 from qym_platform.db.models import LiveSource, LiveWorkerEvent
+
+
+def redact_details(value: Any) -> Any:
+    """Drop credential keys recursively while preserving other JSON values."""
+    if isinstance(value, dict):
+        secret_names = (
+            "api_key",
+            "apikey",
+            "password",
+            "secret",
+            "token",
+            "credential",
+            "authorization",
+            "cookie",
+        )
+        return {
+            key: redact_details(item)
+            for key, item in value.items()
+            if not any(name in key.lower() for name in secret_names)
+        }
+    if isinstance(value, list):
+        return [redact_details(item) for item in value]
+    return value
 
 
 def fingerprint(component: str, code: str, message: str) -> str:

@@ -200,6 +200,13 @@ def _call(client, method, path, kwargs, headers):
 _FILE = {"files": {"file": ("notes.md", b"text", "text/markdown")}}
 
 REFUSED = [
+    # Live worker controls are read-only on archived projects.
+    ("PUT", "/api/projects/{project_slug}/live/worker/state", "/api/projects/pa/live/worker/state", {"json": {"state": "paused"}}, MEMBER),
+    ("PUT", "/api/projects/{project_slug}/live/worker/key", "/api/projects/pa/live/worker/key", {"json": {"api_key_id": None}}, MEMBER),
+    ("POST", "/api/projects/{project_slug}/live/worker/settings", "/api/projects/pa/live/worker/settings", {"json": {"values": {}}}, MEMBER),
+    ("POST", "/api/projects/{project_slug}/live/worker/settings/{version}/restore", "/api/projects/pa/live/worker/settings/1/restore", None, MEMBER),
+    ("POST", "/api/projects/{project_slug}/live/worker/jobs", "/api/projects/pa/live/worker/jobs", {"json": {"kind": "backfill", "since_day": "2026-11-01", "until_day": "2026-11-01", "limit": 10}}, MEMBER),
+    ("POST", "/api/projects/{project_slug}/live/worker/jobs/{job_id}/cancel", "/api/projects/pa/live/worker/jobs/missing/cancel", None, MEMBER),
     # Runs: review workflow, score and diagnosis edits, delete/restore.
     ("POST", "/v1/runs/{run_id}/submit", "/v1/runs/r1/submit", None, MGR),
     ("POST", "/v1/runs/submit", "/v1/runs/submit", {"json": {"run_ids": ["r1"]}}, MGR),

@@ -88,7 +88,7 @@ def session_factory(database, monkeypatch, values):
                 LiveJob(
                     id=job_id,
                     source_id=source.id,
-                    kind="backfill",
+                    kind="backfill_preview" if job_id == "old" else "backfill",
                     params={"hours": 1},
                     status=status,
                     progress={"evaluated": 2} if job_id == "old" else {},
@@ -167,7 +167,7 @@ def test_control_returns_state_settings_and_jobs_to_worker_key(
     assert body["jobs"] == [
         {
             "id": job_id,
-            "kind": "backfill",
+            "kind": "backfill_preview" if job_id == "old" else "backfill",
             "params": {"hours": 1},
             "status": status,
             "progress": progress,
@@ -548,6 +548,13 @@ def test_events_drop_secret_keys_from_details(client, session_factory):
         "access_token": "x",
         "database_password": "x",
         "client_secret": "x",
+        "langfuse_secret_key": "x",
+        "gateway_api_key": "x",
+        "dataiku_api_key": "x",
+        "ApiKey": "x",
+        "credentials": "x",
+        "session_cookie": "x",
+        "auth": {"Authorization": "x"},
         "safe": 2,
         "tokens_used": 5,
         "nested": {"TOKEN": "x", "ok": True},
@@ -558,7 +565,7 @@ def test_events_drop_secret_keys_from_details(client, session_factory):
     with session_factory() as db:
         assert db.query(LiveWorkerEvent).one().details == {
             "safe": 2,
-            "tokens_used": 5,
+            "auth": {},
             "nested": {"ok": True},
             "list": [{"ok": None}],
         }
