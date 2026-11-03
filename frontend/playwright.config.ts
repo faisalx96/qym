@@ -18,6 +18,7 @@ const AUTH_MODE = process.env.QYM_E2E_AUTH_MODE ?? 'none';
 // Defaults the specs and the platform both read (override from the shell when needed).
 process.env.QYM_ADMIN_BOOTSTRAP_TOKEN ??= 'e2e-bootstrap';
 process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY ??= 'nhrVWj9_tg4JBetyZrLyHLQTy9-5DTMysJYeRSS5flY=';
+process.env.QYM_ALLOW_PRIVATE_LLM_BASE_URLS ??= 'true';
 // QYM_E2E_DB lets two runs in one checkout (different ports) keep separate SQLite files.
 const dbFile = process.env.QYM_E2E_DB ?? path.join(here, '.qym-e2e.db');
 // Worktrees have no .venv of their own: honour QYM_PYTHON, else the repo venv, else the active python.

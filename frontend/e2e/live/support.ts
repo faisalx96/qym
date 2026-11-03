@@ -266,5 +266,161 @@ export async function seedLive(
     });
     expect(secondHeartbeat.ok(), await secondHeartbeat.text()).toBeTruthy();
   }
-  return { projectId: project.id, projectSlug: project.slug, sourceKey, days, labels: diagnoses, metrics };
+  return {
+    projectId: project.id,
+    projectSlug: project.slug,
+    apiKey: token,
+    sourceKey,
+    days,
+    labels: diagnoses,
+    metrics,
+  };
+}
+
+/** Configure a separate worker key and a complete first settings version through the UI API. */
+export async function seedWorkerControl(
+  request: APIRequestContext,
+  projectId: string,
+  apiKey: string,
+  sourceKey: string,
+  opts: {
+    projectSlug: string;
+    values?: Record<string, unknown>;
+    secrets?: Record<string, string>;
+    note?: string;
+  },
+) {
+  const key = await request.post(`/v1/projects/${projectId}/api-keys`, { data: { name: 'e2e worker' } });
+  expect(key.ok(), await key.text()).toBeTruthy();
+  const { id: keyId, token } = (await key.json()) as { id: string; token: string };
+  expect(token).not.toBe(apiKey);
+  const base = `/api/projects/${opts.projectSlug}/live/worker`;
+  const query = new URLSearchParams({ source: sourceKey });
+  const selected = await request.put(`${base}/key?${query}`, { data: { api_key_id: keyId } });
+  expect(selected.ok(), await selected.text()).toBeTruthy();
+
+  let values = opts.values;
+  if (!values) {
+    const connection = await request.post(`/v1/projects/${projectId}/llm-connections`, {
+      data: {
+        name: 'Worker gateway',
+        llm_base_url: 'http://127.0.0.1/v1',
+        llm_model: 'judge-a',
+        llm_api_key: 'e2e-gateway-key',
+      },
+    });
+    expect(connection.ok(), await connection.text()).toBeTruthy();
+    const { id } = (await connection.json()) as { id: string };
+    values = {
+      evaluation: {
+        chart_vision_enabled: true,
+        chart_design_enabled: true,
+        chart_images_upload: true,
+        dataiku_execution: true,
+        parallel_turns: 3,
+        poll_interval_s: 60,
+        lookback_hours: 1,
+      },
+      models: {
+        connection_id: id,
+        judge_a: 'judge-a',
+        judge_b: 'judge-b',
+        vision_judge: 'vision-judge',
+        vision_extractor: 'vision-extractor',
+        vision_design_judge: 'vision-design-judge',
+      },
+      langfuse: { host: 'http://127.0.0.1:3000', public_key: 'pk-e2e' },
+      dataiku: { url: 'http://127.0.0.1:11000', database: 'analytics' },
+      database: {
+        host: 'db.example.test',
+        port: 5432,
+        database: 'analytics',
+        user: 'worker',
+        sslmode: 'require',
+      },
+    };
+  }
+  const saved = await request.post(`${base}/settings?${query}`, {
+    data: {
+      values,
+      secrets: {
+        langfuse_secret_key: 'e2e-langfuse-secret',
+        database_password: 'e2e-database-password',
+        dataiku_api_key: 'e2e-dataiku-key',
+        ...opts.secrets,
+      },
+      note: opts.note ?? 'Initial worker settings',
+    },
+  });
+  expect(saved.status(), await saved.text()).toBe(201);
+  const { version } = (await saved.json()) as { version: number };
+  return { version, keyId };
+}
+
+export async function postHeartbeatControl(
+  request: APIRequestContext,
+  projectId: string,
+  apiKey: string,
+  sourceKey: string,
+  control: Record<string, unknown>,
+) {
+  const at = new Date().toISOString();
+  const response = await request.post(`/v1/projects/${projectId}/live/sources/${sourceKey}/heartbeat`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    data: {
+      at,
+      last_poll_at: at,
+      current_day: at.slice(0, 10),
+      worker: { version: 'e2e-v1', eval_code_version: 'e2e-v1', control },
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+export async function postWorkerEvents(
+  request: APIRequestContext,
+  projectId: string,
+  apiKey: string,
+  sourceKey: string,
+  events: {
+    at: string;
+    level: 'error' | 'warning';
+    component: string;
+    code: string;
+    message: string;
+    details: Record<string, unknown>;
+  }[],
+) {
+  const response = await request.post(`/v1/projects/${projectId}/live/sources/${sourceKey}/events`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    data: { events },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  // The API counts grouped rows touched, rather than individual events.
+  const { accepted } = (await response.json()) as { accepted: number };
+  expect(accepted).toBeGreaterThan(0);
+  expect(accepted).toBeLessThanOrEqual(events.length);
+}
+
+export async function postJobProgress(
+  request: APIRequestContext,
+  projectId: string,
+  apiKey: string,
+  sourceKey: string,
+  jobId: string,
+  body: {
+    status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+    progress: Record<string, unknown>;
+    error?: string | null;
+  },
+) {
+  const response = await request.post(
+    `/v1/projects/${projectId}/live/sources/${sourceKey}/jobs/${jobId}/progress`,
+    {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      data: body,
+    },
+  );
+  expect(response.ok(), await response.text()).toBeTruthy();
+  expect(await response.json()).toMatchObject({ id: jobId, status: body.status, progress: body.progress });
 }

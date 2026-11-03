@@ -1,11 +1,31 @@
 /// <reference lib="dom" />
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { gotoApp, uniqueSlug } from '../helpers';
-import { seedLive } from './support';
+import { postHeartbeatControl, postWorkerEvents, seedLive, seedWorkerControl } from './support';
 
 let seed: Awaited<ReturnType<typeof seedLive>>;
 test.beforeAll(async ({ request }) => {
   seed = await seedLive(request, uniqueSlug('live-widths'), { days: 14 });
+  await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
+  await postHeartbeatControl(request, seed.projectId, seed.apiKey, seed.sourceKey, {
+    state: 'running',
+    settings_version_applied: 1,
+    errors_last_hour: 3,
+  });
+  await postWorkerEvents(
+    request,
+    seed.projectId,
+    seed.apiKey,
+    seed.sourceKey,
+    ['langfuse', 'gateway', 'database'].map((component) => ({
+      at: new Date().toISOString(),
+      level: 'error' as const,
+      component,
+      code: `${component}_unavailable`,
+      message: `The ${component} connection could not be reached by the evaluation worker`,
+      details: {},
+    })),
+  );
 });
 
 const viewports = [
@@ -22,7 +42,15 @@ async function noPageOverflow(page: Page) {
 }
 
 async function autoDirection(text: Locator, direction: 'rtl' | 'ltr') {
-  await text.scrollIntoViewIfNeeded();
+  // A tab switch re-renders the block; scrolling retries when the node was replaced mid-action.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await text.scrollIntoViewIfNeeded();
+      break;
+    } catch (error) {
+      if (attempt >= 2 || !String(error).includes('not attached')) throw error;
+    }
+  }
   await expect(text).toHaveAttribute('dir', 'auto');
   await expect(text).toHaveCSS('direction', direction);
   await expect(text).toHaveCSS('text-align', 'start');
@@ -62,6 +90,21 @@ async function responsiveRow(first: Locator, second: Locator) {
 for (const viewport of viewports) {
   test.describe(`${viewport.width} × ${viewport.height}`, () => {
     test.use({ viewport });
+
+    test('Worker settings and three problems fit without horizontal page scroll', async ({ page }) => {
+      await gotoApp(
+        page,
+        `/projects/${seed.projectSlug}/live/worker?${new URLSearchParams({ source: seed.sourceKey })}`,
+      );
+      await expect(page.locator('[data-live-block="worker-state"]')).toContainText('running v1');
+      await expect(page.locator('[data-worker-event]')).toHaveCount(3);
+      await page.evaluate(() => document.fonts.ready);
+      await expect
+        .poll(() =>
+          page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        )
+        .toBe(true);
+    });
 
     test('Charts screenshots fit the page and full-image dialog', async ({ page }) => {
       const id = `${seed.days.at(-1)!.day}/turn-2`;

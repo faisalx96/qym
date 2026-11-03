@@ -2,11 +2,16 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { gotoApp, uniqueSlug } from '../helpers';
 import { AXE_PATH, describeViolations, type AxeViolation } from '../shell/support';
-import { seedLive } from './support';
+import { postHeartbeatControl, seedLive, seedWorkerControl } from './support';
 
 let seed: Awaited<ReturnType<typeof seedLive>>;
 test.beforeAll(async ({ request }) => {
   seed = await seedLive(request, uniqueSlug('live-a11y'), { days: 14 });
+  await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
+  await postHeartbeatControl(request, seed.projectId, seed.apiKey, seed.sourceKey, {
+    state: 'running',
+    settings_version_applied: 1,
+  });
 });
 
 async function focusRing(target: Locator) {
@@ -57,7 +62,7 @@ for (const viewport of [
   { width: 1024, height: 768 },
   { width: 390, height: 844 },
 ]) {
-  for (const surface of ['overview', 'turns', 'turn', 'charts'] as const) {
+  for (const surface of ['overview', 'turns', 'turn', 'charts', 'worker'] as const) {
     test(`LV-32: axe has zero violations on ${surface} at ${viewport.width}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       const day = seed.days.at(-1)!.day;
@@ -66,7 +71,9 @@ for (const viewport of [
           ? ''
           : surface === 'turns'
             ? '/turns'
-            : `/turns/${encodeURIComponent(`${day}/turn-${surface === 'charts' ? 2 : 1}`)}`;
+            : surface === 'worker'
+              ? '/worker'
+              : `/turns/${encodeURIComponent(`${day}/turn-${surface === 'charts' ? 2 : 1}`)}`;
       await gotoApp(
         page,
         `/projects/${seed.projectSlug}/live${suffix}?${new URLSearchParams({ source: seed.sourceKey, day, ...(surface === 'charts' ? { tab: 'charts' } : {}) })}`,
@@ -78,7 +85,9 @@ for (const viewport of [
             ? '[data-live-turn-row]'
             : surface === 'charts'
               ? '[data-live-chart-image]'
-              : '[data-live-answer]';
+              : surface === 'worker'
+                ? '[data-live-block="worker-settings"] form'
+                : '[data-live-answer]';
       await expect(page.locator(ready).first()).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
       await page.addScriptTag({ path: AXE_PATH });
