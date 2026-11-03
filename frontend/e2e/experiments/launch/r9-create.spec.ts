@@ -77,8 +77,10 @@ test.describe('point 1: option boxes', () => {
       // ticked box with Versions: 88 ± 6 at 1440 (112 ± 8 at 390 in the mock, whose box has two tags); the Task row left the box.
       // This seed's environment also carries the "Default preset v1" tag, which wraps to a second tag row at 390 (+24 px).
       const ticked = await box(envBox(page, 'production'));
-      if (width === 1440) near(ticked.height, 88, 6, 'ticked env-box height');
-      if (width === 390) near(ticked.height, 112 + 24, 8, 'ticked env-box height with the preset tag row');
+      // Round 10 (C-3-7, amends C-1-7): the Versions label on its own line over key-over-value cells; the fake's three keys are
+      // one grid row at 1440 and 1024 (124.6) and two rows at 390 (166, + 24 for the preset tag row)
+      if (width !== 390) near(ticked.height, 124.6, 2, 'ticked env-box height');
+      else near(ticked.height, 166 + 24, 2, 'ticked env-box height with the preset tag row');
     });
   }
 

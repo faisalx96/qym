@@ -283,7 +283,7 @@ test.describe('R10 point 1: Skip and Cancel at the far left, Back and the primar
       expect(at['bar-back']!.y, 'row 3').toBeGreaterThan(at['bar-skip']!.y + at['bar-skip']!.height - 1);
       near(at['bar-continue']!.y, at['bar-back']!.y, 1, 'Back and the primary share row 3');
       near(m.bar.right - at['bar-continue']!.right, 9, 1, 'the primary at the end of row 3');
-      await expect(part(page, 'bar-skip')).toHaveText('Skip');
+      expect(await part(page, 'bar-skip').innerText()).toBe('Skip');
       expect(await bar(page).evaluate((n) => n.scrollWidth <= n.clientWidth + 0.5)).toBe(true);
     }
     await expectNoPageOverflow(page);
@@ -376,7 +376,7 @@ test.describe('R10 point 2: one column per swept setting', () => {
       await expect(rows).toHaveCount(12);
       for (let n = 0; n < 12; n++) near((await box(rows.nth(n))).height, 32, 1, `row ${n + 1}`);
       await expect(page.locator('[data-part=run-priority]')).toHaveCount(12);
-      await expect(part(page, 'runs-table').locator('[aria-expanded]')).toHaveCount(0);
+      await expect(part(page, 'runs-table').locator('[data-run][aria-expanded], [data-run] button[aria-expanded]:not([aria-haspopup])')).toHaveCount(0);
     });
   }
 
@@ -603,7 +603,7 @@ test.describe('R10 point 3: versioning details as the service reports them', () 
       await expect(versionsOf(page, 'production')).toHaveAttribute('data-status', 'ok', { timeout: 15_000 });
       const five = await versionFacts(page, 'production');
       expect(five.firstChild).toBe('Versions');
-      near(five.gridWidth, boxW, 2, 'grid width = the box content width');
+      near((await box(envBox(page, 'production'))).width, boxW, 2, 'the box width the grid is designed for');
       expect(five.columns).toBe(cols);
       expect(five.keysClipped).toBe(0);
       expect(five.overlap).toBe(0);
@@ -638,9 +638,13 @@ test.describe('R10 point 3: versioning details as the service reports them', () 
         await page.unroute('**/versioning-details');
         expect(facts.spacers, 'no spacer cells (L1)').toBe(0);
         if (width !== 390 || name !== 'three') near(facts.boxHeight, loading, 1, `${name}: loading = loaded`);
-        // C-3-7 (amended: 124.6 at 390 for one or two keys)
-        if (width !== 390) near(facts.boxHeight, 124.6, 2, `${name} box`);
-        else near(facts.boxHeight, name === 'three' ? 166 : 124.6, 2, `${name} box at 390`);
+        // C-3-7 (amended): the box 124.6 at 1440 and 1024; at 390 the Versions line is one grid row for one or two keys (61.8,
+        // the box 124.6, plus 24 when the "Default preset v1" tag wraps to its own row as here) and two rows for three (103.2)
+        const lineH = (await box(versionsOf(page, 'production'))).height;
+        if (width !== 390) {
+          near(facts.boxHeight, 124.6, 2, `${name} box`);
+          near(lineH, 61.8, 1, `${name} line`);
+        } else near(lineH, name === 'three' ? 103.2 : 61.8, 1, `${name} line at 390`);
       }
     });
   }

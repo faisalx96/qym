@@ -273,13 +273,13 @@ test.describe('polish', () => {
     expect(lowest, tops.slice(0, 60).join(',')).toBeGreaterThan(0);
   });
 
-  test('390px: the launch bar is two rows with all five buttons', async ({ page }) => {
+  test('390px: the launch bar is three rows with all four buttons (round 10, C-1-9)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
     const bar = page.getByRole('region', { name: 'Launch', exact: true });
     const bb = await bar.boundingBox();
     expect(bb!.height).toBeLessThanOrEqual(92);
-    await expect(bar.locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(5);
+    await expect(bar.locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(4);
     await expect(page.getByRole('navigation', { name: 'Step navigation' })).toHaveCount(0);
   });
 
