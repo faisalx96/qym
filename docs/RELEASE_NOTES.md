@@ -13,8 +13,13 @@ Projects gain a **Live** tab for real user turns reported by the evaluation work
 
 ### Live evaluation
 
+- **Worker page.** Control state, choose the worker API key, save settings versions or restore an earlier version, manage encrypted tokens and the database connection, preview or run jobs, and investigate grouped problems.
+- **Ingest contract v1.2.** Adds the control document with conditional polling, job progress, worker events and the heartbeat `control` block; existing v1.1 producers keep working.
+- **Migration `0100`.** Adds worker settings versions, jobs, events and source control fields, including the selected worker key.
+- **Production configuration.** Set `QYM_LLM_CONFIG_ENCRYPTION_KEY` (saving a token without it returns 409) and `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true` for the private cluster gateway.
+
 - **Three pages under Live.** Overview combines the worker heartbeat, daily counters, diagnosis mix, metric means, service health, canaries, a 14/30/90-day trend and the Days table. Turns supports filters, search, sorting and CSV export. Turn detail brings together diagnosis, answers and SQL, judges, charts, services and tools, conversation and evaluator evidence. Pages adapt to narrow screens, keep Arabic text within LTR controls and support keyboard navigation.
-- **Ingest guide v1.0.** The [Live evaluation ingest guide](live-evaluation-ingest-v1.0.md) documents source registration, heartbeats, metric definitions, daily counters, turn batches, canaries and reconciliation, including project-key authentication and per-turn rejection results.
+- **Ingest guide v1.2.** The [Live evaluation ingest guide](live-evaluation-ingest-v1.0.md) documents source registration, heartbeats, metric definitions, daily counters, turn batches, canaries and reconciliation, including project-key authentication and per-turn rejection results.
 - **Chart screenshots.** The turn page shows uploaded chart screenshots. Ingest contract v1.1 adds raw PNG uploads linked by chart ref; migration `0093` stores the images in `live_chart_images`, with the turn's retention.
 - **Retention.** Maintenance deletes expired turns with their scores and canary results in batches (180 days by default), retains daily counter rows for 730 days and records an audit entry when data is removed. Sources and metric definitions remain.
 - **Development seed.** `python frontend/scripts/seed_live.py --base http://127.0.0.1:8800 --slug demo --days 14` populates a development project through the ingest API with synthetic English and Arabic turns, diagnoses and evidence. The default is 14 days and 30 turns per day; the final heartbeat ages normally, so a seeded source becomes stale after the configured interval.

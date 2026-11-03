@@ -1,4 +1,6 @@
-# Live Evaluation Ingest API — Integration Guide v1.1
+# Live Evaluation Ingest API — Integration Guide v1.2
+
+v1.2 — control document, job progress, worker events, heartbeat `control` block.
 
 v1.1 — chart images. Additive to v1.0; existing producers keep working.
 
@@ -35,7 +37,7 @@ ingestion service also serves them under `QYM_INGESTION_PREFIX` (default
 routes depend on `QYM_INGESTION_LEGACY_PATHS`. Set `BASE_URL` to the service origin
 plus its deployed prefix, without a trailing slash; append the router path once.
 
-During maintenance, **all eight routes**, including `GET turns/ids`, return
+During maintenance, **all eleven routes**, including `GET turns/ids`, return
 `503` with `{"detail":"Platform is in maintenance mode; retry later"}` and
 `Retry-After: 60`. Retain pending data and retry after that delay.
 
@@ -381,6 +383,142 @@ apply. Re-pushing a turn keeps images whose refs remain in `summary.charts` and
 drops images whose refs disappeared. Images follow the turn's retention
 (180 days by default) and are removed when the project is deleted.
 
+
+### 3.9 `GET /sources/{key}/control` — Control document
+
+```bash
+curl -sS "$SOURCE/control" -H "Authorization: Bearer $API_KEY" \
+  -H 'If-None-Match: W/"previous-etag"'
+```
+
+No body. Poll every **10 seconds**, passing the last response's weak `ETag` in
+`If-None-Match`. A changed document returns `200`, `ETag` and
+`Cache-Control: no-store`; an unchanged document returns `304` with `ETag` and
+no body. Keep the last document in worker memory; do not put secrets in logs or
+shared caches. Continue control polling while paused so resume can be observed.
+
+| Response field | Type | Meaning |
+|---|---|---|
+| `state` | string | Desired state: `running` or `paused` |
+| `state_changed_at` | datetime or null | Last state change |
+| `state_changed_by` | string or null | Display name of the user who changed state |
+| `settings` | object or null | Latest version; null until the first version is saved |
+| `settings.version` | integer | Monotonically increasing version |
+| `settings.created_at`, `settings.created_by` | datetime, string or null | Version creation time and creator display name |
+| `settings.values` | object | Saved non-secret settings, including models and database connection |
+| `settings.secrets_digest` | string | SHA-256 digest of resolved secrets; changes when credentials change |
+| `settings.errors` | array of strings | Empty when resolution succeeds; otherwise `connection missing` or `connection has no api key` |
+| `settings.secrets` | object | Resolved credentials, only for the selected worker key |
+| `settings.secrets_withheld` | boolean | `true` instead of `secrets` for other project keys, or when no worker key is selected |
+| `jobs` | array | Queued and running jobs, ordered by request time then ID |
+| `jobs[].id`, `jobs[].kind` | string | Job ID and `backfill_preview` or `backfill` |
+| `jobs[].params` | object | `since_day`, `until_day`, UTC `since`/`until`, and `limit` |
+| `jobs[].status`, `jobs[].progress` | string, object | Current status and counters |
+| `jobs[].cancel_requested` | boolean | Worker should stop this job between turns |
+
+Only the source's chosen, non-revoked worker API key receives `secrets`.
+Other valid project keys can read the document with `secrets_withheld: true`;
+this is a successful `200`, not a `403`. Authentication still rejects invalid,
+revoked and out-of-project keys. Secret resolution errors in `errors` do not
+change the HTTP status; do not apply an incomplete configuration. A stored
+secret that cannot be decrypted returns `500` (`secret_cannot_be_decrypted`).
+
+### 3.10 `POST /sources/{key}/jobs/{job_id}/progress` — Job progress
+
+```json
+{"status":"running","progress":{"found":20,"skipped_existing":5,"evaluated":3,"failed":0}}
+```
+
+| Field | Type | Required | Limits / default |
+|---|---|---|---|
+| `status` | string | yes | `running`, `done`, `failed`, or `cancelled` |
+| `progress` | object | no | Default `{}`; finite JSON; counters described below |
+| `error` | string or null | no | Default null; stored for `failed`, truncated to 2,000 characters |
+
+Response (`200`): `{"id":"job-uuid","status":"running","progress":{"found":20,"skipped_existing":5,"evaluated":3,"failed":0}}`.
+
+A queued or running job accepts `running` or a terminal status (`done`, `failed`,
+`cancelled`). The first `running` sets its start time; a terminal status sets
+its finish time. Terminal jobs reject all later updates, including retries.
+A pending cancellation rejects `running`; acknowledge with `cancelled` and the
+latest counters. Cancellation of a queued job finishes it immediately.
+
+The counters `found`, `skipped_existing`, `evaluated` and `failed` must be
+nonnegative integers (not booleans) and must never decrease. An omitted counter
+is treated as zero, so send the complete latest counters on every update,
+including completion and cancellation.
+
+| HTTP / scope | `error.code` | Exact detail or message | Meaning / action |
+|---|---|---|---|
+| `404` | `job_not_found` | `job not found` | Unknown job, or job belongs to another source |
+| `409` | `job_already_finished` | `job already finished` | Job is already done, failed or cancelled |
+| `409` | `job_cancelled` | `job cancelled` | Cancellation is pending; stop sending `running` |
+| `422` | `counters_must_not_decrease` | `counters must not decrease` | Send all counters as nonnegative, nondecreasing integers |
+
+### 3.11 `POST /sources/{key}/events` — Worker events
+
+```json
+{"events":[{"at":"2026-11-01T00:02:00Z","level":"error","component":"database","code":"connection_failed","message":"Database connection failed","details":{"host":"db.example.test"}}]}
+```
+
+| Field | Type | Required | Limits / default |
+|---|---|---|---|
+| `events` | array | yes | Empty allowed; at most `QYM_LIVE_EVENTS_BATCH_MAX` (default 100) |
+| `events[].at` | datetime | yes | Original event timestamp |
+| `events[].level` | string | yes | `error` or `warning` |
+| `events[].component` | string | yes | 1–30 characters, `^[a-z_]+$` |
+| `events[].code` | string | yes | 1–60 characters, `^[a-z0-9_]+$` |
+| `events[].message` | string | yes | 1–2,000 characters |
+| `events[].details` | object | no | Default `{}`; finite JSON; credential keys dropped |
+
+The body cap is **256 KiB (262144 bytes)**, independent of the general ingest
+JSON cap. Response (`200`): `{"accepted":1}`. `accepted` counts distinct event
+groups touched, not individual input events. Events with the same source and
+fingerprint merge within a rolling **15-minute** window based on event times:
+`count` increases, first/last times expand, and details become the latest supplied
+object. Retries increase the count. The fingerprint uses component, code and a
+message normalized for case, whitespace, long hex identifiers and numbers.
+
+Detail keys containing `api_key`, `apikey`, `password`, `secret`, `token`,
+`credential`, `authorization` or `cookie` (case-insensitive) are dropped
+recursively, including inside arrays. This does not scrub message text or
+arbitrary string values: workers must not send credentials there.
+
+| HTTP / scope | `error.code` | Exact detail or message | Meaning / action |
+|---|---|---|---|
+| `422` | `too_many_events` | `too many events` | Split the batch to the configured event count |
+| `413` | `payload_too_large` | `The event batch exceeds ...; send smaller batches.` | Split the body below 256 KiB |
+| `403`, shared | `forbidden` | `API key belongs to another project` | Use the key's project ID |
+| `403`, shared | `user_disabled` | `User disabled` | Key owner is inactive or missing |
+| `403`, shared | `api_key_project_not_found` | `API key project not found` | Key's project is missing |
+| `403`, shared | `forbidden` | `API key owner is no longer a member of this project` | Restore owner access |
+
+All three routes also use the shared authentication, archive, source-not-found,
+validation and maintenance errors in section 6. Progress bodies use the general
+JSON cap; exceeding it also returns `413` / `payload_too_large`.
+
+### 3.12 Heartbeat `control` block
+
+The heartbeat's free-form `worker` dictionary may include `control` below.
+This is reported worker state, distinct from the control document's desired
+state. Send the whole block each time: heartbeat merging is shallow.
+
+| Field inside `worker.control` | Shape | Worker page use |
+|---|---|---|
+| `state`, `reason` | strings | Actual worker state and why it is paused, blocked or running |
+| `settings_version_applied`, `applied_at` | integer, datetime | Running version and when it was applied |
+| `verification` | `{version, ok, checked_at, checks}` | Candidate version verification before apply |
+| `verification.checks` | `{name: {ok, latency_ms, error}}` | Individual dependency checks, timings and failures |
+| `running` | `{values}` | Effective settings currently in use |
+| `models` | `{listed_at, ids}` | Available model IDs and when they were listed |
+| `errors_last_hour` | nonnegative integer | Recent problem count, also shown on the overview badge |
+| `last_error` | `{at, component, code, message}` | Latest reported problem |
+| `job` | `{id, kind, progress}` | Active job and its counters |
+
+The worker verifies a candidate version before applying it and reports the
+verification and effective running version here. A saved version is not proof
+that the worker has applied it; the Worker page distinguishes the two.
+
 ---
 
 ## 4. Turn, summary, and Score schema
@@ -584,7 +722,8 @@ null numeric score.
 
 ## 6. Errors
 
-Request errors normally use `{"detail":"message"}`. Validation errors use
+Request errors include `error: {code, message, details, request_id}` and retain
+`{"detail":"message"}` as a compatibility alias. Validation errors use
 `{"detail":[{"loc":[...],"msg":"...","type":"..."}]}` with possible additional
 fields. Successful turn-batch responses can still contain individual errors.
 
@@ -712,7 +851,7 @@ in the examples. On the JSON routes it allows invalid slash-containing source
 keys to reach validation and receive `422`; the image route accepts turn IDs
 containing slashes.
 Prepend the deployed ingestion alias prefix when required. The `day` query
-parameter is mandatory on the final route.
+parameter is mandatory on the turns/ids route.
 
 | Method | Path | Purpose | Success code |
 |---|---|---|---|
@@ -724,5 +863,8 @@ parameter is mandatory on the final route.
 | `PUT` | `/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image` | Create/replace chart screenshot (raw PNG) | `204` |
 | `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/canaries` | Insert checks once per name and time | `200` |
 | `GET` | `/v1/projects/{project_id}/live/sources/{key:path}/turns/ids` | Reconcile IDs (`?day=YYYY-MM-DD`) | `200` |
+| `GET` | `/v1/projects/{project_id}/live/sources/{key:path}/control` | Read worker control document | `200` / `304` |
+| `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/jobs/{job_id}/progress` | Report job progress | `200` |
+| `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/events` | Report worker events | `200` |
 
-Changelog: v1.1 (2026-11): chart images; v1.0 (2026-11): first version.
+Changelog: v1.2 (2026-11): control document, job progress, worker events, heartbeat `control` block; v1.1 (2026-11): chart images; v1.0 (2026-11): first version.

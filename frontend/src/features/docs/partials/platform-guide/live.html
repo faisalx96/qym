@@ -5,7 +5,7 @@
 <h2>What is a live source?</h2>
 <p>A live source is a named evaluation worker feed within a project, with a stable key, an environment and its own metric definitions. The evaluation worker observes the product and pushes evaluated turns to qym. Pick a source in the header when a project has more than one. A project without a source shows a link to this guide until the evaluation worker registers one.</p>
 
-<h2>The three pages</h2>
+<h2>The Live pages</h2>
 <ul>
   <li><strong>Overview</strong> shows the selected day's worker status, turn counts, diagnosis mix, metric means, service health and the latest canary checks. Choose a day with the arrows or date picker. The trend shows one column per day over 14, 30 or 90 days; choosing a column changes the selected day. A Days row opens that day's turns.</li>
   <li><strong>Turns</strong> lists questions, diagnoses, scores, latency and service faults. Filter by day or date range, diagnosis, status, outcome, mode, service, metric bounds, user or conversation; search questions and answers, sort a column or export the filtered rows as CSV. The URL preserves the filters. Wide tables scroll inside their frame.</li>
@@ -13,6 +13,15 @@
 </ul>
 <p>Chart screenshots appear on the Charts tab when the evaluation worker uploaded them.</p>
 <p>Use Tab to reach day controls, stat links, diagnosis segments, trend columns and Days rows; Enter activates them. Left and right Arrow keys select turn-detail tabs. Arabic questions and answers read right to left within the left-to-right controls.</p>
+
+<h2>Worker page</h2>
+<p>Open <strong>Live → Worker</strong> for the selected source. State pauses or resumes work; Worker key chooses which project API key may receive secrets; Settings saves versions of models, Langfuse, Dataiku and database connections, with encrypted tokens and restore history. Verification shows dependency checks before the worker applies a version, while Running shows what is actually in use. Jobs tracks requested work and Problems collects errors. Project members with write access and administrators may change these controls; viewers may read them. Saving settings does not mean they are running: wait for successful verification and the applied version.</p>
+
+<h2>Evaluate a date range</h2>
+<p>Preview the date range on the Worker page, check the counts, then run it to evaluate missing and failed turns only. The default limits are 31 inclusive days and 2,000 turns, with one queued or running job per kind for the source. Follow progress or cancel between turns from Jobs.</p>
+
+<h2>Problems</h2>
+<p>The Worker page groups recurring errors with counts and their first and latest times. Use <strong>Copy report</strong> to share the problem details for investigation. The overview's problems badge shows recent worker errors and leads to this block.</p>
 
 <h2>Read the worker status and gaps</h2>
 <p><strong>Running</strong> means qym received a recent heartbeat. <strong>Stale</strong> means no heartbeat has arrived, or the last receipt is older than the configured threshold (300 seconds by default). The status line also shows the latest turn time and the judge models and evaluation versions when supplied. A recent heartbeat says the evaluation worker is reporting; it does not guarantee successful product responses or evaluation scores.</p>
@@ -24,5 +33,5 @@
 
 <h2>Where the data comes from</h2>
 <p>The evaluation worker registers the source and metric definitions, sends a heartbeat after each poll, and uploads daily counters, turns with scores and evidence, and canary results through the project API-key-authenticated ingest API. qym stores and presents these reports; it does not run the evaluation worker from this tab. Republishing the same source and turn ID replaces that turn's evidence and scores. The explicit reporting day supplied by the evaluation worker determines the day grouping; times in the UI are UTC.</p>
-<p>For authentication, payloads, limits and reconciliation, see the Live evaluation ingest guide v1.0 (<code>docs/live-evaluation-ingest-v1.0.md</code> in the qym repository, shipped with the release; no network link, so it reads the same in an air-gapped deployment).</p>
+<p>For authentication, payloads, limits and reconciliation, see the Live evaluation ingest guide v1.2 (<code>docs/live-evaluation-ingest-v1.0.md</code> in the qym repository, shipped with the release; no network link, so it reads the same in an air-gapped deployment).</p>
 <p>By default, retention removes turns, their scores and canary results after 180 days; daily counter rows remain for 730 days. Older counters can therefore outlive the detailed evidence and score aggregates computed from retained turns.</p>

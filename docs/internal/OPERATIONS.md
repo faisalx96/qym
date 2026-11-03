@@ -867,13 +867,69 @@ daily counters and heartbeats into qym. qym stores the results and shows them in
 the project's **Live** tab. The two images travel together to the air-gapped
 registry. Both contain their runtime dependencies; nothing is downloaded at
 runtime. qym does not pull evaluations from the worker. The worker's data
-sources and judge connections are configured in its own env file.
+sources and judge connections are managed on the Worker page in qym.
 
 Create a **project API key** in **Project settings → API keys**. Name it after
 the environment, for example `preprod`. The key must belong to `QYM_PROJECT_ID`;
 its owner must remain active and retain project access. The live ingest API
 requires this key even when UI authentication is disabled. The request contract
-is in [Live Evaluation Ingest v1.1](../live-evaluation-ingest-v1.0.md).
+is in [Live Evaluation Ingest v1.2](../live-evaluation-ingest-v1.0.md).
+
+### Worker control from qym
+
+qym stores settings versions and restore history, encrypted secrets, the database
+connection, desired state, jobs and worker events. The worker needs only bootstrap
+environment variables: `QYM_LIVE_ENABLED`, `QYM_BASE_URL`, `QYM_API_KEY`,
+`QYM_PROJECT_ID`, `QYM_LIVE_SOURCE_KEY`, `QYM_LIVE_SOURCE_NAME`,
+`QYM_LIVE_ENVIRONMENT`, `QYM_LIVE_CONTROL_POLL_S` and `CA_BUNDLE`.
+Every other worker setting is managed on **Live → Worker**.
+
+Production qym must set `QYM_LLM_CONFIG_ENCRYPTION_KEY` (without it, saving a
+token returns `409`) and `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true` because the
+cluster gateway has a private address. Keep the encryption key stable and backed
+up so stored credentials remain decryptable.
+
+### Rollout order
+
+1. Deploy qym with migration `0100` and the two production keys above.
+2. Create the worker's project API key and put it in the bootstrap Secret.
+3. Run the worker image's `live-preflight` as a Kubernetes Job in the target
+   namespace with the bootstrap Secret. Its first lines register the live
+   source in qym (`PUT /v1/projects/{project_id}/live/sources/{key}`, the
+   same call the worker makes at start) and report `qym.key`; with no
+   settings version yet it stops at `settings: FAIL no settings version`.
+   The source now exists, so the Worker page can be used.
+4. On **Live → Worker**, choose that key as the worker key and save version 1
+   with models, Langfuse, Dataiku and database settings for the source.
+5. Run the preflight Job again and require every line to report **OK**
+   (database DNS, TCP, TLS, login, recovery, grants, migration; Langfuse;
+   gateway per model; Dataiku) before applying the worker Deployment.
+6. Confirm the Worker page shows **running v1** after the Deployment starts.
+
+### Pause, jobs and problems
+
+Pause stops evaluation polling and jobs between turns; the pod keeps running
+and polling qym for control changes. Resume catches up on missed turns. Preview a
+date range before starting its evaluation job; only missing and failed turns
+are evaluated. Jobs default to at most **31 inclusive days**
+(`QYM_LIVE_JOB_MAX_DAYS`) and **2,000 turns** (`QYM_LIVE_JOB_MAX_LIMIT`), with one
+queued or running job per source and kind (`backfill_preview` or `backfill`).
+Jobs are retained for **90 days** (`QYM_LIVE_JOBS_RETENTION_DAYS`) and worker
+events for **30 days** (`QYM_LIVE_EVENTS_RETENTION_DAYS`). Every worker error is
+reported in the Worker page's **Problems** block, grouped with counts and a
+copyable report for investigation.
+
+### Database readiness (DBA checklist)
+
+The worker role needs `CONNECT` on the database, `USAGE` and `CREATE` on schema
+`audit` (or have `audit` pre-created and owned by the role), and `SELECT` on the
+enrichment tables. It needs nothing on `public`. The pooler must accept TLS
+(`sslmode=require` by default) and must not require startup options.
+
+Preflight reports DNS, TCP, TLS, login, recovery, grants and migration state
+separately. A DNS failure from a workspace means **run it where the worker
+runs**: repeat the preflight Job in the target namespace before changing the
+database configuration.
 
 **Chart screenshots.** qym stores PNG bytes and image metadata in PostgreSQL's
 `live_chart_images` table (migration `0093`). The platform settings
@@ -884,17 +940,22 @@ distinct image refs per turn. Budget roughly 150–300 KB per chart: about
 180-day retention. Images follow turn retention and project deletion; backups
 remain a single `pg_dump`.
 
-Platform env settings for screenshots:
+Platform env settings for screenshots and worker control:
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `QYM_LIVE_CHART_IMAGE_MAX_BYTES` | `2097152` | Maximum bytes per PNG (2 MiB; minimum 65536) |
 | `QYM_LIVE_CHART_IMAGES_PER_TURN` | `10` | Maximum distinct chart image refs per turn |
+| `QYM_LIVE_JOBS_RETENTION_DAYS` | `90` | Job history retention in days |
+| `QYM_LIVE_EVENTS_RETENTION_DAYS` | `30` | Worker event retention in days |
+| `QYM_LIVE_JOB_MAX_DAYS` | `31` | Maximum inclusive days per job |
+| `QYM_LIVE_JOB_MAX_LIMIT` | `2000` | Maximum turns per job |
+| `QYM_LIVE_EVENTS_BATCH_MAX` | `100` | Maximum events per ingest batch |
 
 ### Compose
 
 Copy `docker/live-worker.env.example` to `docker/live-worker.env`. Fill in the
-key, project ID, source name and the worker image's own settings. Keep the
+key, project ID, source name and bootstrap settings. Keep the
 filled file out of version control. Reuse the source key on restart so the
 worker continues the same source's history.
 
@@ -909,17 +970,15 @@ Worker env file:
 | `QYM_LIVE_SOURCE_KEY` | Stable key, for example `worker-preprod`; use a separate key per worker/environment |
 | `QYM_LIVE_SOURCE_NAME` | Display name in the Live tab |
 | `QYM_LIVE_ENVIRONMENT` | Environment label, for example `preprod` |
-| `QYM_LIVE_TIMEOUT_SECONDS` | Optional; HTTP timeout per push in seconds (default 10) |
-| `QYM_LIVE_DETAIL` | Optional; `full` (default) pushes the complete per-turn evidence as the turn detail, `summary` pushes the summary only |
-| `QYM_LIVE_CHART_IMAGES` | Optional; `true` (default) uploads chart screenshots |
-| `QYM_LIVE_CHART_IMAGE_MAX_BYTES` | Optional; worker-side cap in bytes (default 2097152); must not exceed the platform's cap |
+| `QYM_LIVE_CONTROL_POLL_S` | Control polling interval in seconds; use `10` |
+| `CA_BUNDLE` | Path to the CA bundle available inside the worker container |
 
 Compose variables (set in the shell or Compose `.env`, not the worker env file):
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `QYM_LIVE_WORKER_IMAGE` | `qym-live-worker:unset` | Evaluation engine image from the deployment bundle; the placeholder keeps the other services starting when the profile is off, so set it before using the profile |
-| `QYM_LIVE_WORKER_ENV_FILE` | `./live-worker.env` | Path relative to the Compose file; supplies the worker's credentials, data sources and judges |
+| `QYM_LIVE_WORKER_ENV_FILE` | `./live-worker.env` | Path relative to the Compose file; supplies the worker's bootstrap credentials and source identity |
 | `QYM_LIVE_WORKER_QYM_URL` | `http://api:8000` | Overrides the worker's `QYM_BASE_URL`; use for an external platform or a path prefix |
 
 The `live-worker` service starts only with the `live` profile and exposes no

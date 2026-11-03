@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from qym_platform.api.live_ingest import live_ingest_router
+from qym_platform.api.live_ingest import EventsBody, JobProgressBody, live_ingest_router
 from qym_platform.db.models import LiveTurn
 from sqlalchemy.orm import sessionmaker
 from test_live_ingest_sources import TOKEN, _auth_headers, _seed_api_key
@@ -29,7 +29,8 @@ def session_factory(database, monkeypatch):
 
 
 def test_guide_lists_every_route():
-    reference = GUIDE.read_text(encoding="utf-8").split("## 8. Quick reference", 1)[1]
+    guide = GUIDE.read_text(encoding="utf-8")
+    reference = guide.split("## 8. Quick reference", 1)[1]
     documented = set(
         re.findall(r"^\| `(\w+)` \| `([^`]+)` \|", reference, flags=re.MULTILINE)
     )
@@ -39,6 +40,27 @@ def test_guide_lists_every_route():
         for method in route.methods
     }
     assert expected <= documented, f"Missing routes: {expected - documented}"
+
+    app = FastAPI()
+    app.include_router(live_ingest_router)
+    paths = app.openapi()["paths"]
+    for number, model in (("3.9", None), ("3.10", JobProgressBody), ("3.11", EventsBody)):
+        section = guide.split(f"### {number} ", 1)[1].split("\n### ", 1)[0]
+        method, path = re.match(r"`(\w+) ([^`]+)`", section).groups()
+        operation = paths[live_ingest_router.prefix + path][method.lower()]
+        assert "200" in operation["responses"]
+        if model is None:
+            assert "requestBody" not in operation
+            assert 'If-None-Match: W/"previous-etag"' in section
+            assert "`304`" in section
+            continue
+        schema = operation["requestBody"]["content"]["application/json"]["schema"]
+        assert schema == {"$ref": f"#/components/schemas/{model.__name__}"}
+        example = re.search(r"```json\n(.*?)\n```", section, flags=re.DOTALL)
+        assert example is not None
+        model.model_validate_json(example.group(1))
+        for field in model.model_fields:
+            assert f"| `{field}` |" in section
 
 
 def test_guide_chart_image_request_matches_openapi():
