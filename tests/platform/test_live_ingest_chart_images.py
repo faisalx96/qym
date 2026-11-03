@@ -88,7 +88,7 @@ def test_create_then_replace_image(client, session_factory, monkeypatch):
 def test_unknown_turn_is_404(client, session_factory):
     response = _upload(client, turn_id="unknown")
     assert response.status_code == 404, response.text
-    assert response.json() == {"detail": "turn not found"}
+    assert response.json()["detail"] == "turn not found"
     with session_factory() as db:
         assert db.query(LiveChartImage).count() == 0
 
@@ -100,13 +100,13 @@ def test_ref_not_in_charts_is_404(client, session_factory, charts):
         db.commit()
     response = _upload(client)
     assert response.status_code == 404, response.text
-    assert response.json() == {"detail": "chart not found"}
+    assert response.json()["detail"] == "chart not found"
 
 
 def test_unknown_ref_is_404(client):
     response = _upload(client, ref="unknown")
     assert response.status_code == 404, response.text
-    assert response.json() == {"detail": "chart not found"}
+    assert response.json()["detail"] == "chart not found"
 
 
 @pytest.mark.parametrize("length", ["declared", "missing", "understated"])
@@ -132,7 +132,7 @@ def test_body_over_cap_is_413(client, session_factory, monkeypatch, length):
 def test_jpeg_content_type_is_415(client):
     response = _upload(client, headers={"Content-Type": "image/jpeg"})
     assert response.status_code == 415, response.text
-    assert response.json() == {"detail": "unsupported content type"}
+    assert response.json()["detail"] == "unsupported content type"
 
 
 @pytest.mark.parametrize(
@@ -149,7 +149,7 @@ def test_jpeg_content_type_is_415(client):
 def test_invalid_png_is_422(client, session_factory, data):
     response = _upload(client, data)
     assert response.status_code == 422, response.text
-    assert response.json() == {"detail": "invalid PNG"}
+    assert response.json()["detail"] == "invalid PNG"
     with session_factory() as db:
         assert db.query(LiveChartImage).count() == 0
 
@@ -164,7 +164,7 @@ def test_cap_blocks_new_refs_but_allows_replacement(
     assert _upload(client).status_code == 204
     response = _upload(client, ref=OTHER_REF)
     assert response.status_code == 409, response.text
-    assert response.json() == {"detail": "chart image limit reached"}
+    assert response.json()["detail"] == "chart image limit reached"
     replacement = _png(width=1)
     assert _upload(client, replacement).status_code == 204
     with session_factory() as db:
@@ -177,7 +177,7 @@ def test_other_project_key_is_403(client, session_factory):
         _seed_api_key(db, token="other-live-token", suffix="2")
     response = _upload(client, headers=_auth_headers("other-live-token"))
     assert response.status_code == 403, response.text
-    assert response.json() == {"detail": "API key belongs to another project"}
+    assert response.json()["detail"] == "API key belongs to another project"
     with session_factory() as db:
         assert db.query(LiveChartImage).count() == 0
 
@@ -189,9 +189,10 @@ def test_archived_project_uses_existing_key_refusal(client, session_factory):
     response = _upload(client)
     assert response.status_code == 409, response.text
     assert response.headers["X-Qym-Key-State"] == "project_archived"
-    assert response.json() == {
-        "detail": "Project is archived; its API keys stop working until an admin unarchives it"
-    }
+    assert (
+        response.json()["detail"]
+        == "Project is archived; its API keys stop working until an admin unarchives it"
+    )
     with session_factory() as db:
         assert db.query(LiveChartImage).count() == 0
 

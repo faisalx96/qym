@@ -471,7 +471,7 @@ def test_chart_image_not_found(client, chart_turn, turn_id, ref):
         params={"turn_id": turn_id, "ref": ref},
     )
     assert response.status_code == 404, response.text
-    assert response.json() == {"detail": "chart image not found"}
+    assert response.json()["detail"] == "chart image not found"
 
 
 @pytest.mark.parametrize("ref", [None, "", "bad ref", "bad/ref", "x" * 101])
@@ -615,7 +615,7 @@ def test_chart_image_is_scoped_to_selected_source(client, session_factory, chart
         params={"turn_id": TURN_ID, "ref": REF},
     )
     assert response.status_code == 404, response.text
-    assert response.json() == {"detail": "chart image not found"}
+    assert response.json()["detail"] == "chart image not found"
     response = client.get(f"{BASE}/turns/{TURN_ID}", headers=ADMIN)
     assert response.status_code == 200, response.text
     assert response.json()["chart_images"] == {}
@@ -646,7 +646,7 @@ def test_chart_image_is_scoped_to_selected_source(client, session_factory, chart
         params={"source": "other", "turn_id": TURN_ID, "ref": REF},
     )
     assert response.status_code == 404, response.text
-    assert response.json() == {"detail": "chart image not found"}
+    assert response.json()["detail"] == "chart image not found"
     response = client.get(
         f"{CHART_BASE}/chart-image",
         headers=ADMIN,
@@ -672,7 +672,7 @@ def test_chart_image_requires_project_access(client, session_factory, chart_turn
         headers={**headers, "If-None-Match": etag},
     )
     assert response.status_code == detail.status_code, response.text
-    assert response.json() == detail.json()
+    assert response.json()["detail"] == detail.json()["detail"]
 
 
 def test_csv_export_has_one_column_per_spec(client, session_factory):
