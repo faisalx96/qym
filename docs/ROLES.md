@@ -95,6 +95,8 @@ Roles:
 | POST | `/ingestion/v1/runs:upload` | api_key |
 | PUT | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}` | api_key |
 | POST | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}/heartbeat` | api_key |
+| POST | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}/jobs/{job_id}/progress` | api_key |
+| POST | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}/events` | api_key |
 | PUT | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}/metric-specs` | api_key |
 | PUT | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}/days/{day}` | api_key |
 | POST | `/ingestion/v1/projects/{project_id}/live/sources/{key:path}/turns` | api_key |
@@ -180,6 +182,8 @@ Roles:
 | POST | `/v1/runs` | api_key |
 | PUT | `/v1/projects/{project_id}/live/sources/{key:path}` | api_key |
 | POST | `/v1/projects/{project_id}/live/sources/{key:path}/heartbeat` | api_key |
+| POST | `/v1/projects/{project_id}/live/sources/{key:path}/jobs/{job_id}/progress` | api_key |
+| POST | `/v1/projects/{project_id}/live/sources/{key:path}/events` | api_key |
 | PUT | `/v1/projects/{project_id}/live/sources/{key:path}/metric-specs` | api_key |
 | PUT | `/v1/projects/{project_id}/live/sources/{key:path}/days/{day}` | api_key |
 | POST | `/v1/projects/{project_id}/live/sources/{key:path}/turns` | api_key |

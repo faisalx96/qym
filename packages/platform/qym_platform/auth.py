@@ -37,6 +37,7 @@ class Principal:
     scopes: tuple[str, ...] = ()
     provider: Optional[str] = None
     project_id: Optional[str] = None
+    api_key_id: Optional[str] = None
 
 
 def _default_display_name(email: str) -> str:
@@ -206,7 +207,7 @@ def resolve_api_key_principal(db: Session, token: str) -> Principal:
         )
     _require_api_key_project_access(db, row, user)
     scopes = tuple(str(scope).strip() for scope in (row.scopes or []) if str(scope).strip())
-    return Principal(user=user, auth_type="api_key", scopes=scopes, project_id=row.project_id)
+    return Principal(user=user, auth_type="api_key", scopes=scopes, project_id=row.project_id, api_key_id=row.id)
 
 
 def require_api_key_principal(

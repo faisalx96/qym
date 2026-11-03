@@ -644,6 +644,9 @@ KEY_ONLY = [
     ("PUT", "/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image", "/v1/projects/pa/live/sources/w1/turns/t/charts/r/image", {"content": b""}),
     ("PUT", "/v1/projects/{project_id}/live/sources/{key:path}", "/v1/projects/pa/live/sources/w1", {"json": {"name": "w", "environment": "test"}}),
     ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/heartbeat", "/v1/projects/pa/live/sources/w1/heartbeat", {"json": {"at": "2026-11-01T00:00:00Z"}}),
+    ("GET", "/v1/projects/{project_id}/live/sources/{key:path}/control", "/v1/projects/pa/live/sources/w1/control", {}),
+    ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/jobs/{job_id}/progress", "/v1/projects/pa/live/sources/w1/jobs/job/progress", {"json": {"status": "running"}}),
+    ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/events", "/v1/projects/pa/live/sources/w1/events", {"json": {"events": []}}),
     ("PUT", "/v1/projects/{project_id}/live/sources/{key:path}/metric-specs", "/v1/projects/pa/live/sources/w1/metric-specs", {"json": {"specs": []}}),
     ("PUT", "/v1/projects/{project_id}/live/sources/{key:path}/days/{day}", "/v1/projects/pa/live/sources/w1/days/2026-11-01", {"json": {}}),
     ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/turns", "/v1/projects/pa/live/sources/w1/turns", {"json": {"turns": [{"turn_id": "t", "turn_at": "2026-11-01T00:00:00Z", "status": "completed", "question": "q"}]}}),
@@ -651,6 +654,9 @@ KEY_ONLY = [
     ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image", "/ingestion/v1/projects/pa/live/sources/w1/turns/t/charts/r/image", {"content": b""}),
     ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}", "/ingestion/v1/projects/pa/live/sources/w1", {"json": {"name": "w", "environment": "test"}}),
     ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/heartbeat", "/ingestion/v1/projects/pa/live/sources/w1/heartbeat", {"json": {"at": "2026-11-01T00:00:00Z"}}),
+    ("GET", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/control", "/ingestion/v1/projects/pa/live/sources/w1/control", {}),
+    ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/jobs/{job_id}/progress", "/ingestion/v1/projects/pa/live/sources/w1/jobs/job/progress", {"json": {"status": "running"}}),
+    ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/events", "/ingestion/v1/projects/pa/live/sources/w1/events", {"json": {"events": []}}),
     ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/metric-specs", "/ingestion/v1/projects/pa/live/sources/w1/metric-specs", {"json": {"specs": []}}),
     ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/days/{day}", "/ingestion/v1/projects/pa/live/sources/w1/days/2026-11-01", {"json": {}}),
     ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/turns", "/ingestion/v1/projects/pa/live/sources/w1/turns", {"json": {"turns": [{"turn_id": "t", "turn_at": "2026-11-01T00:00:00Z", "status": "completed", "question": "q"}]}}),
@@ -787,7 +793,7 @@ def test_every_write_route_is_classified():
     assert len(routes) > 100, len(routes)
     classified = [
         *((m, t) for m, t, *_ in REFUSED),
-        *((m, t) for m, t, *_ in KEY_ONLY),
+        *((m, t) for m, t, *_ in KEY_ONLY if m != "GET"),
         *ALLOWED,
     ]
     assert len(classified) == len(set(classified)), "a route is listed twice"

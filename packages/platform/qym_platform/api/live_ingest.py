@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable, Literal, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
@@ -25,7 +26,8 @@ from qym_platform.db.models import LiveDay, LiveSource, Project
 from qym_platform.deps import get_db
 from qym_platform.log import get_logger
 from qym_platform.permissions import require_project_writable
-from qym_platform.services import live_ingest
+from qym_platform.services import live_control, live_events, live_ingest, live_jobs
+from qym_platform.services.live_worker_settings import SettingsError
 
 logger = get_logger(__name__)
 
@@ -57,6 +59,66 @@ class HeartbeatBody(BaseModel):
     last_poll_at: Optional[datetime] = None
     current_day: Optional[date] = None
     worker: Optional[dict[str, Any]] = None
+
+
+class JobProgressBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["running", "done", "failed", "cancelled"]
+    progress: dict[str, Any] = Field(default_factory=dict)
+    error: Optional[str] = None
+
+    @field_validator("progress")
+    @classmethod
+    def _safe_progress(cls, value: dict[str, Any]) -> dict[str, Any]:
+        try:
+            json.dumps(value, allow_nan=False)
+            return value
+        except (TypeError, ValueError, RecursionError):
+            raise ValueError("progress must be finite JSON") from None
+
+
+def _event_details(value: Any) -> Any:
+    """Drop credential keys at every depth while preserving other JSON values."""
+    if isinstance(value, dict):
+        secret_names = ("api_key", "password", "secret", "token")
+        return {
+            key: _event_details(item)
+            for key, item in value.items()
+            if not any(
+                key.lower() == name or key.lower().endswith("_" + name)
+                for name in secret_names
+            )
+        }
+    if isinstance(value, list):
+        return [_event_details(item) for item in value]
+    return value
+
+
+class EventBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    at: datetime
+    level: Literal["error", "warning"]
+    component: str = Field(min_length=1, max_length=30, pattern=r"^[a-z_]+$")
+    code: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9_]+$")
+    message: str = Field(min_length=1, max_length=2000)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("details")
+    @classmethod
+    def _safe_details(cls, value: dict[str, Any]) -> dict[str, Any]:
+        try:
+            json.dumps(value, allow_nan=False)
+            return _event_details(value)
+        except (TypeError, ValueError, RecursionError):
+            raise ValueError("details must be JSON-serialisable") from None
+
+
+class EventsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[EventBody]
 
 
 class MetricSpecBody(BaseModel):
@@ -236,12 +298,18 @@ def install_live_ingest_openapi(app: FastAPI) -> None:
 
 def _validated_body(
     model: type[BaseModel],
+    max_bytes: Optional[int] = None,
 ) -> Callable[[Request], Awaitable[BaseModel]]:
     """Cap and validate JSON before dispatching a synchronous ingest handler."""
 
     async def read_body(request: Request) -> BaseModel:
         raw = await _read_ingest_body(
-            request, ingest_settings().live_ingest_max_body_bytes
+            request,
+            (
+                max_bytes
+                if max_bytes is not None
+                else ingest_settings().live_ingest_max_body_bytes
+            ),
         )
         content_type = (
             request.headers.get("content-type", "application/json")
@@ -548,6 +616,66 @@ def get_turn_ids(
 ) -> dict[str, list[str]]:
     source = _source(db, scope[0].id, key)
     return {"turn_ids": live_ingest.turn_ids_for_day(db, source, day)}
+
+
+@live_ingest_router.get("/sources/{key:path}/control")
+def get_control(
+    request: Request,
+    key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
+    scope: tuple[Project, Principal] = Depends(_source_scope),
+    db: Session = Depends(get_db),
+) -> Response:
+    source = _source(db, scope[0].id, key)
+    try:
+        body, etag = live_control.control_document(
+            db, source, scope[1], ingest_settings(), live_ingest.utcnow()
+        )
+    except SettingsError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+    for header in request.headers.getlist("if-none-match"):
+        for candidate in header.split(","):
+            if candidate.strip().removeprefix("W/") == etag.removeprefix("W/"):
+                return Response(status_code=304, headers={"ETag": etag})
+    return JSONResponse(body, headers={"ETag": etag, "Cache-Control": "no-store"})
+
+
+@live_ingest_router.post(
+    "/sources/{key:path}/jobs/{job_id}/progress",
+    openapi_extra=_body_openapi(JobProgressBody),
+)
+def post_job_progress(
+    job_id: str,
+    body: JobProgressBody = Depends(_validated_body(JobProgressBody)),
+    key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
+    scope: tuple[Project, Principal] = Depends(_source_scope),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    source = _source(db, scope[0].id, key)
+    try:
+        job = live_jobs.report_progress(
+            db, source, job_id, body.status, body.progress, body.error, live_ingest.utcnow()
+        )
+    except live_jobs.JobError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+    _commit(db)
+    return {"id": job.id, "status": job.status, "progress": job.progress}
+
+
+@live_ingest_router.post(
+    "/sources/{key:path}/events", openapi_extra=_body_openapi(EventsBody)
+)
+def post_events(
+    body: EventsBody = Depends(_validated_body(EventsBody, max_bytes=256 * 1024)),
+    key: str = Path(..., pattern=_SOURCE_KEY_PATTERN),
+    scope: tuple[Project, Principal] = Depends(_source_scope),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    if len(body.events) > ingest_settings().live_events_batch_max:
+        raise HTTPException(status_code=422, detail="too many events")
+    source = _source(db, scope[0].id, key)
+    accepted = live_events.ingest_events(db, source, body.events, live_ingest.utcnow())
+    _commit(db)
+    return {"accepted": accepted}
 
 
 # Match slashes too so invalid keys receive 422; keep this after the child routes.
