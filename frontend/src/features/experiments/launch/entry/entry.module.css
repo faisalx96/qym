@@ -352,7 +352,6 @@
 /* Home view */
 .home {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
@@ -493,15 +492,15 @@
   overflow-wrap: anywhere;
 }
 
-/* Evaluation Service versions inside a ticked environment box (home view and step 1): one inline row, the label,
-   the values (they wrap under 480 px), Refresh at the end. The loading placeholders and the loaded tags share the
-   same boxes, so the box keeps its height when it fills (rule 7). */
-.versionLine {
+/* Evaluation Service versions inside a ticked environment box (home view and step 1) and in the review's Versions row
+   (round 10, point 3): the label on its own line, then a grid of key-over-value cells in the service's order. The grid
+   takes the height of its keys (L1); the loading frame is three placeholder cells on one row. */
+.versions {
   grid-column: 1 / -1;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-md);
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
   padding-block-start: var(--space-xs);
   border-block-start: 1px solid var(--border-subtle);
 }
@@ -509,32 +508,109 @@
 .versionLabel {
   font-size: var(--font-sm);
   font-weight: 600;
-  line-height: var(--badge-height);
   color: var(--text-secondary);
 }
 
-.versionLine .versionList {
-  /* the pairs are flex items of the line itself: the first one sits beside the label, the rest wrap under it */
-  display: contents;
+.vGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: var(--space-xs) var(--space-md);
+  min-inline-size: 0;
+  margin: 0;
 }
 
-.versionLine .versionItem {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-width: 0;
-  line-height: var(--badge-height);
-}
-
-.versionLine .versionItem dd {
+.vLoading {
   display: flex;
-  min-width: 0;
+  gap: var(--space-xs) var(--space-md);
+  min-inline-size: 0;
 }
 
-.versionState {
+.vItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+/* the key as the service wrote it: no transform, breaks at its words (KeyName's soft breaks), never truncated */
+.vKey {
+  max-inline-size: 100%;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.vItem dd {
+  display: flex;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+/* a value longer than 16 characters, or an object / array, spans the whole row */
+.vItem[data-wide] {
   grid-column: 1 / -1;
-  min-width: 0;
+}
+
+.vText {
+  min-block-size: var(--badge-height);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
   line-height: var(--badge-height);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.vEmpty {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: var(--badge-height);
+  color: var(--text-muted);
+}
+
+.vError {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: var(--badge-height);
+  /* --error alone is 3.3:1 on the tinted selected box, 4.2:1 on the plain one; lift it to clear AA */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+}
+
+.skelKey {
+  display: inline-block;
+  inline-size: 4rem;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+/* the review's Versions row: one line per environment, its name then the same grid */
+.reviewVersions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.reviewEnv {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-md);
+  align-items: start;
+}
+
+.reviewEnvName {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .reviewEnv {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* The gallery mocks of the earlier block design (QaExperimentsMocks) keep these recipes. */
@@ -670,10 +746,10 @@
   border-block-start: 1px solid var(--border-subtle);
 }
 
-/* A loading version row is the loaded DOM with a placeholder per value (QA4-7). */
+/* A loading version cell: a value bar under the key bar (round 10: 3.5rem, three fit one row in a 237 px box). */
 .skelValue {
   display: block;
-  inline-size: 64px;
+  inline-size: 3.5rem;
   block-size: var(--badge-height);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
