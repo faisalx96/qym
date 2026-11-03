@@ -343,7 +343,7 @@ test.describe('versions inside the environment box on step 1', () => {
         await route.continue();
       });
       await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
-      await expect(page.locator('dl[aria-busy="true"]')).toHaveCount(1);
+      await expect(page.locator('[data-env-version] [aria-busy="true"]')).toHaveCount(1);
       expect(describeViolations(await axeSeriousViolations(page))).toBe('');
       release();
       await expect(loaded(page)).toHaveCount(1);

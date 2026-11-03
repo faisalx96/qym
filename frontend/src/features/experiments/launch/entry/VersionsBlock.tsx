@@ -84,7 +84,8 @@ export function VersionsGrid({ details, loading = false }: { details?: Record<st
         ))}
       </div>
     );
-  const entries = Object.entries(details ?? {}).filter(([, v]) => v !== undefined);
+  // a key the service does not report (absent or null) is not drawn
+  const entries = Object.entries(details ?? {}).filter(([, v]) => v !== undefined && v !== null);
   if (!entries.length) return <p className={styles.vEmpty}>No versioning details reported</p>;
   return (
     <dl className={styles.vGrid}>

@@ -428,7 +428,7 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
       return w;
     });
     for (let i = 0; i < (await rows.count()); i++) {
-      const dd = await box(rows.nth(i).locator('dd'));
+      const dd = await box(rows.nth(i).locator(':scope > dd'));
       expect(dd.width).toBeLessThanOrEqual(measure + 1);
       expect((await box(rows.nth(i))).height).toBeGreaterThanOrEqual(31.5);
     }
@@ -490,7 +490,7 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await expect(page.locator('[data-part=runs-cards] [data-run]')).toHaveCount(6, { timeout: 20_000 });
     const row = page.locator('[data-part=review-kv] [data-row]').first();
     const dt = await box(row.locator('dt'));
-    const dd = await box(row.locator('dd'));
+    const dd = await box(row.locator(':scope > dd'));
     expect(dd.y).toBeGreaterThan(dt.y); // label above value
     const card = page.locator('[data-part=runs-cards] [data-run="1"]');
     expect((await box(card)).height).toBeLessThanOrEqual(110);
