@@ -507,6 +507,61 @@ submitted first within one experiment).
 | `npm run e2e:sdk` | 44 passed |
 | `pytest tests/platform/test_design_language.py` | 1 passed |
 
+## Redesign round 10 (2026-11-03/04, `ui/redesign10-experiments`, `ui/redesign10-impl`, `ui/redesign10-review`)
+
+Owner, four points on the experiments design: 1 Continue and Back at the far right, no Launch shortcut, Skip to review at
+the far left; 2 the swept parameters in the review are very hard to read; 3 the environment always shows image version
+though deprecated: a scalable solution that reads any versioning details and presents them as is; 4 a weird empty band
+between the boxes and the bottom bar on the creation home page. The orchestrator decided (K1-K5): the slots
+[Skip][Cancel] status [Back][Continue], the primary slot launching or publishing on the last step only; one column per
+swept axis from the dry run; every key of `versioning_details` in the service's order, named as the service names it,
+UI only; the bar follows the content on the home view and every step (sticky only while the content overflows), which
+amends round 9's pinned bar (C-3-1). The orchestrator reviewed the mocks and amended one design rule (L1: the versions
+grid takes the height of its keys; the "at least three cells" padding left a 37 px empty row at 390 under one or two keys).
+
+- Design (`redesign10/experiments.md`, 40 criteria C-<point>-<n>, decisions D10-1..8, composed mocks `/__ui#round10` and
+  `/__mock/round10/*`, `redesign10/measure/`): the far right held Cancel and a Launch button on every step; the editor's
+  390 bar was 110.2 px; the "Swept setting" column was 160 px holding one 214 px tag (`primary=gpt-4o thr=0.5 timeout=10`)
+  and the `#` column 102 px (the table sized it from its accessible label); a payload without `image_version` still drew
+  "image not set" and the review printed only the fixed three keys; the band between the content and the bar measured
+  53.7 to 735.3 px across views and viewports.
+- Implementation (`redesign10/impl-notes.md`, c130897d): five fixed parts on every launch and editor step (Skip 227,
+  Back 1208, the primary's right edge 15 px from the bar's, on every step; `bar-continue[data-action]` continue / launch /
+  publish; 0 Launch or Publish controls before the review; 390 bar 90.8 px in both modes); one column per swept setting
+  named by its form label (`#` 48, four flex columns 225.8 at 1440 / 121.8 at 1024, linked band 451.5, 6 columns before
+  a horizontal scroll at 1440 and 3 at 1024), a "Swept settings" row in the Summary, the Changes card names the axes,
+  one phone card row per axis; `VersionsGrid` renders the keys as reported in payload order (5 / 3 / 2 columns, objects
+  as compact JSON cut at 48 chars with the full text in `title`, "No versioning details reported" for `{}`), the fixed
+  key lists deleted from the launch page, the review, the best-run picker, the drift lines and the list filters, a Vitest
+  asserts no key list returns; the bar in flow 14 px under the content on the home view and every step at 1440x900 and
+  1440x1400, sticky at the viewport bottom while the content overflows; `DataTable.headerMinWidth` measures the drawn
+  header (the run detail Median column kept at 215.8 / 138.5 by an explicit width). Amended with numbers: C-3-7 at 390
+  (the Versions line 61.8 px for 1-2 keys, 103.2 for 3). Existing specs moved to the new contract (`r9-create`,
+  `r9-editor`, `wizard`, `final-polish`, `qa-b-versions`, `launchSupport.launchButton`, every caller that pressed Launch
+  on a non-review step).
+- Review (`redesign10/review.md`, 49f8b4d6): MEETS WITH FIXES, 39 / 1 / 0, L1 and D10-8 meet, every number re-measured
+  on the production build. Required: C-3-9's grep also matched the API reference HTML that documents real request fields
+  (spec scope amended to `*.ts` / `*.tsx` / `*.css`); `final-polish.spec.ts` still expected a sticky element in the
+  bottom 140 px (the bar now sits 14 px under a short step). Fix pass (`redesign10/fix-pass.md`, ed516263): both, plus
+  the editor's first-step Back labelled "Back to the environment". Merged 7ba5d3c6.
+- Open: the runs list's own versioning facets still humanise key names ("Agent version"); outside the round's surfaces.
+  The gate below ran on a machine shared with another project's session: three browser folder runs at two workers were
+  killed by the kernel OOM killer below their own 4 GB cgroup cap, so every browser run was repeated with one worker and
+  the visual-language folder file by file. No backend code changed in the round (only the regenerated feedback knowledge
+  pack), so the backend chunks were not re-run on this tip; `test_feedback_pack` and the design test were.
+
+### Gate on `UI-redesign` 7ba5d3c6
+
+| Suite | Result |
+|---|---|
+| `pytest` design test + `test_feedback_pack` | 4 passed |
+| `npm run check` | Vitest 1740 (214 files), design test 54 passed |
+| `npm run build`, `npm run build:sdk` | both pass (build at cost 3: it ran out of heap in a 2 GB cgroup with no free swap) |
+| `e2e/experiments` (1 worker) | 330 passed, 1 skipped, 2 failed under load (`qa-b-versions` tab-order sweep, `queue` orphan link); 19 / 19 and 10 / 10 alone |
+| `e2e/run-detail`, `compare`, `runs-list`, `analyzer`, `feedback`, `shell`, `reviews`, `admin`, `trash`, `docs`, `environments`, `perf`, `datasets` (1 worker) | 464, 229, 245, 69, 64, 99, 31, 27, 17, 14, 2, 25, 216 passed; one load failure each in `runs-list` (`passes-rows` focus), `perf` (`runs-passes-load` 500 ms budget) and `datasets` (`meta-list-filter` chip focus): 27 / 27, 12 / 12 and 16 / 16 alone |
+| `e2e/visual-language` file by file (1 worker) | 70 passed (`final-polish` 8 incl. the rewritten bar test, `hover-audit` 31, `link-cards` 11, `heading-scale` 9, `contrast` 6 on its re-run, `sticky-bars` 4, `motion` 3, `page-width` 2, `table-edges` 2); `frozen-static` killed by the kernel OOM killer on all three attempts (3.1 GB peak) and not completed on this tip; the reviewer ran it alone to pass on c130897d (9.8 min), whose app code differs from this tip only by one `aria-label` |
+| `e2e:sdk` | 44 passed |
+
 ## Post-mortem
 
 The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding
