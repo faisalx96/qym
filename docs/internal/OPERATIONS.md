@@ -881,13 +881,27 @@ qym stores settings versions and restore history, encrypted secrets, the databas
 connection, desired state, jobs and worker events. The worker needs only bootstrap
 environment variables: `QYM_LIVE_ENABLED`, `QYM_BASE_URL`, `QYM_API_KEY`,
 `QYM_PROJECT_ID`, `QYM_LIVE_SOURCE_KEY`, `QYM_LIVE_SOURCE_NAME`,
-`QYM_LIVE_ENVIRONMENT`, `QYM_LIVE_CONTROL_POLL_S` and `CA_BUNDLE`.
+`QYM_LIVE_ENVIRONMENT`, `QYM_LIVE_CONTROL_POLL_S`, `CA_BUNDLE` and, in a container
+without a Phoenix collector, `DISABLE_PHOENIX_TRACING=true`.
 Every other worker setting is managed on **Live → Worker**.
 
 Production qym must set `QYM_LLM_CONFIG_ENCRYPTION_KEY` (without it, saving a
 token returns `409`) and `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true` because the
 cluster gateway has a private address. Keep the encryption key stable and backed
 up so stored credentials remain decryptable.
+
+### Images and the Compose rehearsal (2026-11-03)
+
+Built from the round's final commits on a laptop with public base images: platform
+image 901 MB (plus the 11 MB frontend assets image), worker image 3.04 GB (Chromium and
+the chart bundle inside). The rehearsal ran `docker/docker-compose.yml` with those
+images only: a fresh PostgreSQL upgraded to `0099` with the platform image, the api
+image migrated `0099 → 0100` on start, the preflight from inside the worker image
+registered the source and reported "no settings version", the Worker page saved
+version 1, the preflight passed every check, and the worker container verified and
+applied the version without a restart, then paused and resumed from the page.
+Production images come from CI (amd64, private bases); on macOS bash 3.2,
+`docker/build.sh` needs `BASE_IMAGE` and `FRONTEND_BASE_IMAGE` set.
 
 ### Rollout order
 
@@ -972,6 +986,7 @@ Worker env file:
 | `QYM_LIVE_ENVIRONMENT` | Environment label, for example `preprod` |
 | `QYM_LIVE_CONTROL_POLL_S` | Control polling interval in seconds; use `10` |
 | `CA_BUNDLE` | Path to the CA bundle available inside the worker container |
+| `DISABLE_PHOENIX_TRACING` | `true` unless a Phoenix collector is reachable from the container; otherwise the worker logs an export error every few seconds |
 
 Compose variables (set in the shell or Compose `.env`, not the worker env file):
 
