@@ -224,7 +224,8 @@ function EditorBody({
           <span className={barStyles.long}>{`: ${first.label}`}</span>
         </button>
       ) : blockedBy ? (
-        <span className={barStyles.muted}>{blockedBy}</span>
+        // one status line at 390: the explanation is on the Review step; the bar keeps the change count (round 10, C-1-9)
+        <span className={`${barStyles.muted} ${barStyles.long}`}>{blockedBy}</span>
       ) : (
         <span className={barStyles.ok}>Ready to publish</span>
       )}
