@@ -220,6 +220,21 @@ experiment page, where the **Datasets and task** card, one matrix row per datase
 version replace the plain matrix. Experiments launched before this change keep their per-environment tasks and display unchanged;
 **Duplicate** shows the common task or "Different per environment" (read-only). A preset may hold the task of its own environment.
 
+### The Customize bar and the review's run table
+
+Customize (and the default preset editor) has one bottom bar on every step: **Skip to review** and **Cancel** at the far left, the
+run count with the first problem (a link to its field) or Ready in the centre, and **Back** and **Continue** at the far right. On the
+last step Continue's place holds the launch: **Launch N runs** (**Publish vN** in the editor), disabled while a problem or the High
+acknowledgement blocks it; Skip to review is then disabled in place. No earlier step launches; moving on with Continue is never
+blocked. The home view's bar keeps **Customize →** and **Launch as is**. The bar sits under the last card when the page is short
+and stays at the bottom of the window while the page is longer.
+
+The Review step's **runs to launch** table has one row per run: `#`, the Environment and Dataset when they differ between runs,
+**one column per swept setting** (named as the form names it, a linked pair under "Linked: vary together", the value you picked in
+each cell, such as the model connection's name), the Task when it differs, and the run's Priority. When the columns do not fit the
+card, the table scrolls sideways instead of narrowing a column; on a phone each run is a card with the same facts. The Summary lists
+the **Swept settings** one line per sweep, and Changes names them.
+
 ### Priority per run
 
 The experiment has one priority (**Name and priority**, default from the environments) and, on the **Review** step, every run of
@@ -264,9 +279,13 @@ while it runs, and discards and re-queues it if foreign traffic overlaps (up to 
 
 ### Evaluation Service versions (read-only)
 
-The launch form has no versioning box. Under the environments, on the launch home view and on the first Customize step, a
-**Evaluation Service versions** card shows each environment's current `agent`, `image` and `kb`, read from its Evaluation Service
-(**Refresh** reads them again). A run records the versions its service reports; nothing typed by a user is stored on a new
+The launch form has no versioning box. On the launch home view and on the first Customize step, each ticked environment's box has a
+**Versions** line with what its Evaluation Service reports a run started now would record (**Refresh** reads it again): every key of
+its `versioning_details`, in the service's order, the key exactly as the service names it (`agent_version`, `kb_version`,
+`prompt_set`, …) above its value. A key the service does not report is not shown, so a version the service has dropped (such as
+`image_version`) disappears by itself; a service that reports nothing reads "No versioning details reported". Long values and
+objects take the whole line (objects as compact JSON, the whole text in the tooltip). The review's **Versions** row shows the same
+grid per environment. The Experiments list's versioning filters and the best-run scope name each key as reported. A run records the versions its service reports; nothing typed by a user is stored on a new
 experiment, Duplicate and Rerun carry none, and `POST .../experiments` answers 422 when a request still sends `versioning_details`
 (`null` and `{}` are accepted). Experiments and runs created earlier keep their versioning details and still filter by them.
 
