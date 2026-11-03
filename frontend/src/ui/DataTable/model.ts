@@ -320,11 +320,15 @@ export function middleTruncate(text: string, keep = 8): string {
   return `${text.slice(0, keep)}…${text.slice(-keep)}`;
 }
 
-/** Narrowest width at which the header text is not clipped: uppercase 11px text plus padding and the sort glyph. */
+/**
+ * Narrowest width at which the header text is not clipped: uppercase 11px text plus padding and the sort glyph. It is
+ * measured on the drawn header (a string or number `header`), never on `label`, which is only the accessible name
+ * (round 10, D10-8: `#` labelled "Run number" took 102 px).
+ */
 export function headerMinWidth<R>(col: Column<R>, sortable: boolean): number {
   if (col.hideLabel) return DEFAULT_MIN_WIDTH;
-  const text = headerText(col);
-  const label = typeof headerOf(col) === 'string' || typeof headerOf(col) === 'number' ? text.length : 0;
+  const header = headerOf(col);
+  const label = typeof header === 'string' || typeof header === 'number' ? String(header).length : 0;
   if (!label) return DEFAULT_MIN_WIDTH;
   return Math.ceil(label * 8.6) + 16 + (sortable ? 16 : 0);
 }

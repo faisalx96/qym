@@ -77,8 +77,10 @@ test.describe('point 1: option boxes', () => {
       // ticked box with Versions: 88 ± 6 at 1440 (112 ± 8 at 390 in the mock, whose box has two tags); the Task row left the box.
       // This seed's environment also carries the "Default preset v1" tag, which wraps to a second tag row at 390 (+24 px).
       const ticked = await box(envBox(page, 'production'));
-      if (width === 1440) near(ticked.height, 88, 6, 'ticked env-box height');
-      if (width === 390) near(ticked.height, 112 + 24, 8, 'ticked env-box height with the preset tag row');
+      // Round 10 (C-3-7, amends C-1-7): the Versions label on its own line over key-over-value cells; the fake's three keys are
+      // one grid row at 1440 and 1024 (124.6) and two rows at 390 (166, + 24 for the preset tag row)
+      if (width !== 390) near(ticked.height, 124.6, 2, 'ticked env-box height');
+      else near(ticked.height, 166 + 24, 2, 'ticked env-box height with the preset tag row');
     });
   }
 
@@ -197,7 +199,8 @@ test.describe('point 1: option boxes', () => {
 
 // ───────────────────────────── points 3 and 4: one bar, review on its own step ─────────────────────────────
 
-const PARTS = ['bar-back', 'bar-skip', 'bar-continue', 'bar-status', 'bar-cancel', 'bar-launch'];
+// Round 10, C-1-1 (amends C-3-2): five slots in this DOM order on every step; the launch is the last step's primary slot.
+const PARTS = ['bar-skip', 'bar-cancel', 'bar-status', 'bar-back', 'bar-continue'];
 
 async function barFacts(page: Page) {
   const el = bar(page);
@@ -206,7 +209,7 @@ async function barFacts(page: Page) {
   const parts: Record<string, number> = {};
   for (const p of PARTS) {
     const r = await box(part(page, p));
-    parts[p] = Math.round((p === 'bar-launch' ? r.x + r.width : r.x) * 10) / 10;
+    parts[p] = Math.round((p === 'bar-continue' ? r.x + r.width : r.x) * 10) / 10;
   }
   const barButtons = bar(page).locator('button[data-part^=bar-]:not([data-part=bar-ack])');
   const buttons = await barButtons.count();
@@ -215,9 +218,26 @@ async function barFacts(page: Page) {
   return { style, height: b.height, parts, buttons, heights, partNames };
 }
 
+/** The band between the content and the bar (round 10, point 4): the bar's previous sibling, the scroller's overflow. */
+async function barGap(page: Page) {
+  return bar(page).evaluate((b) => {
+    let prev = b.previousElementSibling;
+    while (prev && prev.getBoundingClientRect().height === 0) prev = prev.previousElementSibling;
+    let scroller: HTMLElement | null = b.parentElement;
+    while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    const s = scroller ?? (document.scrollingElement as HTMLElement);
+    const r = b.getBoundingClientRect();
+    return {
+      gap: r.top - (prev?.getBoundingClientRect().bottom ?? 0),
+      barBottom: r.bottom,
+      overflows: s.scrollHeight > s.clientHeight + 1,
+    };
+  });
+}
+
 test.describe('point 3: one launch bar', () => {
   for (const width of [1440, 1024]) {
-    test(`C-3-1, C-3-2, C-3-3, C-3-6 the same bar on all six steps (${width}px)`, async ({ page }) => {
+    test(`C-3-1, C-3-2, C-3-3, C-3-6 / R10 C-1-1, C-1-2, C-1-11 the same bar on all six steps (${width}px)`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       const facts = [];
       for (const step of STEPS) {
@@ -230,75 +250,77 @@ test.describe('point 3: one launch bar', () => {
         near(x.height, 56, 1, `${x.step} bar height`);
         expect(x.style, `${x.step} chrome`).toEqual(first.style);
         expect(x.style['position']).toBe('sticky');
-        expect(x.buttons, `${x.step} button count`).toBe(5);
-        expect(x.partNames.filter((p) => PARTS.includes(p!)).sort(), `${x.step} parts`).toEqual([...PARTS].sort());
+        expect(x.buttons, `${x.step} button count`).toBe(4);
+        expect(x.partNames, `${x.step} parts in order`).toEqual(PARTS);
         for (const h of x.heights) near(h, 24, 0, `${x.step} button height`);
-        if (width === 1440) for (const p of PARTS) near(x.parts[p]!, first.parts[p]!, 1.5, `${x.step} x of ${p}`);
+        for (const p of PARTS) near(x.parts[p]!, first.parts[p]!, 1, `${x.step} x of ${p}`);
       }
       // nothing else sticks to the page bottom: no 42 px step navigation
       await expect(page.getByRole('navigation', { name: 'Step navigation' })).toHaveCount(0);
     });
   }
 
-  for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]] as const) {
-    test(`C-3-1 the bar's top edge is the same on the home view and on all six steps, at the viewport bottom (${width}px)`, async ({ page }) => {
+  for (const [width, height] of [[1440, 900], [1024, 768], [390, 844], [1440, 1400]] as const) {
+    test(`R10 C-4-2, C-4-3 (amends C-3-1) the bar follows the content: 14 px under it when short, at the viewport bottom while it overflows (${width}x${height})`, async ({ page }) => {
       await page.setViewportSize({ width, height });
-      const tops: Array<{ where: string; top: number; bottom: number }> = [];
       const q = `?env=${f.production.id},${f.staging.id}`;
-      await openHome(page, f.project.slug, q);
-      await expect(bar(page)).toBeVisible();
-      await settled(page);
-      let b = await box(bar(page));
-      tops.push({ where: 'home', top: b.y, bottom: b.y + b.height });
-      for (const step of STEPS) {
-        await openLaunch(page, f.project.slug, q, step);
+      const views: Array<{ where: string; open: () => Promise<void> }> = [
+        { where: 'home', open: () => openHome(page, f.project.slug, q) },
+        ...STEPS.map((step) => ({ where: step, open: () => openLaunch(page, f.project.slug, q, step) })),
+      ];
+      for (const v of views) {
+        await v.open();
         await expect(bar(page)).toBeVisible();
         await settled(page);
-        b = await box(bar(page));
-        tops.push({ where: step, top: b.y, bottom: b.y + b.height });
-      }
-      for (const t of tops) {
-        near(t.bottom, height, 0.5, `${t.where} bar bottom is the viewport bottom`);
-        // one height at every step (home and steps share the status line count), so one top edge
-        near(t.top, tops[1]!.top, 0.5, `${t.where} bar top edge`);
+        const m = await barGap(page);
+        if (m.overflows) near(m.barBottom, height, 0.5, `${v.where}: overflowing, the bar rides at the viewport bottom`);
+        else near(m.gap, 14, 0.5, `${v.where}: short, the bar is 14 px under the content`);
       }
     });
   }
 
-  test('C-3-4 Skip and Continue are disabled and leave the tab order on the review step, enabled elsewhere', async ({ page }) => {
+  test('C-3-4 / R10 C-1-3, C-1-4 Skip is disabled on the review step, where the primary slot is the launch', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'models');
     for (const p of ['bar-skip', 'bar-continue']) await expect(part(page, p)).toBeEnabled();
+    await expect(part(page, 'bar-continue')).toHaveAttribute('data-action', 'continue');
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'review');
-    for (const p of ['bar-skip', 'bar-continue']) {
-      await expect(part(page, p)).toHaveAttribute('aria-disabled', 'true');
-      await expect(part(page, p)).toBeDisabled();
-    }
+    await expect(part(page, 'bar-skip')).toHaveAttribute('aria-disabled', 'true');
+    await expect(part(page, 'bar-skip')).toBeDisabled();
+    await expect(part(page, 'bar-continue')).toHaveAttribute('data-action', 'launch');
+    await expect(part(page, 'bar-continue')).toHaveText(/^Launch/);
   });
 
-  test('C-3-5 the Launch label counts runs and nothing moves when it changes', async ({ page, request }) => {
+  test('C-3-5 / R10 C-1-3 the launch label counts runs and Back does not move between "Continue" and "Launch 6 runs"', async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const x = await launchSweep(request, f);
     await page.goto(cloneUrl(f.project.slug, x.id, 'models'));
-    await expect(part(page, 'bar-launch')).toHaveText('Launch 6 runs');
-    const six = await box(part(page, 'bar-cancel'));
-    await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'models');
-    await expect(part(page, 'bar-launch')).toHaveText('Launch');
-    const one = await box(part(page, 'bar-cancel'));
-    near(one.x, six.x, 1, 'Cancel does not move with the label');
-    await expect(part(page, 'bar-launch')).toHaveAttribute('data-variant', 'primary');
+    await expect(part(page, 'bar-continue')).toHaveText('Continue');
+    const onContinue = await box(part(page, 'bar-back'));
+    await page.goto(cloneUrl(f.project.slug, x.id, 'review'));
+    await expect(part(page, 'bar-continue')).toHaveText('Launch 6 runs');
+    const six = await box(part(page, 'bar-back'));
+    near(six.x, onContinue.x, 1, 'Back does not move with the label');
+    await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'review');
+    await expect(part(page, 'bar-continue')).toHaveText('Launch');
+    near((await box(part(page, 'bar-back'))).x, six.x, 1, 'Back does not move with the run count');
+    await expect(part(page, 'bar-continue')).toHaveAttribute('data-variant', 'primary');
+    near((await box(part(page, 'bar-continue'))).width, 120, 0.5, 'the primary slot keeps 120 px');
   });
 
-  test('C-3-7 at 390 the bar has two rows, fits, and shows all five buttons without a menu', async ({ page }) => {
+  test('C-3-7 / R10 C-1-9 at 390 the bar has three rows, fits, and shows all four buttons without a menu', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const step of ['where', 'models', 'review'] as StepId[]) {
       await openLaunch(page, f.project.slug, `?env=${f.production.id},${f.staging.id}`, step);
       const b = await box(bar(page));
-      expect(b.height).toBeLessThanOrEqual(91); // amended C-3-7: two rows, the problem text is hidden at 390 so the status is one line
+      near(b.height, 90.8, 1, `${step} bar at 390 (R10 C-1-9: three rows)`);
       const overflow = await bar(page).evaluate((n) => n.scrollWidth <= n.clientWidth + 0.5);
       expect(overflow).toBe(true);
-      await expect(bar(page).locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(5);
-      for (const p of ['bar-back', 'bar-skip', 'bar-continue', 'bar-cancel', 'bar-launch']) await expect(part(page, p)).toBeVisible();
+      await expect(bar(page).locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(4);
+      for (const p of ['bar-skip', 'bar-cancel', 'bar-status', 'bar-back', 'bar-continue']) await expect(part(page, p)).toBeVisible();
+      const [status, skip, back] = [await box(part(page, 'bar-status')), await box(part(page, 'bar-skip')), await box(part(page, 'bar-back'))];
+      expect(skip.y, 'Skip under the status').toBeGreaterThan(status.y + status.height - 1);
+      expect(back.y, 'Back on the third row').toBeGreaterThan(skip.y + skip.height - 1);
       await expect(page.getByRole('button', { name: 'More launch options' })).toHaveCount(0);
       await expectNoPageOverflow(page);
     }
@@ -406,7 +428,7 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
       return w;
     });
     for (let i = 0; i < (await rows.count()); i++) {
-      const dd = await box(rows.nth(i).locator('dd'));
+      const dd = await box(rows.nth(i).locator(':scope > dd'));
       expect(dd.width).toBeLessThanOrEqual(measure + 1);
       expect((await box(rows.nth(i))).height).toBeGreaterThanOrEqual(31.5);
     }
@@ -414,7 +436,8 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     for (let n = 1; n <= 6; n++) near((await box(runRow(page, n))).height, 32, 1, `run ${n} row`);
     // C-5-4: columns = #, only those that vary, Priority
     const headers = await page.locator('[data-part=runs-table] [role=columnheader]').allInnerTexts();
-    expect(headers.map((h) => h.replace(/\s+/g, ' ').trim().split(' ')[0]!.toLowerCase()).filter(Boolean)).toEqual(['#', 'environment', 'swept', 'priority']);
+    // R10 C-2-1: one column per swept setting, named as the form names it
+    expect(headers.map((h) => h.replace(/\s+/g, ' ').trim().split(' ')[0]!.toLowerCase()).filter(Boolean)).toEqual(['#', 'environment', 'timeout', 'priority']);
     // C-5-5: 18 px / 700 mono next to "runs to launch"
     const count = await computed(part(page, 'run-count'), ['font-size', 'font-weight', 'font-family']);
     expect(count['font-size']).toBe('18px');
@@ -446,16 +469,18 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await expectNoPageOverflow(page);
   });
 
-  test('C-5-9 the Summary and the first four runs are on the first screen at 1440 x 1000', async ({ page, request }) => {
+  test('C-5-9 / R10 C-2-12 the Summary and the first two runs are on the first screen at 1440 x 1000', async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const x = await launchSweep(request, f);
     await page.goto(cloneUrl(f.project.slug, x.id, 'review'));
     await expect(page.locator('[data-part=runs-table] [data-run]')).toHaveCount(6, { timeout: 20_000 });
     await page.evaluate(() => window.scrollTo(0, 0));
     const summary = await box(part(page, 'review-summary'));
-    const fourth = await box(runRow(page, 4));
-    expect(summary.y + summary.height).toBeLessThan(1000);
-    expect(fourth.y + fourth.height).toBeLessThanOrEqual(1000);
+    // amended C-5-9 (R10 C-2-12): the Swept settings row and the Versions grid add to the Summary; the first two runs stay above the bar
+    const second = await box(runRow(page, 2));
+    const top = (await box(bar(page))).y;
+    expect(summary.y + summary.height).toBeLessThan(top);
+    expect(second.y + second.height).toBeLessThanOrEqual(top);
   });
 
   test('C-5-2, C-5-6 at 390 the summary stacks and every run is a card with a 96 px label column', async ({ page, request }) => {
@@ -465,7 +490,7 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await expect(page.locator('[data-part=runs-cards] [data-run]')).toHaveCount(6, { timeout: 20_000 });
     const row = page.locator('[data-part=review-kv] [data-row]').first();
     const dt = await box(row.locator('dt'));
-    const dd = await box(row.locator('dd'));
+    const dd = await box(row.locator(':scope > dd'));
     expect(dd.y).toBeGreaterThan(dt.y); // label above value
     const card = page.locator('[data-part=runs-cards] [data-run="1"]');
     expect((await box(card)).height).toBeLessThanOrEqual(110);
@@ -523,11 +548,12 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     const border = (await computed(ack, ['border-top-color']))['border-top-color'];
     expect(border).toBe(await tokenColor(page, '--warning'));
     await expect(ack.getByRole('checkbox')).not.toBeChecked();
-    await expect(part(page, 'bar-launch')).toBeDisabled();
+    const launch = page.locator('[data-part=bar-continue][data-action=launch]');
+    await expect(launch).toBeDisabled();
     await expect(part(page, 'bar-status')).toContainText('Acknowledge the preemption to launch');
     await ack.getByText('I understand that High runs can preempt other work').click();
-    await expect(part(page, 'bar-launch')).toBeEnabled({ timeout: 15_000 });
-    await part(page, 'bar-launch').click();
+    await expect(launch).toBeEnabled({ timeout: 15_000 });
+    await launch.click();
     await page.waitForURL(/\/experiments\/[0-9a-f-]{36}/, { timeout: 20_000 });
     expect(posts.launches).toHaveLength(1);
     const body = posts.launches[0]!.body;

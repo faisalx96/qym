@@ -46,7 +46,7 @@ export interface WizardProps {
   /** Back from the first step: the start view (launch) or the environment page (editor). */
   onBack: () => void;
   onCancel: () => void;
-  /** The bar's primary action (default: Launch N runs). */
+  /** The last step's action in the bar's primary slot (default: Launch N runs); earlier steps show Continue there. */
   primary?: BarPrimary;
   /** The bar's status slot (default: the run count and the first problem). */
   status?: ReactNode;
@@ -316,6 +316,7 @@ export function LaunchWizard({
           onGo={onGo}
           onCancel={onCancel}
           primary={launchPrimary}
+          action={editor ? 'publish' : 'launch'}
           status={status ?? <LaunchStatus onGo={onGo} needsAck={needsAck && review.items.length === 0} />}
         />
       </div>

@@ -65,7 +65,9 @@ test.describe('wizard', () => {
     await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible();
     // On the last step the review fills the main column (one pane) and Raw JSON sits under it.
     await expect(review(page)).toHaveCount(1);
-    await expect(page.locator('[data-part=bar-continue]')).toBeDisabled();
+    // round 10, C-1-3 / C-1-4: Skip is disabled in place; the primary slot is the launch
+    await expect(page.locator('[data-part=bar-continue]')).toHaveAttribute('data-action', 'launch');
+    await expect(page.locator('[data-part=bar-continue]')).toHaveText(/^Launch/);
     await expect(page.locator('[data-part=bar-skip]')).toBeDisabled();
     await expect(page.getByRole('region', { name: /^Raw JSON/ })).toBeVisible();
     await expectReady(page);
@@ -271,13 +273,13 @@ test.describe('polish', () => {
     expect(lowest, tops.slice(0, 60).join(',')).toBeGreaterThan(0);
   });
 
-  test('390px: the launch bar is two rows with all five buttons', async ({ page }) => {
+  test('390px: the launch bar is three rows with all four buttons (round 10, C-1-9)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
     const bar = page.getByRole('region', { name: 'Launch', exact: true });
     const bb = await bar.boundingBox();
     expect(bb!.height).toBeLessThanOrEqual(92);
-    await expect(bar.locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(5);
+    await expect(bar.locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(4);
     await expect(page.getByRole('navigation', { name: 'Step navigation' })).toHaveCount(0);
   });
 

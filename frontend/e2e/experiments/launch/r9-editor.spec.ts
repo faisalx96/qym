@@ -4,7 +4,7 @@
  */
 import { expect, type Locator, type Page } from '@playwright/test';
 import { resetFakes, test } from '../support';
-import { openLaunch, seedLaunch, type LaunchFixture } from './launchSupport';
+import { openLaunch, seedLaunch, toReview, type LaunchFixture } from './launchSupport';
 import { bar, box, computed, near, part } from './r9Support';
 
 test.setTimeout(120_000);
@@ -50,10 +50,21 @@ test.describe('the preset editor is the Customize wizard', () => {
     await open(page);
     const editor = await barChrome(page);
     near((await box(bar(page))).height, 56, 1, 'bar height');
-    await expect(part(page, 'bar-launch')).toHaveText('Publish v2');
-    await expect(part(page, 'bar-launch')).toBeDisabled();
+    // round 10, C-1-1 / C-1-3: five parts; Continue on the editor's first steps, Publish v2 on Review and publish
+    await expect(part(page, 'bar-continue')).toHaveText('Continue');
+    await expect(part(page, 'bar-launch')).toHaveCount(0);
     await expect(part(page, 'bar-status')).toContainText('0 changes vs v1');
-    for (const p of ['bar-back', 'bar-skip', 'bar-continue', 'bar-status', 'bar-cancel', 'bar-launch']) await expect(part(page, p)).toHaveCount(1);
+    expect(await bar(page).evaluate((n) => Array.from(n.querySelectorAll('[data-part]')).map((e) => e.getAttribute('data-part')))).toEqual([
+      'bar-skip',
+      'bar-cancel',
+      'bar-status',
+      'bar-back',
+      'bar-continue',
+    ]);
+    await toReview(page);
+    await expect(part(page, 'bar-continue')).toHaveAttribute('data-action', 'publish');
+    await expect(part(page, 'bar-continue')).toHaveText('Publish v2');
+    await expect(part(page, 'bar-continue')).toBeDisabled();
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     expect(await barChrome(page)).toEqual(editor);
   });

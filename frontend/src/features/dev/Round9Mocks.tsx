@@ -48,17 +48,20 @@ const NAV: [IconName, string, boolean?][] = [
   ['settings', 'Project settings'],
 ];
 
-function Shell({
+export function Shell({
   crumbs,
   children,
   active = 'Experiments',
+  className,
 }: {
   crumbs: string[];
   children: ReactNode;
   active?: string;
+  /** Round 10: a page that fills the viewport height (the bar-follows-content mocks). */
+  className?: string;
 }) {
   return (
-    <div className={shell.shell} data-testid="page-shell">
+    <div className={className ? `${shell.shell} ${className}` : shell.shell} data-testid="page-shell">
       <aside className={shell.sidebar} aria-label="Navigation">
         <div className={shell.brand}>qym</div>
         <nav className={shell.nav}>
@@ -122,9 +125,9 @@ const STEPS = [
   { id: 'review', label: 'Review and launch' },
 ];
 
-type StepId = 'where' | 'start' | 'models' | 'settings' | 'evaluation' | 'review';
+export type StepId = 'where' | 'start' | 'models' | 'settings' | 'evaluation' | 'review';
 
-function Rail({ current, changes, problems }: { current: StepId; changes?: Partial<Record<StepId, number>>; problems?: Partial<Record<StepId, number>> }) {
+export function Rail({ current, changes, problems }: { current: StepId; changes?: Partial<Record<StepId, number>>; problems?: Partial<Record<StepId, number>> }) {
   return (
     <Stepper
       aria-label="Steps"
@@ -257,7 +260,7 @@ function EnvBox({
   );
 }
 
-const healthy = (
+export const healthy = (
   <>
     <Tag tone="success">Healthy</Tag>
     <Tag>Priority up to HIGH</Tag>
@@ -311,7 +314,7 @@ function EnvironmentsCard({ ticked = 'both', flagged = false }: { ticked?: 'none
   );
 }
 
-function DatasetsCard() {
+export function DatasetsCard() {
   return (
     <Card>
       <div className={styles.cardBody} data-part="dataset-section">
@@ -347,7 +350,18 @@ function DatasetsCard() {
 }
 
 /** The Task section (point 2): above the environments, one control, one availability line. */
-function TaskCard({ value = 'answer-ticket', disabled = false, flagged = false }: { value?: string; disabled?: boolean; flagged?: boolean }) {
+export function TaskCard({
+  value = 'answer-ticket',
+  disabled = false,
+  flagged = false,
+  offeredBy = ['production', 'staging'],
+}: {
+  value?: string;
+  disabled?: boolean;
+  flagged?: boolean;
+  /** Round 10: the ticked environments listed in the availability row. */
+  offeredBy?: string[];
+}) {
   const [v, setV] = useState<string>(disabled ? 'worker' : value);
   return (
     <Card data-testid="task-section">
@@ -370,8 +384,10 @@ function TaskCard({ value = 'answer-ticket', disabled = false, flagged = false }
           {disabled ? null : (
             <span className={styles.avail} data-part="task-availability">
               <span className={styles.availLabel}>Offered by</span>
-              <Tag tone="success">production</Tag>
-              {flagged ? <Tag tone="danger">staging: not offered</Tag> : <Tag tone="success">staging</Tag>}
+              {offeredBy.includes('production') ? <Tag tone="success">production</Tag> : null}
+              {offeredBy.includes('staging') ? (
+                flagged ? <Tag tone="danger">staging: not offered</Tag> : <Tag tone="success">staging</Tag>
+              ) : null}
             </span>
           )}
         </div>
@@ -384,7 +400,7 @@ function TaskCard({ value = 'answer-ticket', disabled = false, flagged = false }
   );
 }
 
-function NameCard() {
+export function NameCard() {
   return (
     <Card aria-label="Name and priority">
       <div className={styles.cardBody}>
@@ -414,7 +430,7 @@ function NameCard() {
   );
 }
 
-function StartFrom() {
+export function StartFrom() {
   return (
     <Card>
       <div className={styles.cardBody}>
@@ -676,7 +692,7 @@ function RunCards({ rows = RUNS }: { rows?: RunRow[] }) {
   );
 }
 
-function KV({ rows }: { rows: [string, ReactNode, boolean?][] }) {
+export function KV({ rows }: { rows: [string, ReactNode, boolean?][] }) {
   return (
     <dl className={styles.kv} data-part="review-kv">
       {rows.map(([k, v, mono]) => (

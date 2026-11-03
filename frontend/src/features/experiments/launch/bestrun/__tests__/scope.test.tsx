@@ -51,8 +51,10 @@ describe('ScopePrompt', () => {
     );
     expect(screen.getByText(/Choose a dataset, a version and versioning values/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Find best runs' })).toBeEnabled();
-    expect(screen.getAllByText(/Any agent version/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Any kb version/i).length).toBeGreaterThan(0);
+    // R10 C-3-10: one select per key, labelled with the key as reported, first item "Any value"
+    expect(screen.getByRole('button', { name: /agent_version/ })).toHaveTextContent('Any value');
+    expect(screen.getByRole('button', { name: /kb_version/ })).toHaveTextContent('Any value');
+    expect(screen.queryAllByText(/Any (agent|kb) version/i)).toHaveLength(0);
     // the version select cannot be used before a dataset is chosen
     expect(screen.getByRole('button', { name: /Dataset version/ })).toBeDisabled();
   });

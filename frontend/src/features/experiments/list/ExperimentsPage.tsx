@@ -35,7 +35,7 @@ import { LATENCY_FILTER_LABEL } from '../copy';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
-import { baseSourceLabel, plural, tallyJobCounts, versioningLabel, versioningWords } from '../lib/format';
+import { baseSourceLabel, plural, tallyJobCounts, versioningLabel } from '../lib/format';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
 
@@ -210,7 +210,7 @@ export function ExperimentsPage() {
             <Select
               label={versioningLabel(key)}
               items={[
-                { key: ALL, label: `All ${versioningWords(key)}s` },
+                { key: ALL, label: 'All values' },
                 ...options.map((v) => ({ key: v, label: v })),
               ]}
               value={selected ?? ALL}

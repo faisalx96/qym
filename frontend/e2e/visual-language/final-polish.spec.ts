@@ -106,7 +106,7 @@ test.describe('1440', () => {
     await check('chart card', page.locator('[data-testid^="chart-card-"]').first());
   });
 
-  test('wizard settings step: one bottom bar of --bar-action-h with the six round 9 slots', async ({
+  test('wizard settings step: one bottom bar of --bar-action-h with the five round 10 slots', async ({
     page,
   }) => {
     await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}&step=settings`);
@@ -117,24 +117,33 @@ test.describe('1440', () => {
     const h = (await bar.boundingBox())!.height;
     expect(h).toBeGreaterThanOrEqual(want);
     expect(h).toBeLessThanOrEqual(want + 1);
-    // round 9 (C-3-2, C-3-9): the step navigation is gone; the bar holds Back, Skip, Continue, the status, Cancel and Launch
+    // round 10 (C-1-1, C-1-6): Skip, Cancel, the status, Back and Continue; no launch before the review step
     await expect(page.locator('[aria-label="Step navigation"]')).toHaveCount(0);
-    for (const part of ['bar-back', 'bar-skip', 'bar-continue', 'bar-cancel', 'bar-launch'])
+    for (const part of ['bar-skip', 'bar-cancel', 'bar-back', 'bar-continue'])
       await expect(bar.locator(`[data-part="${part}"]`)).toHaveCount(1);
+    await expect(bar.locator('[data-part="bar-launch"]')).toHaveCount(0);
     await expect(bar.locator('[data-part="bar-status"]')).toBeVisible();
-    await expect(bar.getByRole('button', { name: /^Launch/ })).toBeVisible();
-    // nothing else is stuck to the bottom edge above the bar: the only region at the foot is the bar
+    await expect(bar.getByRole('button', { name: /^(Launch|Publish)/ })).toHaveCount(0);
+    // round 10 (C-4-1, C-4-2): the bar is sticky and follows the content: on this short step it sits one --space-md (14 px)
+    // under the step, not at the viewport bottom; nothing else in the lower half of the viewport is sticky.
+    await expect(bar).toHaveCSS('position', 'sticky');
+    const gap = await bar.evaluate((el) => {
+      const prev = el.previousElementSibling as HTMLElement | null;
+      return prev ? el.getBoundingClientRect().top - prev.getBoundingClientRect().bottom : NaN;
+    });
+    expect(gap, 'bar top - content bottom').toBeGreaterThanOrEqual(13);
+    expect(gap, 'bar top - content bottom').toBeLessThanOrEqual(15);
     const stuck = await page.evaluate(() => {
       const out: string[] = [];
       for (const el of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
         if (getComputedStyle(el).position !== 'sticky') continue;
         const r = el.getBoundingClientRect();
-        if (r.height > 0 && r.bottom > window.innerHeight - 140 && r.top > window.innerHeight / 2)
+        if (r.height > 0 && r.top > window.innerHeight / 2 && el.getAttribute('aria-label') !== 'Launch')
           out.push(el.getAttribute('aria-label') ?? el.className);
       }
       return out;
     });
-    expect(stuck, 'sticky elements in the bottom 140px').toHaveLength(1);
+    expect(stuck, 'sticky elements in the lower half other than the bar').toHaveLength(0);
   });
 
   test('sweep: sections use the 18px H2 and the compare tabs rhythm', async ({ page }) => {
@@ -178,18 +187,19 @@ test.describe('390', () => {
     await expect(tags.locator('> *').nth(1)).toBeHidden();
   });
 
-  test('wizard: one two-row bar at 390, the same five buttons, no overflow menu (round 9 C-3-7)', async ({ page }) => {
+  test('wizard: one three-row bar at 390, the same four buttons, no overflow menu (round 10 C-1-9)', async ({ page }) => {
     await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}&step=models`);
     await expect(page.getByRole('heading', { name: 'Models', level: 2 })).toBeVisible();
     const bar = page.getByRole('region', { name: 'Launch', exact: true });
     await expect(bar).toBeVisible();
-    // round 9: at 390 the bar is two rows (status, then buttons): 56 + --space-lg + --space-xs = 91 px (mock 90.8)
+    // round 10: at 390 the bar is three rows (status; Skip and Cancel; Back and Continue), 90.8 px
     const h = (await bar.boundingBox())!.height;
     expect(h).toBeGreaterThanOrEqual(89);
     expect(h).toBeLessThanOrEqual(92);
     await expect(page.locator('[aria-label="Step navigation"]')).toHaveCount(0);
-    for (const part of ['bar-back', 'bar-skip', 'bar-continue', 'bar-cancel', 'bar-launch'])
+    for (const part of ['bar-skip', 'bar-cancel', 'bar-status', 'bar-back', 'bar-continue'])
       await expect(bar.locator(`[data-part="${part}"]`)).toHaveCount(1);
+    await expect(bar.locator('[data-part="bar-launch"]')).toHaveCount(0);
     await expect(bar.getByRole('button', { name: 'More launch options' })).toHaveCount(0);
     await expect(bar.locator('[data-part="bar-status"]')).toHaveText(/Fix \d+ problems? first|Ready|runs? to launch/);
   });

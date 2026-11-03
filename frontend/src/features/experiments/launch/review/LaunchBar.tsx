@@ -4,9 +4,10 @@ import type { WizardStepDef, WizardStepId } from '../wizard/steps';
 import styles from './launchBar.module.css';
 
 /**
- * The one bottom bar (round 9, point 3): the same chrome on the home view and on every step. Sticky at the bottom of the
- * scroller, `--bar-action-h`, `--bg-elevated` with `--border-default`; every button is 24 px. The slots are fixed
- * (Back, Skip to review, Continue, status, Cancel, Launch): a slot that does not apply is disabled, never removed.
+ * The one bottom bar (round 9, point 3; round 10): the same chrome on the home view and on every step. It is the next
+ * sibling of the content (the page gap above it) and sticky at the bottom of the scroller, so it rides at the viewport
+ * bottom only while the content is taller than the viewport (round 10, point 4). `--bar-action-h`, `--bg-elevated` with
+ * `--border-default`; every button is 24 px.
  */
 export function LaunchBar({ children, mode = 'steps' }: { children: ReactNode; mode?: 'steps' | 'home' }) {
   return (
@@ -49,65 +50,65 @@ export interface StepsBarProps {
   onBack: () => void;
   onGo: (step: WizardStepId) => void;
   onCancel: () => void;
+  /** The last step's action (launch: "Launch N runs"; editor: "Publish vN"). */
   primary: BarPrimary;
+  /** `launch` or `publish`: what the primary slot does on the last step. */
+  action?: 'launch' | 'publish';
   /** The status slot: the run count (or change count) and the first problem, or Ready. */
   status: ReactNode;
 }
 
-/** The six slots of every wizard step. Labels never change; the destination is the button's title and aria-label. */
-export function StepsBar({ steps, step, onBack, onGo, onCancel, primary, status }: StepsBarProps) {
+/**
+ * The five slots of every wizard step (round 10, point 1): Skip to review and Cancel at the far left, the status in the
+ * centre, Back and the primary slot at the far right. The primary slot is "Continue" on every step but the last and the
+ * launch (or publish) on the last; it keeps one minimum width, so Back never moves. There is no launch on earlier steps.
+ */
+export function StepsBar({ steps, step, onBack, onGo, onCancel, primary, action = 'launch', status }: StepsBarProps) {
   const index = steps.findIndex((s) => s.id === step);
   const prev = index > 0 ? steps[index - 1] : null;
   const next = index >= 0 && index < steps.length - 1 ? steps[index + 1] : null;
   const last = steps[steps.length - 1];
-  const onReview = step === last?.id;
-  const skipTitle = `Skip to ${last?.label.toLowerCase() ?? 'review'}`;
   return (
     <LaunchBar>
-      <div className={styles.nav}>
-        <BarButton
-          part="bar-back"
-          variant="neutral"
-          aria-label={prev ? `Back to ${prev.label.toLowerCase()}` : 'Back to the start'}
-          onPress={() => (prev ? onGo(prev.id) : onBack())}
-        >
-          Back
-        </BarButton>
+      <div className={styles.start}>
         <BarButton
           part="bar-skip"
           variant="neutral"
-          isDisabled={onReview}
-          aria-label={skipTitle}
+          isDisabled={!next}
+          aria-label={action === 'publish' ? 'Skip to review and publish' : 'Skip to review and launch'}
           onPress={() => last && onGo(last.id)}
         >
           Skip<span className={styles.long}> to review</span>
         </BarButton>
-        <BarButton
-          part="bar-continue"
-          variant="neutral"
-          isDisabled={!next}
-          aria-label={next ? `Continue to ${next.label.toLowerCase()}` : 'Continue'}
-          onPress={() => next && onGo(next.id)}
-        >
-          Continue
+        <BarButton part="bar-cancel" variant="ghost" onPress={onCancel}>
+          Cancel
         </BarButton>
       </div>
       <div className={styles.status} data-part="bar-status">
         {status}
       </div>
       <div className={styles.end}>
-        <BarButton part="bar-cancel" variant="ghost" onPress={onCancel}>
-          Cancel
+        <BarButton
+          part="bar-back"
+          variant="neutral"
+          aria-label={
+            prev ? `Back to ${prev.label.toLowerCase()}` : action === 'publish' ? 'Back to the environment' : 'Back to the start'
+          }
+          onPress={() => (prev ? onGo(prev.id) : onBack())}
+        >
+          Back
         </BarButton>
         <BarButton
-          part="bar-launch"
-          variant="primary"
-          className={styles.launch}
-          loading={primary.loading}
-          isDisabled={primary.disabled}
-          onPress={primary.onPress}
+          part="bar-continue"
+          data-action={next ? 'continue' : action}
+          variant={next ? 'neutral' : 'primary'}
+          className={styles.primary}
+          loading={next ? undefined : primary.loading}
+          isDisabled={next ? undefined : primary.disabled}
+          aria-label={next ? `Continue to ${next.label.toLowerCase()}` : undefined}
+          onPress={() => (next ? onGo(next.id) : primary.onPress())}
         >
-          {primary.label}
+          {next ? 'Continue' : primary.label}
         </BarButton>
       </div>
     </LaunchBar>

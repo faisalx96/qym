@@ -151,6 +151,8 @@ export function PassTable({
             id: 'median',
             header: 'Median',
             label: 'Median latency',
+            // the floor this column had while DataTable sized headers from `label` (round 10, D10-8): its width is unchanged
+            width: 137,
             hint: medianHint,
             align: 'end' as const,
             mono: true,

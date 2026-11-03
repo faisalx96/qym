@@ -48,7 +48,8 @@ test('edit from v1: Publish v2 needs a change and notes, confirms, and creates v
   request,
 }) => {
   await openEditor(page, f.env.id);
-  await expect(publishBtn(page, 2)).toBeDisabled();
+  // round 10, C-1-6: Publish is the primary slot of Review and publish only
+  await expect(publishBtn(page, 2)).toHaveCount(0);
   const field = await maxAttempts(page);
   await field.fill('3');
   await toNotes(page);
@@ -75,7 +76,7 @@ test('edit from v1: Publish v2 needs a change and notes, confirms, and creates v
 
 test('an environment without a default preset publishes v1', async ({ page, request }) => {
   await openEditor(page, f.bare.id);
-  await expect(publishBtn(page, 1)).toBeDisabled();
+  await expect(publishBtn(page, 1)).toHaveCount(0);
   await page
     .getByRole('button', { name: /Dataset$/ })
     .first()
@@ -138,6 +139,7 @@ test('409: publishing from a stale tab shows the conflict and reopening drafts v
   await expect(pane(page).getByText('The default preset changed')).toBeVisible();
   expect((await versionsOf(request, f.env.id, 'official')).length).toBe(2);
   await pane(page).getByRole('button', { name: 'Reload the editor' }).click();
+  await toReview(page);
   await expect(publishBtn(page, 3)).toBeVisible();
   await expect(publishBtn(page, 3)).toBeDisabled();
 });

@@ -95,6 +95,8 @@ test.describe('Run settings', () => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await nameBox(page).fill('flagged');
     await checkbox(page).check({ force: true });
+    await expect(page.locator('[data-part=launch-bar]').getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });
+    await toReview(page);
     await expect(launchButton(page)).toBeEnabled({ timeout: 15_000 });
     await launchButton(page).click();
     await expect(page).toHaveURL(/\/experiments\/[0-9a-f-]{36}/);

@@ -47,6 +47,7 @@ test('Launch navigates to the experiment detail, the experiment exists, no guard
   const field = await maxAttempts(page);
   await field.fill('3');
   await expectReady(page);
+  await toReview(page);
   await launchButton(page).click();
   await expect(page).toHaveURL(EXPERIMENT_URL);
   await expect(dialog(page).filter({ hasText: 'Leave without launching?' })).toHaveCount(0);
@@ -69,8 +70,8 @@ test('HIGH priority needs the acknowledgement on the Review step, then sends ack
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   await nameBox(page).fill('high run');
   await pickSelect(page, /Priority/, /^HIGH/);
-  // Round 9 (C-6-6): any High run needs the checkbox; Launch stays disabled and the bar says why.
-  await expect(launchButton(page)).toBeDisabled();
+  // Round 9 (C-6-6): any High run needs the checkbox; the bar says why (round 10: no launch before the review step).
+  await expect(launchButton(page)).toHaveCount(0);
   await expect(launchBar(page)).toContainText('Acknowledge the preemption to launch', { timeout: 15_000 });
   await toReview(page);
   const ack = page.locator('[data-part=review-ack]');
@@ -114,6 +115,7 @@ test('a server preemption_acknowledgement_required answer is confirmed and resen
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   await nameBox(page).fill('preempt run');
   await expectReady(page);
+  await toReview(page);
   await launchButton(page).click();
   const d = dialog(page);
   await expect(d).toContainText('Launch at HIGH priority?');
@@ -143,17 +145,20 @@ test('server 422 validation errors are listed, toasted and the first one is focu
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   await nameBox(page).fill('bad run');
   await expectReady(page);
+  await toReview(page);
   await launchButton(page).click();
   await expect(page.getByText('1 problem to fix before launching')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Samples' })).toBeFocused();
   await toReview(page);
   await expect(review(page)).toContainText('samples is too large for Alpha');
-  await goStep(page, 'evaluation');
   await expect(launchButton(page)).toBeDisabled();
+  await goStep(page, 'evaluation');
+  await expect(launchBar(page)).toContainText(/problem/);
   // Editing the form clears the stale server error.
   blocked = false;
   await page.getByRole('textbox', { name: 'Samples' }).fill('3');
   await expectReady(page);
+  await toReview(page);
   await expect(launchButton(page)).toBeEnabled();
 });
 
@@ -205,6 +210,10 @@ test('keyboard only: pick the environment, name the run, launch', async ({ page,
   await nameBox(page).focus();
   await page.keyboard.type('keyboard run');
   await expectReady(page);
+  // round 10: Skip to review, then the review's launch (the primary slot)
+  await page.locator('[data-part=bar-skip]').focus();
+  await page.keyboard.press('Enter');
+  await expect(review(page)).toBeVisible({ timeout: 25_000 });
   await launchButton(page).focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(EXPERIMENT_URL);

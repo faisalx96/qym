@@ -1,16 +1,5 @@
 import type { BestRunRow, BestRunsPayload } from '@/api/launch';
 
-/** "kb_version" -> "kb version": short words read as acronyms. */
-export function keyWords(key: string): string {
-  const words = String(key)
-    .replace(/[_-]+/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => (w.length <= 2 ? w.toUpperCase() : w.toLowerCase()));
-  return words.length ? words.join(' ') : String(key);
-}
-
 export function runCount(n: number): string {
   return `${n} run${n === 1 ? '' : 's'}`;
 }
@@ -48,7 +37,8 @@ export function scopeSummary(data: Pick<BestRunsPayload, 'scope'> | null | undef
   const version = scope.dataset_version as { version: string } | null;
   if (dataset) parts.push(dataset.name + (version ? ` ${version.version}` : ' · any version'));
   else parts.push('Any dataset');
-  for (const key of Object.keys(scope.versioning ?? {}).sort())
-    parts.push(`${keyWords(key)} ${(scope.versioning[key] as string[]).join(' or ')}`);
+  // the versioning keys as reported (round 10, C-3-10), in the payload's order
+  for (const key of Object.keys(scope.versioning ?? {}))
+    parts.push(`${key} ${(scope.versioning[key] as string[]).join(' or ')}`);
   return parts.join(' · ');
 }

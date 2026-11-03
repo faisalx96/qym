@@ -3,6 +3,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { resetFakes, test } from '../support';
 import {
   expectReady,
+  goStep,
   launchButton,
   nameBox,
   openGroup,
@@ -10,6 +11,7 @@ import {
   openSection,
   launchBar,
   seedLaunch,
+  toReview,
   type LaunchFixture,
 } from './launchSupport';
 
@@ -66,7 +68,9 @@ test('a range 0.1 to 0.5 step 0.1 makes 5 chips and "5 runs to launch"', async (
   await expect(launchBar(page)).toContainText(/5\s*runs to launch/);
   await expect(sweeps.getByTestId('sweep-math')).toContainText('5');
   await expectReady(page);
-  await expect(launchButton(page)).toBeEnabled();
+  // round 10, C-1-6: the launch is on the review step only; Continue moves on
+  await expect(launchButton(page)).toHaveCount(0);
+  await expect(page.locator('[data-part=bar-continue]')).toBeEnabled();
   // Removing a chip updates the count.
   await sweeps.getByRole('button', { name: `Remove 0.5 from ${label}` }).click();
   await expect(launchBar(page)).toContainText(/4\s*runs to launch/);
@@ -122,7 +126,10 @@ test('exceeding the run cap disables Launch and shows the over-cap callout', asy
   const sweeps = page.getByRole('region', { name: /^Sweeps/ });
   await expect(sweeps.getByText(/81 runs is over the limit of 64/)).toBeVisible();
   await expect(launchBar(page)).toContainText(/81\s*runs/);
+  // round 10: the launch is the review step's primary slot; it is blocked there
+  await toReview(page);
   await expect(launchButton(page)).toBeDisabled();
+  await goStep(page, 'settings');
   await expect(page.getByRole('region', { name: /^Sweeps/ })).toBeVisible();
   // Linking brings it back under the cap.
   await tick(
@@ -136,5 +143,6 @@ test('exceeding the run cap disables Launch and shows the over-cap callout', asy
   await sweeps.getByRole('button', { name: 'Link selected' }).click();
   await expect(launchBar(page)).toContainText(/9\s*runs to launch/);
   await expectReady(page);
+  await toReview(page);
   await expect(launchButton(page)).toBeEnabled();
 });

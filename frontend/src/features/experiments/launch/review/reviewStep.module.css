@@ -273,3 +273,66 @@
   font-size: var(--font-sm);
   color: var(--text-secondary);
 }
+
+/* Round 10, point 2: the Summary's "Swept settings" row, one line per axis. */
+.swept {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sweptLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.sweptName {
+  font-weight: 600;
+}
+
+.sweptValues {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.sweptValue {
+  white-space: nowrap;
+}
+
+.sweptJoin {
+  color: var(--text-muted);
+}
+
+/* A swept setting's column header: its name as the form writes it (data, not the uppercase of the fixed headers) and,
+   only when two columns share the name, the section on a second line. */
+.axisHead {
+  display: inline-flex;
+  flex-direction: column;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+}
+
+.axisSection {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+/* the value the user picked, 12 px primary text (mono comes from the column for numbers) */
+.axisCell {
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}

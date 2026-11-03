@@ -25,3 +25,4 @@ export function registerMock(route: MockRoute): void {
 // Area agents append one line per area, e.g.
 // import '@/features/runs/__mocks__/register';
 import '@/features/dev/round9Register';
+import '@/features/dev/round10Register';
