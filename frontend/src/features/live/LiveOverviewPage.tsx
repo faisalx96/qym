@@ -74,7 +74,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
         </div>
       ) : overview ? (
         <>
-          <StatusLine status={overview.status} />
+          <StatusLine status={overview.status} slug={slug} source={source} />
           <DayNumbers overview={overview} linkTo={linkTo} />
           <div className={styles.mixRow}>
             <DiagnosisMix overview={overview} linkTo={linkTo} />

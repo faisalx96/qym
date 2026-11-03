@@ -148,3 +148,18 @@
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
+
+/* Entity names stay visible when a page opts into a wrapping selection. */
+.trigger[data-wrap] {
+  height: auto;
+  min-height: var(--control-height);
+}
+
+.trigger[data-wrap] .value {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  min-inline-size: 0;
+  line-height: 1.5;
+}

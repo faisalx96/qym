@@ -26,6 +26,7 @@ export function SourceControl({
       {sources.length > 1 ? (
         <Select
           label="Live source"
+          wrapValue
           hideLabel
           items={sources.map((item) => ({ key: item.key, label: item.name }))}
           value={current?.key ?? source}

@@ -34,6 +34,7 @@ export const ROUTES = {
     overview: 'overview',
     live: 'live',
     liveTurns: 'live/turns',
+    liveWorker: 'live/worker',
     liveTurn: 'live/turns/*',
     charts: 'charts',
     models: 'models',

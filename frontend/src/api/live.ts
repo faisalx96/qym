@@ -1,6 +1,7 @@
 /** Project live evaluation reads; metric names and worker evidence are producer-defined. */
 import { keepPreviousData, queryOptions, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/http';
+import type { LiveWorkerControl } from './liveWorker';
 import { platformUrl } from '@/lib/runtime';
 
 export interface LiveSourceInfo {
@@ -13,7 +14,10 @@ export interface LiveSourceInfo {
   seconds_since_heartbeat: number | null;
   last_heartbeat_at: string | null;
   last_turn_at: string | null;
-  worker: Record<string, unknown>;
+  desired_state?: 'running' | 'paused';
+  worker_key_set?: boolean;
+  errors_last_hour?: number;
+  worker: Record<string, unknown> & { control?: LiveWorkerControl };
 }
 
 export interface LiveMetricSpec {

@@ -169,13 +169,15 @@ describe('overview blocks', () => {
   it('refreshes worker age every ten seconds, renders metadata and marks stale status', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-01T09:00:42Z'));
-    const { container, rerender, unmount } = render(<StatusLine status={overview.status} />);
+    const { container, rerender, unmount } = render(
+      <StatusLine slug="demo" source="worker" status={overview.status} />,
+    );
     expect(screen.getByText('last poll 42 s ago')).toBeVisible();
     expect(screen.getByText('Judge A')).toBeVisible();
     expect(screen.getByText('hash1')).toBeVisible();
     act(() => vi.advanceTimersByTime(10_000));
     expect(screen.getByText('last poll 52 s ago')).toBeVisible();
-    rerender(<StatusLine status={{ ...overview.status, stale: true }} />);
+    rerender(<StatusLine slug="demo" source="worker" status={{ ...overview.status, stale: true }} />);
     expect(container.querySelector('[data-live-block="status"]')).toHaveAttribute('data-live-stale', 'true');
     expect(screen.getByText('Worker not heard from since 09:00 UTC')).toBeVisible();
     unmount();
@@ -190,6 +192,8 @@ describe('overview blocks', () => {
     vi.setSystemTime(new Date('2026-11-01T13:00:00Z'));
     render(
       <StatusLine
+        slug="demo"
+        source="worker"
         status={{
           ...overview.status,
           stale: true,

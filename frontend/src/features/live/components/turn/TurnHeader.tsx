@@ -59,6 +59,13 @@ export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug:
   const siblings = [...conversation].sort((a, b) => a.turn_at.localeCompare(b.turn_at));
   const current = siblings.findIndex((item) => item.current || item.turn_id === turn.turn_id);
   const user = turn.user_ref;
+  const provenance = data.summary.provenance;
+  const backfilled =
+    provenance &&
+    typeof provenance === 'object' &&
+    'backfill_job_id' in provenance &&
+    typeof provenance.backfill_job_id === 'string' &&
+    provenance.backfill_job_id.trim().length > 0;
   return (
     <div data-live-block="turn-header">
       <PageHeader
@@ -68,6 +75,13 @@ export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug:
           </span>
         }
         meta={[
+          ...(backfilled
+            ? [
+                <Tag key="backfilled" kind="version" dir="auto">
+                  Backfilled
+                </Tag>,
+              ]
+            : []),
           <span key="time" className={styles.number}>
             {utcTime(turn.turn_at)}
           </span>,

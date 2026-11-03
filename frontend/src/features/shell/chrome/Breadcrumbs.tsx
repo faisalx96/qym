@@ -37,6 +37,8 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
         { label: route.runId, to: projectPath(project.slug, `runs/${route.runId}`), mono: true },
         { label: 'Auto-analysis' },
       );
+    } else if (route.page === 'live-worker') {
+      crumbs.push({ label: 'Live', to: projectPath(project.slug, 'live') }, { label: 'Worker' });
     } else if (route.page === 'live-turns' || route.page === 'live-turn') {
       crumbs.push(
         { label: 'Live', to: projectPath(project.slug, 'live') },

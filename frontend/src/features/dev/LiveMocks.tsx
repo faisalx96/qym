@@ -1,4 +1,6 @@
 /** Task 10: composed, static Live pages. No API calls; fixtures are reusable by the feature tasks. */
+import { WorkerPageView } from '@/features/live/LiveWorkerPage';
+import { liveWorkerRead, liveWorkerWaiting, liveWorkerFailed, liveWorkerEvents } from './liveFixtures';
 import type { ReactNode } from 'react';
 import type { LiveOverview, LiveTurnRow } from '@/api/live';
 import {
@@ -106,7 +108,7 @@ const NAV: [IconName, string][] = [
   ['settings', 'Project settings'],
 ];
 
-function Shell({ page, children }: { page: 'overview' | 'turns' | 'turn'; children: ReactNode }) {
+function Shell({ page, children }: { page: 'overview' | 'turns' | 'turn' | 'worker'; children: ReactNode }) {
   return (
     <div className={styles.shell} data-live-mock={page} id={`live-${page}`}>
       <aside className={styles.sidebar} aria-label="Project navigation">
@@ -147,7 +149,7 @@ function Shell({ page, children }: { page: 'overview' | 'turns' | 'turn'; childr
             Demo <Icon name="chevron-right" size={12} /> Live
             {page !== 'overview' ? (
               <>
-                <Icon name="chevron-right" size={12} /> Turns
+                <Icon name="chevron-right" size={12} /> {page === 'worker' ? 'Worker' : 'Turns'}
               </>
             ) : null}
             {page === 'turn' ? (
@@ -1096,6 +1098,38 @@ export function LiveMocks() {
       <Shell page="turn">
         <Turn />
       </Shell>
+      {(
+        [
+          ['running', liveWorkerRead],
+          ['waiting', liveWorkerWaiting],
+          ['failed', liveWorkerFailed],
+        ] as const
+      ).map(([state, read]) => (
+        <section key={state} data-live-state={`worker-${state}`}>
+          <Shell page="worker">
+            <WorkerPageView
+              read={read}
+              source={liveOverview.status.key}
+              status={liveOverview.status}
+              sourceControl={
+                <Tag kind="data">
+                  {liveOverview.status.name} · {liveOverview.status.environment}
+                </Tag>
+              }
+              events={state === 'waiting' ? [] : liveWorkerEvents}
+              eventsFilters={{}}
+              onEventsFilters={noop}
+              busy={{}}
+              onState={async () => {}}
+              onKey={async () => {}}
+              onSave={async () => ({ version: 4 })}
+              onRestore={async () => ({ version: 4 })}
+              onCreateJob={async () => liveWorkerRead.jobs[0]!}
+              onCancelJob={async () => {}}
+            />
+          </Shell>
+        </section>
+      ))}
       <section className={styles.stateSheet} data-live-state="stale">
         <SectionHeader title="Stale worker" description="LV-5 · no heartbeat for more than 300 seconds" />
         <WorkerStatus stale />

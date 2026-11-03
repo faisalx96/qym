@@ -1,4 +1,5 @@
 /** Static API-shaped examples for the Live design round. Vocabulary matches scripts/seed_live.py. */
+import { workerDefaults, type LiveWorkerRead, type LiveWorkerEvent } from '@/api/liveWorker';
 import type { LiveMetricSpec, LiveOverview, LiveTurnDetail, LiveTurnsPage } from '@/api/live';
 
 const metric = (
@@ -402,3 +403,266 @@ export const liveTurnDetail: LiveTurnDetail = {
     })),
   specs: liveSpecs,
 };
+
+const workerValues = workerDefaults();
+workerValues.models = {
+  connection_id: 'gateway-prod',
+  judge_a: 'judge-a',
+  judge_b: 'judge-b',
+  vision_judge: 'vision-judge',
+  vision_extractor: 'vision-extractor',
+  vision_design_judge: 'vision-design',
+};
+workerValues.langfuse = { host: 'https://langfuse.example.com', public_key: 'pk-live-demo' };
+workerValues.dataiku = { url: 'https://dataiku.example.com', database: 'analytics' };
+workerValues.database = {
+  host: 'evaluation-db.internal',
+  port: 5432,
+  database: 'evaluation',
+  user: 'worker',
+  sslmode: 'require',
+};
+const workerAt = '2026-11-03T14:20:00Z';
+export const liveWorkerRead: LiveWorkerRead = {
+  state: { desired: 'running', changed_at: workerAt, changed_by: 'Ali' },
+  running: {
+    state: 'running',
+    reason: null,
+    settings_version_applied: 3,
+    applied_at: workerAt,
+    verification: {
+      version: 3,
+      ok: true,
+      checked_at: workerAt,
+      checks: { 'database.dns': { ok: true, latency_ms: 12, error: null } },
+    },
+    running: workerValues,
+    models: {
+      listed_at: workerAt,
+      ids: ['judge-a', 'judge-b', 'vision-judge', 'vision-extractor', 'vision-design'],
+    },
+    errors_last_hour: 19,
+    last_error: {
+      at: workerAt,
+      component: 'gateway',
+      code: 'gateway_timeout',
+      message: 'The model gateway did not respond in time.',
+    },
+    job: { id: 'job-running', kind: 'backfill', progress: { found: 22, evaluated: 12 } },
+  },
+  stale: false,
+  worker_key: {
+    id: 'key-worker',
+    name: 'Evaluation worker',
+    prefix: 'qym_worker',
+    changed_at: workerAt,
+    changed_by: 'Ali',
+  },
+  api_keys: [
+    { id: 'key-worker', name: 'Evaluation worker', prefix: 'qym_worker' },
+    { id: 'key-next', name: 'Replacement worker', prefix: 'qym_next' },
+  ],
+  settings: {
+    version: 3,
+    created_at: workerAt,
+    created_by: 'Ali',
+    note: 'Production settings',
+    values: workerValues,
+    secret_hints: { langfuse_secret_key: '1234', database_password: '5678', dataiku_api_key: '9012' },
+  },
+  versions: [
+    { version: 3, created_at: workerAt, created_by: 'Ali', note: 'Production settings' },
+    { version: 2, created_at: '2026-11-02T09:00:00Z', created_by: 'Sara', note: 'Initial connection checks' },
+  ],
+  jobs: [
+    {
+      id: 'job-running',
+      kind: 'backfill',
+      params: {
+        since_day: '2026-11-01',
+        until_day: '2026-11-02',
+        since: '2026-11-01T00:00:00Z',
+        until: '2026-11-03T00:00:00Z',
+        limit: 200,
+      },
+      status: 'running',
+      progress: { found: 22, skipped_existing: 2, evaluated: 12, failed: 1 },
+      error: null,
+      requested_by: 'Ali',
+      requested_at: workerAt,
+      started_at: workerAt,
+      finished_at: null,
+      cancel_requested: false,
+    },
+    {
+      id: 'job-done',
+      kind: 'backfill_preview',
+      params: {
+        since_day: '2026-10-30',
+        until_day: '2026-10-31',
+        since: '2026-10-30T00:00:00Z',
+        until: '2026-11-01T00:00:00Z',
+        limit: 200,
+      },
+      status: 'done',
+      progress: { found: 22, skipped_existing: 2, evaluated: 22, failed: 1 },
+      error: null,
+      requested_by: 'Sara',
+      requested_at: '2026-11-02T09:00:00Z',
+      started_at: '2026-11-02T09:00:01Z',
+      finished_at: '2026-11-02T09:00:04Z',
+      cancel_requested: false,
+    },
+  ],
+  connections: [
+    {
+      id: 'gateway-prod',
+      name: 'Production gateway',
+      base_url: 'https://gateway.example.com',
+      api_key_last4: '1234',
+    },
+    {
+      id: 'gateway-dev',
+      name: 'Development gateway',
+      base_url: 'https://gateway-dev.example.com',
+      api_key_last4: '5678',
+    },
+    {
+      id: 'gateway-vision',
+      name: 'Vision gateway',
+      base_url: 'https://vision.example.com',
+      api_key_last4: '9012',
+    },
+  ],
+  model_ids: ['judge-a', 'judge-b', 'vision-judge', 'vision-extractor', 'vision-design'],
+};
+export const liveWorkerWaiting: LiveWorkerRead = {
+  ...liveWorkerRead,
+  worker_key: null,
+  settings: null,
+  versions: [],
+  jobs: [],
+  model_ids: [],
+  running: {
+    ...liveWorkerRead.running!,
+    state: 'waiting',
+    reason: 'no settings version',
+    settings_version_applied: null,
+    applied_at: null,
+    verification: null,
+    running: null,
+    models: null,
+    job: null,
+    errors_last_hour: 0,
+    last_error: null,
+  },
+};
+export const liveWorkerPaused: LiveWorkerRead = {
+  ...liveWorkerRead,
+  state: { ...liveWorkerRead.state, desired: 'paused' },
+  running: { ...liveWorkerRead.running!, state: 'paused', job: null },
+  jobs: [],
+};
+export const liveWorkerPending: LiveWorkerRead = {
+  ...liveWorkerRead,
+  settings: {
+    ...liveWorkerRead.settings!,
+    version: 4,
+    values: {
+      ...workerValues,
+      database: { ...workerValues.database, host: 'estishraf-agent-preprod-db.estishraf-agent-preprod' },
+    },
+  },
+  versions: [
+    { version: 4, created_at: workerAt, created_by: 'Ali', note: 'Change database host' },
+    ...liveWorkerRead.versions,
+  ],
+  running: { ...liveWorkerRead.running!, settings_version_applied: 3, verification: null },
+};
+export const liveWorkerFailed: LiveWorkerRead = {
+  ...liveWorkerPending,
+  running: {
+    ...liveWorkerPending.running!,
+    verification: {
+      version: 4,
+      ok: false,
+      checked_at: workerAt,
+      checks: {
+        'database.dns': {
+          ok: false,
+          latency_ms: null,
+          error:
+            'could not translate host name "estishraf-agent-preprod-db.estishraf-agent-preprod" to address: Temporary failure in name resolution',
+        },
+      },
+    },
+  },
+};
+export const liveWorkerEvents: LiveWorkerEvent[] = [
+  {
+    id: 6,
+    level: 'error',
+    component: 'gateway',
+    code: 'gateway_timeout',
+    message: 'The model gateway did not respond in time.',
+    details: { model: 'judge-a', timeout_s: 60 },
+    count: 14,
+    first_at: '2026-11-03T14:08:00Z',
+    last_at: workerAt,
+  },
+  {
+    id: 5,
+    level: 'error',
+    component: 'langfuse',
+    code: 'langfuse_unavailable',
+    message: 'Could not fetch chats from Langfuse.',
+    details: { status: 503 },
+    count: 3,
+    first_at: '2026-11-03T14:00:00Z',
+    last_at: '2026-11-03T14:12:00Z',
+  },
+  {
+    id: 4,
+    level: 'warning',
+    component: 'renderer',
+    code: 'chart_render_timeout',
+    message: 'The chart renderer timed out; the remaining evaluation continued.',
+    details: { chart: 'revenue-by-region' },
+    count: 2,
+    first_at: '2026-11-03T13:50:00Z',
+    last_at: '2026-11-03T14:02:00Z',
+  },
+  {
+    id: 3,
+    level: 'error',
+    component: 'qym_push',
+    code: 'push_rejected',
+    message: 'The result could not be sent to qym. The worker will retry.',
+    details: { status: 502 },
+    count: 1,
+    first_at: '2026-11-03T13:55:00Z',
+    last_at: '2026-11-03T13:55:00Z',
+  },
+  {
+    id: 2,
+    level: 'warning',
+    component: 'gateway',
+    code: 'model_list_unavailable',
+    message: 'Could not refresh the list of model ids.',
+    details: {},
+    count: 4,
+    first_at: '2026-11-03T13:30:00Z',
+    last_at: '2026-11-03T13:45:00Z',
+  },
+  {
+    id: 1,
+    level: 'error',
+    component: 'langfuse',
+    code: 'trace_read_failed',
+    message: 'A chat trace could not be read.',
+    details: { trace_id: 'trace-demo-1' },
+    count: 1,
+    first_at: '2026-11-03T13:40:00Z',
+    last_at: '2026-11-03T13:40:00Z',
+  },
+];

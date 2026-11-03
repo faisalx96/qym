@@ -9,6 +9,7 @@ import { ErrorState, PageHeader, Skeleton, Text } from '@/ui';
 import { LiveEmptyState } from './LiveEmptyState';
 import { LiveOverviewPage } from './LiveOverviewPage';
 import { LiveTurnPage } from './LiveTurnPage';
+import { LiveWorkerPage } from './LiveWorkerPage';
 import { LiveTurnsPage } from './LiveTurnsPage';
 import styles from './live.module.css';
 
@@ -81,4 +82,13 @@ export function LiveTurnRoute() {
     return <LiveTurnPage slug={slug} source={source} turnId={turnId} />;
   }
   return <LiveRoute title="Turn" />;
+}
+
+export function LiveWorkerRoute() {
+  const { slug } = useProjectContext();
+  const query = useLiveSources(slug);
+  const { get } = useSearchParamsState();
+  const source = get('source') || query.data?.default_source || query.data?.sources[0]?.key;
+  if (query.data?.sources.length && source) return <LiveWorkerPage slug={slug} source={source} />;
+  return <LiveRoute title="Worker" />;
 }

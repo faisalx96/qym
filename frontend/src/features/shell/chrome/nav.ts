@@ -28,7 +28,7 @@ export function projectNav(slug: string): NavItem[] {
       label: 'Live',
       icon: 'clock',
       to: projectPath(slug, 'live'),
-      activeFor: ['live-turns', 'live-turn'],
+      activeFor: ['live-turns', 'live-turn', 'live-worker'],
     },
     { id: 'charts', label: 'Charts', icon: 'chart', to: projectPath(slug, 'charts') },
     { id: 'runs', label: 'Runs', icon: 'list', to: projectPath(slug), activeFor: ['run-detail', 'compare'] },
@@ -87,6 +87,7 @@ const PAGE_LABELS: Record<string, string> = {
   overview: 'Dashboard',
   live: 'Live',
   'live-turns': 'Turns',
+  'live-worker': 'Worker',
   'live-turn': 'Turn',
   charts: 'Charts',
   experiments: 'Experiments',
@@ -123,6 +124,7 @@ export function parseRoute(pathname: string): RouteContext {
       page = 'live-turn';
       turnId = decodeURIComponent(rest.slice('live/turns/'.length));
     } else if (rest === 'live/turns') page = 'live-turns';
+    else if (rest === 'live/worker') page = 'live-worker';
     else if (rest === 'live') page = 'live';
     else if (rest === 'experiments/queue') page = 'experiments-queue';
     else if (rest.startsWith('experiments')) page = 'experiments';

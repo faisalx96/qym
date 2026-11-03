@@ -1,11 +1,24 @@
 import { useEffect, useState } from 'react';
 import type { LiveSourceInfo } from '@/api/live';
+import { Link } from 'react-router-dom';
+import { projectPath } from '@/app/routes';
 import { formatRelative } from '@/lib/format';
-import { Card, StatusMark, Tag } from '@/ui';
+import { Card, LinkButton, StatusMark, Tag } from '@/ui';
 import { staleText, statusTime } from '../lib/stale';
 import styles from '../live.module.css';
 
-export function StatusLine({ status }: { status: LiveSourceInfo }) {
+export function StatusLine({
+  status,
+  slug,
+  source,
+}: {
+  status: LiveSourceInfo;
+  slug: string;
+  source: string;
+}) {
+  const workerUrl = `${projectPath(slug, 'live/worker')}?${new URLSearchParams({ source })}`;
+  const control = status.worker.control;
+  const errors = status.errors_last_hour ?? control?.errors_last_hour ?? 0;
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 10_000);
@@ -36,6 +49,20 @@ export function StatusLine({ status }: { status: LiveSourceInfo }) {
         <span title={formatRelative(status.last_turn_at, now)}>
           Last turn <span className={styles.number}>{lastTurn}</span>
         </span>
+        {control ? (
+          <>
+            <span>
+              Worker · {control.state}
+              {control.settings_version_applied != null ? ` · v${control.settings_version_applied}` : ''}
+            </span>
+            <LinkButton to={workerUrl}>Manage</LinkButton>
+            {errors > 0 ? (
+              <Link to={`${workerUrl}#problems`}>
+                <Tag tone="danger">{errors} problems in the last hour</Tag>
+              </Link>
+            ) : null}
+          </>
+        ) : null}
         {judges.length > 0 ? (
           <span className={styles.inline}>
             Judges{' '}
