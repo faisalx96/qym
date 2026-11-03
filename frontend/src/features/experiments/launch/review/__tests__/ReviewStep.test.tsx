@@ -32,6 +32,40 @@ function four(): LaunchDocument {
   return setEntryRefs(doc, 'billing-faq', ['v:v1', 'v:v2']);
 }
 
+const TIMEOUT = '/env_overrides/LLM_OVERRIDES/endpoints/primary/timeout';
+const MODEL = '/slot_bindings/endpoint:primary';
+const THRESHOLD = '/env_overrides/MILVUS_SEARCH_THRESHOLD';
+const TIMEOUT_AXES = [{ pointers: [TIMEOUT], linked: false, length: 3, values: [[10], [30], [60]] }];
+
+/** The round 10 seed: a linked model x threshold axis and a plain timeout axis, 2 x 3 combinations on two environments. */
+const LINKED = [
+  { connection_id: 'c1', name: 'gpt-4o prod', model: 'gpt-4o' },
+  { connection_id: 'c2', name: 'claude-sonnet eval', model: 'claude-sonnet' },
+];
+const TWO_AXES = [
+  { pointers: [MODEL, THRESHOLD], linked: true, length: 2, values: [[LINKED[0], 0.5], [LINKED[1], 0.7]] },
+  { pointers: [TIMEOUT], linked: false, length: 3, values: [[10], [30], [60]] },
+] as DryRunResponse['axes'];
+const twoAxisJobs = (): DryRunJob[] => {
+  const out: DryRunJob[] = [];
+  let combo = 0;
+  for (const [m, thr] of [[LINKED[0]!, 0.5], [LINKED[1]!, 0.7]] as const)
+    for (const t of [10, 30, 60]) {
+      for (const env of ['s', 'p'])
+        out.push({
+          environment_id: env,
+          environment_name: env === 'p' ? 'production' : 'staging',
+          combo_index: combo,
+          label: `primary=${m.model} thr=${thr} timeout=${t}`,
+          params: { sweep: { [MODEL]: m, [THRESHOLD]: thr, [TIMEOUT]: t } },
+          dataset: { dataset: 'support-tickets', version: 'v3' },
+          task: { id: 'answer-ticket', name: 'Answer ticket' },
+        });
+      combo += 1;
+    }
+  return out;
+};
+
 const sweepJobs = (): DryRunJob[] =>
   ['p', 's'].flatMap((env) =>
     [10, 30, 60].map((t, i) => ({
@@ -39,7 +73,8 @@ const sweepJobs = (): DryRunJob[] =>
       environment_name: env === 'p' ? 'production' : 'staging',
       combo_index: i,
       dataset_index: 0,
-      label: `timeout ${t}`,
+      label: `timeout=${t}`,
+      params: { sweep: { [TIMEOUT]: t } },
       dataset: { dataset: 'support-tickets', version: 'v3' },
       task: { id: 'answer-ticket', name: 'Answer ticket' },
     })),
@@ -96,13 +131,37 @@ describe('ReviewStep (round 9, points 4-6)', () => {
     expect(summary.querySelector('[data-row=shape] dd')).toHaveTextContent('Combine into one run');
   });
 
-  it('C-5-3 / C-5-4 one row per run and only the columns that vary', () => {
+  it('C-5-3 / R10 C-2-1 one row per run and only the columns that vary; one column per swept setting', () => {
     const jobs = sweepJobs();
-    mount(createDocument({ environmentIds: ['p', 's'], name: 'x' }), jobs);
+    mount(createDocument({ environmentIds: ['p', 's'], name: 'x' }), jobs, { extra: { axes: TIMEOUT_AXES } });
     const table = screen.getByRole('grid', { name: 'Runs to launch' });
     expect(within(table).getAllByRole('row')).toHaveLength(7);
-    expect(Array.from(table.querySelectorAll('th')).map((h) => h.textContent)).toEqual(['#', 'Environment', 'Swept setting', 'Priority']);
+    expect(Array.from(table.querySelectorAll('th')).map((h) => h.textContent)).toEqual(['#', 'Environment', 'Timeout', 'Priority']);
+    expect(Array.from(table.querySelectorAll('[data-part=axis-cell]')).map((c) => c.textContent)).toEqual(
+      ['10', '30', '60', '10', '30', '60'],
+    );
     expect(visibleColumns([])).toEqual([]);
+  });
+
+  it('R10 C-2-1 / C-2-3 / C-2-4 the two-axis seed: a column per pointer, a linked band, the values the user picked', () => {
+    mount(createDocument({ environmentIds: ['p', 's'], name: 'x' }), twoAxisJobs(), { extra: { axes: TWO_AXES } });
+    const table = screen.getByRole('grid', { name: 'Runs to launch' });
+    const headers = Array.from(table.querySelectorAll('[data-part=axis-header]')).map((h) => h.textContent);
+    expect(headers).toEqual(['Primary model', 'Milvus Search Threshold', 'Timeout']);
+    expect(table.querySelectorAll('[data-part=axis-header]')).toHaveLength(3);
+    expect(table.textContent).toContain('Linked: vary together');
+    expect(table.textContent).not.toContain('Swept setting');
+    const first = table.querySelector('[data-run="1"]')!;
+    expect(Array.from(first.querySelectorAll('[data-part=axis-cell]')).map((c) => c.textContent)).toEqual(['gpt-4o prod', '0.5', '10']);
+    expect(table.querySelectorAll('[data-part=axis-cell] [class*=tag]')).toHaveLength(0);
+  });
+
+  it('R10 C-2-8 the Summary names the swept settings, one line per axis', () => {
+    mount(createDocument({ environmentIds: ['p', 's'], name: 'x' }), twoAxisJobs(), { extra: { axes: TWO_AXES } });
+    const lines = Array.from(document.querySelectorAll('[data-part=swept-axis]')).map((l) => l.textContent);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe('Primary model + Milvus Search Threshold: gpt-4o prod + 0.5, claude-sonnet eval + 0.7 linked');
+    expect(lines[1]).toBe('Timeout: 10, 30, 60');
   });
 
   it('C-5-5 the run count is a mono 18px figure next to "runs to launch"', () => {

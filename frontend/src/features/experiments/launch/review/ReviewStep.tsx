@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { Fragment, useMemo, useRef } from 'react';
 import type { EnvTasksPayload } from '@/api/launch';
 import { useEnvTaskLists } from '@/api/launch';
 import { useMediaQuery } from '@/features/shell';
@@ -19,6 +19,7 @@ import {
   highEnvironments,
   highRunCount,
   jobKey,
+  locate,
   pairCount,
   pointerToFieldName,
   PRIORITIES,
@@ -30,10 +31,16 @@ import {
   runShapeChanged,
   setAllJobPriorities,
   setJobPriority,
+  sweepAxesText,
+  sweepColumns,
+  sweepLines,
+  sweepValue,
   taskChanged,
   unitsInfo,
   type DryRunJob,
+  type FormContext,
   type Priority,
+  type SweepColumn,
 } from '../model';
 import { LATENCY_REVIEW_LABEL, LATENCY_REVIEW_VALUE } from '../copy';
 import { ChangesCard, ChecksCard, ReviewCard, ReviewKv, type ChangeRow, type KvRow } from './ReviewParts';
@@ -70,6 +77,52 @@ function DatasetValue() {
   );
 }
 
+/** A connection's name by id, from the selected environments' model options. */
+function connectionNamer(ctx: FormContext): (id: string) => string | undefined {
+  return (id) => {
+    for (const env of ctx.envs) {
+      const found = env.options?.connections.find((c) => c.connection_id === id);
+      if (found) return found.name;
+    }
+    return undefined;
+  };
+}
+
+const labelOf = (ctx: FormContext) => (pointer: string) => locate(pointer, ctx).label;
+
+/** The Summary's "Swept settings" row (round 10, C-2-8): one line per axis, `name: v1, v2, v3`; a linked axis pairs. */
+function SweptSettings({ ctx, axes }: { ctx: FormContext; axes: NonNullable<ReturnType<typeof useLaunch>['preview']['data']>['axes'] }) {
+  const lines = sweepLines(axes ?? [], labelOf(ctx), connectionNamer(ctx));
+  return (
+    <ul className={styles.swept} data-part="review-swept">
+      {lines.map((line) => (
+        <li key={line.names.join('+')} className={styles.sweptLine} data-part="swept-axis">
+          <span className={styles.sweptName}>{`${line.names.join(' + ')}:`}</span>{' '}
+          <span className={styles.sweptValues}>
+            {line.values.map((step, s) => (
+              <span key={s} className={styles.sweptValue}>
+                {step.map((v, m) => (
+                  <Fragment key={m}>
+                    {m ? <span className={styles.sweptJoin}> + </span> : null}
+                    <span className={line.mono[m] ? styles.mono : undefined}>{v}</span>
+                  </Fragment>
+                ))}
+                {s < line.values.length - 1 ? ', ' : null}
+              </span>
+            ))}
+            {line.linked ? ' ' : null}
+            {line.linked ? (
+              <Tag kind="count" tone="accent" title="Linked: the n-th values run together">
+                linked
+              </Tag>
+            ) : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function SummaryCard({ taskLists }: { taskLists: Record<string, EnvTasksPayload | undefined> }) {
   const { doc, selectedEnvs, ctx, preview } = useLaunch();
   const pairs = pairCount(doc);
@@ -102,6 +155,9 @@ function SummaryCard({ taskLists }: { taskLists: Record<string, EnvTasksPayload 
       label: 'Run shape',
       value: doc.selection.runShape === 'combined' ? 'Combine into one run' : 'One run each',
     });
+  const axes = preview.data?.axes ?? [];
+  if (axes.length)
+    rows.push({ key: 'swept', label: 'Swept settings', value: <SweptSettings ctx={ctx} axes={axes} /> });
   rows.push({
     key: 'prio',
     label: 'Priority',
@@ -109,7 +165,7 @@ function SummaryCard({ taskLists }: { taskLists: Record<string, EnvTasksPayload 
   });
   if (doc.latencySensitive)
     rows.push({ key: 'latency', label: LATENCY_REVIEW_LABEL, value: LATENCY_REVIEW_VALUE });
-  if (selectedEnvs.length) rows.push({ key: 'versions', label: 'Versions', value: <VersionsSummary />, mono: true });
+  if (selectedEnvs.length) rows.push({ key: 'versions', label: 'Versions', value: <VersionsSummary /> });
   return (
     <ReviewCard title="Summary" part="review-summary" label="Summary">
       <ReviewKv rows={rows} />
@@ -123,7 +179,8 @@ interface RunRow {
   job: DryRunJob;
   env: string;
   dataset: string;
-  swept: string;
+  /** One value per swept column, from `job.params.sweep[pointer]` (never parsed from the label). */
+  sweep: string[];
   task: string;
 }
 
@@ -136,33 +193,72 @@ function datasetOfJob(job: DryRunJob, doc: ReturnType<typeof useLaunch>['doc']):
   return datasetValue(doc) || '—';
 }
 
-/** Columns shown: `#`, the ones that vary, Priority (a column that carries one value for every run is not drawn). */
-export function visibleColumns(rows: readonly RunRow[]): Array<'env' | 'dataset' | 'swept' | 'task'> {
-  const out: Array<'env' | 'dataset' | 'swept' | 'task'> = [];
-  for (const column of ['env', 'dataset', 'swept', 'task'] as const) {
-    if (new Set(rows.map((r) => r[column])).size > 1) out.push(column);
-  }
+type FactColumn = 'env' | 'dataset' | 'task';
+
+/** A run-table column: a fact (environment, dataset, task) or one swept setting (its index in `RunRow.sweep`). */
+export type RunColumn = { kind: 'fact'; id: FactColumn } | { kind: 'sweep'; index: number; column: SweepColumn };
+
+/**
+ * Columns shown between `#` and Priority (round 10, C-2-1): the varying ones of Environment and Dataset, one per swept
+ * setting in axis order, then Task if it varies. A column that carries one value for every run is not drawn.
+ */
+export function visibleColumns(rows: readonly RunRow[], sweeps: readonly SweepColumn[] = []): RunColumn[] {
+  const varies = (values: string[]) => new Set(values).size > 1;
+  const out: RunColumn[] = [];
+  for (const id of ['env', 'dataset'] as const) if (varies(rows.map((r) => r[id]))) out.push({ kind: 'fact', id });
+  sweeps.forEach((column, index) => {
+    if (varies(rows.map((r) => r.sweep[index] ?? ''))) out.push({ kind: 'sweep', index, column });
+  });
+  if (varies(rows.map((r) => r.task))) out.push({ kind: 'fact', id: 'task' });
   return out;
 }
 
-const COLUMN_LABEL = { env: 'Environment', dataset: 'Dataset', swept: 'Swept setting', task: 'Task' } as const;
+const COLUMN_LABEL: Record<FactColumn, string> = { env: 'Environment', dataset: 'Dataset', task: 'Task' };
 
-function tableColumns(
-  columns: ReadonlyArray<'env' | 'dataset' | 'swept' | 'task'>,
-  fallback: Priority,
-): Column<RunRow>[] {
+/** A swept setting's header: its name and, only when two columns share the name, the section on a second line. */
+function AxisHeader({ column }: { column: SweepColumn }) {
+  return (
+    <span className={styles.axisHead} data-part="axis-header">
+      <span>{column.name}</span>
+      {column.section ? (
+        <span className={styles.axisSection} data-part="axis-section">
+          {column.section}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function tableColumns(columns: readonly RunColumn[], fallback: Priority): Column<RunRow>[] {
   return [
     { id: 'n', header: '#', label: 'Run number', type: 'number', width: 48, minWidth: 48, resizable: false, cell: (r) => r.index },
-    ...columns.map(
-      (c): Column<RunRow> => ({
-        id: c,
-        header: COLUMN_LABEL[c],
-        type: c === 'dataset' ? 'id' : 'text',
-        flex: c !== 'swept',
-        width: c === 'swept' ? 160 : 180,
-        cell: (r) => (c === 'swept' ? (r.swept ? <Tag kind="data">{r.swept}</Tag> : '—') : r[c]),
-      }),
-    ),
+    ...columns.map((c): Column<RunRow> => {
+      if (c.kind === 'sweep')
+        return {
+          id: `sweep-${c.index}`,
+          header: <AxisHeader column={c.column} />,
+          label: c.column.label,
+          group: c.column.group,
+          type: 'text',
+          mono: c.column.mono,
+          flex: true,
+          minWidth: 120,
+          cell: (r) => (
+            <span className={styles.axisCell} data-part="axis-cell">
+              {r.sweep[c.index] ?? '—'}
+            </span>
+          ),
+        };
+      return {
+        id: c.id,
+        header: COLUMN_LABEL[c.id],
+        type: c.id === 'dataset' ? 'id' : 'text',
+        flex: true,
+        // Environment shares the row with the swept columns (round 10, C-2-5); Dataset and Task keep their width
+        ...(c.id === 'env' ? { minWidth: 120 } : { width: 180 }),
+        cell: (r) => r[c.id],
+      };
+    }),
     {
       id: 'priority',
       header: 'Priority',
@@ -227,20 +323,24 @@ function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksP
   const fallback = defaultRunPriority(doc, ctx, preview.data);
   const jobs = preview.data?.jobs;
   const taskId = doc.selection.task;
-  const rows = useMemo<RunRow[]>(
-    () =>
-      (jobs ?? []).map((job, i) => ({
+  const axes = preview.data?.axes;
+  const sweeps = useMemo(() => sweepColumns(axes ?? [], labelOf(ctx)), [axes, ctx]);
+  const rows = useMemo<RunRow[]>(() => {
+    const named = connectionNamer(ctx);
+    return (jobs ?? []).map((job, i) => {
+      const swept = (job.params?.sweep ?? {}) as Record<string, unknown>;
+      return {
         key: jobKey(job),
         index: i + 1,
         job,
         env: job.environment_name ?? job.environment_id,
         dataset: datasetOfJob(job, doc),
-        swept: job.label ?? '',
+        sweep: sweeps.map((c) => (c.pointer in swept ? sweepValue(swept[c.pointer], named) : '—')),
         task: job.task?.name ?? taskName(doc.selection.mixedTasks ? null : taskId, taskLists),
-      })),
-    [jobs, doc, taskId, taskLists],
-  );
-  const columns = visibleColumns(rows);
+      };
+    });
+  }, [jobs, doc, taskId, taskLists, sweeps, ctx]);
+  const columns = visibleColumns(rows, sweeps);
   const highCount = highRunCount(doc, jobs, fallback);
   const highEnvs = highEnvironments(doc, jobs, fallback);
   const several = rows.length > 1;
@@ -328,7 +428,7 @@ function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksP
                   <dt>Run</dt>
                   <dd className={styles.mono}>{row.index}</dd>
                   {columns.map((c) => (
-                    <RunFact key={c} column={c} row={row} />
+                    <RunFact key={c.kind === 'fact' ? c.id : `sweep-${c.index}`} column={c} row={row} />
                   ))}
                   <dt>Priority</dt>
                   <dd>
@@ -359,17 +459,20 @@ function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksP
   );
 }
 
-function RunFact({ column, row }: { column: 'env' | 'dataset' | 'swept' | 'task'; row: RunRow }) {
-  const value =
-    column === 'swept' ? (
-      row.swept ? <Tag kind="data">{row.swept}</Tag> : '—'
-    ) : (
-      row[column]
+function RunFact({ column, row }: { column: RunColumn; row: RunRow }) {
+  if (column.kind === 'sweep')
+    return (
+      <>
+        <dt data-part="axis-header">{column.column.label}</dt>
+        <dd className={column.column.mono ? styles.mono : undefined} data-part="axis-cell">
+          {row.sweep[column.index] ?? '—'}
+        </dd>
+      </>
     );
   return (
     <>
-      <dt>{COLUMN_LABEL[column]}</dt>
-      <dd className={column === 'dataset' ? styles.mono : undefined}>{value}</dd>
+      <dt>{COLUMN_LABEL[column.id]}</dt>
+      <dd className={column.id === 'dataset' ? styles.mono : undefined}>{row[column.id]}</dd>
     </>
   );
 }
@@ -378,10 +481,7 @@ function RunFact({ column, row }: { column: 'env' | 'dataset' | 'swept' | 'task'
 function useChangeRows(): ChangeRow[] {
   const { doc, ctx, sectionSummary, focusField, revealStep } = useLaunch();
   const goTo = useGoToSection();
-  const sweepAxes = useMemo(
-    () => axesOf(buildSpec(doc, ctx.evaluatorPanel)).axes.length,
-    [doc, ctx.evaluatorPanel],
-  );
+  const sweepAxes = useMemo(() => axesOf(buildSpec(doc, ctx.evaluatorPanel)).axes, [doc, ctx.evaluatorPanel]);
   const rows: ChangeRow[] = [];
   const several = datasetEntries(doc).length > 1 || pairCount(doc) > 1;
   if (datasetChanged(doc)) {
@@ -416,11 +516,12 @@ function useChangeRows(): ChangeRow[] {
   }
   for (const id of SECTION_IDS as readonly SectionId[]) {
     if (id === 'raw') continue;
-    const changes = id === 'sweeps' ? sweepAxes : sectionSummary(id).changes;
+    const changes = id === 'sweeps' ? sweepAxes.length : sectionSummary(id).changes;
     if (!changes) continue;
+    // the swept settings by name (round 10, C-2-9), not a count
     const label =
       id === 'sweeps'
-        ? `${SECTION_TITLES[id]}: ${plural(changes, 'swept setting')}`
+        ? `${SECTION_TITLES[id]}: ${sweepAxesText(sweepAxes, (p) => locate(p, ctx).label)}`
         : `${SECTION_TITLES[id]}: ${plural(changes, 'change')}`;
     rows.push({ key: id, label, onEdit: () => goTo(id) });
   }
