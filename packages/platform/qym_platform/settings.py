@@ -216,6 +216,21 @@ class PlatformSettings(BaseSettings):
     analysis_max_concurrency: int = Field(default=20, ge=1, le=20)
     analysis_max_retries: int = Field(default=1, ge=0, le=5)
 
+    # Live evaluation (feature round 2026-11-live-evaluation)
+    live_retention_days: int = Field(default=180, ge=1)
+    live_stale_after_seconds: int = Field(default=300, ge=30)
+    live_turn_batch_max: int = Field(default=100, ge=1, le=1000)
+    live_detail_max_bytes: int = Field(default=524288, ge=4096)
+    live_trend_max_days: int = Field(default=90, ge=7, le=365)
+    live_ingest_max_body_bytes: int = Field(default=64 * 1024 * 1024, ge=1_048_576)
+    live_chart_image_max_bytes: int = Field(default=2 * 1024 * 1024, ge=65536)
+    live_chart_images_per_turn: int = Field(default=10, ge=1, le=100)
+    live_jobs_retention_days: int = Field(default=90, ge=1)
+    live_events_retention_days: int = Field(default=30, ge=1)
+    live_job_max_days: int = Field(default=31, ge=1)
+    live_job_max_limit: int = Field(default=2000, ge=1)
+    live_events_batch_max: int = Field(default=100, ge=1)
+
     # Evaluation Service experiments: launches per user per window (0 disables).
     # Dry-run previews are not counted.
     eval_experiment_create_rate_limit: int = Field(default=30, ge=0)

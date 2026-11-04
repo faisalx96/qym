@@ -1,0 +1,426 @@
+import { expect, type APIRequestContext } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { createApiKey, createProject } from '../helpers';
+
+const chartPng = readFileSync(new URL('./fixtures/chart.png', import.meta.url));
+
+const diagnoses = [
+  { value: 'ok', label: 'OK', tone: 'accent' },
+  { value: 'suboptimal', label: 'Suboptimal', tone: 'warning' },
+  { value: 'problem_a', label: 'Problem A', tone: 'danger' },
+  { value: 'problem_b', label: 'Problem B', tone: 'warning' },
+  { value: 'problem_c', label: 'Problem C', tone: 'meta' },
+  { value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' },
+];
+
+interface SeededDay {
+  day: string;
+  turns_seen: number;
+  evaluated: number;
+  turns: {
+    label: string;
+    latency_ms: number;
+    scores: { metric_name: string; score_numeric: number | null; skipped: boolean }[];
+  }[];
+}
+
+/** A small producer fixture, authenticated exactly like a live worker. */
+export async function seedLive(
+  request: APIRequestContext,
+  slug: string,
+  opts: { stale?: boolean; days?: number; secondSource?: boolean } = {},
+) {
+  const project = await createProject(request, 'Live evaluation demo', slug);
+  const token = await createApiKey(request, project.id);
+  const sourceKey = 'worker-preprod';
+  const base = `/v1/projects/${project.id}/live/sources/${sourceKey}`;
+  const headers = { Authorization: `Bearer ${token}` };
+  const worker = {
+    version: 'e2e-v1',
+    poll_interval_s: 60,
+    judges: { a: 'judge-a', b: 'judge-b' },
+    eval_code_version: 'e2e-v1',
+    manifest_hash: 'e2e-manifest',
+  };
+  const now = new Date();
+  const days: SeededDay[] = [];
+
+  const source = await request.put(base, {
+    headers,
+    data: { name: 'Preproduction worker', environment: 'preprod', day_key_timezone: 'UTC', worker },
+  });
+  expect(source.ok(), await source.text()).toBeTruthy();
+
+  const metrics = [
+    {
+      metric_name: 'agent_success',
+      group: 'quality',
+      label: 'Agent success',
+      score_type: 'percentage',
+      is_primary: true,
+    },
+    {
+      metric_name: 'diagnosis',
+      group: 'diagnosis',
+      label: 'Diagnosis',
+      score_type: 'categorical',
+      values: diagnoses,
+    },
+    { metric_name: 'compliance_a', group: 'quality', label: 'Compliance A', score_type: 'percentage' },
+    { metric_name: 'compliance_b', group: 'quality', label: 'Compliance B', score_type: 'percentage' },
+    { metric_name: 'chart_fidelity', group: 'charts', label: 'Chart fidelity', score_type: 'percentage' },
+    { metric_name: 'chart_design', group: 'charts', label: 'Chart design', score_type: 'percentage' },
+    {
+      metric_name: 'service.sql_generation',
+      group: 'service',
+      label: 'SQL generation',
+      score_type: 'boolean',
+    },
+    { metric_name: 'service.viz_agent', group: 'service', label: 'Visualization', score_type: 'boolean' },
+  ];
+  const specs = await request.put(`${base}/metric-specs`, {
+    headers,
+    data: {
+      specs: metrics.map((metric, position) => ({
+        ...metric,
+        position,
+        ...(metric.score_type === 'categorical' ? {} : { direction: 'maximize', pass_threshold: 1 }),
+      })),
+    },
+  });
+  expect(specs.ok(), await specs.text()).toBeTruthy();
+
+  for (let offset = (opts.days ?? 3) - 1; offset >= 0; offset--) {
+    const date = new Date(now);
+    date.setUTCDate(date.getUTCDate() - offset);
+    const day = date.toISOString().slice(0, 10);
+    const counters = { turns_seen: 14, evaluated: 8, failed: 2, incomplete: 2, excluded: 0 };
+    const dayResult = await request.put(`${base}/days/${day}`, {
+      headers,
+      data: {
+        status: offset ? 'closed' : 'running',
+        ...counters,
+        first_poll_at: `${day}T09:00:00Z`,
+        last_poll_at: `${day}T09:12:00Z`,
+        closed_at: offset ? `${day}T23:59:00Z` : null,
+        parameters: { sample: 'navigation' },
+      },
+    });
+    expect(dayResult.ok(), await dayResult.text()).toBeTruthy();
+
+    const turns = Array.from({ length: 12 }, (_, index) => {
+      const diagnosis = diagnoses[index % diagnoses.length]!;
+      const failed = index % 6 === 2;
+      const incomplete = index % 6 === 5;
+      const chartFailed = index % 6 === 1;
+      const charts =
+        index % 2 === 0
+          ? []
+          : [
+              {
+                ref: `chart-${index + 1}`,
+                kind: 'bar',
+                type: 'bar',
+                title: 'Monthly totals',
+                reading: 'Monthly totals increased. The final month was highest.',
+                issues: chartFailed ? ['missing_axis_label'] : [],
+              },
+            ];
+      const services = {
+        sql_generation: { status: failed ? 'failed' : 'ok', fault: failed ? 'timeout' : null },
+        viz_agent: { status: chartFailed ? 'failed' : 'ok', fault: chartFailed ? 'validation' : null },
+      };
+      return {
+        turn_id: `${day}/turn-${index + 1}`,
+        day,
+        turn_at: `${day}T09:${String(index).padStart(2, '0')}:00Z`,
+        evaluated_at: `${day}T09:${String(index).padStart(2, '0')}:30Z`,
+        conversation_id: `${day}/conversation-${Math.floor(index / 3) + 1}`,
+        turn_index: index % 3,
+        user_ref: `user-${(index % 3) + 1}`,
+        mode: index % 2 ? 'report' : 'chat',
+        status: incomplete ? 'incomplete_ingest' : failed ? 'failed' : 'completed',
+        outcome: incomplete ? 'unknown' : failed ? 'error' : 'success',
+        label: diagnosis.value,
+        label_reason: diagnosis.label,
+        question: index === 0 ? 'ما إجمالي الطلبات؟' : `What is the total for group ${index + 1}?`,
+        answer:
+          failed || incomplete ? null : index === 0 ? 'إجمالي الطلبات 10.' : `The total is ${index + 10}.`,
+        sql: [{ query: 'SELECT COUNT(*) AS total FROM orders', rows: 1 }],
+        latency_ms: (index + 1) * 1000,
+        result_rows: failed ? 0 : 1,
+        tool_calls: 2,
+        summary: { charts, services },
+        detail: { evidence: { note: 'Synthetic evaluation evidence' } },
+        scores: metrics.map((metric) => {
+          const categorical = metric.score_type === 'categorical';
+          const skipped = incomplete || metric.metric_name === 'chart_design';
+          const score =
+            metric.metric_name === 'service.sql_generation'
+              ? Number(!failed)
+              : metric.metric_name === 'service.viz_agent'
+                ? Number(!chartFailed)
+                : metric.metric_name === 'chart_fidelity'
+                  ? Number(!chartFailed)
+                  : diagnosis.value === 'ok'
+                    ? 1
+                    : 0.5;
+          return {
+            metric_name: metric.metric_name,
+            score_numeric: categorical || skipped ? null : score,
+            score_raw: categorical ? diagnosis.value : score,
+            label: categorical ? diagnosis.value : null,
+            explanation: 'Synthetic evaluation score',
+            meta:
+              metric.group === 'service' && score === 0 ? { fault: failed ? 'timeout' : 'validation' } : {},
+            skipped,
+            skip_reason: incomplete ? 'incomplete_ingest' : skipped ? 'not_applicable' : null,
+          };
+        }),
+      };
+    });
+    const result = await request.post(`${base}/turns`, { headers, data: { turns } });
+    expect(result.ok(), await result.text()).toBeTruthy();
+    expect(await result.json()).toMatchObject({ accepted: 12, rejected: 0 });
+    for (const turn of turns) {
+      // Keep the last chart of each day without a screenshot for the empty state.
+      if (turn.turn_id === `${day}/turn-12`) continue;
+      for (const chart of turn.summary.charts) {
+        const upload = await request.put(
+          `${base}/turns/${encodeURIComponent(turn.turn_id)}/charts/${encodeURIComponent(chart.ref)}/image`,
+          { headers: { ...headers, 'Content-Type': 'image/png' }, data: chartPng },
+        );
+        expect(upload.status(), await upload.text()).toBe(204);
+      }
+    }
+    days.push({ day, ...counters, turns });
+  }
+
+  const canaries = await request.post(`${base}/canaries`, {
+    headers,
+    data: {
+      results: ['sql_generation', 'viz_agent'].map((canary) => ({
+        canary,
+        checked_at: now.toISOString(),
+        status: canary === 'viz_agent' ? 'failed' : 'ok',
+        fault: canary === 'viz_agent' ? 'validation' : null,
+        latency_ms: 120,
+        detail: { probe: 'synthetic' },
+        eval_code_version: 'e2e-v1',
+      })),
+    },
+  });
+  expect(canaries.ok(), await canaries.text()).toBeTruthy();
+  expect(await canaries.json()).toMatchObject({ accepted: 2 });
+
+  if (!opts.stale) {
+    const heartbeat = await request.post(`${base}/heartbeat`, {
+      headers,
+      data: {
+        at: now.toISOString(),
+        last_poll_at: now.toISOString(),
+        current_day: now.toISOString().slice(0, 10),
+        worker,
+      },
+    });
+    expect(heartbeat.ok(), await heartbeat.text()).toBeTruthy();
+  }
+  if (opts.secondSource) {
+    const secondBase = `/v1/projects/${project.id}/live/sources/worker-dev`;
+    const secondSource = await request.put(secondBase, {
+      headers,
+      data: { name: 'Development worker', environment: 'dev', day_key_timezone: 'UTC', worker },
+    });
+    expect(secondSource.ok(), await secondSource.text()).toBeTruthy();
+    const secondSpecs = await request.put(`${secondBase}/metric-specs`, {
+      headers,
+      data: { specs: metrics.map((metric, position) => ({ ...metric, position })) },
+    });
+    expect(secondSpecs.ok(), await secondSpecs.text()).toBeTruthy();
+    const day = now.toISOString().slice(0, 10);
+    const secondDay = await request.put(`${secondBase}/days/${day}`, {
+      headers,
+      data: { status: 'running', turns_seen: 3, evaluated: 3, failed: 0, incomplete: 0, excluded: 0 },
+    });
+    expect(secondDay.ok(), await secondDay.text()).toBeTruthy();
+    const secondTurns = await request.post(`${secondBase}/turns`, {
+      headers,
+      data: {
+        turns: Array.from({ length: 3 }, (_, index) => ({
+          turn_id: `dev-turn-${index + 1}`,
+          day,
+          turn_at: `${day}T10:0${index}:00Z`,
+          status: 'completed',
+          outcome: 'success',
+          label: 'ok',
+          question: `Development question ${index + 1}`,
+          scores: [{ metric_name: 'agent_success', score_numeric: 1 }],
+        })),
+      },
+    });
+    expect(secondTurns.ok(), await secondTurns.text()).toBeTruthy();
+    expect(await secondTurns.json()).toMatchObject({ accepted: 3, rejected: 0 });
+    const secondHeartbeat = await request.post(`${secondBase}/heartbeat`, {
+      headers,
+      data: { at: now.toISOString(), last_poll_at: now.toISOString(), current_day: day, worker },
+    });
+    expect(secondHeartbeat.ok(), await secondHeartbeat.text()).toBeTruthy();
+  }
+  return {
+    projectId: project.id,
+    projectSlug: project.slug,
+    apiKey: token,
+    sourceKey,
+    days,
+    labels: diagnoses,
+    metrics,
+  };
+}
+
+/** Configure a separate worker key and a complete first settings version through the UI API. */
+export async function seedWorkerControl(
+  request: APIRequestContext,
+  projectId: string,
+  apiKey: string,
+  sourceKey: string,
+  opts: {
+    projectSlug: string;
+    values?: Record<string, unknown>;
+    secrets?: Record<string, string>;
+    note?: string;
+  },
+) {
+  const key = await request.post(`/v1/projects/${projectId}/api-keys`, { data: { name: 'e2e worker' } });
+  expect(key.ok(), await key.text()).toBeTruthy();
+  const { id: keyId, token } = (await key.json()) as { id: string; token: string };
+  expect(token).not.toBe(apiKey);
+  const base = `/api/projects/${opts.projectSlug}/live/worker`;
+  const query = new URLSearchParams({ source: sourceKey });
+  const selected = await request.put(`${base}/key?${query}`, { data: { api_key_id: keyId } });
+  expect(selected.ok(), await selected.text()).toBeTruthy();
+
+  let values = opts.values;
+  if (!values) {
+    const connection = await request.post(`/v1/projects/${projectId}/llm-connections`, {
+      data: {
+        name: 'Worker gateway',
+        llm_base_url: 'http://127.0.0.1/v1',
+        llm_model: 'judge-a',
+        llm_api_key: 'e2e-gateway-key',
+      },
+    });
+    expect(connection.ok(), await connection.text()).toBeTruthy();
+    const { id } = (await connection.json()) as { id: string };
+    values = {
+      evaluation: {
+        chart_vision_enabled: true,
+        chart_design_enabled: true,
+        chart_images_upload: true,
+        dataiku_execution: true,
+        parallel_turns: 3,
+        poll_interval_s: 60,
+        lookback_hours: 1,
+      },
+      models: {
+        connection_id: id,
+        judge_a: 'judge-a',
+        judge_b: 'judge-b',
+        vision_judge: 'vision-judge',
+        vision_extractor: 'vision-extractor',
+        vision_design_judge: 'vision-design-judge',
+      },
+      langfuse: { host: 'http://127.0.0.1:3000', public_key: 'pk-e2e' },
+      dataiku: { url: 'http://127.0.0.1:11000', database: 'analytics' },
+      database: {
+        host: 'db.example.test',
+        port: 5432,
+        database: 'analytics',
+        user: 'worker',
+        sslmode: 'require',
+      },
+    };
+  }
+  const saved = await request.post(`${base}/settings?${query}`, {
+    data: {
+      values,
+      secrets: {
+        langfuse_secret_key: 'e2e-langfuse-secret',
+        database_password: 'e2e-database-password',
+        dataiku_api_key: 'e2e-dataiku-key',
+        ...opts.secrets,
+      },
+      note: opts.note ?? 'Initial worker settings',
+    },
+  });
+  expect(saved.status(), await saved.text()).toBe(201);
+  const { version } = (await saved.json()) as { version: number };
+  return { version, keyId };
+}
+
+export async function postHeartbeatControl(
+  request: APIRequestContext,
+  projectId: string,
+  apiKey: string,
+  sourceKey: string,
+  control: Record<string, unknown>,
+) {
+  const at = new Date().toISOString();
+  const response = await request.post(`/v1/projects/${projectId}/live/sources/${sourceKey}/heartbeat`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    data: {
+      at,
+      last_poll_at: at,
+      current_day: at.slice(0, 10),
+      worker: { version: 'e2e-v1', eval_code_version: 'e2e-v1', control },
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+export async function postWorkerEvents(
+  request: APIRequestContext,
+  projectId: string,
+  apiKey: string,
+  sourceKey: string,
+  events: {
+    at: string;
+    level: 'error' | 'warning';
+    component: string;
+    code: string;
+    message: string;
+    details: Record<string, unknown>;
+  }[],
+) {
+  const response = await request.post(`/v1/projects/${projectId}/live/sources/${sourceKey}/events`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    data: { events },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  // The API counts grouped rows touched, rather than individual events.
+  const { accepted } = (await response.json()) as { accepted: number };
+  expect(accepted).toBeGreaterThan(0);
+  expect(accepted).toBeLessThanOrEqual(events.length);
+}
+
+export async function postJobProgress(
+  request: APIRequestContext,
+  projectId: string,
+  apiKey: string,
+  sourceKey: string,
+  jobId: string,
+  body: {
+    status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+    progress: Record<string, unknown>;
+    error?: string | null;
+  },
+) {
+  const response = await request.post(
+    `/v1/projects/${projectId}/live/sources/${sourceKey}/jobs/${jobId}/progress`,
+    {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      data: body,
+    },
+  );
+  expect(response.ok(), await response.text()).toBeTruthy();
+  expect(await response.json()).toMatchObject({ id: jobId, status: body.status, progress: body.progress });
+}

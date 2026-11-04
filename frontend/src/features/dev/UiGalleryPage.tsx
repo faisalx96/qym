@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DataTableGallery } from './DataTableGallery';
 import { VisualLanguageGallery } from './VisualLanguageGallery';
 import { Round3Mocks } from './Round3Mocks';
@@ -14,6 +14,7 @@ import { EvalFlagsMocks } from './EvalFlagsMocks';
 import { QaExperimentsMocks } from './QaExperimentsMocks';
 import { MultiLaunchMocks } from './MultiLaunchMocks';
 import { AiFeedbackMocks } from './AiFeedbackMocks';
+import { LiveMocks } from './LiveMocks';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -134,6 +135,15 @@ const COLUMNS: Column<Row>[] = [
 const ITEMS = Array.from({ length: 12 }, (_, i) => ({ key: `m${i}`, label: `model-${i}`, count: i * 3 }));
 
 export default function UiGalleryPage() {
+  // The gallery lives outside the app shell, whose content area is the only page scroller (base.css hides the
+  // body overflow), so this dev page lets the document scroll while it is mounted.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'auto';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
   const toast = useToast();
   const [dialog, setDialog] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -957,6 +967,9 @@ export default function UiGalleryPage() {
       <QaExperimentsMocks Section={Section} Case={Case} />
       <MultiLaunchMocks Section={Section} Case={Case} />
       <AiFeedbackMocks Section={Section} Case={Case} />
+      <Section id="live" title="Live evaluation (round 2026-11)">
+        <LiveMocks />
+      </Section>
     </div>
   );
 }

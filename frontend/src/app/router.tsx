@@ -52,6 +52,10 @@ const EnvironmentsRoute = lazyPage(
 const FeedbackIndexRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackIndexRoute');
 const FeedbackNewRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackNewRoute');
 const FeedbackItemRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackItemRoute');
+const LiveOverviewRoute = lazyPage(() => import('@/features/live/LiveRoutes'), 'LiveOverviewRoute');
+const LiveWorkerRoute = lazyPage(() => import('@/features/live/LiveRoutes'), 'LiveWorkerRoute');
+const LiveTurnsRoute = lazyPage(() => import('@/features/live/LiveRoutes'), 'LiveTurnsRoute');
+const LiveTurnRoute = lazyPage(() => import('@/features/live/LiveRoutes'), 'LiveTurnRoute');
 
 const C = ROUTES.projectChildren;
 
@@ -74,6 +78,10 @@ const projectChildren: RouteObject[] = [
   { path: C.settings, element: <ProjectSettingsPage /> },
   // A run URL trimmed to its list (C209); ranks above the run page's splat.
   { path: C.runsTrimmed, element: <RunsIndexRedirect /> },
+  { path: C.live, element: <LiveOverviewRoute /> },
+  { path: C.liveWorker, element: <LiveWorkerRoute /> },
+  { path: C.liveTurns, element: <LiveTurnsRoute /> },
+  { path: C.liveTurn, element: <LiveTurnRoute /> },
   {
     path: C.runs_detail,
     loader: runRouteLoader,

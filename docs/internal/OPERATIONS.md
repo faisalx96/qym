@@ -31,6 +31,11 @@ sure one process runs a given job.
 | `QYM_ROLE` | `all` | `api`, `worker`, or `all` |
 | `QYM_WEB_WORKERS` | `1` | HTTP processes per API pod. Above 1, see "Several web processes in one pod" |
 | `QYM_MAINTENANCE_MODE` | `false` | Reject ingest with 503 during a window |
+| `QYM_LIVE_RETENTION_DAYS` | `180` | Days of live turns, scores and canary checks to retain; day rows have a separate two-year retention |
+| `QYM_LIVE_STALE_AFTER_SECONDS` | `300` | Seconds since the last received heartbeat before a live evaluation worker is shown as stale |
+| `QYM_LIVE_TURN_BATCH_MAX` | `100` | Maximum number of turns accepted in one live ingest batch |
+| `QYM_LIVE_DETAIL_MAX_BYTES` | `524288` | Maximum serialized bytes of a live turn's detail; larger detail is dropped and flagged in its summary |
+| `QYM_LIVE_TREND_MAX_DAYS` | `90` | Maximum number of days returned by the live overview trend |
 | `QYM_EVENT_LOG_MODE` | `full` | `structural` drops item/metric bodies from `run_events` (bodies live in `run_items`/attempts/scores). Enable after the new image is live |
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
@@ -207,12 +212,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0097`, following `0050` through
+The combined migration chain has one head, `0100`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084`, `0086`–`0092`, `0094`, `0095` and `0097` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084`, `0086`–`0092`, `0094`, `0095`, `0097`, `0098`, `0099` and `0100` are quick DDL or small job/queue inserts.
 `0093` builds one partial index on `dashboard_change_events`; when that table is over
 256 MB it queues the build (`create_deferred_indexes`, CONCURRENTLY) instead.
 `0096` builds two covering indexes (`run_item_pass_scores`, and `spans` on every partition);
@@ -254,6 +259,9 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0100 | Worker-control tables `live_worker_settings`, `live_jobs`, `live_worker_events` and six `live_sources` columns (quick DDL, no backfill) | None |
+| 0099 | `live_chart_images` for screenshots attached to live turns (quick DDL, no backfill) | None |
+| 0098 | `live_*` tables for the Live evaluation tab (quick DDL, no backfill) | None |
 | 0097 | `projectrole` gains `VIEWER` (Postgres `ALTER TYPE ... ADD VALUE`, outside the transaction; no rewrite) | None. Managers can now give a member the Viewer role (C033) |
 | 0096 | Covering indexes `ix_run_item_pass_scores_cover` (`run_id, metric_name, item_id, pass_number` INCLUDE `score_numeric`) and `ix_span_run_start_cover` on every span partition (`run_id, start_time_ns` INCLUDE the columns step latency reads), so these reads are index-only (C073) | `create_deferred_indexes` — **queued, runs by itself** only for a table over 256 MB: builds each index CONCURRENTLY (span partitions one by one, attached to the parent index), then runs `VACUUM (ANALYZE)` on `run_item_pass_scores` and on the finished span partitions. About 0.6–0.7 GB of index for 3 M spans |
 | 0095 | Empty `run_create_keys` (an `Idempotency-Key` of `POST /v1/runs` and the run it created, kept 24 hours; FK to the run `ON DELETE CASCADE`) | None: clients that send no key create runs as before |
@@ -352,7 +360,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0097` and a healthy API. The API process then runs every queued job itself.
+   `0100` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -534,7 +542,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0097`.
+deployment only after the API has migrated to `0100`.
 
 ```yaml
 apiVersion: apps/v1
@@ -690,7 +698,8 @@ jobs for the workers service.
 ### Ingress rules
 
 SDK clients need no change: they keep `QYM_BASE_URL` pointed at the ingress
-and the ingress sends exactly the three ingest paths to ingestion. None of
+and the ingress sends the three run ingest paths to ingestion. The live
+evaluation ingest paths go to the ingestion service as well. None of
 main's own `/v1/runs/*` routes (`submit`, `owner`, `approve`, `reject`,
 `unapprove`, `unreject`, `/v1/runs/submit`) matches them (a test asserts the
 route sets are disjoint). Paths are passed through unchanged (no rewrite).
@@ -700,6 +709,7 @@ route sets are disjoint). Paths are passed through unchanged (no rewrite).
 | `= /v1/runs` | ingestion |
 | `= /v1/runs:upload` | ingestion |
 | `~ ^/v1/runs/[^/]+/events$` | ingestion |
+| `~ ^/v1/projects/[^/]+/live/` | ingestion |
 | `/ingestion/` | ingestion |
 | `/workers/` | workers |
 | `/` | main |
@@ -727,6 +737,7 @@ spec:
           - { path: "/v1/runs$",              pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/v1/runs:upload$",       pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/v1/runs/[^/]+/events$", pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
+          - { path: "/v1/projects/[^/]+/live/", pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/ingestion/",            pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
           - { path: "/workers/",              pathType: ImplementationSpecific, backend: { service: { name: qym-workers,   port: { number: 8000 } } } }
           - { path: "/",                      pathType: ImplementationSpecific, backend: { service: { name: qym-main,      port: { number: 8000 } } } }
@@ -848,6 +859,255 @@ smoke run used 8 API and 3 worker connections at rest.
 Rollback: set `QYM_SERVICE=all` (or unset) on main and stop ingestion and
 workers. Jobs still queued then are not run by the single server; they read
 as failed after `QYM_JOB_QUEUE_TIMEOUT_SECONDS` and can be started again.
+
+## Live evaluation worker
+
+The live evaluation engine runs as its own image and pushes evaluated turns,
+daily counters and heartbeats into qym. qym stores the results and shows them in
+the project's **Live** tab. The two images travel together to the air-gapped
+registry. Both contain their runtime dependencies; nothing is downloaded at
+runtime. qym does not pull evaluations from the worker. The worker's data
+sources and judge connections are managed on the Worker page in qym.
+
+Create a **project API key** in **Project settings → API keys**. Name it after
+the environment, for example `preprod`. The key must belong to `QYM_PROJECT_ID`;
+its owner must remain active and retain project access. The live ingest API
+requires this key even when UI authentication is disabled. The request contract
+is in [Live Evaluation Ingest v1.2](../live-evaluation-ingest-v1.0.md).
+
+### Worker control from qym
+
+qym stores settings versions and restore history, encrypted secrets, the database
+connection, desired state, jobs and worker events. The worker needs only bootstrap
+environment variables: `QYM_LIVE_ENABLED`, `QYM_BASE_URL`, `QYM_API_KEY`,
+`QYM_PROJECT_ID`, `QYM_LIVE_SOURCE_KEY`, `QYM_LIVE_SOURCE_NAME`,
+`QYM_LIVE_ENVIRONMENT`, `QYM_LIVE_CONTROL_POLL_S`, `CA_BUNDLE` and, in a container
+without a Phoenix collector, `DISABLE_PHOENIX_TRACING=true`.
+Every other worker setting is managed on **Live → Worker**.
+
+Production qym must set `QYM_LLM_CONFIG_ENCRYPTION_KEY` (without it, saving a
+token returns `409`) and `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true` because the
+cluster gateway has a private address. Keep the encryption key stable and backed
+up so stored credentials remain decryptable.
+
+### Images and the Compose rehearsal (2026-11-03)
+
+Built from the round's final commits on a laptop with public base images: platform
+image 901 MB (plus the 11 MB frontend assets image), worker image 3.04 GB (Chromium and
+the chart bundle inside). The rehearsal ran `docker/docker-compose.yml` with those
+images only: a fresh PostgreSQL upgraded to `0099` with the platform image, the api
+image migrated `0099 → 0100` on start, the preflight from inside the worker image
+registered the source and reported "no settings version", the Worker page saved
+version 1, the preflight passed every check, and the worker container verified and
+applied the version without a restart, then paused and resumed from the page.
+Production images come from CI (amd64, private bases); on macOS bash 3.2,
+`docker/build.sh` needs `BASE_IMAGE` and `FRONTEND_BASE_IMAGE` set.
+
+### Rollout order
+
+1. Deploy qym with migration `0100` and the two production keys above.
+2. Create the worker's project API key and put it in the bootstrap Secret.
+3. Run the worker image's `live-preflight` as a Kubernetes Job in the target
+   namespace with the bootstrap Secret. Its first lines register the live
+   source in qym (`PUT /v1/projects/{project_id}/live/sources/{key}`, the
+   same call the worker makes at start) and report `qym.key`; with no
+   settings version yet it stops at `settings: FAIL no settings version`.
+   The source now exists, so the Worker page can be used.
+4. On **Live → Worker**, choose that key as the worker key and save version 1
+   with models, Langfuse, Dataiku and database settings for the source.
+5. Run the preflight Job again and require every line to report **OK**
+   (database DNS, TCP, TLS, login, recovery, grants, migration; Langfuse;
+   gateway per model; Dataiku) before applying the worker Deployment.
+6. Confirm the Worker page shows **running v1** after the Deployment starts.
+
+### Pause, jobs and problems
+
+Pause stops evaluation polling and jobs between turns; the pod keeps running
+and polling qym for control changes. Resume catches up on missed turns. Preview a
+date range before starting its evaluation job; only missing and failed turns
+are evaluated. Jobs default to at most **31 inclusive days**
+(`QYM_LIVE_JOB_MAX_DAYS`) and **2,000 turns** (`QYM_LIVE_JOB_MAX_LIMIT`), with one
+queued or running job per source and kind (`backfill_preview` or `backfill`).
+Jobs are retained for **90 days** (`QYM_LIVE_JOBS_RETENTION_DAYS`) and worker
+events for **30 days** (`QYM_LIVE_EVENTS_RETENTION_DAYS`). Every worker error is
+reported in the Worker page's **Problems** block, grouped with counts and a
+copyable report for investigation.
+
+### Database readiness (DBA checklist)
+
+The worker role needs `CONNECT` on the database, `USAGE` and `CREATE` on schema
+`audit` (or have `audit` pre-created and owned by the role), and `SELECT` on the
+enrichment tables. It needs nothing on `public`. The pooler must accept TLS
+(`sslmode=require` by default) and must not require startup options.
+
+Preflight reports DNS, TCP, TLS, login, recovery, grants and migration state
+separately. A DNS failure from a workspace means **run it where the worker
+runs**: repeat the preflight Job in the target namespace before changing the
+database configuration.
+
+**Chart screenshots.** qym stores PNG bytes and image metadata in PostgreSQL's
+`live_chart_images` table (migration `0093`). The platform settings
+`QYM_LIVE_CHART_IMAGE_MAX_BYTES` (default 2097152, 2 MiB; minimum 65536) and
+`QYM_LIVE_CHART_IMAGES_PER_TURN` (default 10) cap each image and the number of
+distinct image refs per turn. Budget roughly 150–300 KB per chart: about
+15 MB/day at 100 turns/day with 40 % charted turns, or 2.7 GB at the default
+180-day retention. Images follow turn retention and project deletion; backups
+remain a single `pg_dump`.
+
+Platform env settings for screenshots and worker control:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `QYM_LIVE_CHART_IMAGE_MAX_BYTES` | `2097152` | Maximum bytes per PNG (2 MiB; minimum 65536) |
+| `QYM_LIVE_CHART_IMAGES_PER_TURN` | `10` | Maximum distinct chart image refs per turn |
+| `QYM_LIVE_JOBS_RETENTION_DAYS` | `90` | Job history retention in days |
+| `QYM_LIVE_EVENTS_RETENTION_DAYS` | `30` | Worker event retention in days |
+| `QYM_LIVE_JOB_MAX_DAYS` | `31` | Maximum inclusive days per job |
+| `QYM_LIVE_JOB_MAX_LIMIT` | `2000` | Maximum turns per job |
+| `QYM_LIVE_EVENTS_BATCH_MAX` | `100` | Maximum events per ingest batch |
+
+### Compose
+
+Copy `docker/live-worker.env.example` to `docker/live-worker.env`. Fill in the
+key, project ID, source name and bootstrap settings. Keep the
+filled file out of version control. Reuse the source key on restart so the
+worker continues the same source's history.
+
+Worker env file:
+
+| Variable | Value / meaning |
+|---|---|
+| `QYM_LIVE_ENABLED` | `true`; enables publishing to qym |
+| `QYM_BASE_URL` | Platform origin, including any deployed path prefix; Compose sets it below |
+| `QYM_API_KEY` | Project API key |
+| `QYM_PROJECT_ID` | ID of the project that owns the key, not its slug |
+| `QYM_LIVE_SOURCE_KEY` | Stable key, for example `worker-preprod`; use a separate key per worker/environment |
+| `QYM_LIVE_SOURCE_NAME` | Display name in the Live tab |
+| `QYM_LIVE_ENVIRONMENT` | Environment label, for example `preprod` |
+| `QYM_LIVE_CONTROL_POLL_S` | Control polling interval in seconds; use `10` |
+| `CA_BUNDLE` | Path to the CA bundle available inside the worker container |
+| `DISABLE_PHOENIX_TRACING` | `true` unless a Phoenix collector is reachable from the container; otherwise the worker logs an export error every few seconds |
+
+Compose variables (set in the shell or Compose `.env`, not the worker env file):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `QYM_LIVE_WORKER_IMAGE` | `qym-live-worker:unset` | Evaluation engine image from the deployment bundle; the placeholder keeps the other services starting when the profile is off, so set it before using the profile |
+| `QYM_LIVE_WORKER_ENV_FILE` | `./live-worker.env` | Path relative to the Compose file; supplies the worker's bootstrap credentials and source identity |
+| `QYM_LIVE_WORKER_QYM_URL` | `http://api:8000` | Overrides the worker's `QYM_BASE_URL`; use for an external platform or a path prefix |
+
+The `live-worker` service starts only with the `live` profile and exposes no
+ports. Without `QYM_LIVE_WORKER_IMAGE` the service is defined with a placeholder
+image, so `docker compose up` of the other services keeps working; with the
+profile on, an unset variable fails at pull time. The optional env-file syntax requires
+Docker Compose 2.24 or later; a missing file is ignored, but the worker still
+needs its credentials and source settings.
+
+With the platform's existing Compose environment configured, run from `docker/`:
+
+```bash
+export QYM_LIVE_WORKER_IMAGE='<registry>/live-worker:<release>'
+docker compose --profile live up -d
+```
+
+For the split layout, run from the repository root:
+
+```bash
+docker compose -f docker/docker-compose.split.yml --profile live up -d
+```
+
+The split service depends on `ingestion` and defaults to
+`QYM_BASE_URL=http://ingestion:8000`. If unprefixed ingest routes are disabled
+(`QYM_INGESTION_LEGACY_PATHS=false`), set
+`QYM_LIVE_WORKER_QYM_URL=http://ingestion:8000/ingestion` (use the deployed
+`QYM_INGESTION_PREFIX` and any root path). Compose's `environment` overrides
+`QYM_BASE_URL` in the worker env file; set `QYM_LIVE_WORKER_QYM_URL` to change it.
+
+### Kubernetes sketch
+
+Set `QYM_BASE_URL` in `live-worker.env` to the in-cluster platform or ingestion
+Service URL, including any prefix. Create the Secret in the deployment's namespace:
+
+```bash
+kubectl create secret generic live-worker-env --from-env-file=live-worker.env
+```
+
+Use one replica and `Recreate` so a rollout stops the old worker before starting
+the next. Allow 300 seconds for shutdown. Measure CPU and memory with the actual
+data sources, judges and concurrency, then set requests and limits. The sketch
+leaves resources for the operator to size.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: live-worker }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: live-worker } }
+  template:
+    metadata: { labels: { app: live-worker } }
+    spec:
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: live-worker
+          image: <registry>/live-worker:<release>
+          envFrom: [{ secretRef: { name: live-worker-env } }]
+          # Optional private CA: uncomment with the mount and volume below.
+          # env:
+          #   - { name: CA_BUNDLE, value: /etc/live-worker/ca/ca.crt }
+          livenessProbe:
+            exec:
+              command: ["python", "-m", "real_eval.tracks.live.healthcheck"]
+            initialDelaySeconds: 180
+            periodSeconds: 60
+            failureThreshold: 3
+          resources: {}   # set requests and limits after measuring the worker
+          volumeMounts:
+            - { name: output, mountPath: /app/output }
+            - { name: tmp, mountPath: /tmp }
+            # - { name: ca-bundle, mountPath: /etc/live-worker/ca, readOnly: true }
+      volumes:
+        - { name: output, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+        # - { name: ca-bundle, configMap: { name: live-worker-ca } }
+```
+
+For a private CA, create the optional ConfigMap and uncomment `CA_BUNDLE`, its
+volume mount and its volume in the sketch:
+
+```bash
+kubectl create configmap live-worker-ca --from-file=ca.crt=ca-bundle.pem
+```
+
+`/app/output` and `/tmp` are scratch space and are lost when the pod is replaced.
+The worker image documents its trace store, databases, judge models and CA
+bundle settings.
+
+### Worker status and retention
+
+The Live overview's status line becomes stale after no heartbeat has been
+received for `QYM_LIVE_STALE_AFTER_SECONDS` (default 300). It shows **Worker not
+heard from** with the last heartbeat time. The **Days** table shows per-day
+worker gaps, so an outage remains visible after the worker resumes. Check both
+the current status and the affected day's gaps when investigating missing turns.
+
+`QYM_LIVE_RETENTION_DAYS` (default 180) is a platform setting. It controls
+retention of live turns, scores and canary checks. Day rows have separate
+two-year retention. Configure it on the qym process that runs retention, and
+keep the background loops running in the single-server or split layout.
+
+### Troubleshooting
+
+- **401**: wrong, missing or revoked API key. Check `QYM_API_KEY` and that it was
+  issued for the intended project; a valid key from another project returns 403.
+- **403**: the key belongs to another project, its owner is inactive, or the
+  owner no longer has project access. Check `QYM_PROJECT_ID` and key ownership.
+- **409 archived**: the project is archived. Restore it before resuming ingest.
+- **503 maintenance**: qym is in maintenance mode. Keep pending data and retry
+  after the response's `Retry-After` delay (60 seconds).
+- **Turns rejected**: a batch can return 200 with rejected turns. Read each
+  `results[].error`, correct the reported fields and retry those turns.
 
 ## Evaluation Service experiments
 

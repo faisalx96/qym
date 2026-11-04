@@ -46,6 +46,8 @@ export interface SelectProps<T extends SelectItem> {
   className?: string;
   width?: string | number;
   name?: string;
+  /** Allow entity names to wrap instead of truncating the selected value. */
+  wrapValue?: boolean;
   /** Opens at mount (an inline edit that starts open, C186). */
   defaultOpen?: boolean;
   autoFocus?: boolean;
@@ -72,6 +74,7 @@ export function Select<T extends SelectItem>({
   className,
   width,
   name,
+  wrapValue,
   defaultOpen = false,
   autoFocus,
   onOpenChange,
@@ -124,7 +127,7 @@ export function Select<T extends SelectItem>({
       <Label className={fieldStyles.label} data-hidden={hideLabel ? '' : undefined}>
         {label}
       </Label>
-      <AriaButton className={styles.trigger}>
+      <AriaButton className={styles.trigger} data-wrap={wrapValue ? '' : undefined}>
         {renderValue ? (
           <SelectValue<T> className={styles.value}>
             {({ selectedItem, isPlaceholder }) =>

@@ -23,6 +23,16 @@ from qym_platform.db.models import (
     EvalExperiment,
     DatasetVersion,
     DatasetVersionChange,
+    LiveCanaryResult,
+    LiveChartImage,
+    LiveDay,
+    LiveJob,
+    LiveMetricSpec,
+    LiveSource,
+    LiveTurn,
+    LiveTurnScore,
+    LiveWorkerEvent,
+    LiveWorkerSettings,
     Project,
     ProjectAnalysisCategoryCatalogVersion,
     ProjectAnalysisPromptSettings,
@@ -1791,6 +1801,16 @@ def _project_deletion_counts(db: Session, project_id: str) -> Dict[str, int]:
                 AnalyzerDocument.project_id == project_id
             )
         ),
+        "live_sources": count(
+            db.query(func.count(LiveSource.id)).filter(
+                LiveSource.project_id == project_id
+            )
+        ),
+        "live_turns": count(
+            db.query(func.count(LiveTurn.id))
+            .join(LiveSource, LiveSource.id == LiveTurn.source_id)
+            .filter(LiveSource.project_id == project_id)
+        ),
     }
 
 
@@ -1840,6 +1860,55 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
         ProjectLlmConnection.project_id == project_id
     ).delete(synchronize_session=False)
     db.query(AnalyzerDocument).filter(AnalyzerDocument.project_id == project_id).delete(
+        synchronize_session=False
+    )
+
+    # Live deletion order: lock turns -> children -> turns -> source rows.
+    live_source_ids = select(LiveSource.id).where(LiveSource.project_id == project_id)
+    live_turn_ids = [
+        row[0]
+        for row in db.execute(
+            select(LiveTurn.id)
+            .where(LiveTurn.source_id.in_(live_source_ids))
+            .order_by(LiveTurn.id)
+            .with_for_update()
+        ).all()
+    ]
+    batch_size = 1000
+    for offset in range(0, len(live_turn_ids), batch_size):
+        ids = live_turn_ids[offset : offset + batch_size]
+        db.query(LiveChartImage).filter(LiveChartImage.turn_pk.in_(ids)).delete(
+            synchronize_session=False
+        )
+        db.query(LiveTurnScore).filter(LiveTurnScore.turn_pk.in_(ids)).delete(
+            synchronize_session=False
+        )
+        db.query(LiveTurn).filter(LiveTurn.id.in_(ids)).delete(
+            synchronize_session=False
+        )
+    db.query(LiveCanaryResult).filter(
+        LiveCanaryResult.source_id.in_(live_source_ids)
+    ).delete(synchronize_session=False)
+    db.query(LiveDay).filter(LiveDay.source_id.in_(live_source_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(LiveMetricSpec).filter(LiveMetricSpec.source_id.in_(live_source_ids)).delete(
+        synchronize_session=False
+    )
+    for model in (LiveJob, LiveWorkerEvent, LiveWorkerSettings):
+        while True:
+            ids = (
+                select(model.id)
+                .where(model.source_id.in_(live_source_ids))
+                .order_by(model.id)
+                .limit(batch_size)
+            )
+            deleted = db.query(model).filter(model.id.in_(ids)).delete(
+                synchronize_session=False
+            )
+            if deleted < batch_size:
+                break
+    db.query(LiveSource).filter(LiveSource.project_id == project_id).delete(
         synchronize_session=False
     )
 
@@ -2146,9 +2215,9 @@ def delete_project(
     """Permanently delete a project that has no runs.
 
     Removes its datasets, API keys, members, LLM connections, analysis rules,
-    catalogs, prompts and reference documents. Runs are never deleted here: a
-    project that still has runs (including runs in Trash) returns 409; archive
-    it instead.
+    catalogs, prompts, reference documents and Live evaluation data. Runs are
+    never deleted here: a project that still has runs (including runs in Trash)
+    returns 409; archive it instead.
     """
     _require_admin(principal)
     project = _get_project(db, project_id)

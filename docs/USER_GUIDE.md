@@ -264,6 +264,42 @@ The experiment page shows a **Credentials** row (API key and dataset read token:
 with an *experiment* tag and a link to the experiment; admins can revoke one by hand (a retry issues a new one).
 
 
+## Live evaluation
+
+Open **Live** in a project to follow real user turns evaluated by the evaluation worker, investigate a diagnosis, and read the evidence behind a score.
+
+### What is a live source?
+
+A live source is a named evaluation worker feed within a project, with a stable key, an environment and its own metric definitions. The evaluation worker observes the product and pushes evaluated turns to qym. Pick a source in the header when a project has more than one. A project without a source shows a guide link until the evaluation worker registers one.
+
+### The three pages
+
+- **Overview** shows the selected day's worker status, turn counts, diagnosis mix, metric means, service health and the latest canary checks. Choose a day with the arrows or date picker. The trend shows one column per day over 14, 30 or 90 days; choosing a column changes the selected day. A Days row opens that day's turns.
+- **Turns** lists questions, diagnoses, scores, latency and service faults. Filter by day or date range, diagnosis, status, outcome, mode, service, metric bounds, user or conversation; search questions and answers, sort a column or export the filtered rows as CSV. The URL preserves the filters. Wide tables scroll inside their frame.
+- **Turn detail** opens on Diagnosis, with the reason, judge comparisons, SQL, answer, charts and services. Its other tabs are Answer and SQL, Judges, Charts, Services and tools, Conversation and Evaluator. Evidence appears when supplied by the evaluation worker; unavailable values show a dash or an explanation. Conversation opens related turns. Previous and next follow the originating list's loaded page and filters. Product and evaluation trace links appear when supplied.
+
+Use Tab to reach day controls, stat links, diagnosis segments, trend columns and Days rows; Enter activates them. Left and right Arrow keys select turn-detail tabs. Arabic questions and answers read right to left within the left-to-right controls.
+
+### Read the worker status and gaps
+
+**Running** means qym received a recent heartbeat. **Stale** means no heartbeat has arrived, or the last receipt is older than the configured threshold (300 seconds by default). The status line also shows the latest turn time and the judge models and evaluation versions when supplied. A recent heartbeat says the evaluation worker is reporting; it does not guarantee successful product responses or evaluation scores.
+
+A hatched trend column and a **Gap** in the Days table mean the longest recorded gap between heartbeat receipts exceeded three configured poll intervals (60 seconds per interval when unspecified). A worker gap is different from a quiet day with no turns. Historical gaps stay visible after the evaluation worker resumes; the current status reports its latest heartbeat.
+
+### Read the diagnosis mix and numbers
+
+The diagnosis mix counts the labels on turns received by qym. Labels and their colors come from the source's metric definitions; each segment and legend entry opens the matching turns. Hover or focus a segment to read its count. The worker's **Turns** and **Evaluated** counters can be ahead of uploads: **turns not yet in qym** is the difference between turns seen and turns received, not an extra diagnosis category.
+
+Only received, non-skipped scores contribute to Live metric means. A dash means no numeric score is available, not zero. Service health summarizes the received service scores; canaries are separate active probes whose latest result and latency help distinguish a product fault from a missing worker report.
+
+### Where the data comes from
+
+The evaluation worker registers the source and metric definitions, sends a heartbeat after each poll, and uploads daily counters, turns with scores and evidence, and canary results through the project API-key-authenticated ingest API. qym stores and presents these reports; it does not run the evaluation worker from this tab. Republishing the same source and turn ID replaces that turn's evidence and scores. The explicit reporting day supplied by the evaluation worker determines the day grouping; times in the UI are UTC.
+
+For authentication, payloads, limits and reconciliation, see the [Live evaluation ingest guide v1.0](live-evaluation-ingest-v1.0.md).
+
+By default, retention removes turns, their scores and canary results after 180 days; daily counter rows remain for 730 days. Older counters can therefore outlive the detailed evidence and score aggregates computed from retained turns.
+
 ## Feedback
 
 Feedback turns a need into a well-formed request. Open **Feedback** in the sidebar (every signed-in person sees it, in a project or not).

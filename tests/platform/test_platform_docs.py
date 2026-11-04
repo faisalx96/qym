@@ -26,9 +26,9 @@ def _ia_pages() -> list[tuple[str, str]]:
 
 def test_react_docs_ia_only_references_existing_pages() -> None:
     pages = _ia_pages()
-    assert len(pages) == 27
+    assert len(pages) == 28
     assert len(set(pages)) == len(pages)
-    for page in ("navigation", "runs", "run-detail", "projects-data-review"):
+    for page in ("navigation", "runs", "run-detail", "live", "projects-data-review"):
         assert ("platform-guide", page) in pages
     for section_id, page_id in pages:
         assert (DASHBOARD_DOCS / section_id / f"{page_id}.html").is_file(), (section_id, page_id)

@@ -154,6 +154,22 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Optional live evaluation engine, shipped as a separate worker image.
+  # Pushes evaluated turns to this platform's live ingest API with a project
+  # API key. Its env file supplies everything else (data sources and judges).
+  # Start with `docker compose --profile live up -d`.
+  live-worker:
+    profiles: ["live"]
+    image: ${QYM_LIVE_WORKER_IMAGE:-qym-live-worker:unset}
+    env_file:
+      - path: ${QYM_LIVE_WORKER_ENV_FILE:-./live-worker.env}
+        required: false
+    environment:
+      QYM_BASE_URL: ${QYM_LIVE_WORKER_QYM_URL:-http://api:8000}
+      QYM_LIVE_ENABLED: "true"
+    depends_on: [api]
+    restart: unless-stopped
+
 volumes:
   pgdata:
 

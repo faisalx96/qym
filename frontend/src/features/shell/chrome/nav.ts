@@ -23,6 +23,13 @@ export const GLOBAL_NAV: NavItem[] = [
 export function projectNav(slug: string): NavItem[] {
   return [
     { id: 'overview', label: 'Dashboard', icon: 'home', to: projectPath(slug, 'overview') },
+    {
+      id: 'live',
+      label: 'Live',
+      icon: 'clock',
+      to: projectPath(slug, 'live'),
+      activeFor: ['live-turns', 'live-turn', 'live-worker'],
+    },
     { id: 'charts', label: 'Charts', icon: 'chart', to: projectPath(slug, 'charts') },
     { id: 'runs', label: 'Runs', icon: 'list', to: projectPath(slug), activeFor: ['run-detail', 'compare'] },
     {
@@ -62,6 +69,7 @@ export interface RouteContext {
   page: string;
   projectSlug: string | null;
   runId: string | null;
+  turnId?: string;
   /** Human label of the current page (breadcrumb tail). */
   label: string;
 }
@@ -77,6 +85,10 @@ const PAGE_LABELS: Record<string, string> = {
   feedback: 'Feedback',
   runs: 'Runs',
   overview: 'Dashboard',
+  live: 'Live',
+  'live-turns': 'Turns',
+  'live-worker': 'Worker',
+  'live-turn': 'Turn',
   charts: 'Charts',
   experiments: 'Experiments',
   'experiments-queue': 'Queue',
@@ -98,6 +110,7 @@ export function parseRoute(pathname: string): RouteContext {
     const rest = project[2] ?? '';
     let page = 'runs';
     let runId: string | null = null;
+    let turnId: string | undefined;
     if (rest.startsWith('runs/')) {
       const tail = rest.slice(5);
       if (/\/analyzer$/.test(tail)) {
@@ -107,12 +120,24 @@ export function parseRoute(pathname: string): RouteContext {
         page = 'run-detail';
         runId = decodeURIComponent(tail);
       }
-    } else if (rest === 'experiments/queue') page = 'experiments-queue';
+    } else if (rest.startsWith('live/turns/')) {
+      page = 'live-turn';
+      turnId = decodeURIComponent(rest.slice('live/turns/'.length));
+    } else if (rest === 'live/turns') page = 'live-turns';
+    else if (rest === 'live/worker') page = 'live-worker';
+    else if (rest === 'live') page = 'live';
+    else if (rest === 'experiments/queue') page = 'experiments-queue';
     else if (rest.startsWith('experiments')) page = 'experiments';
     else if (rest.startsWith('environments')) page = 'environments';
     else if (rest.startsWith('datasets')) page = 'datasets';
     else if (rest) page = rest.split('/')[0]!;
-    return { page, projectSlug: slug, runId, label: PAGE_LABELS[page] ?? page };
+    return {
+      page,
+      projectSlug: slug,
+      runId,
+      ...(turnId !== undefined ? { turnId } : {}),
+      label: PAGE_LABELS[page] ?? page,
+    };
   }
   if (path === '/') return { page: 'projects', projectSlug: null, runId: null, label: 'Projects' };
   const run = /^\/run\/(.+?)(\/analyzer)?$/.exec(path);

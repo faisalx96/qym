@@ -24,6 +24,8 @@ export interface TextFieldProps extends Omit<AriaTextFieldProps, 'className' | '
   className?: string;
   inputClassName?: string;
   autoComplete?: string;
+  /** Native model/id suggestions shared by several fields. */
+  list?: string;
   /** Width in ch or px (CSS value). */
   width?: string | number;
 }
@@ -42,6 +44,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
     className,
     inputClassName,
     autoComplete,
+    list,
     width,
     isRequired,
     ...rest
@@ -77,6 +80,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
           className={[styles.control, inputClassName].filter(Boolean).join(' ')}
           placeholder={placeholder}
           autoComplete={autoComplete}
+          list={list}
           data-mono={mono ? '' : undefined}
         />
         {suffix ? <span className={styles.suffix}>{suffix}</span> : null}

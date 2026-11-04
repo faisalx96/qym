@@ -1,0 +1,334 @@
+.page {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  font-size: var(--font-base);
+}
+
+.page > *,
+.mixRow > * {
+  min-inline-size: 0;
+}
+
+.page [dir='auto'] {
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.source[data-multiple] {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  inline-size: max-content;
+  max-inline-size: 100%;
+}
+
+.inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  font-size: var(--font-base);
+}
+
+.status[data-stale] {
+  color: var(--error-text);
+}
+
+.number {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tiles > [role='list'] {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.tiles a {
+  color: inherit;
+}
+
+.tiles a[data-tone] {
+  color: var(--tone-text);
+}
+
+.mixRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--space-md);
+}
+
+.mix {
+  display: flex;
+  gap: 1px;
+  min-inline-size: 0;
+  block-size: var(--control-height);
+}
+
+.mixSegment {
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  background: var(--tone);
+}
+
+.mixLink {
+  display: block;
+  block-size: 100%;
+}
+
+.mixLegend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm) var(--space-md);
+  margin-block-start: var(--space-md);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.legendItem strong {
+  margin-inline-start: auto;
+  color: var(--text-primary);
+}
+
+.swatch {
+  flex: none;
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border-radius: calc(var(--space-xs) / 2);
+  background: var(--tone);
+}
+
+.received {
+  display: block;
+  margin-block-start: var(--space-md);
+}
+
+.metricRows {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.metricRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-sm);
+  padding-block: var(--space-xs);
+  font-size: var(--font-base);
+}
+
+.services {
+  display: grid;
+  grid-template-columns: repeat(var(--live-service-columns, 6), minmax(0, 1fr));
+}
+
+.service {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.service + .service {
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.service > :first-child {
+  font-size: var(--font-xl);
+  font-weight: 700;
+}
+
+.canaries {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  padding-block-start: var(--space-md);
+  margin-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+  font-size: var(--font-sm);
+}
+
+.trendPlot {
+  position: relative;
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: calc(var(--space-xl) * 6);
+  margin-inline: calc(var(--live-trend-overhang, 0px) * -1);
+}
+
+/* Half-gap edge padding keeps pitch = plot width / count in both layouts, matching BarColumns' label rule. */
+.trendPlot[data-dense='true'] .trendColumns {
+  gap: calc(var(--space-xs) / 4);
+  padding-inline: calc(var(--space-xs) / 8);
+}
+
+.trendPlot[data-dense='true'] [data-part='well'] {
+  margin-inline: calc(var(--space-xs) / -8);
+  padding-inline: calc(var(--space-xs) / 8);
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day] {
+  min-inline-size: calc(var(--space-xs) / 2);
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:first-child [data-part='count'] {
+  align-self: flex-start;
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:last-child [data-part='count'] {
+  align-self: flex-end;
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:first-child [data-part='foot'] {
+  align-items: flex-start;
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:last-child [data-part='foot'] {
+  align-items: flex-end;
+}
+
+.trendPlot[data-dense='true'] [data-live-trend-day]:not([data-zero]) [data-part='bar'] {
+  min-block-size: calc(var(--space-xs) / 2);
+}
+
+.rateLine {
+  position: absolute;
+  inset-block: var(--space-lg) calc(var(--space-md) + var(--space-xs));
+  inset-inline: 0;
+  inline-size: 100%;
+  block-size: calc(100% - var(--space-lg) - var(--space-md) - var(--space-xs));
+  overflow: visible;
+  pointer-events: none;
+}
+
+.rateLine polyline {
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.rateLine circle {
+  fill: var(--text-primary);
+}
+
+.lineKey {
+  inline-size: var(--space-md);
+  border-block-start: 2px solid var(--text-primary);
+}
+
+.trendCaption {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.trendPlot [data-live-gap='true'] [data-part='bar'] {
+  flex: 1;
+  min-block-size: var(--bar-action-h);
+}
+
+.trendPlot [data-live-gap='true'] [data-part='well']::before {
+  flex: 0;
+}
+
+/* Reserve the measured implementation's frames during the pending delay (impl-*.json). */
+.loading {
+  --live-status-height: calc(var(--control-height) + var(--space-md));
+  --live-tiles-height: calc(var(--space-xl) * 2 + var(--space-sm) + 2px);
+  --live-means-height: calc(var(--space-xl) * 8 + var(--space-sm) + 1px);
+  --live-mix-height: var(--live-means-height);
+  --live-services-height: var(--live-services-wide);
+  --live-trend-height: var(--live-trend-wide);
+  --live-days-height: var(--live-days-wide);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.loading[data-visible='false'] {
+  visibility: hidden;
+}
+
+@container (width < 900px) {
+  .mixRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tiles > [role='list'] {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .tiles > [role='list'] > [data-tile]:nth-child(n + 5) {
+    grid-column: span 6;
+  }
+
+  .services {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: var(--space-md);
+  }
+
+  .service:nth-child(3n + 1) {
+    border-inline-start: 0;
+  }
+
+  .loading {
+    --live-tiles-height: calc(var(--space-xl) * 4 + var(--space-lg) - 1px);
+    --live-mix-height: calc(var(--space-xl) * 6 + var(--space-md) + var(--space-xs));
+    --live-services-height: var(--live-services-medium);
+    --live-trend-height: var(--live-trend-medium);
+    --live-days-height: var(--live-days-medium);
+  }
+}
+
+@container (width < 480px) {
+  .mixLegend {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .services {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service:nth-child(odd) {
+    border-inline-start: 0;
+  }
+
+  .service:nth-child(even) {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .loading {
+    --live-status-height: calc(var(--space-xl) * 4 + var(--space-md) + 2px);
+    --live-tiles-height: calc(var(--space-xl) * 7 + var(--space-md) + 1px);
+    --live-mix-height: calc(var(--space-xl) * 9 - var(--space-xs) + 1px);
+    --live-services-height: var(--live-services-narrow);
+    --live-trend-height: var(--live-trend-narrow);
+    --live-days-height: var(--live-days-narrow);
+  }
+}
