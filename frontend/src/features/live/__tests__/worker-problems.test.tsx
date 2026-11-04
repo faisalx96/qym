@@ -79,7 +79,7 @@ it('shows a failed events request instead of an empty state', () => {
   expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load worker problems');
   expect(screen.queryByText('No problems reported by the worker')).toBeNull();
 });
-it('shows Manage only with control and the problems badge only above zero', () => {
+it('always shows Manage and shows the problems badge only above zero with or without control', () => {
   const control = liveWorkerRead.running!;
   const base = { ...liveOverview.status, worker: { ...liveOverview.status.worker, control } };
   const { rerender } = render(
@@ -95,6 +95,7 @@ it('shows Manage only with control and the problems badge only above zero', () =
     'href',
     '/projects/demo/live/worker?source=worker+%26+prod#problems',
   );
+  expect(screen.getByText('Worker · running · v3')).toBeVisible();
   rerender(
     <MemoryRouter>
       <StatusLine slug="demo" source="worker" status={{ ...base, errors_last_hour: 0 }} />
@@ -104,10 +105,25 @@ it('shows Manage only with control and the problems badge only above zero', () =
   expect(screen.getByRole('link', { name: 'Manage' })).toBeVisible();
   rerender(
     <MemoryRouter>
+      <StatusLine slug="demo" source="worker" status={{ ...liveOverview.status, errors_last_hour: 2 }} />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute(
+    'href',
+    '/projects/demo/live/worker?source=worker',
+  );
+  expect(screen.queryByText(/Worker ·/)).toBeNull();
+  expect(screen.getByRole('link', { name: '2 problems in the last hour' })).toHaveAttribute(
+    'href',
+    '/projects/demo/live/worker?source=worker#problems',
+  );
+  rerender(
+    <MemoryRouter>
       <StatusLine slug="demo" source="worker" status={liveOverview.status} />
     </MemoryRouter>,
   );
-  expect(screen.queryByRole('link', { name: 'Manage' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Manage' })).toBeVisible();
+  expect(screen.queryByRole('link', { name: /problems in the last hour/ })).toBeNull();
 });
 it.each([
   undefined,

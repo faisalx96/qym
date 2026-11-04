@@ -84,6 +84,12 @@ def upsert_source(
         source = LiveSource(project_id=project_id, key=key)
         db.add(source)
     for name, value in body.model_dump().items():
+        if (
+            name == "worker"
+            and isinstance(source.worker, dict)
+            and "control" in source.worker
+        ):
+            value = {"control": source.worker["control"], **(value or {})}
         setattr(source, name, value)
     return source, created
 

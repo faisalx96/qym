@@ -120,6 +120,70 @@ def test_put_source_creates_then_updates(client, session_factory):
         assert source.day_key_timezone == "UTC"
 
 
+def test_put_source_preserves_heartbeat_control(client, session_factory):
+    created = _create_source(
+        client, product="Assistant", worker={"worker_version": "1", "suite": "daily"}
+    )
+    control = {"state": "running", "settings_version_applied": 3}
+    response = client.post(
+        BASE + "/heartbeat",
+        headers=_auth_headers(),
+        json={"at": "2026-11-01T10:00:00Z", "worker": {"control": control}},
+    )
+    assert response.status_code == 204
+    with session_factory() as session:
+        assert session.query(LiveSource).one().worker["control"] == control
+
+    response = client.put(
+        BASE,
+        headers=_auth_headers(),
+        json={**SOURCE, "name": "Renamed worker", "worker": {"worker_version": "2"}},
+    )
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["id"] == created["id"]
+    assert updated["name"] == "Renamed worker"
+    assert updated["product"] is None
+    assert updated["worker"] == {"worker_version": "2", "control": control}
+    with session_factory() as session:
+        source = session.query(LiveSource).one()
+        assert source.worker == {"worker_version": "2", "control": control}
+
+
+@pytest.mark.parametrize(
+    "stored_worker, worker, expected",
+    [
+        ({"worker_version": "1"}, None, None),
+        ({"control": None, "worker_version": "1"}, None, {"control": None}),
+        (
+            {"control": {"state": "running"}, "worker_version": "1"},
+            None,
+            {"control": {"state": "running"}},
+        ),
+        ({"control": {"state": "running"}}, {}, {"control": {"state": "running"}}),
+        (
+            {"control": {"state": "running"}},
+            {"control": {"state": "paused"}},
+            {"control": {"state": "paused"}},
+        ),
+        ({"control": {"state": "running"}}, {"control": None}, {"control": None}),
+    ],
+)
+def test_upsert_source_control_replacement_rules(
+    client, session_factory, stored_worker, worker, expected
+):
+    from qym_platform.api.live_ingest import SourceBody
+    from qym_platform.services.live_ingest import upsert_source
+
+    _create_source(client, worker=stored_worker)
+    # SourceBody rejects null over HTTP; exercise the service's compatibility path.
+    body = SourceBody.model_construct(**SOURCE, worker=worker)
+    with session_factory() as session:
+        source, created = upsert_source(session, "live-project-1", "worker-1", body)
+        assert created is False
+        assert source.worker == expected
+
+
 def test_key_of_another_project_is_403(client, session_factory):
     with session_factory() as session:
         _seed_api_key(session, token="other-live-token", suffix="2")
