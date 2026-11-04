@@ -1,9 +1,11 @@
 /**
- * Follow a running run (brief 04 §2 J2): probe /live-status every 3 s
- * (1.5 s while a stop is requested; exponential backoff to 30 s on errors;
- * paused while the tab is hidden), and refetch the compact payload when the
- * revision changed and the size-based throttle allows (3 s / 10 s / 30 s for
- * <500 / <5000 / more rows×passes, never sooner than 10× the last reload
+ * Follow a running run (brief 04 §2 J2): probe /live-status every
+ * QYM_RUN_LIVE_REFRESH_SECONDS (the deployment's value, carried by the run
+ * payload and every probe answer; 15 s when unknown; 1.5 s while a stop is
+ * requested; exponential backoff to 30 s on errors; paused while the tab is
+ * hidden), and refetch the compact payload when the revision changed and the
+ * size-based throttle allows (3 s / 10 s / 30 s for <500 / <5000 / more
+ * rows×passes, never sooner than the probe interval or 10× the last reload
  * duration, max 120 s). When `live` turns false: one final reload and the
  * dependent queries are invalidated. A `qym:run-status` announcement from
  * another tab triggers an immediate probe. The owner must remount per run
@@ -16,13 +18,24 @@ import { usePageVisible } from '@/lib/polling';
 import { useRunStatus } from '@/lib/run-status';
 import type { LiveStatus, RunPayload } from '../types';
 
-export const LIVE_PROBE_MS = 3000;
+/** The probe interval when neither the payload nor a probe has said (the platform's default of 15 s). */
+export const DEFAULT_LIVE_REFRESH_MS = 15_000;
 export const LIVE_PROBE_STOPPING_MS = 1500;
 export const LIVE_PROBE_MAX_BACKOFF_MS = 30_000;
 
-export function reloadThrottleMs(rowsTimesPasses: number, lastReloadMs: number): number {
+/** The probe interval in ms from the server's `live_refresh_seconds` (at least 1 s), or the default. */
+export function liveRefreshMs(seconds: number | null | undefined): number {
+  const n = Number(seconds);
+  return Number.isFinite(n) && n >= 1 ? Math.round(n * 1000) : DEFAULT_LIVE_REFRESH_MS;
+}
+
+export function reloadThrottleMs(
+  rowsTimesPasses: number,
+  lastReloadMs: number,
+  probeMs: number = DEFAULT_LIVE_REFRESH_MS,
+): number {
   const base = rowsTimesPasses < 500 ? 3000 : rowsTimesPasses < 5000 ? 10_000 : 30_000;
-  return Math.min(120_000, Math.max(base, lastReloadMs * 10));
+  return Math.max(probeMs, Math.min(120_000, Math.max(base, lastReloadMs * 10)));
 }
 
 export interface LiveRunState {
@@ -56,6 +69,12 @@ export function useLiveRun(runId: string, payload: RunPayload | undefined): Live
   const liveRef = useRef(initiallyLive);
   const backoff = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The deployment's probe interval: the run payload carries it with the revision, every probe answer repeats it.
+  const refreshMs = useRef(liveRefreshMs(payload?.run.live_refresh_seconds));
+  const payloadRefresh = payload?.run.live_refresh_seconds ?? null;
+  useEffect(() => {
+    if (payloadRefresh != null) refreshMs.current = liveRefreshMs(payloadRefresh);
+  }, [payloadRefresh]);
   // The header may paint from the list row (no revision yet); the summary or the rows bring it a moment later.
   const payloadRevision = payload?.run.live_revision ?? null;
   useEffect(() => {
@@ -100,9 +119,13 @@ export function useLiveRun(runId: string, payload: RunPayload | undefined): Live
       status = await fetchLiveStatus(runId);
       backoff.current = 0;
     } catch {
-      backoff.current = Math.min(LIVE_PROBE_MAX_BACKOFF_MS, (backoff.current || LIVE_PROBE_MS) * 2);
+      backoff.current = Math.min(
+        Math.max(LIVE_PROBE_MAX_BACKOFF_MS, refreshMs.current),
+        (backoff.current || refreshMs.current) * 2,
+      );
       return;
     }
+    if (status.live_refresh_seconds != null) refreshMs.current = liveRefreshMs(status.live_refresh_seconds);
     const serverTime = status.server_time ? Date.parse(status.server_time) : NaN;
     const serverOffsetMs = Number.isFinite(serverTime) ? serverTime - Date.now() : 0;
     const wasLive = liveRef.current;
@@ -125,7 +148,7 @@ export function useLiveRun(runId: string, payload: RunPayload | undefined): Live
       return;
     }
     if (status.revision !== revision.current || pendingRevision.current) {
-      const wait = reloadThrottleMs(rowsTimesPasses, lastReloadDuration.current);
+      const wait = reloadThrottleMs(rowsTimesPasses, lastReloadDuration.current, refreshMs.current);
       if (Date.now() - lastReloadAt.current >= wait) {
         revision.current = status.revision;
         pendingRevision.current = null;
@@ -143,10 +166,12 @@ export function useLiveRun(runId: string, payload: RunPayload | undefined): Live
       if (cancelled) return;
       await probe();
       if (cancelled || !liveRef.current) return;
-      const interval = backoff.current || (state.stopRequested ? LIVE_PROBE_STOPPING_MS : LIVE_PROBE_MS);
+      const interval =
+        backoff.current ||
+        (state.stopRequested ? Math.min(LIVE_PROBE_STOPPING_MS, refreshMs.current) : refreshMs.current);
       timer.current = setTimeout(tick, interval);
     };
-    timer.current = setTimeout(tick, LIVE_PROBE_MS);
+    timer.current = setTimeout(tick, refreshMs.current);
     return () => {
       cancelled = true;
       if (timer.current) clearTimeout(timer.current);
