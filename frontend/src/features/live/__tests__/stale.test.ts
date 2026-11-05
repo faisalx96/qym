@@ -11,6 +11,7 @@ const status: LiveSourceInfo = {
   stale: false,
   seconds_since_heartbeat: 42,
   last_heartbeat_at: '2026-11-01T09:00:00Z',
+  last_poll_at: null,
   last_turn_at: null,
   worker: {},
 };

@@ -51,7 +51,7 @@ export function DateRangeDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Evaluate a date range"
+      title="Backfill a day range"
       size="md"
       description="Days in the source's timezone, at most 31 days"
       footer={

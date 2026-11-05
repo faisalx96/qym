@@ -1,4 +1,5 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   failedCheckText,
   fieldStatus,
@@ -10,9 +11,10 @@ import {
 import { actionErrorMessage, ApiError, errorSentence, fieldErrorsOf } from '@/lib/http';
 import {
   Button,
+  Disclosure,
   ErrorState,
+  InlineNotice,
   NumberField,
-  SectionHeader,
   Select,
   Switch,
   Tag,
@@ -20,50 +22,89 @@ import {
   TextField,
   useToast,
 } from '@/ui';
+import { workerTime } from './format';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
+
+const sectionSecrets: Partial<Record<keyof LiveWorkerValues, keyof LiveWorkerSecrets>> = {
+  langfuse: 'langfuse_secret_key',
+  dataiku: 'dataiku_api_key',
+  database: 'database_password',
+};
+const sections = ['evaluation', 'models', 'langfuse', 'dataiku', 'database'] as const;
+function sectionChanged(section: keyof LiveWorkerValues, values: LiveWorkerValues, saved: LiveWorkerValues) {
+  return Object.entries(values[section]).some(([key, value]) => value !== Reflect.get(saved[section], key));
+}
 
 function SettingsSection({
   section,
   title,
   read,
+  summary,
+  differsFromRunning,
+  invalid,
+  targeted,
   children,
 }: {
   section: keyof LiveWorkerValues;
   title: string;
   read: LiveWorkerRead;
+  summary: string;
+  differsFromRunning: boolean;
+  invalid: boolean;
+  targeted: boolean;
   children: ReactNode;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const status = fieldStatus(section, read);
   const error = failedCheckText(section, read);
+  const attention = differsFromRunning || invalid || Boolean(error);
+  const models = section === 'models' ? read.running?.models : null;
   return (
-    <section className={styles.settingsSection} aria-label={title}>
-      <SectionHeader
-        level="lg"
-        title={title}
-        aside={
-          <Tag
-            tone={
-              status === 'running'
-                ? 'success'
-                : status === 'pending'
-                  ? 'warning'
-                  : status === 'failed'
-                    ? 'danger'
-                    : undefined
-            }
-          >
-            {status === 'waiting' ? 'waiting for version 1' : status}
-          </Tag>
+    <section id={`settings-${section}`} className={styles.settingsSection} aria-label={title}>
+      <Disclosure
+        open={expanded || attention || targeted}
+        onOpenChange={setExpanded}
+        title={
+          <span className={styles.inline}>
+            {title}
+            <Tag
+              tone={
+                status === 'running'
+                  ? 'success'
+                  : status === 'pending'
+                    ? 'warning'
+                    : status === 'failed'
+                      ? 'danger'
+                      : undefined
+              }
+            >
+              {status === 'waiting' ? 'waiting for version 1' : status}
+            </Tag>
+          </span>
         }
-      />
-      {error ? (
-        <Text as="p" tone="danger" dir="auto">
-          {error}
-        </Text>
-      ) : null}
-      <div className={styles.fields}>{children}</div>
+        summary={
+          <span className={styles.wrap} dir="auto">
+            {differsFromRunning ? `differs from running v${read.running!.settings_version_applied} · ` : ''}
+            {summary}
+            {models ? (
+              <span className={styles.wrap}>
+                gateway listed {read.model_ids.length} models at {workerTime(models.listed_at)}
+              </span>
+            ) : null}
+          </span>
+        }
+      >
+        <div className={styles.stack}>
+          {error ? (
+            <Text as="p" tone="danger" dir="auto">
+              {error}
+            </Text>
+          ) : null}
+          <div className={styles.fields}>{children}</div>
+        </div>
+      </Disclosure>
     </section>
   );
 }
@@ -83,6 +124,40 @@ export function SettingsForm({
   const toast = useToast();
   const modelsId = useId();
   const errors = fieldErrorsOf(error);
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (sections.some((section) => hash === `#settings-${section}`))
+      document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
+  }, [hash]);
+  const latest = read.settings && read.settings.version >= (loaded.version ?? 0) ? read.settings : loaded;
+  const latestVersion = latest.version ?? 0;
+  const typedSecret = Object.values(secrets).some((value) => value !== '');
+  const hasChanges =
+    !latest.version ||
+    typedSecret ||
+    sections.some((section) => sectionChanged(section, values, latest.values));
+  const evaluation = values.evaluation;
+  const summaries: Record<keyof LiveWorkerValues, string> = {
+    evaluation: `Chart vision ${evaluation.chart_vision_enabled ? 'on' : 'off'} · Dataiku replay ${evaluation.dataiku_execution ? 'on' : 'off'} · ${evaluation.parallel_turns} lanes · poll ${evaluation.poll_interval_s} s · lookback ${evaluation.lookback_hours} h`,
+    models: `${values.models.judge_a || '—'} (A) · ${values.models.judge_b || '—'} (B) · ${values.models.vision_judge || '—'} (vision)`,
+    langfuse: `${values.langfuse.host || '—'} · secret ${secrets.langfuse_secret_key || read.settings?.secret_hints.langfuse_secret_key ? 'set' : 'not set'}`,
+    dataiku: `${values.dataiku.url || '—'} · ${values.dataiku.database || '—'}`,
+    database: `${values.database.host || '—'}:${values.database.port} / ${values.database.database || '—'} · user ${values.database.user || '—'} · SSL ${values.database.sslmode}`,
+  };
+  function sectionProps(section: keyof LiveWorkerValues) {
+    const secretKey = sectionSecrets[section];
+    const running = read.running?.running;
+    return {
+      summary: summaries[section],
+      differsFromRunning:
+        read.running?.settings_version_applied != null &&
+        Boolean(running && sectionChanged(section, values, running)),
+      invalid:
+        Object.keys(values[section]).some((key) => Boolean(fieldError(section, key))) ||
+        Boolean(secretKey && fieldError('secrets', secretKey)),
+      targeted: hash === `#settings-${section}`,
+    };
+  }
   const dirty =
     JSON.stringify(values) !== JSON.stringify(loaded.values) ||
     Object.values(secrets).some((value) => value !== '') ||
@@ -134,6 +209,7 @@ export function SettingsForm({
     );
   }
   async function save() {
+    if (!hasChanges || busy) return;
     setError(null);
     const typed = Object.fromEntries(Object.entries(secrets).filter(([, value]) => value !== ''));
     try {
@@ -161,10 +237,12 @@ export function SettingsForm({
       >
         {incoming ? (
           <div className={styles.stack}>
-            <Text as="p" tone="warning" dir="auto">
-              Version {incoming.version} was saved by {incoming.created_by ?? 'another member'} while you were
-              editing
-            </Text>
+            <InlineNotice tone="warning">
+              <span dir="auto">
+                Version {incoming.version} was saved by {incoming.created_by ?? 'another member'} while you
+                were editing
+              </span>
+            </InlineNotice>
             <div className={styles.inline}>
               <Button onPress={() => initialise(incoming.version, incoming.values)}>
                 Load version {incoming.version}
@@ -173,7 +251,7 @@ export function SettingsForm({
             </div>
           </div>
         ) : null}
-        <SettingsSection section="evaluation" title="Evaluation" read={read}>
+        <SettingsSection section="evaluation" title="Evaluation" read={read} {...sectionProps('evaluation')}>
           {(
             [
               ['chart_vision_enabled', 'Chart vision'],
@@ -214,7 +292,7 @@ export function SettingsForm({
             />
           ))}
         </SettingsSection>
-        <SettingsSection section="models" title="Models" read={read}>
+        <SettingsSection section="models" title="Models" read={read} {...sectionProps('models')}>
           <Select
             label="Connection"
             items={read.connections.map((connection) => ({
@@ -255,7 +333,7 @@ export function SettingsForm({
             ))}
           </datalist>
         </SettingsSection>
-        <SettingsSection section="langfuse" title="Langfuse" read={read}>
+        <SettingsSection section="langfuse" title="Langfuse" read={read} {...sectionProps('langfuse')}>
           <TextField
             label="Langfuse host"
             value={values.langfuse.host}
@@ -270,7 +348,7 @@ export function SettingsForm({
           />
           {secret('langfuse_secret_key', 'Langfuse secret key')}
         </SettingsSection>
-        <SettingsSection section="dataiku" title="Dataiku" read={read}>
+        <SettingsSection section="dataiku" title="Dataiku" read={read} {...sectionProps('dataiku')}>
           <TextField
             label="Dataiku URL"
             value={values.dataiku.url}
@@ -285,7 +363,7 @@ export function SettingsForm({
           />
           {secret('dataiku_api_key', 'Dataiku API key', 'required when Dataiku execution is on')}
         </SettingsSection>
-        <SettingsSection section="database" title="Database" read={read}>
+        <SettingsSection section="database" title="Database" read={read} {...sectionProps('database')}>
           <TextField
             label="Database host"
             value={values.database.host}
@@ -327,12 +405,28 @@ export function SettingsForm({
           />
           {secret('database_password', 'Database password')}
         </SettingsSection>
-        <TextField label="Note" help="Optional" value={note} onChange={setNote} errorMessage={errors.note} />
-        <div className={styles.inline}>
-          <Button type="submit" variant="accent" isDisabled={busy} loading={busy}>
-            Save
+        <div className={styles.saveRow}>
+          <TextField
+            label="Note"
+            help="Optional"
+            value={note}
+            onChange={setNote}
+            errorMessage={errors.note}
+          />
+          <Button
+            type="submit"
+            variant="primary"
+            isDisabled={busy || !hasChanges}
+            loading={busy}
+            disabledReason={`No changes since v${latestVersion}`}
+          >
+            Save as v{latestVersion + 1}
           </Button>
         </div>
+        {!hasChanges ? <Text tone="muted">No changes since v{latestVersion}</Text> : null}
+        <Text tone="muted">
+          After Save: the worker checks every connection and model, finishes its current turn, then switches.
+        </Text>
         {error ? (
           <ErrorState
             compact

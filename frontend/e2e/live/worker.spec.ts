@@ -31,7 +31,7 @@ test.beforeEach(async ({ request }) => {
   seed = await seedLive(request, uniqueSlug('live-worker'), { days: 1 });
 });
 
-test('waiting for the first version becomes running v1 in State and every settings section', async ({
+test('waiting for the first version becomes Running v1 in the status strip and every settings section', async ({
   page,
   request,
 }) => {
@@ -41,8 +41,8 @@ test('waiting for the first version becomes running v1 in State and every settin
     settings_version_applied: null,
   });
   await gotoApp(page, workerPath());
-  const state = page.locator('[data-live-block="worker-state"]');
-  await expect(state).toContainText('Waiting: Waiting for settings version 1');
+  const state = page.locator('[data-live-block="worker-status"]');
+  await expect(state).toContainText('Waiting for settings version 1');
   const settings = page.locator('[data-live-block="worker-settings"]');
   await expect(settings.getByText('waiting for version 1', { exact: true })).toHaveCount(5);
 
@@ -55,8 +55,8 @@ test('waiting for the first version becomes running v1 in State and every settin
     applied_at: new Date().toISOString(),
   });
   await page.reload();
-  await expect(state).toContainText('running v1');
-  await expect(state.locator('[data-shape="orbit"][data-tone="success"]')).toHaveText('Running');
+  await expect(state).toContainText('Running v1');
+  await expect(state.locator('[data-shape="orbit"][data-tone="success"]')).toHaveText('Running v1');
   for (const name of ['Evaluation', 'Models', 'Langfuse', 'Dataiku', 'Database']) {
     await expect(
       settings.getByRole('region', { name, exact: true }).locator('[data-tone="success"]'),
@@ -93,12 +93,8 @@ test('a failed database verification shows the failed chip and worker error', as
 test('pausing requires confirmation and records who paused the worker', async ({ page, request }) => {
   await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   await gotoApp(page, workerPath());
-  const state = page.locator('[data-live-block="worker-state"]');
-  // react-aria switches toggle from their label, as the other e2e suites do.
-  await state
-    .getByRole('switch', { name: 'Running', exact: true })
-    .locator('xpath=ancestor::label[1]')
-    .click();
+  const state = page.locator('[data-live-block="worker-status"]');
+  await state.getByRole('button', { name: 'Pause evaluation', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Pause evaluation?' });
   await expect(dialog).toBeVisible();
   const before = await request.get(apiPath());
@@ -114,8 +110,8 @@ test('pausing requires confirmation and records who paused the worker', async ({
   const { state: body } = (await response.json()) as { state: WorkerState };
   expect(body.desired).toBe('paused');
   expect(body.changed_by).toBeTruthy();
-  await expect(state).toContainText(`paused by ${body.changed_by}`);
-  await expect(state.getByRole('switch', { name: 'Paused', exact: true })).not.toBeChecked();
+  await expect(state).toContainText(`by ${body.changed_by}`);
+  await expect(state.getByRole('button', { name: 'Resume evaluation', exact: true })).toBeVisible();
 });
 
 test('restoring v1 after saving v2 creates v3 with the restore note and original values', async ({
@@ -137,8 +133,7 @@ test('restoring v1 after saving v2 creates v3 with the restore note and original
   await gotoApp(page, workerPath());
   const history = page.locator('[data-live-block="worker-history"]');
   await history
-    .getByRole('row')
-    .filter({ has: page.getByRole('rowheader', { name: 'v1', exact: true }) })
+    .locator('[data-worker-version="1"]')
     .getByRole('button', { name: 'Restore', exact: true })
     .click();
   const dialog = page.getByRole('dialog', { name: 'Restore version 1?' });
@@ -150,9 +145,7 @@ test('restoring v1 after saving v2 creates v3 with the restore note and original
   const response = await restored;
   expect(response.status(), await response.text()).toBe(201);
   expect(await response.json()).toMatchObject({ version: 3 });
-  const row = history
-    .getByRole('row')
-    .filter({ has: page.getByRole('rowheader', { name: 'v3', exact: true }) });
+  const row = history.locator('[data-worker-version="3"]');
   await expect(row).toContainText('restored from v1');
   const current = await request.get(apiPath());
   expect(current.ok(), await current.text()).toBeTruthy();
@@ -167,8 +160,11 @@ test('date range preview, run, progress and cancellation use the worker jobs API
 }) => {
   await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   await gotoApp(page, workerPath());
-  await page.getByRole('button', { name: 'Evaluate a date range', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Evaluate a date range', exact: true });
+  await page
+    .locator('[data-live-block="worker-status"]')
+    .getByRole('button', { name: 'Backfill a day range', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Backfill a day range', exact: true });
   const day = seed.days[0]!.day;
   await dialog.getByLabel('From', { exact: true }).fill(day);
   await dialog.getByLabel('To', { exact: true }).fill(day);
@@ -231,8 +227,11 @@ test('date range preview, run, progress and cancellation use the worker jobs API
 test('a 32-day range is refused before submitting either job kind', async ({ page, request }) => {
   await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   await gotoApp(page, workerPath());
-  await page.getByRole('button', { name: 'Evaluate a date range', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Evaluate a date range', exact: true });
+  await page
+    .locator('[data-live-block="worker-status"]')
+    .getByRole('button', { name: 'Backfill a day range', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Backfill a day range', exact: true });
   await dialog.getByLabel('From', { exact: true }).fill('2025-01-01');
   await dialog.getByLabel('To', { exact: true }).fill('2025-02-01');
   const submissions: string[] = [];

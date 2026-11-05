@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
@@ -18,9 +19,11 @@ from qym_platform.datetime_utils import to_api_timestamp
 from qym_platform.db.models import (
     ApiKey,
     AuditLog,
+    LiveDay,
     LiveJob,
     LiveMetricSpec,
     LiveSource,
+    LiveTurn,
     LiveWorkerEvent,
     LiveWorkerSettings,
     Project,
@@ -430,13 +433,28 @@ def project_live_worker(
     ):
         model_ids = []
     key = next((key for key in keys if key.id == selected.worker_key_id), None)
+    now = live_overview.utcnow()
+    status = live_overview.source_status(selected, PlatformSettings(), now)
+    today = now.date()
+    day = db.query(LiveDay).filter_by(source_id=selected.id, day=today).first()
+    in_qym = (
+        db.query(func.count(LiveTurn.id))
+        .filter(LiveTurn.source_id == selected.id, LiveTurn.day == today)
+        .scalar()
+    )
     return {
         "state": _worker_state(selected, names.get),
         "worker": selected.worker,
         "running": running,
-        "stale": live_overview.source_status(
-            selected, PlatformSettings(), live_overview.utcnow()
-        )["stale"],
+        "stale": status["stale"],
+        "status": status,
+        "today": {
+            "day": today.isoformat(),
+            "turns_seen": day.turns_seen if day else 0,
+            "evaluated": day.evaluated if day else 0,
+            "failed": day.failed if day else 0,
+            "in_qym": in_qym,
+        },
         "worker_key": _worker_key(selected, key, names.get),
         "api_keys": [
             {"id": key.id, "name": key.name, "prefix": key.prefix} for key in keys

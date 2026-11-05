@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
-import { problemReport, type WorkerEventsFilters } from '@/api/liveWorker';
+import { problemReport, type LiveWorkerEvent, type WorkerEventsFilters } from '@/api/liveWorker';
 import { liveOverview, liveTurnDetail, liveWorkerEvents, liveWorkerRead } from '@/features/dev/liveFixtures';
 import { ProblemsBlock } from '../components/worker/ProblemsBlock';
 import { StatusLine } from '../components/StatusLine';
@@ -18,17 +18,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
-function Problems() {
+function Problems({ events = liveWorkerEvents }: { events?: LiveWorkerEvent[] }) {
   const [filters, setFilters] = useState<WorkerEventsFilters>({});
   return (
-    <ProblemsBlock
-      source="worker-prod"
-      status={liveOverview.status}
-      read={liveWorkerRead}
-      events={liveWorkerEvents}
-      eventsFilters={filters}
-      onEventsFilters={setFilters}
-    />
+    <MemoryRouter initialEntries={['/projects/demo/live/worker?source=worker+%26+prod&view=all']}>
+      <ProblemsBlock
+        source="worker-prod"
+        status={liveOverview.status}
+        read={liveWorkerRead}
+        events={events}
+        eventsFilters={filters}
+        onEventsFilters={setFilters}
+      />
+    </MemoryRouter>
   );
 }
 it('renders grouped counts, filters by component and level, and can clear filters', async () => {
@@ -42,14 +44,22 @@ it('renders grouped counts, filters by component and level, and can clear filter
   expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(1);
   await user.click(screen.getByRole('button', { name: 'gateway' }));
   expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(4);
+  await user.click(screen.getByRole('button', { name: 'Settings' }));
+  expect(screen.getByText('No problems reported by the worker')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'All' }));
+  expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(4);
+  await user.click(screen.getByRole('button', { name: 'Errors' }));
+  expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(6);
 });
 it('copies the full problem report including code and message', async () => {
   const user = userEvent.setup();
   vi.stubGlobal('isSecureContext', true);
   const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
-  render(<Problems />);
+  const event = { ...liveWorkerEvents[0]!, message: '[LIVE] The gateway is unavailable.' };
+  render(<Problems events={[event]} />);
   await user.click(screen.getAllByRole('button', { name: 'Copy report' })[0]!);
-  const event = liveWorkerEvents[0]!;
+  expect(screen.getByText('The gateway is unavailable.')).toBeVisible();
+  expect(screen.queryByText(event.message)).toBeNull();
   await waitFor(() =>
     expect(writeText).toHaveBeenCalledWith(
       problemReport({
@@ -65,16 +75,77 @@ it('copies the full problem report including code and message', async () => {
   expect(writeText.mock.calls[0]![0]).toContain(`Code: ${event.code}`);
   expect(writeText.mock.calls[0]![0]).toContain(`Message: ${event.message}`);
 });
+it.each([
+  ['gateway', 'Models', 'models'],
+  ['database', 'Database', 'database'],
+  ['langfuse', 'Langfuse', 'langfuse'],
+  ['dataiku', 'Dataiku', 'dataiku'],
+])('links failed %s checks to the settings section', (prefix, title, id) => {
+  render(
+    <Problems
+      events={[
+        {
+          ...liveWorkerEvents[0]!,
+          component: 'control',
+          details: {
+            checks: {
+              'gateway.passed': { ok: true },
+              [`${prefix}.connect`]: { ok: false },
+              [`${prefix}.auth`]: { ok: false },
+              [`${prefix}.ok`]: { ok: true },
+            },
+          },
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByText(`${prefix}.connect · ${prefix}.auth`)).toBeVisible();
+  expect(screen.getByRole('link', { name: `Fix in ${title}` })).toHaveAttribute(
+    'href',
+    `/projects/demo/live/worker?source=worker+%26+prod&view=all#settings-${id}`,
+  );
+});
+it('links the first failed section when checks fail across sections', () => {
+  render(
+    <Problems
+      events={[
+        {
+          ...liveWorkerEvents[0]!,
+          component: 'control',
+          details: {
+            checks: {
+              'gateway.models': { ok: true },
+              'database.connect': { ok: false },
+              'langfuse.auth': { ok: false },
+            },
+          },
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByText('database.connect · langfuse.auth')).toBeVisible();
+  expect(screen.getAllByRole('link', { name: /^Fix in/ })).toHaveLength(1);
+  expect(screen.getByRole('link', { name: 'Fix in Database' })).toBeVisible();
+});
+it.each([null, [], {}, 'unavailable', { 'gateway.models': { ok: true } }])(
+  'shows no Fix link without failed checks %#',
+  (checks) => {
+    render(<Problems events={[{ ...liveWorkerEvents[0]!, component: 'control', details: { checks } }]} />);
+    expect(screen.queryByRole('link', { name: /^Fix in/ })).toBeNull();
+  },
+);
 it('shows a failed events request instead of an empty state', () => {
   render(
-    <ProblemsBlock
-      source="worker"
-      read={liveWorkerRead}
-      events={[]}
-      eventsFilters={{}}
-      onEventsFilters={() => {}}
-      eventsError={new Error('Unavailable')}
-    />,
+    <MemoryRouter>
+      <ProblemsBlock
+        source="worker"
+        read={liveWorkerRead}
+        events={[]}
+        eventsFilters={{}}
+        onEventsFilters={() => {}}
+        eventsError={new Error('Unavailable')}
+      />
+    </MemoryRouter>,
   );
   expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load worker problems');
   expect(screen.queryByText('No problems reported by the worker')).toBeNull();

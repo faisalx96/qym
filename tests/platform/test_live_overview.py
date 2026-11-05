@@ -55,6 +55,7 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     assert body["sources"][0]["errors_last_hour"] == 0
     assert body["sources"][0]["stale"] is True
     assert body["sources"][0]["seconds_since_heartbeat"] is None
+    assert body["sources"][0]["last_poll_at"] is None
 
     from qym_platform.services import live_overview
 
@@ -63,6 +64,7 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     with session_factory() as db:
         source = db.query(LiveSource).one()
         source.last_heartbeat_at = now - timedelta(seconds=10)
+        source.last_poll_at = now - timedelta(seconds=40)
         db.add(
             ApiKey(
                 id="worker-key", project_id="p", user_id="u", name="Worker",
@@ -93,6 +95,10 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     assert source["stale"] is False
     assert source["seconds_since_heartbeat"] == 10
     assert source["last_heartbeat_at"] == "2026-11-01T11:59:50Z"
+    assert source["last_poll_at"] == "2026-11-01T11:59:20Z"
+    assert _overview(client, source="worker-1")["status"]["last_poll_at"] == source[
+        "last_poll_at"
+    ]
     assert source["last_turn_at"] == "2026-11-01T10:05:00Z"
     assert source["product"] == "Assistant"
     assert source["worker"]["judges"] == {"a": "judge-a", "b": "judge-b"}

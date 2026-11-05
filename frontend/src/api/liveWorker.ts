@@ -1,6 +1,7 @@
 /** Live worker control, settings and jobs. Secrets are write-only. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/http';
+import type { LiveSourceInfo } from './live';
 export { errorReport } from '@/lib/error-report';
 
 export interface LiveWorkerValues {
@@ -100,6 +101,8 @@ export interface LiveWorkerRead {
   state: { desired: 'running' | 'paused'; changed_at: string | null; changed_by: string | null };
   running: LiveWorkerControl | null;
   stale: boolean;
+  status: LiveSourceInfo;
+  today: { day: string; turns_seen: number; evaluated: number; failed: number; in_qym: number };
   worker_key: LiveWorkerKey | null;
   api_keys: Pick<LiveWorkerKey, 'id' | 'name' | 'prefix'>[];
   settings: (LiveWorkerVersion & { values: LiveWorkerValues; secret_hints: LiveWorkerSecrets }) | null;

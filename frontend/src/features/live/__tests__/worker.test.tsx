@@ -17,6 +17,7 @@ import {
   liveWorkerRead,
   liveWorkerWaiting,
   liveWorkerPending,
+  liveWorkerPaused,
   liveWorkerFailed,
   liveWorkerEvents,
 } from '@/features/dev/liveFixtures';
@@ -80,29 +81,209 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('renders the six blocks in the specified DOM order', async () => {
+async function openField(section: string, label: string) {
+  const region = await screen.findByRole('region', { name: section });
+  const trigger = within(region).getByRole('button', { name: new RegExp(`^${section} `) });
+  if (trigger.getAttribute('aria-expanded') !== 'true') await userEvent.setup().click(trigger);
+  return within(region).getByLabelText(label);
+}
+
+it('renders status, problems, jobs and settings in the specified DOM order', async () => {
   const { container } = setup();
-  await screen.findByRole('button', { name: 'Save' });
+  await screen.findByRole('button', { name: 'Save as v4' });
   expect(
-    [...container.querySelectorAll('[data-live-block^="worker-"]')].map((node) =>
-      node.getAttribute('data-live-block'),
-    ),
-  ).toEqual([
-    'worker-state',
-    'worker-settings',
-    'worker-history',
-    'worker-jobs',
-    'worker-problems',
-    'worker-models',
-  ]);
-  expect(screen.getByText('running v3 since 14:20')).toBeVisible();
-  expect(screen.getByLabelText('Judge A')).toHaveAttribute('list');
+    [
+      ...container.querySelectorAll('[data-live-block^="worker-"]:not([data-live-block="worker-history"])'),
+    ].map((node) => node.getAttribute('data-live-block')),
+  ).toEqual(['worker-status', 'worker-problems', 'worker-jobs', 'worker-settings']);
+  expect(screen.getByText('Running v3')).toBeVisible();
+  expect(await openField('Models', 'Judge A')).toHaveAttribute('list');
 });
 it('shows waiting state, key warning and waiting section tags', async () => {
   setup(liveWorkerWaiting);
-  expect(await screen.findByText('Waiting: no settings version')).toBeVisible();
+  expect(await screen.findByText('Waiting')).toBeVisible();
+  expect(screen.getByText('no settings version')).toBeVisible();
   expect(screen.getAllByText('waiting for version 1')).toHaveLength(5);
   expect(screen.getByText('Choose the worker key before saving settings')).toBeVisible();
+});
+it('shows the status strip values and matching job update from the fixture', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-03T14:22:00Z'));
+  setup();
+  const status = await screen.findByRole('region', { name: 'Worker status' });
+  expect(within(status).getByText('Running v3')).toBeVisible();
+  expect(within(status).getByText('since 14:20 UTC by Ali')).toBeVisible();
+  expect(within(status).getByText('3m ago')).toBeVisible();
+  expect(within(status).getByText('every 60 s')).toBeVisible();
+  expect(within(status).getByText('14:18 UTC')).toBeVisible();
+  expect(within(status).getByText('47 today, 44 evaluated')).toBeVisible();
+  const problems = within(status).getByRole('link', { name: '19 problems in the last hour' });
+  expect(problems).toHaveAttribute('href', '/projects/demo/live/worker?source=worker#problems');
+  expect(within(problems).getByText('19')).toHaveAttribute('data-tone', 'warning');
+  expect(within(status).getByText('Backfill · 12 of 22 turns')).toBeVisible();
+  expect(within(status).getByText('updated 2m ago')).toBeVisible();
+});
+it('uses the poll timestamp before the heartbeat and marks a stale worker', async () => {
+  setup({
+    ...liveWorkerRead,
+    stale: true,
+    status: { ...liveWorkerRead.status, stale: true, last_poll_at: '2026-11-03T15:19:00+01:00' },
+    running: { ...liveWorkerRead.running!, reason: 'verifying version 4', job: null },
+  });
+  const status = await screen.findByRole('region', { name: 'Worker status' });
+  expect(within(status).getByText('not reporting since 14:19 UTC')).toHaveAttribute('data-tone', 'danger');
+  expect(within(status).getByText('verifying version 4')).toBeVisible();
+  expect(within(status).getByText('none')).toBeVisible();
+});
+it('falls back to the heartbeat when the worker has no poll timestamp', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-03T14:22:00Z'));
+  setup({ ...liveWorkerRead, status: { ...liveWorkerRead.status, last_poll_at: null } });
+  const status = await screen.findByRole('region', { name: 'Worker status' });
+  expect(within(status).getByText('2m ago')).toHaveAttribute(
+    'title',
+    liveWorkerRead.status.last_heartbeat_at,
+  );
+});
+it('resumes a paused worker through the state endpoint', async () => {
+  const { fetch } = setup(liveWorkerPaused);
+  const user = userEvent.setup();
+  expect(await screen.findByText('Paused v3')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Resume evaluation' }));
+  await waitFor(() => expect(writes(fetch)).toHaveLength(1));
+  expect(writes(fetch)[0]![0]).toContain('/state?source=');
+  expect(JSON.parse(String(writes(fetch)[0]![1]?.body))).toEqual({ state: 'running' });
+});
+it('collapses settings with current summaries and disables Save until values or secrets change', async () => {
+  setup();
+  const user = userEvent.setup();
+  const save = await screen.findByRole('button', { name: 'Save as v4' });
+  expect(save).toBeDisabled();
+  expect(screen.getByText('No changes since v3', { selector: 'p' })).toBeVisible();
+  const evaluation = screen.getByRole('region', { name: 'Evaluation' });
+  const trigger = within(evaluation).getByRole('button');
+  expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  expect(trigger).toHaveTextContent(
+    'Chart vision on · Dataiku replay on · 3 lanes · poll 60 s · lookback 1 h',
+  );
+  expect(screen.getByText('gateway listed 5 models at 14:20 UTC')).toBeVisible();
+  expect(screen.getByText('v3 · running')).toHaveAttribute('data-tone', 'success');
+  await user.type(screen.getByRole('textbox', { name: 'Note' }), 'A note alone');
+  expect(save).toBeDisabled();
+  await user.click(trigger);
+  await user.click(within(evaluation).getByRole('switch', { name: 'Chart vision' }));
+  expect(trigger).toHaveTextContent('differs from running v3 · Chart vision off');
+  expect(save).toBeEnabled();
+  await user.click(trigger);
+  expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await user.click(within(evaluation).getByRole('switch', { name: 'Chart vision' }));
+  expect(save).toBeDisabled();
+  await user.type(await openField('Langfuse', 'Langfuse secret key'), 'replacement');
+  expect(save).toBeEnabled();
+  expect(within(screen.getByRole('region', { name: 'Langfuse' })).getByRole('button')).not.toHaveTextContent(
+    'differs from running',
+  );
+});
+it('keeps a draft matching running collapsed while enabling Save against the latest version', async () => {
+  const view = setup();
+  const user = userEvent.setup();
+  await user.type(await screen.findByRole('textbox', { name: 'Note' }), 'Keep this note');
+  await refetchWorker(view, liveWorkerPending);
+  const save = await screen.findByRole('button', { name: 'Save as v5' });
+  const database = screen.getByRole('region', { name: 'Database' });
+  const trigger = within(database).getByRole('button', { name: /^Database / });
+  expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  expect(trigger).not.toHaveTextContent('differs from running');
+  expect(save).toBeEnabled();
+});
+it('opens a saved section that differs from running while disabling Save for unchanged values', async () => {
+  const view = setup(liveWorkerPending);
+  const database = await screen.findByRole('region', { name: 'Database' });
+  const trigger = within(database).getByRole('button', { name: /^Database / });
+  expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  expect(trigger).toHaveTextContent('differs from running v3 ·');
+  expect(screen.getByRole('button', { name: 'Save as v5' })).toBeDisabled();
+  expect(screen.getByText('No changes since v4', { selector: 'p' })).toBeVisible();
+  await refetchWorker(view, {
+    ...liveWorkerPending,
+    running: {
+      ...liveWorkerPending.running!,
+      settings_version_applied: 4,
+      running: liveWorkerPending.settings!.values,
+    },
+  });
+  await waitFor(() => expect(trigger).not.toHaveTextContent('differs from running'));
+  expect(trigger).toHaveAttribute('aria-expanded', 'false');
+});
+it('opens failed verification without a difference prefix when values match running', async () => {
+  setup({
+    ...liveWorkerRead,
+    running: {
+      ...liveWorkerRead.running!,
+      verification: { ...liveWorkerFailed.running!.verification!, version: 3 },
+    },
+  });
+  const database = await screen.findByRole('region', { name: 'Database' });
+  const trigger = within(database).getByRole('button', { name: /^Database / });
+  expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  expect(trigger).not.toHaveTextContent('differs from running');
+  expect(trigger).not.toHaveTextContent('changed ·');
+  expect(within(database).getByText(/could not translate host name/)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Save as v4' })).toBeDisabled();
+});
+it('has no running difference prefix when the worker has no running settings', async () => {
+  setup(liveWorkerWaiting);
+  const user = userEvent.setup();
+  await user.type(await openField('Database', 'Database host'), 'new.example.com');
+  expect(
+    within(screen.getByRole('region', { name: 'Database' })).getByRole('button', { name: /^Database / }),
+  ).not.toHaveTextContent('differs from running');
+  expect(screen.getByRole('button', { name: 'Save as v1' })).toBeEnabled();
+});
+it('shows plain problem labels and opens the section targeted by a Fix link', async () => {
+  const route = '/projects/demo/live/worker?source=worker+%26+prod&view=all';
+  const view = setup(liveWorkerRead, undefined, [route]);
+  await screen.findByRole('button', { name: 'Save as v4' });
+  act(() => {
+    view.client.setQueryData(['project', 'demo', 'live', 'worker-events', source, {}], {
+      events: [
+        {
+          ...liveWorkerEvents[0]!,
+          component: 'control',
+          message: '[LIVE] Checks failed',
+          details: { checks: { 'gateway.models': { ok: false } } },
+        },
+      ],
+    });
+  });
+  const problems = document.getElementById('problems')!;
+  for (const label of ['All', 'Settings', 'Judges', 'Dataiku', 'Delivery to qym', 'Turns', 'Jobs'])
+    expect(within(problems).getByRole('button', { name: label })).toBeVisible();
+  expect(await within(problems).findByText('Checks failed')).toBeVisible();
+  expect(within(problems).getByText('gateway.models')).toBeVisible();
+  const link = within(problems).getByRole('link', { name: 'Fix in Models' });
+  expect(link).toHaveAttribute('href', `${route}#settings-models`);
+  await userEvent.setup().click(link);
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole('region', { name: 'Models' })).getByRole('button', {
+        name: /^Models /,
+      }),
+    ).toHaveAttribute('aria-expanded', 'true'),
+  );
+  expect(screen.getByLabelText('Judge A')).toBeVisible();
+  expect(screen.getByRole('link', { name: '19 problems in the last hour' })).toHaveAttribute(
+    'href',
+    `${route}#problems`,
+  );
+});
+it.each([
+  ['2026-11-04', '2026-11-04', '4 Nov'],
+  ['2026-11-03', '2026-11-04', '3 Nov to 4 Nov'],
+])('shows readable job days %s to %s', async (since_day, until_day, label) => {
+  const job = liveWorkerRead.jobs[0]!;
+  setup({ ...liveWorkerRead, jobs: [{ ...job, params: { ...job.params, since_day, until_day } }] });
+  expect(within(await screen.findByRole('grid', { name: 'Worker jobs' })).getByText(label)).toBeVisible();
 });
 it.each([
   [liveWorkerPending, 'pending'],
@@ -115,9 +296,9 @@ it.each([
 it('posts values, only the typed secret and note, then clears secrets and toasts the version', async () => {
   const { fetch } = setup();
   const user = userEvent.setup();
-  await user.type(await screen.findByLabelText('Langfuse secret key'), 'new-secret');
+  await user.type(await openField('Langfuse', 'Langfuse secret key'), 'new-secret');
   await user.type(screen.getByRole('textbox', { name: 'Note' }), 'Rotate Langfuse');
-  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
   expect(await screen.findByText('Saved as version 4')).toBeVisible();
   const [url, init] = writes(fetch)[0]!;
   expect(new URL(url, 'http://localhost').pathname).toBe('/api/projects/demo/live/worker/settings');
@@ -139,10 +320,10 @@ async function refetchWorker(view: ReturnType<typeof setup>, read: LiveWorkerRea
 it('preserves the draft on a new version and loads it only when requested', async () => {
   const view = setup();
   const user = userEvent.setup();
-  const host = await screen.findByLabelText('Database host');
+  const host = await openField('Database', 'Database host');
   await user.clear(host);
   await user.type(host, 'draft.example.com');
-  await user.type(screen.getByLabelText('Langfuse secret key'), 'draft-secret');
+  await user.type(await openField('Langfuse', 'Langfuse secret key'), 'draft-secret');
   await user.type(screen.getByRole('textbox', { name: 'Note' }), 'Draft note');
   await refetchWorker(view, liveWorkerPending);
   expect(await screen.findByText('Version 4 was saved by Ali while you were editing')).toBeVisible();
@@ -160,7 +341,10 @@ it('preserves the draft on a new version and loads it only when requested', asyn
 it.each(['Langfuse secret key', 'Note'])('keeps a draft with only %s changed', async (label) => {
   const view = setup();
   const user = userEvent.setup();
-  await user.type(await screen.findByLabelText(label, { selector: 'input' }), 'Draft');
+  await user.type(
+    await (label === 'Note' ? screen.findByRole('textbox', { name: 'Note' }) : openField('Langfuse', label)),
+    'Draft',
+  );
   await refetchWorker(view, liveWorkerPending);
   expect(await screen.findByText('Version 4 was saved by Ali while you were editing')).toBeVisible();
   expect(screen.getByLabelText(label, { selector: 'input' })).toHaveValue('Draft');
@@ -172,7 +356,7 @@ it.each(['Langfuse secret key', 'Note'])('keeps a draft with only %s changed', a
 });
 it('loads a new version silently when the form is not dirty', async () => {
   const view = setup();
-  await screen.findByLabelText('Database host');
+  await openField('Database', 'Database host');
   await refetchWorker(view, liveWorkerPending);
   await waitFor(() =>
     expect(screen.getByLabelText('Database host')).toHaveValue(
@@ -187,11 +371,11 @@ it('reinitialises the form after saving so the next version loads silently', asy
     return response({ version: 4 });
   });
   const user = userEvent.setup();
-  const host = await screen.findByLabelText('Database host');
+  const host = await openField('Database', 'Database host');
   await user.clear(host);
   await user.type(host, liveWorkerPending.settings!.values.database.host);
   await user.type(screen.getByRole('textbox', { name: 'Note' }), 'New host');
-  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
   expect(await screen.findByText('Saved as version 4')).toBeVisible();
   expect(screen.queryByText(/while you were editing/)).toBeNull();
   expect(screen.getByRole('textbox', { name: 'Note' })).toHaveValue('');
@@ -210,7 +394,24 @@ it('scrolls to problems after the worker data loads for a hash link', async () =
   Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
   try {
     setup(liveWorkerRead, undefined, ['/projects/demo/live/worker?source=worker#problems']);
-    await screen.findByRole('button', { name: 'Save' });
+    await screen.findByRole('button', { name: 'Save as v4' });
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' }));
+    expect(scrollIntoView.mock.contexts).toContain(document.getElementById('problems'));
+  } finally {
+    if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original);
+    else Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  }
+});
+it('keeps the route and query and scrolls when the strip problems link is clicked', async () => {
+  const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+  try {
+    const route = '/projects/demo/live/worker?source=worker+%26+prod&view=all';
+    setup(liveWorkerRead, undefined, [route]);
+    const link = await screen.findByRole('link', { name: '19 problems in the last hour' });
+    expect(link).toHaveAttribute('href', `${route}#problems`);
+    await userEvent.setup().click(link);
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' }));
     expect(scrollIntoView.mock.contexts).toContain(document.getElementById('problems'));
   } finally {
@@ -221,8 +422,8 @@ it('scrolls to problems after the worker data loads for a hash link', async () =
 it('confirms restoring version 2 and posts the restore endpoint', async () => {
   const { fetch } = setup();
   const user = userEvent.setup();
-  await screen.findByRole('button', { name: 'Save' });
-  const row = screen.getByText('v2').closest('tr')!;
+  await screen.findByRole('button', { name: 'Save as v4' });
+  const row = screen.getByText('v2').closest('li')!;
   await user.click(within(row).getByRole('button', { name: 'Restore' }));
   expect(screen.getByRole('dialog', { name: 'Restore version 2?' })).toBeVisible();
   expect(writes(fetch)).toHaveLength(0);
@@ -233,7 +434,7 @@ it('confirms restoring version 2 and posts the restore endpoint', async () => {
 it('confirms pausing, then PUTs paused', async () => {
   const { fetch } = setup();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('switch', { name: 'Running' }));
+  await user.click(await screen.findByRole('button', { name: 'Pause evaluation' }));
   expect(screen.getByRole('dialog', { name: 'Pause evaluation?' })).toBeVisible();
   expect(writes(fetch)).toHaveLength(0);
   await user.click(screen.getByRole('button', { name: 'Pause' }));
@@ -253,9 +454,15 @@ it('PUTs the selected worker key', async () => {
 });
 async function openRange() {
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Evaluate a date range' }));
+  await user.click((await screen.findAllByRole('button', { name: 'Backfill a day range' }))[0]!);
   return user;
 }
+it('opens the same date range dialog from the Jobs block', async () => {
+  setup();
+  const buttons = await screen.findAllByRole('button', { name: 'Backfill a day range' });
+  await userEvent.setup().click(buttons[1]!);
+  expect(screen.getByRole('dialog', { name: 'Backfill a day range' })).toBeVisible();
+});
 function dates(since: string, until: string) {
   fireEvent.change(screen.getByLabelText('From'), { target: { value: since } });
   fireEvent.change(screen.getByLabelText('To'), { target: { value: until } });
@@ -395,10 +602,17 @@ it('maps a nested 422 to Database host without marking Langfuse host', async () 
     ),
   );
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Save' }));
+  await user.type(await openField('Langfuse', 'Langfuse secret key'), 'new-secret');
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
   await waitFor(() => expect(screen.getByLabelText('Database host')).toHaveAttribute('aria-invalid', 'true'));
+  const trigger = within(screen.getByRole('region', { name: 'Database' })).getByRole('button', {
+    name: /^Database /,
+  });
+  expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  expect(trigger).not.toHaveTextContent('differs from running');
+  expect(trigger).not.toHaveTextContent('changed ·');
   expect(screen.getByLabelText('Database host')).toHaveAccessibleDescription('Database host is invalid');
-  expect(screen.getByLabelText('Langfuse host')).not.toHaveAttribute('aria-invalid', 'true');
+  expect(await openField('Langfuse', 'Langfuse host')).not.toHaveAttribute('aria-invalid', 'true');
 });
 it.each([
   [403, 'Viewers cannot change this project'],
@@ -410,7 +624,9 @@ it.each([
       status,
     ),
   );
-  await userEvent.setup().click(await screen.findByRole('button', { name: 'Save' }));
+  const user = userEvent.setup();
+  await user.type(await openField('Langfuse', 'Langfuse secret key'), 'new-secret');
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
   expect(await screen.findByText(`Couldn’t save the settings. ${message}`)).toBeVisible();
   expect(screen.getAllByText(message).length).toBeGreaterThan(0);
   expect(screen.getByText(/request abc123/)).toBeVisible();
@@ -454,10 +670,10 @@ it('polls the worker every five seconds while a job runs and every fifteen after
   expect(fetch).toHaveBeenCalledTimes(4);
   unmount();
 });
-it('reserves six skeleton frames and shows a failed load with retry', async () => {
+it('reserves four skeleton frames and shows a failed load with retry', async () => {
   const { fetch, container } = setup();
-  expect(container.querySelectorAll('[data-live-loading] [role="status"]')).toHaveLength(6);
-  await screen.findByRole('button', { name: 'Save' });
+  expect(container.querySelectorAll('[data-live-loading] [role="status"]')).toHaveLength(4);
+  await screen.findByRole('button', { name: 'Save as v4' });
   fetch.mockResolvedValue(response({ detail: 'Worker unavailable' }, 503));
   await act(async () => {
     await clients[0]!.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
@@ -530,7 +746,9 @@ it('keeps errors for duplicate host and database field names in their own sectio
       422,
     ),
   );
-  await userEvent.setup().click(await screen.findByRole('button', { name: 'Save' }));
+  const user = userEvent.setup();
+  await user.type(await openField('Langfuse', 'Langfuse secret key'), 'new-secret');
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
   await waitFor(() =>
     expect(screen.getByLabelText('Database host')).toHaveAccessibleDescription('Database host is invalid'),
   );

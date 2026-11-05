@@ -13,6 +13,7 @@ export interface LiveSourceInfo {
   stale: boolean;
   seconds_since_heartbeat: number | null;
   last_heartbeat_at: string | null;
+  last_poll_at: string | null;
   last_turn_at: string | null;
   desired_state?: 'running' | 'paused';
   worker_key_set?: boolean;

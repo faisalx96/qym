@@ -3,18 +3,17 @@ import type { LiveJob } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
 import { Button, ConfirmDialog, DataTable, EmptyState, ErrorState, Tag, Text, type Column } from '@/ui';
-import { DateRangeDialog } from './DateRangeDialog';
+import { workerDay } from './format';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerBusy, WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
 
 export function JobsBlock({
   jobs,
-  onCreateJob,
+  onBackfill,
   onCancelJob,
   busy,
-}: { jobs: LiveJob[]; busy: WorkerBusy } & Pick<WorkerCallbacks, 'onCreateJob' | 'onCancelJob'>) {
-  const [range, setRange] = useState(false);
+}: { jobs: LiveJob[]; busy: WorkerBusy; onBackfill: () => void } & Pick<WorkerCallbacks, 'onCancelJob'>) {
   const [cancel, setCancel] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const columns: Column<LiveJob>[] = [
@@ -26,11 +25,12 @@ export function JobsBlock({
     },
     {
       id: 'range',
-      header: 'Range',
+      header: 'Days',
       priority: 2,
       cell: (row) => (
         <span className={styles.wrap}>
-          {row.params.since_day} → {row.params.until_day}
+          {workerDay(row.params.since_day)}
+          {row.params.until_day !== row.params.since_day ? ` to ${workerDay(row.params.until_day)}` : ''}
         </span>
       ),
     },
@@ -114,11 +114,7 @@ export function JobsBlock({
     },
   ];
   return (
-    <WorkerBlock
-      name="jobs"
-      title="Jobs"
-      aside={<Button onPress={() => setRange(true)}>Evaluate a date range</Button>}
-    >
+    <WorkerBlock name="jobs" title="Jobs" aside={<Button onPress={onBackfill}>Backfill a day range</Button>}>
       {jobs.length ? (
         <DataTable
           aria-label="Worker jobs"
@@ -133,14 +129,6 @@ export function JobsBlock({
       {error ? (
         <ErrorState compact error={error} title="Couldn’t cancel the job" message={errorSentence(error)} />
       ) : null}
-      <DateRangeDialog
-        key={range ? 'open' : 'closed'}
-        open={range}
-        onOpenChange={setRange}
-        jobs={jobs}
-        onCreateJob={onCreateJob}
-        busy={busy.createJob}
-      />
       <ConfirmDialog
         open={cancel !== null}
         onOpenChange={(open) => {
