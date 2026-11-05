@@ -14,11 +14,7 @@ export function WorkerBlock({
   children: ReactNode;
 }) {
   return (
-    <section
-      id={name === 'problems' ? 'problems' : undefined}
-      className={styles.block}
-      data-live-block={`worker-${name}`}
-    >
+    <section id={name === 'problems' ? 'problems' : undefined} data-live-block={`worker-${name}`}>
       <SectionBoundary name={title}>
         <Card>
           <SectionHeader title={title} aside={aside} />

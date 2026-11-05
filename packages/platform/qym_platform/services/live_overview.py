@@ -58,6 +58,7 @@ def source_status(
         "stale": elapsed is None or elapsed > settings.live_stale_after_seconds,
         "seconds_since_heartbeat": int(elapsed) if elapsed is not None else None,
         "last_heartbeat_at": to_api_timestamp(source.last_heartbeat_at),
+        "last_poll_at": to_api_timestamp(source.last_poll_at),
         "last_turn_at": to_api_timestamp(source.last_turn_at),
         "worker": source.worker,
     }

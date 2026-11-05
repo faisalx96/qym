@@ -13,8 +13,10 @@ from test_live_worker_settings import SECRETS, session_factory, values  # noqa: 
 from qym_platform.db.models import (
     ApiKey,
     AuditLog,
+    LiveDay,
     LiveJob,
     LiveSource,
+    LiveTurn,
     LiveWorkerEvent,
     LiveWorkerSettings,
     Project,
@@ -110,6 +112,29 @@ def test_read_without_version_and_with_version(client, session_factory, values):
         "running": None,
         "worker": {},
         "stale": True,
+        "status": {
+            "desired_state": "running",
+            "worker_key_set": False,
+            "errors_last_hour": 0,
+            "id": "source",
+            "key": "worker",
+            "name": "Worker",
+            "environment": "test",
+            "product": None,
+            "stale": True,
+            "seconds_since_heartbeat": None,
+            "last_heartbeat_at": None,
+            "last_poll_at": None,
+            "last_turn_at": None,
+            "worker": {},
+        },
+        "today": {
+            "day": "2026-11-03",
+            "turns_seen": 0,
+            "evaluated": 0,
+            "failed": 0,
+            "in_qym": 0,
+        },
         "worker_key": None,
         "api_keys": [],
         "settings": None,
@@ -145,7 +170,7 @@ def test_read_without_version_and_with_version(client, session_factory, values):
             db,
             source,
             NOW,
-            None,
+            NOW - timedelta(seconds=30),
             None,
             {"control": control, "worker_version": "2", "eval_code_version": "abc"},
             NOW,
@@ -179,6 +204,7 @@ def test_read_without_version_and_with_version(client, session_factory, values):
                     status="done",
                     requested_by_user_id=f"creator-{i}",
                     requested_at=NOW + timedelta(seconds=i),
+                    updated_at=NOW + timedelta(minutes=1, seconds=i),
                 )
             )
         db.commit()
@@ -201,6 +227,10 @@ def test_read_without_version_and_with_version(client, session_factory, values):
         "eval_code_version": "abc",
     }
     assert body["stale"] is False
+    assert body["status"]["stale"] is False
+    assert body["status"]["last_heartbeat_at"] == "2026-11-03T22:00:00Z"
+    assert body["status"]["last_poll_at"] == "2026-11-03T21:59:30Z"
+    assert body["status"]["worker"] == body["worker"]
     assert body["model_ids"] == ["judge-a"]
     assert body["settings"]["version"] == 56
     assert body["settings"]["created_by"] == "Creator 54"
@@ -209,11 +239,66 @@ def test_read_without_version_and_with_version(client, session_factory, values):
     assert [j["requested_by"] for j in body["jobs"]] == [
         f"Creator {i}" for i in range(54, 34, -1)
     ]
+    assert [j["updated_at"] for j in body["jobs"]] == [
+        f"2026-11-03T22:01:{i:02d}Z" for i in range(54, 34, -1)
+    ]
     assert len(user_queries) <= 3, user_queries
     assert_safe(body)
     assert (
         client.get(BASE, headers=ADMIN, params={"source": "missing"}).status_code == 404
     )
+
+
+@pytest.mark.parametrize("with_day", [False, True])
+def test_read_today_uses_utc_day_and_selected_source(client, session_factory, with_day):
+    with session_factory() as db:
+        # It is already November 4 in the source timezone; the strip reports UTC today.
+        db.get(LiveSource, "source").day_key_timezone = "Asia/Riyadh"
+        db.add(
+            LiveSource(
+                id="second",
+                project_id="p",
+                key="second",
+                name="Second",
+                environment="test",
+                is_active=False,
+            )
+        )
+        db.flush()
+        for source_id, day, seen, evaluated, failed, count in [
+            ("source", NOW.date(), 12, 9, 2, 3),
+            ("source", NOW.date() + timedelta(days=1), 100, 90, 10, 2),
+            ("second", NOW.date(), 200, 180, 20, 4),
+        ]:
+            if with_day or day != NOW.date() or source_id != "source":
+                db.add(
+                    LiveDay(
+                        source_id=source_id,
+                        day=day,
+                        turns_seen=seen,
+                        evaluated=evaluated,
+                        failed=failed,
+                    )
+                )
+            for i in range(count):
+                db.add(
+                    LiveTurn(
+                        source_id=source_id,
+                        day=day,
+                        turn_id=f"{day}-{i}",
+                        turn_at=NOW,
+                        status="completed",
+                        question="Question",
+                    )
+                )
+        db.commit()
+    assert read(client, source="worker")["today"] == {
+        "day": "2026-11-03",
+        "turns_seen": 12 if with_day else 0,
+        "evaluated": 9 if with_day else 0,
+        "failed": 2 if with_day else 0,
+        "in_qym": 3,
+    }
 
 
 def test_state_round_trip_and_audit(client, session_factory):

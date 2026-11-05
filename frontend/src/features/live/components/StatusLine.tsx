@@ -50,18 +50,16 @@ export function StatusLine({
           Last turn <span className={styles.number}>{lastTurn}</span>
         </span>
         {control ? (
-          <>
-            <span>
-              Worker · {control.state}
-              {control.settings_version_applied != null ? ` · v${control.settings_version_applied}` : ''}
-            </span>
-            <LinkButton to={workerUrl}>Manage</LinkButton>
-            {errors > 0 ? (
-              <Link to={`${workerUrl}#problems`}>
-                <Tag tone="danger">{errors} problems in the last hour</Tag>
-              </Link>
-            ) : null}
-          </>
+          <span>
+            Worker · {control.state}
+            {control.settings_version_applied != null ? ` · v${control.settings_version_applied}` : ''}
+          </span>
+        ) : null}
+        <LinkButton to={workerUrl}>Manage</LinkButton>
+        {errors > 0 ? (
+          <Link to={`${workerUrl}#problems`}>
+            <Tag tone="danger">{errors} problems in the last hour</Tag>
+          </Link>
         ) : null}
         {judges.length > 0 ? (
           <span className={styles.inline}>

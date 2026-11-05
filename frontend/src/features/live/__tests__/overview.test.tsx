@@ -51,6 +51,7 @@ const overview: LiveOverview = {
     stale: false,
     seconds_since_heartbeat: 42,
     last_heartbeat_at: '2026-11-01T09:00:00Z',
+    last_poll_at: null,
     last_turn_at: null,
     worker: { judges: { a: 'Judge A', b: 'Judge B' }, eval_code_version: 'v1', manifest_hash: 'hash1' },
   },
@@ -171,6 +172,7 @@ describe('overview blocks', () => {
     vi.setSystemTime(new Date('2026-11-01T09:00:42Z'));
     const { container, rerender, unmount } = render(
       <StatusLine slug="demo" source="worker" status={overview.status} />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.getByText('last poll 42 s ago')).toBeVisible();
     expect(screen.getByText('Judge A')).toBeVisible();
@@ -201,6 +203,7 @@ describe('overview blocks', () => {
           last_turn_at: `${day}T12:31:00Z`,
         }}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.getByText(`Worker not heard from since ${expected}`)).toBeVisible();
     expect(screen.getByText(expected).parentElement).toHaveTextContent(`Last turn ${expected}`);

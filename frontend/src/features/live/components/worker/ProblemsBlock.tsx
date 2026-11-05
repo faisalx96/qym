@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import type { LiveSourceInfo } from '@/api/live';
 import {
   problemReport,
@@ -6,9 +7,51 @@ import {
   type WorkerEventsFilters,
 } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
-import { Chip, CopyButton, EmptyState, ErrorState, Skeleton, Tag, Text } from '@/ui';
+import { Chip, CopyButton, EmptyState, ErrorState, LinkButton, Skeleton, Tag, Text } from '@/ui';
 import { WorkerBlock } from './WorkerBlock';
 import styles from '../../worker.module.css';
+
+const componentLabels: Record<string, string> = {
+  control: 'Settings',
+  judge: 'Judges',
+  dataiku: 'Dataiku',
+  qym_push: 'Delivery to qym',
+  turn: 'Turns',
+  job: 'Jobs',
+};
+const checkSections: Record<string, { id: string; title: string }> = {
+  gateway: { id: 'models', title: 'Models' },
+  database: { id: 'database', title: 'Database' },
+  langfuse: { id: 'langfuse', title: 'Langfuse' },
+  dataiku: { id: 'dataiku', title: 'Dataiku' },
+};
+
+function FailedChecks({ event, path }: { event: LiveWorkerEvent; path: string }) {
+  const checks = event.details.checks;
+  if (event.component !== 'control' || !checks || typeof checks !== 'object' || Array.isArray(checks))
+    return null;
+  const entries = Object.entries(checks);
+  if (!entries.length) return null;
+  const failed = entries.filter(
+    ([, check]) => !(check && typeof check === 'object' && 'ok' in check && check.ok === true),
+  );
+  if (!failed.length) return null;
+  const section = Object.entries(checkSections).find(([prefix]) =>
+    failed[0]![0].startsWith(`${prefix}.`),
+  )?.[1];
+  return (
+    <div className={styles.inline}>
+      <Text as="span" tone="danger" className={styles.wrap} dir="auto">
+        {failed.map(([name]) => name).join(' · ')}
+      </Text>
+      {section ? (
+        <LinkButton to={`${path}#settings-${section.id}`} variant="ghost">
+          Fix in {section.title}
+        </LinkButton>
+      ) : null}
+    </div>
+  );
+}
 
 export interface ProblemsProps {
   source: string;
@@ -32,12 +75,14 @@ export function ProblemsBlock({
   eventsError,
   onEventsRetry,
 }: ProblemsProps) {
+  const location = useLocation();
   const components = [
     ...new Set([
+      ...Object.keys(componentLabels),
       ...events.map((event) => event.component),
       ...(eventsFilters.component ? [eventsFilters.component] : []),
     ]),
-  ].sort();
+  ];
   const rows = events
     .filter(
       (event) =>
@@ -45,7 +90,8 @@ export function ProblemsBlock({
         (!eventsFilters.level || eventsFilters.level === event.level),
     )
     .sort((a, b) => b.last_at.localeCompare(a.last_at));
-  const worker = status?.worker;
+  const sourceStatus = status ?? read.status;
+  const worker = sourceStatus.worker;
   const workerVersion = typeof worker?.worker_version === 'string' ? worker.worker_version : undefined;
   const evalVersion = typeof worker?.eval_code_version === 'string' ? worker.eval_code_version : undefined;
   return (
@@ -59,6 +105,12 @@ export function ProblemsBlock({
       }
     >
       <div className={styles.inline}>
+        <Chip
+          isSelected={!eventsFilters.component}
+          onChange={() => onEventsFilters({ ...eventsFilters, component: undefined })}
+        >
+          All
+        </Chip>
         {components.map((component) => (
           <Chip
             key={component}
@@ -67,7 +119,7 @@ export function ProblemsBlock({
               onEventsFilters({ ...eventsFilters, component: selected ? component : undefined })
             }
           >
-            {component}
+            {componentLabels[component] ?? component}
           </Chip>
         ))}
         {(['error', 'warning'] as const).map((level) => (
@@ -123,7 +175,7 @@ export function ProblemsBlock({
                   text={() =>
                     problemReport({
                       source,
-                      environment: status?.environment,
+                      environment: sourceStatus.environment,
                       worker_version: workerVersion,
                       eval_code_version: evalVersion,
                       settings_version_applied: read.running?.settings_version_applied,
@@ -133,19 +185,14 @@ export function ProblemsBlock({
                 />
               </div>
               <Text as="p" dir="auto" className={styles.wrap}>
-                {event.message}
+                {event.message.replace(/^\[LIVE\] /, '')}
               </Text>
+              <FailedChecks event={event} path={`${location.pathname}${location.search}`} />
             </li>
           ))}
         </ul>
       ) : (
-        <EmptyState
-          title={
-            eventsFilters.component || eventsFilters.level
-              ? 'No problems match these filters'
-              : 'No problems reported by the worker'
-          }
-        />
+        <EmptyState title="No problems reported by the worker" />
       )}
     </WorkerBlock>
   );

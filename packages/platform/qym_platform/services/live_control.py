@@ -52,6 +52,7 @@ def job_dict(
             else _user_name(object_session(job), job.requested_by_user_id)
         ),
         "requested_at": to_api_timestamp(job.requested_at),
+        "updated_at": to_api_timestamp(job.updated_at),
         "started_at": to_api_timestamp(job.started_at),
         "finished_at": to_api_timestamp(job.finished_at),
         "cancel_requested": job.cancel_requested_at is not None,

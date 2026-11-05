@@ -16,12 +16,12 @@ import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { ErrorState, PageHeader, Skeleton } from '@/ui';
 import { SourceControl } from './components/SourceControl';
-import { StateBlock } from './components/worker/StateBlock';
+import { StatusStrip } from './components/worker/StatusStrip';
 import { SettingsForm } from './components/worker/SettingsForm';
 import { HistoryBlock } from './components/worker/HistoryBlock';
 import { JobsBlock } from './components/worker/JobsBlock';
 import { ProblemsBlock, type ProblemsProps } from './components/worker/ProblemsBlock';
-import { ModelsBlock } from './components/worker/ModelsBlock';
+import { DateRangeDialog } from './components/worker/DateRangeDialog';
 import type { WorkerBusy, WorkerCallbacks } from './components/worker/types';
 import liveStyles from './live.module.css';
 import styles from './worker.module.css';
@@ -43,17 +43,38 @@ export function WorkerPageView({
   onCancelJob,
   ...problems
 }: WorkerPageViewProps) {
+  const [range, setRange] = useState(false);
   return (
     <div className={`${fullWidth} ${liveStyles.page}`}>
       <PageHeader title="Worker" meta={sourceControl ? [sourceControl] : undefined} />
       <div className={styles.grid}>
-        <StateBlock read={read} busy={busy} onState={onState} onKey={onKey} />
-        <SettingsForm read={read} busy={busy.save} onSave={onSave} />
-        <HistoryBlock versions={read.versions} busy={busy.restore} onRestore={onRestore} />
-        <JobsBlock jobs={read.jobs} busy={busy} onCreateJob={onCreateJob} onCancelJob={onCancelJob} />
+        <StatusStrip
+          read={read}
+          busy={busy}
+          onState={onState}
+          onKey={onKey}
+          onBackfill={() => setRange(true)}
+        />
         <ProblemsBlock {...problems} read={read} />
-        <ModelsBlock read={read} />
+        <JobsBlock jobs={read.jobs} busy={busy} onBackfill={() => setRange(true)} onCancelJob={onCancelJob} />
+        <div className={styles.settingsRow}>
+          <SettingsForm read={read} busy={busy.save} onSave={onSave} />
+          <HistoryBlock
+            versions={read.versions}
+            runningVersion={read.running?.settings_version_applied}
+            busy={busy.restore}
+            onRestore={onRestore}
+          />
+        </div>
       </div>
+      <DateRangeDialog
+        key={range ? 'open' : 'closed'}
+        open={range}
+        onOpenChange={setRange}
+        jobs={read.jobs}
+        onCreateJob={onCreateJob}
+        busy={busy.createJob}
+      />
     </div>
   );
 }
@@ -93,14 +114,16 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
           />
         ) : (
           <div className={styles.grid} data-live-loading="worker">
-            {['state', 'settings', 'history', 'jobs', 'problems', 'models'].map((name) => (
+            {(
+              [
+                ['status', 180],
+                ['problems', 360],
+                ['jobs', 260],
+                ['settings', 400],
+              ] as const
+            ).map(([name, height]) => (
               <div key={name} data-live-block={`worker-${name}`}>
-                <Skeleton
-                  reserve
-                  kind="chart"
-                  height={`var(--worker-${name}-height)`}
-                  label={`Loading worker ${name}`}
-                />
+                <Skeleton reserve kind="chart" height={height} label={`Loading worker ${name}`} />
               </div>
             ))}
           </div>

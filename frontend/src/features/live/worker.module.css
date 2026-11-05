@@ -1,20 +1,7 @@
 /* Live worker: composed control blocks, wrapping data and reserved loading frames. */
 .grid {
-  --worker-state-height: 280px;
-  --worker-settings-height: 1180px;
-  --worker-history-height: 280px;
-  --worker-jobs-height: 400px;
-  --worker-problems-height: 650px;
-  --worker-models-height: 280px;
-
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-areas:
-    'state models'
-    'settings settings'
-    'history history'
-    'jobs jobs'
-    'problems problems';
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-md);
   min-inline-size: 0;
 }
@@ -25,38 +12,40 @@
   min-inline-size: 0;
 }
 
-.grid > [data-live-block='worker-state'] {
-  grid-area: state;
-  min-block-size: var(--worker-state-height);
+.settingsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-md);
+  min-inline-size: 0;
 }
 
-.grid > [data-live-block='worker-settings'] {
-  grid-area: settings;
-  min-block-size: var(--worker-settings-height);
+.settingsRow > [data-live-block='worker-settings'] {
+  flex: 3 1 36rem;
+  min-inline-size: 0;
 }
 
-.grid > [data-live-block='worker-history'] {
-  grid-area: history;
-  min-block-size: var(--worker-history-height);
+.settingsRow > [data-live-block='worker-history'] {
+  flex: 1 1 18rem;
+  min-inline-size: 0;
 }
 
-.grid > [data-live-block='worker-jobs'] {
-  grid-area: jobs;
-  min-block-size: var(--worker-jobs-height);
+.actions,
+.saveRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
 }
 
-.grid > [data-live-block='worker-problems'] {
-  grid-area: problems;
-  min-block-size: var(--worker-problems-height);
+.saveRow > :first-child {
+  flex: 1 1 16rem;
+  min-inline-size: 0;
 }
 
-.grid > [data-live-block='worker-models'] {
-  grid-area: models;
-  min-block-size: var(--worker-models-height);
-}
-
-.block > * {
-  min-block-size: 100%;
+.workerKey {
+  flex: 0 1 22rem;
+  min-inline-size: 0;
 }
 
 .stack {
@@ -75,13 +64,13 @@
 .settingsSection {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-sm);
   min-inline-size: 0;
 }
 
 .settingsSection + .settingsSection {
   border-block-start: 1px solid var(--border-subtle);
-  padding-block-start: var(--space-lg);
+  padding-block-start: var(--space-sm);
 }
 
 .inline {
@@ -104,44 +93,33 @@
   overflow-wrap: anywhere;
 }
 
-.problems {
+.problems,
+.versions {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.problem {
+.problem,
+.version {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   padding-block: var(--space-md);
 }
 
-.problem + .problem {
+.problem + .problem,
+.version + .version {
   border-block-start: 1px solid var(--border-subtle);
 }
 
 @container (width < 900px) {
-  .grid {
-    --worker-settings-height: 1360px;
-
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'state' 'settings' 'history' 'jobs' 'problems' 'models';
-  }
-
   .fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @container (width < 480px) {
-  .grid {
-    --worker-settings-height: 2400px;
-    --worker-history-height: 480px;
-    --worker-jobs-height: 700px;
-    --worker-problems-height: 1050px;
-  }
-
   .fields {
     grid-template-columns: minmax(0, 1fr);
   }

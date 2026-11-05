@@ -2,68 +2,55 @@ import { useState } from 'react';
 import type { LiveWorkerVersion } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
-import { Button, ConfirmDialog, DataTable, EmptyState, ErrorState, useToast, type Column } from '@/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorState, Text, useToast } from '@/ui';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
 
 export function HistoryBlock({
   versions,
+  runningVersion,
   onRestore,
   busy,
-}: { versions: LiveWorkerVersion[]; busy?: boolean } & Pick<WorkerCallbacks, 'onRestore'>) {
+}: { versions: LiveWorkerVersion[]; runningVersion?: number | null; busy?: boolean } & Pick<
+  WorkerCallbacks,
+  'onRestore'
+>) {
   const [restore, setRestore] = useState<number | null>(null);
   const [error, setError] = useState<unknown>(null);
   const toast = useToast();
-  const columns: Column<LiveWorkerVersion>[] = [
-    { id: 'version', header: 'Version', mono: true, priority: 1, cell: (row) => `v${row.version}` },
-    {
-      id: 'created_at',
-      header: 'When',
-      priority: 2,
-      cell: (row) => <span title={row.created_at}>{formatRelative(row.created_at)}</span>,
-    },
-    {
-      id: 'created_by',
-      header: 'Who',
-      priority: 2,
-      cell: (row) => (
-        <span className={styles.wrap} dir="auto">
-          {row.created_by ?? '—'}
-        </span>
-      ),
-    },
-    {
-      id: 'note',
-      header: 'Note',
-      priority: 2,
-      cell: (row) => (
-        <span className={styles.wrap} dir="auto">
-          {row.note ?? '—'}
-        </span>
-      ),
-    },
-    {
-      id: 'actions',
-      header: 'Actions',
-      priority: 2,
-      cell: (row) => (
-        <Button isDisabled={busy} onPress={() => setRestore(row.version)}>
-          Restore
-        </Button>
-      ),
-    },
-  ];
   return (
-    <WorkerBlock name="history" title="History">
+    <WorkerBlock name="history" title="Versions">
       {versions.length ? (
-        <DataTable
-          aria-label="Settings history"
-          rows={versions}
-          columns={columns}
-          rowKey={(row) => row.version}
-          responsive="cards"
-        />
+        <ul className={styles.versions} aria-label="Settings history">
+          {versions.map((version) => (
+            <li key={version.version} className={styles.version} data-worker-version={version.version}>
+              <Text
+                as="div"
+                variant="md"
+                weight={600}
+                tone={version.version === runningVersion ? 'success' : 'primary'}
+              >
+                v{version.version}
+                {version.version === runningVersion ? ' · running' : ''}
+              </Text>
+              <Text dir="auto" className={styles.wrap}>
+                {version.note ?? '—'}
+              </Text>
+              <div className={styles.inline}>
+                <time dateTime={version.created_at} title={version.created_at}>
+                  {formatRelative(version.created_at)}
+                </time>
+                <Text as="span" dir="auto" className={styles.wrap}>
+                  {version.created_by ?? '—'}
+                </Text>
+                <Button isDisabled={busy} onPress={() => setRestore(version.version)}>
+                  Restore
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : (
         <EmptyState title="No versions yet" />
       )}

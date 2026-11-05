@@ -96,7 +96,7 @@ for (const viewport of viewports) {
         page,
         `/projects/${seed.projectSlug}/live/worker?${new URLSearchParams({ source: seed.sourceKey })}`,
       );
-      await expect(page.locator('[data-live-block="worker-state"]')).toContainText('running v1');
+      await expect(page.locator('[data-live-block="worker-status"]')).toContainText('Running v1');
       await expect(page.locator('[data-worker-event]')).toHaveCount(3);
       await page.evaluate(() => document.fonts.ready);
       await expect
