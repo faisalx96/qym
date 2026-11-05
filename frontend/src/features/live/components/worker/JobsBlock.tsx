@@ -43,7 +43,9 @@ export function JobsBlock({
           <Tag
             tone={
               row.status === 'running'
-                ? 'accent'
+                ? row.cancel_requested
+                  ? 'warning'
+                  : 'accent'
                 : row.status === 'done'
                   ? 'success'
                   : row.status === 'failed'
@@ -51,7 +53,7 @@ export function JobsBlock({
                     : undefined
             }
           >
-            {row.status}
+            {row.status === 'running' && row.cancel_requested ? 'cancelling' : row.status}
           </Tag>
           {row.progress.paused ? <Tag>paused</Tag> : null}
           {row.status === 'failed' && row.error ? (
@@ -87,7 +89,17 @@ export function JobsBlock({
       id: 'requested_at',
       header: 'When',
       priority: 2,
-      cell: (row) => <span title={row.requested_at}>{formatRelative(row.requested_at)}</span>,
+      cell: (row) => {
+        const stale = row.status === 'running' && Date.now() - Date.parse(row.updated_at) > 10 * 60_000;
+        return (
+          <div>
+            <span title={row.requested_at}>{formatRelative(row.requested_at)}</span>
+            <Text as="div" variant="sm" tone={stale ? 'danger' : 'muted'} title={row.updated_at}>
+              {stale ? 'no update for' : 'updated'} {formatRelative(row.updated_at)}
+            </Text>
+          </div>
+        );
+      },
     },
     {
       id: 'actions',

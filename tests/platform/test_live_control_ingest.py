@@ -190,6 +190,7 @@ def test_control_returns_state_settings_and_jobs_to_worker_key(
             "error": None,
             "requested_by": "Worker owner",
             "requested_at": "2026-11-03T12:01:00Z",
+            "updated_at": "2026-11-03T12:00:00Z",
             "started_at": None,
             "finished_at": None,
             "cancel_requested": False,

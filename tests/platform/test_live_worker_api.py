@@ -179,6 +179,7 @@ def test_read_without_version_and_with_version(client, session_factory, values):
                     status="done",
                     requested_by_user_id=f"creator-{i}",
                     requested_at=NOW + timedelta(seconds=i),
+                    updated_at=NOW + timedelta(minutes=1, seconds=i),
                 )
             )
         db.commit()
@@ -208,6 +209,9 @@ def test_read_without_version_and_with_version(client, session_factory, values):
     assert len(body["jobs"]) == 20
     assert [j["requested_by"] for j in body["jobs"]] == [
         f"Creator {i}" for i in range(54, 34, -1)
+    ]
+    assert [j["updated_at"] for j in body["jobs"]] == [
+        f"2026-11-03T22:01:{i:02d}Z" for i in range(54, 34, -1)
     ]
     assert len(user_queries) <= 3, user_queries
     assert_safe(body)

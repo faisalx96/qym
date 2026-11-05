@@ -77,6 +77,7 @@ export interface LiveJob {
   error: string | null;
   requested_by: string | null;
   requested_at: string;
+  updated_at: string;
   started_at: string | null;
   finished_at: string | null;
   cancel_requested: boolean;
@@ -135,9 +136,9 @@ export function useLiveWorker(slug: string, source: string) {
     queryKey: workerKey(slug, source),
     queryFn: () => api.get<LiveWorkerRead>(livePath(slug, source)),
     refetchInterval: (query) =>
-      query.state.data?.jobs.some((job) => job.status === 'queued' || job.status === 'running')
+      query.state.data?.jobs?.some((job) => job.status === 'queued' || job.status === 'running')
         ? 5000
-        : 30000,
+        : 15000,
     refetchIntervalInBackground: false,
   });
 }

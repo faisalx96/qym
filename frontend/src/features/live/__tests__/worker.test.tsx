@@ -323,6 +323,70 @@ it('queues a backfill, closes the dialog and toasts', async () => {
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(JSON.parse(String(writes(fetch)[0]![1]?.body)).kind).toBe('backfill');
 });
+it.each([
+  ['running', true, 'cancelling', 'warning'],
+  ['running', false, 'running', 'accent'],
+  ['cancelled', true, 'cancelled', undefined],
+] as const)('shows job status %s with cancel_requested=%s', async (status, cancel_requested, label, tone) => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [{ ...liveWorkerRead.jobs[0]!, status, cancel_requested }],
+  });
+  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
+  const badge = within(table).getByText(label);
+  expect(badge).toBeVisible();
+  if (tone) expect(badge).toHaveAttribute('data-tone', tone);
+  else expect(badge).not.toHaveAttribute('data-tone');
+  if (status === 'running') {
+    const button = within(table).getByRole('button', {
+      name: cancel_requested ? 'Cancel requested' : 'Cancel',
+    });
+    if (cancel_requested) expect(button).toBeDisabled();
+    else expect(button).toBeEnabled();
+  }
+});
+it.each([
+  ['running', '2026-11-03T12:18:00Z', 'updated 2m ago', 'muted'],
+  ['running', '2026-11-03T12:10:00Z', 'updated 10m ago', 'muted'],
+  ['running', '2026-11-03T12:09:59Z', 'no update for 10m ago', 'danger'],
+  ['queued', '2026-11-03T12:00:00Z', 'updated 20m ago', 'muted'],
+  ['done', '2026-11-03T12:00:00Z', 'updated 20m ago', 'muted'],
+  ['failed', '2026-11-03T12:00:00Z', 'updated 20m ago', 'muted'],
+  ['cancelled', '2026-11-03T12:00:00Z', 'updated 20m ago', 'muted'],
+] as const)('shows job freshness for %s updated at %s', async (status, updated_at, label, tone) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-03T12:20:00Z'));
+  setup({
+    ...liveWorkerRead,
+    jobs: [{ ...liveWorkerRead.jobs[0]!, status, requested_at: '2026-11-03T11:20:00Z', updated_at }],
+  });
+  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
+  const requested = within(table).getByText('1h ago');
+  const cell = requested.closest('td')!;
+  const updated = within(cell).getByText(label);
+  expect(updated).toBeVisible();
+  expect(updated).toHaveAttribute('data-tone', tone);
+  expect(updated).toHaveAttribute('title', updated_at);
+  expect(requested.compareDocumentPosition(updated) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+it('confirms cancelling a job and shows cancelling after the worker refresh', async () => {
+  const job = liveWorkerRead.jobs[0]!;
+  const cancelled = { ...job, cancel_requested: true };
+  const view = setup(liveWorkerRead, () => {
+    view.setRead({ ...liveWorkerRead, jobs: [cancelled] });
+    return response(cancelled);
+  });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+  const dialog = screen.getByRole('dialog', { name: 'Cancel job?' });
+  expect(writes(view.fetch)).toHaveLength(0);
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel job' }));
+  expect(await screen.findByText('cancelling')).toHaveAttribute('data-tone', 'warning');
+  expect(writes(view.fetch)).toHaveLength(1);
+  expect(writes(view.fetch)[0]![0]).toContain(`/jobs/${job.id}/cancel?source=`);
+  expect(writes(view.fetch)[0]![1]?.method).toBe('POST');
+  expect(screen.getByRole('button', { name: 'Cancel requested' })).toBeDisabled();
+});
 it('maps a nested 422 to Database host without marking Langfuse host', async () => {
   setup(liveWorkerRead, () =>
     response(
@@ -351,7 +415,7 @@ it.each([
   expect(screen.getAllByText(message).length).toBeGreaterThan(0);
   expect(screen.getByText(/request abc123/)).toBeVisible();
 });
-it('polls at five seconds while jobs run and thirty seconds after completion', async () => {
+it('polls the worker every five seconds while a job runs and every fifteen afterwards', async () => {
   vi.useFakeTimers();
   let read = liveWorkerRead;
   const fetch = vi.fn(async () => response(read));
@@ -365,21 +429,27 @@ it('polls at five seconds while jobs run and thirty seconds after completion', a
     await vi.advanceTimersByTimeAsync(1);
   });
   expect(fetch).toHaveBeenCalledTimes(1);
+  // The fixture has a running job: the page refreshes every five seconds.
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(4998);
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
   });
   expect(fetch).toHaveBeenCalledTimes(2);
+  // No active job: fifteen seconds.
   read = { ...liveWorkerRead, jobs: [] };
   await act(async () => {
     await vi.advanceTimersByTimeAsync(5000);
   });
   expect(fetch).toHaveBeenCalledTimes(3);
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(29000);
+    await vi.advanceTimersByTimeAsync(14999);
   });
   expect(fetch).toHaveBeenCalledTimes(3);
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1);
   });
   expect(fetch).toHaveBeenCalledTimes(4);
   unmount();
