@@ -218,19 +218,6 @@ export function FeedbackListPage() {
     />
   ) : null;
 
-  // QE-150: "/" focuses the search, as on the runs list.
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (el && (el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName))) return;
-      e.preventDefault();
-      searchRef.current?.focus();
-    };
-    window.addEventListener('keydown', on);
-    return () => window.removeEventListener('keydown', on);
-  }, []);
-
   const empty = data && data.counts.all === 0 && !filtered && !list.isFetching;
   return (
     <div className={`${constrained} ${styles.page}`} data-testid="feedback-list-page">
@@ -297,7 +284,8 @@ export function FeedbackListPage() {
                     ref={searchRef}
                     label="Search requests"
                     placeholder="Search requests"
-                    width="100%"
+                    width="var(--search-width)"
+                    shortcut="/"
                     value={view.q}
                     onChange={(q) => set({ q: q || null })}
                     onClear={() => set({ q: null })}

@@ -171,7 +171,7 @@ function PickerBody({
           value={search}
           onChange={reset(setSearch)}
           onClear={() => setSearch('')}
-          width={220}
+          width="var(--search-width)"
         />
         <MultiSelect
           label="Task"

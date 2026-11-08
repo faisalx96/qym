@@ -378,7 +378,7 @@ function DiagnosisEditor({
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}
-          width={240}
+          width="var(--search-width)"
         />
         {canManage ? (
           adding ? (

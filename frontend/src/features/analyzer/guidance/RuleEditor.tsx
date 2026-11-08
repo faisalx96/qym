@@ -69,7 +69,7 @@ export function RuleEditor({
             setPage(1);
           }}
           onClear={() => setQuery('')}
-          width={240}
+          width="var(--search-width)"
         />
         {editable ? (
           <>

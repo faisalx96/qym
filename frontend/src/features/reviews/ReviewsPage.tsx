@@ -475,7 +475,7 @@ export function ReviewsPage() {
               hint="/"
               value={search}
               onChange={setSearch}
-              width={260}
+              width="var(--search-width)"
             />
             <SourceControl filters={filters} onChange={setFilters} />
             <span className={styles.grow} />
