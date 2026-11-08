@@ -250,9 +250,12 @@ def test_read_without_version_and_with_version(client, session_factory, values):
 
 
 @pytest.mark.parametrize("with_day", [False, True])
-def test_read_today_uses_utc_day_and_selected_source(client, session_factory, with_day):
+def test_read_today_uses_source_day_and_selected_source(
+    client, session_factory, with_day
+):
     with session_factory() as db:
-        # It is already November 4 in the source timezone; the strip reports UTC today.
+        # 22:00 UTC on November 3 is already November 4 in the source timezone;
+        # the strip reports the source's today, not the UTC day.
         db.get(LiveSource, "source").day_key_timezone = "Asia/Riyadh"
         db.add(
             LiveSource(
@@ -265,12 +268,13 @@ def test_read_today_uses_utc_day_and_selected_source(client, session_factory, wi
             )
         )
         db.flush()
+        today = NOW.date() + timedelta(days=1)
         for source_id, day, seen, evaluated, failed, count in [
-            ("source", NOW.date(), 12, 9, 2, 3),
-            ("source", NOW.date() + timedelta(days=1), 100, 90, 10, 2),
-            ("second", NOW.date(), 200, 180, 20, 4),
+            ("source", today, 12, 9, 2, 3),
+            ("source", NOW.date(), 100, 90, 10, 2),
+            ("second", today, 200, 180, 20, 4),
         ]:
-            if with_day or day != NOW.date() or source_id != "source":
+            if with_day or day != today or source_id != "source":
                 db.add(
                     LiveDay(
                         source_id=source_id,
@@ -293,7 +297,7 @@ def test_read_today_uses_utc_day_and_selected_source(client, session_factory, wi
                 )
         db.commit()
     assert read(client, source="worker")["today"] == {
-        "day": "2026-11-03",
+        "day": "2026-11-04",
         "turns_seen": 12 if with_day else 0,
         "evaluated": 9 if with_day else 0,
         "failed": 2 if with_day else 0,

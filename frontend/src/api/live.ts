@@ -15,6 +15,8 @@ export interface LiveSourceInfo {
   last_heartbeat_at: string | null;
   last_poll_at: string | null;
   last_turn_at: string | null;
+  /** The source's current day ('YYYY-MM-DD') in its day_key_timezone (backend). */
+  today?: string;
   desired_state?: 'running' | 'paused';
   worker_key_set?: boolean;
   errors_last_hour?: number;
