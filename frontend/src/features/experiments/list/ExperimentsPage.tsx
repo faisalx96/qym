@@ -303,13 +303,6 @@ export function ExperimentsPage() {
           rowKey={(x) => x.id}
           rowHref={(x) => experimentPath(slug, x.id)}
           rowActions={(x) => [
-            {
-              id: 'open',
-              label: 'Open',
-              icon: 'external',
-              primary: true,
-              onPress: () => navigate(experimentPath(slug, x.id)),
-            },
             ...(readOnly
               ? []
               : [
