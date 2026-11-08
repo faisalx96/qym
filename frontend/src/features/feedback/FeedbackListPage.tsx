@@ -292,7 +292,6 @@ export function FeedbackListPage() {
                   />
                 }
                 rows={filterRow}
-                count={`${data?.matching ?? 0} ${data?.matching === 1 ? 'request' : 'requests'}`}
                 trailing={exportMenu}
                 columnsMenu={false}
                 densityMenu={false}
