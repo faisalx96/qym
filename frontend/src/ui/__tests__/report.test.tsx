@@ -136,7 +136,7 @@ describe('ScopeBar', () => {
         onToggleSidebar={() => {}}
       />,
     );
-    expect(screen.getByText('+1')).toBeInTheDocument();
+    expect(screen.getByText('+1 more')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Quick filters' })).toBeInTheDocument();
   });
 });

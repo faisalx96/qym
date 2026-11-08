@@ -250,26 +250,6 @@ tr:focus-within .idCopy,
   min-width: 0;
 }
 
-.more {
-  border: 0;
-  background: transparent;
-  padding: 0 var(--space-xs);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  cursor: pointer;
-  border-radius: var(--control-radius);
-}
-
-.more[data-hovered] {
-  color: var(--text-primary);
-}
-
-.more[data-focus-visible] {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 1px;
-}
-
 .tagPop {
   display: flex;
   flex-wrap: wrap;

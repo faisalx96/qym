@@ -43,7 +43,7 @@ export function ScopeChips({
           {chip.label.length > 56 ? `${chip.label.slice(0, 55)}…` : chip.label}
         </Chip>
       ))}
-      {more > 0 ? <Tag kind="count">+{more}</Tag> : null}
+      {more > 0 ? <Tag kind="count">+{more} more</Tag> : null}
     </>
   );
 }

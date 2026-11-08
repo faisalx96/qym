@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
-import { Button as AriaButton } from 'react-aria-components';
 import { formatDurationMs, formatNumericValue, formatRelative } from '@/lib/format';
 import { metricBand, type MetricDirection, type MetricType } from '@/lib/metrics';
 import { CopyButton } from '../../CopyButton';
 import { staggerIndex, useEntrance, useFlashOnChange } from '../../motion';
 import { Popover } from '../../Popover';
 import { RunStatusBadge } from '../../RunStatusBadge';
-import { Tag } from '../../Tag';
+import { MoreTag, Tag } from '../../Tag';
 import { UserName } from '../../UserName';
 import { middleTruncate } from '../model';
 import styles from './cells.module.css';
@@ -242,11 +241,7 @@ export function TagsCell({
       {rest.length ? (
         <Popover
           label={`More ${label}`}
-          trigger={
-            <AriaButton className={styles.more} aria-label={`${rest.length} more ${label}`}>
-              +{rest.length}
-            </AriaButton>
-          }
+          trigger={<MoreTag count={rest.length} aria-label={`${rest.length} more ${label}`} />}
         >
           <span className={styles.tagPop}>
             {rest.map((t) => (
