@@ -142,7 +142,7 @@ export function EnvironmentPicker() {
       </p>
       {canManage && !readOnly ? (
         <div>
-          <Button size="sm" variant="neutral" icon={<Icon name="plus" />} onPress={() => setAdding(true)}>
+          <Button size="sm" variant="neutral" icon={<Icon name="plus" size={12} />} onPress={() => setAdding(true)}>
             New environment
           </Button>
         </div>
