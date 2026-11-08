@@ -15,5 +15,9 @@ export function workerDay(value: string): string {
 
 /** The worker state as a StatusMark (B-11): running = blue orbit, paused = grey pause, any other = grey ring. */
 export function workerStateMark(state: string): [StatusTone, StatusShape] {
-  return state === 'running' ? ['info', 'orbit'] : state === 'paused' ? ['neutral', 'pause'] : ['neutral', 'ring'];
+  return state === 'running'
+    ? ['info', 'orbit']
+    : state === 'paused'
+      ? ['neutral', 'pause']
+      : ['neutral', 'ring'];
 }
