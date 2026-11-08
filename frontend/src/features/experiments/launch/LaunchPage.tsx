@@ -73,7 +73,7 @@ function LaunchBody({
       actions={
         <>
           <Button
-            variant="ghost"
+            variant="neutral"
             icon={<Icon name="chevron-left" size={12} />}
             onPress={() => goToStep(null)}
           >

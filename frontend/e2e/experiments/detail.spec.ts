@@ -266,7 +266,7 @@ test.describe('experiment detail', () => {
     expect(after.jobs).toHaveLength(2);
     expect(after.jobs.filter((j) => j.superseded)).toHaveLength(1);
     // the matrix cell now shows the new attempt and a link to the earlier one
-    await expect(page.getByRole('button', { name: '↻ 1 earlier' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '1 earlier' })).toBeVisible();
     await expect(stat(page.getByLabel('Job totals'), 'Failed')).toContainText('0');
 
     // Job history starts closed (C206): one line with the counts
@@ -283,7 +283,7 @@ test.describe('experiment detail', () => {
     // the matrix shortcut opens the history and scrolls to the superseded row
     await history.getByText('Show earlier attempts (1)').click();
     await expect(history.getByRole('row')).toHaveCount(2);
-    await page.getByRole('button', { name: '↻ 1 earlier' }).click();
+    await page.getByRole('button', { name: '1 earlier' }).click();
     await expect(history.getByRole('row')).toHaveCount(3);
     // the new HIGH attempt would block every other priority on the shared fake service
     await stopExperiment(request, project.id, x.id);

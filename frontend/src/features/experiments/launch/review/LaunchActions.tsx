@@ -19,7 +19,7 @@ export function LaunchActions({
   const { review, isLaunching, launch, openSection, focusField, readOnly } = useLaunch();
   return (
     <div className={styles.actions}>
-      <Button size="md" variant="ghost" onPress={onCancel}>
+      <Button size="md" variant="neutral" onPress={onCancel}>
         Cancel
       </Button>
       {hideRaw ? null : (

@@ -31,7 +31,7 @@ function Row({ name }: { name: string }) {
         <Tag kind="data">json</Tag>
         <span className={styles.spacer} />
         <Button
-          variant="ghost"
+          variant="danger"
           aria-label={`Remove ${name}`}
           onPress={() => setDoc((d) => setConfig(d, name, undefined))}
         >

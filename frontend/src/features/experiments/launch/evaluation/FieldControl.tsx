@@ -60,7 +60,7 @@ export function FieldControl({ field }: { field: EvaluatorFieldView }) {
         <span className={styles.mono}>
           {(field.value as { sweep: unknown[] }).sweep.map((v) => JSON.stringify(v)).join(', ')}
         </span>
-        <Button variant="ghost" onPress={() => setDoc((d) => setConfig(d, name, stopSweep(field.value)))}>
+        <Button variant="neutral" onPress={() => setDoc((d) => setConfig(d, name, stopSweep(field.value)))}>
           Single value
         </Button>
       </div>
@@ -153,7 +153,7 @@ export function FieldControl({ field }: { field: EvaluatorFieldView }) {
         <span className={styles.spacer} />
         {field.changed ? (
           <Button
-            variant="ghost"
+            variant="neutral"
             aria-label={`Reset ${label} to the starting point`}
             onPress={() => {
               draft.clear();

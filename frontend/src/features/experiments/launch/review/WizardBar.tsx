@@ -88,7 +88,7 @@ export function WizardBar({
           />
         ) : null}
         {showCancel && !phone ? (
-          <Button size="sm" variant="ghost" onPress={onCancel}>
+          <Button size="sm" variant="neutral" onPress={onCancel}>
             Cancel
           </Button>
         ) : null}

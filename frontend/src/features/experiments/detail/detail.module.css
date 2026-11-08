@@ -183,25 +183,6 @@
   gap: var(--space-sm);
 }
 
-.earlier {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent-primary);
-  font: inherit;
-  font-size: var(--font-sm);
-  cursor: pointer;
-}
-
-.earlier:hover {
-  text-decoration: underline;
-}
-
-.earlier:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
-}
-
 .metric {
   display: flex;
   align-items: baseline;

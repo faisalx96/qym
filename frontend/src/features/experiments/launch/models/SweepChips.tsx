@@ -122,7 +122,7 @@ export function SweepChips({ label, items, connections, onChange, onSingle }: Sw
           </Button>
         ) : null}
         <span className={styles.spacer} />
-        <Button variant="ghost" onPress={onSingle}>
+        <Button variant="neutral" onPress={onSingle}>
           Single model
         </Button>
       </div>

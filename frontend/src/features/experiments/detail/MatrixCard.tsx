@@ -11,6 +11,7 @@ import {
   ActionTile,
   Button,
   Checkbox,
+  Icon,
   RowMenu,
   SectionHeader,
   Card,
@@ -259,14 +260,14 @@ function MatrixCell({
         ) : null}
         <JobStatusBadge status={job.status} />
         {earlier ? (
-          <button
-            type="button"
-            className={styles.earlier}
-            title="Show earlier attempts in the job history"
-            onClick={() => onShowAttempts(job)}
+          <Button
+            variant="neutral"
+            size="sm"
+            icon={<Icon name="retry" size={12} />}
+            onPress={() => onShowAttempts(job)}
           >
-            ↻ {earlier} earlier
-          </button>
+            {earlier} earlier
+          </Button>
         ) : null}
         <span className={styles.cellMenu}>
           <RowMenu label={`Actions: ${comboLabel} on ${env.name}`} items={items} onAction={onAction} />

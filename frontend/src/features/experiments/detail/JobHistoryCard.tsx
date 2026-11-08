@@ -1,7 +1,7 @@
 /**
  * Every job, current attempts first; earlier (superseded) attempts on demand. The card starts as one closed line,
  * 'Job history · 6 jobs, 1 earlier attempt', because the matrix already lists the current jobs (C206); it opens in
- * place, and the matrix's '↻ n earlier' link opens it.
+ * place, and the matrix's 'n earlier' button opens it.
  */
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';

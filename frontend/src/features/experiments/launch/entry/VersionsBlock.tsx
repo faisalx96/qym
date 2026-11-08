@@ -91,7 +91,7 @@ export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectI
       )}
       <span className={styles.versionRefresh}>
         <Button
-          variant="ghost"
+          variant="neutral"
           size="sm"
           aria-label={hasTaskRow ? `Refresh versions and tasks of ${env.name}` : `Refresh versions of ${env.name}`}
           // A request already in flight is kept (no cancel and re-issue): Refresh twice is harmless.
