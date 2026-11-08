@@ -463,7 +463,7 @@ export function DisableItemDialog({
           <Button variant="neutral" size="md" onPress={() => onOpenChange(false)} isDisabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" size="md" loading={busy} onPress={() => void submit()}>
+          <Button variant="danger" size="md" loading={busy} onPress={() => void submit()}>
             {many ? `Disable ${count}` : 'Disable item'}
           </Button>
         </>
