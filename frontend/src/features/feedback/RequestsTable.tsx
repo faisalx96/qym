@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, DataTable, EmptyState, type Column, type Key, type SortState, Flag } from '@/ui';
+import { DataTable, EmptyState, type Column, type Key, type SortState, Flag } from '@/ui';
 import type { FeedbackList, FeedbackRow } from '@/api/feedback';
 import { ComplexityTag, PriorityBadge, StatusBadge } from './badges';
 import { shortDate } from './format';
@@ -131,8 +131,8 @@ export interface RequestsTableProps {
   toolbar: React.ReactNode;
   footer: React.ReactNode;
   filtered: boolean;
-  /** Drops every filter and the search (the empty state of a filter that matches nothing offers it, QE-127). */
-  onClearFilters: () => void;
+  /** The list search text: the filtered empty state echoes it. */
+  q?: string;
   /** Rows the last loaded page had: the loading frame draws as many. */
   lastCount: number;
 }
@@ -178,15 +178,7 @@ export function RequestsTable(p: RequestsTableProps) {
       errorTitle="Couldn’t load feedback"
       empty="No requests match."
       filteredEmpty={
-        <EmptyState
-          compact
-          title="No requests match."
-          action={
-            <Button variant="neutral" size="sm" onPress={p.onClearFilters}>
-              Clear filters
-            </Button>
-          }
-        />
+        <EmptyState compact title={p.q ? `No requests match “${p.q}”` : 'No requests match these filters'} />
       }
       isFiltered={p.filtered}
       storageKey="feedback-requests"

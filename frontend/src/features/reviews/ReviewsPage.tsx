@@ -571,29 +571,21 @@ export function ReviewsPage() {
           ) : first && rows.length === 0 ? (
             <EmptyState
               title={
-                filtered || filters.search
-                  ? 'No diagnoses match these filters'
-                  : filters.status === 'pending'
-                    ? 'Nothing to review'
-                    : 'Nothing here yet'
+                filters.search
+                  ? `No issues match “${filters.search}”`
+                  : filtered
+                    ? 'No issues match these filters'
+                    : filters.status === 'pending'
+                      ? 'Nothing to review'
+                      : 'Nothing here yet'
               }
               body={
                 filtered
                   ? undefined
-                  : 'Diagnoses arrive when auto-analysis runs, or when someone adds a root cause on a run.'
+                  : 'Issues arrive when auto-analysis runs, or when someone adds a root cause on a run.'
               }
               action={
-                filtered ? (
-                  <Button
-                    variant="neutral"
-                    onPress={() => {
-                      setSearch('');
-                      setFilters({ ...clearedFilters(filters), status: filters.status });
-                    }}
-                  >
-                    Clear filters
-                  </Button>
-                ) : (
+                filtered ? undefined : (
                   <LinkButton to={projectSlug ? projectPath(projectSlug) : ROUTES.projects} variant="neutral">
                     Open runs
                   </LinkButton>

@@ -287,17 +287,7 @@ export function FeedbackListPage() {
             sort={sortToState(view.sort)}
             onSortChange={(s) => set({ sort: s ? `${s.key}:${s.direction}` : null })}
             filtered={filtered}
-            onClearFilters={() =>
-              set({
-                status: null,
-                about: null,
-                project: null,
-                priority: null,
-                complexity: null,
-                q: null,
-                mine: null,
-              })
-            }
+            q={view.q || undefined}
             lastCount={remembered.rows}
             toolbar={
               <DataTable.Toolbar
