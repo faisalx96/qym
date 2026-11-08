@@ -228,11 +228,6 @@
   min-block-size: calc(2 * var(--control-height) + 6px);
 }
 
-.flow[data-open] {
-  max-block-size: none;
-  overflow: visible;
-}
-
 .group {
   display: contents;
 }
@@ -263,6 +258,17 @@
 
 .moreBtn {
   flex: none;
+  align-self: flex-end;
+}
+
+.groupGrid {
+  display: grid;
+  flex: 1;
+  min-inline-size: 0;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-lg);
+  row-gap: var(--space-md);
+  align-items: start;
 }
 
 .moreFacts {

@@ -107,7 +107,7 @@ for (const width of [1440, 390]) {
       // (an object or array chip is a button that opens its JSON: "{ 3 keys }" / "[ 4 items ]")
       for (const t of buttons)
         expect(t).toMatch(
-          /\+ \d+ more|Show less|^\s*$|Copy|Export|Previous|Next|^[[{] \d+ (keys?|items?) [\]}]$/,
+          /\+\d+ more|Show less|^\s*$|Copy|Export|Previous|Next|^[[{] \d+ (keys?|items?) [\]}]$/,
         );
       // the passes tag on a repeat run
       await openRun(page, s.slug, wide);
@@ -228,19 +228,14 @@ test('P6-8, P6-9: the clamp keeps 54px (84 compact), "+ N more" is exact, openin
   expect(info.height).toBeLessThanOrEqual(54 + 1);
   expect(info.visible).toBeGreaterThanOrEqual(6);
   expect(info.hidden).toBeGreaterThan(0);
-  const more = h.getByRole('button', { name: /^\+ \d+ more$/ });
-  await expect(more).toHaveText(`+ ${info.hidden} more`);
+  const more = h.getByRole('button', { name: /^\+\d+ more$/ });
+  await expect(more).toHaveText(`+${info.hidden} more`);
   expect((await h.boundingBox())!.height).toBeLessThanOrEqual(200);
   await more.click();
   await expect(h.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
   await expect(h.getByText('Run ID', { exact: true })).toBeVisible();
-  const after = await flow.evaluate((el) => {
-    const flowBox = el.getBoundingClientRect();
-    return Array.from(el.querySelectorAll<HTMLElement>('[data-chip]')).every(
-      (c) => c.getBoundingClientRect().bottom <= flowBox.bottom + 1,
-    );
-  });
-  expect(after).toBe(true);
+  await expect(flow).toHaveCount(0);
+  await expect(h.getByTestId('hero-grid')).toBeVisible();
   await page.reload();
   await expect(h.getByRole('button', { name: 'Show less' })).toBeVisible();
   await h.getByRole('button', { name: 'Show less' }).click();
@@ -274,7 +269,7 @@ test('P6-8 compact: five lines (144px, spec amended) and at least six chips at 2
   expect(info.height).toBeLessThanOrEqual(144 + 1);
   expect(info.visible).toBeGreaterThanOrEqual(6);
   expect((await hero(page).boundingBox())!.height).toBeLessThanOrEqual(570);
-  await expect(hero(page).getByRole('button', { name: /^\+ \d+ more$/ })).toBeVisible();
+  await expect(hero(page).getByRole('button', { name: /^\+\d+ more$/ })).toBeVisible();
 });
 
 test('P6-10: a run with no config, metadata or versioning has no chip band and is at most 125px', async ({

@@ -4,7 +4,7 @@
  * clamped to two lines (three on a phone) with "+ N more". Nothing hides behind a chevron. Round 10: the first qym's
  * gradient top line and wash instead of a status rail; the status sits beside the name; the facts share one height.
  */
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Button,
@@ -16,8 +16,10 @@ import {
   InlineNotice,
   isBareRunId,
   JsonPreview,
+  KeyValueGrid,
   KeyValueTag,
   ModelTag,
+  MoreTag,
   RunStatusBadge,
   Tag,
   TaskTag,
@@ -156,61 +158,100 @@ function ContextBand({
       data-testid="hero-context"
     >
       <div className={styles.contextRow}>
-        <div
-          ref={flow}
-          id="run-hero-chips"
-          className={styles.flow}
-          data-open={open ? '' : undefined}
-          data-total={total}
-          data-provisional={provisional ? '' : undefined}
-        >
-          {groups.map((g) => (
-            <div key={g.label} role="list" aria-label={g.label} className={styles.group}>
-              {g.chips.map((c, i) => {
-                const chip = (
-                  <span role="listitem" data-chip="" className={styles.chipItem}>
-                    {c.dataset ? (
+        {open ? (
+          <div className={styles.groupGrid} data-testid="hero-grid">
+            {groups.map((g) => (
+              <Fragment key={g.label}>
+                <span className={styles.groupLabel}>{g.label}</span>
+                <KeyValueGrid
+                  dense
+                  columns={4}
+                  aria-label={g.label}
+                  items={g.chips.map((c) => ({
+                    key: c.key,
+                    label: c.label,
+                    value: c.dataset ? (
                       <DatasetChip entry={c.dataset} slug={slug} />
+                    ) : c.raw !== undefined ? (
+                      <JsonPreview value={c.raw} title={c.key} compact>
+                        {c.text}
+                      </JsonPreview>
                     ) : (
-                      <KeyValueTag label={c.label} text={c.text} title={c.title}>
-                        {c.raw !== undefined ? (
-                          // An object or array value opens its JSON in a dialog, clamped or not (QA 2026-10-21).
-                          <JsonPreview value={c.raw} title={c.key} compact>
-                            {c.text}
-                          </JsonPreview>
-                        ) : undefined}
-                      </KeyValueTag>
-                    )}
-                  </span>
-                );
-                return i === 0 ? (
-                  <span key={c.key} className={styles.lead}>
-                    <span className={styles.groupLabel} aria-hidden="true">
-                      {g.label}
-                    </span>
-                    {chip}
-                  </span>
-                ) : (
-                  <span key={c.key} className={styles.chipWrap}>
-                    {chip}
-                  </span>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-        {showButton ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className={styles.moreBtn}
-            aria-expanded={open}
-            aria-controls="run-hero-more"
-            onPress={toggle}
-            iconEnd={<Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />}
+                      c.text
+                    ),
+                    mono: true,
+                    tone: 'meta',
+                  }))}
+                />
+              </Fragment>
+            ))}
+          </div>
+        ) : (
+          <div
+            ref={flow}
+            id="run-hero-chips"
+            className={styles.flow}
+            data-total={total}
+            data-provisional={provisional ? '' : undefined}
           >
-            {open ? 'Show less' : `+ ${hidden} more`}
-          </Button>
+            {groups.map((g) => (
+              <div key={g.label} role="list" aria-label={g.label} className={styles.group}>
+                {g.chips.map((c, i) => {
+                  const chip = (
+                    <span role="listitem" data-chip="" className={styles.chipItem}>
+                      {c.dataset ? (
+                        <DatasetChip entry={c.dataset} slug={slug} />
+                      ) : (
+                        <KeyValueTag label={c.label} text={c.text} title={c.title}>
+                          {c.raw !== undefined ? (
+                            // An object or array value opens its JSON in a dialog, clamped or not (QA 2026-10-21).
+                            <JsonPreview value={c.raw} title={c.key} compact>
+                              {c.text}
+                            </JsonPreview>
+                          ) : undefined}
+                        </KeyValueTag>
+                      )}
+                    </span>
+                  );
+                  return i === 0 ? (
+                    <span key={c.key} className={styles.lead}>
+                      <span className={styles.groupLabel} aria-hidden="true">
+                        {g.label}
+                      </span>
+                      {chip}
+                    </span>
+                  ) : (
+                    <span key={c.key} className={styles.chipWrap}>
+                      {chip}
+                    </span>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+        {showButton ? (
+          open ? (
+            <Button
+              variant="neutral"
+              size="sm"
+              className={styles.moreBtn}
+              aria-expanded
+              aria-controls="run-hero-more"
+              onPress={toggle}
+              iconEnd={<Icon name="chevron-up" size={12} />}
+            >
+              Show less
+            </Button>
+          ) : (
+            <MoreTag
+              count={hidden}
+              chevron
+              aria-expanded={false}
+              aria-controls="run-hero-more"
+              onPress={toggle}
+            />
+          )
         ) : null}
       </div>
       <Collapse open={open} id="run-hero-more">

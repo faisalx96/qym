@@ -304,8 +304,8 @@ test.describe('union run page', () => {
     const expected = { 1440: 6, 1024: 10, 390: 10 } as const;
     for (const width of WIDTHS) {
       await open(page, width, url(many));
-      const more = page.getByRole('button', { name: /^\+ \d+ more$/ });
-      await expect(more).toHaveText(`+ ${expected[width]} more`);
+      const more = page.getByRole('button', { name: /^\+\d+ more$/ });
+      await expect(more).toHaveText(`+${expected[width]} more`);
       const hero = await size(page, '[data-testid=run-hero]');
       expect(hero.h).toBeGreaterThan(150);
       // pressing it shows every chip
