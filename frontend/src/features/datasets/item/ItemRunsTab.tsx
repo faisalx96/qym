@@ -81,6 +81,7 @@ export function ItemRunsTab({
         <Link
           to={`${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`}
           className={styles.runLink}
+          data-link="name"
         >
           {r.run_name || r.external_run_id || r.run_id}
         </Link>
@@ -166,6 +167,7 @@ export function ItemRunsTab({
           <Link
             to={`${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}&trace=1`}
             className={styles.runLink}
+            data-link="name"
           >
             Trace
           </Link>

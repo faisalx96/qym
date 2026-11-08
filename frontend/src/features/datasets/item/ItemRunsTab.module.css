@@ -6,13 +6,8 @@
 }
 
 .runLink {
-  color: var(--accent-secondary);
   text-decoration: none;
   font-weight: 600;
-}
-
-.runLink:hover {
-  text-decoration: underline;
 }
 
 .runLink:focus-visible {

@@ -64,7 +64,7 @@
   background: none;
   border: 0;
   padding: 0;
-  color: var(--accent-secondary);
+  color: var(--accent-primary);
   font: inherit;
   cursor: pointer;
   text-decoration: underline;

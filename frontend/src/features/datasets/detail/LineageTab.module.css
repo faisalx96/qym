@@ -48,12 +48,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-md);
   font-weight: 650;
-  color: var(--accent-primary);
   text-decoration: none;
-}
-
-.versionLink:hover {
-  text-decoration: underline;
 }
 
 .versionLink:focus-visible {

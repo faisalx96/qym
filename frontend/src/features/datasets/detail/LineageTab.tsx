@@ -43,6 +43,7 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
             <Link
               to={datasetPath(slug, datasetRef, { tab: 'lineage', v: v.version })}
               className={styles.versionLink}
+              data-link="name"
             >
               {v.version}
             </Link>
