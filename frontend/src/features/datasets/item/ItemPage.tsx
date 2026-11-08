@@ -279,6 +279,7 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
                 size="md"
                 onPress={() => void save()}
                 isDisabled={!dirty || !valid}
+                disabledReason={!dirty ? 'No changes to save' : undefined}
                 loading={editor.saving}
                 data-testid="save-item"
               >
