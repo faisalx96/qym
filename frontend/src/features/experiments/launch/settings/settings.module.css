@@ -7,9 +7,7 @@
 }
 
 .toolbarSearch {
-  flex: 1 1 200px;
-  max-width: 320px;
-  min-width: 160px;
+  flex: none;
 }
 
 .spacer {

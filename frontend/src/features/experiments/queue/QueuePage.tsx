@@ -354,7 +354,8 @@ export function QueuePage() {
         placeholder="Search experiment or environment"
         value={search}
         onChange={setSearch}
-        width={260}
+        width="var(--search-width)"
+        shortcut="/"
       />
       <Select
         label="Environment"

@@ -1,6 +1,6 @@
 /** A role table as the "Role overrides" card: search, "Overridden only", "Reset roles", an "All roles" row. */
 import { useId, useState } from 'react';
-import { Button, Checkbox, Tag } from '@/ui';
+import { Button, Checkbox, SearchField, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import {
   addKey,
@@ -66,13 +66,13 @@ export function RoleTable({ node, errors }: { node: RoleTableNode } & TreeProps)
         </Tag>
       </div>
       <div className={styles.addRow}>
-        <input
-          className={[styles.control, styles.addInput].join(' ')}
-          type="search"
-          aria-label={`Search ${noun}s`}
+        <SearchField
+          label={`Search ${noun}s`}
+          hideLabel
           placeholder={`Search ${noun}s`}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={setQuery}
+          width="var(--search-width)"
         />
         <Checkbox isSelected={overriddenOnly} onChange={setOverriddenOnly}>
           Overridden only
