@@ -13,7 +13,7 @@ export function formatPrimaryMean(value: number | null, spec: LiveMetricSpec | u
   if (value === null) return '—';
   if (spec?.score_type === 'duration') return formatDurationMs(value);
   if (spec?.score_type === 'percentage' || spec?.score_type === 'boolean') {
-    return formatPercentValue(value, 0);
+    return formatPercentValue(value, 1);
   }
   return value.toFixed(2);
 }

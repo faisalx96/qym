@@ -22,7 +22,7 @@ export function statusWord(value: string): string {
 
 export function scoreText(value: number | null, spec?: LiveMetricSpec | null): string {
   if (value === null) return '—';
-  if (!spec || spec.score_type === 'percentage') return formatPercentValue(value, spec?.precision ?? 0);
+  if (!spec || spec.score_type === 'percentage') return formatPercentValue(value, 1);
   if (spec.score_type === 'boolean') return value ? 'Pass' : 'Fail';
   if (spec.score_type === 'duration' && spec.unit === 'ms') return formatDurationMs(value);
   return `${formatNumericValue(value, spec.precision ?? 2)}${spec.unit ? ` ${spec.unit}` : ''}`;
