@@ -1656,6 +1656,7 @@ function DataTableInner<R>({
                   label={a.label}
                   icon={a.icon ?? (a.danger ? 'trash' : 'more')}
                   tone={a.danger ? 'danger' : 'default'}
+                  tile
                   isDisabled={a.disabled}
                   onPress={() => a.onPress(r)}
                 />
