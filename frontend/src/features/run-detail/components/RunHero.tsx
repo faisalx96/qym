@@ -47,25 +47,8 @@ import { RejectNote, ReviewLog, RunHeaderActions } from './RunActions';
 import { useRunPage } from '../RunContext';
 import { useModelIndex } from '@/api/dashboard';
 import { useOptionalProject } from '@/features/shell/ProjectContext';
-import { modelSlot } from '@/features/runs-list/model';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import styles from './RunHero.module.css';
-
-type Series = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
-/** The model's series slot from the project's model index; neutral until the index loads or when the model is absent. */
-function modelSeriesOf(
-  index: Record<string, number> | null,
-  name: string,
-  reasoning: boolean,
-): Series | undefined {
-  if (!index) return undefined;
-  const key = [
-    `${name}|||${reasoning ? 'reasoning' : 'plain'}`,
-    `${name}|||plain`,
-    `${name}|||reasoning`,
-  ].find((k) => k in index);
-  return key ? (modelSlot(key, index) as Series) : undefined;
-}
 
 export interface RunHeroProps {
   run: Run;

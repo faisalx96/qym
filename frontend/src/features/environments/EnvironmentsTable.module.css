@@ -55,30 +55,6 @@
   display: block;
 }
 
-.health {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.dot {
-  width: var(--space-sm);
-  height: var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--text-muted);
-  flex: none;
-}
-
-.health[data-status='ok'] .dot {
-  background: var(--success);
-}
-
-.health[data-status='error'] .dot {
-  background: var(--error);
-}
-
 .healthCell {
   display: flex;
   flex-direction: column;

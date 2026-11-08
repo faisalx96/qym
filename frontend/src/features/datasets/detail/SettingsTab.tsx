@@ -28,18 +28,31 @@ export function CardHead({
   title,
   description,
   aside,
+  count,
 }: {
   id: string;
   title: string;
   description?: ReactNode;
   aside?: ReactNode;
+  /** A count Tag right after the title (B-27: '2 people'). */
+  count?: ReactNode;
 }) {
+  const heading = (
+    <Text variant="md" as="h2" id={id}>
+      {title}
+    </Text>
+  );
   return (
     <div className={styles.cardHead} data-testid="card-head">
       <div className={styles.cardHeadText}>
-        <Text variant="lg" weight={600} as="h2" id={id}>
-          {title}
-        </Text>
+        {count ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+            {heading}
+            {count}
+          </div>
+        ) : (
+          heading
+        )}
         {description ? (
           <Text variant="sm" tone="muted" as="p">
             {description}

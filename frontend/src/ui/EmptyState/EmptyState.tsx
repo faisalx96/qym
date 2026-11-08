@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { Icon } from '../Icon';
 import { Text } from '../Text';
 import styles from './EmptyState.module.css';
 
@@ -33,7 +34,7 @@ export function EmptyState({ icon, title, body, action, guide, compact }: EmptyS
       {action ? <div className={styles.action}>{action}</div> : null}
       {guide ? (
         <Link to={guide} className={styles.guide}>
-          Read the guide
+          Read the guide <Icon name="chevron-right" size={12} />
         </Link>
       ) : null}
     </div>

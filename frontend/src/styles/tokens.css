@@ -44,7 +44,7 @@
   --metric-error: #eab308;
   --error: #ef4444;
   --error-dim: #7f1d1d;
-  --info: #3b82f6;
+  --info: var(--accent-secondary); /* B-36: one blue, the Running blue */
 
   /* 5-color score scale (red → orange → yellow → lime → green) */
   --score-1: #ef4444; /* 0-39%: red */
@@ -126,7 +126,6 @@
   --motion-step-out: 140ms;
   --ease-standard: ease;
   --page-max-w: 1233px; /* every report and settings page; the one page width */
-  --page-narrow-w: 1120px; /* text-first pages (profile): an explicit `narrow` container */
   --settings-prompt-rail-width: 200px;
   --settings-prompt-tab-width: 240px;
   --settings-prompt-editor-min-height: 280px;
@@ -287,6 +286,7 @@
   --row-regular: 40px;
   --row-comfortable: 52px;
   --table-header-height: 34px;
+  --search-width: 260px; /* list and report searches (C152) */
   --table-group-height: 24px;
   --table-footer-height: 40px;
   --bg-selected: rgba(0, 212, 170, 0.08);
@@ -299,6 +299,10 @@
   --tint-faint: 6%; /* row/section wash (danger and live only) */
   --tint-soft: 12%; /* Badge, Tag, Chip selected, score pill, icon tile fill */
   --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
+  --tint-gold: 17%; /* the admin role fill: at 12% gold reads brown on the dark surface (Q16) */
+  --role-admin: #e0bc4a; /* admin role tag (Q16 B) */
+  --stripe-step: 2%; /* page list stripe: --text-primary mixed into the row base (resolution 14, owner tunes) */
+  --stripe-step-report: 1%; /* report-table stripe: half the page stripe */
   --error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary)); /* 5.15:1 on a 12% error tint */
 
   --chart-6: #a3e635;

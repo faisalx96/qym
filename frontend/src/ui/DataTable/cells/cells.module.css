@@ -137,6 +137,22 @@
   background: var(--accent-primary);
 }
 
+/* B-35: the experiments jobs bar recipe: a green evaluated part and a red failed part, width by share of found. */
+.track[data-parts] {
+  display: inline-flex;
+}
+.part {
+  display: block;
+  flex: none;
+  block-size: 100%;
+}
+.part[data-part='ok'] {
+  background: var(--success);
+}
+.part[data-part='failed'] {
+  background: var(--error);
+}
+
 .scoreText {
   font-weight: 650;
   color: var(--text-primary);
@@ -250,44 +266,12 @@ tr:focus-within .idCopy,
   min-width: 0;
 }
 
-.more {
-  border: 0;
-  background: transparent;
-  padding: 0 var(--space-xs);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  cursor: pointer;
-  border-radius: var(--control-radius);
-}
-
-.more[data-hovered] {
-  color: var(--text-primary);
-}
-
-.more[data-focus-visible] {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 1px;
-}
-
 .tagPop {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
   max-width: 260px;
   padding: var(--space-sm);
-}
-
-.user {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.userName {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .progress {

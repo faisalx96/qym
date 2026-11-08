@@ -247,3 +247,10 @@
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
+
+/* C-23: a trace or system column title: the zap Icon, then the words. */
+.boltLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}

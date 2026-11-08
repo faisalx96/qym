@@ -25,7 +25,7 @@ export interface DatasetRoute {
   search: string;
   sort: string;
   label: string;
-  /** items state filter; `active` is the default and is never written to the URL */
+  /** items state filter; `all` is the default and is never written to the URL */
   state: 'active' | 'disabled' | 'all';
   /** repeatable `path:value` metadata filters (`meta=` in the URL) */
   meta: string[];
@@ -39,7 +39,7 @@ export interface DatasetRoute {
 }
 
 export function parseItemStateParam(raw: string | null): 'active' | 'disabled' | 'all' {
-  return raw === 'disabled' || raw === 'all' ? raw : 'active';
+  return raw === 'active' || raw === 'disabled' ? raw : 'all';
 }
 
 /** `splat` is everything after `/datasets/` (may be '' or undefined). */

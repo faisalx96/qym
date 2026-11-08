@@ -7,6 +7,7 @@ import {
   type WorkerEventsFilters,
 } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
+import { humanizeKey } from '@/lib/humanizeKey';
 import { Chip, CopyButton, EmptyState, ErrorState, LinkButton, Skeleton, Tag, Text } from '@/ui';
 import { WorkerBlock } from './WorkerBlock';
 import styles from '../../worker.module.css';
@@ -19,6 +20,11 @@ const componentLabels: Record<string, string> = {
   turn: 'Turns',
   job: 'Jobs',
 };
+
+/** A worker component key as its label; an unknown key reads as plain words (X18). */
+export function componentLabel(key: string): string {
+  return componentLabels[key] ?? humanizeKey(key);
+}
 const checkSections: Record<string, { id: string; title: string }> = {
   gateway: { id: 'models', title: 'Models' },
   database: { id: 'database', title: 'Database' },

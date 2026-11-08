@@ -44,7 +44,7 @@ export function ScoreValue({
   error,
   retries,
   ci,
-  digits = 0,
+  digits = 1,
   raw,
   text: textOverride,
   variant = 'text',

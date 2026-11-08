@@ -70,7 +70,18 @@ export function ServiceStatus({ status }: { status: string | null }) {
   );
 }
 
+/** A boolean Live score as the run pass mark: 1 = green check 'Pass', 0 = red cross 'Fail', null = '—' (C-19). */
+export function PassFailMark({ value }: { value: number | null }) {
+  if (value === null) return <span>—</span>;
+  return value ? (
+    <StatusMark tone="success" shape="check" label="Pass" />
+  ) : (
+    <StatusMark tone="danger" shape="cross" label="Fail" />
+  );
+}
+
 export function MetricValue({ value, spec }: { value: number | null; spec?: LiveMetricSpec | null }) {
+  if (spec?.score_type === 'boolean') return <PassFailMark value={value} />;
   return (
     <ScoreValue
       value={value}

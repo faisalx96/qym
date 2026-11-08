@@ -1,0 +1,43 @@
+/* LevelTag (D-30): three bars 3px wide, 1px apart, 4, 7 and 10px tall; the first n bars take the level colour. */
+.levels {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1px;
+  block-size: 10px;
+}
+
+.levels i {
+  inline-size: 3px;
+  border-radius: 1px;
+  background: var(--border-strong);
+}
+
+.levels i:nth-child(1) {
+  block-size: 4px;
+}
+
+.levels i:nth-child(2) {
+  block-size: 7px;
+}
+
+.levels i:nth-child(3) {
+  block-size: 10px;
+}
+
+.levels[data-level='1'] {
+  --level-color: var(--text-muted);
+}
+
+.levels[data-level='2'] {
+  --level-color: var(--warning);
+}
+
+.levels[data-level='3'] {
+  --level-color: var(--error);
+}
+
+.levels[data-level='1'] i:nth-child(-n + 1),
+.levels[data-level='2'] i:nth-child(-n + 2),
+.levels[data-level='3'] i {
+  background: var(--level-color);
+}

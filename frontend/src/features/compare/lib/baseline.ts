@@ -215,6 +215,17 @@ export function chipDelta(delta: number, type: string): string {
   return `${glyph} ${sign}${type === 'numeric' ? formatNumericValue(abs, abs < 1 ? 3 : 1) : (abs * 100).toFixed(1)}`;
 }
 
+/** A relative latency change: '+12% slower', '−8% faster' (Q18 A); |change| of 2% or less is noise. */
+export function latencyChange(rel: number): { text: string; verdict: 'slower' | 'faster' | 'flat' } {
+  const n = Math.round(Math.abs(rel) * 100);
+  if (n === 0) return { text: '0%', verdict: 'flat' };
+  const slower = rel > 0;
+  return {
+    text: `${slower ? '+' : '−'}${n}% ${slower ? 'slower' : 'faster'}`,
+    verdict: n <= 2 ? 'flat' : slower ? 'slower' : 'faster',
+  };
+}
+
 export function formatBand(halfWidth: number, type: string): string {
   if (type === 'numeric') return '±' + formatNumericValue(halfWidth, halfWidth < 1 ? 3 : 1);
   return '±' + (halfWidth * 100).toFixed(1);

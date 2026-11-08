@@ -20,6 +20,13 @@
   color: var(--text-primary);
 }
 
+/* D-27: muted text right after the title (a date window); .headRight keeps its auto start margin. */
+.titleMeta {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 .headRight {
   display: inline-flex;
   flex-wrap: wrap;

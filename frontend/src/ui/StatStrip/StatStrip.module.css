@@ -122,18 +122,13 @@
   height: 20px;
 }
 
-/* the tile carries the tone; the number stays primary unless it is a problem (errors) */
-.strip[data-variant='compact-header'] .item:not([data-tone='danger'], [data-tone='warning']) .value {
-  color: var(--text-primary);
-}
-
 .label {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
   font-size: var(--font-md);
-  font-weight: 650;
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .value {
@@ -142,14 +137,6 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--font-xl);
   font-weight: 700;
-  color: var(--text-primary);
-}
-
-.item[data-tone] .value {
-  color: var(--tone-text);
-}
-
-.item[data-tone='neutral'] .value {
   color: var(--text-primary);
 }
 
@@ -212,6 +199,48 @@
 
 .strip[data-variant='compact'] .value {
   font-size: var(--font-lg);
+}
+
+/* D-29 mini (Compare run cards): no frame, no dividers, three equal columns; the label over a tile and the number. */
+.strip[data-variant='mini'] {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-xs);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.strip[data-variant='mini'] .item {
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* --text-muted on purpose: the base .label is --text-secondary (E-38). */
+.strip[data-variant='mini'] .label {
+  font-size: var(--font-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.strip[data-variant='mini'] .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.miniRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.strip[data-variant='mini'] .value {
+  font-size: var(--font-md);
+  font-weight: 650;
 }
 
 .bar {
@@ -304,7 +333,8 @@
 
 /* The last tile fills its row when the count does not divide the columns (no empty grey cell). */
 @media (max-width: 800px) {
-  .strip:not([data-grouped]):not([data-variant='compact']) > .item:last-child:nth-child(odd) {
+  .strip:not([data-grouped]):not([data-variant='compact']):not([data-variant='mini'])
+    > .item:last-child:nth-child(odd) {
     grid-column: 1 / -1;
   }
 

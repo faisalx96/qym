@@ -54,8 +54,11 @@
   transform: rotate(90deg);
 }
 
+/* E-32: a long title wraps inside the row (names wrap, C-Q1). */
 .title {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .summary {

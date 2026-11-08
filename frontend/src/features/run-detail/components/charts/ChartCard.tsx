@@ -10,6 +10,8 @@ import styles from './ChartCard.module.css';
 export interface ChartCardProps {
   /** Card title (also the section's accessible name). */
   title: string;
+  /** Muted text right after the title (a date window). */
+  titleMeta?: ReactNode;
   /** Accessible name of the card when it differs from the visible title (default: the title). */
   ariaLabel?: string;
   /** Native tooltip of the title (e.g. the metric's direction). */
@@ -39,6 +41,7 @@ export interface ChartCardProps {
 
 export function ChartCard({
   title,
+  titleMeta,
   ariaLabel,
   titleHint,
   meta,
@@ -69,6 +72,7 @@ export function ChartCard({
           <span className={styles.title} title={titleHint}>
             {title}
           </span>
+          {titleMeta ? <span className={styles.titleMeta}>{titleMeta}</span> : null}
           {legend || controls || meta || help ? (
             <span className={styles.headRight}>
               {legend}

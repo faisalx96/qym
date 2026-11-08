@@ -94,6 +94,16 @@ export function VersionCell({ row }: { row: RunRow }) {
   );
 }
 
+/** A trace or system column title (19-03): the zap Icon, 12px, in the header colour, then the words. */
+export function BoltLabel({ label }: { label: string }) {
+  return (
+    <span className={styles.boltLabel}>
+      <Icon name="zap" size={12} />
+      {label}
+    </span>
+  );
+}
+
 /** Sans with tabular figures (round 10, as the first qym list): the mono face spread the date and time apart. */
 export function DateCell({ row }: { row: RunRow }) {
   const d = formatDateParts(row.timestamp);

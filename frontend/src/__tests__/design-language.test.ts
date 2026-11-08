@@ -566,11 +566,11 @@ describe('visual language (redesign round 2)', () => {
 
   it('keeps the hover underline for running text only (QG1-9, QG1-16)', () => {
     const base = read(join(SRC, 'styles/base.css'));
-    expect(base).toContain("a:hover:where(:not([data-link='block']))");
+    expect(base).toContain("a:hover:where(:not([data-link='block'], [data-link='name']))");
     const hovers = [...base.matchAll(/(^|\n)([^{}\n]*a:hover[^{}]*)\{([^{}]*)\}/g)].filter((m) =>
       /text-decoration\s*:\s*underline/.test(m[3]!),
     );
-    expect(hovers.map((m) => m[2]!.trim())).toEqual(["a:hover:where(:not([data-link='block']))"]);
+    expect(hovers.map((m) => m[2]!.trim())).toEqual(["a:hover:where(:not([data-link='block'], [data-link='name']))"]);
     // :where keeps the rule at specificity (0,1,1): a component's own `.x:hover` override must still win
     expect(base).not.toMatch(/a:hover:not\(/);
     expect(read(join(SRC, 'ui/Card/Card.tsx'))).toContain('data-link="block"');
@@ -730,7 +730,7 @@ describe('buttons (C049, C136, C166, C232)', () => {
 
   it('is 24px everywhere and 32px only in a dialog footer', () => {
     const css = read(join(SRC, 'ui/Button/Button.module.css'));
-    expect(css).toContain(":global([data-dialog-footer]) .button[data-size='md']");
+    expect(css).toContain(':global([data-dialog-footer]) .button {');
     expect(css).not.toMatch(/^\.button\[data-size='md'\]/m);
     expect(read(join(SRC, 'ui/Dialog/Dialog.tsx'))).toContain('data-dialog-footer');
   });

@@ -83,7 +83,7 @@ export function activeChips(view: RunView, defs: FieldDef[], metric: string | nu
     if (!e) return;
     chips.push({
       key: `error:${slot}`,
-      label: `${kind}: ${e.label.length > 48 ? e.label.slice(0, 47) + '…' : e.label}`,
+      label: `${kind}: ${e.label}`,
       clear: (v) => {
         const errors = { ...v.filters.errors };
         delete errors[slot as ErrorSlot];

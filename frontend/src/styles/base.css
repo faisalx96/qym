@@ -73,8 +73,18 @@ a {
    with data-link="block" and keeps its own hover treatment (QD13). :where() keeps the selector at the old specificity
    (0,1,1), so a component's own `.x:hover { text-decoration: none }` still wins (a bare :not([data-link]) would add 0,1,0
    and silently beat every one of them). */
-a:hover:where(:not([data-link='block'])) {
+a:hover:where(:not([data-link='block'], [data-link='name'])) {
   text-decoration: underline;
+}
+
+/* A-17: a name or id that opens a page (data-link="name") is white at rest, green on hover, never underlined. */
+a[data-link='name'] {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+a[data-link='name']:hover {
+  color: var(--accent-primary);
+  text-decoration: none;
 }
 
 button,

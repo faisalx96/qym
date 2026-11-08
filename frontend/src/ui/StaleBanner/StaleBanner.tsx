@@ -1,3 +1,4 @@
+import { formatAgo } from '@/lib/dates';
 import { Button } from '../Button';
 import { Icon } from '../Icon';
 import styles from './StaleBanner.module.css';
@@ -9,13 +10,9 @@ export interface StaleBannerProps {
   now?: Date;
 }
 
+/** 'just now', '2m ago', '3h ago' (lib/dates formatAgo, C-09). */
 export function relativeAge(since: Date, now = new Date()): string {
-  const s = Math.max(0, Math.round((now.getTime() - since.getTime()) / 1000));
-  if (s < 60) return `${s}s ago`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60);
-  return `${h} h ago`;
+  return formatAgo(since, now);
 }
 
 /** Shown above dimmed rows when a refresh failed (role=status). */
@@ -28,7 +25,7 @@ export function StaleBanner({ since, filtersApplied, onRetry, now }: StaleBanner
         {filtersApplied ? '' : 'Your latest filter change is not applied yet.'}
       </span>
       {onRetry ? (
-        <Button variant="ghost" onPress={onRetry} icon={<Icon name="retry" size={12} />}>
+        <Button variant="neutral" onPress={onRetry} icon={<Icon name="retry" size={12} />}>
           Retry
         </Button>
       ) : null}
