@@ -1,4 +1,5 @@
 /** Best-run picker helpers (B15): scope query, base header and labels. */
+import { formatAgo } from '@/lib/dates';
 import { sameValue } from './pointers';
 import type { BaseInfo } from './types';
 
@@ -47,10 +48,8 @@ export function formatScore(value: unknown): string {
 }
 
 export function formatAge(seconds: unknown): string {
-  if (typeof seconds !== 'number') return '—';
-  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))}m ago`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
-  return `${Math.round(seconds / 86400)}d ago`;
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return '—';
+  return formatAgo(Date.now() - seconds * 1000);
 }
 
 /** "agent v1.12 / kb 381" (other keys follow as "key value"). */
