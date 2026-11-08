@@ -420,13 +420,6 @@ export function ItemsTab({
 
   const rowActions = (): RowAction<DatasetItem>[] => [
     {
-      id: 'open',
-      label: 'Open item page',
-      icon: 'external',
-      primary: true,
-      onPress: (it) => navigate(itemHref(it)),
-    },
-    {
       id: 'copy',
       label: 'Copy as JSON',
       icon: 'copy',
