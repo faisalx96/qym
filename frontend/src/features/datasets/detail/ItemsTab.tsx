@@ -429,6 +429,8 @@ export function ItemsTab({
     {
       id: 'copy',
       label: 'Copy as JSON',
+      icon: 'copy',
+      primary: true,
       onPress: (it) =>
         void copyText(
           formatJson({
