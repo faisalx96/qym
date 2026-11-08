@@ -49,7 +49,7 @@ export const STATUS_LABEL: Record<string, string> = {
   STOPPING: 'Stopping…',
 };
 
-/** Smart decimals (percent points) so a score differs from its neighbours. */
+/** cv3-shim: remove after C-12 (deprecated: every score shows one decimal; delete with its last callers). */
 export function smartDigits(
   value: number | undefined,
   neighbours: [number | null, number | null] | undefined,
