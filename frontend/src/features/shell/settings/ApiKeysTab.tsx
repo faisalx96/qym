@@ -192,7 +192,7 @@ function KeysCard({
             rows={keys.data}
             rowKey={(k) => k.id}
             storageKey="settings-api-keys"
-            empty="No API keys yet."
+            empty="No API keys yet"
           />
         )}
       </div>
@@ -251,13 +251,16 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
             primary={
               <span className={styles.tokenName}>
                 {t.name || 'Unnamed token'}
-                <Tag data-testid="token-kind-chip">experiment</Tag>
+                <Tag kind="data" data-testid="token-kind-chip">
+                  Experiment
+                </Tag>
                 <RevokedMark at={t.revoked_at} />
               </span>
             }
             secondary={
               t.experiment ? (
                 <Link
+                  data-link="name"
                   className={styles.tokenLink}
                   to={experimentPath(slug, t.experiment.id)}
                   data-testid="token-experiment-link"
@@ -384,7 +387,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
             columns={columns}
             rows={tokens.data}
             rowKey={(t) => t.id}
-            empty="No read tokens."
+            empty="No read tokens"
           />
         )}
       </div>
