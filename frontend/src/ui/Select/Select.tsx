@@ -17,6 +17,7 @@ import {
 } from 'react-aria-components';
 import { fieldStyles } from '../Field';
 import { Icon } from '../Icon';
+import { BarTrigger } from '../MultiSelect';
 import styles from './Select.module.css';
 
 export interface SelectItem {
@@ -53,6 +54,9 @@ export interface SelectProps<T extends SelectItem> {
   autoFocus?: boolean;
   /** Told when the popover opens or closes, e.g. to end an inline edit on Escape. */
   onOpenChange?: (open: boolean) => void;
+  /** 'bar' = the filter-bar trigger (BarTrigger of ui/MultiSelect): the label inside the button, then ' · <value label>'
+   * when the value is not the first (default) item; accent tint when set. */
+  triggerVariant?: 'field' | 'bar';
 }
 
 /** Single select on the 24px control, listbox popover, optional search. */
@@ -78,7 +82,11 @@ export function Select<T extends SelectItem>({
   defaultOpen = false,
   autoFocus,
   onOpenChange,
+  triggerVariant = 'field',
 }: SelectProps<T>) {
+  const bar = triggerVariant === 'bar';
+  const selected = items.find((i) => i.key === value);
+  const isSet = selected !== undefined && selected.key !== items[0]?.key;
   const search = searchable === 'auto' ? items.length > 8 : Boolean(searchable);
   const { contains } = useFilter({ sensitivity: 'base' });
   const [open, setOpenState] = useState(defaultOpen);
@@ -122,23 +130,27 @@ export function Select<T extends SelectItem>({
       isOpen={open}
       onOpenChange={setOpen}
       autoFocus={autoFocus}
-      style={{ width, maxWidth: '100%' }}
+      style={bar ? undefined : { width, maxWidth: '100%' }}
     >
-      <Label className={fieldStyles.label} data-hidden={hideLabel ? '' : undefined}>
+      <Label className={fieldStyles.label} data-hidden={hideLabel || bar ? '' : undefined}>
         {label}
       </Label>
-      <AriaButton className={styles.trigger} data-wrap={wrapValue ? '' : undefined}>
-        {renderValue ? (
-          <SelectValue<T> className={styles.value}>
-            {({ selectedItem, isPlaceholder }) =>
-              isPlaceholder || !selectedItem ? placeholder : renderValue(selectedItem)
-            }
-          </SelectValue>
-        ) : (
-          <SelectValue className={styles.value} />
-        )}
-        <Icon name="chevron-down" size={12} />
-      </AriaButton>
+      {bar ? (
+        <BarTrigger label={label} value={isSet ? selected.label : undefined} active={isSet} />
+      ) : (
+        <AriaButton className={styles.trigger} data-wrap={wrapValue ? '' : undefined}>
+          {renderValue ? (
+            <SelectValue<T> className={styles.value}>
+              {({ selectedItem, isPlaceholder }) =>
+                isPlaceholder || !selectedItem ? placeholder : renderValue(selectedItem)
+              }
+            </SelectValue>
+          ) : (
+            <SelectValue className={styles.value} />
+          )}
+          <Icon name="chevron-down" size={12} />
+        </AriaButton>
+      )}
       {help ? (
         <AriaText slot="description" className={fieldStyles.help}>
           {help}

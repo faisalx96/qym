@@ -14,6 +14,7 @@ export * from './ScopeBar';
 export * from './QuickFilterGroup';
 export * from './TextBlock';
 export * from './Button';
+export * from './ClearFiltersButton';
 export * from './IconButton';
 export * from './CopyButton';
 export * from './LinkButton';
