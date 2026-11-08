@@ -299,6 +299,10 @@
   --tint-faint: 6%; /* row/section wash (danger and live only) */
   --tint-soft: 12%; /* Badge, Tag, Chip selected, score pill, icon tile fill */
   --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
+  --tint-gold: 17%; /* the admin role fill: at 12% gold reads brown on the dark surface (Q16) */
+  --role-admin: #e0bc4a; /* admin role tag (Q16 B) */
+  --stripe-step: 2%; /* page list stripe: --text-primary mixed into the row base (resolution 14, owner tunes) */
+  --stripe-step-report: 1%; /* report-table stripe: half the page stripe */
   --error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary)); /* 5.15:1 on a 12% error tint */
 
   --chart-6: #a3e635;

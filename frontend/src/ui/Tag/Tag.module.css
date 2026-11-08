@@ -49,6 +49,11 @@
   background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
 }
 
+/* B-17: the admin role tag, gold letters on a 17% gold fill (at 12% gold reads brown on the dark surface). */
+.tag[data-tone='gold'] {
+  background: color-mix(in srgb, var(--tone) var(--tint-gold), transparent);
+}
+
 .dot {
   flex: none;
   width: 6px;
