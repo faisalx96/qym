@@ -168,10 +168,17 @@
 
 .unregisteredRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-xs) 0;
+}
+
+.unregisteredMain {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
 }
 
 .unregisteredRow + .unregisteredRow {

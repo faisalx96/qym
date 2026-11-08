@@ -436,10 +436,10 @@ function AccessBody({
             <CardHead
               id="ds-access-people"
               title="People with access"
-              aside={
-                <Text variant="sm" tone="muted" as="span" data-testid="access-count">
+              count={
+                <Tag kind="count" data-testid="access-count">
                   {peopleCount}
-                </Text>
+                </Tag>
               }
             />
           }
