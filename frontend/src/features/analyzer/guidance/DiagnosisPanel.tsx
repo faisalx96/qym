@@ -18,6 +18,7 @@ import {
   EmptyState,
   ErrorState,
   Icon,
+  InlineNotice,
   SearchField,
   SectionHeader,
   SegmentedControl,
@@ -319,56 +320,34 @@ function DiagnosisEditor({
         }
       />
       {!canManage ? (
-        <div className={s.banner} role="note">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            Project manager access is required to edit categories. You can read the catalog and its examples.
-          </Text>
-        </div>
+        <InlineNotice tone="neutral" icon="info">
+          Project manager access is required to edit categories. You can read the catalog and its examples.
+        </InlineNotice>
       ) : null}
       {conflict ? (
-        <div className={s.banner} role="alert" data-tone="danger">
-          <Icon name="warning" size={14} />
-          <div className={s.bannerText}>
-            <Text variant="md" weight={600}>
-              The catalog changed while you were editing
-            </Text>
-            <Text variant="base" tone="secondary">
-              {`Someone saved revision ${conflict.version}. Your edits are still here. Reload to take theirs (your edits are discarded) or overwrite theirs with yours.`}
-            </Text>
-          </div>
+        <InlineNotice tone="danger" lead="The catalog changed while you were editing.">
+          {`Someone saved revision ${conflict.version}. Your edits are still here. Reload to take theirs (your edits are discarded) or overwrite theirs with yours.`}{' '}
           <Button size="sm" onPress={() => void reloadLatest()}>
             Reload latest
-          </Button>
+          </Button>{' '}
           <Button size="sm" variant="danger" onPress={() => void submit(conflict.version)}>
             Overwrite with my edits
           </Button>
-        </div>
+        </InlineNotice>
       ) : null}
       {failure ? (
-        <div className={s.banner} role="alert" data-tone="danger">
-          <Icon name="warning" size={14} />
-          <Text variant="base" tone="secondary">
-            {failure}
-          </Text>
-        </div>
+        <InlineNotice tone="danger">{failure}</InlineNotice>
       ) : null}
       {showProblems && hasProblems ? (
-        <div className={s.banner} role="alert" data-tone="warning">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            {`Add both Description and Use when for: ${[...problems.categories, ...problems.subcategories].join(', ')}.`}
-          </Text>
-        </div>
+        <InlineNotice tone="warning" icon="info">
+          {`Add both Description and Use when for: ${[...problems.categories, ...problems.subcategories].join(', ')}.`}
+        </InlineNotice>
       ) : null}
       {newApprovals ? (
-        <div className={s.banner} role="status" data-tone="warning">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            New approvals are available. Their examples are shown below; save or discard your edits to refresh
-            the catalog.
-          </Text>
-        </div>
+        <InlineNotice tone="warning" icon="info">
+          New approvals are available. Their examples are shown below; save or discard your edits to refresh the
+          catalog.
+        </InlineNotice>
       ) : null}
 
       <div className={d.tools}>
