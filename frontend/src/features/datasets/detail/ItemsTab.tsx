@@ -531,7 +531,8 @@ export function ItemsTab({
               placeholder="Search items"
               value={search}
               onChange={setSearch}
-              width={260}
+              width="var(--search-width)"
+              shortcut="/"
               data-testid="items-search"
             />
           }
