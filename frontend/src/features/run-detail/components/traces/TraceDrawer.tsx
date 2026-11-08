@@ -483,7 +483,7 @@ export function TraceDrawer({
               href={langfuse}
               target="_blank"
               rel="noopener noreferrer"
-              icon={<Icon name="external" size={12} />}
+              iconEnd={<Icon name="external" size={12} />}
             >
               Open in Langfuse
             </LinkButton>

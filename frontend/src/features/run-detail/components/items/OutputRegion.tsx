@@ -115,7 +115,7 @@ export function OutputRegion({
               href={langfuseUrl}
               target="_blank"
               rel="noopener noreferrer"
-              icon={<Icon name="external" size={12} />}
+              iconEnd={<Icon name="external" size={12} />}
             >
               Open in Langfuse
             </LinkButton>
