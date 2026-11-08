@@ -11,6 +11,7 @@ import {
   JsonPreview,
   LinkButton,
   ScoreValue,
+  StatusMark,
   Tag,
   TextBlock,
 } from '@/ui';
@@ -49,9 +50,9 @@ export function Collapsible({ text, lines = 12 }: { text: string; lines?: number
         <TextBlock text={text} mode={textMode} />
       </div>
       {long ? (
-        <button type="button" className={styles.more} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Button variant="neutral" size="sm" aria-expanded={open} onPress={() => setOpen(!open)}>
           {open ? 'Show less' : 'Show more'}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -267,7 +268,7 @@ function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metric
         <ul key={metric} className={styles.issueList}>
           {issues.map((issue, i) => (
             <li key={issue.issue_id ?? i} className={styles.issue}>
-              <Tag kind="accent">{issue.category || 'Uncategorized'}</Tag>
+              <Tag kind="data">{issue.category || 'Uncategorized'}</Tag>
               {issue.subcategory ? <span className={styles.muted}>{issue.subcategory}</span> : null}
               <span className={styles.muted}>{metric}</span>
               {issue.finding ? <span className={styles.finding}>{issue.finding}</span> : null}
@@ -285,7 +286,7 @@ function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metric
                 </span>
               ) : null}
               {canEdit ? (
-                <Button size="sm" variant="ghost" onPress={() => setDialog({ metric, issue })}>
+                <Button size="sm" variant="neutral" onPress={() => setDialog({ metric, issue })}>
                   Edit
                 </Button>
               ) : null}
@@ -386,18 +387,18 @@ export function OutputCard({
           )}
         </span>
         <span className={styles.facts}>
-          <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
-            {pill.state === 'pass'
-              ? '✓ Pass'
-              : pill.state === 'fail'
-                ? '✗ Fail'
-                : pill.state === 'error'
-                  ? '⚠ Error'
-                  : '—'}
-          </Tag>
+          {pill.state === 'none' ? (
+            <span>—</span>
+          ) : (
+            <StatusMark
+              tone={pill.state === 'pass' ? 'success' : 'danger'}
+              shape={pill.state === 'pass' ? 'check' : 'cross'}
+              label={pill.state === 'pass' ? 'Pass' : pill.state === 'fail' ? 'Fail' : 'Error'}
+            />
+          )}
           {best ? (
             <Tag kind="data" tone="success" title="Highest score on this item">
-              ★ Best
+              <Icon name="star" size={12} /> Best
             </Tag>
           ) : null}
           {row.latency_ms != null ? (
@@ -423,7 +424,7 @@ export function OutputCard({
                 href={langfuse}
                 target="_blank"
                 rel="noopener noreferrer"
-                icon={<Icon name="external" size={12} />}
+                iconEnd={<Icon name="external" size={12} />}
               >
                 Langfuse
               </LinkButton>

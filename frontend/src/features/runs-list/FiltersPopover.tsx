@@ -246,7 +246,7 @@ export function FiltersPanel({
       </div>
       <div className={styles.foot} ref={footRef}>
         <Button
-          variant="ghost"
+          variant="neutral"
           onPress={() => {
             onChange({ ...DEFAULT_VIEW, versioning: {}, q: view.q, sort: view.sort });
             // the button disables itself: keep focus inside the panel so Esc still closes it
@@ -346,10 +346,10 @@ function FacetSection({
             />
           ) : null}
           <div className={styles.facetActions}>
-            <Button variant="ghost" onPress={() => onChange([])}>
+            <Button variant="neutral" onPress={() => onChange([])}>
               Select all
             </Button>
-            <Button variant="ghost" onPress={() => onChange([NONE])}>
+            <Button variant="neutral" onPress={() => onChange([NONE])}>
               None
             </Button>
           </div>

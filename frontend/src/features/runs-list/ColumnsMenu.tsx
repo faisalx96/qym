@@ -1,14 +1,15 @@
-/** Columns popover: Run columns / Metrics / ⚡ System / ⚡ Trace stats (frozen-columns section dropped, decision §9.4). */
+/** Columns popover: Run columns / Metrics / System / Trace stats (frozen-columns section dropped, decision §9.4). */
 import { useState } from 'react';
 import { Button, Checkbox, Icon, Popover, SearchField, Text } from '@/ui';
+import { BoltLabel } from './cells';
 import type { ColumnDef, ColumnGroup } from './columns';
 import styles from './ColumnsMenu.module.css';
 
-const GROUPS: { id: ColumnGroup; label: string }[] = [
+const GROUPS: { id: ColumnGroup; label: string; bolt?: boolean }[] = [
   { id: 'run', label: 'Run columns' },
   { id: 'metrics', label: 'Metrics' },
-  { id: 'system', label: '⚡ System' },
-  { id: 'trace', label: '⚡ Trace stats' },
+  { id: 'system', label: 'System', bolt: true },
+  { id: 'trace', label: 'Trace stats', bolt: true },
   { id: 'group', label: 'Group stats' },
 ];
 
@@ -64,10 +65,10 @@ export function ColumnsMenu({
           onChange={setQuery}
           onClear={() => setQuery('')}
         />
-        <Button variant="ghost" onPress={() => setListed(true)}>
+        <Button variant="neutral" onPress={() => setListed(true)}>
           All
         </Button>
-        <Button variant="ghost" onPress={() => setListed(false)}>
+        <Button variant="neutral" onPress={() => setListed(false)}>
           None
         </Button>
       </div>
@@ -78,7 +79,7 @@ export function ColumnsMenu({
           return (
             <div key={g.id} className={styles.group}>
               <Text variant="sm" tone="muted" as="div" weight={650} className={styles.groupLabel}>
-                {g.label}
+                {g.bolt ? <BoltLabel label={g.label} /> : g.label}
               </Text>
               {cols.map((c) => (
                 <Checkbox
@@ -87,7 +88,7 @@ export function ColumnsMenu({
                   onChange={() => toggle(c.visKey!)}
                   className={styles.option}
                 >
-                  {c.label}
+                  {c.bolt ? <BoltLabel label={c.label} /> : c.label}
                 </Checkbox>
               ))}
             </div>
@@ -98,7 +99,7 @@ export function ColumnsMenu({
             No columns match.
           </Text>
         ) : null}
-        <Button variant="ghost" onPress={() => onChange(null)}>
+        <Button variant="neutral" onPress={() => onChange(null)}>
           Reset to default
         </Button>
       </div>
