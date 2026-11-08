@@ -730,7 +730,7 @@ describe('buttons (C049, C136, C166, C232)', () => {
 
   it('is 24px everywhere and 32px only in a dialog footer', () => {
     const css = read(join(SRC, 'ui/Button/Button.module.css'));
-    expect(css).toContain(":global([data-dialog-footer]) .button[data-size='md']");
+    expect(css).toContain(':global([data-dialog-footer]) .button {');
     expect(css).not.toMatch(/^\.button\[data-size='md'\]/m);
     expect(read(join(SRC, 'ui/Dialog/Dialog.tsx'))).toContain('data-dialog-footer');
   });

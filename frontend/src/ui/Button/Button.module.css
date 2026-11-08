@@ -24,8 +24,8 @@
   text-decoration: none;
 }
 
-/* One size per role (C049): every button is 24px; 32px only in a dialog footer, even when a page asks for size md. */
-:global([data-dialog-footer]) .button[data-size='md'] {
+/* One size per role (C049, A-02): every button is 24px; every button in a dialog footer is 32px, whatever size the page asks for. */
+:global([data-dialog-footer]) .button {
   height: 32px;
   min-height: 32px;
   padding: 0 var(--space-md);
@@ -37,7 +37,7 @@
   width: var(--control-height);
 }
 
-:global([data-dialog-footer]) .button[data-icon-only][data-size='md'] {
+:global([data-dialog-footer]) .button[data-icon-only] {
   width: 32px;
 }
 
