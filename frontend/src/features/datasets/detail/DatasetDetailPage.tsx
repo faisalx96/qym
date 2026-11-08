@@ -32,7 +32,6 @@ import {
   HelpMarker,
   ErrorState,
   Icon,
-  IconButton,
   Identicon,
   PageHeader,
   Skeleton,
@@ -433,7 +432,16 @@ function DetailBody({
             {active ? (
               <DropdownMenu
                 label="More actions"
-                trigger={<IconButton label="More actions" icon="more" data-testid="hero-more" />}
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="neutral"
+                    icon={<Icon name="more" size={14} />}
+                    data-testid="hero-more"
+                  >
+                    Actions
+                  </Button>
+                }
                 items={[
                   ...(canWrite
                     ? [{ id: 'name', label: 'Name version', icon: <ActionTile icon="edit" /> }]
