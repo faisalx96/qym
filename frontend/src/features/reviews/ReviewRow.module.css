@@ -82,9 +82,11 @@
 }
 
 .ctx {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--font-sm);
   color: var(--text-muted);
 }

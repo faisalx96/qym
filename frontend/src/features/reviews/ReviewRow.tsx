@@ -1,6 +1,8 @@
 /** One 56px queue row. Checkbox, select button and decision actions are siblings (no nested interactive). */
+import { useModelIndex } from '@/api/dashboard';
 import type { CorrectionRow } from '@/api/reviews';
-import { Checkbox, IconButton, Tag, Tooltip } from '@/ui';
+import { Checkbox, DatasetTag, IconButton, ModelTag, Tag, TaskTag, Tooltip } from '@/ui';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import { textDirAttrs } from '@/lib/text';
 import { correctionPriority } from './lib/filters';
 import { ReviewStatusMark } from './DetailPane';
@@ -34,6 +36,7 @@ export function ReviewRow({
   onReject,
   onReset,
 }: ReviewRowProps) {
+  const modelIndex = useModelIndex(row.project_slug);
   const priority = correctionPriority(row);
   const issue = row.human_root_cause_issues?.[0] ?? row.ai_root_cause_issues?.[0];
   const summary = issue
@@ -86,9 +89,16 @@ export function ReviewRow({
           {summary}
         </span>
         <span className={styles.ctx}>
-          {[showProject ? row.project_name : null, row.task, row.dataset, row.model]
-            .filter(Boolean)
-            .join(' · ')}
+          {showProject ? <span>{row.project_name}</span> : null}
+          <TaskTag name={row.task} />
+          <DatasetTag name={row.dataset} />
+          {row.model ? (
+            <ModelTag
+              name={row.model}
+              reasoning={!!row.has_reasoning}
+              series={modelSeriesOf(modelIndex, row.model, !!row.has_reasoning)}
+            />
+          ) : null}
         </span>
       </button>
       <span className={styles.actions}>
