@@ -111,7 +111,6 @@ export function CatalogPage() {
                 <Button
                   variant="primary"
                   icon={<Icon name="plus" size={12} />}
-                  iconEnd={<Icon name="chevron-down" size={12} />}
                   data-testid="new-dataset"
                 >
                   New dataset
