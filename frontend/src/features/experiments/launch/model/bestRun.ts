@@ -1,5 +1,6 @@
 /** Best-run picker helpers (B15): scope query, base header and labels. */
 import { formatAgo } from '@/lib/dates';
+import { formatPercent } from '@/lib/metrics';
 import { sameValue } from './pointers';
 import type { BaseInfo } from './types';
 
@@ -44,7 +45,7 @@ export function bestRunQuery(scope: BestRunScope): string {
 
 export function formatScore(value: unknown): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-  return String(Number(value.toFixed(Math.abs(value) >= 100 ? 1 : 3)));
+  return formatPercent(value, 1);
 }
 
 export function formatAge(seconds: unknown): string {
