@@ -16,6 +16,7 @@ import {
   EmptyState,
   ErrorState,
   Icon,
+  IconButton,
   SectionHeader,
   Skeleton,
   Switch,
@@ -221,14 +222,13 @@ export function DocumentsPanel({
                   {d.selected ? 'Included' : 'Excluded'}
                 </Switch>
                 {canManage ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Delete ${d.name}`}
+                  <IconButton
+                    tile
+                    tone="danger"
+                    icon="trash"
+                    label={`Delete ${d.name}`}
                     onPress={() => setDeleting(d)}
-                  >
-                    <Icon name="trash" size={12} />
-                  </Button>
+                  />
                 ) : null}
               </li>
             ))}

@@ -18,6 +18,7 @@ import {
   EmptyState,
   ErrorState,
   Icon,
+  IconButton,
   InlineNotice,
   SearchField,
   SectionHeader,
@@ -335,9 +336,7 @@ function DiagnosisEditor({
           </Button>
         </InlineNotice>
       ) : null}
-      {failure ? (
-        <InlineNotice tone="danger">{failure}</InlineNotice>
-      ) : null}
+      {failure ? <InlineNotice tone="danger">{failure}</InlineNotice> : null}
       {showProblems && hasProblems ? (
         <InlineNotice tone="warning" icon="info">
           {`Add both Description and Use when for: ${[...problems.categories, ...problems.subcategories].join(', ')}.`}
@@ -345,8 +344,8 @@ function DiagnosisEditor({
       ) : null}
       {newApprovals ? (
         <InlineNotice tone="warning" icon="info">
-          New approvals are available. Their examples are shown below; save or discard your edits to refresh the
-          catalog.
+          New approvals are available. Their examples are shown below; save or discard your edits to refresh
+          the catalog.
         </InlineNotice>
       ) : null}
 
@@ -535,19 +534,18 @@ function DiagnosisEditor({
                               ) : null}
                               <span className={s.spacer} />
                               {canManage && !x.exampleOnly ? (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  aria-label={`Remove subcategory ${x.name}`}
+                                <IconButton
+                                  tile
+                                  tone="danger"
+                                  icon="trash"
+                                  label={`Remove subcategory ${x.name}`}
                                   onPress={() =>
                                     editCategory(active.name, (c) => ({
                                       ...c,
                                       subs: c.subs.filter((y) => y.name !== x.name),
                                     }))
                                   }
-                                >
-                                  <Icon name="trash" size={12} />
-                                </Button>
+                                />
                               ) : null}
                             </div>
                             {x.exampleOnly ? (

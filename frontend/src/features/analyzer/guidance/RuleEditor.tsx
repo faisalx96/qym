@@ -6,6 +6,7 @@ import {
   ConfirmDialog,
   EmptyState,
   Icon,
+  IconButton,
   Pagination,
   SearchField,
   Tag,
@@ -152,14 +153,13 @@ export function RuleEditor({
                   ) : null}
                   {r.inferred_from ? <Tag kind="data">{r.inferred_from}</Tag> : null}
                   {editable ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={`Delete rule ${r.title || 'untitled'}`}
+                    <IconButton
+                      tile
+                      tone="danger"
+                      icon="trash"
+                      label={`Delete rule ${r.title || 'untitled'}`}
                       onPress={() => setDeleting([r.key])}
-                    >
-                      <Icon name="trash" size={12} />
-                    </Button>
+                    />
                   ) : null}
                 </div>
                 {isOpen && !editable ? (
