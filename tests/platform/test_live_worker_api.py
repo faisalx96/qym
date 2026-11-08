@@ -126,6 +126,7 @@ def test_read_without_version_and_with_version(client, session_factory, values):
             "last_heartbeat_at": None,
             "last_poll_at": None,
             "last_turn_at": None,
+            "today": "2026-11-03",
             "worker": {},
         },
         "today": {
