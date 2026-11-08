@@ -121,7 +121,9 @@ export function EnvironmentPicker() {
                 ) : null}
                 <LinkButton
                   to={environmentPath(slug, env.id)}
-                  variant="ghost"
+                  variant="neutral"
+                  size="sm"
+                  iconEnd={<Icon name="external" size={12} />}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Details of ${env.name} (opens in a new tab)`}
