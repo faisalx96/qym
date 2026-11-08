@@ -66,19 +66,6 @@
   max-inline-size: 320px;
 }
 
-.personCell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-inline-size: 0;
-}
-
-.personName {
-  font-size: var(--font-base);
-  color: var(--text-primary);
-  overflow-wrap: anywhere;
-}
-
 .personEmail {
   font-size: var(--font-sm);
   color: var(--text-muted);

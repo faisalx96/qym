@@ -28,6 +28,7 @@ import {
   Skeleton,
   Tag,
   Text,
+  UserName,
   useToast,
   type Column,
   Flag,
@@ -249,14 +250,7 @@ function AccessBody({
       minWidth: 200,
       priority: 1,
       cardTitle: true,
-      cell: (r) => (
-        <span className={styles.personCell}>
-          <span className={styles.personName} dir="auto">
-            {r.person.name}
-          </span>
-          <span className={styles.personEmail}>{r.person.email}</span>
-        </span>
-      ),
+      cell: (r) => <UserName id={r.person.id} name={r.person.name} email={r.person.email} showEmail />,
     },
     {
       id: 'level',
