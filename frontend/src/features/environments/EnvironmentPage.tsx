@@ -34,6 +34,7 @@ export function EnvironmentPage({ environmentId }: { environmentId: string }) {
         actions={
           <LinkButton
             to={environmentsPath(slug)}
+            variant="neutral"
             icon={<Icon name="prev" size={12} />}
             className={styles.pageBack}
           >
