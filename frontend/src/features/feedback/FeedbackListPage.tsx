@@ -302,8 +302,9 @@ export function FeedbackListPage() {
               <DataTable.Footer
                 testId="feedback-footer"
                 ariaLabel="Feedback status"
+                filterNote={data && filtered ? `Filtered from ${data.counts.all} requests` : undefined}
                 pagination={
-                  data && data.total > PAGE_SIZE
+                  data
                     ? {
                         total: data.total,
                         page: view.page,
