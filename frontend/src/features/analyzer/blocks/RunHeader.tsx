@@ -1,5 +1,7 @@
 import { viewRunTo } from './JobStatus';
 import type { RunPasses, RunSummary } from '@/api/analysis';
+import { useModelIndex } from '@/api/dashboard';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import { DatasetTag, isBareRunId, LinkButton, ModelTag, Select, Tag, TaskTag, Text } from '@/ui';
 import s from './blocks.module.css';
 
@@ -21,6 +23,7 @@ export function RunHeader({
   onPass: (pass: number) => void;
   busy: boolean;
 }) {
+  const modelIndex = useModelIndex(slug);
   return (
     <div className={s.runHeader}>
       <div className={s.runTitle}>
@@ -29,7 +32,9 @@ export function RunHeader({
         </Text>
         <div className={s.runMeta}>
           <TaskTag name={run.task_name} />
-          {run.model_name ? <ModelTag name={run.model_name} /> : null}
+          {run.model_name ? (
+            <ModelTag name={run.model_name} series={modelSeriesOf(modelIndex, run.model_name, false)} />
+          ) : null}
           <DatasetTag name={run.dataset_name} />
           <Tag kind="data">{runId}</Tag>
         </div>

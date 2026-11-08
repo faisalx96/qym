@@ -1,6 +1,7 @@
 /** Right-hand diagnosis detail: header actions, AI vs Human issues, previews, lazy full detail (o), inline edit. */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { useModelIndex } from '@/api/dashboard';
 import { useCorrection, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
 import { textDirAttrs } from '@/lib/text';
@@ -21,6 +22,7 @@ import {
   UserName,
 } from '@/ui';
 import { formatDate } from '../datasets/lib/itemValue';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import { IssueEditForm, IssueList } from './IssueList';
 import { correctionPriority } from './lib/filters';
 import styles from './DetailPane.module.css';
@@ -58,6 +60,7 @@ export function editSeed(row: CorrectionRow): CorrectionRow['human_root_cause_is
 
 export function DetailPane(p: DetailPaneProps) {
   const { row } = p;
+  const modelIndex = useModelIndex(row.project_slug);
   const priority = correctionPriority(row);
   const runHref = row.run_id
     ? `${runPath(row.project_slug, row.run_id)}${new URLSearchParams({ ...(row.pass_number != null && !row.pass_deleted_at ? { pass: String(row.pass_number) } : {}), ...(row.item_id ? { item: row.item_id } : {}) }).toString().replace(/^(?=.)/, '?')}`
@@ -202,7 +205,15 @@ export function DetailPane(p: DetailPaneProps) {
         <Chipline
           label="Model"
           value={row.model}
-          node={row.model ? <ModelTag name={row.model} reasoning={!!row.has_reasoning} /> : null}
+          node={
+            row.model ? (
+              <ModelTag
+                name={row.model}
+                reasoning={!!row.has_reasoning}
+                series={modelSeriesOf(modelIndex, row.model, !!row.has_reasoning)}
+              />
+            ) : null
+          }
         />
       </div>
 
