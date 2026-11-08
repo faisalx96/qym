@@ -118,6 +118,12 @@
   background: var(--tone);
 }
 
+/* B-07: Unanswerable is the darker grey, solid (the mix bar segment and a legend swatch). */
+.mixSegment[data-dark],
+[data-dark] > .swatch {
+  --tone: var(--text-dim);
+}
+
 .received {
   display: block;
   margin-block-start: var(--space-md);
