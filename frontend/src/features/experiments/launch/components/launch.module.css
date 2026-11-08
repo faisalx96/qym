@@ -6,30 +6,30 @@
   min-width: 0;
 }
 
+/* C-43: the InlineNotice recipe (a 3px start rail, a glyph and a faint wash in the tone; the title leads the line). */
 .callout {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  font-size: var(--font-base);
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-inline-start: 3px solid var(--tone);
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
+  background: color-mix(in srgb, var(--tone) var(--tint-faint), transparent);
+  font-size: var(--font-sm);
+  line-height: 1.5;
   color: var(--text-secondary);
   min-width: 0;
 }
 
-.callout[data-tone='warning'] {
-  border-color: color-mix(in srgb, var(--warning) 55%, var(--border-default));
+.calloutIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--tone-text);
 }
 
-.callout[data-tone='error'] {
-  border-color: color-mix(in srgb, var(--error) 55%, var(--border-default));
-  color: var(--text-primary);
-}
-
-.callout[data-tone='success'] {
-  border-color: color-mix(in srgb, var(--success) 45%, var(--border-default));
+.calloutText {
+  min-width: 0;
+  flex: 1;
 }
 
 .callout ul {
@@ -38,7 +38,7 @@
 }
 
 .calloutTitle {
-  color: var(--text-primary);
+  color: var(--tone-text);
   font-weight: 600;
 }
 
