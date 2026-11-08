@@ -21,6 +21,7 @@ import {
   DropdownMenu,
   EmptyState,
   ErrorState,
+  Icon,
   IconButton,
   SectionHeader,
   Skeleton,
@@ -151,6 +152,7 @@ function RulesView({
             canManage ? (
               <Button
                 variant="primary"
+                icon={<Icon name="plus" size={12} />}
                 loading={createDraft.isPending}
                 onPress={() => void onCreateDraft(null)}
               >
@@ -230,7 +232,13 @@ function RulesView({
             Versions
           </Text>
           {canManage ? (
-            <Button size="sm" loading={createDraft.isPending} onPress={() => void onCreateDraft(open)}>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Icon name="plus" size={12} />}
+              loading={createDraft.isPending}
+              onPress={() => void onCreateDraft(open)}
+            >
               Create draft
             </Button>
           ) : null}
@@ -558,7 +566,7 @@ function VersionWorkspace({
             {isProduction ? <StatusMark tone="success" shape="full" label="Live" /> : null}
             {editable ? (
               <Button
-                variant="accent"
+                variant="primary"
                 size="sm"
                 isDisabled={!settled || draft.rules.length === 0}
                 onPress={onPublish}
@@ -566,7 +574,7 @@ function VersionWorkspace({
                 Publish
               </Button>
             ) : version.status === 'published' && !isProduction && canPromote ? (
-              <Button variant="accent" size="sm" loading={promoting} onPress={onPromote}>
+              <Button variant="primary" size="sm" loading={promoting} onPress={onPromote}>
                 Make live
               </Button>
             ) : null}

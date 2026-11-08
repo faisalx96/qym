@@ -377,7 +377,7 @@ function DiagnosisEditor({
               />
               <Button
                 size="sm"
-                variant="accent"
+                variant="primary"
                 type="submit"
                 isDisabled={!newName.trim()}
                 disabledReason="Enter a category name"

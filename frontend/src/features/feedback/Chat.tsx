@@ -210,7 +210,7 @@ export const Chat = forwardRef<HTMLTextAreaElement, ChatProps>(function Chat(p, 
             </Button>
           ) : (
             <Button
-              variant="accent"
+              variant="primary"
               isDisabled={!canSend}
               icon={<Icon name="next" size={14} />}
               onPress={p.onSend}

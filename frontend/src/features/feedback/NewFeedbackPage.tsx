@@ -157,7 +157,7 @@ export function NewFeedbackPage() {
                   Cancel
                 </Button>
                 <Button
-                  variant="accent"
+                  variant="primary"
                   isDisabled={!ready}
                   disabledReason={text.trim() ? 'Pick a project first' : 'Describe your request first'}
                   loading={create.isPending}
