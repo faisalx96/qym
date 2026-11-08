@@ -70,22 +70,6 @@
   flex: 1;
 }
 
-.searchInput {
-  width: 100%;
-  padding-block: var(--space-xs);
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  font-family: var(--font-sans);
-  font-size: var(--font-sm);
-  color: var(--text-primary);
-}
-
-.searchInput:focus-visible {
-  outline: 2px solid var(--accent-primary);
-}
-
 .toggle:focus-visible,
 .more:focus-visible {
   outline: 2px solid var(--accent-primary);
@@ -429,14 +413,6 @@
   font-family: var(--font-mono);
   font-size: var(--font-base);
   color: var(--text-primary);
-}
-
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
 }
 
 .empty {

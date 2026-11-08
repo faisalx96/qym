@@ -73,7 +73,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}
-          width="clamp(18ch, 14vw, 22ch)"
+          width="var(--search-width)"
         />
         {datasetItems.length > 1 ? (
           <span data-testid="dataset-filter">

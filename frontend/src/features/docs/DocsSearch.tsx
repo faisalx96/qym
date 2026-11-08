@@ -20,22 +20,6 @@ export function DocsSearch() {
   const listId = useId();
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
-      const t = document.activeElement as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
-      )
-        return;
-      e.preventDefault();
-      input.current?.focus();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
-
-  useEffect(() => {
     if (query && !records) void loadSearchIndex().then(setRecords);
   }, [query, records]);
 
@@ -59,7 +43,7 @@ export function DocsSearch() {
         label="Search docs"
         hideLabel
         placeholder="Search docs"
-        hint="/"
+        shortcut="/"
         value={query}
         onChange={(v) => {
           clearTimeout(blurTimer.current);

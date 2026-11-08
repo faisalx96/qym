@@ -377,7 +377,8 @@ export function TrashPage() {
           placeholder="Search run name or ID"
           value={search}
           onChange={setSearch}
-          width={260}
+          width="var(--search-width)"
+          shortcut="/"
         />
         <Select
           label="Project"

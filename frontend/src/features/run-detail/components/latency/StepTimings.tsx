@@ -217,13 +217,13 @@ export const StepTimings = forwardRef<
           </div>
           <div className={styles.tools}>
             <SearchField
-              label="Find a step or model"
+              label="Search steps and models"
               hideLabel
-              placeholder="Find a step or model"
+              placeholder="Search steps and models"
               value={view.query}
               onChange={(query) => patch({ query })}
               onClear={() => patch({ query: '' })}
-              width={200}
+              width="var(--search-width)"
             />
             <SegmentedControl
               label="Group steps"

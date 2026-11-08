@@ -10,6 +10,7 @@ import {
   ErrorState,
   Icon,
   LinkButton,
+  SearchField,
   SegmentedControl,
   Skeleton,
   SplitPane,
@@ -376,16 +377,17 @@ export function TraceDrawer({
   const treeEl = active ? (
     <section className={styles.treePane} aria-label="Spans">
       <div className={styles.treeTools}>
-        <label className={styles.search}>
-          <span className={styles.srOnly}>Filter spans</span>
-          <input
-            ref={searchRef}
-            type="search"
-            className={styles.searchInput}
-            placeholder="Filter spans (/)"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
+        <SearchField
+          ref={searchRef}
+          className={styles.search}
+          label="Search spans"
+          placeholder="Search spans"
+          hint="/"
+          width="100%"
+          value={search}
+          onChange={setSearch}
+          inputProps={{
+            onKeyDown: (e) => {
               if (e.key === 'Escape' && search) {
                 e.stopPropagation();
                 setSearch('');
@@ -393,9 +395,9 @@ export function TraceDrawer({
                 e.preventDefault();
                 scroller?.focus();
               }
-            }}
-          />
-        </label>
+            },
+          }}
+        />
         <Button
           size="sm"
           variant="neutral"
