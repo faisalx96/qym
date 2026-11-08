@@ -245,7 +245,11 @@ export const StepTimings = forwardRef<
             <DropdownMenu
               label="Export step timings"
               trigger={
-                <Button variant="accent" icon={<Icon name="download" size={12} />}>
+                <Button
+                  variant="accent"
+                  icon={<Icon name="download" size={12} />}
+                  iconEnd={<Icon name="chevron-down" size={12} />}
+                >
                   Export
                 </Button>
               }

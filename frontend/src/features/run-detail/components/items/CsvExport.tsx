@@ -74,8 +74,8 @@ export function CsvExport() {
     <>
       <Button
         size="sm"
-        variant="neutral"
-        icon={<Icon name="expand" size={12} />}
+        variant="accent"
+        icon={<Icon name="download" size={12} />}
         onPress={() => void start()}
         loading={!!loading}
         data-testid="csv-button"
