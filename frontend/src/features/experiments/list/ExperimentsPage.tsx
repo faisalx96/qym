@@ -358,7 +358,7 @@ export function ExperimentsPage() {
             trailing={
               live ? (
                 <Text variant="sm" tone="muted">
-                  Refreshes automatically while experiments run
+                  Updates automatically
                 </Text>
               ) : null
             }

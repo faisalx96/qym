@@ -59,7 +59,7 @@ test.describe('experiments list', () => {
     await expect(table.getByText('finished one')).toBeVisible();
     await expect(table.getByText('still going')).toBeVisible();
     await expect(page.getByText('2 experiments').first()).toBeVisible();
-    await expect(page.getByText('Refreshes automatically while experiments run')).toBeVisible();
+    await expect(page.getByText('Updates automatically')).toBeVisible();
     // env names are resolved client-side
     await expect(table.getByText('staging').first()).toBeVisible();
 
@@ -69,7 +69,7 @@ test.describe('experiments list', () => {
     await expect(table.getByText('still going')).toHaveCount(0);
     await expect(table.getByText('finished one')).toBeVisible();
     // nothing queued or running is listed any more: no auto-refresh promise
-    await expect(page.getByText('Refreshes automatically while experiments run')).toHaveCount(0);
+    await expect(page.getByText('Updates automatically')).toHaveCount(0);
 
     // created by me (dev@local is the creator of both)
     await page.getByText('Created by me').click();

@@ -234,7 +234,7 @@ export function JobHistoryCard({
           <div className={styles.cardHead}>
             <Text variant="base" tone="muted" as="p" className={styles.note}>
               {live
-                ? 'Refreshing automatically while jobs are queued or running.'
+                ? 'Updates automatically'
                 : 'Every job has finished.'}
             </Text>
             {supersededCount ? (

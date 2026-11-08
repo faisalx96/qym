@@ -498,6 +498,9 @@ export function QueuePage() {
                 filters={filterControls}
                 trailing={
                   <>
+                    <Text variant="sm" tone="muted">
+                      Updates automatically
+                    </Text>
                     <Button
                       size="sm"
                       variant="neutral"
@@ -525,7 +528,6 @@ export function QueuePage() {
                     ? `Showing the first ${jobs.length} of ${query.data.total} jobs`
                     : plural(query.data.total, 'job')
                 }
-                trailing="Refreshes automatically; paused while this tab is hidden"
               />
             </DataTable>
             {!jobs.every((j) => j.can_cancel) && jobs.length ? (
