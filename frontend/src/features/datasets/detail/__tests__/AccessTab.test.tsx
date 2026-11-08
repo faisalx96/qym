@@ -155,8 +155,8 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     });
     renderSection();
     const add = await screen.findByTestId('access-add');
-    const levels = within(add).getByRole('radiogroup', { name: 'Level for the new person' });
-    await user.click(within(levels).getByRole('radio', { name: 'Modify' }));
+    await user.click(within(add).getByRole('button', { name: /Level/ }));
+    await user.click(await screen.findByRole('option', { name: 'Modify' }));
     const addButton = within(add).getByRole('button', { name: /^Add person$/ });
     expect(addButton).toBeDisabled();
     await user.click(within(add).getByRole('button', { name: /Choose a project member/ }));

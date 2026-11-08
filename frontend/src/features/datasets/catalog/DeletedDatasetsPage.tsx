@@ -6,7 +6,7 @@ import { actionErrorMessage } from '@/lib/http';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { readOnlyReason, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Button, DataTable, EmptyState, PageHeader, RelativeTime, Tag, Text, Tooltip, useToast } from '@/ui';
+import { DataTable, EmptyState, IconButton, PageHeader, RelativeTime, Tag, Text, Tooltip, useToast } from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { datasetPath } from '../lib/route';
 import { RESTORE_RULE } from '../lib/versions';
@@ -110,28 +110,28 @@ export function DeletedDatasetsPage() {
             hideable: false,
             cell: (d) =>
               canRestore ? (
-                <Button
-                  variant="accent"
-                  size="sm"
-                  onPress={() => void onRestore(d)}
-                  loading={busyId === d.id}
-                  data-testid={`restore-${d.slug}`}
-                >
-                  Restore
-                </Button>
+                <Tooltip content={`Restore ${d.name}`}>
+                  <IconButton
+                    tile
+                    icon="retry"
+                    label={`Restore ${d.name}`}
+                    isDisabled={busyId === d.id}
+                    onPress={() => void onRestore(d)}
+                    data-testid={`restore-${d.slug}`}
+                  />
+                </Tooltip>
               ) : (
                 <Tooltip content={readOnly ? readOnlyReason(projectContext) : RESTORE_RULE}>
-                  <Button
-                    variant="neutral"
-                    size="sm"
+                  <IconButton
+                    tile
+                    icon="retry"
+                    label="Restore"
                     aria-disabled="true"
                     data-disabled-reason=""
                     onPress={() =>
                       toast.show(readOnly ? readOnlyReason(projectContext) : RESTORE_RULE, { tone: 'info' })
                     }
-                  >
-                    Restore
-                  </Button>
+                  />
                 </Tooltip>
               ),
           },

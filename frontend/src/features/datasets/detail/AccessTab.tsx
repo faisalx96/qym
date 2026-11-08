@@ -24,7 +24,6 @@ import {
   Icon,
   IconButton,
   RadioGroup,
-  SegmentedControl,
   Select,
   Skeleton,
   Tag,
@@ -159,6 +158,7 @@ function AccessBody({
   const [rows, setRows] = useState<Row[]>(savedRows);
   const [who, setWho] = useState<Key | null>(null);
   const [newLevel, setNewLevel] = useState<GrantLevel>('view');
+  const [editingLevel, setEditingLevel] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const addRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -264,14 +264,23 @@ function AccessBody({
       width: 160,
       priority: 1,
       cell: (r) =>
-        editable ? (
-          <SegmentedControl
+        editable && editingLevel === r.person.id ? (
+          <Select
             label={`Level for ${r.person.name}`}
-            options={LEVEL_OPTIONS}
+            hideLabel
+            items={LEVEL_OPTIONS.map((o) => ({ key: o.value, label: o.label }))}
             value={r.level}
-            onChange={(level) => {
-              setRows(rows.map((x) => (x.person.id === r.person.id ? { ...x, level } : x)));
-              setFailed(false);
+            defaultOpen
+            autoFocus
+            width={110}
+            searchable={false}
+            onOpenChange={(open) => {
+              if (!open) setEditingLevel(null);
+            }}
+            onChange={(k) => {
+              if (!k) return;
+              setRows(rows.map((x) => (x.person.id === r.person.id ? { ...x, level: k as GrantLevel } : x)));
+              setEditingLevel(null);
             }}
           />
         ) : (
@@ -311,16 +320,26 @@ function AccessBody({
       ? [
           {
             id: 'remove',
-            header: 'Remove',
+            header: 'Actions',
             hideLabel: true,
-            width: 48,
+            width: 72,
             priority: 1,
             cell: (r: Row) => (
-              <IconButton
-                label={`Remove ${r.person.name}`}
-                icon="close"
-                onPress={() => removeRow(rows.findIndex((x) => x.person.id === r.person.id))}
-              />
+              <span className={styles.rowActions}>
+                <IconButton
+                  tile
+                  icon="edit"
+                  label={`Change the level of ${r.person.name}`}
+                  onPress={() => setEditingLevel(r.person.id)}
+                />
+                <IconButton
+                  tile
+                  tone="danger"
+                  icon="ban"
+                  label={`Remove ${r.person.name}`}
+                  onPress={() => removeRow(rows.findIndex((x) => x.person.id === r.person.id))}
+                />
+              </span>
             ),
           } satisfies Column<Row>,
         ]
@@ -445,11 +464,15 @@ function AccessBody({
                       width="100%"
                     />
                   </div>
-                  <SegmentedControl
-                    label="Level for the new person"
-                    options={LEVEL_OPTIONS}
+                  <Select
+                    label="Level"
+                    items={LEVEL_OPTIONS.map((o) => ({ key: o.value, label: o.label }))}
                     value={newLevel}
-                    onChange={setNewLevel}
+                    onChange={(k) => {
+                      if (k) setNewLevel(k as GrantLevel);
+                    }}
+                    searchable={false}
+                    width={160}
                   />
                   <Button
                     variant="neutral"

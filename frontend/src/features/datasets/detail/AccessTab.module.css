@@ -85,6 +85,13 @@
   overflow-wrap: anywhere;
 }
 
+/* the row's tiles: the green pencil, then the red remove (mocks/M47) */
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .when {
   font-family: var(--font-mono);
   font-size: var(--font-sm);
