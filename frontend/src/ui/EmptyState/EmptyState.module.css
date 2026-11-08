@@ -36,7 +36,12 @@
   line-height: 1.5;
 }
 
+/* A-25: the buttons sit in one centred row that wraps, apart by --space-sm. */
 .action {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
   margin-top: var(--space-sm);
 }
 
