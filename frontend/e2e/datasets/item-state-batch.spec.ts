@@ -791,8 +791,8 @@ test.describe('version header, download, publish note, history and compare (A2-3
     await expect(page.getByRole('listbox').getByText('130 items (6 disabled)')).toBeVisible();
     await page.keyboard.press('Escape');
     await page.getByTestId('hero-more').click();
-    await expect(page.getByRole('menuitem', { name: '↓ Download JSONL', exact: true })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: '↓ Download JSONL with disabled items' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Download JSONL', exact: true })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Download JSONL with disabled items' })).toBeVisible();
     await page.keyboard.press('Escape');
     await open(page, s, '', s.v1);
     await expect(page.getByRole('tab', { name: /Items/ })).toContainText('130');

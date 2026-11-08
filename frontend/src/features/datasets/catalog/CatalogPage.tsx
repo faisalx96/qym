@@ -10,6 +10,7 @@ import { useSearchParamsState } from '@/lib/url-state';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
+  ActionTile,
   Button,
   DropdownMenu,
   EmptyState,
@@ -117,11 +118,17 @@ export function CatalogPage() {
                 </Button>
               }
               items={[
-                { id: 'blank', label: 'Start blank', description: 'Create an empty dataset' },
+                {
+                  id: 'blank',
+                  label: 'Start blank',
+                  description: 'Create an empty dataset',
+                  icon: <ActionTile icon="plus" />,
+                },
                 {
                   id: 'import',
                   label: 'Import CSV / TSV / JSON / JSONL',
                   description: 'Upload a file as version v1',
+                  icon: <ActionTile icon="upload" />,
                 },
               ]}
               onAction={(id) => (id === 'blank' ? setCreating(true) : setImporting(true))}

@@ -20,6 +20,7 @@ import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
 import {
+  ActionTile,
   Button,
   Chip,
   ConfirmDialog,
@@ -634,16 +635,19 @@ export function ItemsTab({
                     {
                       id: 'disable',
                       label: menuLabel('disable', counts?.active ?? 0),
+                      icon: <ActionTile icon="ban" />,
                       disabled: !counts?.active,
                     },
                     {
                       id: 'enable',
                       label: menuLabel('enable', counts?.disabled ?? 0),
+                      icon: <ActionTile icon="check" />,
                       disabled: !counts?.disabled,
                     },
                     {
                       id: 'delete',
                       label: menuLabel('delete', counts?.all ?? 0),
+                      icon: <ActionTile icon="trash" tone="danger" />,
                       tone: 'danger',
                       separatorBefore: true,
                       disabled: !counts?.all,

@@ -25,6 +25,7 @@ import { useCrumbLabel } from '@/lib/crumb-label';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
+  ActionTile,
   Button,
   ConfirmDialog,
   DropdownMenu,
@@ -430,20 +431,24 @@ function DetailBody({
                 label="More actions"
                 trigger={<IconButton label="More actions" icon="more" data-testid="hero-more" />}
                 items={[
-                  ...(canWrite ? [{ id: 'name', label: 'Name version' }] : []),
-                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare versions' }] : []),
+                  ...(canWrite ? [{ id: 'name', label: 'Name version', icon: <ActionTile icon="edit" /> }] : []),
+                  ...(versions.length > 1
+                    ? [{ id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> }]
+                    : []),
                   ...(dataset.items_visible
                     ? [
                         {
                           id: 'download',
-                          label: '↓ Download JSONL',
+                          label: 'Download JSONL',
+                          icon: <ActionTile icon="braces-lines" />,
                           href: platformUrl(downloadUrl(slug, ref, active.version)),
                         },
                         ...(active.disabled_count > 0
                           ? [
                               {
                                 id: 'download-all',
-                                label: '↓ Download JSONL with disabled items',
+                                label: 'Download JSONL with disabled items',
+                                icon: <ActionTile icon="braces-lines" />,
                                 href: platformUrl(downloadUrl(slug, ref, active.version, true)),
                               },
                             ]
@@ -455,7 +460,7 @@ function DetailBody({
                         {
                           id: 'upload',
                           label: 'Upload file as new version',
-                          icon: <Icon name="upload" size={12} />,
+                          icon: <ActionTile icon="upload" />,
                           separatorBefore: true,
                         },
                       ]
