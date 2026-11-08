@@ -278,7 +278,6 @@ export default function UiGalleryPage() {
             <Button variant="accent">Accent</Button>
             <Button variant="primary">Primary</Button>
             <Button variant="danger">Delete run</Button>
-            <Button variant="ghost">Ghost</Button>
             <Button variant="neutral" isDisabled>
               Disabled
             </Button>
@@ -318,7 +317,7 @@ export default function UiGalleryPage() {
               href="https://example.com"
               target="_blank"
               rel="noreferrer"
-              icon={<Icon name="external" size={12} />}
+              iconEnd={<Icon name="external" size={12} />}
             >
               External
             </LinkButton>
@@ -480,10 +479,9 @@ export default function UiGalleryPage() {
             </Text>
           </Disclosure>
         </Case>
-        <Case label="Tabs (dense)">
+        <Case label="Tabs (counts)">
           <Tabs
             label="Datasets"
-            variant="dense"
             selected={tab === 'members' ? 'b' : 'a'}
             onSelect={() => {}}
             items={[
@@ -1000,7 +998,6 @@ function ReportGalleryDemo() {
           shown={6}
           total={24}
           chips={status.map((s) => ({ key: s, label: `Status: ${s}`, onClear: () => setStatus([]) }))}
-          onClearAll={() => setStatus([])}
           onJumpToItems={() => {}}
           sidebarOpen={open}
           onToggleSidebar={() => setOpen((o) => !o)}
