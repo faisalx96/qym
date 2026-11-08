@@ -83,7 +83,7 @@ describe('live chart screenshots', () => {
 
   it('keeps the no-charts message on Diagnosis', () => {
     const { container } = render(<DiagnosisTab data={{ ...data, summary: {} }} />);
-    expect(screen.getByText('No charts available for this turn.')).toBeInTheDocument();
+    expect(screen.getByText('No charts for this turn')).toBeInTheDocument();
     expect(container.querySelector('[data-live-chart-image]')).not.toBeInTheDocument();
   });
 

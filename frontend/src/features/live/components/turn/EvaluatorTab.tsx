@@ -1,5 +1,5 @@
 import type { LiveTurnDetail } from '@/api/live';
-import { DataTable, Disclosure, JsonTree, Text, type Column } from '@/ui';
+import { DataTable, Disclosure, EmptyState, JsonTree, type Column } from '@/ui';
 import { evalMetaOf } from '../../lib/summary';
 import { EvidenceCard, Facts, MetricValue } from './Evidence';
 import styles from '../../turn.module.css';
@@ -51,13 +51,13 @@ export function EvaluatorTab({ data }: { data: LiveTurnDetail }) {
         rowKey={(score) => score.id}
         responsive="scroll"
         minWidth={900}
-        empty={<Text tone="muted">No evaluation scores available for this turn.</Text>}
+        empty="No evaluation scores for this turn"
       />
       <Disclosure title="Raw evaluation detail" summary={data.detail ? 'JSON' : 'Not available'}>
         {data.detail ? (
           <JsonTree data={data.detail} label="Raw evaluation detail" />
         ) : (
-          <Text tone="muted">No raw detail available for this turn.</Text>
+          <EmptyState compact title="No raw detail for this turn" />
         )}
       </Disclosure>
     </>

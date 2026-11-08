@@ -1,5 +1,5 @@
 import type { LiveTurnDetail } from '@/api/live';
-import { DataTable, KeyValueGrid, Text, type Column } from '@/ui';
+import { DataTable, EmptyState, KeyValueGrid, Text, type Column } from '@/ui';
 import { servicesOf, toolsOf, type ToolCall, type ToolFailure } from '../../lib/summary';
 import { EvidenceCard, Facts, MetricValue, ServiceStatus } from './Evidence';
 import styles from '../../turn.module.css';
@@ -67,7 +67,7 @@ export function ServicesTab({ data }: { data: LiveTurnDetail }) {
           ))}
         </div>
       ) : (
-        <Text tone="muted">No services available for this turn.</Text>
+        <EmptyState compact title="No services for this turn" />
       )}
       <EvidenceCard title="Tools">
         <div className={styles.stack}>
@@ -90,7 +90,7 @@ export function ServicesTab({ data }: { data: LiveTurnDetail }) {
             rowKey={(row) => row.id}
             responsive="scroll"
             minWidth={600}
-            empty={<Text tone="muted">No tool failures reported.</Text>}
+            empty="No tool failures"
           />
           {tools?.list ? (
             <DataTable
@@ -100,7 +100,7 @@ export function ServicesTab({ data }: { data: LiveTurnDetail }) {
               rowKey={(row) => row.id}
               responsive="scroll"
               minWidth={400}
-              empty={<Text tone="muted">No tool calls recorded.</Text>}
+              empty="No tool calls recorded"
             />
           ) : (
             <Text tone="muted">Call list not available for this turn</Text>

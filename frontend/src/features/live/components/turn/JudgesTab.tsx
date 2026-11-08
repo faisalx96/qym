@@ -1,5 +1,5 @@
 import type { LiveTurnDetail } from '@/api/live';
-import { KeyValueGrid, Text, TextBlock } from '@/ui';
+import { EmptyState, KeyValueGrid, Text, TextBlock } from '@/ui';
 import { comparisonRows, judgeOf, numberOf, recordOf, stringOf } from '../../lib/summary';
 import { EvidenceCard, MetricValue, SqlParts } from './Evidence';
 import styles from '../../turn.module.css';
@@ -51,7 +51,7 @@ export function JudgesTab({ data }: { data: LiveTurnDetail }) {
                 />
               </div>
             ) : (
-              <Text tone="muted">No evidence available for this judge.</Text>
+              <EmptyState compact title="No evidence for this judge" />
             )}
             <div className={styles.crossReview}>
               <Text variant="md" weight={600}>
