@@ -1,4 +1,4 @@
-/** The environments table with its row actions (Run default preset, Manage/View, Test). Page and settings share it. */
+/** The environments table with its row actions (Run default preset, Test). Page and settings share it. */
 import { useState } from 'react';
 import { useTestEnvironment } from '@/api/evalEnvironments';
 import { errorMessage, useEvalEnvironments, type EvalEnvironment } from '@/api/evalCommon';
@@ -14,6 +14,7 @@ import {
   type Column,
   type RowAction,
 } from '@/ui';
+import { titleCase } from '@/features/experiments/lib/format';
 import { DefaultPresetTag, HealthCell, SchemaCell, SlotsStatusTag } from './cells';
 import styles from './EnvironmentsTable.module.css';
 import { canRunDefaultPreset, useRunDefaultPreset } from './runDefaultPreset';
@@ -144,7 +145,7 @@ export function EnvironmentsList({
       header: 'Priority cap',
       width: 125,
       priority: 3,
-      cell: (env) => <Tag kind="data">{env.max_priority || '—'}</Tag>,
+      cell: (env) => <Tag kind="data">{env.max_priority ? titleCase(env.max_priority) : '—'}</Tag>,
     },
   ];
 
@@ -161,18 +162,13 @@ export function EnvironmentsList({
           },
         ]
       : []),
-    {
-      id: 'manage',
-      label: `${canManage ? 'Manage' : 'View'} ${env.name}`,
-      icon: 'external',
-      primary: true,
-      onPress: onOpen,
-    },
     ...(canEdit
       ? [
           {
             id: 'test',
             label: `Test ${env.name}`,
+            icon: 'wrench',
+            primary: true,
             disabled: testingId === env.id,
             onPress: () => void runTest(env),
           },
