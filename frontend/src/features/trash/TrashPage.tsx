@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Key } from 'react-aria-components';
 import { useSearchParams } from 'react-router-dom';
 import { useAllProjects } from '@/api/admin';
+import { useModelIndex } from '@/api/dashboard';
 import {
   PURGE_MAX,
   RESTORE_MAX,
@@ -23,6 +24,7 @@ import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useAuth, useDocumentTitle } from '@/features/shell';
 import { constrained, fullWidth } from '@/features/shell/layout';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import {
   ActionTile,
   Button,
@@ -79,6 +81,12 @@ function plural(n: number) {
 
 function fmtDate(iso: string) {
   return formatDay(iso);
+}
+
+/** A trashed run's model in its own project's model colour (rows come from many projects). */
+function TrashModelCell({ slug, name, reasoning }: { slug: string; name: string; reasoning: boolean }) {
+  const modelIndex = useModelIndex(slug);
+  return <ModelTag name={name} reasoning={reasoning} series={modelSeriesOf(modelIndex, name, reasoning)} />;
 }
 
 export function TrashPage() {
@@ -289,7 +297,12 @@ export function TrashPage() {
       priority: 3,
       header: 'Model',
       width: 130,
-      cell: (r) => (r.model ? <ModelTag name={r.model} reasoning={!!r.trace_stats?.has_reasoning} /> : '—'),
+      cell: (r) =>
+        r.model ? (
+          <TrashModelCell slug={r.project_slug} name={r.model} reasoning={!!r.trace_stats?.has_reasoning} />
+        ) : (
+          '—'
+        ),
     },
     { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => <TaskTag name={r.task} /> },
     {
