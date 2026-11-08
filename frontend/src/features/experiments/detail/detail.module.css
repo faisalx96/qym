@@ -12,11 +12,8 @@
   gap: var(--space-sm);
 }
 
-.headerActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
+.page > [data-page-header] {
+  margin-bottom: 0;
 }
 
 .stack {

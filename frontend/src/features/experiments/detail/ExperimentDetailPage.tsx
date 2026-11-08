@@ -178,39 +178,35 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
           x.description || 'Jobs launched by this experiment, one per combination and environment.'
         }
         meta={meta}
+        actions={
+          <>
+            {readOnly ? null : (
+              <LinkButton
+                to={launchPath(slug, { clone: x.id })}
+                variant="accent"
+                icon={<Icon name="retry" size={12} />}
+                title="Open the launch form as a copy of this experiment"
+                data-testid="exp-run-again"
+              >
+                Run again
+              </LinkButton>
+            )}
+            {actions.length ? (
+              <DropdownMenu
+                label="Experiment actions"
+                trigger={
+                  <Button variant="neutral" icon={<Icon name="more" size={14} />} data-testid="exp-actions">
+                    Actions
+                  </Button>
+                }
+                items={actions}
+                onAction={(id) => (id === 'retry' ? flows.retryFailed() : flows.cancelExperiment())}
+              />
+            ) : null}
+          </>
+        }
       />
       <Credentials detail={x} />
-      <div className={styles.headerActions}>
-        {readOnly ? null : (
-          <LinkButton
-            to={launchPath(slug, { clone: x.id })}
-            variant="accent"
-            size="md"
-            icon={<Icon name="retry" size={14} />}
-            title="Open the launch form as a copy of this experiment"
-            data-testid="exp-run-again"
-          >
-            Run again
-          </LinkButton>
-        )}
-        {actions.length ? (
-          <DropdownMenu
-            label="Experiment actions"
-            trigger={
-              <Button
-                size="md"
-                variant="neutral"
-                icon={<Icon name="more" size={14} />}
-                data-testid="exp-actions"
-              >
-                Actions
-              </Button>
-            }
-            items={actions}
-            onAction={(id) => (id === 'retry' ? flows.retryFailed() : flows.cancelExperiment())}
-          />
-        ) : null}
-      </div>
       {!canControl && !readOnly && actions.length ? (
         <Text variant="base" tone="muted" className={styles.note}>
           {flows.denied
