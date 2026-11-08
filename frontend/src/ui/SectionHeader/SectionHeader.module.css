@@ -18,6 +18,12 @@
 .title {
   margin: 0;
 }
+/* B-27: the title and its count Tag in one row. */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
 .description {
   margin: 0;
 }

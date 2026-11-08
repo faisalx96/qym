@@ -13,9 +13,6 @@ export interface SectionHeaderProps {
   count?: ReactNode;
 }
 
-/** The title and its count Tag in one row (B-27). */
-const TITLE_ROW = { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' } as const;
-
 /** Sentence-case section title + muted description (DESIGN_LANGUAGE §1). */
 export function SectionHeader({ title, description, aside, level = 'xl', id, count }: SectionHeaderProps) {
   const heading = (
@@ -27,7 +24,7 @@ export function SectionHeader({ title, description, aside, level = 'xl', id, cou
     <div className={styles.head} data-level={level}>
       <div className={styles.text}>
         {count ? (
-          <div style={TITLE_ROW}>
+          <div className={styles.titleRow}>
             {heading}
             {count}
           </div>
