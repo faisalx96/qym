@@ -72,11 +72,11 @@ test.describe('experiments list', () => {
     await expect(page.getByText('Updates automatically')).toHaveCount(0);
 
     // created by me (dev@local is the creator of both)
-    await page.getByText('Created by me').click();
+    await pickSelect(page, /Created by/, 'Me');
     await expect.poll(() => query(page).get('mine')).toBe('1');
 
     await page.reload();
-    await expect(page.getByRole('checkbox', { name: 'Created by me' })).toBeChecked();
+    await expect(page.getByRole('button', { name: /Created by/ })).toContainText('Me');
     await expect(page.getByRole('button', { name: /Status$/ })).toContainText('Failed');
     await expect(table.getByText('finished one')).toBeVisible();
     await expect(table.getByText('still going')).toHaveCount(0);

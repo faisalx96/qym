@@ -7,6 +7,14 @@
   margin-block: var(--space-md);
 }
 
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
 .envCards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));

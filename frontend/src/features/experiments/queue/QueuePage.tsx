@@ -32,7 +32,7 @@ import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
-  Checkbox,
+  ClearFiltersButton,
   EmptyState,
   ErrorState,
   Icon,
@@ -347,45 +347,77 @@ export function QueuePage() {
     },
   ];
 
-  const filterControls = (
-    <div className={styles.filters} role="group" aria-label="Queue filters">
-      <SearchField
-        label="Search jobs"
-        placeholder="Search experiment or environment"
-        value={search}
-        onChange={setSearch}
-        width="var(--search-width)"
-        shortcut="/"
-      />
+  const searchField = (
+    <SearchField
+      label="Search jobs"
+      placeholder="Search experiment or environment"
+      value={search}
+      onChange={setSearch}
+      width="var(--search-width)"
+      shortcut="/"
+    />
+  );
+  const activeCount =
+    (filters.environment ? 1 : 0) +
+    (filters.statuses?.length ? 1 : 0) +
+    (filters.mine ? 1 : 0) +
+    (filters.latency ? 1 : 0) +
+    (filters.experiment ? 1 : 0) +
+    (search.trim() ? 1 : 0);
+  const filterRow = (
+    <div className={styles.filterRow} role="group" aria-label="Queue filters">
       <Select
         label="Environment"
+        triggerVariant="bar"
         items={envItems}
         value={filters.environment ?? ''}
         onChange={(k) => replaceUrlQuery({ environment: k ? String(k) : null })}
         searchable={false}
-        width={190}
       />
       <Select
         label="Status"
+        triggerVariant="bar"
         items={statusItems}
         value={filters.statuses?.[0] ?? ''}
         onChange={(k) => replaceUrlQuery({ status: k ? String(k) : null })}
         searchable={false}
-        width={160}
       />
       <Select
         label="Experiment"
+        triggerVariant="bar"
         items={experimentItems}
         value={filters.experiment ?? ''}
         onChange={(k) => replaceUrlQuery({ experiment: k ? String(k) : null })}
-        width={240}
       />
-      <Checkbox isSelected={filters.mine} onChange={(v) => replaceUrlQuery({ mine: v })}>
-        Only my jobs
-      </Checkbox>
-      <Checkbox isSelected={filters.latency} onChange={(v) => replaceUrlQuery({ latency: v })}>
-        {LATENCY_FILTER_LABEL}
-      </Checkbox>
+      <Select
+        label="Created by"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'Everyone' },
+          { key: 'me', label: 'Me' },
+        ]}
+        value={filters.mine ? 'me' : ''}
+        onChange={(k) => replaceUrlQuery({ mine: k === 'me' })}
+      />
+      <Select
+        label="Latency-sensitive"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'All' },
+          { key: '1', label: LATENCY_FILTER_LABEL },
+        ]}
+        value={filters.latency ? '1' : ''}
+        onChange={(k) => replaceUrlQuery({ latency: k === '1' })}
+      />
+      <ClearFiltersButton
+        count={activeCount}
+        onClear={() => {
+          setSearch('');
+          replaceUrlQuery({ environment: null, status: null, mine: null, latency: null, experiment: null });
+        }}
+      />
     </div>
   );
 
@@ -401,7 +433,12 @@ export function QueuePage() {
         description="Jobs waiting for or running on this project’s Evaluation Service environments, in dispatch order."
         tabs={<ExperimentsTabs current="queue" />}
       />
-      {query.data ? null : filterControls}
+      {query.data ? null : (
+        <div className={styles.filters}>
+          {searchField}
+          {filterRow}
+        </div>
+      )}
       {showSkeleton ? (
         <Skeleton kind="table" count={6} label="Loading queue" />
       ) : query.isError && !query.data ? (
@@ -495,7 +532,8 @@ export function QueuePage() {
               }
             >
               <DataTable.Toolbar
-                filters={filterControls}
+                search={searchField}
+                rows={filterRow}
                 trailing={
                   <>
                     <Text variant="sm" tone="muted">

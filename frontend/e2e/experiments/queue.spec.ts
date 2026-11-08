@@ -106,7 +106,7 @@ test.describe('queue page', () => {
     await expect(jobsGrid(page).getByRole('row')).toHaveCount(4);
     await pickSelect(page, /Status$/, 'Queued');
     await expect.poll(() => query(page).get('status')).toBe('QUEUED');
-    await page.getByText('Only my jobs').click();
+    await pickSelect(page, /Created by/, 'Me');
     await expect.poll(() => query(page).get('mine')).toBe('1');
 
     await page.reload();

@@ -16,7 +16,7 @@ import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import {
-  Checkbox,
+  ClearFiltersButton,
   DataTable,
   EmptyState,
   Icon,
@@ -195,18 +195,23 @@ export function ExperimentsPage() {
   );
 
   const emptyAll = Boolean(query.data) && !filtered && total === 0;
-  const filters = (
-    <div className={styles.filters} role="group" aria-label="Filter experiments">
-      <SearchField
-        label="Search experiments"
-        placeholder="Search experiments"
-        value={search}
-        onChange={setSearch}
-        width="var(--search-width)"
-        shortcut="/"
-      />
+  const searchField = (
+    <SearchField
+      label="Search experiments"
+      placeholder="Search experiments"
+      value={search}
+      onChange={setSearch}
+      width="var(--search-width)"
+      shortcut="/"
+    />
+  );
+  const activeCount =
+    (status ? 1 : 0) + Object.keys(versioning).length + (mine ? 1 : 0) + (latency ? 1 : 0) + (needle ? 1 : 0);
+  const filterRow = (
+    <div className={styles.filterRow} role="group" aria-label="Filter experiments">
       <Select
         label="Status"
+        triggerVariant="bar"
         items={[
           { key: ALL, label: 'All statuses' },
           ...EXPERIMENT_STATUSES.map((s) => ({ key: s, label: titleCase(s) })),
@@ -220,7 +225,6 @@ export function ExperimentsPage() {
           })
         }
         searchable={false}
-        width={150}
       />
       {versioningKeys.map((key) => {
         const selected = versioning[key];
@@ -230,39 +234,55 @@ export function ExperimentsPage() {
           <span key={key} title={`Evaluation Service versioning: ${key}`} data-exp-versioning={key}>
             <Select
               label={versioningLabel(key)}
+              triggerVariant="bar"
               items={[{ key: ALL, label: 'All values' }, ...options.map((v) => ({ key: v, label: v }))]}
               value={selected ?? ALL}
               onChange={(k) => setVersioning(key, !k || k === ALL ? null : String(k))}
-              width={170}
             />
           </span>
         );
       })}
-      <Checkbox
-        isSelected={mine}
-        onChange={(on) =>
+      <Select
+        label="Created by"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'Everyone' },
+          { key: 'me', label: 'Me' },
+        ]}
+        value={mine ? 'me' : ''}
+        onChange={(k) =>
           update((next) => {
-            if (on) next.set('mine', '1');
+            if (k === 'me') next.set('mine', '1');
             else next.delete('mine');
             resetPage(next);
           })
         }
-      >
-        Created by me
-      </Checkbox>
-      <Checkbox
-        isSelected={latency}
-        data-testid="filter-latency"
-        onChange={(on) =>
+      />
+      <Select
+        label="Latency-sensitive"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'All' },
+          { key: '1', label: LATENCY_FILTER_LABEL },
+        ]}
+        value={latency ? '1' : ''}
+        onChange={(k) =>
           update((next) => {
-            if (on) next.set('latency', '1');
+            if (k === '1') next.set('latency', '1');
             else next.delete('latency');
             resetPage(next);
           })
         }
-      >
-        {LATENCY_FILTER_LABEL}
-      </Checkbox>
+      />
+      <ClearFiltersButton
+        count={activeCount}
+        onClear={() => {
+          setSearch('');
+          setParams({}, { replace: true });
+        }}
+      />
     </div>
   );
 
@@ -354,7 +374,8 @@ export function ExperimentsPage() {
           }
         >
           <DataTable.Toolbar
-            filters={filters}
+            search={searchField}
+            rows={filterRow}
             trailing={
               live ? (
                 <Text variant="sm" tone="muted">

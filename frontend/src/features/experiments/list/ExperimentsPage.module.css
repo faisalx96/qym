@@ -1,8 +1,9 @@
-.filters {
+.filterRow {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-md);
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
 }
 
 .truncate {
