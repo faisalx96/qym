@@ -5,7 +5,7 @@
  */
 import { useMemo } from 'react';
 import type { Key } from 'react-aria-components';
-import { Button, Icon, MultiSelect, Popover, SegmentedControl, Slider } from '@/ui';
+import { Button, ClearFiltersButton, Icon, MultiSelect, Popover, SegmentedControl, Slider } from '@/ui';
 import type { CorrectionsPage, ReviewFilters, ReviewSource } from '@/api/reviews';
 import styles from './FilterBar.module.css';
 
@@ -157,18 +157,7 @@ export function FacetRow({
         <FacetTrigger key={f.key} facet={f} filters={filters} facets={facets} onChange={onChange} />
       ))}
       <ConfidenceTrigger filters={filters} onChange={onChange} />
-      {count ? (
-        <Button
-          variant="danger"
-          icon={<Icon name="close" size={12} />}
-          onPress={onClear}
-          className={styles.clear}
-          aria-label={`Clear ${count} filter${count === 1 ? '' : 's'}`}
-          data-testid="clear-filters"
-        >
-          Clear <span className={styles.clearCount}>{count}</span>
-        </Button>
-      ) : null}
+      <ClearFiltersButton count={count} onClear={onClear} testId="clear-filters" />
     </div>
   );
 }
