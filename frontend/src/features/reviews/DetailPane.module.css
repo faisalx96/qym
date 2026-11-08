@@ -44,31 +44,32 @@
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-xs) var(--space-sm);
+  gap: var(--space-sm) var(--space-lg);
 }
 
 .chip {
   display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-xs);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
-  font-size: var(--font-sm);
 }
 
 .chipLabel {
   color: var(--text-muted);
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: var(--font-sm);
+  font-weight: 600;
 }
 
 .chipValue,
 .chipLink {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
+  font-size: var(--font-base);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.chipValue {
+  color: var(--text-primary);
 }
 
 .chipLink {
