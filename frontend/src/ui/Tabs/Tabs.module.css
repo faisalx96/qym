@@ -98,17 +98,22 @@
   cursor: not-allowed;
 }
 
+/* The CountTile recipe (B-28, D-26, X15 A): the number in the exact centre of an 18px tile. */
 .count {
   display: inline-flex;
   align-items: center;
-  min-height: 18px;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
   padding: 0 var(--space-xs);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--bg-active);
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-sm);
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
 }
 
 .tab[data-tone='danger'] .count {

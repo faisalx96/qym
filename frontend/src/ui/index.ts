@@ -1,5 +1,6 @@
 // Primitive library barrel. One directory per primitive: <Name>/{<Name>.tsx, <Name>.module.css, index.ts}.
 export * from './Icon';
+export * from './CountTile';
 export * from './Text';
 export * from './Stack';
 export * from './Eyebrow';
