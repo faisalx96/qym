@@ -1168,9 +1168,9 @@
   gap: var(--space-xs);
 }
 
+/* E-37: a phrase with a count is sans (inherited), with tabular figures. */
 .count,
 .selCount {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-sm);
   color: var(--text-muted);
