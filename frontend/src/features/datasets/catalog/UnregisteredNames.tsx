@@ -4,7 +4,7 @@
  */
 import { APP_LOCALE } from '@/lib/dates';
 import { useUnregisteredDatasetNames } from '@/api/datasets';
-import { Button, Card, Text } from '@/ui';
+import { Button, Card, DatasetTag, Text } from '@/ui';
 import styles from './CatalogPage.module.css';
 
 export function UnregisteredNames({
@@ -39,9 +39,7 @@ export function UnregisteredNames({
       <ul className={styles.unregisteredList}>
         {names.map((n) => (
           <li key={n.name} className={styles.unregisteredRow}>
-            <span className={styles.unregisteredName} dir="auto">
-              {n.name}
-            </span>
+            <DatasetTag name={n.name} />
             <Text variant="sm" tone="muted" as="span" mono>
               {n.runs.toLocaleString(APP_LOCALE)} {n.runs === 1 ? 'run' : 'runs'}
             </Text>

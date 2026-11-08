@@ -177,12 +177,3 @@
 .unregisteredRow + .unregisteredRow {
   border-top: 1px solid var(--border-subtle);
 }
-
-.unregisteredName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
