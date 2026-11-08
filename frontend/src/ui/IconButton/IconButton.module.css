@@ -33,14 +33,14 @@
   outline-offset: 2px;
 }
 
-.iconAction[data-tone='danger'][data-hovered],
+.iconAction[data-tone='danger'],
 .iconAction[data-tone='reject'] {
   color: var(--error);
 }
 .iconAction[data-tone='approve'] {
   color: var(--success);
 }
-.iconAction[data-tone='reject'][data-hovered] {
+.iconAction:is([data-tone='reject'], [data-tone='danger'])[data-hovered] {
   color: var(--error-hover);
 }
 
