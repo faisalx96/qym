@@ -3,8 +3,9 @@
  * It owns the sticky line while the table header is held above the detail. Its position is a translate set by
  * `useStickyShift` on the bar itself (the table's scroller is an overflow container, so CSS sticky cannot work here).
  */
-import { Button, CopyButton, Icon, Tag } from '@/ui';
+import { Button, CopyButton, Icon, StatusMark, type StatusShape, type StatusTone } from '@/ui';
 import type { ItemVerdict } from '../../lib/itemVerdict';
+import { VERDICT_MARK } from '../../lib/verdictMark';
 import styles from './ItemBar.module.css';
 
 export function ItemBar({
@@ -22,11 +23,19 @@ export function ItemBar({
   link: string;
   onCollapse: () => void;
 }) {
+  const [tone, shape]: [StatusTone, StatusShape] =
+    verdict.kind === 'aggregate'
+      ? verdict.tone === 'success'
+        ? ['success', 'check']
+        : verdict.tone === 'danger'
+          ? ['danger', 'cross']
+          : ['warning', 'dot']
+      : (VERDICT_MARK[verdict.kind] ?? ['neutral', 'ring']);
   return (
     <div className={styles.bar} data-item-bar="" data-item-bar-for={itemId}>
       <span className={styles.num}>#{number}</span>
       <span className={styles.verdict}>
-        <Tag tone={verdict.tone}>{verdict.label}</Tag>
+        <StatusMark tone={tone} shape={shape} label={verdict.label} />
       </span>
       <span className={styles.preview} dir="auto">
         {preview}
