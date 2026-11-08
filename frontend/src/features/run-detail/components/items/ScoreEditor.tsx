@@ -132,7 +132,7 @@ export function ScoreEditor({
           }
         }}
       />
-      <Button size="sm" variant="accent" type="submit" loading={mutation.isPending}>
+      <Button size="sm" variant="primary" type="submit" loading={mutation.isPending}>
         Save
       </Button>
       <Button size="sm" variant="neutral" onPress={onDone}>

@@ -94,7 +94,7 @@ export function CsvExport() {
               Cancel
             </Button>
             <Button
-              variant="accent"
+              variant="primary"
               onPress={download}
               isDisabled={selected.size === 0}
               disabledReason="Select at least one column"
