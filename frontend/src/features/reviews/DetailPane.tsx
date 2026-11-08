@@ -289,7 +289,7 @@ function Chipline({
       {node ? (
         node
       ) : href ? (
-        <Link to={href} className={styles.chipLink}>
+        <Link to={href} className={styles.chipLink} data-link="name">
           {value}
         </Link>
       ) : (

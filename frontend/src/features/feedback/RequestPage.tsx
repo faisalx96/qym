@@ -63,7 +63,7 @@ function targetMeta(d: FeedbackDetail) {
     link = t.accessible ? (
       <>
         {' · '}
-        <Link to={to} className={styles.idLink} data-testid="target-link">
+        <Link to={to} className={styles.idLink} data-link="name" data-testid="target-link">
           {label}
         </Link>
       </>

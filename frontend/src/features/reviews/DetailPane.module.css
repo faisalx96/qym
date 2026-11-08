@@ -72,12 +72,7 @@
 }
 
 .chipLink {
-  color: var(--accent-secondary);
   text-decoration: none;
-}
-
-.chipLink:hover {
-  text-decoration: underline;
 }
 
 .chipLink:focus-visible {

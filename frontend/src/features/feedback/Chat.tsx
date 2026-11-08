@@ -15,7 +15,13 @@ function ToolText({ item }: { item: LogItem }) {
       {ids.map((id, i) => (
         <span key={id}>
           {i > 0 ? ' ' : null}
-          <Link to={`/feedback/${id}`} className={styles.idLink} data-link-sm="" data-request-link={id}>
+          <Link
+            to={`/feedback/${id}`}
+            className={styles.idLink}
+            data-link="name"
+            data-link-sm=""
+            data-request-link={id}
+          >
             {id}
           </Link>
         </span>

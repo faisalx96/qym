@@ -47,7 +47,6 @@
 .idLink {
   font-family: var(--font-mono);
   font-size: inherit;
-  color: var(--accent-primary);
   white-space: nowrap;
 }
 
