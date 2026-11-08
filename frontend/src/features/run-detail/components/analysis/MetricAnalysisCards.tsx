@@ -147,7 +147,7 @@ function Card({
             return (
               <li key={key} className={styles.issue} data-testid="issue" data-status={status}>
                 <div className={styles.issueHead}>
-                  <Tag kind="accent">{issue.category || 'Uncategorized'}</Tag>
+                  <Tag kind="data">{issue.category || 'Uncategorized'}</Tag>
                   {issue.subcategory ? <span className={styles.sub}>{issue.subcategory}</span> : null}
                   <ReviewStatusMark status={status} />
                   {issue.confidence != null ? (
