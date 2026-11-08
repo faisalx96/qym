@@ -194,7 +194,6 @@
 .table tbody th {
   block-size: 31px;
   padding: 0 var(--space-md);
-  border-block-end: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   vertical-align: middle;
 }
@@ -207,6 +206,10 @@
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
+}
+
+.table tr:nth-child(even) > * {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step-report), var(--card-bg));
 }
 
 .table tr[data-active] > * {
@@ -222,7 +225,7 @@
   block-size: 34px;
 }
 
-.itemRow:hover > * {
+.table tr.itemRow:hover > * {
   background: var(--bg-hover);
 }
 
@@ -333,6 +336,12 @@ button.outcome:focus-visible {
   color: var(--error-text);
 }
 
+.keyMark {
+  flex: none;
+  margin-inline-end: var(--space-xs);
+  color: var(--text-muted);
+}
+
 .passCell {
   display: inline-flex;
   align-items: center;
@@ -360,26 +369,18 @@ button.outcome:focus-visible {
 }
 
 .move {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-inline-size: 36px;
-  block-size: 22px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-active);
-  color: var(--text-secondary);
+  display: block;
+  text-align: center;
   font-family: var(--font-mono);
   font-size: var(--font-sm);
-  font-weight: 650;
+  color: var(--text-muted);
 }
 
 .move[data-tone='up'] {
-  background: color-mix(in srgb, var(--success) 14%, transparent);
   color: var(--success);
 }
 
 .move[data-tone='down'] {
-  background: color-mix(in srgb, var(--error) 14%, transparent);
   color: var(--error-text);
 }
 
