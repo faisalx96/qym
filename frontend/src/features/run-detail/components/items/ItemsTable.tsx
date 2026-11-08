@@ -18,8 +18,6 @@ import {
   type Column,
   type Key,
   type SortState,
-  type StatusShape,
-  type StatusTone,
 } from '@/ui';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs } from '@/lib/text';
@@ -27,6 +25,7 @@ import { metricPassesFor, type FilteredItem, type SortBy } from '../../lib/filte
 import { metricHasPassThreshold } from '../../lib/runModel';
 import { latencyLabel, metricCell, rowStatus } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
+import { VERDICT_MARK } from '../../lib/verdictMark';
 import type { Row } from '../../types';
 import { defaultPageSize } from '../../lib/itemsPaging';
 import { isUnionRun } from '../../lib/heroModel';
@@ -37,15 +36,6 @@ import styles from './ItemsTable.module.css';
 
 const PAGE_SIZE_KEY = 'qym:run-page-size';
 const PAGE_SIZES = [20, 50, 100, 500];
-
-/** The Status column's StatusMark for an item outcome: the pixel figure is the non-colour cue. */
-const STATUS_MARK: Record<string, [StatusTone, StatusShape]> = {
-  pass: ['success', 'check'],
-  fail: ['danger', 'cross'],
-  error: ['danger', 'cross'],
-  not_received: ['warning', 'pause'],
-  running: ['info', 'orbit'],
-};
 
 function usePageSize(total: number): [number, (n: number) => void] {
   const [chosen, setChosen] = useState<number | null>(() => {
@@ -144,7 +134,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       priority: 1,
       cell: ({ row }) => {
         const status = rowStatus(ctx, row, selectedMetric);
-        const [tone, shape] = STATUS_MARK[status.kind] ?? ['neutral', 'ring'];
+        const [tone, shape] = VERDICT_MARK[status.kind] ?? ['neutral', 'ring'];
         return (
           <StatusMark
             tone={tone}
