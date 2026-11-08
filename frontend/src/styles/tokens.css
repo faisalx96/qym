@@ -287,6 +287,7 @@
   --row-regular: 40px;
   --row-comfortable: 52px;
   --table-header-height: 34px;
+  --search-width: 260px; /* list and report searches (C152) */
   --table-group-height: 24px;
   --table-footer-height: 40px;
   --bg-selected: rgba(0, 212, 170, 0.08);
