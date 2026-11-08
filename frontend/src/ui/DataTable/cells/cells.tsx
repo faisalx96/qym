@@ -274,23 +274,51 @@ export function UserCell({
 
 /* ── ProgressCell ──────────────────────────────────────────────────────── */
 
-export function ProgressCell({ done, total }: { done: number; total: number }) {
+/**
+ * Progress: a bar, then 'done/total' mono. With `failed` (Live worker Jobs, B-35) the bar has a green evaluated part
+ * and a red failed part, and `showFailed` adds a red 'N failed' count tag.
+ */
+export function ProgressCell({
+  done,
+  total,
+  failed,
+  showFailed = false,
+}: {
+  done: number;
+  total: number;
+  failed?: number;
+  showFailed?: boolean;
+}) {
   const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+  const failedPct = total > 0 && failed ? Math.min(100 - pct, (failed / total) * 100) : 0;
   return (
     <span className={styles.progress}>
       <span
         className={styles.track}
+        data-parts={failed === undefined ? undefined : ''}
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={total}
         aria-valuenow={done}
         aria-label="Progress"
       >
-        <span className={styles.fill} style={{ inlineSize: `${pct}%` }} data-plain="" />
+        {failed === undefined ? (
+          <span className={styles.fill} style={{ inlineSize: `${pct}%` }} data-plain="" />
+        ) : (
+          <>
+            <span className={styles.part} data-part="ok" style={{ inlineSize: `${pct}%` }} />
+            <span className={styles.part} data-part="failed" style={{ inlineSize: `${failedPct}%` }} />
+          </>
+        )}
       </span>
       <span className={styles.scoreText}>
         {done}/{total}
       </span>
+      {showFailed && failed ? (
+        <Tag kind="count" tone="danger">
+          {failed} failed
+        </Tag>
+      ) : null}
     </span>
   );
 }
