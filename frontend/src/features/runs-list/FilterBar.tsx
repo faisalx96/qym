@@ -278,12 +278,12 @@ export function useFilterBarParts({
         ref={searchRef}
         label="Search run or dataset names"
         placeholder="Search run or dataset names"
-        hint="/"
+        shortcut="/"
         value={search.text}
         onChange={search.change}
         onClear={() => search.flush('')}
         onSubmit={(v) => search.flush(v)}
-        width={phone ? 220 : 280}
+        width={phone ? 220 : 'var(--search-width)'}
       />
     ) : null,
     filters: phone ? (
