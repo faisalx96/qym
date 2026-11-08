@@ -137,7 +137,11 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
           title="You don’t have access to this dataset"
           message="Ask a project manager to add you. Its runs stay listed with item contents hidden."
           action={
-            <Button variant="neutral" onPress={() => navigate(catalogPath(slug))}>
+            <Button
+              variant="neutral"
+              icon={<Icon name="prev" size={12} />}
+              onPress={() => navigate(catalogPath(slug))}
+            >
               Back to datasets
             </Button>
           }
@@ -431,7 +435,9 @@ function DetailBody({
                 label="More actions"
                 trigger={<IconButton label="More actions" icon="more" data-testid="hero-more" />}
                 items={[
-                  ...(canWrite ? [{ id: 'name', label: 'Name version', icon: <ActionTile icon="edit" /> }] : []),
+                  ...(canWrite
+                    ? [{ id: 'name', label: 'Name version', icon: <ActionTile icon="edit" /> }]
+                    : []),
                   ...(versions.length > 1
                     ? [{ id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> }]
                     : []),

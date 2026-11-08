@@ -6,7 +6,17 @@ import { actionErrorMessage } from '@/lib/http';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { readOnlyReason, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { DataTable, EmptyState, IconButton, PageHeader, RelativeTime, Tag, Text, Tooltip, useToast } from '@/ui';
+import {
+  DataTable,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  RelativeTime,
+  Tag,
+  Text,
+  Tooltip,
+  useToast,
+} from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { datasetPath } from '../lib/route';
 import { RESTORE_RULE } from '../lib/versions';

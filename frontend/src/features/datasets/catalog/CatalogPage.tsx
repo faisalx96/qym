@@ -108,11 +108,7 @@ export function CatalogPage() {
             <DropdownMenu
               label="New dataset"
               trigger={
-                <Button
-                  variant="primary"
-                  icon={<Icon name="plus" size={12} />}
-                  data-testid="new-dataset"
-                >
+                <Button variant="primary" icon={<Icon name="plus" size={12} />} data-testid="new-dataset">
                   New dataset
                 </Button>
               }

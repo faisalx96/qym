@@ -132,7 +132,7 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
             <LinkButton
               to={datasetPath(slug, dataset.slug)}
               variant="neutral"
-              icon={<Icon name="chevron-left" size={12} />}
+              icon={<Icon name="prev" size={12} />}
             >
               Back to the dataset
             </LinkButton>
