@@ -44,7 +44,7 @@
   --metric-error: #eab308;
   --error: #ef4444;
   --error-dim: #7f1d1d;
-  --info: #3b82f6;
+  --info: var(--accent-secondary); /* B-36: one blue, the Running blue */
 
   /* 5-color score scale (red → orange → yellow → lime → green) */
   --score-1: #ef4444; /* 0-39%: red */
