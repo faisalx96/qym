@@ -148,7 +148,7 @@ export function NewFeedbackPage() {
               </span>
               <span className={styles.footActions}>
                 <Button
-                  variant="ghost"
+                  variant="neutral"
                   onPress={() => {
                     writeDraft(null);
                     navigate('/feedback');

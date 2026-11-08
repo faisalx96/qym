@@ -53,7 +53,7 @@ function CommentInner({
       description={description}
       footer={
         <>
-          <Button variant="ghost" onPress={() => onOpenChange(false)}>
+          <Button variant="neutral" onPress={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button

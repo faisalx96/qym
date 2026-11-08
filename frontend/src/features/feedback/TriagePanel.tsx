@@ -160,7 +160,7 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
           <p className={styles.triageError} role="alert">
             {error}{' '}
             {error.startsWith('Someone') ? (
-              <Button size="sm" variant="ghost" onPress={() => window.location.reload()}>
+              <Button size="sm" variant="neutral" onPress={() => window.location.reload()}>
                 Reload
               </Button>
             ) : null}

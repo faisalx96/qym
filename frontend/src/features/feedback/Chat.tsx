@@ -157,7 +157,7 @@ export const Chat = forwardRef<HTMLTextAreaElement, ChatProps>(function Chat(p, 
         data-testid="chat-log"
       >
         {p.onLoadEarlier ? (
-          <Button size="sm" variant="ghost" onPress={p.onLoadEarlier} data-testid="load-earlier">
+          <Button size="sm" variant="neutral" onPress={p.onLoadEarlier} data-testid="load-earlier">
             Show earlier messages
           </Button>
         ) : null}

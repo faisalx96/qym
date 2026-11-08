@@ -549,7 +549,7 @@ export function ReviewsPage() {
                 >
                   Delete
                 </Button>
-                <Button variant="ghost" size="sm" onPress={() => setSelected(new Set())}>
+                <Button variant="neutral" size="sm" onPress={() => setSelected(new Set())}>
                   Clear
                 </Button>
               </>

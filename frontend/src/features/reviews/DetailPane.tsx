@@ -155,7 +155,7 @@ export function DetailPane(p: DetailPaneProps) {
             </span>
           </Button>
           <Button
-            variant="ghost"
+            variant="neutral"
             size="sm"
             onPress={p.onToggle}
             aria-expanded={p.expanded}

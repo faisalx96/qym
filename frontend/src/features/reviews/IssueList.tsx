@@ -219,7 +219,7 @@ export function IssueEditForm({
         ) : (
           <Button
             icon={<Icon name="plus" size={12} />}
-            variant="ghost"
+            variant="neutral"
             size="sm"
             onPress={() => setIssues((l) => [...l, { ...BLANK }])}
           >
@@ -227,7 +227,7 @@ export function IssueEditForm({
           </Button>
         )}
         <span className={styles.grow} />
-        <Button variant="ghost" size="sm" onPress={onCancel}>
+        <Button variant="neutral" size="sm" onPress={onCancel}>
           Cancel
         </Button>
         <Button variant="primary" size="sm" type="submit" loading={saving} data-testid="edit-save">

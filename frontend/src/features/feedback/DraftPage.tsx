@@ -387,7 +387,7 @@ function DraftConversation({
           `Deleted after ${info.retention_days} days without a submit`,
         ]}
         actions={
-          <Button variant="ghost" size="md" onPress={() => setDiscard(true)}>
+          <Button variant="danger" size="md" onPress={() => setDiscard(true)}>
             Discard draft
           </Button>
         }
@@ -397,7 +397,7 @@ function DraftConversation({
           This draft is from {ageDays} {ageDays === 1 ? 'day' : 'days'} ago. The assistant remembers the
           conversation. It is deleted in {info.days_left} {info.days_left === 1 ? 'day' : 'days'} if you do
           not submit it.{' '}
-          <Button size="sm" variant="ghost" onPress={() => setWelcome(false)}>
+          <Button size="sm" variant="neutral" onPress={() => setWelcome(false)}>
             Dismiss
           </Button>
         </Callout>

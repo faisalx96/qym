@@ -384,7 +384,7 @@ function DiagnosisEditor({
               >
                 Add
               </Button>
-              <Button size="sm" variant="ghost" onPress={() => setAdding(false)}>
+              <Button size="sm" variant="neutral" onPress={() => setAdding(false)}>
                 Cancel
               </Button>
             </form>

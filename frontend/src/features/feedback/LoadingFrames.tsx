@@ -33,7 +33,7 @@ export function ChatLoadingFrame() {
           'Deleted after 30 days without a submit',
         ]}
         actions={
-          <Button variant="ghost" size="md" isDisabled>
+          <Button variant="danger" size="md" isDisabled>
             Discard draft
           </Button>
         }
