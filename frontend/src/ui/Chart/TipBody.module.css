@@ -1,4 +1,4 @@
-/* Latency and traces tooltip body (legacy .lt-tip): title, a label/value grid (labels sans, values mono), a green hint. */
+/* Chart tooltip body (legacy .lt-tip, C-35): title, a label/value grid (labels sans, values mono), a green hint. */
 .tip {
   display: flex;
   flex-direction: column;
