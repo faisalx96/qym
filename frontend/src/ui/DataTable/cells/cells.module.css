@@ -278,18 +278,6 @@ tr:focus-within .idCopy,
   padding: var(--space-sm);
 }
 
-.user {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.userName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .progress {
   display: inline-flex;
   align-items: center;

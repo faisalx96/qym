@@ -4,10 +4,10 @@ import { formatDurationMs, formatNumericValue, formatRelative } from '@/lib/form
 import { metricBand, type MetricDirection, type MetricType } from '@/lib/metrics';
 import { CopyButton } from '../../CopyButton';
 import { staggerIndex, useEntrance, useFlashOnChange } from '../../motion';
-import { Identicon } from '../../Identicon';
 import { Popover } from '../../Popover';
 import { RunStatusBadge } from '../../RunStatusBadge';
 import { Tag } from '../../Tag';
+import { UserName } from '../../UserName';
 import { middleTruncate } from '../model';
 import styles from './cells.module.css';
 import { formatHeaderDate, toDate } from '@/lib/dates';
@@ -263,14 +263,18 @@ export function TagsCell({
 
 /* ── UserCell ──────────────────────────────────────────────────────────── */
 
-export function UserCell({ name, seed }: { name: string | null | undefined; seed?: string }) {
-  if (!name) return <span>—</span>;
-  return (
-    <span className={styles.user}>
-      <Identicon seed={seed ?? name} cell={4} gap={1} />
-      <span className={styles.userName}>{name}</span>
-    </span>
-  );
+/** A person in a table: UserName (initials disc in the person's colour, then the name), B-25. */
+export function UserCell({
+  id,
+  name,
+  email,
+}: {
+  id?: string | null;
+  name?: string | null;
+  email?: string | null;
+}) {
+  if (!name && !email) return <span>—</span>;
+  return <UserName id={id} name={name} email={email} />;
 }
 
 /* ── ProgressCell ──────────────────────────────────────────────────────── */
