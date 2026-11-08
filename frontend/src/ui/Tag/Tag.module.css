@@ -73,3 +73,31 @@
   font-size: var(--font-sm);
   font-weight: 500;
 }
+
+/* MoreTag: the count Tag as a button that shows hidden tags (A-20). The count Tag look (20px, mono 10px 650, primary
+   text on --bg-elevated), with a hover and a focus ring because it acts. */
+.more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: none;
+  min-height: var(--badge-height);
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 650;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.more[data-hovered] {
+  background: var(--bg-hover);
+}
+.more[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
