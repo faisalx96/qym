@@ -176,7 +176,7 @@ export function RequestsTable(p: RequestsTableProps) {
       error={p.error && !p.data ? p.error : undefined}
       onRetry={p.onRetry}
       errorTitle="Couldn’t load feedback"
-      empty="No requests match."
+      empty="No requests match"
       filteredEmpty={
         <EmptyState compact title={p.q ? `No requests match “${p.q}”` : 'No requests match these filters'} />
       }
