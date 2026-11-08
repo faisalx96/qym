@@ -1,4 +1,4 @@
-import { Button, DropdownMenu, IconButton } from '@/ui';
+import { ActionTile, Button, DropdownMenu, IconButton } from '@/ui';
 import { useMediaQuery } from '@/features/shell';
 import { plural } from '../../lib/format';
 import { launchLabel } from '../model';
@@ -34,8 +34,8 @@ export function WizardBar({
   const optional = step === 'models' || step === 'settings' || step === 'evaluation';
   const problem = first ? `Fix ${plural(review.items.length, 'problem')} first: ${first.label}` : '';
   const overflow = [
-    ...(phone && first ? [{ id: 'problem', label: problem }] : []),
-    ...(phone && showCancel ? [{ id: 'cancel', label: 'Cancel' }] : []),
+    ...(phone && first ? [{ id: 'problem', label: problem, icon: <ActionTile icon="warning" /> }] : []),
+    ...(phone && showCancel ? [{ id: 'cancel', label: 'Cancel', icon: <ActionTile icon="close" /> }] : []),
   ];
   return (
     <div className={styles.wizardBar} role="region" aria-label="Launch">
