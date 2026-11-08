@@ -15,7 +15,7 @@ export interface ToolbarProps {
   filters?: ReactNode;
   /** Active filter chip strip. */
   chips?: ReactNode;
-  /** "43 runs" style count. */
+  /** cv3-shim: remove after D-11 (deprecated: a list count shows only in the footer range; this prop renders nothing). */
   count?: ReactNode;
   /** Extra controls on the right (Select, Export …). */
   trailing?: ReactNode;
@@ -38,13 +38,12 @@ const DENSITIES: { id: Density; label: string }[] = [
   { id: 'comfortable', label: 'Comfortable' },
 ];
 
-/** Search, filters, chips, count, then the built-in Columns and Density menus. */
+/** Search, filters, chips, then the built-in Columns and Density menus. A list toolbar shows no count (D-11). */
 export function Toolbar({
   search,
   filters,
   chips,
   rows,
-  count,
   trailing,
   columnsMenu,
   densityMenu,
@@ -99,10 +98,7 @@ export function Toolbar({
         {/* visibility: hidden also takes these controls out of the Tab order */}
         <div className={styles.toolbarHidden} aria-hidden="true">
           {main}
-          <div className={styles.toolbarEnd}>
-            {count ? <span className={styles.count}>{count}</span> : null}
-            {trailing}
-          </div>
+          <div className={styles.toolbarEnd}>{trailing}</div>
         </div>
       </div>
     );
@@ -126,7 +122,6 @@ export function Toolbar({
         </>
       )}
       <div className={styles.toolbarEnd}>
-        {count ? <span className={styles.count}>{count}</span> : null}
         {trailing}
         {showColumns ? (
           <ColumnsMenu columns={columns} model={model} reorderable={reorderable} suspended={suspended} />
