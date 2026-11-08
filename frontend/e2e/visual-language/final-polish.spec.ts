@@ -188,6 +188,6 @@ test.describe('390', () => {
     expect(h).toBeLessThanOrEqual(want + 1);
     await expect(page.getByRole('navigation', { name: 'Step navigation' })).toHaveCount(1);
     await expect(bar.getByRole('button', { name: /^Fix \d+ problems? first/ })).toHaveCount(0);
-    await expect(bar.getByRole('button', { name: 'More launch options' })).toBeVisible();
+    await expect(bar.getByRole('button', { name: 'Actions', exact: true })).toBeVisible();
   });
 });
