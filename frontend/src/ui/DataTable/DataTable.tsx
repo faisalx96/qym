@@ -626,6 +626,7 @@ function DataTableInner<R>({
           {
             id: '__actions',
             pseudo: 'actions',
+            foldLabel: () => 'Row actions',
             width: 16 + 26 * actionSlots,
             pin: 'end',
             resizable: false,
@@ -1648,36 +1649,38 @@ function DataTableInner<R>({
       const primary = lone ? [...shown, lone] : shown;
       const more = lone ? [] : rest;
       return (
-        <td key={col.id} {...common} role="gridcell" data-pseudo="actions">
-          <span className={styles.rowActions}>
-            {primary.map((a) => (
-              <Tooltip key={a.id} content={a.hint ?? a.label}>
-                <IconButton
-                  label={a.label}
-                  icon={a.icon ?? (a.danger ? 'trash' : 'more')}
-                  tone={a.danger ? 'danger' : 'default'}
-                  tile
-                  isDisabled={a.disabled}
-                  onPress={() => a.onPress(r)}
+        <td key={col.id} {...common} role="gridcell" data-pseudo="actions" data-fold="">
+          <FoldCell label="Row actions">
+            <span className={styles.rowActions}>
+              {primary.map((a) => (
+                <Tooltip key={a.id} content={a.hint ?? a.label}>
+                  <IconButton
+                    label={a.label}
+                    icon={a.icon ?? (a.danger ? 'trash' : 'more')}
+                    tone={a.danger ? 'danger' : 'default'}
+                    tile
+                    isDisabled={a.disabled}
+                    onPress={() => a.onPress(r)}
+                  />
+                </Tooltip>
+              ))}
+              {more.length ? (
+                <DropdownMenu
+                  label="Row actions"
+                  trigger={<IconButton label="Row actions" icon="more" />}
+                  items={more.map((a) => ({
+                    id: a.id,
+                    label: a.label,
+                    icon: typeof a.icon === 'string' ? <Icon name={a.icon as IconName} size={12} /> : a.icon,
+                    tone: a.danger ? ('danger' as const) : undefined,
+                    disabled: a.disabled,
+                    description: a.hint,
+                  }))}
+                  onAction={(id) => more.find((a) => a.id === id)?.onPress(r)}
                 />
-              </Tooltip>
-            ))}
-            {more.length ? (
-              <DropdownMenu
-                label="Row actions"
-                trigger={<IconButton label="Row actions" icon="more" />}
-                items={more.map((a) => ({
-                  id: a.id,
-                  label: a.label,
-                  icon: typeof a.icon === 'string' ? <Icon name={a.icon as IconName} size={12} /> : a.icon,
-                  tone: a.danger ? ('danger' as const) : undefined,
-                  disabled: a.disabled,
-                  description: a.hint,
-                }))}
-                onAction={(id) => more.find((a) => a.id === id)?.onPress(r)}
-              />
-            ) : null}
-          </span>
+              ) : null}
+            </span>
+          </FoldCell>
         </td>
       );
     }
