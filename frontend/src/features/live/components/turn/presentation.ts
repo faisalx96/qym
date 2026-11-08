@@ -1,5 +1,6 @@
 import type { LiveMetricSpec } from '@/api/live';
 import { formatDurationMs, formatNumericValue, formatPercentValue } from '@/lib/format';
+import { humanizeKey } from '@/lib/humanizeKey';
 import { diagnosisSpec, mixSegments } from '../../lib/mix';
 
 export function labelFor(value: string | null, specs: LiveMetricSpec[]) {
@@ -9,6 +10,13 @@ export function labelFor(value: string | null, specs: LiveMetricSpec[]) {
       tone: 'neutral' as const,
     }
   );
+}
+
+const STATUS_WORDS: Record<string, string> = { ok: 'OK', failed: 'Failed', skipped: 'Skipped' };
+
+/** A raw Live status value as a word ('ok' → 'OK'). */
+export function statusWord(value: string): string {
+  return STATUS_WORDS[value] ?? humanizeKey(value);
 }
 
 export function scoreText(value: number | null, spec?: LiveMetricSpec | null): string {
