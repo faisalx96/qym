@@ -84,7 +84,7 @@ export function MatrixCard({
             </Button>
           </div>
         </div>
-        <Card flush className={styles.tableWrap}>
+        <div className={styles.tableWrap}>
           <table className={styles.matrix}>
             <caption className={styles.srOnly}>
               Latest attempt of each combination in each environment
@@ -146,7 +146,7 @@ export function MatrixCard({
               ))}
             </tbody>
           </table>
-        </Card>
+        </div>
       </div>
     </Card>
   );

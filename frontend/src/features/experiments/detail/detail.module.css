@@ -110,8 +110,11 @@
 }
 
 /* Matrix */
+/* flush in the Matrix card */
 .tableWrap {
-  overflow: auto; /* a flush ui/Card: the frame, radius and surface are the Card's */
+  overflow: auto;
+  margin: 0 calc(-1 * var(--space-lg)) calc(-1 * var(--space-md));
+  border-top: 1px solid var(--border-subtle);
 }
 
 .matrix {
