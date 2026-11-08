@@ -137,7 +137,7 @@ export function correctionPriority(c: CorrectionRow, now = Date.now()): Priority
   const raw = c.ai_confidence == null ? NaN : Number(c.ai_confidence);
   const confidence = Number.isFinite(raw) ? raw : null;
   if (confidence != null && confidence < 0.75) reasons.push(`${Math.round(confidence * 100)}% confidence`);
-  if (changed) reasons.push('A reviewer changed the AI diagnosis');
+  if (changed) reasons.push('A reviewer changed the AI issue');
   const created = c.created_at ? Date.parse(c.created_at) : NaN;
   const days = Number.isFinite(created) ? Math.floor((now - created) / 86_400_000) : 0;
   if (days >= PRIORITY_WAIT_DAYS) reasons.push(`Waiting ${days} days`);
