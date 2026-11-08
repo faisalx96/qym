@@ -15,6 +15,7 @@ import { useSearchParamsState } from '@/lib/url-state';
 import {
   Button,
   Card,
+  ClearFiltersButton,
   DataTable,
   DropdownMenu,
   Drawer,
@@ -23,7 +24,7 @@ import {
   MultiSelect,
   PageHeader,
   SearchField,
-  SegmentedControl,
+  Select,
   StaleBanner,
   useToast,
   type Key,
@@ -135,6 +136,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="Status"
         triggerVariant="bar"
+        emptyMeansAll
         items={STATUSES}
         value={new Set(view.status)}
         onChange={multi('status')}
@@ -142,6 +144,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="About"
         triggerVariant="bar"
+        emptyMeansAll
         items={ABOUT}
         value={new Set(view.about)}
         onChange={multi('about')}
@@ -149,6 +152,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="Project"
         triggerVariant="bar"
+        emptyMeansAll
         items={(data?.facets.projects ?? []).map((p) => ({ key: p.slug, label: p.name, count: p.count }))}
         value={new Set(view.project)}
         onChange={multi('project')}
@@ -156,6 +160,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="Priority"
         triggerVariant="bar"
+        emptyMeansAll
         items={PRIORITIES}
         value={new Set(view.priority)}
         onChange={multi('priority')}
@@ -163,6 +168,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="Complexity"
         triggerVariant="bar"
+        emptyMeansAll
         items={COMPLEXITIES}
         value={new Set(view.complexity)}
         onChange={multi('complexity')}
@@ -170,14 +176,16 @@ export function FeedbackListPage() {
     </>
   );
   const whose = (
-    <SegmentedControl
-      label="Whose requests"
+    <Select
+      label="Created by"
+      hideLabel
+      triggerVariant="bar"
+      items={[
+        { key: 'all', label: 'Everyone' },
+        { key: 'mine', label: 'Me' },
+      ]}
       value={view.mine ? 'mine' : 'all'}
       onChange={(v) => set({ mine: v === 'mine' ? '1' : null })}
-      options={[
-        { value: 'all', label: 'Everyone' },
-        { value: 'mine', label: 'Mine' },
-      ]}
     />
   );
   const filterRow = phone ? (
@@ -201,6 +209,20 @@ export function FeedbackListPage() {
     <div className={styles.filterRow} data-testid="filter-row">
       <span className={styles.facets}>{facetNodes}</span>
       {whose}
+      <ClearFiltersButton
+        count={activeFilterCount(view) + (view.q ? 1 : 0)}
+        onClear={() =>
+          set({
+            status: null,
+            about: null,
+            project: null,
+            priority: null,
+            complexity: null,
+            q: null,
+            mine: null,
+          })
+        }
+      />
     </div>
   );
 
