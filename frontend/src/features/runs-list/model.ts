@@ -14,6 +14,23 @@ export function modelSlot(key: string, index: Record<string, number>): number {
   return ((index[key] ?? 0) % 8) + 1;
 }
 
+export type Series = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+/** The model's series slot from the project's model index; neutral until the index loads or when the model is absent. */
+export function modelSeriesOf(
+  index: Record<string, number> | null,
+  name: string,
+  reasoning: boolean,
+): Series | undefined {
+  if (!index) return undefined;
+  const key = [
+    `${name}|||${reasoning ? 'reasoning' : 'plain'}`,
+    `${name}|||plain`,
+    `${name}|||reasoning`,
+  ].find((k) => k in index);
+  return key ? (modelSlot(key, index) as Series) : undefined;
+}
+
 /** Marker shape for the wrap-around beyond 8 models. */
 export function modelShape(key: string, index: Record<string, number>): 'circle' | 'square' | 'diamond' {
   return (['circle', 'square', 'diamond'] as const)[Math.floor((index[key] ?? 0) / 8) % 3] ?? 'circle';
