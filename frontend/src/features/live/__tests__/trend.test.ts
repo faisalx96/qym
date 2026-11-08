@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
-import { columnPitch, trendColumns } from '../lib/trend';
+import { columnPitch, trendColumns, trendDayLabel, trendLabels, trendSegments } from '../lib/trend';
+import { mixSegments } from '../lib/mix';
 
 const diagnosis: LiveMetricSpec = {
   metric_name: 'diagnosis',
@@ -33,6 +34,19 @@ const trend: LiveOverview['trend'] = [
 ];
 
 describe('trendColumns', () => {
+  it('uses meta for inconclusive in trend stacks and legend without changing other diagnosis tones', () => {
+    const spec = {
+      ...diagnosis,
+      values: [{ value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' }],
+    };
+    const counts = { inconclusive: 3 };
+    expect(trendColumns([{ ...trend[0]!, turns: 4, counts_by_label: counts }], [spec])[0]?.stacks).toEqual([
+      { value: 'inconclusive', label: 'Inconclusive', tone: 'meta', n: 3 },
+      { value: null, label: 'Undiagnosed', tone: 'neutral', n: 1 },
+    ]);
+    expect(trendSegments(counts, spec)[0]?.tone).toBe('meta');
+    expect(mixSegments(counts, spec)[0]?.tone).toBe('neutral');
+  });
   it('keeps every day, including zero days, with totals and missing rates intact', () => {
     const columns = trendColumns(trend, [diagnosis]);
     expect(columns.map(({ day, total, rate }) => ({ day, total, rate }))).toEqual([
@@ -76,6 +90,30 @@ describe('trendColumns', () => {
     expect(column.stacks.find((stack) => stack.value === 'ok')!.n / column.total).toBe(0.5);
     expect(column.stacks.reduce((sum, stack) => sum + stack.n, 0)).toBe(8);
     expect(trendColumns([trend[2]!], [diagnosis])[0]?.stacks).toEqual([]);
+  });
+});
+
+describe('trendDayLabel', () => {
+  it('keeps the month boundary and demotes a colliding first label only at narrow pitch', () => {
+    const days = Array.from({ length: 14 }, (_, index) =>
+      new Date(Date.UTC(2026, 9, 31 + index)).toISOString().slice(0, 10),
+    );
+    expect(trendLabels(days, 20).slice(0, 2)).toEqual([
+      { label: '31', labelPriority: false },
+      { label: '1 Nov', labelPriority: true },
+    ]);
+    expect(trendLabels(days, 60).slice(0, 2)).toEqual([
+      { label: '31 Oct', labelPriority: true },
+      { label: '1 Nov', labelPriority: true },
+    ]);
+  });
+
+  it('marks the first day and month boundaries in UTC, including across years', () => {
+    expect(trendDayLabel('2026-10-26', true)).toBe('26 Oct');
+    expect(trendDayLabel('2026-10-31', false)).toBe('31');
+    expect(trendDayLabel('2026-11-01', false)).toBe('1 Nov');
+    expect(trendDayLabel('2027-01-01', false)).toBe('1 Jan');
+    expect(trendDayLabel('2027-01-02', false)).toBe('02');
   });
 });
 

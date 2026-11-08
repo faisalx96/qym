@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { validateDateRange, type LiveJob } from '@/api/liveWorker';
+import { validateDateRange, type CreateWorkerJob, type LiveJob } from '@/api/liveWorker';
 import { errorSentence } from '@/lib/http';
-import { Button, Dialog, ErrorState, NumberField, Text, TextField, useToast } from '@/ui';
+import { Button, Checkbox, Dialog, ErrorState, NumberField, Text, TextField, useToast } from '@/ui';
 import type { WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
 
@@ -22,6 +22,7 @@ export function DateRangeDialog({
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [limit, setLimit] = useState(200);
+  const [redoInconclusive, setRedoInconclusive] = useState(false);
   const [validation, setValidation] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [preview, setPreview] = useState<LiveJob | null>(null);
@@ -36,8 +37,15 @@ export function DateRangeDialog({
     setValidation(message);
     setError(null);
     if (message) return;
+    const redo: CreateWorkerJob['redo'] = redoInconclusive ? ['failed', 'inconclusive'] : ['failed'];
     try {
-      const job = await onCreateJob({ kind, since_day: since, until_day: until, limit });
+      const job = await onCreateJob({
+        kind,
+        since_day: since,
+        until_day: until,
+        limit,
+        ...(kind === 'backfill' ? { redo } : {}),
+      });
       if (kind === 'backfill_preview') setPreview(job);
       else {
         onOpenChange(false);
@@ -69,6 +77,9 @@ export function DateRangeDialog({
         <TextField label="From" type="date" value={since} onChange={setSince} />
         <TextField label="To" type="date" value={until} onChange={setUntil} />
         <NumberField label="Limit" value={limit} onChange={setLimit} help="1 to 2,000" />
+        <Checkbox isSelected={redoInconclusive} onChange={setRedoInconclusive}>
+          Also redo turns labelled Inconclusive
+        </Checkbox>
         {validation ? (
           <Text role="alert" tone="danger">
             {validation}
@@ -79,10 +90,13 @@ export function DateRangeDialog({
         ) : null}
         {currentPreview?.status === 'done' ? (
           <Text role="status">
-            {currentPreview.progress.found ?? 0} chats, {currentPreview.progress.skipped_existing ?? 0}{' '}
+            {currentPreview.progress.found ?? 0} turns, {currentPreview.progress.skipped_existing ?? 0}{' '}
             already evaluated,{' '}
             {(currentPreview.progress.found ?? 0) - (currentPreview.progress.skipped_existing ?? 0)} to
             evaluate
+            {typeof currentPreview.progress.listed === 'number'
+              ? ` (${currentPreview.progress.listed} traces listed)`
+              : ''}
           </Text>
         ) : null}
         {currentPreview && (currentPreview.status === 'queued' || currentPreview.status === 'running') ? (

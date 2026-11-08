@@ -108,10 +108,18 @@
 }
 
 .foot {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding-block-start: var(--space-xs);
+}
+
+.baseline {
+  position: absolute;
+  inset-block-start: 0;
+  inline-size: 100%;
+  block-size: var(--space-xs);
 }
 
 .count,

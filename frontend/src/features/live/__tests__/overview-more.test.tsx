@@ -147,9 +147,21 @@ describe('overview service and history blocks', () => {
     expect(container.querySelectorAll('[data-live-trend-day]')).toHaveLength(5);
     const gap = container.querySelector('[data-live-trend-day="2026-10-29"]')!;
     expect(gap).toHaveAttribute('data-live-gap', 'true');
-    expect(gap.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
+    expect(gap.querySelector('[data-part="baseline"]')?.getAttribute('style')).toContain(
       'repeating-linear-gradient',
     );
+    expect(gap.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain('var(--error) 0% 100%');
+    expect(gap.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '1');
+    expect(gap).toHaveStyle({ '--p': '0.25' });
+    expect(container.querySelector('[data-live-trend-day="2026-10-28"] [data-part="axis"]')).toHaveAttribute(
+      'data-text',
+      '28 Oct',
+    );
+    expect(container.querySelector('[data-live-trend-day="2026-11-01"] [data-part="axis"]')).toHaveAttribute(
+      'data-text',
+      '1 Nov',
+    );
+    expect(screen.getByText(/hatched baseline: worker gap/)).toBeVisible();
     expect(container.querySelector('[data-live-trend-day="2026-10-31"]')).toHaveAttribute(
       'data-live-gap',
       'false',
@@ -165,6 +177,45 @@ describe('overview service and history blocks', () => {
     fireEvent.click(screen.getByRole('button', { name: /2026-10-28: 4 turns/ }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('trend_days=30&day=2026-10-28');
     expect(screen.getByText('Problem', { exact: true })).toBeVisible();
+  });
+
+  it('colours inconclusive stacks and legend meta while undiagnosed stays neutral', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <TrendChart
+          trend={[{ ...trend[0]!, counts_by_label: { inconclusive: 3 } }]}
+          specs={[
+            { ...specs[2]!, values: [{ value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' }] },
+          ]}
+          primaryMetric="diagnosis"
+          days={14}
+          onDays={() => {}}
+        />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
+      'var(--accent-tertiary) 0% 75%',
+    );
+    expect(screen.getByText('Inconclusive').closest('[data-tone]')).toHaveAttribute('data-tone', 'meta');
+    expect(screen.getByText('Undiagnosed').closest('[data-tone]')).toHaveAttribute('data-tone', 'neutral');
+    expect(container.querySelector('[data-part="baseline"]')).toBeNull();
+  });
+
+  it('keeps a zero count and baseline marker for an empty gap day', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <TrendChart
+          trend={[{ ...trend[3]!, worker_gap: true }]}
+          specs={specs}
+          primaryMetric="quality"
+          days={14}
+          onDays={() => {}}
+        />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '0');
+    expect(container.querySelector('[data-part="baseline"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-live-trend-day]')).toHaveStyle({ '--p': '0' });
   });
 
   it('fills half an eight-turn bar with the four diagnosed turns and labels the remainder', () => {

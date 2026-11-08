@@ -47,7 +47,11 @@ function setup(
       );
     }
     if (url.pathname.endsWith('/events')) return response({ events: liveWorkerEvents });
-    if (url.pathname.endsWith('/worker')) return response(current);
+    if (url.pathname.endsWith('/worker'))
+      return response({
+        ...current,
+        jobs: current.jobs.slice(0, Number(url.searchParams.get('jobs_limit') ?? 20)),
+      });
     return response({ sources: [liveOverview.status], default_source: source });
   });
   vi.stubGlobal('fetch', fetch);
@@ -492,7 +496,7 @@ it('validates limit without sending a request', async () => {
   expect(screen.getByRole('alert')).toHaveTextContent('Limit must be 1 to 2,000');
   expect(writes(fetch)).toHaveLength(0);
 });
-it('previews and displays the result when the next refetch completes the job', async () => {
+it.each([undefined, 0, 30])('previews without redo and displays listed=%s after refetch', async (listed) => {
   const job: LiveJob = {
     ...liveWorkerRead.jobs[0]!,
     id: 'preview-new',
@@ -504,6 +508,7 @@ it('previews and displays the result when the next refetch completes the job', a
   const { fetch, client, setRead } = setup(liveWorkerRead, () => response(job, 201));
   const user = await openRange();
   dates('2026-01-01', '2026-01-02');
+  await user.click(screen.getByRole('checkbox', { name: 'Also redo turns labelled Inconclusive' }));
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   expect(await screen.findByText('Preview queued')).toBeVisible();
   expect(JSON.parse(String(writes(fetch)[0]![1]?.body))).toEqual({
@@ -514,21 +519,133 @@ it('previews and displays the result when the next refetch completes the job', a
   });
   setRead({
     ...liveWorkerRead,
-    jobs: [{ ...job, status: 'done', progress: { found: 22, skipped_existing: 2 } }],
+    jobs: [{ ...job, status: 'done', progress: { found: 22, skipped_existing: 2, listed } }],
   });
   await act(async () => {
     await client.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
   });
-  expect(await screen.findByText('22 chats, 2 already evaluated, 20 to evaluate')).toBeVisible();
+  expect(
+    await screen.findByText(
+      `22 turns, 2 already evaluated, 20 to evaluate${listed === undefined ? '' : ` (${listed} traces listed)`}`,
+    ),
+  ).toBeVisible();
 });
-it('queues a backfill, closes the dialog and toasts', async () => {
+it.each([false, true])('queues a backfill with redo inconclusive=%s, closes and toasts', async (redo) => {
   const { fetch } = setup(liveWorkerRead, () => response(liveWorkerRead.jobs[0], 201));
   const user = await openRange();
   dates('2026-01-01', '2026-01-02');
+  const checkbox = screen.getByRole('checkbox', { name: 'Also redo turns labelled Inconclusive' });
+  expect(checkbox).not.toBeChecked();
+  if (redo) await user.click(checkbox);
   await user.click(screen.getByRole('button', { name: 'Run' }));
   expect(await screen.findByText('Backfill queued')).toBeVisible();
   expect(screen.queryByRole('dialog')).toBeNull();
-  expect(JSON.parse(String(writes(fetch)[0]![1]?.body)).kind).toBe('backfill');
+  expect(JSON.parse(String(writes(fetch)[0]![1]?.body))).toEqual({
+    kind: 'backfill',
+    since_day: '2026-01-01',
+    until_day: '2026-01-02',
+    limit: 200,
+    redo: redo ? ['failed', 'inconclusive'] : ['failed'],
+  });
+});
+
+it.each([
+  [{}, '0 / 0 turns evaluated, 0 failed', undefined],
+  [
+    { evaluated: 4, found: 8, skipped_existing: 0, redone: 0, failed: 0, listed: 0 },
+    '4 / 8 turns evaluated, 0 failed',
+    '0 traces listed',
+  ],
+  [
+    { evaluated: 4, found: 8, skipped_existing: 3, redone: 2, failed: 1, listed: 20 },
+    '4 / 8 turns evaluated, 3 already evaluated, 2 redone, 1 failed',
+    '20 traces listed',
+  ],
+] as const)('explains progress counters for %j', async (progress, label, listed) => {
+  setup({ ...liveWorkerRead, jobs: [{ ...liveWorkerRead.jobs[0]!, progress }] });
+  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
+  expect(within(table).getByText(label)).toBeVisible();
+  if (listed) expect(within(table).getByText(listed)).toBeVisible();
+  else expect(within(table).queryByText(/traces listed/)).toBeNull();
+});
+
+it.each([
+  [['failed'], null],
+  [['failed', 'inconclusive'], 'redo inconclusive'],
+  [['all'], 'redo all'],
+] as const)('labels redo params %j', async (redo, label) => {
+  const job = liveWorkerRead.jobs[0]!;
+  setup({ ...liveWorkerRead, jobs: [{ ...job, params: { ...job.params, redo: [...redo] } }] });
+  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
+  if (label) expect(within(table).getByText(label)).toBeVisible();
+  else expect(within(table).queryByText(/^redo /)).toBeNull();
+});
+
+it('requests older jobs at 20, 50, 100 and 200 and stops at the maximum', async () => {
+  const jobs = Array.from({ length: 200 }, (_, i) => ({
+    ...liveWorkerRead.jobs[0]!,
+    id: `job-${i}`,
+    status: 'done' as const,
+  }));
+  const { fetch } = setup({ ...liveWorkerRead, jobs });
+  const user = userEvent.setup();
+  for (const limit of [20, 50, 100, 200]) {
+    expect(await screen.findByText(`Newest ${limit} jobs`)).toBeVisible();
+    expect(
+      fetch.mock.calls.some(([input]) => {
+        const url = new URL(input, 'http://localhost');
+        return url.pathname.endsWith('/worker') && url.searchParams.get('jobs_limit') === String(limit);
+      }),
+    ).toBe(true);
+    if (limit < 200) await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
+  }
+  expect(screen.queryByRole('button', { name: 'Show older jobs' })).toBeNull();
+});
+
+it.each([20, 50])('keeps the page and draft when loading jobs beyond %i fails', async (limit) => {
+  const jobs = Array.from({ length: 100 }, (_, i) => ({
+    ...liveWorkerRead.jobs[0]!,
+    id: `job-${i}`,
+    status: 'done' as const,
+  }));
+  const { fetch, client } = setup({ ...liveWorkerRead, jobs });
+  const user = userEvent.setup();
+  await screen.findByText('Newest 20 jobs');
+  if (limit === 50) {
+    await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
+    await screen.findByText('Newest 50 jobs');
+  }
+  await user.type(screen.getByRole('textbox', { name: 'Note' }), 'Unsaved note');
+  const table = screen.getByRole('grid', { name: 'Worker jobs' });
+  const original = fetch.getMockImplementation()!;
+  fetch.mockImplementation((input, init) => {
+    const url = new URL(input, 'http://localhost');
+    if (url.pathname.endsWith('/worker') && Number(url.searchParams.get('jobs_limit')) > limit)
+      return Promise.resolve(response({ detail: 'Older jobs unavailable' }, 500));
+    return original(input, init);
+  });
+  await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
+  expect(await screen.findByText(/Couldn’t load older jobs/)).toBeVisible();
+  expect(screen.getByRole('grid', { name: 'Worker jobs' })).toBe(table);
+  expect(screen.getByText(`Newest ${limit} jobs`)).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'Note' })).toHaveValue('Unsaved note');
+  fetch.mockClear();
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
+  });
+  const requests = fetch.mock.calls.map(([input]) => new URL(input, 'http://localhost'));
+  expect(
+    requests
+      .filter((url) => url.pathname.endsWith('/worker'))
+      .map((url) => url.searchParams.get('jobs_limit')),
+  ).toEqual([String(limit)]);
+});
+
+it('hides older jobs when fewer than the current limit are returned', async () => {
+  setup({ ...liveWorkerRead, jobs: [] });
+  expect(await screen.findByText('No jobs yet')).toBeVisible();
+  expect(screen.queryByText(/Newest \d+ jobs/)).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Show older jobs' })).toBeNull();
 });
 it.each([
   ['running', true, 'cancelling', 'warning'],
@@ -634,7 +751,7 @@ it.each([
 it('polls the worker every five seconds while a job runs and every fifteen afterwards', async () => {
   vi.useFakeTimers();
   let read = liveWorkerRead;
-  const fetch = vi.fn(async () => response(read));
+  const fetch = vi.fn<(input: string) => Promise<Response>>(async () => response(read));
   vi.stubGlobal('fetch', fetch);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   clients.push(client);
@@ -645,6 +762,9 @@ it('polls the worker every five seconds while a job runs and every fifteen after
     await vi.advanceTimersByTimeAsync(1);
   });
   expect(fetch).toHaveBeenCalledTimes(1);
+  expect(new URL(String(fetch.mock.calls[0]?.[0]), 'http://localhost').searchParams.has('jobs_limit')).toBe(
+    false,
+  );
   // The fixture has a running job: the page refreshes every five seconds.
   await act(async () => {
     await vi.advanceTimersByTimeAsync(4998);

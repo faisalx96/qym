@@ -65,10 +65,19 @@ export interface LiveWorkerKey {
 export interface LiveJob {
   id: string;
   kind: 'backfill_preview' | 'backfill';
-  params: { since_day: string; until_day: string; since: string; until: string; limit: number };
+  params: {
+    since_day: string;
+    until_day: string;
+    since: string;
+    until: string;
+    limit: number;
+    redo?: string[];
+  };
   status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   progress: {
     found?: number;
+    listed?: number;
+    redone?: number;
     skipped_existing?: number;
     evaluated?: number;
     failed?: number;
@@ -126,18 +135,26 @@ export interface CreateWorkerJob {
   since_day: string;
   until_day: string;
   limit: number;
+  redo?: ('failed' | 'inconclusive' | 'all')[];
 }
 
 const workerKey = (slug: string, source: string) => ['project', slug, 'live', 'worker', source];
-function livePath(slug: string, source: string, sub = '', filters: WorkerEventsFilters = {}) {
+function livePath(
+  slug: string,
+  source: string,
+  sub = '',
+  filters: WorkerEventsFilters & { jobs_limit?: number } = {},
+) {
   const params = new URLSearchParams({ source });
   for (const [key, value] of Object.entries(filters)) if (value !== undefined) params.set(key, String(value));
   return `/api/projects/${encodeURIComponent(slug)}/live/worker${sub}?${params}`;
 }
-export function useLiveWorker(slug: string, source: string) {
+export function useLiveWorker(slug: string, source: string, jobsLimit?: number) {
   return useQuery({
-    queryKey: workerKey(slug, source),
-    queryFn: () => api.get<LiveWorkerRead>(livePath(slug, source)),
+    queryKey: [...workerKey(slug, source), jobsLimit],
+    queryFn: () => api.get<LiveWorkerRead>(livePath(slug, source, '', { jobs_limit: jobsLimit })),
+    placeholderData: (previous, query) =>
+      query?.queryKey[1] === slug && query.queryKey[4] === source ? previous : undefined,
     refetchInterval: (query) =>
       query.state.data?.jobs?.some((job) => job.status === 'queued' || job.status === 'running')
         ? 5000

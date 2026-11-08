@@ -10,11 +10,13 @@ import {
   useSaveWorkerSettings,
   useSetWorkerKey,
   useSetWorkerState,
+  type LiveWorkerRead,
   type WorkerEventsFilters,
 } from '@/api/liveWorker';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
-import { ErrorState, PageHeader, Skeleton } from '@/ui';
+import { actionErrorMessage } from '@/lib/http';
+import { ErrorState, PageHeader, Skeleton, useToast } from '@/ui';
 import { SourceControl } from './components/SourceControl';
 import { StatusStrip } from './components/worker/StatusStrip';
 import { SettingsForm } from './components/worker/SettingsForm';
@@ -29,6 +31,7 @@ import styles from './worker.module.css';
 export interface WorkerPageViewProps extends ProblemsProps, WorkerCallbacks {
   busy: WorkerBusy;
   sourceControl?: ReactNode;
+  jobsLimit?: number;
 }
 /** No data hooks: the same composed page is used by the app and the gallery. */
 export function WorkerPageView({
@@ -41,6 +44,8 @@ export function WorkerPageView({
   onRestore,
   onCreateJob,
   onCancelJob,
+  jobsLimit = 20,
+  onJobsLimit,
   ...problems
 }: WorkerPageViewProps) {
   const [range, setRange] = useState(false);
@@ -56,7 +61,14 @@ export function WorkerPageView({
           onBackfill={() => setRange(true)}
         />
         <ProblemsBlock {...problems} read={read} />
-        <JobsBlock jobs={read.jobs} busy={busy} onBackfill={() => setRange(true)} onCancelJob={onCancelJob} />
+        <JobsBlock
+          jobs={read.jobs}
+          busy={busy}
+          onBackfill={() => setRange(true)}
+          onCancelJob={onCancelJob}
+          jobsLimit={jobsLimit}
+          onJobsLimit={onJobsLimit}
+        />
         <div className={styles.settingsRow}>
           <SettingsForm read={read} busy={busy.save} onSave={onSave} />
           <HistoryBlock
@@ -87,7 +99,26 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
   useDocumentTitle('Worker · Live');
   const location = useLocation();
   const [filters, setFilters] = useState<WorkerEventsFilters>({});
-  const query = useLiveWorker(slug, source);
+  const [jobsLimit, setJobsLimit] = useState(20);
+  const query = useLiveWorker(slug, source, jobsLimit);
+  const [lastSuccess, setLastSuccess] = useState<{ read: LiveWorkerRead; jobsLimit: number } | null>(null);
+  const [jobsError, setJobsError] = useState<Error | null>(null);
+  const { show: showToast } = useToast();
+  if (
+    query.isSuccess &&
+    !query.isPlaceholderData &&
+    (query.data !== lastSuccess?.read || jobsLimit !== lastSuccess?.jobsLimit)
+  ) {
+    setLastSuccess({ read: query.data, jobsLimit });
+  }
+  if (query.isError && lastSuccess && jobsLimit > lastSuccess.jobsLimit) {
+    setJobsError(query.error);
+    setJobsLimit(lastSuccess.jobsLimit);
+  }
+  useEffect(() => {
+    if (jobsError) showToast(actionErrorMessage('load older jobs', jobsError), { tone: 'error' });
+  }, [jobsError, showToast]);
+  const read = query.data ?? lastSuccess?.read;
   const events = useLiveWorkerEvents(slug, source, filters);
   const sources = useLiveSources(slug);
   const state = useSetWorkerState(slug, source);
@@ -102,7 +133,7 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
   }, [location.hash, query.data]);
   const status = sources.data?.sources.find((item) => item.key === source || item.id === source);
   const sourceControl = <SourceControl key="source" slug={slug} source={source} status={status} />;
-  if (!query.data)
+  if (!read)
     return (
       <div className={`${fullWidth} ${liveStyles.page}`}>
         <PageHeader title="Worker" meta={[sourceControl]} />
@@ -140,7 +171,7 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
         />
       ) : null}
       <WorkerPageView
-        read={query.data}
+        read={read}
         source={source}
         status={status}
         sourceControl={sourceControl}
@@ -164,6 +195,8 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
         onRestore={restore.mutateAsync}
         onCreateJob={createJob.mutateAsync}
         onCancelJob={cancelJob.mutateAsync}
+        jobsLimit={jobsLimit}
+        onJobsLimit={setJobsLimit}
       />
     </>
   );

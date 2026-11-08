@@ -13,7 +13,12 @@ export function JobsBlock({
   onBackfill,
   onCancelJob,
   busy,
-}: { jobs: LiveJob[]; busy: WorkerBusy; onBackfill: () => void } & Pick<WorkerCallbacks, 'onCancelJob'>) {
+  jobsLimit,
+  onJobsLimit,
+}: { jobs: LiveJob[]; busy: WorkerBusy; onBackfill: () => void; jobsLimit: number } & Pick<
+  WorkerCallbacks,
+  'onCancelJob' | 'onJobsLimit'
+>) {
   const [cancel, setCancel] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const columns: Column<LiveJob>[] = [
@@ -21,7 +26,16 @@ export function JobsBlock({
       id: 'kind',
       header: 'Kind',
       priority: 1,
-      cell: (row) => <Tag>{row.kind === 'backfill_preview' ? 'Preview' : 'Backfill'}</Tag>,
+      cell: (row) => (
+        <div className={styles.inline}>
+          <Tag>{row.kind === 'backfill_preview' ? 'Preview' : 'Backfill'}</Tag>
+          {row.params.redo?.includes('all') ? (
+            <Tag>redo all</Tag>
+          ) : row.params.redo?.includes('inconclusive') ? (
+            <Tag>redo inconclusive</Tag>
+          ) : null}
+        </div>
+      ),
     },
     {
       id: 'range',
@@ -69,10 +83,19 @@ export function JobsBlock({
       header: 'Progress',
       priority: 2,
       cell: (row) => (
-        <span className={styles.wrap}>
-          {row.progress.evaluated ?? 0} / {row.progress.found ?? 0} evaluated, {row.progress.failed ?? 0}{' '}
-          failed
-        </span>
+        <div className={styles.wrap}>
+          {row.progress.evaluated ?? 0} / {row.progress.found ?? 0} turns evaluated
+          {(row.progress.skipped_existing ?? 0) > 0
+            ? `, ${row.progress.skipped_existing} already evaluated`
+            : ''}
+          {(row.progress.redone ?? 0) > 0 ? `, ${row.progress.redone} redone` : ''}
+          {`, ${row.progress.failed ?? 0} failed`}
+          {typeof row.progress.listed === 'number' ? (
+            <Text as="div" variant="sm" tone="muted">
+              {row.progress.listed} traces listed
+            </Text>
+          ) : null}
+        </div>
       ),
     },
     {
@@ -126,6 +149,18 @@ export function JobsBlock({
       ) : (
         <EmptyState title="No jobs yet" />
       )}
+      {jobs.length ? (
+        <div className={styles.inline}>
+          <Text variant="sm" tone="muted">
+            Newest {jobs.length} jobs
+          </Text>
+          {jobs.length >= jobsLimit && jobsLimit < 200 ? (
+            <Button onPress={() => onJobsLimit?.(jobsLimit < 50 ? 50 : jobsLimit < 100 ? 100 : 200)}>
+              Show older jobs
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {error ? (
         <ErrorState compact error={error} title="Couldn’t cancel the job" message={errorSentence(error)} />
       ) : null}

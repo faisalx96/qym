@@ -247,15 +247,6 @@
   gap: var(--space-sm);
 }
 
-.trendPlot [data-live-gap='true'] [data-part='bar'] {
-  flex: 1;
-  min-block-size: var(--bar-action-h);
-}
-
-.trendPlot [data-live-gap='true'] [data-part='well']::before {
-  flex: 0;
-}
-
 /* Reserve the measured implementation's frames during the pending delay (impl-*.json). */
 .loading {
   --live-status-height: calc(var(--control-height) + var(--space-md));

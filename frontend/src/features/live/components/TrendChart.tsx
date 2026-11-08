@@ -5,8 +5,8 @@ import { BarColumns, useMeasuredWidth, type BarSpec } from '@/features/run-detai
 import { useSearchParamsState } from '@/lib/url-state';
 import { SegmentedControl, type CardTone } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
-import { diagnosisSpec, mixSegments } from '../lib/mix';
-import { columnPitch, formatPrimaryMean, trendColumns } from '../lib/trend';
+import { diagnosisSpec } from '../lib/mix';
+import { columnPitch, formatPrimaryMean, trendColumns, trendLabels, trendSegments } from '../lib/trend';
 import styles from '../live.module.css';
 
 const toneFill: Record<CardTone, string> = {
@@ -63,7 +63,7 @@ export function TrendChart({
   for (const item of spec?.values ?? []) {
     if (typeof item.value === 'string') legendCounts[item.value] = legendCounts[item.value] || 1;
   }
-  const labels: { value: string | null; label: string; tone: CardTone }[] = mixSegments(legendCounts, spec);
+  const labels: { value: string | null; label: string; tone: CardTone }[] = trendSegments(legendCounts, spec);
   if (columns.some((column) => column.stacks.some((stack) => stack.value === null))) {
     labels.push({ value: null, label: 'Undiagnosed', tone: 'neutral' });
   }
@@ -71,14 +71,19 @@ export function TrendChart({
     specs.find((item) => item.is_primary) ?? specs.find((item) => item.metric_name === primaryMetric);
   const primaryLabel = primary?.label ?? 'Primary mean';
   const showRate = primary?.score_type === 'percentage' || primary?.score_type === 'boolean';
-  const bars: BarSpec[] = columns.map((column) => ({
+  const axisLabels = trendLabels(
+    columns.map((column) => column.day),
+    pitch.bar + pitch.gap,
+  );
+  const bars: BarSpec[] = columns.map((column, index) => ({
     key: column.day,
     count: column.total,
-    label: column.day.slice(8),
-    zero: column.gap ? 'hide' : 'show',
-    color: column.gap
+    ...axisLabels[index]!,
+    zero: 'show',
+    color: stackedFill(column.stacks, column.total),
+    baseline: column.gap
       ? 'repeating-linear-gradient(135deg, var(--border-strong) 0 var(--space-xs), var(--bg-elevated) var(--space-xs) var(--space-sm))'
-      : stackedFill(column.stacks, column.total),
+      : undefined,
     name: `${column.day}: ${column.total} turns, ${primaryLabel} ${formatPrimaryMean(column.rate, primary)}${column.gap ? ', worker gap' : ''}`,
     tip: (
       <div>
@@ -145,7 +150,7 @@ export function TrendChart({
           </div>
           <span>
             {columns.length ? `${columns[0]!.day} – ${columns.at(-1)!.day} · ` : ''}
-            UTC · hatched column: worker gap
+            UTC · hatched baseline: worker gap
           </span>
         </div>
       }
