@@ -274,6 +274,7 @@ class WorkerJobBody(BaseModel):
     since_day: date
     until_day: date
     limit: int
+    redo: Optional[list[Literal["failed", "inconclusive", "all"]]] = None
 
 
 def _worker_project(db: Session, principal: Principal, project_slug: str) -> Project:
@@ -390,6 +391,7 @@ def _settings_error(exc: live_worker_settings.SettingsError) -> NoReturn:
 
 @live_router.get("/api/projects/{project_slug}/live/worker")
 def project_live_worker(
+    jobs_limit: int = Query(default=20, ge=1, le=200),
     selected: LiveSource = Depends(_worker_source),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -398,7 +400,7 @@ def project_live_worker(
         db.query(LiveJob)
         .filter_by(source_id=selected.id)
         .order_by(LiveJob.requested_at.desc(), LiveJob.id.desc())
-        .limit(20)
+        .limit(jobs_limit)
         .all()
     )
     keys = (
@@ -626,6 +628,7 @@ def project_live_worker_job(
             PlatformSettings(),
             principal.user.id,
             live_overview.utcnow(),
+            redo=body.redo,
         )
     except live_jobs.JobError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc

@@ -78,10 +78,16 @@ def create_job(
     settings: PlatformSettings,
     actor_user_id: Optional[str],
     now: datetime,
+    redo: Optional[list[str]] = None,
 ) -> LiveJob:
     """Queue one inclusive calendar-day range per source and job kind."""
     if kind not in ("backfill_preview", "backfill"):
         raise JobError(422, "invalid job kind")
+    if redo is not None:
+        if len(redo) != len(set(redo)):
+            raise JobError(422, "redo must not contain duplicate labels")
+        if "all" in redo and len(redo) > 1:
+            raise JobError(422, "redo all must not be combined with others")
     if until_day < since_day:
         raise JobError(422, "until_day before since_day")
     if (until_day - since_day).days + 1 > settings.live_job_max_days:
@@ -118,6 +124,11 @@ def create_job(
             "since": to_api_timestamp(datetime.combine(since_day, time.min, zone)),
             "until": to_api_timestamp(datetime.combine(until_day, time.max, zone)),
             "limit": limit,
+            "redo": (
+                []
+                if kind == "backfill_preview"
+                else ["failed"] if redo is None else list(redo)
+            ),
         },
         status="queued",
         requested_by_user_id=actor_user_id,

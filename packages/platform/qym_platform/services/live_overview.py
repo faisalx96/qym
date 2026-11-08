@@ -454,7 +454,7 @@ def overview_payload(
         "trend": trend(
             db,
             source,
-            day,
+            max(day, now.date()),
             max(1, min(trend_days, settings.live_trend_max_days)),
             primary_name=primary_name,
         ),

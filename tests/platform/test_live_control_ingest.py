@@ -402,9 +402,12 @@ def test_progress_stamps_started_and_finished(
     }
     later = NOW + timedelta(minutes=1)
     monkeypatch.setattr("qym_platform.services.live_ingest.utcnow", lambda: later)
-    assert _progress(client, progress={"evaluated": 2}).status_code == 200
+    assert _progress(client, progress={"evaluated": 2, "redone": 5}).status_code == 200
     response = _progress(
-        client, status=terminal, progress={"evaluated": 3}, error="x" * 2001
+        client,
+        status=terminal,
+        progress={"evaluated": 3, "listed": 20, "redone": 2},
+        error="x" * 2001,
     )
     assert response.status_code == 200, response.text
     with session_factory() as db:
@@ -412,7 +415,7 @@ def test_progress_stamps_started_and_finished(
         assert job.started_at == NOW
         assert job.finished_at == later
         assert job.updated_at == later
-        assert job.progress == {"evaluated": 3}
+        assert job.progress == {"evaluated": 3, "listed": 20, "redone": 2}
         assert job.error == ("x" * 2000 if terminal == "failed" else None)
 
 

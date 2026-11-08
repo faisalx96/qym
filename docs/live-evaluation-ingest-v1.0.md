@@ -412,7 +412,8 @@ shared caches. Continue control polling while paused so resume can be observed.
 | `settings.secrets_withheld` | boolean | `true` instead of `secrets` for other project keys, or when no worker key is selected |
 | `jobs` | array | Queued and running jobs, ordered by request time then ID |
 | `jobs[].id`, `jobs[].kind` | string | Job ID and `backfill_preview` or `backfill` |
-| `jobs[].params` | object | `since_day`, `until_day`, UTC `since`/`until`, and `limit` |
+| `jobs[].params` | object | `since_day`, `until_day`, UTC `since`/`until`, `limit`, and `redo` |
+| `jobs[].params.redo` | array of strings | Existing rows to re-evaluate: `failed`, `inconclusive`, or `all`; defaults to `["failed"]` for backfill, always `[]` for preview |
 | `jobs[].status`, `jobs[].progress` | string, object | Current status and counters |
 | `jobs[].cancel_requested` | boolean | Worker should stop this job between turns |
 
@@ -422,6 +423,18 @@ this is a successful `200`, not a `403`. Authentication still rejects invalid,
 revoked and out-of-project keys. Secret resolution errors in `errors` do not
 change the HTTP status; do not apply an incomplete configuration. A stored
 secret that cannot be decrypted returns `500` (`secret_cannot_be_decrypted`).
+
+The UI read endpoint `GET /api/projects/{project_slug}/live/worker` accepts:
+
+| Query parameter | Type | Default / limits |
+|---|---|---|
+| `jobs_limit` | integer | Default `20`; `1`–`200`; returns the newest jobs first |
+
+To queue a job, `POST /api/projects/{project_slug}/live/worker/jobs` accepts an
+optional `redo` array alongside `kind`, `since_day`, `until_day`, and `limit`.
+Omitting it (or passing null) defaults to `["failed"]` for `backfill`; an explicit
+`[]` requests no redo. `backfill_preview` always stores `[]`. Duplicate labels or
+`all` combined with any other label return `422`.
 
 ### 3.10 `POST /sources/{key}/jobs/{job_id}/progress` — Job progress
 
@@ -447,6 +460,9 @@ The counters `found`, `skipped_existing`, `evaluated` and `failed` must be
 nonnegative integers (not booleans) and must never decrease. An omitted counter
 is treated as zero, so send the complete latest counters on every update,
 including completion and cancellation.
+
+Additional progress keys, including `listed` and `redone`, are stored unchanged
+and are not required to be monotonic. They may be reported only at completion.
 
 | HTTP / scope | `error.code` | Exact detail or message | Meaning / action |
 |---|---|---|---|

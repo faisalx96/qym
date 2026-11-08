@@ -28,6 +28,9 @@ BASE = "/api/projects/test/live"
 @pytest.fixture(autouse=True)
 def _auth_mode(monkeypatch):
     monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
+    monkeypatch.setattr(
+        "qym_platform.services.live_overview.utcnow", lambda: datetime(2026, 11, 1, 12)
+    )
 
 
 @pytest.fixture()
@@ -205,7 +208,10 @@ def test_metric_means_exclude_skipped_and_null_when_all_skipped(client):
     assert means["chart_fidelity"]["spec"]["group"] == "charts"
 
 
-def test_pushed_day_wins_over_turn_at(client):
+def test_pushed_day_wins_over_turn_at(client, monkeypatch):
+    monkeypatch.setattr(
+        "qym_platform.services.live_overview.utcnow", lambda: datetime(2026, 10, 31, 12)
+    )
     body = _overview(client, day="2026-10-31", trend_days=2)
     assert body["day"]["in_qym"] == 6
     assert body["day"]["label_mix"]["inconclusive"] == 1
@@ -249,6 +255,23 @@ def test_service_rates_and_fault_breakdown(client, session_factory):
         "n": 6,
         "fault_breakdown": {},
     }
+
+
+@pytest.mark.parametrize(
+    "day, expected_days",
+    [
+        ("2026-10-30", ["2026-10-31", "2026-11-01"]),
+        ("2026-11-02", ["2026-11-01", "2026-11-02"]),
+    ],
+)
+def test_trend_ends_at_today_or_selected_future_day(client, day, expected_days):
+    body = _overview(client, day=day, trend_days=2)
+    assert [row["day"] for row in body["trend"]] == expected_days
+    if day == "2026-10-30":
+        assert body["trend"][-1]["turns"] == 6
+        assert body["day"]["row"]["day"] == day
+        assert body["day"]["in_qym"] == 6
+        assert body["days"]["rows"][0]["day"] == "2026-11-01"
 
 
 def test_trend_has_one_entry_per_day_with_zeros(client, monkeypatch):

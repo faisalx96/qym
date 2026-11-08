@@ -249,6 +249,33 @@ def test_read_without_version_and_with_version(client, session_factory, values):
     )
 
 
+@pytest.mark.parametrize("jobs_limit", [1, 50, 200])
+def test_read_jobs_limit(client, session_factory, jobs_limit):
+    with session_factory() as db:
+        for i in range(205):
+            db.add(
+                LiveJob(
+                    id=f"job-{i}",
+                    source_id="source",
+                    kind="backfill",
+                    status="done",
+                    requested_at=NOW + timedelta(seconds=i),
+                )
+            )
+        db.commit()
+    jobs = read(client, jobs_limit=jobs_limit)["jobs"]
+    assert [job["id"] for job in jobs] == [
+        f"job-{i}" for i in range(204, 204 - jobs_limit, -1)
+    ]
+
+
+@pytest.mark.parametrize("jobs_limit", [0, 201])
+def test_read_jobs_limit_bounds(client, jobs_limit):
+    response = client.get(BASE, headers=ADMIN, params={"jobs_limit": jobs_limit})
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_error"
+
+
 @pytest.mark.parametrize("with_day", [False, True])
 def test_read_today_uses_utc_day_and_selected_source(client, session_factory, with_day):
     with session_factory() as db:
@@ -504,6 +531,13 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
         ({"until_day": "2026-02-01"}, "At most 31 days per job"),
         ({"limit": 0}, "limit must be 1 to 2000"),
         ({"limit": 2001}, "limit must be 1 to 2000"),
+        ({"redo": ["failed", "failed"]}, "redo must not contain duplicate labels"),
+        ({"redo": ["all", "all"]}, "redo must not contain duplicate labels"),
+        ({"redo": ["all", "failed"]}, "redo all must not be combined with others"),
+        (
+            {"redo": ["inconclusive", "all"]},
+            "redo all must not be combined with others",
+        ),
         (
             {"since_day": "2026-11-05", "until_day": "2026-11-05"},
             "until_day in the future",
@@ -518,6 +552,7 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
     assert response.status_code == 201, response.text
     assert response.json()["status"] == "queued"
     assert response.json()["requested_by"] == "Owner"
+    assert response.json()["params"]["redo"] == ["failed"]
     duplicate = client.post(BASE + "/jobs", headers=ADMIN, json=JOB)
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"] == "a backfill job is already queued or running"
@@ -526,12 +561,11 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
         db.get(LiveJob, response.json()["id"]).status = "running"
         db.commit()
     assert client.post(BASE + "/jobs", headers=ADMIN, json=JOB).status_code == 409
-    assert (
-        client.post(
-            BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": "backfill_preview"}
-        ).status_code
-        == 201
+    preview = client.post(
+        BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": "backfill_preview"}
     )
+    assert preview.status_code == 201, preview.text
+    assert preview.json()["params"]["redo"] == []
     with session_factory() as db:
         db.add(
             LiveSource(
@@ -555,6 +589,33 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
         client.post(BASE + "/jobs", headers=ADMIN, json=JOB).json()["detail"]
         == "At most 2 days per job"
     )
+
+
+@pytest.mark.parametrize("kind", ["backfill", "backfill_preview"])
+@pytest.mark.parametrize(
+    "redo",
+    [None, [], ["failed"], ["inconclusive"], ["failed", "inconclusive"], ["all"]],
+)
+def test_jobs_redo(client, session_factory, kind, redo):
+    response = client.post(
+        BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": kind, "redo": redo}
+    )
+    assert response.status_code == 201, response.text
+    expected = (
+        [] if kind == "backfill_preview" else ["failed"] if redo is None else redo
+    )
+    assert response.json()["params"]["redo"] == expected
+    assert read(client)["jobs"][0]["params"]["redo"] == expected
+    with session_factory() as db:
+        assert db.get(LiveJob, response.json()["id"]).params["redo"] == expected
+
+
+def test_jobs_redo_unknown_label(client):
+    response = client.post(
+        BASE + "/jobs", headers=ADMIN, json={**JOB, "redo": ["success"]}
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_error"
 
 
 @pytest.mark.parametrize("stale_precheck", [False, True])
@@ -627,6 +688,7 @@ def test_jobs_params_are_utc_bounds_of_the_source_timezone(client, session_facto
         "since_day": "2026-11-04",
         "until_day": "2026-11-04",
         "limit": 2000,
+        "redo": ["failed"],
         "since": "2026-11-03T21:00:00Z",
         "until": "2026-11-04T20:59:59.999999Z",
     }
