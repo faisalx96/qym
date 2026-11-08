@@ -458,7 +458,7 @@ function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaul
           {fields.length ? ` · fields: ${fields.map(fieldLabel).join(', ')}` : ''}
         </span>
         <span className={styles.rowSide}>
-          <UserPill user={entry.edited_by} label="Edited By:" />
+          <UserPill user={entry.edited_by} label="Edited by" />
         </span>
       </button>
       {open ? (
@@ -521,7 +521,7 @@ function ItemRow({
               : ''}
         </span>
         <span className={styles.rowSide}>
-          <UserPill user={item.edited_by} label="Edited By:" />
+          <UserPill user={item.edited_by} label="Edited by" />
         </span>
       </button>
       {open ? (

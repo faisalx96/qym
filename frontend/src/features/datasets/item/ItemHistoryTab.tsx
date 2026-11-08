@@ -70,7 +70,7 @@ export function ItemHistoryTab({
           <header className={styles.versionHead}>
             <span className={styles.versionLabel}>{v.version}</span>
             <VersionBadge version={v} />
-            <UserPill user={v.created_by} label="Drafted By:" />
+            <UserPill user={v.created_by} label="Drafted by" />
             <span className={styles.when}>{formatDate(v.created_at)}</span>
           </header>
           {revisions.length ? (
@@ -119,7 +119,7 @@ export function ItemHistoryTab({
                               }
                             : null)
                         }
-                        label="Edited By:"
+                        label="Edited by"
                       />
                       <span className={styles.when}>{formatDate(r.created_at)}</span>
                       {typeChanged.length ? (
