@@ -1075,9 +1075,11 @@
   padding-block: var(--space-sm);
 }
 
+/* D-10: the pager sits in the exact centre; the start (filter note) and end slots share the free space. */
 .footer {
   min-height: var(--table-footer-height);
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   border-top: 1px solid var(--border-subtle);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
@@ -1091,6 +1093,18 @@
   flex-wrap: wrap;
   gap: var(--space-sm);
   min-width: 0;
+}
+
+.footerEnd {
+  justify-content: flex-end;
+}
+
+/* Narrow screens keep the flex footer: the note, the pager and the end items wrap. */
+@media (width < 640px) {
+  .footer {
+    display: flex;
+    justify-content: space-between;
+  }
 }
 
 /* A-01: a centred control (the 'Show N more' button): the start and end parts take equal widths, so it sits in the
