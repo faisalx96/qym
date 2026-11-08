@@ -138,7 +138,7 @@
   height: auto;
   min-width: 160px;
   padding: var(--space-sm);
-  background: var(--bg-base);
+  background: var(--card-bg);
   color: var(--text-primary);
   font-size: var(--font-base);
   font-weight: 600;
@@ -146,21 +146,19 @@
   text-transform: none;
   white-space: normal;
   vertical-align: top;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .matrix td {
   min-width: 200px;
   padding: var(--space-sm);
-  border-bottom: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: var(--font-base);
   vertical-align: top;
 }
 
-.matrix tbody tr:last-child th,
-.matrix tbody tr:last-child td {
-  border-bottom: 0;
+.matrix tbody tr:nth-child(even) > th,
+.matrix tbody tr:nth-child(even) > td {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step), var(--card-bg)); /* page stripe (D-01) */
 }
 
 .comboLabel {
