@@ -10,6 +10,8 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  Flag,
+  Icon,
   PageHeader,
   RunName,
   RunStatusBadge,
@@ -17,11 +19,11 @@ import {
   Select,
   Skeleton,
   StatStrip,
-  Tag,
   TaskTag,
   Text,
   Card as UiCard,
   type Column,
+  type IconName,
 } from '@/ui';
 import { constrained, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { projectPath, runPath } from '@/app/routes';
@@ -43,9 +45,16 @@ const LIVE = ['RUNNING', 'PENDING'];
 const NON_LIVE = ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED', 'STOPPED'];
 type Origin = 'all' | 'official' | 'local';
 type Days = '7' | '30' | '90';
+const KPI_ICON: Record<'runs' | 'execution_success' | 'runs_with_errors' | 'models' | 'items', IconName> = {
+  runs: 'chart',
+  execution_success: 'check',
+  runs_with_errors: 'warning',
+  models: 'feedback',
+  items: 'list',
+};
 
 export function OverviewPage() {
-  const { slug, project, readOnly } = useProjectContext();
+  const { slug, readOnly } = useProjectContext();
   useDocumentTitle('Dashboard');
   const { params, replaceUrlQuery } = useSearchParamsState();
   const origin = (
@@ -134,7 +143,7 @@ export function OverviewPage() {
     <RunsCtx.Provider value={ctx}>
       <div className={constrained} data-testid="overview-page">
         <PageHeader
-          title={project.name}
+          title="Dashboard"
           description="Project overview and recent activity."
           actions={
             <SegmentedControl<Origin>
@@ -165,17 +174,24 @@ export function OverviewPage() {
                 label: e.name,
                 value: e.value,
                 tone:
-                  e.key === 'runs'
-                    ? 'accent'
-                    : e.key === 'execution_success'
-                      ? 'success'
-                      : e.key === 'runs_with_errors' && kpis.runs_with_errors
-                        ? 'danger'
-                        : undefined,
+                  e.key === 'execution_success'
+                    ? 'success'
+                    : e.key === 'runs_with_errors' && kpis.runs_with_errors
+                      ? 'danger'
+                      : undefined,
+                icon: <Icon name={KPI_ICON[e.key]} />,
                 sub:
                   e.key === 'runs'
-                    ? `${scope.label}${approvedCount !== undefined ? ` · ${approvedCount} approved` : ''}${updating ? ' · Updating…' : ''}`
-                    : scope.label,
+                    ? [
+                        scope.filtered ? scope.label : null,
+                        approvedCount !== undefined ? `${approvedCount} approved` : null,
+                        updating ? 'Updating…' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ') || undefined
+                    : scope.filtered
+                      ? scope.label
+                      : undefined,
                 help: e.title,
               }))}
             />
@@ -306,6 +322,7 @@ export function OverviewPage() {
                           <Link
                             to={`${projectPath(slug, 'reviews')}?status=pending&id=${encodeURIComponent(String(c.id))}`}
                             className={styles.reviewLink}
+                            data-link="name"
                             title={`Open review #${c.id}`}
                           >
                             #{String(c.id)}
@@ -316,7 +333,7 @@ export function OverviewPage() {
                       {pendingTotal > pendingItems.length ? (
                         <li>
                           <Text variant="sm" tone="muted" as="span">
-                            + {pendingTotal - pendingItems.length} more pending
+                            and {pendingTotal - pendingItems.length} more pending
                           </Text>
                         </li>
                       ) : null}
@@ -390,9 +407,9 @@ function RunLink({ slug, row }: { slug: string; row: RunRow }) {
   return (
     <span className={styles.runLine}>
       {link}
-      <Tag kind="accent" title="Run launched by an official experiment">
+      <Flag tone="info" icon="shield" title="Run launched by an official experiment">
         Official
-      </Tag>
+      </Flag>
     </span>
   );
 }
@@ -535,7 +552,8 @@ function Part({
           </Text>
         ) : null}
         <Link to={to} className={styles.viewAll}>
-          View all →<span className={styles.srOnly}> {title}</span>
+          View all <Icon name="chevron-right" size={12} aria-hidden />
+          <span className={styles.srOnly}> {title}</span>
         </Link>
       </header>
       {failed ? (
@@ -591,7 +609,8 @@ function Card({
           {aside}
           {!hideViewAll ? (
             <Link to={to} className={styles.viewAll}>
-              View all →<span className={styles.srOnly}> {title}</span>
+              View all <Icon name="chevron-right" size={12} aria-hidden />
+              <span className={styles.srOnly}> {title}</span>
             </Link>
           ) : null}
         </header>
