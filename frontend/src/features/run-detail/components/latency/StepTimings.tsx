@@ -7,6 +7,7 @@ import { forwardRef, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { stepLatencyUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import {
+  ActionTile,
   Button,
   Card,
   ChartTooltipHost,
@@ -254,9 +255,15 @@ export const StepTimings = forwardRef<
                 </Button>
               }
               items={[
-                { id: 'csv-summary', label: 'CSV summary' },
-                { id: 'csv-spans', label: 'CSV raw spans' },
-                { id: 'svg', label: 'SVG plot', disabled: !rows.length },
+                { id: 'csv-summary', label: 'CSV summary', icon: <ActionTile icon="sheet" /> },
+                { id: 'csv-spans', label: 'CSV raw spans', icon: <ActionTile icon="sheet" /> },
+                {
+                  id: 'svg',
+                  label: 'SVG plot',
+                  icon: <ActionTile icon="picture" />,
+                  disabled: !rows.length,
+                  disabledReason: rows.length ? undefined : 'No step matches the search',
+                },
               ]}
               onAction={onExport}
             />
