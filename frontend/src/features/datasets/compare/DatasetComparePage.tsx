@@ -261,7 +261,7 @@ function DownloadDiff({
   const toast = useToast();
   return (
     <Button
-      variant="neutral"
+      variant="accent"
       icon={<Icon name="download" size={12} />}
       loading={busy}
       data-testid="download-diff"
