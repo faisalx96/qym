@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
 import {
   Button,
+  ClearFiltersButton,
   DropdownMenu,
   Icon,
   IconButton,
@@ -121,9 +122,7 @@ function NavFilters() {
         />
       </Popover>
       {count > 0 ? (
-        <Button size="sm" variant="ghost" onPress={() => api.clearFilters()} data-testid="nav-clear-filters">
-          Clear ({count})
-        </Button>
+        <ClearFiltersButton count={count} onClear={() => api.clearFilters()} testId="nav-clear-filters" />
       ) : null}
     </>
   );

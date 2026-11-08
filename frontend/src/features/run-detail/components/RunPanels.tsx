@@ -2,7 +2,16 @@
 import { useState } from 'react';
 import { projectPath } from '@/app/routes';
 import { JobStatusBadge } from '@/features/experiments/components/StatusBadges';
-import { Card, Flag, LinkButton, StatusMark, Tag, type StatusShape, type StatusTone } from '@/ui';
+import {
+  Card,
+  Flag,
+  InlineNotice,
+  LinkButton,
+  StatusMark,
+  Tag,
+  type StatusShape,
+  type StatusTone,
+} from '@/ui';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
@@ -262,13 +271,13 @@ export function RunNotices({ run, readOnly }: { run: Run; readOnly: boolean }) {
   return (
     <>
       {readOnly ? (
-        <div className={styles.notice} role="note" data-testid="read-only-notice">
-          <b>{READ_ONLY_COPY.lead}</b> {READ_ONLY_COPY.body}
-        </div>
+        <InlineNotice tone="neutral" icon="info" lead={READ_ONLY_COPY.lead} data-testid="read-only-notice">
+          {READ_ONLY_COPY.body}
+        </InlineNotice>
       ) : lock ? (
-        <div className={styles.notice} role="note" data-testid="scores-locked-notice">
-          <b>{lock.lead}</b> {lock.body}
-        </div>
+        <InlineNotice tone="neutral" icon="info" lead={lock.lead} data-testid="scores-locked-notice">
+          {lock.body}
+        </InlineNotice>
       ) : null}
     </>
   );

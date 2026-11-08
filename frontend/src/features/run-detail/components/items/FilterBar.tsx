@@ -196,12 +196,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
         {chips.length ? (
           <span className={styles.chipList}>
             {chips.map((chip) => (
-              <Chip
-                key={chip.key}
-                isSelected
-                removeLabel={`Remove filter ${chip.label}`}
-                onRemove={() => api.replaceView(chip.clear(view))}
-              >
+              <Chip key={chip.key} isSelected>
                 {chip.label}
               </Chip>
             ))}
