@@ -57,6 +57,9 @@ export interface SelectProps<T extends SelectItem> {
   /** 'bar' = the filter-bar trigger (BarTrigger of ui/MultiSelect): the label inside the button, then ' · <value label>'
    * when the value is not the first (default) item; accent tint when set. */
   triggerVariant?: 'field' | 'bar';
+  /** Marks the field invalid without an error message (a form that shows its errors elsewhere). */
+  isInvalid?: boolean;
+  'aria-describedby'?: string;
 }
 
 /** Single select on the 24px control, listbox popover, optional search. */
@@ -83,6 +86,8 @@ export function Select<T extends SelectItem>({
   autoFocus,
   onOpenChange,
   triggerVariant = 'field',
+  isInvalid,
+  'aria-describedby': ariaDescribedBy,
 }: SelectProps<T>) {
   const bar = triggerVariant === 'bar';
   const selected = items.find((i) => i.key === value);
@@ -124,7 +129,8 @@ export function Select<T extends SelectItem>({
       onSelectionChange={(k) => onChange(k)}
       isDisabled={isDisabled}
       isRequired={isRequired}
-      isInvalid={errorMessage ? true : undefined}
+      isInvalid={isInvalid ?? (errorMessage ? true : undefined)}
+      aria-describedby={ariaDescribedBy}
       placeholder={placeholder}
       name={name}
       isOpen={open}
