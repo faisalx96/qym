@@ -1,4 +1,4 @@
-/* .qym-tabs: underline-only active state; dense variant for chart dataset tabs. */
+/* .qym-tabs: underline-only active state (horizontal) or start bar (vertical). */
 .tabs {
   display: flex;
   flex-direction: column;
@@ -128,31 +128,6 @@
 
 .tab[data-tone='danger'][data-selected] .count {
   color: var(--text-primary);
-}
-
-/* Dense dataset tabs: elevated strip, filled active surface. */
-.tabs[data-variant='dense'] .list {
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-}
-
-.tabs[data-variant='dense'] .tab {
-  min-height: var(--control-height);
-  padding: 0 var(--space-sm);
-  border-bottom: 0;
-  margin-bottom: 0;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-}
-
-.tabs[data-variant='dense'] .tab[data-selected] {
-  background: var(--bg-active);
-  color: var(--accent-primary);
-  box-shadow: inset 0 -2px 0 var(--accent-primary);
 }
 
 .panel {

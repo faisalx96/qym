@@ -15,7 +15,7 @@ export interface TabsProps {
   items: TabItem[];
   selected: string;
   onSelect: (id: string) => void;
-  /** underline (default) | dense (elevated strip with count tiles) */
+  /** cv3-shim: remove after D-24 (deprecated: there is one tab look; this prop does nothing). */
   variant?: 'underline' | 'dense';
   /** `<TabPanel id>` children */
   children?: ReactNode;
@@ -29,7 +29,6 @@ export function Tabs({
   items,
   selected,
   onSelect,
-  variant = 'underline',
   children,
   className,
   orientation = 'horizontal',
@@ -64,7 +63,6 @@ export function Tabs({
       disabledKeys={items.filter((i) => i.disabled).map((i) => i.id)}
       orientation={orientation}
       className={[styles.tabs, className].filter(Boolean).join(' ')}
-      data-variant={variant}
     >
       <TabList ref={listRef} aria-label={label} className={styles.list}>
         {items.map((item) => (
