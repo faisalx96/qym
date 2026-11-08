@@ -367,6 +367,9 @@
 }
 
 .linkButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   padding: 0;
   border: 0;
   background: none;
