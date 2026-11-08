@@ -1,6 +1,6 @@
 /**
  * The metrics of an expanded item (round 3 P5): one matrix, metric rows by pass columns (or Score and Reason for one
- * pass), a Mean column, 8 rows then "Show N more metrics". A value opens ONE detail panel under the matrix (reason, judge
+ * pass), a Mean column, 8 rows then "Show N more". A value opens ONE detail panel under the matrix (reason, judge
  * metadata, edit). The matrix is a DataTable grid; cells are buttons with a roving tabindex (arrows, Home / End,
  * Enter / Space open, Escape closes).
  */
@@ -288,12 +288,12 @@ export function MetricMatrix({
       {rows.length > DEFAULT_METRIC_ROWS ? (
         <Button
           size="sm"
-          variant="ghost"
+          variant="neutral"
           className={styles.more}
           onPress={() => setExpandedRows((v) => !v)}
           aria-expanded={expandedRows}
         >
-          {expandedRows ? 'Show fewer metrics' : `Show ${rows.length - DEFAULT_METRIC_ROWS} more metrics`}
+          {expandedRows ? 'Show fewer' : `Show ${rows.length - DEFAULT_METRIC_ROWS} more`}
         </Button>
       ) : null}
       {pick && pickRow && pickCell && pickPass ? (

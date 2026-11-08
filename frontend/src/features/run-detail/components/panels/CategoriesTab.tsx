@@ -405,7 +405,7 @@ function KeyCard({
       {ordered.length > DEFAULT_VISIBLE_VALUES ? (
         <div className={styles.more}>
           <Button size="sm" variant="neutral" onPress={() => setAll(!all)}>
-            {all ? 'Show fewer' : `Show all ${ordered.length} values`}
+            {all ? 'Show fewer' : `Show ${ordered.length - DEFAULT_VISIBLE_VALUES} more`}
           </Button>
         </div>
       ) : null}

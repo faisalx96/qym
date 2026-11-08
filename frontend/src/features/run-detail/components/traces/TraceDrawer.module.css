@@ -86,22 +86,6 @@
   outline: 2px solid var(--accent-primary);
 }
 
-.tool {
-  padding-block: var(--space-xs);
-  padding: 0 var(--space-sm);
-  border: 0;
-  border-radius: var(--control-radius);
-  background: transparent;
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.tool:hover {
-  color: var(--accent-primary);
-}
-
-.tool:focus-visible,
 .toggle:focus-visible,
 .more:focus-visible {
   outline: 2px solid var(--accent-primary);

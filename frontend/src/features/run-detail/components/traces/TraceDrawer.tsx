@@ -398,7 +398,7 @@ export function TraceDrawer({
         </label>
         <Button
           size="sm"
-          variant="ghost"
+          variant="neutral"
           onPress={() =>
             setExpandedBy((s) => ({
               ...s,
@@ -412,7 +412,11 @@ export function TraceDrawer({
         >
           Expand all
         </Button>
-        <Button size="sm" variant="ghost" onPress={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}>
+        <Button
+          size="sm"
+          variant="neutral"
+          onPress={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}
+        >
           Collapse all
         </Button>
       </div>

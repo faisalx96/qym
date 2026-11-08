@@ -134,7 +134,7 @@ export function OutputRegion({
           />
           <Button
             size="sm"
-            variant="ghost"
+            variant="neutral"
             aria-label="Expand all output keys"
             isDisabled={view === 'raw' || !anyStructured}
             onPress={expandAll}
@@ -143,7 +143,7 @@ export function OutputRegion({
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="neutral"
             aria-label="Collapse all output keys"
             isDisabled={view === 'raw' || !anyStructured}
             onPress={() => setOpen(new Set(defaultOpen))}

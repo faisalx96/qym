@@ -139,7 +139,7 @@ export function ScoreEditor({
         Cancel
       </Button>
       {edited ? (
-        <Button size="sm" variant="ghost" onPress={reset} isDisabled={mutation.isPending}>
+        <Button size="sm" variant="neutral" onPress={reset} isDisabled={mutation.isPending}>
           Reset to scorer value
         </Button>
       ) : null}
