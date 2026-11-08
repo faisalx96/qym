@@ -63,13 +63,22 @@
     border-color var(--transition-fast);
 }
 
+/* D-25: a vertical list marks the selected item with a 2px bar on its start edge, no fill. */
 .tabs[data-orientation='vertical'] > .list > .tab {
   border-bottom: 0;
-  border-inline-end: 2px solid transparent;
+  border-inline-start: 2px solid transparent;
   margin-bottom: 0;
-  margin-inline-end: -1px;
+  margin-inline-end: 0;
   justify-content: space-between;
   min-width: var(--settings-prompt-tab-width);
+}
+
+.tabs[data-orientation='vertical'] > .list > .tab[data-selected] {
+  border-inline-start-color: var(--accent-primary);
+}
+
+.tabs[data-orientation='vertical'] > .list > .tab[data-tone='danger'][data-selected] {
+  border-inline-start-color: var(--error);
 }
 
 .tab[data-hovered] {
