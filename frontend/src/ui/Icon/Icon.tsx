@@ -172,7 +172,8 @@ const PATHS: Record<IconName, string> = {
   'braces-lines':
     'M7 3H6a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M17 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1M9 8h6M9 12h6M9 16h6',
   picture: 'M4 4h16v16H4zM9 7.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM20 15l-5-5L4 20',
-  'html-file': 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M10 12l-2.5 2.5L10 17M14 12l2.5 2.5L14 17',
+  'html-file':
+    'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M10 12l-2.5 2.5L10 17M14 12l2.5 2.5L14 17',
   /* C-23: the zap glyph; E-30: the diamond (stroke only). */
   zap: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   diamond: 'M12 3l9 9-9 9-9-9z',

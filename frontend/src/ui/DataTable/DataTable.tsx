@@ -1652,18 +1652,28 @@ function DataTableInner<R>({
         <td key={col.id} {...common} role="gridcell" data-pseudo="actions" data-fold="">
           <FoldCell label="Row actions">
             <span className={styles.rowActions}>
-              {primary.map((a) => (
-                <Tooltip key={a.id} content={a.hint ?? a.label}>
+              {primary.map((a) => {
+                const button = (
                   <IconButton
+                    key={a.id}
                     label={a.label}
                     icon={a.icon ?? (a.danger ? 'trash' : 'more')}
                     tone={a.danger ? 'danger' : 'default'}
                     tile
                     isDisabled={a.disabled}
+                    disabledReason={a.disabled ? a.hint : undefined}
                     onPress={() => a.onPress(r)}
                   />
-                </Tooltip>
-              ))}
+                );
+                // A locked action with a hint shows it in the reason box (A-22), not a tooltip.
+                return a.disabled && a.hint ? (
+                  button
+                ) : (
+                  <Tooltip key={a.id} content={a.hint ?? a.label}>
+                    {button}
+                  </Tooltip>
+                );
+              })}
               {more.length ? (
                 <DropdownMenu
                   label="Row actions"
@@ -1671,7 +1681,9 @@ function DataTableInner<R>({
                   items={more.map((a) => ({
                     id: a.id,
                     label: a.label,
-                    icon: a.icon ? <ActionTile icon={a.icon} tone={a.danger ? 'danger' : 'default'} /> : undefined,
+                    icon: a.icon ? (
+                      <ActionTile icon={a.icon} tone={a.danger ? 'danger' : 'default'} />
+                    ) : undefined,
                     tone: a.danger ? ('danger' as const) : undefined,
                     disabled: a.disabled,
                     description: a.hint,
