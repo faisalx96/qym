@@ -178,7 +178,9 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
     [
       'Experiment',
       experimentHref ? (
-        <a href={experimentHref}>{String(p.experiment_name ?? experimentId.slice(0, 8))}</a>
+        <a href={experimentHref} data-link="name">
+          {String(p.experiment_name ?? experimentId.slice(0, 8))}
+        </a>
       ) : (
         String(p.experiment_name ?? (experimentId.slice(0, 8) || '—'))
       ),

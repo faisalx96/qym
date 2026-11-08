@@ -64,6 +64,7 @@ export function PassTable({ passes, model, metric, basePath, medianHint, queued 
           to={`${basePath}?pass=${p.pass_number}`}
           aria-label={`Open pass ${p.pass_number}`}
           className={styles.passLink}
+          data-link="name"
         >
           <span className={styles.passDot} aria-hidden="true" />
           Pass {p.pass_number}
