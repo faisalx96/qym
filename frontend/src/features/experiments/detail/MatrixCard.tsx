@@ -223,7 +223,7 @@ function MatrixCell({
       label: 'Cancel',
       tone: 'danger',
       separatorBefore: true,
-      icon: <ActionTile icon="stop" tone="danger" />,
+      icon: <ActionTile icon="ban" tone="danger" />,
       disabled: !canControl || busy,
     });
   const onAction = (id: string) => {

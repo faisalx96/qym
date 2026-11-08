@@ -149,7 +149,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
       label: 'Cancel experiment',
       tone: 'danger',
       separatorBefore: actions.length > 0,
-      icon: <ActionTile icon="stop" tone="danger" />,
+      icon: <ActionTile icon="ban" tone="danger" />,
       disabled: !canControl || flows.busy.has('all'),
     });
 

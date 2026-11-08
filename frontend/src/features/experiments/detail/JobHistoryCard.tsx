@@ -204,7 +204,7 @@ export function JobHistoryCard({
           {
             id: 'cancel',
             label: `Cancel job #${j.combo_index} on ${j.environment_name ?? 'environment'}`,
-            icon: 'close',
+            icon: 'ban',
             primary: true,
             danger: true,
             disabled: !canControl || flows.busy.has(j.id),

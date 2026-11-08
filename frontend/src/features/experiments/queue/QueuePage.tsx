@@ -479,7 +479,7 @@ export function QueuePage() {
                 {
                   id: 'cancel',
                   label: j.status === 'CANCELLING' ? 'Stopping…' : 'Cancel',
-                  icon: 'close',
+                  icon: 'ban',
                   primary: true,
                   danger: true,
                   disabled: !j.can_cancel || readOnly || j.status === 'CANCELLING',
