@@ -5,7 +5,7 @@
  */
 import { useMemo } from 'react';
 import type { Key } from 'react-aria-components';
-import { Button, ClearFiltersButton, Icon, MultiSelect, Popover, SegmentedControl, Slider } from '@/ui';
+import { BarTrigger, ClearFiltersButton, MultiSelect, Popover, SegmentedControl, Slider } from '@/ui';
 import type { CorrectionsPage, ReviewFilters, ReviewSource } from '@/api/reviews';
 import styles from './FilterBar.module.css';
 
@@ -105,13 +105,12 @@ function ConfidenceTrigger({
       label="Confidence"
       placement="bottom start"
       trigger={
-        <Button
-          variant={set ? 'accent' : 'neutral'}
-          iconEnd={<Icon name="chevron-down" size={12} />}
+        <BarTrigger
+          label="Confidence"
+          value={set ? `${filters.confMin}–${filters.confMax}%` : undefined}
+          active={set}
           data-testid="confidence-trigger"
-        >
-          Confidence{set ? ` · ${filters.confMin}–${filters.confMax}%` : ''}
-        </Button>
+        />
       }
     >
       <div className={styles.band} role="group" aria-label="Confidence band">
