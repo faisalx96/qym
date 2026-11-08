@@ -100,7 +100,7 @@ function TableBody({ rows, label }: { rows: Record<string, unknown>[]; label: st
         density="compact"
         densityLocked
         columnMenu={false}
-        zebra={false}
+        stripe="report"
         variant="embedded"
         stickyHeader={false}
       />

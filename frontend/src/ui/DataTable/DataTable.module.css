@@ -4,6 +4,7 @@
   /* Row separators are a faint hairline, and none where zebra stripes already separate the rows: a full-strength line
      on every row read as a grid of boxes (round 10). */
   --row-line: color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  --zebra-step: var(--stripe-step);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -23,6 +24,11 @@
 
 .card[data-zebra] {
   --row-line: transparent;
+}
+
+/* D-01: a table inside a run, compare or experiment report section takes the fainter report stripe. */
+.card[data-stripe='report'] {
+  --zebra-step: var(--stripe-step-report);
 }
 
 .card[data-variant='embedded'] {
@@ -693,7 +699,7 @@
 }
 
 .tr[data-zebra] {
-  --row-base: var(--card-bg);
+  --row-base: color-mix(in srgb, var(--text-primary) var(--zebra-step), var(--bg-base));
 }
 
 .tr[data-clickable] {

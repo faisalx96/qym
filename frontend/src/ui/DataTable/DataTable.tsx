@@ -98,7 +98,10 @@ export interface DataTableProps<R> {
   density?: Density;
   /** The page fixes the density; hides the density menu. */
   densityLocked?: boolean;
+  /** Stripes every second row; on by default ('auto' and true are the same); only false turns them off (D-01). */
   zebra?: boolean | 'auto';
+  /** 'report': the fainter stripe of a table inside a run, compare or experiment report section. */
+  stripe?: 'page' | 'report';
   /** The row under the pointer lights its edge in the accent (round 10: the first qym's By pass table). */
   hoverEdge?: boolean;
   variant?: 'card' | 'embedded';
@@ -416,6 +419,7 @@ function DataTableInner<R>({
   density: densityProp,
   densityLocked,
   zebra = 'auto',
+  stripe = 'page',
   hoverEdge = false,
   variant = 'card',
   stickyHeader = true,
@@ -561,7 +565,6 @@ function DataTableInner<R>({
     virtualize === true || vcfg !== null || (virtualize === undefined && display.length > VIRTUAL_AFTER);
   const scrollParent = vcfg?.scrollParent ?? null;
   const [scrollMargin, setScrollMargin] = useState(0);
-  const dataRows = display.filter((d): d is Extract<DisplayRow<R>, { kind: 'row' }> => d.kind === 'row');
   // Selectable / focusable entries: run rows and their child rows, in display order.
   const entries = display.filter((d): d is TableEntry<R> => d.kind === 'row' || d.kind === 'child');
   // Data marks (ScoreBar fills) grow in once, during the table's first paint of data; rows that scroll in
@@ -1386,8 +1389,7 @@ function DataTableInner<R>({
     const w = floorWidth(c);
     return w + w * capped.share;
   };
-  const zebraOn =
-    zebra === 'auto' ? !embedded && model.density !== 'comfortable' && dataRows.length > 8 : zebra;
+  const zebraOn = zebra !== false;
 
   /* visible width of the scroller, for detailFit="viewport" */
   const [scrollerW, setScrollerW] = useState(0);
@@ -1991,6 +1993,7 @@ function DataTableInner<R>({
         data-variant={variant}
         data-density={model.density}
         data-zebra={zebraOn ? '' : undefined}
+        data-stripe={stripe === 'report' ? 'report' : undefined}
         data-hover-edge={hoverEdge ? '' : undefined}
         data-testid="data-table"
       >
