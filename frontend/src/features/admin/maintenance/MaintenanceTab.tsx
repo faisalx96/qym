@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useDbStats, useMaintenance, useRefreshMaintenance, type DbStats as DbStatsUnion } from '@/api/admin';
+import { formatAgo } from '@/lib/dates';
 import { useDelayedPending } from '@/lib/pending';
 import { Button, Card, DataTable, ErrorState, Section, Skeleton, Text, useToast, type Column } from '@/ui';
 import { formatBytes, formatCount } from '../format';
@@ -84,7 +85,7 @@ const EVENT_COLS: Column<EventRow>[] = [
   },
 ];
 
-/** The table list opens on the largest tables only; 'Show all N tables' expands it in place (C093). */
+/** The table list opens on the largest tables only; 'Show N more' expands it in place (C093). */
 export const LARGEST_TABLES_SHOWN = 10;
 
 /** The statistics tables, loaded on their own: the rest of the tab never waits for them. */
@@ -114,35 +115,35 @@ function DbStatsTables({ query }: { query: ReturnType<typeof useDbStats> }) {
   return (
     <div className={styles.tables}>
       <DataTable
-        density="compact"
+        density="comfortable"
         densityLocked
         aria-label="Run events by type"
         columns={EVENT_COLS}
         rows={stats.run_events_by_type ?? []}
         rowKey={(r) => r.type}
         storageKey="admin-db-events"
-        empty="No run events."
+        empty="No run events"
       />
       <DataTable
-        density="compact"
+        density="comfortable"
         densityLocked
         aria-label="Largest tables"
         columns={TABLE_COLS}
         rows={allTables || hidden <= 0 ? tables : tables.slice(0, LARGEST_TABLES_SHOWN)}
         rowKey={(r) => r.table}
         storageKey="admin-db-tables"
-        empty="No table statistics."
+        empty="No table statistics"
       >
         {hidden > 0 ? (
           <DataTable.Footer
-            summary={
+            filterNote={
               allTables
                 ? `All ${tables.length} tables`
                 : `${LARGEST_TABLES_SHOWN} largest of ${tables.length} tables`
             }
-            trailing={
+            center={
               <Button variant="neutral" size="sm" onPress={() => setAllTables((v) => !v)}>
-                {allTables ? `Show the ${LARGEST_TABLES_SHOWN} largest` : `Show all ${tables.length} tables`}
+                {allTables ? 'Show fewer' : `Show ${hidden} more`}
               </Button>
             }
           />
@@ -196,7 +197,7 @@ export function MaintenanceTab() {
         title="Database"
         description={
           stats.data
-            ? `Statistics refreshed ${Math.round(stats.data.db_stats_age_seconds)} s ago`
+            ? `Statistics refreshed ${formatAgo(Date.now() - stats.data.db_stats_age_seconds * 1000)}`
             : stats.isError
               ? 'Statistics unavailable'
               : 'Collecting statistics. This can take a few seconds on a large database.'

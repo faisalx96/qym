@@ -6,7 +6,7 @@ import panel from '@/features/experiments/launch/components/launch.module.css';
 import { DatasetPicker } from '@/features/experiments/launch/entry/DatasetPicker';
 import { EnvTask } from '@/features/experiments/launch/entry/TaskRow';
 import entry from '@/features/experiments/launch/entry/entry.module.css';
-import { Button, Tag, Text } from '@/ui';
+import { Button, Disclosure, Tag, Text } from '@/ui';
 
 /** "3 changes vs v2" (the count the Publish button and the review share). */
 export function useEditorChangeCount(): number {
@@ -74,7 +74,7 @@ export function EditorEntry() {
           <span className={entry.statusActions}>
             <Button
               size="sm"
-              variant="ghost"
+              variant="neutral"
               isDisabled={count === 0 || readOnly}
               disabledReason={readOnly ? 'Read-only' : 'No changes to undo'}
               onPress={resetAll}
@@ -115,10 +115,9 @@ export function EditorEntry() {
           </Callout>
         ) : null}
         {base.releaseNotes ? (
-          <details>
-            <summary>Release notes of {base.label}</summary>
+          <Disclosure title={`Release notes of ${base.label}`}>
             <p className={entry.notes}>{base.releaseNotes}</p>
-          </details>
+          </Disclosure>
         ) : null}
       </div>
     </div>
