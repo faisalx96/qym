@@ -100,7 +100,7 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
   return formatAgo(iso, now);
 }
 
-/** '10:36:16', 24-hour. */
+/** cv3-shim: remove after C-10 (deprecated: 'Last updated' reads formatAgo; delete with its last callers). */
 export function formatClock(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${formatTime(d)}:${pad(d.getSeconds())}`;
