@@ -27,6 +27,7 @@ import {
   Dialog,
   RadioGroup,
   Select,
+  Stepper,
   Tag,
   Text,
   TextField,
@@ -463,21 +464,19 @@ function WizardInner({
           </div>
         }
       >
-        <ol className={styles.steps} aria-label="Steps">
-          {steps.map((label, i) => (
-            <li
-              key={label}
-              className={styles.step}
-              aria-current={i + 1 === visualStep ? 'step' : undefined}
-              data-done={i + 1 < visualStep ? '' : undefined}
-            >
-              <span className={styles.stepNum} aria-hidden="true">
-                {i + 1}
-              </span>
-              {label}
-            </li>
-          ))}
-        </ol>
+        <Stepper
+          className={styles.steps}
+          aria-label="Steps"
+          steps={steps.map((label, i) => ({ id: String(i + 1), label }))}
+          current={String(visualStep)}
+          onSelect={(id) => {
+            const n = Number(id) as 1 | 2 | 3;
+            if (n < step) {
+              setErrors({});
+              setStep(n);
+            }
+          }}
+        />
 
         {step === 1 ? (
           <div className={styles.body}>
