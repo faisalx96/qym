@@ -212,7 +212,7 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
             <h2 className={styles.title} id="rxp-title">
               Experiment
             </h2>
-            <Tag kind="accent">Official run</Tag>
+            <Flag tone="info" icon="shield">Official run</Flag>
           </div>
           <div className={styles.copy}>
             Launched by qym on a registered environment. Settings show this run’s combination.
