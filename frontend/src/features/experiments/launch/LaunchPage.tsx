@@ -80,7 +80,7 @@ function LaunchBody({
             Start
           </Button>
           {narrow ? null : (
-            <LinkButton to={experimentsPath(slug)} variant="ghost">
+            <LinkButton to={experimentsPath(slug)} variant="neutral" icon={<Icon name="prev" size={12} />}>
               All experiments
             </LinkButton>
           )}
@@ -93,7 +93,7 @@ function LaunchBody({
       description="Pick where it runs and what to start from. You can change anything in Customize."
       actions={
         narrow ? undefined : (
-          <LinkButton to={experimentsPath(slug)} variant="ghost">
+          <LinkButton to={experimentsPath(slug)} variant="neutral" icon={<Icon name="prev" size={12} />}>
             All experiments
           </LinkButton>
         )
@@ -163,7 +163,7 @@ export function LaunchPage() {
       title="New experiment"
       description="Pick where it runs and what to start from. You can change anything in Customize."
       actions={
-        <LinkButton to={experimentsPath(slug)} variant="ghost">
+        <LinkButton to={experimentsPath(slug)} variant="neutral" icon={<Icon name="prev" size={12} />}>
           All experiments
         </LinkButton>
       }
