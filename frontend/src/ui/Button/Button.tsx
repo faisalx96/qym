@@ -2,7 +2,14 @@ import { forwardRef, useId, useImperativeHandle, useLayoutEffect, useRef, type R
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import styles from './Button.module.css';
 
-export type ButtonVariant = 'neutral' | 'accent' | 'danger' | 'ghost' | 'primary' | 'meta';
+export type ButtonVariant =
+  | 'neutral'
+  | 'accent'
+  | 'danger'
+  | 'primary'
+  | 'meta'
+  // cv3-shim: remove after A-01 (a deprecated alias: 'ghost' renders as 'neutral')
+  | 'ghost';
 export type ButtonSize = 'sm' | 'md';
 
 export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style' | 'children'> {
@@ -22,7 +29,7 @@ export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style'
 
 /**
  * The one button. neutral/accent/danger = .qym-inline-action recipes;
- * primary = filled accent (.btn-primary); ghost = text only.
+ * primary = filled accent (.btn-primary). There is no text-only tone.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
@@ -56,7 +63,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <AriaButton
       ref={inner}
       className={[styles.button, className].filter(Boolean).join(' ')}
-      data-variant={variant}
+      // cv3-shim: remove after A-01 (the 'ghost' alias draws the neutral button)
+      data-variant={variant === 'ghost' ? 'neutral' : variant}
       data-size={size}
       data-loading={loading ? '' : undefined}
       data-icon-only={!children && (icon || iconEnd) ? '' : undefined}

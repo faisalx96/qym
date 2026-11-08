@@ -105,8 +105,8 @@ function TableBody({ rows, label }: { rows: Record<string, unknown>[]; label: st
         stickyHeader={false}
       />
       {rows.length > TABLE_LIMIT && !all ? (
-        <Button size="sm" variant="ghost" onPress={() => setAll(true)}>
-          Show all {rows.length}
+        <Button size="sm" variant="neutral" onPress={() => setAll(true)}>
+          Show {rows.length - TABLE_LIMIT} more
         </Button>
       ) : null}
     </div>
@@ -249,7 +249,7 @@ export function StructuredValue({
             <span className={styles.spacer} />
             <Button
               size="sm"
-              variant="ghost"
+              variant="neutral"
               aria-label="Expand all keys"
               onPress={() => setOpenKeys(new Set(allPaths(parsed.data, uid)))}
             >
@@ -257,7 +257,7 @@ export function StructuredValue({
             </Button>
             <Button
               size="sm"
-              variant="ghost"
+              variant="neutral"
               aria-label="Collapse all keys"
               onPress={() => setOpenKeys(new Set())}
             >
@@ -310,7 +310,7 @@ export function StructuredValue({
           />
           <span className={styles.spacer} />
           {view === 'sections' ? (
-            <Button size="sm" variant="ghost" onPress={() => setAll(!anyOpen)}>
+            <Button size="sm" variant="neutral" onPress={() => setAll(!anyOpen)}>
               {anyOpen ? 'Collapse all' : 'Expand all'}
             </Button>
           ) : null}
@@ -327,7 +327,7 @@ export function StructuredValue({
                 <Button
                   key={e.key}
                   size="sm"
-                  variant="ghost"
+                  variant="neutral"
                   aria-label={`Go to ${e.key}`}
                   onPress={() => jump(e.key, i)}
                 >

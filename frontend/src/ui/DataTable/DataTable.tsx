@@ -1439,7 +1439,7 @@ function DataTableInner<R>({
     selection.selectAllMatching.total > selected.size ? (
       <div className={styles.banner} role="status">
         {selected.size} selected.
-        <Button variant="ghost" onPress={selection.selectAllMatching.onSelectAll}>
+        <Button variant="neutral" onPress={selection.selectAllMatching.onSelectAll}>
           Select all {selection.selectAllMatching.total} {selection.selectAllMatching.noun ?? 'rows'}
         </Button>
       </div>
@@ -2211,7 +2211,7 @@ function CardList<R>({
           </label>
           {sort ? (
             <Button
-              variant="ghost"
+              variant="neutral"
               onPress={() => setSort({ ...sort, direction: sort.direction === 'asc' ? 'desc' : 'asc' })}
             >
               {sort.direction === 'asc' ? 'Ascending' : 'Descending'}
@@ -2428,7 +2428,7 @@ function CardList<R>({
                     </dl>
                   ) : null}
                   <Button
-                    variant="ghost"
+                    variant="neutral"
                     aria-expanded={isMore}
                     onPress={() =>
                       setMore((s) => {

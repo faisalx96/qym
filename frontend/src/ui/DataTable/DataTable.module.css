@@ -1093,6 +1093,27 @@
   min-width: 0;
 }
 
+/* A-01: a centred control (the 'Show N more' button): the start and end parts take equal widths, so it sits in the
+   middle of the footer. */
+.footer[data-center] > .footerStart,
+.footer[data-center] > .footerEnd {
+  flex: 1 1 0;
+}
+.footer[data-center] > .footerEnd {
+  justify-content: flex-end;
+}
+.footerCenter {
+  display: flex;
+  justify-content: center;
+  flex: none;
+}
+
+/* D-10: the filter note at the far left of the footer. */
+.filterNote {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
 .toolbarMain {
   flex: 1 1 auto;
 }

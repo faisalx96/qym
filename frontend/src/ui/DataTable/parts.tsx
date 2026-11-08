@@ -79,7 +79,7 @@ export function Toolbar({
       )}
       {bulkActions}
       {bulkOwnSummary ? null : (
-        <Button variant="ghost" onPress={clearSelection}>
+        <Button variant="neutral" onPress={clearSelection}>
           Clear selection
         </Button>
       )}
@@ -164,7 +164,7 @@ export function SelectionBar() {
         {bulkActions}
       </div>
       <div className={styles.toolbarEnd}>
-        <Button variant="ghost" onPress={clearSelection}>
+        <Button variant="neutral" onPress={clearSelection}>
           Clear selection
         </Button>
       </div>
@@ -176,22 +176,48 @@ export interface FooterProps {
   /** Test id / accessible name of the footer landmark. */
   testId?: string;
   ariaLabel?: string;
-  /** "1-50 of 423 runs". */
+  /** "Filtered from 423 runs" at the far left, while a search or filter narrows the list (D-10). */
+  filterNote?: string;
+  /** cv3-shim: remove after D-10 (deprecated: the count text moves to pagination or filterNote). */
   summary?: ReactNode;
   pagination?: PaginationProps;
   /** "Last updated 16:30:12" and similar. */
   trailing?: ReactNode;
+  /** A control centred in the footer (the 'Show N more' button, docs 3.4). Shown only when there is no pagination. */
+  center?: ReactNode;
 }
 
-export function Footer({ summary, pagination, trailing, testId, ariaLabel }: FooterProps) {
+export function Footer({
+  filterNote,
+  pagination,
+  center,
+  trailing,
+  testId,
+  ariaLabel,
+  summary, // cv3-shim: remove after D-10
+}: FooterProps) {
   const { selectedCount } = useDataTableCtx();
   return (
-    <footer className={styles.footer} data-dt-footer="" data-testid={testId} aria-label={ariaLabel}>
+    <footer
+      className={styles.footer}
+      data-dt-footer=""
+      data-testid={testId}
+      aria-label={ariaLabel}
+      data-center={center && !pagination ? '' : undefined}
+    >
       <div className={styles.footerStart}>
+        {filterNote ? <span className={styles.filterNote}>{filterNote}</span> : null}
+        {/* cv3-shim: remove after D-10 */}
         {summary ? <span className={styles.count}>{summary}</span> : null}
         {selectedCount > 0 ? <span className={styles.count}>{selectedCount} selected</span> : null}
       </div>
-      {pagination ? <Pagination {...pagination} /> : <span />}
+      {pagination ? (
+        <Pagination {...pagination} />
+      ) : center ? (
+        <div className={styles.footerCenter}>{center}</div>
+      ) : (
+        <span />
+      )}
       <div className={styles.footerEnd}>{trailing}</div>
     </footer>
   );

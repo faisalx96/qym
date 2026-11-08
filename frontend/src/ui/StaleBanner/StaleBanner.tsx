@@ -28,7 +28,7 @@ export function StaleBanner({ since, filtersApplied, onRetry, now }: StaleBanner
         {filtersApplied ? '' : 'Your latest filter change is not applied yet.'}
       </span>
       {onRetry ? (
-        <Button variant="ghost" onPress={onRetry} icon={<Icon name="retry" size={12} />}>
+        <Button variant="neutral" onPress={onRetry} icon={<Icon name="retry" size={12} />}>
           Retry
         </Button>
       ) : null}
