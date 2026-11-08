@@ -90,10 +90,11 @@ describe('overview service and history blocks', () => {
             `/live/turns?${new URLSearchParams({ day: '2026-11-01', source: 'worker', ...filters })}`
           }
         />
+        <Location />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: '80% Search' })).toHaveAttribute(
-      'href',
+    fireEvent.click(screen.getByRole('button', { name: /Search/ }));
+    expect(screen.getByLabelText('URL')).toHaveTextContent(
       '/live/turns?day=2026-11-01&source=worker&service=search&service_status=not_ok',
     );
     expect(container.querySelector('[data-live-service="search"] [data-band]')).not.toBeNull();
@@ -109,9 +110,9 @@ describe('overview service and history blocks', () => {
     const { container } = render(<Canaries canaries={canaries} specs={specs} />);
     const marks = [...container.querySelectorAll('[data-live-canary]')];
     expect(marks.map((mark) => mark.getAttribute('data-live-canary'))).toEqual(['failed', 'search', 'other']);
-    expect(marks[0]).toHaveTextContent('Failed failed120 ms');
-    expect(marks[1]).toHaveTextContent('Search ok0 ms');
-    expect(marks[2]).toHaveTextContent('Other skipped—');
+    expect(marks[0]).toHaveTextContent('Failed Failed120ms');
+    expect(marks[1]).toHaveTextContent('Search OK0ms');
+    expect(marks[2]).toHaveTextContent('Other Skipped—');
     expect(marks[2]?.querySelector('[data-shape="pause"][data-tone="neutral"]')).not.toBeNull();
     expect(canaries[0]?.canary).toBe('search');
     expect(screen.queryByText('No canary results for this day')).toBeNull();
@@ -160,7 +161,7 @@ describe('overview service and history blocks', () => {
     expect(points[2]).toHaveAttribute('cx', '90%');
     expect(points[2]).toHaveAttribute('cy', '100%');
     expect(points[0]?.closest('svg')).toHaveAttribute('aria-hidden', 'true');
-    fireEvent.click(screen.getByRole('radio', { name: '30' }));
+    fireEvent.click(screen.getByRole('radio', { name: '30d' }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('source=worker&days_page=2&trend_days=30');
     fireEvent.click(screen.getByRole('button', { name: /2026-10-28: 4 turns/ }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('trend_days=30&day=2026-10-28');
@@ -180,7 +181,7 @@ describe('overview service and history blocks', () => {
       </MemoryRouter>,
     );
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
-      'var(--accent-primary) 0% 50%',
+      'var(--success) 0% 50%',
     );
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
       'var(--text-muted) 50% 100%',
