@@ -800,6 +800,23 @@
     var(--pin-line, 0 0 0 transparent);
 }
 
+/* E-49: one closed ring. After a collapsed (0px) select cell, the first visible cell draws the start edge. */
+.tr:focus-visible td[data-collapsed] + td {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+/* E-49: at the scroll end the folded fold cell keeps the end edge (beats the fold rule that drops its shadow). */
+.bodyHost[data-scroll-end] .tr:focus-visible .td[data-fold]:not(:has(.fold[data-open])) {
+  box-shadow:
+    inset -2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary);
+}
+
 .selectionCluster {
   display: flex;
   align-items: center;
