@@ -1,5 +1,6 @@
 import type { LiveMetricSpec } from '@/api/live';
 import { formatDurationMs, formatNumericValue, formatPercentValue } from '@/lib/format';
+import { formatTableDate } from '@/lib/dates';
 import { humanizeKey } from '@/lib/humanizeKey';
 import { diagnosisSpec, mixSegments } from '../../lib/mix';
 
@@ -27,11 +28,13 @@ export function scoreText(value: number | null, spec?: LiveMetricSpec | null): s
   return `${formatNumericValue(value, spec.precision ?? 2)}${spec.unit ? ` ${spec.unit}` : ''}`;
 }
 
-export function utcTime(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return '—';
-  return `${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })} · ${date.toISOString().slice(11, 16)} UTC`;
+/** A Live instant on the viewer clock: 'Nov 5 · 17:45' ('—' for an invalid value). */
+export function liveTime(value: string): string {
+  return formatTableDate(value);
 }
+
+/** cv3-shim: remove after C-02 (renamed liveTime). */
+export const utcTime = liveTime;
 
 export function traceHref(value: string | null): string | null {
   if (!value) return null;

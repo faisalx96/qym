@@ -1,17 +1,8 @@
 import type { LiveSourceInfo } from '@/api/live';
+import { formatTableDate } from '@/lib/dates';
 
 export function statusTime(timestamp: string, now: Date = new Date()): string {
-  const date = new Date(timestamp);
-  const time = date.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'UTC',
-  });
-  const day =
-    date.toISOString().slice(0, 10) === now.toISOString().slice(0, 10)
-      ? ''
-      : `${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} `;
-  return `${day}${time} UTC`;
+  return formatTableDate(timestamp, now);
 }
 
 export function staleText(status: LiveSourceInfo, now: Date = new Date()): string {

@@ -62,7 +62,8 @@ export function mixSegments(counts: Record<string, number>, spec: LiveMetricSpec
     });
   }
   for (const value of Object.keys(counts)) {
-    if (!labels.has(value)) labels.set(value, { label: value, tone: 'neutral', dark: false, specTone: undefined });
+    if (!labels.has(value))
+      labels.set(value, { label: value, tone: 'neutral', dark: false, specTone: undefined });
   }
   return [...labels].map(([value, label]) => ({
     value,
