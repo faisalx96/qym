@@ -359,17 +359,7 @@ export function ExperimentsPage() {
           filteredEmpty={
             <EmptyState
               compact
-              title="No matching experiments"
-              body="Nothing matches these filters."
-              action={
-                <button
-                  type="button"
-                  className={styles.linkButton}
-                  onClick={() => setParams({}, { replace: true })}
-                >
-                  Clear filters
-                </button>
-              }
+              title={needle ? `No experiments match “${search.trim()}”` : 'No experiments match these filters'}
             />
           }
         >

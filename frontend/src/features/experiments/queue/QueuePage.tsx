@@ -510,24 +510,7 @@ export function QueuePage() {
                 <EmptyState
                   compact
                   icon={<Icon name="clock" />}
-                  title="No jobs match these filters"
-                  body="Clear a filter to see more jobs."
-                  action={
-                    <Button
-                      variant="neutral"
-                      onPress={() =>
-                        replaceUrlQuery({
-                          environment: null,
-                          status: null,
-                          mine: null,
-                          latency: null,
-                          experiment: null,
-                        })
-                      }
-                    >
-                      Clear filters
-                    </Button>
-                  }
+                  title={search.trim() ? `No jobs match “${search.trim()}”` : 'No jobs match these filters'}
                 />
               }
             >

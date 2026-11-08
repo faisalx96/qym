@@ -118,7 +118,7 @@ test.describe('queue page', () => {
 
     await pickSelect(page, /Status$/, 'Blocked');
     await expect(page.getByText('No jobs match these filters')).toBeVisible();
-    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await page.getByTestId('filters-clear').click();
     await expect.poll(() => page.url().includes('?')).toBe(false);
     await expect(jobsGrid(page).getByRole('row')).toHaveCount(5);
   });

@@ -84,10 +84,10 @@ test.describe('experiments list', () => {
     // no history entries were added by the filters (replace, not push)
     expect(await page.evaluate(() => history.length)).toBeLessThanOrEqual(3);
 
-    // a status without rows: no-match state with Clear filters
+    // a status without rows: no-match state, cleared by the red Clear of the filter bar
     await pickSelect(page, /Status$/, 'Cancelled');
-    await expect(page.getByText('No matching experiments')).toBeVisible();
-    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page.getByText('No experiments match these filters')).toBeVisible();
+    await page.getByTestId('filters-clear').click();
     await expect.poll(() => page.url().includes('?')).toBe(false);
     await expect(table.getByText('still going')).toBeVisible();
 
@@ -111,15 +111,15 @@ test.describe('experiments list', () => {
     // facets come from run versioning metadata; with no runs the toolbar has no facet selects,
     // while a ?versioning= param in the URL still filters (and survives reload).
     await gotoApp(page, `${expPath(project.slug)}?versioning=agent_version%3Dnope`);
-    await expect(page.getByText('No matching experiments')).toBeVisible();
+    await expect(page.getByText('No experiments match these filters')).toBeVisible();
     // the key in the URL keeps its select: humanised label, value, and the key in the tooltip
     const facet = page.locator('[data-exp-versioning="agent_version"]');
     await expect(facet).toHaveAttribute('title', 'Evaluation Service versioning: agent_version');
     await expect(facet.getByRole('button', { name: /Agent version/ })).toContainText('nope');
     await page.reload();
-    await expect(page.getByText('No matching experiments')).toBeVisible();
+    await expect(page.getByText('No experiments match these filters')).toBeVisible();
     expect(query(page).getAll('versioning')).toEqual(['agent_version=nope']);
-    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await page.getByTestId('filters-clear').click();
     await expect(page.getByRole('grid', { name: 'Experiments' }).getByText('versioned')).toBeVisible();
   });
 
