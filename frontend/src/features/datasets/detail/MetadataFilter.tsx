@@ -279,7 +279,7 @@ function FacetPanel({
           </div>
         ) : null}
         <div className={styles.foot}>
-          <Button variant="ghost" size="sm" onPress={onCancel}>
+          <Button variant="neutral" size="sm" onPress={onCancel}>
             Cancel
           </Button>
           <Button

@@ -216,10 +216,10 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
               searchable="auto"
               width={220}
             />
-            <LinkButton to={datasetPath(slug, dataset.slug, { v: base.version })} variant="ghost">
+            <LinkButton to={datasetPath(slug, dataset.slug, { v: base.version })} variant="neutral">
               Open base
             </LinkButton>
-            <LinkButton to={datasetPath(slug, dataset.slug, { v: head.version })} variant="ghost">
+            <LinkButton to={datasetPath(slug, dataset.slug, { v: head.version })} variant="neutral">
               Open head
             </LinkButton>
             <DownloadDiff

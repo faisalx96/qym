@@ -100,7 +100,7 @@ export function CatalogPage() {
               />
             </>
           ) : null}
-          <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="ghost">
+          <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="neutral">
             Deleted datasets
           </LinkButton>
           {canCreate ? (

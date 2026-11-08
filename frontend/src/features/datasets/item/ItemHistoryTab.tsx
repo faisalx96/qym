@@ -140,7 +140,7 @@ export function ItemHistoryTab({
                       !stateChange &&
                       r.after ? (
                         <Button
-                          variant="ghost"
+                          variant="neutral"
                           size="sm"
                           onPress={() => setRevert(r)}
                           data-testid={`revert-${r.revision_number}`}

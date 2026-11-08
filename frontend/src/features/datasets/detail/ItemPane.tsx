@@ -111,7 +111,7 @@ export function ItemPane({
           <IconButton label="Next item" icon="chevron-down" onPress={() => onNavigate(1)} />
           <LinkButton
             to={`${datasetPath(slug, dataset.slug)}?${query}`}
-            variant="ghost"
+            variant="neutral"
             size="sm"
             data-testid="pane-open-page"
           >

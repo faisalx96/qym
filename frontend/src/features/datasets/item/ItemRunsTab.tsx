@@ -109,7 +109,7 @@ export function ItemRunsTab({
       header: (
         <span className={styles.outputHead}>
           Output
-          <Button variant="ghost" size="sm" onPress={() => setExpandAll((v) => !v)}>
+          <Button variant="neutral" size="sm" onPress={() => setExpandAll((v) => !v)}>
             {expandAll ? 'Collapse' : 'Expand'}
           </Button>
         </span>

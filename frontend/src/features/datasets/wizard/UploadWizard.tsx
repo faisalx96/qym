@@ -436,7 +436,7 @@ function WizardInner({
         isKeyboardDismissDisabled={submitting}
         footer={
           <div className={styles.footer}>
-            <Button variant="ghost" onPress={requestClose} isDisabled={submitting}>
+            <Button variant="neutral" onPress={requestClose} isDisabled={submitting}>
               Cancel
             </Button>
             <div className={styles.footerEnd}>
@@ -770,7 +770,7 @@ function WizardInner({
                     data-indeterminate={progress.fraction === null ? '' : undefined}
                   />
                 </div>
-                <Button variant="ghost" size="sm" onPress={() => abortRef.current?.abort()}>
+                <Button variant="neutral" size="sm" onPress={() => abortRef.current?.abort()}>
                   Cancel upload
                 </Button>
               </div>
