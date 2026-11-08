@@ -98,7 +98,7 @@ export function ScoreBar({
   const band = max === undefined ? metricBand(value, type, dir) : null;
   const ratio = max === undefined ? value : max > 0 ? value / max : 0;
   const pct = Math.max(0, Math.min(1, ratio)) * 100;
-  const label = text ?? (max === undefined ? `${Math.round(value * 100)}%` : formatNumericValue(value));
+  const label = text ?? (max === undefined ? `${(value * 100).toFixed(1)}%` : formatNumericValue(value));
   return (
     <span
       className={styles.scoreBar}

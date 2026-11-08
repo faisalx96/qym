@@ -29,6 +29,7 @@ import { ErrorState } from '../ErrorState';
 import { Icon } from '../Icon';
 import { Tooltip } from '../Tooltip';
 import { ActionTile, IconButton } from '../IconButton';
+import { ScoreValue } from '../ScoreValue';
 import { Button } from '../Button';
 import { EnterContext, ENTER_MS } from '../motion';
 import { DataTableContext } from './context';
@@ -57,7 +58,6 @@ import {
 } from './model';
 import { FoldCell } from './FoldCell';
 import { Footer, SelectionBar, Toolbar } from './parts';
-import { ScoreBar } from './cells';
 import { RelativeTime, DurationCell, NumberCell } from './cells';
 import { useDataTableModel, type DataTableModel } from './useDataTableModel';
 import { useStickyShift } from './useStickyShift';
@@ -381,7 +381,7 @@ function defaultCell<R>(col: Column<R>, row: R): ReactNode {
     case 'duration':
       return typeof raw === 'number' ? <DurationCell ms={raw} /> : String(raw);
     case 'score':
-      return typeof raw === 'number' ? <ScoreBar value={raw} /> : String(raw);
+      return typeof raw === 'number' ? <ScoreValue value={raw} variant="plain" /> : String(raw);
     case 'date':
       return <RelativeTime iso={String(raw)} />;
     case 'id':
