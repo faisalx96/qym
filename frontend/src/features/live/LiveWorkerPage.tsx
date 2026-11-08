@@ -58,7 +58,7 @@ export function WorkerPageView({
       <div className={styles.grid}>
         <StatusStrip read={read} />
         <ProblemsBlock {...problems} read={read} />
-        <JobsBlock jobs={read.jobs} busy={busy} onBackfill={() => setRange(true)} onCancelJob={onCancelJob} />
+        <JobsBlock jobs={read.jobs} busy={busy} onCancelJob={onCancelJob} />
         <div className={styles.settingsRow}>
           <SettingsForm
             read={read}

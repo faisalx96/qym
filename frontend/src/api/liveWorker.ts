@@ -77,6 +77,7 @@ export interface LiveJob {
   };
   error: string | null;
   requested_by: string | null;
+  requested_by_user_id?: string | null;
   requested_at: string;
   updated_at: string;
   started_at: string | null;
