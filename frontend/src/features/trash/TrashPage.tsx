@@ -280,7 +280,7 @@ export function TrashPage() {
       cell: (r) => (
         <span className={styles.stack}>
           <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
-          {r.deleted_by_name ? <UserName name={r.deleted_by_name} /> : null}
+          {r.deleted_by_name ? <UserName id={r.deleted_by_user_id} name={r.deleted_by_name} /> : null}
         </span>
       ),
     },

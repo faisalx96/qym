@@ -9,6 +9,7 @@ import {
   LinkButton,
   StatusMark,
   Tag,
+  UserName,
   type StatusShape,
   type StatusTone,
 } from '@/ui';
@@ -50,7 +51,7 @@ function HistoryEntry({ event, selfApproved }: { event: ReviewHistoryEvent; self
     <li className={styles.entry} data-action={event.action}>
       <div className={styles.entryHead}>
         <StatusMark tone={action.tone} shape={action.shape} label={action.label} />
-        <span className={styles.actor}>{who(event.actor)}</span>
+        <UserName id={event.actor?.id} name={who(event.actor)} email={event.actor?.email} />
         {selfApproved ? (
           <Flag tone="warning" icon="user" title="The same person submitted and approved this run">
             Self-approved
@@ -212,7 +213,9 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
             <h2 className={styles.title} id="rxp-title">
               Experiment
             </h2>
-            <Flag tone="info" icon="shield">Official run</Flag>
+            <Flag tone="info" icon="shield">
+              Official run
+            </Flag>
           </div>
           <div className={styles.copy}>
             Launched by qym on a registered environment. Settings show this run’s combination.
