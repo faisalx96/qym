@@ -26,9 +26,9 @@ import { Checkbox } from '../Checkbox';
 import { DropdownMenu, type MenuItemSpec } from '../DropdownMenu';
 import { EmptyState } from '../EmptyState';
 import { ErrorState } from '../ErrorState';
-import { Icon, type IconName } from '../Icon';
+import { Icon } from '../Icon';
 import { Tooltip } from '../Tooltip';
-import { IconButton } from '../IconButton';
+import { ActionTile, IconButton } from '../IconButton';
 import { Button } from '../Button';
 import { EnterContext, ENTER_MS } from '../motion';
 import { DataTableContext } from './context';
@@ -1671,7 +1671,7 @@ function DataTableInner<R>({
                   items={more.map((a) => ({
                     id: a.id,
                     label: a.label,
-                    icon: typeof a.icon === 'string' ? <Icon name={a.icon as IconName} size={12} /> : a.icon,
+                    icon: a.icon ? <ActionTile icon={a.icon} tone={a.danger ? 'danger' : 'default'} /> : undefined,
                     tone: a.danger ? ('danger' as const) : undefined,
                     disabled: a.disabled,
                     description: a.hint,

@@ -54,8 +54,17 @@
 }
 
 .item[data-disabled] {
-  opacity: 0.45;
   cursor: not-allowed;
+}
+/* A locked item fades its icon, text and trailing icon; the reason box (the wrap's ::after) stays at full opacity. */
+.item[data-disabled] > .icon,
+.item[data-disabled] .text,
+.item[data-disabled] > svg {
+  opacity: 0.45;
+}
+.reasonItem {
+  flex: 1;
+  min-width: 0;
 }
 
 .icon {
