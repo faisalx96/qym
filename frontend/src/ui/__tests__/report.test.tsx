@@ -98,27 +98,25 @@ describe('ReportLayout', () => {
 });
 
 describe('ScopeBar', () => {
-  it('reports the scope, removes chips and clears', async () => {
+  it('reports the scope; its chips have no × and it has no Clear all (C-44)', async () => {
     const user = userEvent.setup();
     const onClear = vi.fn();
-    const onClearAll = vi.fn();
     const onJump = vi.fn();
     const { container } = render(
       <ScopeBar
         shown={12}
         total={40}
         chips={[{ key: 'a', label: 'Failing', onClear }]}
-        onClearAll={onClearAll}
         onJumpToItems={onJump}
         sidebarOpen
         onToggleSidebar={() => {}}
       />,
     );
     expect(screen.getByText('Scope: 12 of 40 items')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Remove Failing from scope' }));
-    expect(onClear).toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Clear all' }));
-    expect(onClearAll).toHaveBeenCalled();
+    expect(screen.getByText('Failing')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove Failing from scope' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
+    expect(onClear).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'View 12 items' }));
     expect(onJump).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Hide filters' })).toHaveAttribute('aria-expanded', 'true');
@@ -132,7 +130,6 @@ describe('ScopeBar', () => {
         total={2}
         chips={['a', 'b', 'c'].map((k) => ({ key: k, label: k, onClear: () => {} }))}
         maxChips={2}
-        onClearAll={() => {}}
         onJumpToItems={() => {}}
         sidebarOpen={false}
         narrow

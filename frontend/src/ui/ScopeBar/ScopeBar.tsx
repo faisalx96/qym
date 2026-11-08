@@ -11,8 +11,19 @@ export interface ScopeChip {
   onClear: () => void;
 }
 
-/** The removable filter chips of a scope (ScopeBar and the sidebar's Active group share them). */
-export function ScopeChips({ chips, maxChips = 6 }: { chips: ScopeChip[]; maxChips?: number }) {
+/**
+ * The filter chips of a scope (ScopeBar and the sidebar's Active group share them). `removable={false}` (the run
+ * ScopeBar, C-44) draws the chips with no × and a click does nothing: the one Clear is in the sticky section nav.
+ */
+export function ScopeChips({
+  chips,
+  maxChips = 6,
+  removable = true,
+}: {
+  chips: ScopeChip[];
+  maxChips?: number;
+  removable?: boolean;
+}) {
   const visible = chips.slice(0, maxChips);
   const more = chips.length - visible.length;
   return (
@@ -21,9 +32,13 @@ export function ScopeChips({ chips, maxChips = 6 }: { chips: ScopeChip[]; maxChi
         <Chip
           key={chip.key}
           isSelected
-          removeLabel={`Remove ${chip.label} from scope`}
-          onRemove={chip.onClear}
-          onChange={chip.onClear}
+          {...(removable
+            ? {
+                removeLabel: `Remove ${chip.label} from scope`,
+                onRemove: chip.onClear,
+                onChange: chip.onClear,
+              }
+            : {})}
         >
           {chip.label.length > 56 ? `${chip.label.slice(0, 55)}…` : chip.label}
         </Chip>
@@ -37,7 +52,8 @@ export interface ScopeBarProps {
   shown: number;
   total: number;
   chips: ScopeChip[];
-  onClearAll: () => void;
+  /** cv3-shim: remove after C-44 (deprecated: the ScopeBar has no Clear all; this prop does nothing). */
+  onClearAll?: () => void;
   onJumpToItems: () => void;
   /** Wide: the inline sidebar is shown. Narrow: the drawer is open. */
   sidebarOpen: boolean;
@@ -51,12 +67,11 @@ export interface ScopeBarProps {
   hideChips?: boolean;
 }
 
-/** The scope strip above the report: "N of M items", the removable filters, Clear and the sidebar toggle. */
+/** The scope strip above the report: "N of M items", the filters (no ×, no Clear: C-44) and the sidebar toggle. */
 export function ScopeBar({
   shown,
   total,
   chips,
-  onClearAll,
   onJumpToItems,
   sidebarOpen,
   onToggleSidebar,
@@ -72,13 +87,10 @@ export function ScopeBar({
       </Text>
       {hideChips ? null : (
         <div className={styles.chips}>
-          <ScopeChips chips={chips} maxChips={maxChips} />
+          <ScopeChips chips={chips} maxChips={maxChips} removable={false} />
         </div>
       )}
       <div className={styles.actions}>
-        <Button size="sm" variant="ghost" onPress={onClearAll} data-testid="scope-clear">
-          Clear all
-        </Button>
         <Button size="sm" variant="neutral" onPress={onJumpToItems}>
           View {shown.toLocaleString('en-US')} {noun}
         </Button>
