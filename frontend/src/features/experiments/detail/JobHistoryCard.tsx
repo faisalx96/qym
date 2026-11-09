@@ -9,6 +9,7 @@ import type { ExperimentDetail, ExperimentJob } from '@/api/experiments';
 import { runPath } from '@/app/routes';
 import {
   Checkbox,
+  CountTile,
   DataTable,
   Disclosure,
   RelativeTime,
@@ -242,7 +243,7 @@ export function JobHistoryCard({
             </Text>
             {supersededCount ? (
               <Checkbox isSelected={showEarlier} onChange={onShowEarlier}>
-                Show earlier attempts ({supersededCount})
+                Show earlier attempts<CountTile>{supersededCount}</CountTile>
               </Checkbox>
             ) : null}
           </div>

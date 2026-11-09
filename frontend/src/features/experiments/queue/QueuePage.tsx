@@ -33,6 +33,7 @@ import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
   ClearFiltersButton,
+  CountTile,
   EmptyState,
   ErrorState,
   Icon,
@@ -482,7 +483,7 @@ export function QueuePage() {
                   isDisabled={!selected.size || readOnly}
                   onPress={() => openCancel(selectedJobs)}
                 >
-                  Cancel selected ({selected.size})
+                  Cancel selected<CountTile>{selected.size}</CountTile>
                 </Button>
               }
               rowActions={(j) => [
@@ -538,7 +539,7 @@ export function QueuePage() {
                       isDisabled={!cancellableJobs.length}
                       onPress={() => setSelected(new Set(cancellableJobs.map((j) => j.id)))}
                     >
-                      Select all I can cancel ({cancellableJobs.length})
+                      Select all I can cancel<CountTile>{cancellableJobs.length}</CountTile>
                     </Button>
                     {filters.experiment ? (
                       <Button

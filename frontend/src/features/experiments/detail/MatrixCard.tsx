@@ -11,6 +11,7 @@ import {
   ActionTile,
   Button,
   Checkbox,
+  CountTile,
   Icon,
   RowMenu,
   SectionHeader,
@@ -92,7 +93,7 @@ export function MatrixCard({
               disabledReason="Select two runs to compare"
               onPress={onCompare}
             >
-              Compare selected ({selected.length})
+              Compare selected<CountTile>{selected.length}</CountTile>
             </Button>
           </div>
         </div>

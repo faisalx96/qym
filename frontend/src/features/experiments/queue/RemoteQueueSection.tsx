@@ -15,6 +15,7 @@ import {
 import { useProjectContext } from '@/features/shell';
 import {
   Button,
+  CountTile,
   DataTable,
   ErrorState,
   Icon,
@@ -206,7 +207,8 @@ function RemoteEnv({
         density="regular"
         bulkActions={
           <Button size="sm" variant="danger" isDisabled={!ids.length} onPress={() => setConfirm(true)}>
-            Cancel selected {stale ? 'remote jobs' : 'orphans'} ({ids.length})
+            Cancel selected {stale ? 'remote jobs' : 'orphans'}
+            <CountTile>{ids.length}</CountTile>
           </Button>
         }
         selection={

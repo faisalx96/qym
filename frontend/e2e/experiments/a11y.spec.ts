@@ -264,7 +264,7 @@ test.describe('keyboard', () => {
     await expect(boxes.first()).toBeChecked();
     await tabTo(page, boxes.nth(1));
     await page.keyboard.press('Space');
-    const compare = matrix.getByRole('button', { name: /Compare selected \(2\)/ });
+    const compare = matrix.getByRole('button', { name: /Compare selected\s?2/ });
     await expect(compare).toBeEnabled();
     await tabTo(page, compare);
     await page.keyboard.press('Enter');

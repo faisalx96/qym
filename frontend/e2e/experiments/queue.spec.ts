@@ -145,8 +145,8 @@ test.describe('queue page', () => {
     await expect(jobsGrid(page).getByRole('row')).toHaveCount(4);
     await selectRow(page, 0);
     await selectRow(page, 1);
-    await expect(page.getByRole('button', { name: 'Cancel selected (2)' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Cancel selected (2)' }).click();
+    await expect(page.getByRole('button', { name: /^Cancel selected\s?2$/ })).toBeEnabled();
+    await page.getByRole('button', { name: /^Cancel selected\s?2$/ }).click();
 
     const dialog = page.getByTestId('cancel-split-dialog');
     await expect(dialog.getByRole('heading', { name: 'Cancel 2 jobs?' })).toBeVisible();
@@ -176,9 +176,9 @@ test.describe('queue page', () => {
   }) => {
     const { project } = await seedQueue(request);
     await gotoApp(page, queuePath(project.slug));
-    await page.getByRole('button', { name: /Select all I can cancel \(4\)/ }).click();
+    await page.getByRole('button', { name: /Select all I can cancel\s?4/ }).click();
     await expect(page.getByRole('region', { name: 'Selection actions' })).toContainText('4 selected');
-    await page.getByRole('button', { name: 'Cancel selected (4)' }).click();
+    await page.getByRole('button', { name: /^Cancel selected\s?4$/ }).click();
     const dialog = page.getByTestId('cancel-split-dialog');
     await expect(dialog.locator('[data-split="here"]')).toContainText('3');
     await expect(dialog.locator('[data-split="remote"]')).toContainText(
@@ -292,7 +292,7 @@ test.describe('queue page', () => {
 
     const orphanRow = remote.getByRole('row').filter({ hasText: 'orphan-run' });
     await orphanRow.locator('label').first().click();
-    await section.getByRole('button', { name: 'Cancel selected orphans (1)' }).click();
+    await section.getByRole('button', { name: /^Cancel selected orphans\s?1$/ }).click();
     const dialog = page.getByTestId('cancel-split-dialog');
     await expect(dialog).toContainText('Cancel 1 orphan job on staging?');
     await expect(dialog.locator('[data-split="orphans"]')).toContainText('Orphans on the service');

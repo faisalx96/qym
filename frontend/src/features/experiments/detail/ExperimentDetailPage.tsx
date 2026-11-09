@@ -15,6 +15,7 @@ import { useDelayedPending } from '@/lib/pending';
 import {
   ActionTile,
   Button,
+  CountTile,
   DropdownMenu,
   ErrorState,
   Icon,
@@ -143,7 +144,11 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
   if (retryable.length)
     actions.push({
       id: 'retry',
-      label: `Retry failed (${retryable.length})`,
+      label: (
+        <>
+          Retry failed<CountTile>{retryable.length}</CountTile>
+        </>
+      ),
       icon: <ActionTile icon="retry" />,
       disabled: !canControl || flows.busy.size > 0,
     });
