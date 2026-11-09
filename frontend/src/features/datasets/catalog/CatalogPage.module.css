@@ -117,12 +117,6 @@
   color: var(--text-muted);
 }
 
-.stats strong {
-  font-family: var(--font-mono);
-  font-weight: 650;
-  color: var(--text-primary);
-}
-
 .cardFoot {
   display: flex;
   align-items: center;

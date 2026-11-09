@@ -266,14 +266,12 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
           {d.description || <span className={styles.noDescription}>No description</span>}
         </p>
         <div className={styles.stats}>
+          <span>{catalogItemCount(d).toLocaleString(APP_LOCALE)} items</span>
           <span>
-            <strong>{catalogItemCount(d).toLocaleString(APP_LOCALE)}</strong> items
+            {catalogVersionCount(d)} {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
           </span>
           <span>
-            <strong>{catalogVersionCount(d)}</strong> {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
-          </span>
-          <span>
-            <strong>{d.run_count.toLocaleString(APP_LOCALE)}</strong> {d.run_count === 1 ? 'run' : 'runs'}
+            {d.run_count.toLocaleString(APP_LOCALE)} {d.run_count === 1 ? 'run' : 'runs'}
           </span>
         </div>
         <div className={styles.cardFoot}>
