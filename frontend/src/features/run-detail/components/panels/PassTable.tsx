@@ -1,6 +1,6 @@
 /**
  * "By pass" (round 10, the first qym's table): the main table of the repeat analysis, right under the tiles. One row
- * per pass, every metric as a column (no picker), then Avg latency and Median latency (with the ⚡ glyph), Errors and
+ * per pass, every metric as a column (no picker), then Avg latency and Median latency (with the zap Icon), Errors and
  * Items. Values are centred; the best and the worst pass of each metric carry a tag on the same line. A row
  * lights its edge on hover (`hoverEdge`); nothing resizes or reorders.
  */
@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { formatPercent, type MetricDirection } from '@/lib/metrics';
 import { DataTable, ScoreValue, type Column } from '@/ui';
+import { BoltLabel } from '@/features/runs-list/cells';
 import type { RunModel } from '../../lib/runModel';
 import { latencyLabel } from '../../lib/rowDisplay';
 import type { PassSummary } from '../../types';
@@ -113,14 +114,7 @@ export function PassTable({ passes, model, metric, basePath, medianHint, queued 
     })),
     {
       id: 'latency',
-      header: (
-        <>
-          <span className={styles.bolt} aria-hidden="true">
-            ⚡
-          </span>
-          Avg latency
-        </>
-      ),
+      header: <BoltLabel label="Avg latency" />,
       label: 'Avg latency',
       align: 'center',
       mono: true,
@@ -129,14 +123,7 @@ export function PassTable({ passes, model, metric, basePath, medianHint, queued 
     },
     {
       id: 'median',
-      header: (
-        <>
-          <span className={styles.bolt} aria-hidden="true">
-            ⚡
-          </span>
-          Median latency
-        </>
-      ),
+      header: <BoltLabel label="Median latency" />,
       label: 'Median latency',
       hint: medianHint,
       align: 'center',
