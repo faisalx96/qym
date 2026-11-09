@@ -80,8 +80,8 @@
 }
 
 .when {
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 
