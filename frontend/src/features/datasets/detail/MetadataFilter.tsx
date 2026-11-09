@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { ListBox, ListBoxItem, type Key } from 'react-aria-components';
 import { useMetadataFacets } from '@/api/datasets';
 import {
+  BarTrigger,
   Button,
   EmptyState,
   ErrorState,
@@ -40,18 +41,16 @@ export function MetadataFilter({ slug, datasetRef, version, filters, onAdd }: Me
   const toast = useToast();
   const canAdd = canAddMetaFilter(filters);
   const button = (
-    <Button
-      variant="neutral"
-      size="sm"
-      icon={<Icon name="plus" size={12} />}
+    <BarTrigger
+      label="Metadata"
+      value={filters.length ? String(filters.length) : undefined}
+      active={filters.length > 0}
       // At the limit the button reads disabled but stays focusable, so its tooltip can say why.
       className={canAdd ? undefined : styles.limit}
       data-limit={canAdd ? undefined : ''}
       onPress={canAdd ? undefined : () => toast.show(META_LIMIT_HINT, { tone: 'info' })}
       data-testid="metadata-filter"
-    >
-      Metadata
-    </Button>
+    />
   );
   if (!canAdd) {
     return <Tooltip content={META_LIMIT_HINT}>{button}</Tooltip>;
