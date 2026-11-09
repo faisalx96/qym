@@ -510,12 +510,7 @@ export function ItemsTab({
         filteredEmpty={
           <EmptyState
             compact
-            title="No items match these filters"
-            action={
-              <Button variant="neutral" onPress={clearFilters}>
-                Clear filters
-              </Button>
-            }
+            title={route.search ? `No items match “${route.search}”` : 'No items match these filters'}
           />
         }
         className={styles.table}

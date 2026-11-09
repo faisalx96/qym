@@ -171,8 +171,7 @@ export function CatalogPage() {
       ) : query.data && visible.length === 0 ? (
         <EmptyState
           compact
-          title="No datasets match"
-          body={`Nothing matches “${search}”.`}
+          title={`No datasets match “${search}”`}
           action={
             <Button variant="neutral" onPress={() => setSearch('')}>
               Clear search
