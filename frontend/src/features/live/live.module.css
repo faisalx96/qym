@@ -2,7 +2,7 @@
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-lg);
   min-inline-size: 0;
   font-size: var(--font-base);
 }
@@ -45,25 +45,33 @@
   font-size: var(--font-base);
 }
 
-.status[data-stale] {
-  color: var(--error-text);
-}
-
 .number {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-.tiles > [role='list'] {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+/* C-02: a Live date-time, the runs Date recipe: sans, tabular figures, one line. */
+.time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .tiles a {
   color: inherit;
+  text-decoration: none;
 }
 
-.tiles a[data-tone] {
+.tiles a:hover {
+  color: var(--accent-primary);
+}
+
+.tiles [data-band] {
   color: var(--tone-text);
+}
+
+/* D-08: the Days heading above the table. */
+.blockTitle {
+  margin-block-end: var(--space-sm);
 }
 
 .mixRow {
@@ -246,11 +254,6 @@
 .lineKey {
   inline-size: var(--space-md);
   border-block-start: 2px solid var(--text-primary);
-}
-
-.trendCaption {
-  display: grid;
-  gap: var(--space-sm);
 }
 
 .trendPlot [data-live-gap='true'] [data-part='bar'] {
