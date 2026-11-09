@@ -4,9 +4,9 @@ import styles from './badges.module.css';
 
 const STATUS_FIGURE: Record<FeedbackStatus, [StatusTone, StatusShape]> = {
   draft: ['warning', 'dot'],
-  new: ['neutral', 'ring'],
-  accepted: ['info', 'check'],
-  planned: ['info', 'hourglass'],
+  new: ['neutral', 'hourglass'],
+  accepted: ['success', 'check'],
+  planned: ['neutral', 'hourglass'],
   done: ['success', 'full'],
   declined: ['danger', 'cross'],
 };
