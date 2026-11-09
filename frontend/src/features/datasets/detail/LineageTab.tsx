@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LinkButton, Section, Skeleton, Tag, Text, Card 
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
 import { formatDate, pluralize } from '../lib/itemValue';
+import { formatTableDate } from '@/lib/dates';
 import { versionSourceText } from '../lib/versions';
 import { comparePath, datasetPath } from '../lib/route';
 import styles from './LineageTab.module.css';
@@ -123,7 +124,7 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
           <ol className={styles.log}>
             {changes.map((c) => (
               <li key={c.id} className={styles.logRow}>
-                <span className={styles.logTime}>{formatDate(c.created_at)}</span>
+                <span className={styles.logTime}>{formatTableDate(c.created_at)}</span>
                 <span className={styles.logText}>{describeChange(c, byId)}</span>
                 <UserPill user={c.actor} />
               </li>

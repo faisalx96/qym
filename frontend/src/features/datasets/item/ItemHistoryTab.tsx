@@ -18,7 +18,8 @@ import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge } from '../components/VersionSwitcher';
 import { orderItemHistory, showsTypeChange } from '../lib/itemHistory';
-import { formatDate, sameValue, storedType } from '../lib/itemValue';
+import { sameValue, storedType } from '../lib/itemValue';
+import { formatTableDate } from '@/lib/dates';
 import styles from './ItemHistoryTab.module.css';
 
 const FIELDS: { key: 'input' | 'expected_output' | 'metadata' | 'labels'; label: string }[] = [
@@ -71,7 +72,7 @@ export function ItemHistoryTab({
             <span className={styles.versionLabel}>{v.version}</span>
             <VersionBadge version={v} />
             <UserPill user={v.created_by} label="Drafted by" />
-            <span className={styles.when}>{formatDate(v.created_at)}</span>
+            <span className={styles.when}>{formatTableDate(v.created_at)}</span>
           </header>
           {revisions.length ? (
             <ol className={styles.revisions}>
@@ -121,7 +122,7 @@ export function ItemHistoryTab({
                         }
                         label="Edited by"
                       />
-                      <span className={styles.when}>{formatDate(r.created_at)}</span>
+                      <span className={styles.when}>{formatTableDate(r.created_at)}</span>
                       {typeChanged.length ? (
                         <Text as="span" variant="sm" tone="warning">
                           type changed:{' '}
