@@ -45,7 +45,7 @@ export function ItemBar({
         <Button
           size="sm"
           variant="neutral"
-          iconEnd={<Icon name="chevron-up" size={14} />}
+          iconEnd={<Icon name="chevron-up" size={12} />}
           onPress={onCollapse}
           aria-label={`Collapse item #${number}`}
         >

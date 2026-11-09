@@ -151,7 +151,7 @@ export function RunHeaderActions({ run, slug }: { run: Run; slug: string }) {
             reference,
             run.run_id,
           )}
-          icon={<Icon name="split" size={14} />}
+          icon={<Icon name="split" size={12} />}
           title={`Compare with ${reference.name} (${
             reference.kind === 'approved'
               ? 'the latest approved run'
