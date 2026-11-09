@@ -152,6 +152,11 @@
 .part[data-part='failed'] {
   background: var(--error);
 }
+/* B-35: with the two-part track the count is the experiments jobs text: grey, body weight. */
+.partsText {
+  font-weight: 450;
+  color: var(--text-secondary);
+}
 
 .scoreText {
   font-weight: 650;

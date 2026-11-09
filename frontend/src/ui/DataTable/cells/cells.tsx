@@ -311,7 +311,7 @@ export function ProgressCell({
           </>
         )}
       </span>
-      <span className={styles.scoreText}>
+      <span className={failed === undefined ? styles.scoreText : styles.partsText}>
         {done}/{total}
       </span>
       {showFailed && failed ? (
