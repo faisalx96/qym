@@ -179,7 +179,12 @@ export function JobHistoryCard({
         j.run_id && !j.run?.deleted ? (
           <TwoLine
             primary={
-              <Link className={styles.runLink} to={runPath(slug, j.run_id)} title={j.run_name || j.run_id}>
+              <Link
+                className={styles.runLink}
+                to={runPath(slug, j.run_id)}
+                title={j.run_name || j.run_id}
+                data-link="name"
+              >
                 <span className={styles.truncate}>{j.run_name || j.run_id}</span>
               </Link>
             }
@@ -233,9 +238,7 @@ export function JobHistoryCard({
         <div className={styles.stack}>
           <div className={styles.cardHead}>
             <Text variant="base" tone="muted" as="p" className={styles.note}>
-              {live
-                ? 'Updates automatically'
-                : 'Every job has finished.'}
+              {live ? 'Updates automatically' : 'Every job has finished.'}
             </Text>
             {supersededCount ? (
               <Checkbox isSelected={showEarlier} onChange={onShowEarlier}>

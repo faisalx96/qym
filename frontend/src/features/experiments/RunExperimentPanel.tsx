@@ -108,7 +108,7 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
       label: 'Experiment',
       value:
         openable && !isExport ? (
-          <Link to={experimentPath(slug, panel.experiment_id ?? '')} className={styles.link}>
+          <Link to={experimentPath(slug, panel.experiment_id ?? '')} data-link="name">
             {panel.experiment_name || String(panel.experiment_id).slice(0, 8)}
           </Link>
         ) : (

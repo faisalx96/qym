@@ -150,7 +150,11 @@ function RemoteEnv({
       cell: (i) =>
         i.match ? (
           <TwoLine
-            primary={<Link to={experimentPath(slug, i.match.experiment_id)}>{i.match.experiment_name}</Link>}
+            primary={
+              <Link to={experimentPath(slug, i.match.experiment_id)} data-link="name">
+                {i.match.experiment_name}
+              </Link>
+            }
             secondary={
               <>
                 Local status {titleCase(i.match.status)}{' '}

@@ -66,15 +66,10 @@
 }
 
 .runLink {
-  color: var(--accent-primary);
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.runLink:hover {
-  text-decoration: underline;
 }
 
 .runLink:focus-visible {
@@ -158,7 +153,11 @@
 
 .matrix tbody tr:nth-child(even) > th,
 .matrix tbody tr:nth-child(even) > td {
-  background: color-mix(in srgb, var(--text-primary) var(--stripe-step), var(--card-bg)); /* page stripe (D-01) */
+  background: color-mix(
+    in srgb,
+    var(--text-primary) var(--stripe-step),
+    var(--card-bg)
+  ); /* page stripe (D-01) */
 }
 
 .comboLabel {
@@ -200,7 +199,8 @@
 }
 
 .metricLink:hover {
-  text-decoration: underline;
+  color: var(--accent-primary);
+  text-decoration: none;
 }
 
 .metricLink:focus-visible {

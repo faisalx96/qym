@@ -47,10 +47,6 @@
   cursor: not-allowed;
 }
 
-.link {
-  color: var(--accent-primary);
-}
-
 .mono {
   font-family: var(--font-mono);
 }

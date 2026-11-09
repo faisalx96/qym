@@ -224,7 +224,7 @@ export function QueuePage() {
         <TwoLine
           primary={
             <span className={styles.jobTitle}>
-              <Link to={experimentPath(slug, j.experiment_id)} className={styles.link}>
+              <Link to={experimentPath(slug, j.experiment_id)} className={styles.link} data-link="name">
                 {j.experiment_name || 'Experiment'} {comboText(j)}
               </Link>
               {j.priority === 'HIGH' ? <Tag tone="warning">HIGH</Tag> : null}
@@ -337,7 +337,7 @@ export function QueuePage() {
               <span className={styles.progressText}>{j.run.items_done ?? 0} items</span>
             )}
             <span className={styles.progressText}>
-              <Link to={runPath(slug, runId)} className={styles.link}>
+              <Link to={runPath(slug, runId)} className={styles.link} data-link="name">
                 {jobLabel(j)} run
               </Link>
             </span>

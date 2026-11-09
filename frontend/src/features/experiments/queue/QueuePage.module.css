@@ -92,12 +92,7 @@
 }
 
 .link {
-  color: var(--accent-primary);
   text-decoration: none;
-}
-
-.link:hover {
-  text-decoration: underline;
 }
 
 .envCell {
