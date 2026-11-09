@@ -119,10 +119,8 @@
 
 .previewLabel {
   font-size: var(--font-sm);
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 /* item text in the sans face (design-language rule 4, C153); the JSON snapshots stay mono */
