@@ -878,3 +878,48 @@ it('keeps errors for duplicate host and database field names in their own sectio
   );
   expect(screen.getByLabelText('Database name')).not.toHaveAttribute('aria-invalid', 'true');
 });
+
+it('uses the worker read zone for status and settings times', async () => {
+  setup({
+    ...liveWorkerRead,
+    stale: true,
+    status: { ...liveWorkerRead.status, stale: true, day_key_timezone: 'Asia/Riyadh' },
+  });
+  const status = await screen.findByRole('region', { name: 'Worker status' });
+  expect(within(status).getByText('since 17:20 Riyadh by Ali')).toBeVisible();
+  expect(within(status).getByText('not reporting since 17:19 Riyadh')).toBeVisible();
+  expect(within(status).getByText('17:18 Riyadh')).toBeVisible();
+  expect(screen.getByText('gateway listed 5 models at 17:20 Riyadh')).toBeVisible();
+});
+
+it.each([
+  ['Asia/Riyadh', true],
+  ['UTC', false],
+  [undefined, false],
+  ['Invalid/Zone', false],
+])('validates the range against the worker source today (%s)', async (zone, allowed) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-09T22:30:00Z'));
+  const { fetch } = setup(
+    { ...liveWorkerRead, status: { ...liveWorkerRead.status, day_key_timezone: zone } },
+    () => response(liveWorkerRead.jobs[0], 201),
+  );
+  const user = await openRange();
+  dates('2026-11-10', '2026-11-10');
+  await user.click(screen.getByRole('button', { name: 'Preview' }));
+  if (allowed) {
+    await waitFor(() => expect(writes(fetch)).toHaveLength(1));
+    expect(JSON.parse(String(writes(fetch)[0]![1]?.body))).toMatchObject({
+      since_day: '2026-11-10',
+      until_day: '2026-11-10',
+    });
+    expect(screen.queryByText('The end day is in the future')).toBeNull();
+    dates('2026-11-11', '2026-11-11');
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('The end day is in the future');
+    expect(writes(fetch)).toHaveLength(1);
+  } else {
+    expect(screen.getByRole('alert')).toHaveTextContent('The end day is in the future');
+    expect(writes(fetch)).toHaveLength(0);
+  }
+});

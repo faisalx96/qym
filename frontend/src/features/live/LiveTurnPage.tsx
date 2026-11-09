@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useLiveTurn, type LiveTurnsPage } from '@/api/live';
+import { useLiveSources, useLiveTurn, type LiveTurnsPage } from '@/api/live';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
@@ -36,6 +36,11 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
   const showSkeleton = useDelayedPending(query.isPending);
   useDocumentTitle(`${query.data?.turn.question ?? 'Turn'} · Live`);
   const data = query.data;
+  const sources = useLiveSources(slug);
+  const sourceInfo = sources.data?.sources.find(
+    (item) => item.key === source || item.id === source || item.id === data?.turn.source_id,
+  );
+  const zone = sourceInfo?.day_key_timezone;
   const chartSlots =
     query.isPending && tab === 'charts'
       ? (queryClient
@@ -97,7 +102,7 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
         </div>
       ) : data ? (
         <>
-          <TurnHeader data={data} slug={slug} source={source} />
+          <TurnHeader data={data} slug={slug} source={source} zone={zone} />
           <TurnTiles data={data} />
           <div data-live-block="tabs">
             <Tabs
@@ -122,7 +127,7 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
                 <ServicesTab data={data} />
               </TabPanel>
               <TabPanel id="conversation" className={styles.panel}>
-                <ConversationTab data={data} slug={slug} source={source} />
+                <ConversationTab data={data} slug={slug} source={source} zone={zone} />
               </TabPanel>
               <TabPanel id="evaluator" className={styles.panel}>
                 <EvaluatorTab data={data} />

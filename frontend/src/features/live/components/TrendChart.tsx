@@ -7,6 +7,7 @@ import { SegmentedControl, type CardTone } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { diagnosisSpec } from '../lib/mix';
 import { columnPitch, formatPrimaryMean, trendColumns, trendLabels, trendSegments } from '../lib/trend';
+import { zoneLabel } from '../lib/zone';
 import styles from '../live.module.css';
 
 const toneFill: Record<CardTone, string> = {
@@ -32,12 +33,14 @@ function stackedFill(stacks: ReturnType<typeof trendColumns>[number]['stacks'], 
 }
 
 export function TrendChart({
+  zone,
   trend,
   specs,
   primaryMetric,
   days,
   onDays,
 }: {
+  zone?: string;
   trend: LiveOverview['trend'];
   specs: LiveMetricSpec[];
   primaryMetric: string | null;
@@ -150,7 +153,7 @@ export function TrendChart({
           </div>
           <span>
             {columns.length ? `${columns[0]!.day} – ${columns.at(-1)!.day} · ` : ''}
-            UTC · hatched baseline: worker gap
+            {zoneLabel(zone)} · hatched baseline: worker gap
           </span>
         </div>
       }

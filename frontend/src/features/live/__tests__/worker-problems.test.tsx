@@ -227,3 +227,37 @@ it.each([
   unmount();
   client.clear();
 });
+
+it.each(['UTC', undefined, 'Invalid/Zone'])('keeps the original raw UTC report line for %s', (zone) => {
+  const report = problemReport({
+    source: 'worker',
+    day_key_timezone: zone,
+    event: { ...liveWorkerEvents[0]!, last_at: '2026-11-09T22:30:12' },
+  });
+  expect(report.split('\n').filter((line) => line.startsWith('Time ('))).toEqual([
+    'Time (UTC): 2026-11-09T22:30:12',
+  ]);
+});
+
+it('copies source-local seconds immediately above the unchanged UTC log timestamp', async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal('isSecureContext', true);
+  const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+  render(
+    <MemoryRouter>
+      <ProblemsBlock
+        source="worker"
+        read={{ ...liveWorkerRead, status: { ...liveWorkerRead.status, day_key_timezone: 'Asia/Riyadh' } }}
+        events={[{ ...liveWorkerEvents[0]!, last_at: '2026-11-09T22:30:12' }]}
+        eventsFilters={{}}
+        onEventsFilters={() => {}}
+      />
+    </MemoryRouter>,
+  );
+  await user.click(screen.getByRole('button', { name: 'Copy report' }));
+  await waitFor(() =>
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('Time (Riyadh): 2026-11-10 01:30:12\nTime (UTC): 2026-11-09T22:30:12'),
+    ),
+  );
+});

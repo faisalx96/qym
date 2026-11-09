@@ -25,6 +25,7 @@ import { JobsBlock } from './components/worker/JobsBlock';
 import { ProblemsBlock, type ProblemsProps } from './components/worker/ProblemsBlock';
 import { DateRangeDialog } from './components/worker/DateRangeDialog';
 import type { WorkerBusy, WorkerCallbacks } from './components/worker/types';
+import { zoneToday } from './lib/zone';
 import liveStyles from './live.module.css';
 import styles from './worker.module.css';
 
@@ -84,6 +85,7 @@ export function WorkerPageView({
         open={range}
         onOpenChange={setRange}
         jobs={read.jobs}
+        today={zoneToday(read.status.day_key_timezone)}
         onCreateJob={onCreateJob}
         busy={busy.createJob}
       />

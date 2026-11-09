@@ -68,12 +68,14 @@ export function LiveTurnsPage({ slug, source }: { slug: string; source: string }
       ) : turns.data && overview.data ? (
         <>
           <TurnFilters
+            zone={overview.data.status.day_key_timezone}
             filters={filters}
             facets={turns.data.facets}
             specs={overview.data.specs}
             dayCount={overview.data.day.in_qym}
           />
           <TurnsTable
+            zone={overview.data.status.day_key_timezone}
             slug={slug}
             source={source}
             filters={filters}

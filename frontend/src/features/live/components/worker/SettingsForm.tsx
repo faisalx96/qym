@@ -90,7 +90,8 @@ function SettingsSection({
             {summary}
             {models ? (
               <span className={styles.wrap}>
-                gateway listed {read.model_ids.length} models at {workerTime(models.listed_at)}
+                gateway listed {read.model_ids.length} models at{' '}
+                {workerTime(models.listed_at, read.status.day_key_timezone)}
               </span>
             ) : null}
           </span>

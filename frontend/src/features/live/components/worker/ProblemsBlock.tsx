@@ -175,6 +175,7 @@ export function ProblemsBlock({
                   text={() =>
                     problemReport({
                       source,
+                      day_key_timezone: read.status.day_key_timezone,
                       environment: sourceStatus.environment,
                       worker_version: workerVersion,
                       eval_code_version: evalVersion,

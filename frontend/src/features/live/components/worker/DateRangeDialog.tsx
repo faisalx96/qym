@@ -3,6 +3,7 @@ import { validateDateRange, type CreateWorkerJob, type LiveJob } from '@/api/liv
 import { errorSentence } from '@/lib/http';
 import { Button, Checkbox, Dialog, ErrorState, NumberField, Text, TextField, useToast } from '@/ui';
 import type { WorkerCallbacks } from './types';
+import { zoneToday } from '../../lib/zone';
 import styles from '../../worker.module.css';
 
 export function DateRangeDialog({
@@ -11,7 +12,7 @@ export function DateRangeDialog({
   jobs,
   onCreateJob,
   busy,
-  today = new Date().toISOString().slice(0, 10),
+  today = zoneToday('UTC'),
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;

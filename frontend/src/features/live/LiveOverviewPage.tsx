@@ -17,7 +17,17 @@ import { TrendChart } from './components/TrendChart';
 import { DaysTable } from './components/DaysTable';
 import styles from './live.module.css';
 
-export function LiveOverviewPage({ slug, source, day }: { slug: string; source: string; day: string }) {
+export function LiveOverviewPage({
+  slug,
+  source,
+  day,
+  zone: sourceZone,
+}: {
+  slug: string;
+  source: string;
+  day: string;
+  zone?: string;
+}) {
   const { project } = useProjectContext();
   useDocumentTitle(`Live · ${project.name}`);
   const { get, replaceUrlQuery } = useSearchParamsState();
@@ -28,6 +38,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
   const query = useLiveOverview(slug, { source, day, trendDays, daysPage });
   const showSkeleton = useDelayedPending(query.isPending);
   const overview = query.data;
+  const zone = overview?.status.day_key_timezone ?? sourceZone;
   const cachedOverview = useCachedOverview(slug, source);
   const linkTo = (filters: Record<string, string> = {}) =>
     `/projects/${encodeURIComponent(slug)}/live/turns?${new URLSearchParams({ day, source, ...filters })}`;
@@ -40,7 +51,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
           description="Every real user turn, evaluated as it happens"
           meta={[
             <SourceControl key="source" slug={slug} source={source} status={overview?.status} />,
-            <DaySwitcher key="day" day={day} />,
+            <DaySwitcher key="day" day={day} zone={zone} />,
           ]}
         />
       </div>
@@ -84,6 +95,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
             <Canaries canaries={overview.canaries} specs={overview.specs} />
           </ServiceHealth>
           <TrendChart
+            zone={zone}
             trend={overview.trend}
             specs={overview.specs}
             primaryMetric={overview.primary_metric}
@@ -91,6 +103,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
             onDays={(value) => replaceUrlQuery({ trend_days: value })}
           />
           <DaysTable
+            zone={zone}
             days={overview.days}
             slug={slug}
             source={source}

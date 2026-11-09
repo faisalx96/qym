@@ -11,6 +11,7 @@ import { LiveOverviewPage } from './LiveOverviewPage';
 import { LiveTurnPage } from './LiveTurnPage';
 import { LiveWorkerPage } from './LiveWorkerPage';
 import { LiveTurnsPage } from './LiveTurnsPage';
+import { zoneToday } from './lib/zone';
 import styles from './live.module.css';
 
 function LiveRoute({ title }: { title: string }) {
@@ -46,12 +47,14 @@ export function LiveOverviewRoute() {
   const query = useLiveSources(slug);
   const { get } = useSearchParamsState();
   const source = get('source') || query.data?.default_source || query.data?.sources[0]?.key;
+  const sourceInfo = query.data?.sources.find((item) => item.key === source || item.id === source);
   if (query.data?.sources.length && source) {
     return (
       <LiveOverviewPage
         slug={slug}
         source={source}
-        day={get('day') || new Date().toISOString().slice(0, 10)}
+        day={get('day') || zoneToday(sourceInfo?.day_key_timezone)}
+        zone={sourceInfo?.day_key_timezone}
       />
     );
   }

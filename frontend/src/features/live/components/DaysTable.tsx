@@ -4,9 +4,11 @@ import { DataTable, ScoreValue, StatusMark, Text, type Column } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
 import { formatPrimaryMean } from '../lib/trend';
+import { zoneLabel } from '../lib/zone';
 import styles from '../live.module.css';
 
 export function DaysTable({
+  zone,
   days,
   slug,
   source,
@@ -14,6 +16,7 @@ export function DaysTable({
   primaryMetric,
   stale = false,
 }: {
+  zone?: string;
   days: LiveOverview['days'];
   slug: string;
   source: string;
@@ -27,7 +30,7 @@ export function DaysTable({
     specs.find((spec) => spec.is_primary) ?? specs.find((spec) => spec.metric_name === primaryMetric);
   const diagnosis = diagnosisSpec(specs);
   const columns: Column<LiveOverview['days']['rows'][number]>[] = [
-    { id: 'day', header: 'Day (UTC)', width: 130, mono: true },
+    { id: 'day', header: `Day (${zoneLabel(zone)})`, width: 130, mono: true },
     { id: 'turns_seen', header: 'Turns', width: 75, type: 'number' },
     { id: 'evaluated', header: 'Evaluated', width: 90, type: 'number' },
     { id: 'failed', header: 'Failed', width: 75, type: 'number' },

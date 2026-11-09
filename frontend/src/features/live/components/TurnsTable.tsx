@@ -4,9 +4,11 @@ import { applyQueryUpdates, useSearchParamsState } from '@/lib/url-state';
 import { DataTable, EmptyState, ScoreValue, StatusMark, Tag, type Column, type SortState } from '@/ui';
 import { listedScoreColumns } from '../lib/filters';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
+import { zoneLabel, zoneTime } from '../lib/zone';
 import styles from '../turns.module.css';
 
 interface TurnsTableProps {
+  zone?: string;
   slug: string;
   source: string;
   filters: LiveFilters;
@@ -26,7 +28,7 @@ function scoreText(row: LiveTurnRow, spec: LiveMetricSpec): string {
   return `${value.toFixed(digits)}${spec.unit ? ` ${spec.unit}` : ''}`;
 }
 
-export function TurnsTable({ slug, source, filters, data, specs, refreshing }: TurnsTableProps) {
+export function TurnsTable({ slug, source, filters, data, specs, refreshing, zone }: TurnsTableProps) {
   const { params, replaceUrlQuery } = useSearchParamsState();
   const path = `/projects/${encodeURIComponent(slug)}/live/turns`;
   const linkTo = (conversation: string) =>
@@ -45,12 +47,12 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
   const columns: Column<LiveTurnRow>[] = [
     {
       id: 'turn_at',
-      header: 'Time (UTC)',
+      header: `Time (${zoneLabel(zone)})`,
       width: 88,
       pin: 'start',
       mono: true,
       sort: { key: 'turn_at', first: 'desc' },
-      cell: (row) => <span title={row.turn_at}>{row.turn_at.slice(11, 16)}</span>,
+      cell: (row) => <span title={row.turn_at}>{zoneTime(row.turn_at, zone)}</span>,
     },
     {
       id: 'question',

@@ -14,9 +14,11 @@ import {
 } from '@/ui';
 import { filterChips } from '../lib/filters';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
+import { zoneLabel } from '../lib/zone';
 import styles from '../turns.module.css';
 
 interface TurnFiltersProps {
+  zone?: string;
   filters: LiveFilters;
   facets: LiveTurnsPage['facets'] | undefined;
   specs: LiveMetricSpec[];
@@ -49,7 +51,7 @@ function FilterControl({
   );
 }
 
-export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersProps) {
+export function TurnFilters({ filters, facets, specs, dayCount, zone }: TurnFiltersProps) {
   const { replaceUrlQuery } = useSearchParamsState();
   const update = (updates: QueryUpdates) => replaceUrlQuery({ ...updates, page: null });
   const chips = filterChips(filters, facets, specs);
@@ -154,7 +156,7 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
           .map((chip) => (
             <div key={chip.key} className={styles.filterControl} data-live-filter={chip.key}>
               <Text variant="sm" tone="muted" weight={650}>
-                {chip.key === 'day' || chip.key === 'from' ? 'Day (UTC)' : chip.key}
+                {chip.key === 'day' || chip.key === 'from' ? `Day (${zoneLabel(zone)})` : chip.key}
               </Text>
               <Chip
                 isSelected

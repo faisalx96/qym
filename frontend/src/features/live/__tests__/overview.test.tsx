@@ -239,3 +239,26 @@ describe('overview blocks', () => {
     ).toBeInTheDocument();
   });
 });
+
+it('navigates and clamps to Riyadh today while labeling the source zone', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-11-09T22:30:00Z'));
+  function Switcher() {
+    const location = useLocation();
+    return <DaySwitcher day={new URLSearchParams(location.search).get('day')!} zone="Asia/Riyadh" />;
+  }
+  render(
+    <MemoryRouter initialEntries={['?day=2026-11-09']}>
+      <Switcher />
+    </MemoryRouter>,
+  );
+  expect(screen.getByText('Riyadh')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
+  expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Today · 10 Nov 2026' }));
+  expect(screen.getByRole('group', { name: 'Day (Riyadh)' })).toBeVisible();
+  const dayInput = screen.getByRole('spinbutton', { name: /day,/i });
+  fireEvent.keyDown(dayInput, { key: 'ArrowUp' });
+  expect(dayInput).toHaveAttribute('aria-valuenow', '10');
+});

@@ -3,7 +3,7 @@ import { parseLiveFilters, useLiveSources, useLiveTurns, type LiveTurnDetail } f
 import { useSearchParamsState } from '@/lib/url-state';
 import { Card, IconButton, PageHeader, Tag } from '@/ui';
 import { DiagnosisLabel } from './Evidence';
-import { labelFor, traceHref, turnHref, utcTime } from './presentation';
+import { labelFor, traceHref, turnHref, turnTime } from './presentation';
 import styles from '../../turn.module.css';
 
 function ListNavigation({
@@ -46,7 +46,17 @@ function ListNavigation({
   );
 }
 
-export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug: string; source: string }) {
+export function TurnHeader({
+  data,
+  slug,
+  source,
+  zone,
+}: {
+  data: LiveTurnDetail;
+  slug: string;
+  source: string;
+  zone?: string;
+}) {
   const { turn, conversation, specs } = data;
   const { get } = useSearchParamsState();
   const list = get('list');
@@ -83,7 +93,7 @@ export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug:
               ]
             : []),
           <span key="time" className={styles.number}>
-            {utcTime(turn.turn_at)}
+            {turnTime(turn.turn_at, zone)}
           </span>,
           <span
             key="user"

@@ -1,8 +1,9 @@
+import { zoneLabel, zoneTime } from '../../lib/zone';
 import { APP_LOCALE, toDate } from '@/lib/dates';
 
-export function workerTime(value: string | null | undefined): string {
+export function workerTime(value: string | null | undefined, zone?: string): string {
   const date = toDate(value);
-  return date ? `${date.toISOString().slice(11, 16)} UTC` : '—';
+  return date ? `${zoneTime(date.toISOString(), zone)} ${zoneLabel(zone)}` : '—';
 }
 
 export function workerDay(value: string): string {

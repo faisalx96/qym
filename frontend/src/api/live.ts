@@ -9,6 +9,7 @@ export interface LiveSourceInfo {
   key: string;
   name: string;
   environment: string;
+  day_key_timezone?: string;
   product: string | null;
   stale: boolean;
   seconds_since_heartbeat: number | null;

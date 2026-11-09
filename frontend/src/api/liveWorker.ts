@@ -1,5 +1,6 @@
 /** Live worker control, settings and jobs. Secrets are write-only. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { safeZone, zoneDateTime, zoneLabel } from '@/features/live/lib/zone';
 import { api } from '@/lib/http';
 import type { LiveSourceInfo } from './live';
 export { errorReport } from '@/lib/error-report';
@@ -282,6 +283,7 @@ export function validateDateRange(
   since_day: string,
   until_day: string,
   limit: number,
+  // A day key in the source's timezone, supplied by the caller.
   today: string,
 ): string | null {
   if (
@@ -298,6 +300,7 @@ export function validateDateRange(
   return null;
 }
 export interface ProblemReportInput {
+  day_key_timezone?: string;
   source: string;
   environment?: string | null;
   worker_version?: string | null;
@@ -307,12 +310,14 @@ export interface ProblemReportInput {
 }
 export function problemReport(input: ProblemReportInput): string {
   const { event } = input;
+  const zone = safeZone(input.day_key_timezone);
   return Object.entries({
     Source: input.source,
     Environment: input.environment,
     'Worker version': input.worker_version,
     'Eval code version': input.eval_code_version,
     'Settings version applied': input.settings_version_applied,
+    ...(zone === 'UTC' ? {} : { [`Time (${zoneLabel(zone)})`]: zoneDateTime(event.last_at, zone, true) }),
     'Time (UTC)': event.last_at,
     Component: event.component,
     Code: event.code,

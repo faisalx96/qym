@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { liveOverviewQueryOptions, type LiveOverview } from '@/api/live';
 import { liveOverview } from '@/features/dev/liveFixtures';
+import { LiveOverviewRoute } from '../LiveRoutes';
 import { LiveOverviewPage } from '../LiveOverviewPage';
 import { LiveTurnsPage } from '../LiveTurnsPage';
 
@@ -62,6 +63,7 @@ const overviewResponse = (data = liveOverview) => new Response(JSON.stringify(da
 afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('overview loading and error states', () => {
@@ -206,4 +208,56 @@ it.each([false, true])('changes the source and reloads the %s page numbers', asy
   if (turns) expect(await screen.findByText('3 of 3 turns on 1 Nov 2026')).toBeVisible();
   else
     await waitFor(() => expect(container.querySelector('[data-live-stat="turns"]')).toHaveTextContent('3'));
+});
+
+it.each([
+  ['Asia/Riyadh', '2026-11-10', 'Riyadh'],
+  ['UTC', '2026-11-09', 'UTC'],
+  [undefined, '2026-11-09', 'UTC'],
+  ['Invalid/Zone', '2026-11-09', 'UTC'],
+])('waits for source info before requesting the default day in %s', async (zone, expectedDay, label) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-09T22:30:00Z'));
+  const status = { ...liveOverview.status, day_key_timezone: zone };
+  let resolveSources!: (response: Response) => void;
+  const pendingSources = new Promise<Response>((resolve) => {
+    resolveSources = resolve;
+  });
+  const requests: URL[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string) => {
+      const url = new URL(input, 'http://localhost');
+      requests.push(url);
+      if (url.pathname.endsWith('/live')) return pendingSources;
+      return overviewResponse({ ...liveOverview, status });
+    }),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  clients.push(client);
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[`?source=${source}`]}>
+        <LiveOverviewRoute />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(requests.some((url) => url.pathname.endsWith('/overview'))).toBe(false);
+  await act(async () => {
+    resolveSources(
+      new Response(
+        JSON.stringify({
+          sources: [{ ...second, day_key_timezone: 'UTC' }, status],
+          default_source: second.key,
+        }),
+      ),
+    );
+  });
+  await screen.findByRole('grid', { name: 'Days' });
+  expect(
+    requests.filter((url) => url.pathname.endsWith('/overview')).map((url) => url.searchParams.get('day')),
+  ).toEqual([expectedDay]);
+  expect(screen.getByText(`Day (${label})`)).toBeVisible();
+  expect(screen.getByText((text) => text.endsWith(`${label} · hatched baseline: worker gap`))).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled();
 });

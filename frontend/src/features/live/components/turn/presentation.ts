@@ -1,3 +1,5 @@
+import { toDate } from '@/lib/dates';
+import { safeZone, zoneLabel, zoneTime } from '../../lib/zone';
 import type { LiveMetricSpec } from '@/api/live';
 import { formatDurationMs, formatNumericValue, formatPercentValue } from '@/lib/format';
 import { diagnosisSpec, mixSegments } from '../../lib/mix';
@@ -19,10 +21,10 @@ export function scoreText(value: number | null, spec?: LiveMetricSpec | null): s
   return `${formatNumericValue(value, spec.precision ?? 2)}${spec.unit ? ` ${spec.unit}` : ''}`;
 }
 
-export function utcTime(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return '—';
-  return `${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })} · ${date.toISOString().slice(11, 16)} UTC`;
+export function turnTime(value: string, zone?: string): string {
+  const date = toDate(value);
+  if (!date) return '—';
+  return `${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: safeZone(zone) })} · ${zoneTime(value, zone)} ${zoneLabel(zone)}`;
 }
 
 export function traceHref(value: string | null): string | null {

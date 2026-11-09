@@ -29,7 +29,7 @@ export function StatusLine({
     worker.judges && typeof worker.judges === 'object'
       ? Object.values(worker.judges).filter((judge): judge is string => typeof judge === 'string')
       : [];
-  const lastTurn = status.last_turn_at ? statusTime(status.last_turn_at, now) : '—';
+  const lastTurn = status.last_turn_at ? statusTime(status.last_turn_at, now, status.day_key_timezone) : '—';
   return (
     <Card
       compact

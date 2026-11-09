@@ -67,7 +67,7 @@ export function StatusStrip({
             sub: (
               <span dir="auto" className={styles.wrap}>
                 {control?.reason ||
-                  `${control?.applied_at ? `since ${workerTime(control.applied_at)}` : ''}${read.state.changed_by ? ` by ${read.state.changed_by}` : ''}`}
+                  `${control?.applied_at ? `since ${workerTime(control.applied_at, read.status.day_key_timezone)}` : ''}${read.state.changed_by ? ` by ${read.state.changed_by}` : ''}`}
               </span>
             ),
           },
@@ -80,7 +80,9 @@ export function StatusStrip({
                 title={poll ?? undefined}
                 className={styles.wrap}
               >
-                {read.status.stale ? `not reporting since ${workerTime(poll)}` : formatRelative(poll)}
+                {read.status.stale
+                  ? `not reporting since ${workerTime(poll, read.status.day_key_timezone)}`
+                  : formatRelative(poll)}
               </Text>
             ),
             sub: interval != null ? `every ${interval} s` : undefined,
@@ -90,7 +92,7 @@ export function StatusStrip({
             label: 'Last turn',
             value: (
               <Text as="span" mono title={read.status.last_turn_at ?? undefined}>
-                {workerTime(read.status.last_turn_at)}
+                {workerTime(read.status.last_turn_at, read.status.day_key_timezone)}
               </Text>
             ),
             sub: `${read.today.turns_seen} today, ${read.today.evaluated} evaluated`,

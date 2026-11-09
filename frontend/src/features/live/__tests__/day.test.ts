@@ -23,3 +23,13 @@ describe('UTC day navigation', () => {
     expect(dayLabel('2026-10-31')).toBe('Sat 31 Oct 2026');
   });
 });
+
+it('marks today in Riyadh without shifting historical keys', () => {
+  vi.useFakeTimers();
+  const now = new Date('2026-11-09T22:30:00Z');
+  vi.setSystemTime(now);
+  expect(isToday('2026-11-10', now, 'Asia/Riyadh')).toBe(true);
+  expect(isToday('2026-11-09', now, 'Asia/Riyadh')).toBe(false);
+  expect(dayLabel('2026-11-10', 'Asia/Riyadh')).toBe('Today · 10 Nov 2026');
+  expect(dayLabel('2026-11-09', 'Asia/Riyadh')).toBe('Mon 9 Nov 2026');
+});
