@@ -76,6 +76,8 @@
    (--foot, set per plot), so a thinned axis label can never make a column end higher than its neighbour. */
 .col {
   display: grid;
+  /* Chrome up to at least 131 defaults buttons to align-items: flex-start, stopping the well filling its row. */
+  align-items: stretch;
   flex: 1;
   grid-template-columns: minmax(
     0,

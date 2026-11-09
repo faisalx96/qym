@@ -179,14 +179,18 @@ describe('overview service and history blocks', () => {
     expect(screen.getByText('Problem', { exact: true })).toBeVisible();
   });
 
-  it('colours inconclusive stacks and legend meta while undiagnosed stays neutral', () => {
+  it('keeps distinct diagnosis tones in the trend legend and inconclusive stacks neutral', () => {
+    const values = [
+      { value: 'ok', label: 'OK', tone: 'accent' },
+      { value: 'problem', label: 'Problem', tone: 'danger' },
+      { value: 'system_problem', label: 'System problem', tone: 'meta' },
+      { value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' },
+    ];
     const { container } = render(
       <MemoryRouter>
         <TrendChart
           trend={[{ ...trend[0]!, counts_by_label: { inconclusive: 3 } }]}
-          specs={[
-            { ...specs[2]!, values: [{ value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' }] },
-          ]}
+          specs={[{ ...specs[2]!, values }]}
           primaryMetric="diagnosis"
           days={14}
           onDays={() => {}}
@@ -194,9 +198,14 @@ describe('overview service and history blocks', () => {
       </MemoryRouter>,
     );
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
-      'var(--accent-tertiary) 0% 75%',
+      'var(--text-muted) 0% 75%',
     );
-    expect(screen.getByText('Inconclusive').closest('[data-tone]')).toHaveAttribute('data-tone', 'meta');
+    const legendTones = values.map(({ label, tone }) => {
+      const entry = screen.getByText(label, { exact: true }).closest('[data-tone]');
+      expect(entry).toHaveAttribute('data-tone', tone);
+      return entry?.getAttribute('data-tone');
+    });
+    expect(new Set(legendTones).size).toBe(values.length);
     expect(screen.getByText('Undiagnosed').closest('[data-tone]')).toHaveAttribute('data-tone', 'neutral');
     expect(container.querySelector('[data-part="baseline"]')).toBeNull();
   });

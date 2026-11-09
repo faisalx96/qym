@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
-import { columnPitch, trendColumns, trendDayLabel, trendLabels, trendSegments } from '../lib/trend';
+import { columnPitch, trendColumns, trendDayLabel, trendLabels } from '../lib/trend';
 import { mixSegments } from '../lib/mix';
 
 const diagnosis: LiveMetricSpec = {
@@ -34,18 +34,19 @@ const trend: LiveOverview['trend'] = [
 ];
 
 describe('trendColumns', () => {
-  it('uses meta for inconclusive in trend stacks and legend without changing other diagnosis tones', () => {
+  it('uses the mix tones for every diagnosis, including inconclusive', () => {
     const spec = {
       ...diagnosis,
-      values: [{ value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' }],
+      values: [
+        { value: 'system_problem', label: 'System problem', tone: 'meta' },
+        { value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' },
+      ],
     };
     const counts = { inconclusive: 3 };
     expect(trendColumns([{ ...trend[0]!, turns: 4, counts_by_label: counts }], [spec])[0]?.stacks).toEqual([
-      { value: 'inconclusive', label: 'Inconclusive', tone: 'meta', n: 3 },
+      ...mixSegments(counts, spec).map(({ value, label, tone, n }) => ({ value, label, tone, n })),
       { value: null, label: 'Undiagnosed', tone: 'neutral', n: 1 },
     ]);
-    expect(trendSegments(counts, spec)[0]?.tone).toBe('meta');
-    expect(mixSegments(counts, spec)[0]?.tone).toBe('neutral');
   });
   it('keeps every day, including zero days, with totals and missing rates intact', () => {
     const columns = trendColumns(trend, [diagnosis]);

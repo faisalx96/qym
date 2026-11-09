@@ -35,14 +35,6 @@ export function trendLabels(days: string[], pitch: number) {
   return labels;
 }
 
-/** Inconclusive is distinct from undiagnosed only in the trend stacks and legend. */
-export function trendSegments(counts: Record<string, number>, spec: LiveMetricSpec | null) {
-  return mixSegments(counts, spec).map((segment) => ({
-    ...segment,
-    tone: segment.value === 'inconclusive' ? ('meta' as const) : segment.tone,
-  }));
-}
-
 /** Columns include half a gap at each edge, so their centres stay at (i + 0.5) * width / count. */
 export function columnPitch(width: number, count: number): { bar: number; gap: number } {
   const gap = count * (3 + 4) > width ? 1 : 4;
@@ -70,7 +62,7 @@ export function trendColumns(
 }[] {
   const spec = diagnosisSpec(specs);
   return trend.map((entry) => {
-    const stacks: { value: string | null; label: string; tone: CardTone; n: number }[] = trendSegments(
+    const stacks: { value: string | null; label: string; tone: CardTone; n: number }[] = mixSegments(
       entry.counts_by_label,
       spec,
     ).map(({ value, label, tone, n }) => ({ value, label, tone, n }));
