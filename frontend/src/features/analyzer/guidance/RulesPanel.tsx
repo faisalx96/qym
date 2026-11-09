@@ -86,9 +86,10 @@ export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canMana
 }
 
 function stateBadge(v: RuleVersion, productionId: string | null) {
-  if (v.id === productionId || v.is_active) return <StatusMark tone="success" shape="full" label="Live" />;
+  if (v.id === productionId || v.is_active)
+    return <StatusMark tone="success" shape="full" label="Production" />;
   if (v.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
-  return <StatusMark tone="neutral" shape="full" label="Published" />;
+  return <StatusMark tone="info" shape="full" label="Published" />;
 }
 
 function RulesView({
@@ -580,7 +581,7 @@ function VersionWorkspace({
             <Flag tone={editable ? 'warning' : 'neutral'} icon={editable ? 'edit' : 'lock'}>
               {editable ? 'Editable draft' : version.status === 'draft' ? 'Draft (read-only)' : 'Read-only'}
             </Flag>
-            {isProduction ? <StatusMark tone="success" shape="full" label="Live" /> : null}
+            {isProduction ? <StatusMark tone="success" shape="full" label="Production" /> : null}
             {editable ? (
               <Button
                 variant="primary"

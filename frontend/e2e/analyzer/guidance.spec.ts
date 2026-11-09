@@ -60,7 +60,7 @@ test.describe('Rules tab as manager (10)', () => {
     await publish.getByRole('button', { name: 'Publish' }).click();
     await expect(page.getByText('v1 published and live').first()).toBeVisible();
     const list = page.getByRole('complementary', { name: 'Rule versions' });
-    await expect(list.getByText('Live')).toBeVisible();
+    await expect(list.getByText('Production', { exact: true })).toBeVisible();
     await expect(page.getByText('Read-only', { exact: true })).toBeVisible();
 
     // create a draft from the live version, change the rule
