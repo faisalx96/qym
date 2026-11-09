@@ -1,4 +1,4 @@
-import { EmptyState, Skeleton, Tag, Text, Flag } from '@/ui';
+import { Disclosure, EmptyState, Skeleton, Tag, Text, Flag } from '@/ui';
 import type { AnalysisResultPayload } from '@/api/analysis';
 import { rootCauseIssues } from '../model/rootCause';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -73,12 +73,11 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
               {i.finding}
             </Text>
             {i.category_reason ? (
-              <details className={s.details}>
-                <summary>Why this category</summary>
+              <Disclosure className={s.details} title="Why this category">
                 <Text variant="base" tone="secondary" as="p" dir="auto">
                   {i.category_reason}
                 </Text>
-              </details>
+              </Disclosure>
             ) : null}
           </li>
         ))}
@@ -94,12 +93,11 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
         ))}
       </div>
       {context ? (
-        <details className={s.details}>
-          <summary>Item context</summary>
+        <Disclosure className={s.details} title="Item context">
           <pre className={s.messageBody} dir="auto">
             {context}
           </pre>
-        </details>
+        </Disclosure>
       ) : null}
     </article>
   );

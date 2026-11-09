@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import type { RootCauseIssue } from '@/api/reviews';
 import { useCategoryCatalogQuery } from '@/api/runs';
 import { textDirAttrs } from '@/lib/text';
-import { Button, IconButton, Select, Text, TextField, Textarea, Icon } from '@/ui';
+import { Button, Disclosure, IconButton, Select, Text, TextField, Textarea, Icon } from '@/ui';
 import styles from './IssueList.module.css';
 
 const NEW_CATEGORY = '__new__';
@@ -51,10 +51,9 @@ export function IssueList({ issues, tone }: { issues: RootCauseIssue[]; tone: 'a
             </p>
           ) : null}
           {i.category_reason ? (
-            <details className={styles.why}>
-              <summary>Why this category</summary>
+            <Disclosure className={styles.why} title="Why this category">
               <p {...textDirAttrs(i.category_reason)}>{i.category_reason}</p>
-            </details>
+            </Disclosure>
           ) : null}
         </li>
       ))}

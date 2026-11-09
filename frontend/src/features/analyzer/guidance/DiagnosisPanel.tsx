@@ -16,6 +16,7 @@ import {
   Button,
   ConfirmDialog,
   EmptyState,
+  Disclosure,
   ErrorState,
   Icon,
   IconButton,
@@ -602,14 +603,18 @@ function DiagnosisEditor({
                         });
                         return (
                           <li key={x.id}>
-                            <details className={d.example}>
-                              <summary>
-                                <span className={d.mono}>{x.item_id ?? `#${x.id}`}</span>
-                                {x.metric_name ? <Tag kind="data">{x.metric_name}</Tag> : null}
-                                <span>
-                                  {issues[0]?.finding || x.note || x.detail || 'Approved correction'}
-                                </span>
-                              </summary>
+                            <Disclosure
+                              className={d.example}
+                              title={
+                                <>
+                                  <span className={d.mono}>{x.item_id ?? `#${x.id}`}</span>{' '}
+                                  {x.metric_name ? <Tag kind="data">{x.metric_name}</Tag> : null}{' '}
+                                  <span>
+                                    {issues[0]?.finding || x.note || x.detail || 'Approved correction'}
+                                  </span>
+                                </>
+                              }
+                            >
                               <dl className={d.exampleBody}>
                                 {(
                                   [
@@ -629,7 +634,7 @@ function DiagnosisEditor({
                                     </div>
                                   ))}
                               </dl>
-                            </details>
+                            </Disclosure>
                           </li>
                         );
                       })}

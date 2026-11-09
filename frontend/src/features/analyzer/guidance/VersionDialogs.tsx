@@ -13,6 +13,7 @@ import { actionErrorMessage } from '@/lib/http';
 import {
   Button,
   Dialog,
+  Disclosure,
   ErrorState,
   Select,
   Skeleton,
@@ -169,26 +170,23 @@ export function CompareDialog({
           <ul className={s.diffList}>
             {data.changed_rules.map((r) => (
               <li key={`c${r.id}`} className={s.diffItem}>
-                <details>
-                  <summary>{`Changed: ${r.after.title || r.before.title}`}</summary>
+                <Disclosure title={`Changed: ${r.after.title || r.before.title}`}>
                   <RulePair before={r.before} after={r.after} />
-                </details>
+                </Disclosure>
               </li>
             ))}
             {data.added_rules.map((r, i) => (
               <li key={`a${r.id ?? i}`} className={s.diffItem}>
-                <details>
-                  <summary>{`Added: ${r.title}`}</summary>
+                <Disclosure title={`Added: ${r.title}`}>
                   <RulePair after={r} />
-                </details>
+                </Disclosure>
               </li>
             ))}
             {data.removed_rules.map((r, i) => (
               <li key={`r${r.id ?? i}`} className={s.diffItem}>
-                <details>
-                  <summary>{`Removed: ${r.title}`}</summary>
+                <Disclosure title={`Removed: ${r.title}`}>
                   <RulePair before={r} />
-                </details>
+                </Disclosure>
               </li>
             ))}
           </ul>
