@@ -185,7 +185,7 @@ test.describe('axe', () => {
     await page.keyboard.press('Escape');
     await page.locator('[data-exp-cell]').first().locator('[data-row-menu]').click();
     await page.getByRole('menuitem', { name: 'Save as preset' }).click();
-    await expect(page.getByRole('dialog', { name: 'Save as preset' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Save as a preset?' })).toBeVisible();
     await expectNoSeriousViolations(page, 'save as preset');
   });
 

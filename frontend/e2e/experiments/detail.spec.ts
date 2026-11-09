@@ -425,7 +425,7 @@ test.describe('experiment detail', () => {
     });
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
     await cellAction(page.locator(`[data-exp-cell="${x.jobs[0]!.id}"]`), 'Save as preset');
-    const dialog = page.getByRole('dialog', { name: 'Save as preset' });
+    const dialog = page.getByRole('dialog', { name: 'Save as a preset?' });
     const name = dialog.getByRole('textbox', { name: /Preset name/ });
     await expect(name).toBeFocused();
     await expect(name).not.toHaveValue('');
