@@ -29,13 +29,11 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
           <Flag tone="danger" icon="warning">
             {r.error_code || 'Error'}
           </Flag>
+        ) : issues.length && confidence != null ? (
+          <Text variant="sm" tone="muted" as="span">{`${Math.round(confidence * 100)}% confidence`}</Text>
         ) : (
           <Flag tone={issues.length ? 'info' : 'warning'}>
-            {issues.length && confidence != null
-              ? `${Math.round(confidence * 100)}% confidence`
-              : issues.length
-                ? 'Diagnosed'
-                : 'No diagnosis'}
+            {issues.length ? 'Diagnosed' : 'No diagnosis'}
           </Flag>
         )}
         {r.retry_count ? (
@@ -63,12 +61,11 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
               {i.confidence != null ? (
                 <Text
                   variant="sm"
-                  mono
                   tone="muted"
                   as="span"
                   aria-label={`confidence ${Math.round(i.confidence * 100)} percent`}
                 >
-                  {`${Math.round(i.confidence * 100)}%`}
+                  {`${Math.round(i.confidence * 100)}% confidence`}
                 </Text>
               ) : null}
             </div>

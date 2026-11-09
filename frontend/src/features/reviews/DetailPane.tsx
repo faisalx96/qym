@@ -86,7 +86,7 @@ export function DetailPane(p: DetailPaneProps) {
         </div>
         <div className={styles.meta}>
           {typeof row.ai_confidence === 'number' ? (
-            <span>AI confidence {Math.round(row.ai_confidence * 100)}%</span>
+            <span>{Math.round(row.ai_confidence * 100)}% confidence</span>
           ) : null}
           {row.corrected_by ? (
             <span>

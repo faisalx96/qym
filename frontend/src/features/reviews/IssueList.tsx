@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import type { RootCauseIssue } from '@/api/reviews';
 import { useCategoryCatalogQuery } from '@/api/runs';
 import { textDirAttrs } from '@/lib/text';
-import { Button, IconButton, Select, Tag, Text, TextField, Textarea, Icon } from '@/ui';
+import { Button, IconButton, Select, Text, TextField, Textarea, Icon } from '@/ui';
 import styles from './IssueList.module.css';
 
 const NEW_CATEGORY = '__new__';
@@ -38,7 +38,9 @@ export function IssueList({ issues, tone }: { issues: RootCauseIssue[]; tone: 'a
           <div className={styles.issueHead}>
             <span className={styles.issueNum}>Issue {n + 1}</span>
             {typeof i.confidence === 'number' ? (
-              <Tag kind="count">{Math.round(i.confidence * 100)}%</Tag>
+              <Text as="span" variant="sm" tone="muted">
+                {Math.round(i.confidence * 100)}% confidence
+              </Text>
             ) : null}
           </div>
           <Text variant="md" weight={650} dir="auto">

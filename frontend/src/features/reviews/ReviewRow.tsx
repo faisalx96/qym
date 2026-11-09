@@ -82,7 +82,7 @@ export function ReviewRow({
           {row.self_reviewed ? <Tag>Self-approved</Tag> : null}
           {row.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
           {typeof row.ai_confidence === 'number' ? (
-            <span className={styles.conf}>{Math.round(row.ai_confidence * 100)}%</span>
+            <span className={styles.conf}>{Math.round(row.ai_confidence * 100)}% confidence</span>
           ) : null}
         </span>
         <span className={styles.summary} {...textDirAttrs(summary)}>

@@ -67,9 +67,8 @@
 
 .conf {
   margin-inline-start: auto;
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .summary {
