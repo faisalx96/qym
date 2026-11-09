@@ -279,7 +279,7 @@ describe('live turn evidence presentation', () => {
     expect(container.querySelector('[data-live-stat="rows"]')).toHaveTextContent('0');
     expect(container.querySelector('[data-tile="compliance_a"] [data-live-stat]')).toHaveTextContent('0%');
     expect(container.querySelector('[data-tile="compliance_b"] [data-live-stat]')).toHaveTextContent(
-      '38%',
+      '38.0%',
     );
     expect(container.querySelector('[data-tile="latency"] [data-live-stat]')).toHaveTextContent('0ms');
     expect(container.querySelector('[data-tile="rows"] [data-live-stat]')).toHaveTextContent('0');
@@ -308,7 +308,7 @@ describe('live turn evidence presentation', () => {
     const judgeA = screen.getByLabelText('Judge A compliance');
     expect(
       within(judgeA).getByText('Overall compliance').closest('dt')?.nextElementSibling,
-    ).toHaveTextContent('42%');
+    ).toHaveTextContent('42.0%');
     await user.click(screen.getByRole('tab', { name: 'Charts' }));
     expect(screen.getByRole('img', { name: /bar chart/ })).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Services and tools' }));

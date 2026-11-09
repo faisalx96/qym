@@ -118,7 +118,7 @@ describe('overview blocks', () => {
       'href',
       linkTo({ status: 'completed' }),
     );
-    expect(container.querySelector('[data-live-stat="primary"]')).toHaveTextContent('71%');
+    expect(container.querySelector('[data-live-stat="primary"]')).toHaveTextContent('71.0%');
     expect(container.querySelector('[data-live-stat="latency"]')).toHaveTextContent('6.5s');
   });
 

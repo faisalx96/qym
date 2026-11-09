@@ -462,7 +462,7 @@ describe('Turns filters and table', () => {
     const turn = container.querySelector('[data-live-turn-row]')!;
     expect(turn.querySelector('[data-col="turn_at"]')).toHaveAttribute('data-pin', 'start');
     expect(turn.querySelector('[data-col="label"] [data-tone]')).toHaveAttribute('data-tone', 'danger');
-    expect(turn.querySelector('[data-col="metric:quality"]')).toHaveTextContent('50%');
+    expect(turn.querySelector('[data-col="metric:quality"]')).toHaveTextContent('50.0%');
     expect(turn.querySelector('[data-col="metric:compliance"]')).toHaveTextContent('—');
     expect(turn.querySelector('[data-col="charts"] [data-tone="danger"]')).toHaveTextContent('1 failed');
     expect(turn.querySelector('[data-col="services"] [data-tone]')).toHaveAttribute('data-tone', 'danger');
@@ -572,7 +572,7 @@ describe('LiveTurnsPage', () => {
       }),
     );
     renderPage();
-    expect(await screen.findByText('2 of 12 turns on 1 Nov 2026')).toBeVisible();
+    expect(await screen.findByText('2 of 12 turns on Nov 1, 2026')).toBeVisible();
     expect(document.title).toBe('Turns · Live · Demo project · قيِّم');
     expect(screen.getByText(liveOverview.status.name)).toBeVisible();
     expect(screen.getByText(liveOverview.status.environment)).toBeVisible();

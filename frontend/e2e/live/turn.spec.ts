@@ -137,8 +137,8 @@ test('turn diagnosis, judges, conversation and raw evaluator evidence', async ({
   );
   await expect(header.locator('[data-live-block="turn-navigation"]')).toHaveCount(0);
   await expect(page.locator('[data-live-block="turn-tiles"] [data-tile]')).toHaveCount(6);
-  await expect(page.locator('[data-tile="compliance_a"] [data-live-stat]')).toHaveText('42%');
-  await expect(page.locator('[data-tile="compliance_b"] [data-live-stat]')).toHaveText('38%');
+  await expect(page.locator('[data-tile="compliance_a"] [data-live-stat]')).toHaveText('42.0%');
+  await expect(page.locator('[data-tile="compliance_b"] [data-live-stat]')).toHaveText('38.0%');
   for (const block of ['why', 'deviations', 'agent-sql', 'judge-sql', 'answer', 'chart', 'turn-services']) {
     await expect(page.locator(`[data-live-block="${block}"]`)).toBeVisible();
   }
