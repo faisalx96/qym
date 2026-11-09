@@ -555,7 +555,8 @@ button.chip:focus-visible,
   font-weight: 600;
 }
 
-.cellRow .control {
+/* The cell's control (TextField, Textarea or the Select wrapper, E-25): not the actions, not a JSON field group. */
+.cellRow > :not(.cellActions, .json) {
   flex: 1 1 96px;
   min-width: 96px;
 }
