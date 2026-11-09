@@ -330,6 +330,7 @@ export function ExperimentsPage() {
           loading={tableLoading(query.isPending, showSkeleton)}
           refreshing={query.isFetching && !showSkeleton && live}
           error={query.isError && !query.data ? query.error : undefined}
+          errorTitle="Couldn’t load experiments"
           onRetry={() => void query.refetch()}
           isFiltered={filtered}
           empty={
