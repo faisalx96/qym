@@ -79,7 +79,7 @@ test('the filtered list explains where a reason comes from, and the filter can b
     'task error → scorer error → reason → explanation → label → no reason recorded',
   );
   await page.keyboard.press('Escape');
-  await banner.getByRole('button', { name: 'Clear filter' }).click();
+  await page.getByTestId('nav-clear-filters').click();
   await expect(banner).toBeHidden();
 });
 

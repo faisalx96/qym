@@ -100,7 +100,7 @@ test('P3-6: a row click toggles the existing filter, aria-pressed follows, a sco
   await row.click();
   await expect(row).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(before);
-  await expect(page.getByRole('button', { name: /^Remove filter / }).first()).toBeVisible();
+  await expect(page.locator('[data-run-filters]').locator('[aria-pressed="true"]').first()).toBeVisible();
   await row.click();
   await expect(row).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(async () => (await itemsCount(page))[0]).toBe(before);

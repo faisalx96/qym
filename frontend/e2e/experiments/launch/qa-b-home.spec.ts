@@ -45,15 +45,15 @@ const overflow = (l: Locator) =>
 
 test.describe('home view', () => {
   for (const width of WIDTHS) {
-    test(`the control sits in the Environments card after "New environment" at ${width}px`, async ({ page }) => {
+    test(`the control sits in the Environments card after "Add environment" at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await openHome(page, f.project.slug);
-      // QA3-10: once, in the Environments card, below the New environment button.
+      // QA3-10: once, in the Environments card, below the Add environment button.
       await expect(control(page)).toHaveCount(1);
       const card = envCard(page);
       await expect(card.getByRole('group', { name: 'Environments' })).toBeVisible();
       await expect(card.getByTestId('launch-latency')).toHaveCount(1);
-      const add = await box(card.getByRole('button', { name: 'New environment' }));
+      const add = await box(card.getByRole('button', { name: 'Add environment' }));
       const block = await box(page.getByTestId('home-latency'));
       expect(block.y - (add.y + add.height)).toBeGreaterThanOrEqual(14);
       // QA3-11: a 1 px subtle rule, 14 px above the checkbox.

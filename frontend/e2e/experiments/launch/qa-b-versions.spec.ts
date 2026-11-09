@@ -315,7 +315,7 @@ test.describe('versions inside the environment box on step 1', () => {
     }
     const at = (needle: string) => seen.findIndex((s) => s.includes(needle));
     console.log('QA4-13 tab order', JSON.stringify(seen));
-    const order = [at('Environment default'), at('Latency-sensitive run'), at('Alpha'), at('Details of Alpha'), at('Refresh versions of Alpha'), at('New environment'), at('golden')];
+    const order = [at('Environment default'), at('Latency-sensitive run'), at('Alpha'), at('Details of Alpha'), at('Refresh versions of Alpha'), at('Add environment'), at('golden')];
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
     await expect(refreshOf(page, 'Alpha')).toHaveAccessibleName('Refresh versions of Alpha');

@@ -6,7 +6,7 @@ import { createProject, gotoApp, uniqueSlug } from '../helpers';
 test('create project: a whitespace-only name is rejected, nothing is created', async ({ page }) => {
   await gotoApp(page, '/');
   await page.getByRole('button', { name: 'New project' }).first().click();
-  const dlg = page.getByRole('dialog', { name: 'Create project' });
+  const dlg = page.getByRole('dialog', { name: 'New project' });
   const posts: string[] = [];
   page.on('request', (r) => {
     if (r.method() === 'POST' && r.url().endsWith('/v1/projects')) posts.push(r.url());

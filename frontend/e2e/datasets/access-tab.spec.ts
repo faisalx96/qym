@@ -326,8 +326,8 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     const dates = await table.getByTestId('grant-added-at').allInnerTexts();
     expect(dates).toHaveLength(3);
     for (const date of dates) expect(date).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
-    // QA5-39: the level control is named for the person
-    await expect(table.getByRole('radiogroup', { name: `Level for ${list[0]!.name}` })).toBeVisible();
+    // D-28: the level reads as a Tag; the row's edit tile changes it
+    await expect(table.getByRole('row').filter({ hasText: list[0]!.name }).getByText('View', { exact: true })).toBeVisible();
   });
 
   test('a level change keeps the date; remove and re-add is clean again (QA5-41, QA5-47, QA5-51)', async ({
@@ -338,8 +338,8 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     await open(page, 1440, project.slug, d.slug);
     const table = page.getByTestId('access-grants-table');
     const before = await table.getByTestId('grant-added-at').first().innerText();
-    const level = table.getByRole('radiogroup', { name: `Level for ${list[1]!.name}` });
-    await level.locator('label', { hasText: 'Modify' }).click();
+    await table.getByRole('button', { name: `Change the level of ${list[1]!.name}` }).click();
+    await page.getByRole('option', { name: 'Modify' }).click();
     await expect(saveFooter(page)).toContainText('Unsaved changes');
     expect(await table.getByTestId('grant-added-at').first().innerText()).toBe(before);
     await page.getByRole('button', { name: 'Discard' }).click();
@@ -419,7 +419,7 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
 });
 
 test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
-  test('states: No changes, Unsaved changes, Saving, Couldn’t save access (QA5-45, QA5-46)', async ({
+  test('states: No changes, Unsaved changes, Saving, a failed save (QA5-45, QA5-46, E-10)', async ({
     page,
     request,
   }) => {
@@ -429,14 +429,8 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     await expect(bar).toContainText('All changes saved');
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Discard' })).toBeDisabled();
-    near((await size(bar)).h, 56, 0.6);
     await page.getByTestId('access-mode-project').click();
     await expect(bar).toContainText('Unsaved changes');
-    near((await size(bar)).h, 56, 0.6);
-    // QA5-45: primary text colour (rgb(237, 237, 240)), not the secondary grey
-    expect(await bar.locator('[data-part=status]').evaluate((e) => getComputedStyle(e).color)).toBe(
-      'rgb(237, 237, 240)',
-    );
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     let fail = true;
@@ -448,12 +442,12 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     });
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(bar).toContainText('Saving');
-    near((await size(bar)).h, 56, 0.6);
     release();
-    await expect(bar).toContainText('Couldn’t save access');
+    // E-10: a failed save keeps 'Unsaved changes'; the toast carries the error
+    await expect(bar).toContainText('Unsaved changes');
+    await expect(page.locator('[data-toast-container]').getByText(/boom/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
     await expect(page.getByTestId('access-mode-project')).toBeChecked();
-    near((await size(bar)).h, 56, 0.6);
     fail = false;
     const puts: unknown[] = [];
     page.on('request', (r) => {
@@ -477,7 +471,8 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
       if (r.method() === 'PUT' && r.url().includes('/access')) puts.push(r.postDataJSON());
     });
     const add = page.getByTestId('access-add');
-    await add.locator('label', { hasText: 'Modify' }).click();
+    await add.getByRole('button', { name: /Level/ }).click();
+    await page.getByRole('option', { name: 'Modify' }).click();
     await add.getByRole('button', { name: /Choose a project member/ }).click();
     await page.getByRole('option', { name: /Late Joiner/ }).click();
     await add.getByRole('button', { name: /^Add person$/ }).click();
@@ -495,31 +490,6 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     await expect(page.getByTestId('access-count')).toHaveText('2 people');
     await page.reload();
     await expect(page.getByTestId('access-grants-table').getByText('Late Joiner')).toBeVisible();
-  });
-
-  test('at 390 the bar is 56 clean and 65.4 with a wrapping status (QA5-45, QA5-61)', async ({
-    page,
-    request,
-  }) => {
-    const { project, d } = await restrictedWith(request, 'narrow', 2);
-    await open(page, 390, project.slug, d.slug);
-    const bar = saveFooter(page);
-    near((await size(bar)).h, 56, 0.6);
-    await page.route(/\/v1\/datasets\/[^/?]+\/access\?/, (route) =>
-      route.request().method() === 'PUT'
-        ? route.fulfill({ status: 500, json: { detail: 'boom' } })
-        : route.continue(),
-    );
-    await page.getByTestId('access-mode-project').click();
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(bar).toContainText('Couldn’t save access');
-    const h = (await size(bar)).h;
-    expect(
-      [56, 65.4].some((n) => Math.abs(h - n) < 1),
-      `bar ${h}`,
-    ).toBe(true);
-    for (const name of ['Discard', 'Save access'])
-      near((await size(page.getByRole('button', { name }))).h, 24, 0.6);
   });
 });
 

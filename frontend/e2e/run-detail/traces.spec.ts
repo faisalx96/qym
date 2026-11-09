@@ -187,11 +187,11 @@ test.describe('latency and traces panel (J5)', () => {
     await bars.nth(8).click(); // 2.25s to 2.5s: 26 items
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(240);
     await expect.poll(() => params(page).get('filters') ?? '').toContain('latency');
-    const chip = page.getByRole('button', { name: /Remove filter .*(ms|s)/i }).first();
+    const chip = page.locator('[data-run-filters]').getByText(/(ms|s)/i).first();
     await expect(chip).toBeVisible();
     const [n] = await itemsCount(page);
     expect(n).toBeGreaterThan(0);
-    await chip.click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);
   });
 
