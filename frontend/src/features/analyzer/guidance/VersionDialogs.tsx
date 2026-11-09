@@ -65,7 +65,7 @@ export function PublishDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`Publish v${version.version}`}
+      title={`Publish v${version.version}?`}
       description="A published version is locked. You can promote it to production now or later."
       size="sm"
       footer={

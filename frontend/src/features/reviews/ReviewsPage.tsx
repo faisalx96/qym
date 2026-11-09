@@ -671,7 +671,7 @@ export function ReviewsPage() {
             focusRow(id);
           }
         }}
-        title="Reject diagnosis"
+        title="Reject this issue?"
         description={
           dialog?.kind === 'reject'
             ? `Reject #${dialog.row.id} (${dialog.row.item_id}). It stays on the run, marked wrong. Say why.`
