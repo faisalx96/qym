@@ -555,11 +555,20 @@ export function QueuePage() {
                 }
               />
               <DataTable.Footer
-                summary={
-                  query.data.total > jobs.length
-                    ? `Showing the first ${jobs.length} of ${query.data.total} jobs`
-                    : plural(query.data.total, 'job')
+                filterNote={
+                  query.data.total > query.data.jobs.length
+                    ? `Showing the first ${query.data.jobs.length} of ${query.data.total} jobs`
+                    : search.trim()
+                      ? `Filtered from ${query.data.jobs.length} jobs`
+                      : undefined
                 }
+                pagination={{
+                  total: jobs.length,
+                  page: 1,
+                  pageSize: Math.max(1, jobs.length),
+                  noun: 'jobs',
+                  onPageChange: () => {},
+                }}
               />
             </DataTable>
             {!jobs.every((j) => j.can_cancel) && jobs.length ? (

@@ -219,7 +219,15 @@ function RemoteEnv({
         aria-label={`Remote jobs on ${env.environment_name}`}
         empty={<Text tone="secondary">The service holds no queued or running jobs.</Text>}
       >
-        <DataTable.Footer summary={plural(env.items.length, 'remote job')} />
+        <DataTable.Footer
+          pagination={{
+            total: env.items.length,
+            page: 1,
+            pageSize: Math.max(1, env.items.length),
+            noun: 'remote jobs',
+            onPageChange: () => {},
+          }}
+        />
       </DataTable>
       {!canCancel ? (
         <Text variant="sm" tone="muted">

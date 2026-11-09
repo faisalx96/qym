@@ -273,7 +273,15 @@ export function JobHistoryCard({
                 : undefined
             }
           >
-            <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'job' : 'jobs'}`} />
+            <DataTable.Footer
+              pagination={{
+                total: rows.length,
+                page: 1,
+                pageSize: Math.max(1, rows.length),
+                noun: 'jobs',
+                onPageChange: () => {},
+              }}
+            />
           </DataTable>
         </div>
       </Disclosure>

@@ -35,7 +35,7 @@ import { ExperimentsTabs } from '../ExperimentsTabs';
 import { ConnectFirst } from '../components/ConnectFirst';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
-import { baseSourceLabel, jobsText, plural, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
+import { baseSourceLabel, jobsText, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
 import { loadLaunchPage } from '../lazy';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
@@ -382,17 +382,25 @@ export function ExperimentsPage() {
             }
           />
           <DataTable.Footer
-            summary={query.data ? plural(total, 'experiment') : undefined}
+            filterNote={needle ? `Filtered from ${loaded.length} experiments` : undefined}
             pagination={
-              query.data && total > PAGE_SIZE
-                ? {
-                    total,
-                    page,
-                    pageSize: PAGE_SIZE,
-                    noun: 'experiments',
-                    onPageChange: (p) =>
-                      update((next) => (p > 1 ? next.set('page', String(p)) : next.delete('page'))),
-                  }
+              query.data
+                ? needle
+                  ? {
+                      total: experiments.length,
+                      page: 1,
+                      pageSize: Math.max(1, experiments.length),
+                      noun: 'experiments',
+                      onPageChange: () => {},
+                    }
+                  : {
+                      total,
+                      page,
+                      pageSize: PAGE_SIZE,
+                      noun: 'experiments',
+                      onPageChange: (p) =>
+                        update((next) => (p > 1 ? next.set('page', String(p)) : next.delete('page'))),
+                    }
                 : undefined
             }
           />
