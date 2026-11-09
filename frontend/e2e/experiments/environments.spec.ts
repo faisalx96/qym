@@ -211,7 +211,7 @@ test.describe('environment page', () => {
     await expect(schema.getByText(/Schema unchanged/)).toBeVisible();
 
     await page.getByRole('textbox', { name: 'Base URL' }).fill('ftp://not-allowed.example.com');
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Unsaved changes')).toBeVisible();
     const saved = await (await request.get(`/v1/projects/${project.id}/eval-environments/${env.id}`)).json();
     expect(JSON.stringify(saved)).toContain(env.url);
@@ -249,7 +249,7 @@ test.describe('environment page', () => {
     });
     await pickSelect(page, 'Default priority', 'LOW');
     await page.getByRole('textbox', { name: 'Ranking metric' }).fill('exact_match');
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expectToast(page, 'Saved “staging”');
     expect(bodies[0]).toMatchObject({
       base_url: other,
@@ -267,7 +267,7 @@ test.describe('environment page', () => {
     const third = `http://127.0.0.1:${FAKE_A}/${uniqueSlug('moved2')}`;
     bodies.length = 0;
     await base.fill(third);
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expectToast(page, 'Saved “staging”');
     expect(bodies[0]).not.toHaveProperty('allow_connection_keys');
     const final = (await (
