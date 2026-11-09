@@ -214,6 +214,7 @@ export function ItemRunsTab({
         columns={columns}
         loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
+        errorTitle="Couldn’t load runs of this item"
         onRetry={() => void query.refetch()}
         rowHref={(r) => `${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`}
         onRowOpen={(r) => navigate(`${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`)}

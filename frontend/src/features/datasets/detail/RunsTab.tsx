@@ -108,6 +108,7 @@ export function RunsTab({
         columns={columns}
         loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
+        errorTitle="Couldn’t load runs on this dataset"
         onRetry={() => void query.refetch()}
         empty={
           query.data ? (

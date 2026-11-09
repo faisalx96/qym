@@ -492,6 +492,7 @@ export function ItemsTab({
         loading={tableLoading(query.isPending && visible, showSkeleton)}
         refreshing={query.isFetching && query.isPlaceholderData}
         error={query.isError ? query.error : undefined}
+        errorTitle="Couldn’t load items"
         onRetry={() => void query.refetch()}
         isFiltered={filtered}
         empty={

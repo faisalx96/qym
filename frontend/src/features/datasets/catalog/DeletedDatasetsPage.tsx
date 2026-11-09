@@ -61,6 +61,7 @@ export function DeletedDatasetsPage() {
         rowKey={(d) => d.id}
         loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
+        errorTitle="Couldn’t load deleted datasets"
         onRetry={() => void query.refetch()}
         empty={
           query.data ? (
