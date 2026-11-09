@@ -4,7 +4,7 @@
   flex-direction: column;
   gap: var(--space-md);
   max-width: var(--analysis-content-width);
-  margin-inline: auto;
+  margin-inline: 0;
 }
 
 /* The tab panel is empty (the view is its content), so it must not add spacing under the strip. */
