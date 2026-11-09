@@ -10,10 +10,10 @@ const STATUS_FIGURE: Record<FeedbackStatus, [StatusTone, StatusShape]> = {
   done: ['success', 'full'],
   declined: ['danger', 'cross'],
 };
-const PRIORITY_TONE: Record<FeedbackPriority, 'info' | 'warning' | 'danger' | undefined> = {
+const PRIORITY_TONE: Record<FeedbackPriority, 'warning' | 'danger' | undefined> = {
   low: undefined,
-  medium: 'info',
-  high: 'warning',
+  medium: 'warning',
+  high: 'danger',
   critical: 'danger',
 };
 const KIND_TONE: Record<RelatedKind, 'warning' | 'danger' | undefined> = {
