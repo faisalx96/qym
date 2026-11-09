@@ -48,16 +48,3 @@ export const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
   STOPPING: 'Stopping…',
 };
-
-/** cv3-shim: remove after C-12 (deprecated: every score shows one decimal; delete with its last callers). */
-export function smartDigits(
-  value: number | undefined,
-  neighbours: [number | null, number | null] | undefined,
-): number {
-  if (value === undefined || !neighbours) return 1;
-  for (let d = 1; d <= 3; d++) {
-    const r = (x: number) => (x * 100).toFixed(d);
-    if (neighbours.every((n) => n === null || r(n) !== r(value))) return d;
-  }
-  return 3;
-}
