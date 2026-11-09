@@ -20,17 +20,19 @@ import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
 import {
+  ActionTile,
   Button,
-  Chip,
+  ClearFiltersButton,
   ConfirmDialog,
   DataTable,
   DropdownMenu,
   EmptyState,
   Icon,
+  MultiSelect,
   promptPreview,
-  ScoreBar,
+  ScoreValue,
   SearchField,
-  SegmentedControl,
+  Select,
   TagsCell,
   useToast,
   type Column,
@@ -39,14 +41,12 @@ import {
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
 import { menuLabel } from '../lib/batchCopy';
-import { STATE_OPTIONS, stateCount, stateTotalText, stateUrlValue, type StateFilter } from '../lib/itemState';
+import { STATE_OPTIONS, stateCount, stateUrlValue, type StateFilter } from '../lib/itemState';
 import {
   addMetaFilter,
-  metaChipLabel,
   metaFiltersToParams,
   metaModesToParams,
   parseMetaFilters,
-  removeMetaFilter,
   type MetaFilter,
 } from '../lib/metaFilter';
 import type { BatchAction } from '@/api/datasets';
@@ -143,7 +143,7 @@ export function ItemsTab({
       search: route.search || undefined,
       sort: route.sort || undefined,
       label: route.label || undefined,
-      state: route.state === 'active' ? undefined : route.state,
+      state: route.state,
       meta: metaParams.length ? metaParams : undefined,
       meta_mode: metaModes.length ? metaModes : undefined,
     },
@@ -169,7 +169,7 @@ export function ItemsTab({
         {
           search: route.search || undefined,
           label: route.label || undefined,
-          state: route.state === 'active' ? undefined : route.state,
+          state: route.state,
           meta: metaParams.length ? metaParams : undefined,
           meta_mode: metaModes.length ? metaModes : undefined,
         },
@@ -181,28 +181,22 @@ export function ItemsTab({
     }
   }
 
-  // QA1-29: after Add filter focus lands on the new chip, after a removal on the Metadata button. The popover
-  // returns focus to its trigger when it closes (in a later frame), so the move runs again after that.
+  // QA1-29: after Add filter focus returns to the Metadata trigger.
   const pendingFocus = useRef<string | null>(null);
   useEffect(() => {
     const target = pendingFocus.current;
     if (target === null) return;
     pendingFocus.current = null;
     const move = () => {
-      const el =
-        target === ''
-          ? document.querySelector<HTMLElement>('[data-testid="metadata-filter"]')
-          : document.querySelector<HTMLElement>(
-              `[data-testid="meta-chip"][data-meta-path="${CSS.escape(target)}"]`,
-            );
+      const el = document.querySelector<HTMLElement>('[data-testid="metadata-filter"]');
       if (el && document.activeElement !== el) el.focus();
     };
     // not cancelled by a re-render: the route object (and so metaFilters) is new on every render
     for (const delay of [0, 80, 200]) setTimeout(move, delay);
   }, [metaFilters]);
 
-  function setMeta(next: MetaFilter[], focusPath = '') {
-    pendingFocus.current = focusPath;
+  function setMeta(next: MetaFilter[]) {
+    pendingFocus.current = '';
     onFilterChange?.();
     setParams(
       (prev) => {
@@ -224,7 +218,7 @@ export function ItemsTab({
     setParams(
       (prev) => {
         const params = new URLSearchParams(prev);
-        for (const key of ['search', 'label', 'meta', 'meta_mode', 'page']) params.delete(key);
+        for (const key of ['search', 'label', 'meta', 'meta_mode', 'state', 'page']) params.delete(key);
         return params;
       },
       { replace: true },
@@ -264,12 +258,14 @@ export function ItemsTab({
   }
 
   const noCriteria = !route.search && !route.label && metaFilters.length === 0;
+  const filterCount =
+    (route.search ? 1 : 0) + (route.label ? 1 : 0) + metaFilters.length + (route.state !== 'all' ? 1 : 0);
   const counts = query.data?.counts;
   if (
     query.data &&
     query.data.total === 0 &&
     noCriteria &&
-    route.state === 'active' &&
+    route.state === 'all' &&
     (counts?.all ?? 0) === 0
   ) {
     return (
@@ -390,11 +386,14 @@ export function ItemsTab({
       type: 'score',
       sort: `metric:${m}`,
       width: 130,
+      align: 'center',
       priority: 2,
       cell: (item) => (
-        <ScoreBar
+        <ScoreValue
           value={item.result_summary?.metrics?.[m]?.avg ?? null}
+          type="score"
           direction={metricDir(directions[m])}
+          variant="plain"
         />
       ),
     })),
@@ -420,15 +419,10 @@ export function ItemsTab({
 
   const rowActions = (): RowAction<DatasetItem>[] => [
     {
-      id: 'open',
-      label: 'Open item page',
-      icon: 'external',
-      primary: true,
-      onPress: (it) => navigate(itemHref(it)),
-    },
-    {
       id: 'copy',
       label: 'Copy as JSON',
+      icon: 'copy',
+      primary: true,
       onPress: (it) =>
         void copyText(
           formatJson({
@@ -498,6 +492,7 @@ export function ItemsTab({
         loading={tableLoading(query.isPending && visible, showSkeleton)}
         refreshing={query.isFetching && query.isPlaceholderData}
         error={query.isError ? query.error : undefined}
+        errorTitle="Couldn’t load items"
         onRetry={() => void query.refetch()}
         isFiltered={filtered}
         empty={
@@ -516,12 +511,7 @@ export function ItemsTab({
         filteredEmpty={
           <EmptyState
             compact
-            title="No items match these filters"
-            action={
-              <Button variant="neutral" onPress={clearFilters}>
-                Clear filters
-              </Button>
-            }
+            title={route.search ? `No items match “${route.search}”` : 'No items match these filters'}
           />
         }
         className={styles.table}
@@ -535,80 +525,51 @@ export function ItemsTab({
               placeholder="Search items"
               value={search}
               onChange={setSearch}
-              width={260}
+              width="var(--search-width)"
+              shortcut="/"
               data-testid="items-search"
             />
           }
-          filters={
-            <>
+          rows={
+            <div className={styles.filterRow} role="group" aria-label="Item filters">
+              <span data-testid="items-state">
+                <MultiSelect
+                  label="State"
+                  triggerVariant="bar"
+                  emptyMeansAll
+                  items={STATE_OPTIONS.map((o) => ({
+                    key: o.id,
+                    label: o.label,
+                    count: stateCount(counts, o.id),
+                  }))}
+                  value={route.state === 'all' ? new Set<Key>() : new Set<Key>([route.state])}
+                  onChange={(next) => {
+                    onFilterChange?.();
+                    const state: StateFilter = next.size === 1 ? ([...next][0] as StateFilter) : 'all';
+                    setQuery({ state: stateUrlValue(state) ?? null, page: null });
+                  }}
+                />
+              </span>
+              <Select
+                label="Label"
+                hideLabel
+                triggerVariant="bar"
+                items={[{ key: '', label: 'All' }, ...version.labels.map((l) => ({ key: l, label: l }))]}
+                value={route.label}
+                onChange={(key) => {
+                  onFilterChange?.();
+                  setQuery({ label: key ? String(key) : null, page: null });
+                }}
+              />
               <MetadataFilter
                 slug={slug}
                 datasetRef={dataset.slug}
                 version={version.version}
                 filters={metaFilters}
-                onAdd={(f) => setMeta(addMetaFilter(metaFilters, f), f.path)}
+                onAdd={(f) => setMeta(addMetaFilter(metaFilters, f))}
               />
-              <span data-testid="items-state">
-                <SegmentedControl<StateFilter>
-                  label="Item state"
-                  options={STATE_OPTIONS.map((o) => {
-                    const n = stateCount(counts, o.id);
-                    return {
-                      value: o.id,
-                      label: (
-                        <>
-                          {o.label}
-                          {n === undefined ? null : <span className={styles.countLabel}>{n}</span>}
-                        </>
-                      ),
-                    };
-                  })}
-                  value={route.state}
-                  onChange={(next) => {
-                    onFilterChange?.();
-                    setQuery({ state: stateUrlValue(next) ?? null, page: null });
-                  }}
-                />
-              </span>
-            </>
-          }
-          chips={
-            route.label || metaFilters.length ? (
-              <div className={styles.chipRow} data-testid="filter-chips">
-                {route.label ? (
-                  <Chip
-                    isSelected
-                    onRemove={() => {
-                      onFilterChange?.();
-                      setQuery({ label: null, page: null });
-                    }}
-                    removeLabel="Clear label filter"
-                  >
-                    label: {route.label}
-                  </Chip>
-                ) : null}
-                {metaFilters.map((f) => (
-                  <Chip
-                    key={f.path}
-                    isSelected
-                    onRemove={() => setMeta(removeMetaFilter(metaFilters, f))}
-                    removeLabel={`Remove filter ${metaChipLabel(f)}`}
-                    data-testid="meta-chip"
-                    data-meta-path={f.path}
-                  >
-                    {metaChipLabel(f)}
-                  </Chip>
-                ))}
-              </div>
-            ) : null
-          }
-          count={
-            query.data ? (
-              <span aria-live="polite">
-                {stateTotalText(route.state, counts, query.data.total)}
-                {route.search ? ` matching “${route.search}”` : ''}
-              </span>
-            ) : null
+              <ClearFiltersButton count={filterCount} onClear={clearFilters} />
+            </div>
           }
           trailing={
             <>
@@ -639,16 +600,19 @@ export function ItemsTab({
                     {
                       id: 'disable',
                       label: menuLabel('disable', counts?.active ?? 0),
+                      icon: <ActionTile icon="ban" />,
                       disabled: !counts?.active,
                     },
                     {
                       id: 'enable',
                       label: menuLabel('enable', counts?.disabled ?? 0),
+                      icon: <ActionTile icon="check" />,
                       disabled: !counts?.disabled,
                     },
                     {
                       id: 'delete',
                       label: menuLabel('delete', counts?.all ?? 0),
+                      icon: <ActionTile icon="trash" tone="danger" />,
                       tone: 'danger',
                       separatorBefore: true,
                       disabled: !counts?.all,
@@ -662,6 +626,11 @@ export function ItemsTab({
         />
         {/* Add item and Import live in the dataset header only (C116) */}
         <DataTable.Footer
+          filterNote={
+            query.data && (!noCriteria || route.state === 'disabled') && total < version.item_count
+              ? `Filtered from ${version.item_count} items`
+              : undefined
+          }
           pagination={{
             total,
             page: route.page + 1,

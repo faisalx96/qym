@@ -103,12 +103,12 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
 export function VersionBadge({ version }: { version: DatasetVersion }) {
   if (isProduction(version))
     return (
-      <Flag tone="info" icon="star">
+      <Flag tone="success" icon="star">
         Production
       </Flag>
     );
   if (version.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
-  return <StatusMark tone="neutral" shape="full" label="Published" />;
+  return <StatusMark tone="info" shape="full" label="Published" />;
 }
 
 export function AliasTags({ version }: { version: DatasetVersion }) {

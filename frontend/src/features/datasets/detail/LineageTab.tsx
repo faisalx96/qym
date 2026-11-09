@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LinkButton, Section, Skeleton, Tag, Text, Card 
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
 import { formatDate, pluralize } from '../lib/itemValue';
+import { formatTableDate } from '@/lib/dates';
 import { versionSourceText } from '../lib/versions';
 import { comparePath, datasetPath } from '../lib/route';
 import styles from './LineageTab.module.css';
@@ -43,6 +44,7 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
             <Link
               to={datasetPath(slug, datasetRef, { tab: 'lineage', v: v.version })}
               className={styles.versionLink}
+              data-link="name"
             >
               {v.version}
             </Link>
@@ -56,17 +58,29 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
             </span>
             {v.change_counts ? (
               <span className={styles.changes} role="group" aria-label="Changes vs parent">
-                {v.change_counts.added ? <Tag tone="success">+{v.change_counts.added}</Tag> : null}
-                {v.change_counts.deleted ? <Tag tone="danger">−{v.change_counts.deleted}</Tag> : null}
-                {v.change_counts.modified ? <Tag tone="warning">~{v.change_counts.modified}</Tag> : null}
+                {v.change_counts.added ? (
+                  <Tag kind="count" tone="success">
+                    +{v.change_counts.added}
+                  </Tag>
+                ) : null}
+                {v.change_counts.deleted ? (
+                  <Tag kind="count" tone="danger">
+                    −{v.change_counts.deleted}
+                  </Tag>
+                ) : null}
+                {v.change_counts.modified ? (
+                  <Tag kind="count" tone="warning">
+                    ~{v.change_counts.modified}
+                  </Tag>
+                ) : null}
                 {v.change_counts.disabled ? <Tag>{v.change_counts.disabled} disabled</Tag> : null}
                 {v.change_counts.enabled ? <Tag>{v.change_counts.enabled} enabled</Tag> : null}
               </span>
             ) : null}
           </div>
           <div className={styles.cardSide}>
-            <UserPill user={v.published_by} label="Published by:" />
-            <UserPill user={v.created_by} label="Drafted By:" />
+            <UserPill user={v.published_by} label="Published by" />
+            <UserPill user={v.created_by} label="Drafted by" />
             {v.parent_version_id && byId.has(v.parent_version_id) ? (
               <LinkButton
                 to={comparePath(slug, datasetRef, {
@@ -110,7 +124,7 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
           <ol className={styles.log}>
             {changes.map((c) => (
               <li key={c.id} className={styles.logRow}>
-                <span className={styles.logTime}>{formatDate(c.created_at)}</span>
+                <span className={styles.logTime}>{formatTableDate(c.created_at)}</span>
                 <span className={styles.logText}>{describeChange(c, byId)}</span>
                 <UserPill user={c.actor} />
               </li>

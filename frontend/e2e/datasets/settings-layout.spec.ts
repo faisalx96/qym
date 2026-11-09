@@ -134,15 +134,15 @@ test('the General rows: label column and row heights at 1440 (QA5-5)', async ({ 
 test('Save changes, status text and the footer (QA5-10, QA5-15)', async ({ page, request }) => {
   const s = await seed(request);
   await open(page, s, 1440);
-  const save = page.getByRole('button', { name: 'Save changes' });
+  const save = page.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeDisabled();
-  await expect(page.getByText('No changes')).toBeVisible();
+  await expect(page.getByText('All changes saved')).toBeVisible();
   near((await size(save)).h, 24, 0.6);
   await page.getByRole('textbox', { name: 'Description' }).fill('A new description.');
   await expect(page.getByText('Unsaved changes')).toBeVisible();
   await save.click();
   await expect(page.locator('[data-toast-container]').getByText('Settings saved')).toBeVisible();
-  await expect(page.getByText('No changes')).toBeVisible();
+  await expect(page.getByText('All changes saved')).toBeVisible();
 });
 
 test('without the Visibility card the Danger zone holds the side column alone (QA5-13)', async ({
@@ -181,7 +181,7 @@ test('a reader has read-only fields and no footer (QA5-10, QA5-11)', async ({ pa
   });
   await open(page, s, 1440);
   await expect(page.getByRole('textbox', { name: 'Name' })).toHaveAttribute('readonly', '');
-  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('private-toggle')).toBeDisabled();
   await expect(
     page.getByText('Only the dataset creator or a project manager can delete a dataset.'),

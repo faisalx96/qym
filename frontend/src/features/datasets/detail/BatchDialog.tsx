@@ -231,7 +231,7 @@ export function BatchDialog({
           {action === 'disable' ? (
             <>
               <Textarea
-                label="Reason (optional)"
+                label="Reason"
                 rows={2}
                 value={reason}
                 onChange={(v) => setReason(v.slice(0, REASON_MAX))}
@@ -254,7 +254,7 @@ export function BatchDialog({
             </Text>
           ) : null}
           {action === 'delete' ? (
-            <Note tone="danger" title="This removes the items from this draft">
+            <Note tone="danger" title="This removes the items from this draft.">
               <span>Published versions keep their copy.</span>
             </Note>
           ) : null}

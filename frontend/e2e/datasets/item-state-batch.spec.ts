@@ -442,7 +442,7 @@ test.describe('All matching menu and selected rows (A3-15 to A3-26)', () => {
     await expect(dialog).toContainText(
       'They stay in this draft and are left out of runs once it is published. You can enable them again in any draft.',
     );
-    await dialog.getByRole('textbox', { name: 'Reason (optional)' }).fill('both are duplicates');
+    await dialog.getByRole('textbox', { name: 'Reason' }).fill('both are duplicates');
     await dialog.getByRole('button', { name: 'Disable 2' }).click();
     await expect(page.locator('[data-toast-container]')).toContainText('2 items disabled');
     await expect(page.getByTestId('items-state')).toContainText('Disabled8');
@@ -492,7 +492,7 @@ test.describe('batch confirm dialog (A3-27 to A3-42)', () => {
     await expect(ids).toContainText('First items');
     await expect(ids.locator('li')).toHaveCount(6); // five tags and "and 35 more"
     await expect(ids).toContainText('and 35 more');
-    const reason = dialog.getByRole('textbox', { name: 'Reason (optional)' });
+    const reason = dialog.getByRole('textbox', { name: 'Reason' });
     await reason.fill('x'.repeat(30));
     await expect(dialog.getByTestId('reason-counter')).toHaveText('30 / 500');
     await expect(dialog).toContainText(
@@ -684,14 +684,14 @@ test.describe('item pane, item page and the disable dialog (A2-13 to A2-35)', ()
     await expect(dialog).toContainText(
       'The item stays in this draft but is left out of runs once the draft is published. You can enable it again in any draft.',
     );
-    await expect(dialog.getByRole('textbox', { name: 'Reason (optional)' })).toBeFocused();
-    await dialog.getByRole('textbox', { name: 'Reason (optional)' }).fill('abc');
+    await expect(dialog.getByRole('textbox', { name: 'Reason' })).toBeFocused();
+    await dialog.getByRole('textbox', { name: 'Reason' }).fill('abc');
     await expect(dialog.getByTestId('reason-counter')).toHaveText('3 / 500');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(action).toBeFocused(); // focus returns to the button (A2-23)
     await action.click();
-    await page.getByRole('dialog').getByRole('textbox', { name: 'Reason (optional)' }).fill('duplicate');
+    await page.getByRole('dialog').getByRole('textbox', { name: 'Reason' }).fill('duplicate');
     await page.getByRole('dialog').getByRole('button', { name: 'Disable item' }).click();
     await expect(page.locator('[data-toast-container]')).toContainText('Item faq-001 disabled');
     // The pane stays on the item, now disabled; the list leaves it out of Active (A2-22).
@@ -791,8 +791,8 @@ test.describe('version header, download, publish note, history and compare (A2-3
     await expect(page.getByRole('listbox').getByText('130 items (6 disabled)')).toBeVisible();
     await page.keyboard.press('Escape');
     await page.getByTestId('hero-more').click();
-    await expect(page.getByRole('menuitem', { name: '↓ Download JSONL', exact: true })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: '↓ Download JSONL with disabled items' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Download JSONL', exact: true })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Download JSONL with disabled items' })).toBeVisible();
     await page.keyboard.press('Escape');
     await open(page, s, '', s.v1);
     await expect(page.getByRole('tab', { name: /Items/ })).toContainText('130');

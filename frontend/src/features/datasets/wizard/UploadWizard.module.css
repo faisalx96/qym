@@ -1,43 +1,6 @@
-/* Upload wizard: Stepper (.dsx-wizard-steps), FileDropZone (.dsx-file-drop), mapping + preview tables; composes Dialog/Select/Button. */
+/* Upload wizard: ui/Stepper, FileDropZone (.dsx-file-drop), mapping + preview tables; composes Dialog/Select/Button. */
 .steps {
-  display: flex;
-  gap: var(--space-md);
   margin: 0 0 var(--space-md);
-  padding: 0;
-  list-style: none;
-}
-
-.step {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.step[aria-current='step'] {
-  color: var(--text-primary);
-}
-
-.stepNum {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-}
-
-.step[aria-current='step'] .stepNum {
-  background: var(--accent-primary);
-  color: var(--bg-void);
-}
-
-.step[data-done] .stepNum {
-  color: var(--accent-primary);
 }
 
 .body {
@@ -64,14 +27,14 @@
   background: none;
   border: 0;
   padding: 0;
-  color: var(--accent-secondary);
+  color: var(--accent-primary);
   font: inherit;
   cursor: pointer;
   text-decoration: underline;
 }
 
 .linkButton:focus-visible {
-  outline: var(--focus-ring);
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -113,7 +76,7 @@
 }
 
 .drop:focus-within {
-  outline: var(--focus-ring);
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -181,6 +144,11 @@
   text-align: start;
   padding: var(--space-xs) var(--space-sm);
   white-space: nowrap;
+}
+
+/* page stripe on every second preview row (D-01, D-Q1) */
+.preview tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step), var(--bg-base));
 }
 
 .mapTable td,
