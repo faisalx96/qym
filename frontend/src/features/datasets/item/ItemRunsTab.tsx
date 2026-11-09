@@ -8,6 +8,7 @@ import {
   Button,
   DataTable,
   EmptyState,
+  Icon,
   RelativeTime,
   ScoreValue,
   StatStrip,
@@ -189,11 +190,21 @@ export function ItemRunsTab({
           aria-label="Run aggregates"
           variant="compact-header"
           items={[
-            { label: 'Runs', value: agg.run_count },
-            { label: 'Errors', value: agg.error_count, tone: agg.error_count ? 'danger' : undefined },
-            { label: 'Avg latency', value: formatLatency(agg.avg_latency_ms) },
+            { label: 'Runs', value: agg.run_count, icon: <Icon name="chart" size={12} /> },
+            {
+              label: 'Errors',
+              value: agg.error_count,
+              tone: agg.error_count ? 'danger' : undefined,
+              icon: <Icon name="warning" size={12} />,
+            },
+            {
+              label: 'Avg latency',
+              value: formatLatency(agg.avg_latency_ms),
+              icon: <Icon name="clock" size={12} />,
+            },
             ...metrics.map((m) => ({
               label: m,
+              icon: <Icon name="shield" size={12} />,
               value: (
                 <ScoreValue
                   value={agg.metrics[m]?.avg ?? null}
