@@ -56,7 +56,7 @@ test.describe('390px', () => {
 
   test('the bar names the first problem (in its overflow menu) and jumps to it', async ({ page }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
-    await page.getByRole('button', { name: 'More launch options' }).click();
+    await page.getByRole('button', { name: 'Actions', exact: true }).click();
     const problem = page.getByRole('menuitem', { name: /^Fix 1 problem first: Name/ });
     await expect(problem).toBeVisible();
     await problem.click();

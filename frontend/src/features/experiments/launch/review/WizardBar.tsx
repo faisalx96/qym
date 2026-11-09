@@ -1,4 +1,4 @@
-import { ActionTile, Button, DropdownMenu, IconButton } from '@/ui';
+import { ActionTile, Button, DropdownMenu, Icon } from '@/ui';
 import { useMediaQuery } from '@/features/shell';
 import { plural } from '../../lib/format';
 import { launchLabel } from '../model';
@@ -79,7 +79,11 @@ export function WizardBar({
         {overflow.length ? (
           <DropdownMenu
             label="More launch options"
-            trigger={<IconButton label="More launch options" icon="more" />}
+            trigger={
+              <Button size="sm" variant="neutral" icon={<Icon name="more" size={14} />}>
+                Actions
+              </Button>
+            }
             items={overflow}
             onAction={(id) => {
               if (id === 'problem' && first) focusIssue(first);
