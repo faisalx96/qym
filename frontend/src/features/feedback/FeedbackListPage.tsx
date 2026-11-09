@@ -13,6 +13,7 @@ import { useDocumentTitle, useMediaQuery } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { useSearchParamsState } from '@/lib/url-state';
 import {
+  ActionTile,
   Button,
   Card,
   ClearFiltersButton,
@@ -334,6 +335,8 @@ export function FeedbackListPage() {
   );
 }
 
+const FORMAT_GLYPH = { csv: 'sheet', xlsx: 'xgrid', json: 'braces', jsonl: 'braces-lines' } as const;
+
 function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (f: ExportFormat) => void }) {
   const trigger = (
     <Button
@@ -357,7 +360,11 @@ function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (f: Expor
     <DropdownMenu
       label="Export format"
       trigger={trigger}
-      items={EXPORT_FORMATS.map((f) => ({ id: f.id, label: f.label }))}
+      items={EXPORT_FORMATS.map((f) => ({
+        id: f.id,
+        label: f.label,
+        icon: <ActionTile icon={FORMAT_GLYPH[f.id]} />,
+      }))}
       onAction={(id) => onPick(id as ExportFormat)}
     />
   );

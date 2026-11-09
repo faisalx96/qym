@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import type { AnalysisConfig } from '@/api/analysis';
-import { Button, CountTile, DropdownMenu, IconButton, LinkButton, Select, Text } from '@/ui';
+import { ActionTile, Button, CountTile, DropdownMenu, IconButton, LinkButton, Select, Text } from '@/ui';
 import type { PhaseView } from '../useAnalysisPhase';
 import type { RunnerState } from '../useAnalysisRunner';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -217,9 +217,15 @@ export function ActionRail({
                 {
                   id: 'test',
                   label: test.testing ? 'Cancel test' : testLabel,
+                  icon: <ActionTile icon="play" />,
                   disabled: test.testing ? false : locked || !ws.llmReady || noTargets,
                 },
-                { id: 'preview', label: 'Prompt preview', disabled: !preview.hasTarget },
+                {
+                  id: 'preview',
+                  label: 'Prompt preview',
+                  icon: <ActionTile icon="eye" />,
+                  disabled: !preview.hasTarget,
+                },
               ]}
               onAction={(id) => {
                 if (id === 'preview') onPreview();

@@ -15,6 +15,7 @@ import {
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
+  ActionTile,
   Button,
   Checkbox,
   ConfirmDialog,
@@ -278,15 +279,26 @@ function RulesView({
                 }
                 onAction={onMenu}
                 items={[
-                  ...(canManage ? [{ id: 'draft', label: 'Create draft from this version' }] : []),
-                  { id: 'download', label: 'Download JSON' },
-                  { id: 'compare', label: 'Compare versions' },
-                  ...(canManage ? [{ id: 'merge', label: 'Merge versions' }] : []),
+                  ...(canManage
+                    ? [
+                        {
+                          id: 'draft',
+                          label: 'Create draft from this version',
+                          icon: <ActionTile icon="plus" />,
+                        },
+                      ]
+                    : []),
+                  { id: 'download', label: 'Download JSON', icon: <ActionTile icon="braces" /> },
+                  { id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> },
+                  ...(canManage
+                    ? [{ id: 'merge', label: 'Merge versions', icon: <ActionTile icon="swap" /> }]
+                    : []),
                   ...(data.can_delete && v.id !== productionId && !v.is_active
                     ? [
                         {
                           id: 'delete',
                           label: 'Delete version',
+                          icon: <ActionTile icon="trash" tone="danger" />,
                           tone: 'danger' as const,
                           separatorBefore: true,
                         },
