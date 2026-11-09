@@ -496,40 +496,49 @@ it('validates limit without sending a request', async () => {
   expect(screen.getByRole('alert')).toHaveTextContent('Limit must be 1 to 2,000');
   expect(writes(fetch)).toHaveLength(0);
 });
-it.each([undefined, 0, 30])('previews without redo and displays listed=%s after refetch', async (listed) => {
-  const job: LiveJob = {
-    ...liveWorkerRead.jobs[0]!,
-    id: 'preview-new',
-    kind: 'backfill_preview',
-    status: 'queued',
-    params: { ...liveWorkerRead.jobs[0]!.params, since_day: '2026-01-01', until_day: '2026-01-02' },
-    progress: {},
-  };
-  const { fetch, client, setRead } = setup(liveWorkerRead, () => response(job, 201));
-  const user = await openRange();
-  dates('2026-01-01', '2026-01-02');
-  await user.click(screen.getByRole('checkbox', { name: 'Also redo turns labelled Inconclusive' }));
-  await user.click(screen.getByRole('button', { name: 'Preview' }));
-  expect(await screen.findByText('Preview queued')).toBeVisible();
-  expect(JSON.parse(String(writes(fetch)[0]![1]?.body))).toEqual({
-    kind: 'backfill_preview',
-    since_day: '2026-01-01',
-    until_day: '2026-01-02',
-    limit: 200,
-  });
-  setRead({
-    ...liveWorkerRead,
-    jobs: [{ ...job, status: 'done', progress: { found: 22, skipped_existing: 2, listed } }],
-  });
-  await act(async () => {
-    await client.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
-  });
-  expect(
-    await screen.findByText(
-      `22 turns, 2 already evaluated, 20 to evaluate${listed === undefined ? '' : ` (${listed} traces listed)`}`,
-    ),
-  ).toBeVisible();
-});
+it.each([undefined, 0, 30])(
+  'previews with the run redo and displays legacy listed=%s after refetch',
+  async (listed) => {
+    const job: LiveJob = {
+      ...liveWorkerRead.jobs[0]!,
+      id: 'preview-new',
+      kind: 'backfill_preview',
+      status: 'queued',
+      params: {
+        ...liveWorkerRead.jobs[0]!.params,
+        since_day: '2026-01-01',
+        until_day: '2026-01-02',
+        redo: ['failed', 'inconclusive'],
+      },
+      progress: {},
+    };
+    const { fetch, client, setRead } = setup(liveWorkerRead, () => response(job, 201));
+    const user = await openRange();
+    dates('2026-01-01', '2026-01-02');
+    await user.click(screen.getByRole('checkbox', { name: 'Also redo turns labelled Inconclusive' }));
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(await screen.findByText('Preview queued')).toBeVisible();
+    expect(JSON.parse(String(writes(fetch)[0]![1]?.body))).toEqual({
+      kind: 'backfill_preview',
+      since_day: '2026-01-01',
+      until_day: '2026-01-02',
+      limit: 200,
+      redo: ['failed', 'inconclusive'],
+    });
+    setRead({
+      ...liveWorkerRead,
+      jobs: [{ ...job, status: 'done', progress: { found: 22, skipped_existing: 2, listed } }],
+    });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
+    });
+    expect(
+      await within(screen.getByRole('dialog', { name: 'Backfill a day range' })).findByText(
+        `22 turns, 2 already evaluated, 20 to evaluate${listed === undefined ? '' : ` (${listed} traces listed)`}`,
+      ),
+    ).toBeVisible();
+  },
+);
 it.each([false, true])('queues a backfill with redo inconclusive=%s, closes and toasts', async (redo) => {
   const { fetch } = setup(liveWorkerRead, () => response(liveWorkerRead.jobs[0], 201));
   const user = await openRange();
@@ -550,15 +559,15 @@ it.each([false, true])('queues a backfill with redo inconclusive=%s, closes and 
 });
 
 it.each([
-  [{}, '0 / 0 turns evaluated, 0 failed', undefined],
+  [{}, '0 evaluated · 0 failed · 0 already evaluated · 0 turns in the range', undefined],
   [
     { evaluated: 4, found: 8, skipped_existing: 0, redone: 0, failed: 0, listed: 0 },
-    '4 / 8 turns evaluated, 0 failed',
+    '4 evaluated · 0 failed · 0 already evaluated · 8 turns in the range',
     '0 traces listed',
   ],
   [
-    { evaluated: 4, found: 8, skipped_existing: 3, redone: 2, failed: 1, listed: 20 },
-    '4 / 8 turns evaluated, 3 already evaluated, 2 redone, 1 failed',
+    { evaluated: 4, found: 10, skipped_existing: 3, redone: 2, failed: 1, listed: 20 },
+    '4 evaluated · 2 redone · 1 failed · 3 already evaluated · 10 turns in the range',
     '20 traces listed',
   ],
 ] as const)('explains progress counters for %j', async (progress, label, listed) => {
@@ -578,7 +587,7 @@ it.each([
   setup({ ...liveWorkerRead, jobs: [{ ...job, params: { ...job.params, redo: [...redo] } }] });
   const table = await screen.findByRole('grid', { name: 'Worker jobs' });
   if (label) expect(within(table).getByText(label)).toBeVisible();
-  else expect(within(table).queryByText(/^redo /)).toBeNull();
+  expect(within(table).getByText(`Limit 200 · redo ${redo.join(', ')}`)).toBeVisible();
 });
 
 it('requests older jobs at 20, 50, 100 and 200 and stops at the maximum', async () => {
@@ -922,4 +931,231 @@ it.each([
     expect(screen.getByRole('alert')).toHaveTextContent('The end day is in the future');
     expect(writes(fetch)).toHaveLength(0);
   }
+});
+
+it.each(['running', 'done'] as const)('explains new backfill outcomes for %s', async (status) => {
+  setup({
+    ...liveWorkerRead,
+    status: { ...liveWorkerRead.status, day_key_timezone: 'Asia/Riyadh' },
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        status,
+        progress: {
+          found: 30,
+          evaluated: 6,
+          judged: 3,
+          recorded: 2,
+          incomplete: 1,
+          redone: 2,
+          failed: 1,
+          skipped_existing: 4,
+          resumed: 3,
+          fetch_failed: 1,
+          limit_reached: true,
+          remaining: 14,
+          effective_until: '2026-11-03T21:30:00Z',
+          listed: 40,
+          rejected: {
+            other_names: 3,
+            excluded_users: 2,
+            no_session: 1,
+            other_environment: 3,
+            bad_timestamp: 1,
+          },
+        },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(
+    table.getByText(
+      '6 evaluated · 2 redone · 1 failed · 4 already evaluated · 30 turns in the range · 3 from an earlier attempt · 1 could not be fetched, will be retried by the next backfill',
+    ),
+  ).toBeVisible();
+  expect(
+    table.getByText(
+      'Of the evaluated: 3 judged, 2 recorded without judges (cancelled or failed in Insightor), 1 incomplete',
+    ),
+  ).toBeVisible();
+  expect(
+    table.getByText('Stopped at the limit of 200. 14 turns in this range are still not evaluated.'),
+  ).toHaveAttribute('data-tone', 'warning');
+  expect(
+    table.getByText('Covers turns up to 2026-11-04 00:30 Riyadh; later turns are left to the live loop.'),
+  ).toBeVisible();
+  expect(
+    table.getByText(
+      '40 traces listed: 30 user turns, 3 other traces, 2 from excluded users, 1 without a conversation, 3 from other environments, 1 with an invalid timestamp',
+    ),
+  ).toHaveAttribute('data-tone', 'muted');
+});
+
+it('hides empty breakdowns and zero rejection categories', async () => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        progress: {
+          evaluated: 4,
+          found: 4,
+          judged: 4,
+          recorded: 0,
+          incomplete: 0,
+          listed: 6,
+          rejected: { other_names: 2, excluded_users: 0, no_session: 0 },
+        },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.queryByText(/Of the evaluated/)).toBeNull();
+  expect(
+    table.queryByText(/Stopped at the limit|earlier attempt|could not be fetched|Covers turns/),
+  ).toBeNull();
+  expect(table.getByText('6 traces listed: 4 user turns, 2 other traces')).toBeVisible();
+});
+
+it.each(['running', 'queued'] as const)('explains why a %s job is waiting', async (status) => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        status,
+        updated_at: '2026-01-01T00:00:00Z',
+        progress: { waiting: 'worker paused' },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText('Waiting: worker paused')).toBeVisible();
+  expect(table.queryByText(/no update for/)).toBeNull();
+});
+
+it('shows Queued when a queued job has no reason', async () => {
+  setup({ ...liveWorkerRead, jobs: [{ ...liveWorkerRead.jobs[0]!, status: 'queued', progress: {} }] });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText('Queued')).toBeVisible();
+});
+
+it('shows the reason for cancelling an unresponsive worker job', async () => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        status: 'cancelled',
+        error: 'cancelled while the worker was not responding',
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText('cancelled while the worker was not responding')).toBeVisible();
+});
+
+it.each([
+  [{ found: 12, skipped_existing: 10 }, '12 turns, 10 already evaluated, 2 to evaluate'],
+  [
+    { found: 50, skipped_existing: 10, would_evaluate: 20, would_redo: 5, beyond_limit: 15 },
+    '20 to evaluate · 5 to redo · 10 already evaluated · 15 beyond the limit of 25',
+  ],
+  [
+    { found: 10, skipped_existing: 10, would_evaluate: 0, would_redo: 0, beyond_limit: 0 },
+    '0 to evaluate · 0 to redo · 10 already evaluated · 0 beyond the limit of 25',
+  ],
+])('gives preview rows their own summary for %j', async (progress, sentence) => {
+  const job = liveWorkerRead.jobs[0]!;
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...job,
+        kind: 'backfill_preview',
+        status: 'done',
+        params: { ...job.params, limit: 25, redo: [] },
+        progress,
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText(sentence)).toBeVisible();
+  expect(table.getByText('Limit 25 · redo none')).toBeVisible();
+});
+
+it('previews the same limit and redo as Run and hides the preview when redo changes', async () => {
+  const job: LiveJob = {
+    ...liveWorkerRead.jobs[0]!,
+    id: 'new-preview',
+    kind: 'backfill_preview',
+    status: 'done',
+    params: {
+      ...liveWorkerRead.jobs[0]!.params,
+      since_day: '2026-01-01',
+      until_day: '2026-01-02',
+      limit: 25,
+      redo: ['failed'],
+    },
+    progress: { would_evaluate: 20, would_redo: 5, skipped_existing: 10, beyond_limit: 15 },
+  };
+  const { fetch } = setup(liveWorkerRead, () => response(job, 201));
+  const user = await openRange();
+  dates('2026-01-01', '2026-01-02');
+  const limit = screen.getByRole('textbox', { name: 'Limit' });
+  await user.clear(limit);
+  await user.type(limit, '25');
+  await user.tab();
+  expect(
+    screen.getByText('The job stops after this many turns. Preview shows how many are waiting.'),
+  ).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Preview' }));
+  const sentence = '20 to evaluate · 5 to redo · 10 already evaluated · 15 beyond the limit of 25';
+  expect(await screen.findByText(sentence)).toBeVisible();
+  await user.click(screen.getByRole('checkbox', { name: 'Also redo turns labelled Inconclusive' }));
+  expect(screen.queryByText(sentence)).toBeNull();
+  await user.click(screen.getByRole('checkbox', { name: 'Also redo turns labelled Inconclusive' }));
+  await user.click(screen.getByRole('button', { name: 'Run' }));
+  const [preview, run] = writes(fetch).map(
+    ([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>,
+  );
+  expect(preview).toEqual({
+    kind: 'backfill_preview',
+    since_day: '2026-01-01',
+    until_day: '2026-01-02',
+    limit: 25,
+    redo: ['failed'],
+  });
+  expect(run).toEqual({ ...preview, kind: 'backfill' });
+});
+
+it('keeps a zero redone count visible after the job previously reported redos', async () => {
+  const job = { ...liveWorkerRead.jobs[0]!, progress: { evaluated: 1, found: 3, redone: 2 } };
+  const { client, setRead } = setup({ ...liveWorkerRead, jobs: [job] });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText(/1 evaluated · 2 redone/)).toBeVisible();
+  setRead({ ...liveWorkerRead, jobs: [{ ...job, progress: { ...job.progress, redone: 0 } }] });
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
+  });
+  await waitFor(() => expect(table.getByText(/1 evaluated · 0 redone/)).toBeVisible());
+});
+
+it('does not invent a rejection gap when listed equals found', async () => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        progress: {
+          found: 4,
+          listed: 4,
+          rejected: { other_names: 0 },
+        },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText('4 traces listed')).toBeVisible();
+  expect(table.queryByText(/user turns/)).toBeNull();
 });

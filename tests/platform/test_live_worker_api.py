@@ -590,7 +590,7 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
         BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": "backfill_preview"}
     )
     assert preview.status_code == 201, preview.text
-    assert preview.json()["params"]["redo"] == []
+    assert preview.json()["params"]["redo"] == ["failed"]
     with session_factory() as db:
         db.add(
             LiveSource(
@@ -626,18 +626,18 @@ def test_jobs_redo(client, session_factory, kind, redo):
         BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": kind, "redo": redo}
     )
     assert response.status_code == 201, response.text
-    expected = (
-        [] if kind == "backfill_preview" else ["failed"] if redo is None else redo
-    )
+    expected = ["failed"] if redo is None else redo
     assert response.json()["params"]["redo"] == expected
     assert read(client)["jobs"][0]["params"]["redo"] == expected
+    assert read(client)["jobs"][0]["params"]["limit"] == JOB["limit"]
     with session_factory() as db:
         assert db.get(LiveJob, response.json()["id"]).params["redo"] == expected
 
 
-def test_jobs_redo_unknown_label(client):
+@pytest.mark.parametrize("kind", ["backfill", "backfill_preview"])
+def test_jobs_redo_unknown_label(client, kind):
     response = client.post(
-        BASE + "/jobs", headers=ADMIN, json={**JOB, "redo": ["success"]}
+        BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": kind, "redo": ["success"]}
     )
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "validation_error"
@@ -905,3 +905,69 @@ def test_other_project_member_is_404(client, session_factory):
     for method, path, body in [("GET", "", None), ("GET", "/events", None), *WRITES]:
         response = client.request(method, BASE + path, headers=headers, json=body)
         assert response.status_code == 404, response.text
+
+
+@pytest.mark.parametrize(
+    "heartbeat_age, job_age, cancelled",
+    [
+        (120, 1, True),
+        (121, 1, True),
+        (119, 600, False),
+        (0, 600, False),
+        (None, 120, True),
+        (None, 119, False),
+    ],
+)
+def test_cancel_running_uses_worker_heartbeat_or_job_update(
+    client, session_factory, heartbeat_age, job_age, cancelled
+):
+    from qym_platform.services.live_jobs import JobError, report_progress
+
+    with session_factory() as db:
+        source = db.get(LiveSource, "source")
+        source.last_heartbeat_at = (
+            NOW - timedelta(seconds=heartbeat_age)
+            if heartbeat_age is not None
+            else None
+        )
+        db.add(
+            LiveJob(
+                id="stalled",
+                source_id=source.id,
+                kind="backfill",
+                status="running",
+                updated_at=NOW - timedelta(seconds=job_age),
+            )
+        )
+        db.commit()
+    response = client.post(BASE + "/jobs/stalled/cancel", headers=ADMIN)
+    assert response.status_code == 200, response.text
+    job = response.json()
+    assert job["cancel_requested"] is True
+    assert job["status"] == ("cancelled" if cancelled else "running")
+    assert bool(job["finished_at"]) is cancelled
+    assert job["error"] == (
+        "cancelled while the worker was not responding" if cancelled else None
+    )
+    assert client.post(BASE + "/jobs", headers=ADMIN, json=JOB).status_code == (
+        201 if cancelled else 409
+    )
+    with session_factory() as db:
+        for status in (
+            ["running", "done", "failed", "cancelled"] if cancelled else ["running"]
+        ):
+            with pytest.raises(JobError) as exc:
+                report_progress(
+                    db, db.get(LiveSource, "source"), "stalled", status, {}, None, NOW
+                )
+            assert exc.value.status == 409
+
+
+@pytest.mark.parametrize("redo", [["failed", "failed"], ["all", "failed"]])
+def test_preview_rejects_invalid_redo_combinations(client, redo):
+    response = client.post(
+        BASE + "/jobs",
+        headers=ADMIN,
+        json={**JOB, "kind": "backfill_preview", "redo": redo},
+    )
+    assert response.status_code == 422, response.text

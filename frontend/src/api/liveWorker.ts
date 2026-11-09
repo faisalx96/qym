@@ -84,6 +84,25 @@ export interface LiveJob {
     failed?: number;
     last_turn_at?: string;
     paused?: boolean;
+    resumed?: number;
+    judged?: number;
+    recorded?: number;
+    incomplete?: number;
+    fetch_failed?: number;
+    limit_reached?: boolean;
+    remaining?: number;
+    would_evaluate?: number;
+    would_redo?: number;
+    beyond_limit?: number;
+    waiting?: string;
+    rejected?: {
+      other_names?: number;
+      no_session?: number;
+      excluded_users?: number;
+      other_environment?: number;
+      bad_timestamp?: number;
+    };
+    effective_until?: string;
   };
   error: string | null;
   requested_by: string | null;
@@ -93,6 +112,15 @@ export interface LiveJob {
   finished_at: string | null;
   cancel_requested: boolean;
 }
+/** Older workers cannot distinguish redo or turns beyond the selection limit. */
+export function jobPreviewSentence(job: LiveJob): string {
+  const p = job.progress;
+  if (p.would_evaluate === undefined && p.would_redo === undefined && p.beyond_limit === undefined) {
+    return `${p.found ?? 0} turns, ${p.skipped_existing ?? 0} already evaluated, ${(p.found ?? 0) - (p.skipped_existing ?? 0)} to evaluate`;
+  }
+  return `${p.would_evaluate ?? 0} to evaluate · ${p.would_redo ?? 0} to redo · ${p.skipped_existing ?? 0} already evaluated · ${p.beyond_limit ?? 0} beyond the limit of ${job.params.limit}`;
+}
+
 export interface LiveWorkerEvent {
   id: number;
   level: 'error' | 'warning';

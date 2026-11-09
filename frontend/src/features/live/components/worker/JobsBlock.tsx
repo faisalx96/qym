@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { LiveJob } from '@/api/liveWorker';
+import { jobPreviewSentence, type LiveJob } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
 import { Button, ConfirmDialog, DataTable, EmptyState, ErrorState, Tag, Text, type Column } from '@/ui';
+import { zoneDateTime, zoneLabel } from '../../lib/zone';
 import { workerDay } from './format';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerBusy, WorkerCallbacks } from './types';
@@ -10,12 +11,13 @@ import styles from '../../worker.module.css';
 
 export function JobsBlock({
   jobs,
+  zone,
   onBackfill,
   onCancelJob,
   busy,
   jobsLimit,
   onJobsLimit,
-}: { jobs: LiveJob[]; busy: WorkerBusy; onBackfill: () => void; jobsLimit: number } & Pick<
+}: { jobs: LiveJob[]; zone?: string; busy: WorkerBusy; onBackfill: () => void; jobsLimit: number } & Pick<
   WorkerCallbacks,
   'onCancelJob' | 'onJobsLimit'
 >) {
@@ -70,7 +72,7 @@ export function JobsBlock({
             {row.status === 'running' && row.cancel_requested ? 'cancelling' : row.status}
           </Tag>
           {row.progress.paused ? <Tag>paused</Tag> : null}
-          {row.status === 'failed' && row.error ? (
+          {(row.status === 'failed' || row.status === 'cancelled') && row.error ? (
             <Text tone="danger" className={styles.wrap} dir="auto">
               {row.error}
             </Text>
@@ -82,21 +84,7 @@ export function JobsBlock({
       id: 'progress',
       header: 'Progress',
       priority: 2,
-      cell: (row) => (
-        <div className={styles.wrap}>
-          {row.progress.evaluated ?? 0} / {row.progress.found ?? 0} turns evaluated
-          {(row.progress.skipped_existing ?? 0) > 0
-            ? `, ${row.progress.skipped_existing} already evaluated`
-            : ''}
-          {(row.progress.redone ?? 0) > 0 ? `, ${row.progress.redone} redone` : ''}
-          {`, ${row.progress.failed ?? 0} failed`}
-          {typeof row.progress.listed === 'number' ? (
-            <Text as="div" variant="sm" tone="muted">
-              {row.progress.listed} traces listed
-            </Text>
-          ) : null}
-        </div>
-      ),
+      cell: (row) => <JobProgress key={row.id} job={row} zone={zone} />,
     },
     {
       id: 'requested_by',
@@ -113,12 +101,16 @@ export function JobsBlock({
       header: 'When',
       priority: 2,
       cell: (row) => {
-        const stale = row.status === 'running' && Date.now() - Date.parse(row.updated_at) > 10 * 60_000;
+        const waiting = row.status === 'running' ? row.progress.waiting?.trim() : '';
+        const stale =
+          row.status === 'running' && !waiting && Date.now() - Date.parse(row.updated_at) > 10 * 60_000;
         return (
           <div>
             <span title={row.requested_at}>{formatRelative(row.requested_at)}</span>
             <Text as="div" variant="sm" tone={stale ? 'danger' : 'muted'} title={row.updated_at}>
-              {stale ? 'no update for' : 'updated'} {formatRelative(row.updated_at)}
+              {waiting
+                ? `Waiting: ${waiting}`
+                : `${stale ? 'no update for' : 'updated'} ${formatRelative(row.updated_at)}`}
             </Text>
           </div>
         );
@@ -184,5 +176,75 @@ export function JobsBlock({
         }}
       />
     </WorkerBlock>
+  );
+}
+
+function JobProgress({ job, zone }: { job: LiveJob; zone?: string }) {
+  const p = job.progress;
+  const [hadRedone, setHadRedone] = useState((p.redone ?? 0) > 0);
+  if (!hadRedone && (p.redone ?? 0) > 0) setHadRedone(true);
+  const summary = [
+    `${p.evaluated ?? 0} evaluated`,
+    ...((p.redone ?? 0) > 0 || hadRedone ? [`${p.redone ?? 0} redone`] : []),
+    `${p.failed ?? 0} failed`,
+    `${p.skipped_existing ?? 0} already evaluated`,
+    `${p.found ?? 0} turns in the range`,
+    ...((p.resumed ?? 0) > 0 ? [`${p.resumed} from an earlier attempt`] : []),
+    ...((p.fetch_failed ?? 0) > 0
+      ? [`${p.fetch_failed} could not be fetched, will be retried by the next backfill`]
+      : []),
+  ].join(' · ');
+  const rejected = p.rejected;
+  const rejections =
+    rejected && (p.listed ?? 0) > (p.found ?? 0)
+      ? [
+          `${p.found ?? 0} user turns`,
+          ...((rejected.other_names ?? 0) > 0 ? [`${rejected.other_names} other traces`] : []),
+          ...((rejected.excluded_users ?? 0) > 0 ? [`${rejected.excluded_users} from excluded users`] : []),
+          ...((rejected.no_session ?? 0) > 0 ? [`${rejected.no_session} without a conversation`] : []),
+          ...((rejected.other_environment ?? 0) > 0
+            ? [`${rejected.other_environment} from other environments`]
+            : []),
+          ...((rejected.bad_timestamp ?? 0) > 0
+            ? [`${rejected.bad_timestamp} with an invalid timestamp`]
+            : []),
+        ].join(', ')
+      : null;
+  return (
+    <div className={styles.wrap}>
+      {job.status === 'queued'
+        ? p.waiting?.trim()
+          ? `Waiting: ${p.waiting}`
+          : 'Queued'
+        : job.kind === 'backfill_preview'
+          ? jobPreviewSentence(job)
+          : summary}
+      {job.kind === 'backfill' && (p.recorded ?? 0) + (p.incomplete ?? 0) > 0 ? (
+        <Text as="div" variant="sm" tone="muted">
+          Of the evaluated: {p.judged ?? 0} judged, {p.recorded ?? 0} recorded without judges (cancelled or
+          failed in Insightor), {p.incomplete ?? 0} incomplete
+        </Text>
+      ) : null}
+      {p.limit_reached ? (
+        <Text as="div" variant="sm" tone="warning">
+          Stopped at the limit of {job.params.limit}. {p.remaining ?? 0} turns in this range are still not
+          evaluated.
+        </Text>
+      ) : null}
+      <Text as="div" variant="sm" tone="muted">
+        Limit {job.params.limit} · redo {job.params.redo?.join(', ') || 'none'}
+      </Text>
+      {p.effective_until ? (
+        <Text as="div" variant="sm" tone="muted">
+          Covers turns up to {zoneDateTime(p.effective_until, zone)} {zoneLabel(zone)}; later turns are left
+          to the live loop.
+        </Text>
+      ) : null}
+      {typeof p.listed === 'number' ? (
+        <Text as="div" variant="sm" tone="muted">
+          {p.listed} traces listed{rejections ? `: ${rejections}` : ''}
+        </Text>
+      ) : null}
+    </div>
   );
 }

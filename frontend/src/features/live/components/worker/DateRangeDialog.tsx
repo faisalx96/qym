@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { validateDateRange, type CreateWorkerJob, type LiveJob } from '@/api/liveWorker';
+import { jobPreviewSentence, validateDateRange, type CreateWorkerJob, type LiveJob } from '@/api/liveWorker';
 import { errorSentence } from '@/lib/http';
 import { Button, Checkbox, Dialog, ErrorState, NumberField, Text, TextField, useToast } from '@/ui';
 import type { WorkerCallbacks } from './types';
@@ -29,8 +29,13 @@ export function DateRangeDialog({
   const [preview, setPreview] = useState<LiveJob | null>(null);
   const toast = useToast();
   const latest = jobs.find((job) => job.id === preview?.id) ?? preview;
+  const redo: CreateWorkerJob['redo'] = redoInconclusive ? ['failed', 'inconclusive'] : ['failed'];
   const currentPreview =
-    latest?.params.since_day === since && latest.params.until_day === until && latest.params.limit === limit
+    latest?.params.since_day === since &&
+    latest.params.until_day === until &&
+    latest.params.limit === limit &&
+    latest.params.redo?.length === redo.length &&
+    redo.every((label) => latest.params.redo?.includes(label))
       ? latest
       : null;
   async function submit(kind: LiveJob['kind']) {
@@ -38,14 +43,13 @@ export function DateRangeDialog({
     setValidation(message);
     setError(null);
     if (message) return;
-    const redo: CreateWorkerJob['redo'] = redoInconclusive ? ['failed', 'inconclusive'] : ['failed'];
     try {
       const job = await onCreateJob({
         kind,
         since_day: since,
         until_day: until,
         limit,
-        ...(kind === 'backfill' ? { redo } : {}),
+        redo,
       });
       if (kind === 'backfill_preview') setPreview(job);
       else {
@@ -77,7 +81,12 @@ export function DateRangeDialog({
       <div className={styles.stack}>
         <TextField label="From" type="date" value={since} onChange={setSince} />
         <TextField label="To" type="date" value={until} onChange={setUntil} />
-        <NumberField label="Limit" value={limit} onChange={setLimit} help="1 to 2,000" />
+        <NumberField
+          label="Limit"
+          value={limit}
+          onChange={setLimit}
+          help="The job stops after this many turns. Preview shows how many are waiting."
+        />
         <Checkbox isSelected={redoInconclusive} onChange={setRedoInconclusive}>
           Also redo turns labelled Inconclusive
         </Checkbox>
@@ -91,17 +100,18 @@ export function DateRangeDialog({
         ) : null}
         {currentPreview?.status === 'done' ? (
           <Text role="status">
-            {currentPreview.progress.found ?? 0} turns, {currentPreview.progress.skipped_existing ?? 0}{' '}
-            already evaluated,{' '}
-            {(currentPreview.progress.found ?? 0) - (currentPreview.progress.skipped_existing ?? 0)} to
-            evaluate
+            {jobPreviewSentence(currentPreview)}
             {typeof currentPreview.progress.listed === 'number'
               ? ` (${currentPreview.progress.listed} traces listed)`
               : ''}
           </Text>
         ) : null}
         {currentPreview && (currentPreview.status === 'queued' || currentPreview.status === 'running') ? (
-          <Text role="status">Preview {currentPreview.status}</Text>
+          <Text role="status">
+            {currentPreview.progress.waiting?.trim()
+              ? `Waiting: ${currentPreview.progress.waiting}`
+              : `Preview ${currentPreview.status}`}
+          </Text>
         ) : null}
         {currentPreview?.status === 'failed' ? (
           <ErrorState

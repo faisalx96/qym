@@ -467,15 +467,46 @@ A queued or running job accepts `running` or a terminal status (`done`, `failed`
 `cancelled`). The first `running` sets its start time; a terminal status sets
 its finish time. Terminal jobs reject all later updates, including retries.
 A pending cancellation rejects `running`; acknowledge with `cancelled` and the
-latest counters. Cancellation of a queued job finishes it immediately.
+latest counters. Cancellation of a queued job finishes it immediately. Cancelling
+running work also finishes it immediately when the source's server-recorded
+`last_heartbeat_at` is at least 120 seconds old (falling back to the job's
+`updated_at` when no heartbeat exists). The job's error is then
+`cancelled while the worker was not responding`; later worker posts get 409.
+With a recent heartbeat, cancellation remains a request for the worker to stop.
 
-The counters `found`, `skipped_existing`, `evaluated` and `failed` must be
+The counters `found`, `listed`, `skipped_existing`, `evaluated`, `redone` and `failed` must be
 nonnegative integers (not booleans) and must never decrease. An omitted counter
 is treated as zero, so send the complete latest counters on every update,
 including completion and cancellation.
 
-Additional progress keys, including `listed` and `redone`, are stored unchanged
-and are not required to be monotonic. They may be reported only at completion.
+Progress is stored exactly as supplied, including unknown extra keys (which must
+still be finite JSON). Older workers may omit every new field below. Optional
+counts must be nonnegative integers, not booleans; these new counts are not
+subject to the monotonic check.
+
+| Optional progress keys | Type | Meaning |
+|---|---|---|
+| `resumed` | integer | Turns written by an earlier attempt of this job |
+| `judged`, `recorded`, `incomplete` | integers | Breakdown of `evaluated`: judged, recorded without judges (cancelled or failed in Insightor), and incomplete; `evaluated = judged + recorded + incomplete` |
+| `fetch_failed` | integer | Turns that could not be fetched and can be retried by the next backfill |
+| `limit_reached` | boolean | The job stopped at its selection limit |
+| `remaining` | integer | Turns in the range still not evaluated |
+| `would_evaluate`, `would_redo`, `beyond_limit` | integers | Preview selections and turns beyond the limit |
+| `waiting` | string | Why work is waiting |
+| `rejected` | object | Optional nonnegative integer counts: `other_names`, `no_session`, `excluded_users`, `other_environment`, `bad_timestamp`; explains `listed − found` |
+| `effective_until` | ISO timestamp string | Effective cutoff; later turns are left to the live loop |
+
+`evaluated` counts rows written without an evaluation failure. `redone` counts
+replacements by a non-failed result; `failed` includes redos that failed again.
+`skipped_existing` counts turns evaluated before this job. These counters retain
+the worker's meanings; qym does not recompute them. Existing `last_turn_at` and
+`paused` progress keys also remain supported.
+
+Both preview and backfill jobs carry the same `params.limit` and `params.redo`
+in their read and control documents. Both default to `redo: ["failed"]` when
+omitted; an explicit empty list disables redo. Preview uses the new counts when
+available; for older workers the UI uses `found − skipped_existing` and does not
+infer a redo or beyond-limit count.
 
 | HTTP / scope | `error.code` | Exact detail or message | Meaning / action |
 |---|---|---|---|
