@@ -5,7 +5,7 @@
  * the last keystroke, so one keystroke does not re-render the other fields.
  */
 import { memo, useEffect, useId, useRef, useState } from 'react';
-import { IconButton, Tag } from '@/ui';
+import { IconButton, Select, Tag, Textarea, TextField } from '@/ui';
 import {
   enumOptions,
   envName,
@@ -126,15 +126,15 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
   const draft = useDraft(external, commitText);
 
   const ref = (el: HTMLElement | null) => registerField(node.fieldName, el);
-  const controlProps = {
+  const fieldProps = {
     id,
-    className: styles.control,
-    disabled: Boolean(bound),
-    'aria-label': cell ? node.label : undefined,
-    'aria-invalid': messages.length ? true : undefined,
+    label: node.label,
+    hideLabel: true,
+    isDisabled: Boolean(bound),
+    isInvalid: messages.length > 0,
     'aria-describedby': describedBy,
-    title: bound ? `Filled by the ${bound} model` : undefined,
   };
+  const boundTitle = bound ? `Filled by the ${bound} model` : undefined;
 
   const encoding = jsonEncoding(entry);
   const structuredOk = Boolean(encoding) && !bound && !asJson && !node.invalid && !rawMode;
@@ -173,34 +173,20 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
       />
     );
   } else if (node.swept) {
+    const sweepText = isSweepValue(node.value)
+      ? `Sweep: ${node.value.sweep.map((v) => JSON.stringify(v)).join(', ')}`
+      : '';
     control = (
-      <input
-        {...controlProps}
-        ref={ref}
-        data-mono=""
-        type="text"
-        readOnly
-        title={
-          isSweepValue(node.value)
-            ? `Sweep: ${node.value.sweep.map((v) => JSON.stringify(v)).join(', ')}`
-            : undefined
-        }
-        value={
-          isSweepValue(node.value)
-            ? `Sweep: ${node.value.sweep.map((v) => JSON.stringify(v)).join(', ')}`
-            : ''
-        }
-      />
+      <TextField {...fieldProps} ref={ref} mono isReadOnly title={sweepText || undefined} value={sweepText} />
     );
   } else if (kind === 'secret') {
     control = (
-      <input
-        {...controlProps}
+      <TextField
+        {...fieldProps}
         ref={ref}
-        type="text"
-        disabled
+        isDisabled
+        title={boundTitle}
         value=""
-        readOnly
         placeholder={bound ? node.placeholder : 'Keys are set through model slots'}
       />
     );
@@ -238,48 +224,51 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
       options = keys.map((k) => ({ value: k, label: k }));
     }
     control = (
-      <select
-        {...controlProps}
-        ref={ref}
-        data-mono={kind === 'endpoint-ref' ? '' : undefined}
-        value={external}
-        onChange={(e) => commitText(e.target.value)}
-      >
-        <option value="">
-          {kind === 'endpoint-ref' ? 'Inherit' : unsetLabel(entry, bound, node.placeholder)}
-        </option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+      <span ref={ref}>
+        <Select
+          label={node.label}
+          hideLabel
+          items={[
+            {
+              key: '',
+              label: kind === 'endpoint-ref' ? 'Inherit' : unsetLabel(entry, bound, node.placeholder),
+            },
+            ...options.map((o) => ({ key: o.value, label: o.label })),
+          ]}
+          value={external}
+          onChange={(k) => commitText(String(k ?? ''))}
+          isDisabled={Boolean(bound)}
+          isInvalid={messages.length > 0}
+          aria-describedby={describedBy}
+        />
+      </span>
     );
   } else if (kind === 'json' || kind === 'array' || kind === 'object') {
     control = (
-      <textarea
-        {...controlProps}
+      <Textarea
+        {...fieldProps}
         ref={ref}
+        mono
         spellCheck={false}
         rows={cell ? 2 : 4}
         placeholder={node.placeholder}
         value={draft.value}
-        onChange={(e) => draft.onChange(e.target.value)}
+        onChange={draft.onChange}
         onBlur={draft.onBlur}
       />
     );
   } else {
     control = (
-      <input
-        {...controlProps}
+      <TextField
+        {...fieldProps}
         ref={ref}
-        data-mono={mono ? '' : undefined}
-        type="text"
-        spellCheck={false}
+        title={boundTitle}
+        mono={mono}
+        spellCheck="false"
         inputMode={kind === 'number' ? 'decimal' : undefined}
         placeholder={node.placeholder}
         value={draft.value}
-        onChange={(e) => draft.onChange(e.target.value)}
+        onChange={draft.onChange}
         onBlur={draft.onBlur}
         onKeyDown={(e) => {
           if (e.key === 'Enter') draft.flush();
@@ -385,14 +374,7 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
       </div>
     );
   }
-  const labelEl =
-    node.swept || container ? (
-      <span className={styles.label}>{node.title}</span>
-    ) : (
-      <label className={styles.label} htmlFor={id}>
-        {node.title}
-      </label>
-    );
+  const labelEl = <span className={styles.label}>{node.title}</span>;
   return (
     <div
       className={styles.field}

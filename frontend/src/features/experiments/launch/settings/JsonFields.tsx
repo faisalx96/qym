@@ -10,7 +10,7 @@
  * table cell, a container is edited as JSON text.
  */
 import { useId, useState } from 'react';
-import { Button, Icon, IconButton } from '@/ui';
+import { Button, Icon, IconButton, Select, Textarea, TextField } from '@/ui';
 import { plural } from '../../lib/format';
 import { listTableModel, newListItem, uniformKeys, type JsonObject, type JsonValue } from '../model';
 import { AddRow } from './AddRow';
@@ -120,6 +120,11 @@ const labelFor = (ed: Editor, path: Path) => [ed.label, ...path.map(String)].fil
 
 // ── scalar controls ─────────────────────────────────────────────────────
 
+const BOOLEAN_ITEMS = [
+  { key: 'true', label: 'true' },
+  { key: 'false', label: 'false' },
+];
+
 function ScalarInput({
   kind,
   value,
@@ -137,32 +142,29 @@ function ScalarInput({
   const [error, setError] = useState('');
   if (kind === 'boolean') {
     return (
-      <select
-        className={styles.control}
-        aria-label={label}
+      <Select
+        label={label}
+        hideLabel
+        items={BOOLEAN_ITEMS}
         value={value === true ? 'true' : 'false'}
-        onChange={(e) => onValue(e.target.value === 'true')}
-      >
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </select>
+        onChange={(k) => onValue(k === 'true')}
+      />
     );
   }
   return (
-    <input
-      className={styles.control}
-      data-mono={kind !== 'string' ? '' : undefined}
-      type="text"
-      spellCheck={false}
+    <TextField
+      label={label}
+      hideLabel
+      mono={kind !== 'string'}
+      spellCheck="false"
       inputMode={kind === 'number' ? 'decimal' : undefined}
-      aria-label={label}
-      aria-invalid={error ? true : undefined}
+      isInvalid={Boolean(error)}
       title={error || undefined}
       placeholder={placeholder ?? (kind === 'null' ? 'null' : undefined)}
       value={draft ?? text(value)}
-      onChange={(e) => {
-        setDraft(e.target.value);
-        const parsed = parseText(kind, e.target.value);
+      onChange={(next) => {
+        setDraft(next);
+        const parsed = parseText(kind, next);
         if ('error' in parsed) setError(parsed.error);
         else {
           setError('');
@@ -189,17 +191,18 @@ function JsonTextControl({
   const [draft, setDraft] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
   return (
-    <textarea
-      className={styles.control}
+    <Textarea
+      label={label}
+      hideLabel
+      mono
       spellCheck={false}
       rows={2}
-      aria-label={label}
-      aria-invalid={invalid ? true : undefined}
+      isInvalid={invalid}
       value={draft ?? JSON.stringify(value)}
-      onChange={(e) => {
-        setDraft(e.target.value);
+      onChange={(next) => {
+        setDraft(next);
         try {
-          onValue(JSON.parse(e.target.value) as JsonValue);
+          onValue(JSON.parse(next) as JsonValue);
           setInvalid(false);
         } catch {
           setInvalid(true);
@@ -228,18 +231,15 @@ function AllControl({
   const [error, setError] = useState('');
   if (kind === 'boolean') {
     return (
-      <select
-        className={styles.control}
-        aria-label={label}
+      <Select
+        label={label}
+        hideLabel
+        items={[{ key: '', label: common ? `Same: ${String(common.value)}` : 'Mixed' }, ...BOOLEAN_ITEMS]}
         value=""
-        onChange={(e) => {
-          if (e.target.value) onApply(e.target.value === 'true');
+        onChange={(k) => {
+          if (k) onApply(k === 'true');
         }}
-      >
-        <option value="">{common ? `Same: ${String(common.value)}` : 'Mixed'}</option>
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </select>
+      />
     );
   }
   const shown = common ? text(common.value) : '';
@@ -255,17 +255,16 @@ function AllControl({
     onApply(parsed.value);
   };
   return (
-    <input
-      className={styles.control}
-      data-mono={kind !== 'string' ? '' : undefined}
-      type="text"
-      spellCheck={false}
-      aria-label={label}
-      aria-invalid={error ? true : undefined}
+    <TextField
+      label={label}
+      hideLabel
+      mono={kind !== 'string'}
+      spellCheck="false"
+      isInvalid={Boolean(error)}
       title={error || 'A value set here is written into every item'}
       placeholder={common ? undefined : 'Mixed'}
       value={draft ?? shown}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={setDraft}
       onBlur={apply}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
