@@ -178,11 +178,11 @@ test.describe('the tab strip (QA5-17 to QA5-23)', () => {
 
 test.describe('layout and heights (QA5-24 to QA5-37, QA5-59)', () => {
   // [width, mode card (no grants, project), mode group, always, whole tab with twelve, people card twelve, table twelve, add row]
-  // Measured on the branch app with twelve grants (picture check, check/3/result.json access_tab_numbers); CI confirms them.
+  // The main values plus the change new app minus old app, both measured with twelve grants (picture check); CI confirms them.
   const NUMBERS = [
-    [1440, 203.4, 69, 24.5, 920.8, 703.4, 514, 43.4],
+    [1440, 188, 53.6, 24.5, 905.5, 703.4, 514, 43.4],
     [1024, 203.4, 69, 24.5, 920.8, 703.4, 514, 43.4],
-    [390, 327.7, 161.3, 41, 1861.6, 1519.9, 1279.1, 94.8],
+    [390, 327.7, 161.3, 41, 1871.2, 1529.5, 1288.7, 94.8],
   ] as const;
   for (const [width, mode, group, always, whole, people12, table12, add] of NUMBERS) {
     test(`twelve people at ${width}px`, async ({ page, request }) => {
