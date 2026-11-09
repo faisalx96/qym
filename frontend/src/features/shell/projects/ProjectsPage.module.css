@@ -31,6 +31,12 @@
   flex-direction: column;
   min-width: 0;
   flex: 1;
+  overflow-wrap: anywhere;
+  gap: 2px;
+}
+
+.role {
+  align-self: flex-start;
 }
 
 .cardMeta {
@@ -41,8 +47,9 @@
   color: var(--text-muted);
 }
 
-.cardMeta strong {
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-weight: 600;
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block-end: var(--space-md);
 }
