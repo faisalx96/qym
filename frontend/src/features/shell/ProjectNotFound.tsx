@@ -43,8 +43,8 @@ export function ProjectNotFound({ slug, kind, archived, error, onRetry }: Projec
               Open the project’s runs
             </LinkButton>
           ) : (
-            <LinkButton to="/" variant="accent">
-              All projects
+            <LinkButton to="/" variant="neutral" icon={<Icon name="prev" size={12} />}>
+              Projects
             </LinkButton>
           )
         }
