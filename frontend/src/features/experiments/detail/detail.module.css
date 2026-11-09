@@ -42,12 +42,6 @@
   gap: var(--space-sm);
 }
 
-.empty {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--font-md);
-}
-
 .sub {
   display: block;
   margin-top: var(--space-xs);
@@ -224,6 +218,11 @@
 }
 
 /* Chart */
+.chartEmpty {
+  display: grid;
+  place-items: center;
+}
+
 .chartBox {
   display: flex;
   flex-direction: column;
@@ -298,6 +297,7 @@
 .legend {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-md);
   margin: 0;
   padding: 0;
