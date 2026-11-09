@@ -236,20 +236,43 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
       <StatStrip
         aria-label="Job totals"
         items={[
-          { key: 'jobs', label: 'Jobs', value: stats.jobs },
+          { key: 'jobs', label: 'Jobs', value: stats.jobs, icon: <Icon name="flask" /> },
           {
             key: 'ok',
             label: 'Succeeded',
             value: stats.succeeded,
-            tone: stats.succeeded ? 'success' : undefined,
+            icon: <Icon name="check" />,
+            tone: 'success',
           },
-          { key: 'failed', label: 'Failed', value: stats.failed, tone: stats.failed ? 'danger' : undefined },
+          {
+            key: 'failed',
+            label: 'Failed',
+            value: stats.failed,
+            icon: <Icon name="close" />,
+            tone: stats.failed ? 'danger' : undefined,
+          },
           // In progress and Cancelled are normal at 0: they show only when they hold a job (C137)
           ...(stats.inProgress
-            ? [{ key: 'live', label: 'In progress', value: stats.inProgress, tone: 'accent' as const }]
+            ? [
+                {
+                  key: 'live',
+                  label: 'In progress',
+                  value: stats.inProgress,
+                  icon: <Icon name="clock" />,
+                  tone: 'info' as const,
+                },
+              ]
             : []),
           ...(stats.cancelled
-            ? [{ key: 'cancelled', label: 'Cancelled', value: stats.cancelled, tone: 'warning' as const }]
+            ? [
+                {
+                  key: 'cancelled',
+                  label: 'Cancelled',
+                  value: stats.cancelled,
+                  icon: <Icon name="stop" />,
+                  tone: 'warning' as const,
+                },
+              ]
             : []),
         ]}
       />
