@@ -83,6 +83,10 @@ describe('overview loading and error states', () => {
     failed = false;
     await userEvent.setup().click(screen.getByRole('button', { name: /retry/i }));
     await waitFor(() => expect(document.querySelector('[data-live-stat="turns"]')).toHaveTextContent('47'));
+    expect(screen.getByRole('link', { name: 'Manage worker' })).toHaveAttribute(
+      'href',
+      `/projects/demo/live/worker?${new URLSearchParams({ source })}`,
+    );
   });
 
   it('reserves the measured first-load frames through their CSS variables', async () => {
