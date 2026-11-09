@@ -15,31 +15,33 @@ const EDGE = 8;
 const FALLBACK_W = 280;
 const FALLBACK_H = 30;
 
-/** The nearest parent that is the containing block of a fixed box (transform, filter, containment), else null. */
-function fixedContainer(el: Element): Element | null {
-  for (let p = el.parentElement; p; p = p.parentElement) {
-    const s = getComputedStyle(p);
-    if (
-      (s.transform && s.transform !== 'none') ||
-      (s.filter && s.filter !== 'none') ||
-      (s.backdropFilter && s.backdropFilter !== 'none') ||
-      (s.perspective && s.perspective !== 'none') ||
-      /transform|filter|perspective/.test(s.willChange) ||
-      /layout|paint|strict|content/.test(s.contain) ||
-      (s.containerType && s.containerType !== 'normal')
-    )
-      return p;
-  }
-  return null;
+/** Where a fixed box inside `el` has its origin: a transformed or contained parent moves it off the window corner. */
+function fixedOrigin(el: Element): { x: number; y: number } {
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none';
+  el.append(probe);
+  const r = probe.getBoundingClientRect();
+  probe.remove();
+  return { x: r.left, y: r.top };
 }
 
+/** The reason box's border-box size (its computed width and height are the content box). */
 function boxSize(el: Element): { w: number; h: number } {
   const s = getComputedStyle(el, '::after');
-  const w = parseFloat(s.width);
-  const h = parseFloat(s.height);
+  const n = (v: string) => parseFloat(v) || 0;
+  const w = n(s.width);
+  const h = n(s.height);
+  const extraW =
+    s.boxSizing === 'border-box'
+      ? 0
+      : n(s.paddingLeft) + n(s.paddingRight) + n(s.borderLeftWidth) + n(s.borderRightWidth);
+  const extraH =
+    s.boxSizing === 'border-box'
+      ? 0
+      : n(s.paddingTop) + n(s.paddingBottom) + n(s.borderTopWidth) + n(s.borderBottomWidth);
   return {
-    w: Number.isFinite(w) && w > 0 ? w : FALLBACK_W,
-    h: Number.isFinite(h) && h > 0 ? h : FALLBACK_H,
+    w: w > 0 ? w + extraW : FALLBACK_W,
+    h: h > 0 ? h + extraH : FALLBACK_H,
   };
 }
 
@@ -64,12 +66,9 @@ export function placeReason(el: HTMLElement): void {
     y = above ? r.top - GAP - h : r.bottom + GAP;
     at = `${above ? 'above' : 'below'}-${fitsEnd ? 'start' : 'end'}`;
   }
-  const cb = fixedContainer(el);
-  if (cb) {
-    const c = cb.getBoundingClientRect();
-    x -= c.left + cb.clientLeft;
-    y -= c.top + cb.clientTop;
-  }
+  const o = fixedOrigin(el);
+  x -= o.x;
+  y -= o.y;
   el.style.setProperty('--reason-x', `${Math.round(x)}px`);
   el.style.setProperty('--reason-y', `${Math.round(y)}px`);
   el.setAttribute('data-reason-at', at);
