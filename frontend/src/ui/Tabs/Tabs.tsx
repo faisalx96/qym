@@ -15,8 +15,6 @@ export interface TabsProps {
   items: TabItem[];
   selected: string;
   onSelect: (id: string) => void;
-  /** cv3-shim: remove after D-24 (deprecated: there is one tab look; this prop does nothing). */
-  variant?: 'underline' | 'dense';
   /** `<TabPanel id>` children */
   children?: ReactNode;
   className?: string;
