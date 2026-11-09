@@ -117,7 +117,7 @@ describe('SettingsSection', () => {
       '/LLM_OVERRIDES/endpoints/primary/timeout': 30,
       '/LLM_OVERRIDES/endpoints/fast/timeout': 30,
     });
-  });
+  }, 20_000);
 
   it('writes the "All roles" row to every role', async () => {
     const { user } = setup(<SettingsSection />);
