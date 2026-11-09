@@ -78,25 +78,19 @@ function writeFrame(rows: number, height: number) {
   }
 }
 
-export function NewFeedbackButton({ disabled, size = 'md' }: { disabled?: boolean; size?: 'md' | 'sm' }) {
+export function NewFeedbackButton({ disabled }: { disabled?: boolean }) {
   const navigate = useNavigate();
-  const button = (
+  return (
     <Button
-      variant="accent"
-      size={size}
-      icon={<Icon name="plus" size={14} />}
+      variant="primary"
+      icon={<Icon name="plus" size={12} />}
       isDisabled={disabled}
+      disabledReason="An admin must connect a model first"
+      data-testid={disabled ? 'new-feedback-disabled' : undefined}
       onPress={() => navigate('/feedback/new')}
     >
       New feedback
     </Button>
-  );
-  return disabled ? (
-    <span title="An administrator has to connect a model first" data-testid="new-feedback-disabled">
-      {button}
-    </span>
-  ) : (
-    button
   );
 }
 
