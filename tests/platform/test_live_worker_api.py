@@ -802,6 +802,9 @@ def test_events_list_filters_and_limit(client, session_factory):
     response = client.get(BASE + "/events", headers=ADMIN)
     assert response.status_code == 200
     rows = response.json()["events"]
+    assert response.json()["total"] == 204
+    assert response.json()["page"] == 1
+    assert response.json()["limit"] == 50
     assert len(rows) == 50
     assert rows[0]["message"] == "Event 203"
     assert all(row["details"] == {"attempt": 203 - i} for i, row in enumerate(rows))
@@ -817,14 +820,16 @@ def test_events_list_filters_and_limit(client, session_factory):
         "last_at",
     }
     assert rows[0]["first_at"] == "2026-11-03T22:00:00Z"
-    for filters in (
-        {"component": "database"},
-        {"level": "error"},
-        {"component": "database", "level": "error"},
+    for filters, total in (
+        ({"component": "database"}, 136),
+        ({"level": "error"}, 102),
+        ({"component": "database", "level": "error"}, 68),
     ):
-        rows = client.get(
+        body = client.get(
             BASE + "/events", headers=ADMIN, params={**filters, "limit": 200}
-        ).json()["events"]
+        ).json()
+        assert body["total"] == total
+        rows = body["events"]
         assert rows
         assert all(all(row[k] == v for k, v in filters.items()) for row in rows)
         assert [r["last_at"] for r in rows] == sorted(
@@ -835,8 +840,25 @@ def test_events_list_filters_and_limit(client, session_factory):
         == 200
     )
     assert client.get(BASE + "/events?limit=201", headers=ADMIN).status_code == 422
+    assert client.get(BASE + "/events?page=0", headers=ADMIN).status_code == 422
+    page = client.get(BASE + "/events?limit=10&page=2", headers=ADMIN).json()
+    assert page["total"] == 204
+    assert page["page"] == 2
+    assert page["limit"] == 10
+    assert [row["message"] for row in page["events"]] == [
+        f"Event {i}" for i in range(193, 183, -1)
+    ]
+    assert client.get(BASE + "/events?limit=10&page=22", headers=ADMIN).json() == {
+        "events": [],
+        "total": 204,
+        "page": 22,
+        "limit": 10,
+    }
     assert client.get(BASE + "/events?component=missing", headers=ADMIN).json() == {
-        "events": []
+        "events": [],
+        "total": 0,
+        "page": 1,
+        "limit": 50,
     }
 
 

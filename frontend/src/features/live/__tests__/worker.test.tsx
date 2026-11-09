@@ -249,7 +249,7 @@ it('shows plain problem labels and opens the section targeted by a Fix link', as
   const view = setup(liveWorkerRead, undefined, [route]);
   await screen.findByRole('button', { name: 'Save as v4' });
   act(() => {
-    view.client.setQueryData(['project', 'demo', 'live', 'worker-events', source, {}], {
+    view.client.setQueryData(['project', 'demo', 'live', 'worker-events', source, { page: 1, limit: 10 }], {
       events: [
         {
           ...liveWorkerEvents[0]!,

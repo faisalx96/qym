@@ -7,7 +7,7 @@ import {
   type WorkerEventsFilters,
 } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
-import { Chip, CopyButton, EmptyState, ErrorState, LinkButton, Skeleton, Tag, Text } from '@/ui';
+import { Chip, CopyButton, EmptyState, ErrorState, LinkButton, Pagination, Skeleton, Tag, Text } from '@/ui';
 import { WorkerBlock } from './WorkerBlock';
 import styles from '../../worker.module.css';
 
@@ -53,11 +53,14 @@ function FailedChecks({ event, path }: { event: LiveWorkerEvent; path: string })
   );
 }
 
+export const PROBLEMS_PAGE_SIZE = 10;
+
 export interface ProblemsProps {
   source: string;
   status?: LiveSourceInfo;
   read: LiveWorkerRead;
   events: LiveWorkerEvent[];
+  eventsTotal?: number;
   eventsFilters: WorkerEventsFilters;
   onEventsFilters: (filters: WorkerEventsFilters) => void;
   eventsPending?: boolean;
@@ -69,6 +72,7 @@ export function ProblemsBlock({
   status,
   read,
   events,
+  eventsTotal,
   eventsFilters,
   onEventsFilters,
   eventsPending,
@@ -107,7 +111,7 @@ export function ProblemsBlock({
       <div className={styles.inline}>
         <Chip
           isSelected={!eventsFilters.component}
-          onChange={() => onEventsFilters({ ...eventsFilters, component: undefined })}
+          onChange={() => onEventsFilters({ ...eventsFilters, component: undefined, page: 1 })}
         >
           All
         </Chip>
@@ -116,7 +120,7 @@ export function ProblemsBlock({
             key={component}
             isSelected={eventsFilters.component === component}
             onChange={(selected) =>
-              onEventsFilters({ ...eventsFilters, component: selected ? component : undefined })
+              onEventsFilters({ ...eventsFilters, component: selected ? component : undefined, page: 1 })
             }
           >
             {componentLabels[component] ?? component}
@@ -127,7 +131,7 @@ export function ProblemsBlock({
             key={level}
             isSelected={eventsFilters.level === level}
             onChange={(selected) =>
-              onEventsFilters({ ...eventsFilters, level: selected ? level : undefined })
+              onEventsFilters({ ...eventsFilters, level: selected ? level : undefined, page: 1 })
             }
           >
             {level === 'error' ? 'Errors' : 'Warnings'}
@@ -195,6 +199,15 @@ export function ProblemsBlock({
       ) : (
         <EmptyState title="No problems reported by the worker" />
       )}
+      {eventsTotal !== undefined && eventsTotal > PROBLEMS_PAGE_SIZE ? (
+        <Pagination
+          total={eventsTotal}
+          page={eventsFilters.page ?? 1}
+          pageSize={PROBLEMS_PAGE_SIZE}
+          noun="problems"
+          onPageChange={(page) => onEventsFilters({ ...eventsFilters, page })}
+        />
+      ) : null}
     </WorkerBlock>
   );
 }

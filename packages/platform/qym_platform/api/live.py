@@ -673,6 +673,7 @@ def project_live_worker_events(
     component: Optional[str] = Query(default=None),
     level: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
 ) -> dict:
     query = db.query(LiveWorkerEvent).filter_by(source_id=selected.id)
@@ -680,8 +681,10 @@ def project_live_worker_events(
         query = query.filter_by(component=component)
     if level is not None:
         query = query.filter_by(level=level)
+    total = query.count()
     rows = (
         query.order_by(LiveWorkerEvent.last_at.desc(), LiveWorkerEvent.id.desc())
+        .offset((page - 1) * limit)
         .limit(limit)
         .all()
     )
@@ -699,5 +702,8 @@ def project_live_worker_events(
                 "last_at": to_api_timestamp(row.last_at),
             }
             for row in rows
-        ]
+        ],
+        "total": total,
+        "page": page,
+        "limit": limit,
     }

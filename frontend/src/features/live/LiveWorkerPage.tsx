@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import { useLiveSources } from '@/api/live';
 import {
@@ -22,7 +23,7 @@ import { StatusStrip } from './components/worker/StatusStrip';
 import { SettingsForm } from './components/worker/SettingsForm';
 import { HistoryBlock } from './components/worker/HistoryBlock';
 import { JobsBlock } from './components/worker/JobsBlock';
-import { ProblemsBlock, type ProblemsProps } from './components/worker/ProblemsBlock';
+import { PROBLEMS_PAGE_SIZE, ProblemsBlock, type ProblemsProps } from './components/worker/ProblemsBlock';
 import { DateRangeDialog } from './components/worker/DateRangeDialog';
 import type { WorkerBusy, WorkerCallbacks } from './components/worker/types';
 import { zoneToday } from './lib/zone';
@@ -99,8 +100,9 @@ export function LiveWorkerPage({ slug, source }: { slug: string; source: string 
 }
 function WorkerPage({ slug, source }: { slug: string; source: string }) {
   useDocumentTitle('Worker · Live');
+  const client = useQueryClient();
   const location = useLocation();
-  const [filters, setFilters] = useState<WorkerEventsFilters>({});
+  const [filters, setFilters] = useState<WorkerEventsFilters>({ page: 1 });
   const [jobsLimit, setJobsLimit] = useState(20);
   const query = useLiveWorker(slug, source, jobsLimit);
   const [lastSuccess, setLastSuccess] = useState<{ read: LiveWorkerRead; jobsLimit: number } | null>(null);
@@ -121,7 +123,39 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
     if (jobsError) showToast(actionErrorMessage('load older jobs', jobsError), { tone: 'error' });
   }, [jobsError, showToast]);
   const read = query.data ?? lastSuccess?.read;
-  const events = useLiveWorkerEvents(slug, source, filters);
+  const events = useLiveWorkerEvents(slug, source, { ...filters, limit: PROBLEMS_PAGE_SIZE });
+  const { data: eventsData, isSuccess, isPlaceholderData, isFetching, isFetchedAfterMount } = events;
+  useEffect(() => {
+    if (
+      !isSuccess ||
+      isPlaceholderData ||
+      isFetching ||
+      !isFetchedAfterMount ||
+      eventsData.events.length ||
+      !eventsData.total
+    )
+      return;
+    const lastPage = Math.ceil(eventsData.total / PROBLEMS_PAGE_SIZE);
+    if ((filters.page ?? 1) <= lastPage) return;
+    // Discard the empty response so revisiting this page fetches it again, even with a fresh cache.
+    client.removeQueries({
+      queryKey: ['project', slug, 'live', 'worker-events', source, { ...filters, limit: PROBLEMS_PAGE_SIZE }],
+      exact: true,
+    });
+    // The server correction and cache removal must happen together after the fetch completes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilters({ ...filters, page: lastPage });
+  }, [
+    client,
+    slug,
+    source,
+    filters,
+    eventsData,
+    isSuccess,
+    isPlaceholderData,
+    isFetching,
+    isFetchedAfterMount,
+  ]);
   const sources = useLiveSources(slug);
   const state = useSetWorkerState(slug, source);
   const key = useSetWorkerKey(slug, source);
@@ -178,6 +212,7 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
         status={status}
         sourceControl={sourceControl}
         events={events.data?.events ?? []}
+        eventsTotal={events.data?.total}
         eventsFilters={filters}
         onEventsFilters={setFilters}
         eventsPending={events.isPending}

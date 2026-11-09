@@ -125,6 +125,13 @@ export interface WorkerEventsFilters {
   component?: string;
   level?: 'error' | 'warning';
   limit?: number;
+  page?: number;
+}
+export interface LiveWorkerEvents {
+  events: LiveWorkerEvent[];
+  total?: number;
+  page?: number;
+  limit?: number;
 }
 export interface SaveWorkerSettings {
   values: LiveWorkerValues;
@@ -166,7 +173,16 @@ export function useLiveWorker(slug: string, source: string, jobsLimit?: number) 
 export function useLiveWorkerEvents(slug: string, source: string, filters: WorkerEventsFilters = {}) {
   return useQuery({
     queryKey: ['project', slug, 'live', 'worker-events', source, filters],
-    queryFn: () => api.get<{ events: LiveWorkerEvent[] }>(livePath(slug, source, '/events', filters)),
+    queryFn: () => api.get<LiveWorkerEvents>(livePath(slug, source, '/events', filters)),
+    placeholderData: (previous, query) => {
+      const previousFilters = query?.queryKey[5] as WorkerEventsFilters | undefined;
+      return query?.queryKey[1] === slug &&
+        query.queryKey[4] === source &&
+        previousFilters?.component === filters.component &&
+        previousFilters?.level === filters.level
+        ? previous
+        : undefined;
+    },
     refetchInterval: 15000,
     refetchIntervalInBackground: false,
   });
