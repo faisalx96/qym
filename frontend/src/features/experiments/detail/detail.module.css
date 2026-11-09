@@ -67,7 +67,7 @@
 }
 
 .runLink:focus-visible {
-  outline: var(--focus-ring);
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -198,7 +198,7 @@
 }
 
 .metricLink:focus-visible {
-  outline: var(--focus-ring);
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
