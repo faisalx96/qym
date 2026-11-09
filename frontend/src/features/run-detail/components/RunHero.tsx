@@ -344,7 +344,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
               </Link>
             ) : samples > 1 ? (
               <Tag kind="count" title={`${samples} passes per item`}>
-                x{samples} passes
+                ×{samples}
               </Tag>
             ) : null}
             <CopyButton text={run.run_id} label="Copy run id" />

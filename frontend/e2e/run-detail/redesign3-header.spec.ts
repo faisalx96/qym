@@ -111,7 +111,7 @@ for (const width of [1440, 390]) {
         );
       // the passes tag on a repeat run
       await openRun(page, s.slug, wide);
-      await expect(hero(page).getByText('x10 passes')).toBeVisible();
+      await expect(hero(page).getByText('×10', { exact: true })).toBeVisible();
     });
 
     test('P6-3, P6-4: height ceilings and the first section close to the top', async ({ page }) => {
