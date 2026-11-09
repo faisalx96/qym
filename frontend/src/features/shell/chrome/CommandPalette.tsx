@@ -175,7 +175,7 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
       actions.push({
         id: 'action:create',
         group: 'Actions',
-        label: 'Create project',
+        label: 'New project',
         icon: 'plus',
         run: () => {
           close();
