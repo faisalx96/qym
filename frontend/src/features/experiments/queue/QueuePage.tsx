@@ -48,7 +48,6 @@ import {
   useToast,
   type Column,
   Card,
-  Flag,
   StatusMark,
   SearchField,
 } from '@/ui';
@@ -263,9 +262,11 @@ export function QueuePage() {
           <span className={styles.envCell}>
             {j.environment_name}
             {env && env.health_status && env.health_status !== 'ok' ? (
-              <Flag tone="warning" icon="warning">
-                {env.health_status}
-              </Flag>
+              env.health_status === 'error' ? (
+                <StatusMark tone="danger" shape="cross" label="Error" />
+              ) : (
+                <StatusMark tone="neutral" shape="ring" label="Unknown" />
+              )
             ) : null}
           </span>
         );
@@ -595,11 +596,11 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
             <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
           ) : null}
           {healthy ? (
-            <StatusMark tone="success" shape="full" label="Healthy" />
-          ) : env.health_status === 'unknown' || !env.health_status ? (
-            <StatusMark tone="neutral" shape="ring" label="Unknown" />
+            <StatusMark tone="success" shape="check" label="Healthy" />
+          ) : env.health_status === 'error' ? (
+            <StatusMark tone="danger" shape="cross" label="Error" />
           ) : (
-            <StatusMark tone="warning" shape="cross" label={env.health_status} />
+            <StatusMark tone="neutral" shape="ring" label="Unknown" />
           )}
         </div>
         <div className={styles.counts}>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDialog';
 import { SlotEditorDialog } from '@/features/environments/SlotEditor';
-import { Button, Checkbox, Icon, LinkButton, Tag } from '@/ui';
+import { Button, Checkbox, Icon, LinkButton, StatusMark, Tag } from '@/ui';
 import { environmentPath } from '../../paths';
 import { pairCount, PSEUDO, pointerToFieldName, unitsFor } from '../model';
 import { useLaunch } from '../LaunchContext';
@@ -38,13 +38,11 @@ function EnvironmentTags({
   return (
     <span className={styles.envTags}>
       {env.health_status === 'ok' ? (
-        <Tag tone="success">Healthy</Tag>
+        <StatusMark tone="success" shape="check" label="Healthy" />
       ) : env.health_status === 'error' ? (
-        <Tag tone="danger" title={env.health_error ?? undefined}>
-          Unhealthy
-        </Tag>
+        <StatusMark tone="danger" shape="cross" label="Error" title={env.health_error ?? undefined} />
       ) : (
-        <Tag>Not checked</Tag>
+        <StatusMark tone="neutral" shape="ring" label="Unknown" />
       )}
       {!env.current_schema_id ? <Tag tone="warning">No schema</Tag> : null}
       {env.model_slots?.needs_confirmation ? <Tag tone="warning">Needs LLM grouping</Tag> : null}
@@ -142,7 +140,12 @@ export function EnvironmentPicker() {
       </p>
       {canManage && !readOnly ? (
         <div>
-          <Button size="sm" variant="neutral" icon={<Icon name="plus" size={12} />} onPress={() => setAdding(true)}>
+          <Button
+            size="sm"
+            variant="neutral"
+            icon={<Icon name="plus" size={12} />}
+            onPress={() => setAdding(true)}
+          >
             New environment
           </Button>
         </div>
