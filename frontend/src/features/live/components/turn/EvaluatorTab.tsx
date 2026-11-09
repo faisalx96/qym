@@ -1,6 +1,6 @@
 import type { LiveTurnDetail } from '@/api/live';
 import { DataTable, Disclosure, JsonTree, Text, type Column } from '@/ui';
-import { evalMetaOf } from '../../lib/summary';
+import { recordOf } from '../../lib/summary';
 import { EvidenceCard, Facts, MetricValue } from './Evidence';
 import styles from '../../turn.module.css';
 
@@ -42,7 +42,7 @@ export function EvaluatorTab({ data }: { data: LiveTurnDetail }) {
   return (
     <>
       <EvidenceCard title="Evaluator metadata">
-        <Facts value={evalMetaOf(data.summary)} label="Evaluator metadata" />
+        <Facts value={recordOf(recordOf(data.summary)?.eval_meta)} label="Evaluator metadata" />
       </EvidenceCard>
       <DataTable
         aria-label="Evaluation scores"

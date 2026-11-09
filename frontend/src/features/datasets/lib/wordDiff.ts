@@ -20,7 +20,8 @@ export function diffTokens(text: string): string[] {
     .filter((t) => t !== '');
 }
 
-function myersDiff(a: string[], b: string[], maxD: number): DiffOp[] | null {
+/** Myers operations over arbitrary tokens; null when the edit budget is exceeded. */
+export function diffSequence(a: string[], b: string[], maxD: number): DiffOp[] | null {
   const n = a.length;
   const m = b.length;
   const trace: Int32Array[] = [];
@@ -102,7 +103,7 @@ export function wordDiff(a: string, b: string): DiffOp[] | null {
   const midA = aw.slice(start, endA);
   const midB = bw.slice(start, endB);
   if (midA.length + midB.length > DIFF_TOKEN_BUDGET) return null;
-  const mid = myersDiff(midA, midB, DIFF_EDIT_BUDGET);
+  const mid = diffSequence(midA, midB, DIFF_EDIT_BUDGET);
   if (mid === null) return null;
   const same = (list: string[]): DiffOp[] => list.map((text) => ({ kind: 'same', text }));
   return [...same(aw.slice(0, start)), ...mid, ...same(aw.slice(endA))];

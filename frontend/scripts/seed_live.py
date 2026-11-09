@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import random
 import re
 import struct
@@ -32,8 +33,8 @@ DIAGNOSES = [
     ("inconclusive", "Inconclusive", "neutral", 15),
 ]
 SERVICES = (
-    "router", "retrieval", "sql_generation", "sql_execution", "visualization",
-    "finalize", "eval_health",
+    "router", "retrieval", "sql_generation", "sql_execution", "viz_agent",
+    "finalize_report", "eval_health",
 )
 QUESTIONS = [
     (
@@ -198,15 +199,16 @@ def build_turn(day, index, total, label, rng, now, specs):
     if label == "system_problem":
         failing = "sql_execution" if index % 2 else "eval_health"
     for name in SERVICES:
-        skipped = name == "visualization" and not chart
-        failed = name == failing or name == "visualization" and chart_issue
+        skipped = name == "viz_agent" and not chart
+        failed = name == failing or name == "viz_agent" and chart_issue
         services[name] = {
             "status": "skipped" if skipped else "failed" if failed else "ok",
             "score": None if skipped else 0.0 if failed else 1.0,
             "fault": ("system" if label == "system_problem" else "agent") if failed else None,
             "signals": {"latency_ms": round(rng.uniform(20, 1200), 1)},
+            "reason": "No chart requested." if skipped else "The service failed." if failed else "The service completed.",
         }
-    tools = ["retrieval", "sql_execution"] + (["visualization"] if chart else [])
+    tools = ["retrieval", "sql_execution"] + (["viz_agent"] if chart else [])
     tool_list = [{"name": name, "step": step, "ok": services[name]["status"] == "ok"}
                  for step, name in enumerate(tools, 1)]
     failures = [{"name": entry["name"], "step": entry["step"],
@@ -298,6 +300,8 @@ def main() -> None:
     parser.add_argument("--stale", action="store_true",
                         help="skip the final heartbeat; earlier receipts age out after the server's stale threshold")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--evidence-cases", action="store_true",
+                        help="add the four synthetic Insightor contract cases on the latest day")
     args = parser.parse_args()
     if args.days < 1 or args.turns_per_day < 1:
         parser.error("--days and --turns-per-day must be positive")
@@ -316,6 +320,9 @@ def main() -> None:
          body={"name": "Evaluation worker", "environment": "preprod", "worker": worker,
                "day_key_timezone": "UTC"})
     specs = metric_specs()
+    if args.evidence_cases:
+        next(spec for spec in specs if spec["metric_name"] == "diagnosis")["values"].append(
+            {"value": "agent_ok", "label": "Agent OK", "tone": "accent"})
     call(base, source + "/metric-specs", method="PUT", token=token, body={"specs": specs})
     # Allocate the requested mix across the whole seed, then randomize its order.
     total = args.days * args.turns_per_day
@@ -340,6 +347,21 @@ def main() -> None:
         turns = [build_turn(day, index, args.turns_per_day,
                             labels[offset * args.turns_per_day + index], rng, now, specs)
                  for index in range(args.turns_per_day)]
+        if args.evidence_cases and not historical:
+            # Synthetic evidence built from Insightor code (recon A/B), not captured traces.
+            fixtures_path = Path(__file__).resolve().parents[1] / "src/features/dev/liveEvidenceFixtures.json"
+            cases = json.loads(fixtures_path.read_text())
+            for fixture in cases.values():
+                sample = build_turn(day, 0, 1, "ok", rng, now, specs)
+                sample.update(fixture)
+                sample.update(conversation_id=f"conversation-{fixture['turn_id']}", turn_index=0,
+                              detail={"sample": True})
+                sample["scores"] = [
+                    {"metric_name": "agent_success", "score_numeric": int(fixture["label"] == "agent_ok")},
+                    {"metric_name": "diagnosis", "score_raw": fixture["label"], "label": fixture["label"],
+                     "explanation": fixture["summary"]["verdict"]["reason_en"]},
+                ]
+                turns.append(sample)
         for batch_start in range(0, len(turns), 50):
             batch = turns[batch_start:batch_start + 50]
             report = call(base, source + "/turns", method="POST", token=token, body={"turns": batch})
@@ -374,7 +396,7 @@ def main() -> None:
         call(base, source + f"/days/{day}", method="PUT", token=token, body=day_body)
     checks = []
     for name in SERVICES[:-1]:
-        failed = name == "visualization"
+        failed = name == "viz_agent"
         checks.append({"canary": name, "checked_at": iso(now), "status": "failed" if failed else "ok",
                        "fault": "system" if failed else None, "latency_ms": round(rng.uniform(20, 1200), 1),
                        "detail": {"message": "Probe timed out" if failed else "Probe completed"},

@@ -4,13 +4,29 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { liveTurnDetail as turnDetail, liveOverview, liveTurnsPage } from '@/features/dev/liveFixtures';
+import {
+  liveTurnDetail as turnDetail,
+  liveOverview,
+  liveTurnsPage,
+  liveEvidenceTurns,
+  liveSpecs,
+} from '@/features/dev/liveFixtures';
 import { parseLiveFilters, type LiveTurnDetail } from '@/api/live';
 import { ApiError } from '@/lib/http';
 import { LiveTurnPage } from '../LiveTurnPage';
 import { DiagnosisTab } from '../components/turn/DiagnosisTab';
 import { TurnTiles } from '../components/turn/TurnTiles';
 import {
+  verdictOf,
+  turnClassOf,
+  rulesAppliedOf,
+  rulesVersionOf,
+  crossReviewOf,
+  judgeFactsOf,
+  guardrailsOf,
+  deliveredOf,
+  questionContextOf,
+  errorOf,
   chartsOf,
   comparisonRows,
   deviationsOf,
@@ -44,6 +60,13 @@ describe('live turn summary readers', () => {
       columnsTotal: null,
       sample: [],
       replay: null,
+      status: null,
+      blocked: null,
+      subQuestion: null,
+      agentIndex: null,
+      semanticEquivalent: null,
+      resultSetMatch: null,
+      textSimilarity: null,
     });
   });
 
@@ -53,7 +76,7 @@ describe('live turn summary readers', () => {
     ).toMatchObject({ columns: [], columnsTotal: null, sample: [] });
     expect(sqlPartsOf([{ replay: value }])[0]?.replay).toEqual(
       value !== null && typeof value === 'object' && !Array.isArray(value)
-        ? { rows: null, columns: [], columnsTotal: null, sample: [] }
+        ? { rows: null, columns: [], columnsTotal: null, sample: [], error: null, skipped: null }
         : null,
     );
   });
@@ -157,6 +180,7 @@ describe('live turn summary readers', () => {
   it('reads services, tool failures and calls, chart evidence and evaluator metadata', () => {
     expect(servicesOf(turnDetail.summary)).toContainEqual({
       name: 'sql_generation',
+      reason: 'The generated query uses an incomplete category filter.',
       status: 'failed',
       score: 0,
       fault: 'agent',
@@ -180,7 +204,13 @@ describe('live turn summary readers', () => {
         reading: 'يقارن الرسم القيم في الفئات الواردة في السؤال.',
       },
     ]);
-    expect(evalMetaOf(turnDetail.summary)).toEqual(turnDetail.summary.eval_meta);
+    expect(evalMetaOf(turnDetail.summary)).toEqual({
+      ...(turnDetail.summary.eval_meta as object),
+      rulesVersion: null,
+      maxAttempts: null,
+      stageDurations: null,
+      visionJudgeModel: null,
+    });
   });
 
   it('returns null or empty arrays for absent optional sections', () => {
@@ -509,5 +539,452 @@ describe('live turn evidence presentation', () => {
     );
     expect(url.searchParams.get('source')).toBe(source);
     expect(url.searchParams.get('list')).toBe(list);
+  });
+});
+
+describe('contract evidence readers', () => {
+  const privacy = liveEvidenceTurns['privacy-refusal'].summary;
+  const chart = liveEvidenceTurns['chart-summary'].summary;
+  const mismatch = liveEvidenceTurns['sql-mismatch'].summary;
+  const blocked = liveEvidenceTurns['query-blocked'];
+
+  it('reads verdict, class, rule sources and version', () => {
+    expect(verdictOf(privacy)).toMatchObject({
+      label: 'agent_ok',
+      basis: 'rule',
+      confidence: 0.96,
+      reasonEn: expect.any(String),
+      reasonAr: expect.any(String),
+      steps: [
+        { kind: 'rule', textEn: expect.any(String), textAr: expect.any(String), source: 'check-scope' },
+      ],
+    });
+    expect(turnClassOf(privacy)).toEqual({ name: 'refused_privacy', stage: 'router', review: 'route' });
+    expect(rulesAppliedOf(privacy)).toMatchObject([
+      {
+        id: 'G5',
+        group: 'guardrail',
+        role: 'decided',
+        titleEn: expect.any(String),
+        titleAr: expect.any(String),
+        verdictEn: expect.any(String),
+        verdictAr: expect.any(String),
+        sources: ['insightor-be/src/config/prompts/local_prompts/router_pii_check.md:4-6'],
+      },
+    ]);
+    expect(rulesVersionOf(privacy)).toBe('3fa9c1d2e4b7');
+  });
+
+  it('reads both judges, checks, deviations and statement comparisons', () => {
+    for (const side of ['a', 'b'] as const) {
+      expect(judgeOf(privacy, side)).toMatchObject({
+        privacyViolation: false,
+        reasoningEn: expect.any(String),
+        reasoningAr: expect.any(String),
+        routeReview: { verdict: 'correct', reasoningEn: expect.any(String), reasoningAr: expect.any(String) },
+      });
+      expect(judgeOf(mismatch, side)).toMatchObject({
+        checks: { followedManifest: false, sqlWellFormed: true, responseCorrect: false },
+        sqlReasoningEn: expect.any(String),
+        sqlReasoningAr: expect.any(String),
+        deviations: [
+          {
+            axis: 'sql',
+            type: 'missing_filter',
+            dropped: false,
+            droppedReason: null,
+            textEn: expect.any(String),
+            textAr: expect.any(String),
+          },
+          {
+            axis: 'response',
+            dropped: true,
+            droppedReason: 'contradicts fact: the answer explicitly says 2025',
+          },
+        ],
+        sqlParts: [
+          {
+            subQuestion: 'أعلى عشر مدن في عام 2025',
+            agentIndex: 0,
+            semanticEquivalent: false,
+            resultSetMatch: false,
+            textSimilarity: 0.65,
+          },
+        ],
+      });
+    }
+  });
+
+  it('reads cross-review, judge facts, delivered charts and question context', () => {
+    for (const side of ['a_on_b', 'b_on_a'] as const)
+      expect(crossReviewOf(chart, side)).toMatchObject({
+        textEn: expect.any(String),
+        textAr: expect.any(String),
+        agreement: true,
+        betterSql: 'tie',
+      });
+    expect(judgeFactsOf(chart)).toEqual([
+      {
+        textEn: 'Chart shown to the user: bar chart, 10 categories, built from SQL #1 (10 rows).',
+        source: 'Tool: suggest_chart',
+      },
+    ]);
+    expect(deliveredOf(chart)).toMatchObject({
+      charts: [
+        {
+          kind: 'chart',
+          type: 'bar',
+          title: expect.any(String),
+          categories: 10,
+          sourceRows: 10,
+          result: 'as_asked',
+          shownInAnswer: true,
+        },
+      ],
+      methodology: [expect.any(String)],
+      dataNotes: [expect.any(String)],
+      datesShown: true,
+      textTrimmedForChart: true,
+    });
+    expect(questionContextOf(chart)).toEqual({
+      enrichedQuestion: 'ما أعلى عشر مدن من حيث عدد السكان في عام 2025؟',
+      previousQuestion: 'اعرض عدد السكان لعام 2025.',
+      previousAnswer: 'يمكن عرض عدد السكان حسب المدينة.',
+      selectedExcerpt: 'حسب المدينة',
+    });
+  });
+
+  it('separates production errors, blocked queries and withheld replays', () => {
+    expect(sqlPartsOf(blocked.turn.sql)[0]).toMatchObject({
+      status: 'blocked',
+      blocked: 'privacy',
+      executed: false,
+      replay: { error: null, skipped: 'privacy', rows: null, sample: [] },
+    });
+    expect(guardrailsOf(blocked.summary)).toEqual({
+      granted: { pii: true, internals: true, businessQuestion: true },
+      fired: [
+        {
+          stage: 'query_blocker',
+          kind: 'pii',
+          ruleId: 'G16',
+          textEn: 'The blocked query must not be replayed.',
+          source: 'pii_judge.query',
+        },
+      ],
+      replayWithheld: true,
+    });
+    expect(sqlPartsOf(liveEvidenceTurns['sql-mismatch'].turn.sql)[1]).toMatchObject({
+      status: 'error',
+      error: 'Warehouse connection timed out.',
+      replay: { error: 'Warehouse replay timed out.' },
+    });
+    expect(evalMetaOf(chart)).toMatchObject({
+      rulesVersion: '3fa9c1d2e4b7',
+      maxAttempts: 3,
+      visionJudgeModel: 'vision-judge',
+      stageDurations: { enrichment: 0.4, metrics: 1.2, judges: 41, replay: 6.3, total: 49.5 },
+    });
+    expect(errorOf(mismatch)).toBe('Warehouse replay timed out for the second statement.');
+  });
+
+  it('orders services by severity then spec position, keeping unknown services and reasons', () => {
+    const services = {
+      services: {
+        router: { status: 'ok' },
+        finalize_report: { status: 'degraded' },
+        future_service: { status: 'failed', reason: 'Future service failed.', fault: 'policy' },
+        sql_execution: { status: 'failed', fault: 'infra', reason: 'Warehouse timed out.' },
+        eval_health: { status: 'skipped' },
+        retrieval: { status: 'ok' },
+      },
+    };
+    expect(servicesOf(services).map((item) => item.name)).toEqual([
+      'sql_execution',
+      'future_service',
+      'finalize_report',
+      'router',
+      'retrieval',
+      'eval_health',
+    ]);
+    expect(
+      servicesOf(
+        services,
+        liveSpecs.map((spec) => ({ ...spec, position: -spec.position })),
+      )
+        .filter((item) => item.status === 'ok')
+        .map((item) => item.name),
+    ).toEqual(['retrieval', 'router']);
+    expect(servicesOf(services)[1]).toMatchObject({ reason: 'Future service failed.', fault: 'policy' });
+  });
+
+  it('falls back to old mixed strings and judge-filtered flat deviations without changing raw reasoning', () => {
+    const en = 'The query needs a year filter to answer the question correctly.';
+    const ar = 'يحتاج الاستعلام إلى شرط السنة للإجابة عن السؤال بشكل صحيح.';
+    const text = `${en} / ${ar}`;
+    const old = {
+      judges: { a: { reasoning: text } },
+      cross_review: { a_on_b: { text } },
+      deviations: [
+        { judge: 'b', axis: 'sql', text: 'Wrong judge' },
+        { judge: 'a', axis: 'sql', text },
+      ],
+    };
+    expect(judgeOf(old, 'a')).toMatchObject({
+      reasoning: text,
+      reasoningEn: en,
+      reasoningAr: ar,
+      checks: null,
+      routeReview: null,
+      privacyViolation: null,
+      sqlReasoningEn: null,
+      sqlReasoningAr: null,
+      deviations: [{ axis: 'sql', textEn: en, textAr: ar, type: null, dropped: null, droppedReason: null }],
+    });
+    expect(crossReviewOf(old, 'a_on_b')).toEqual({
+      textEn: en,
+      textAr: ar,
+      agreement: null,
+      betterSql: null,
+    });
+    expect(
+      judgeOf(
+        { ...old, judges: { a: { reasoning: text, reasoning_en: '', reasoning_ar: null, deviations: [] } } },
+        'a',
+      ),
+    ).toMatchObject({ reasoningEn: '', reasoningAr: null, deviations: [] });
+    expect(sqlPartsOf(turnDetail.turn.sql)[0]?.status).toBeNull();
+    expect(judgeOf(turnDetail.summary, 'a')?.reasoning).toBe(
+      'The generated query uses an incomplete category filter.',
+    );
+  });
+
+  it.each([{}, turnDetail.summary, null, [], 'bad', 9])(
+    'keeps new evidence absent on old or malformed rows %#',
+    (value) => {
+      const summary = value as Record<string, unknown>;
+      expect(verdictOf(summary)).toBeNull();
+      expect(turnClassOf(summary)).toBeNull();
+      expect(rulesAppliedOf(summary)).toEqual([]);
+      expect(rulesVersionOf(summary)).toBeNull();
+      expect(judgeFactsOf(summary)).toEqual([]);
+      expect(guardrailsOf(summary)).toBeNull();
+      expect(deliveredOf(summary)).toBeNull();
+      expect(questionContextOf(summary)).toBeNull();
+      expect(errorOf(summary)).toBeNull();
+    },
+  );
+
+  it('does not coerce malformed contract fields', () => {
+    expect(
+      verdictOf({
+        verdict: {
+          label: 1,
+          basis: 'invalid',
+          confidence: Infinity,
+          steps: [null, { kind: 1, text_en: {}, text_ar: false, source: [] }],
+        },
+      }),
+    ).toEqual({
+      label: null,
+      basis: null,
+      reasonEn: null,
+      reasonAr: null,
+      confidence: null,
+      steps: [{ kind: null, textEn: null, textAr: null, source: null }],
+    });
+    expect(turnClassOf({ turn_class: { name: {}, stage: false, review: [] } })).toEqual({
+      name: null,
+      stage: null,
+      review: null,
+    });
+    expect(
+      rulesAppliedOf({
+        rules_applied: [
+          null,
+          {
+            id: 5,
+            group: [],
+            title_en: {},
+            title_ar: false,
+            verdict_en: 1,
+            verdict_ar: [],
+            sources: [null, 'path'],
+            role: 'invalid',
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        id: null,
+        group: null,
+        titleEn: null,
+        titleAr: null,
+        verdictEn: null,
+        verdictAr: null,
+        sources: ['path'],
+        role: null,
+      },
+    ]);
+    expect(rulesVersionOf({ rules_version: 1 })).toBeNull();
+    expect(errorOf({ error: {} })).toBeNull();
+    expect(
+      judgeOf(
+        {
+          judges: {
+            a: {
+              reasoning_en: [],
+              reasoning_ar: {},
+              sql_reasoning_en: 1,
+              sql_reasoning_ar: false,
+              privacy_violation: 'false',
+              checks: { followed_manifest: 'true', sql_well_formed: 1, response_correct: {} },
+              route_review: { verdict: 'other', reasoning_en: {}, reasoning_ar: [] },
+              deviations: [
+                null,
+                { axis: 'other', type: 1, text_en: {}, text_ar: [], dropped: 'false', dropped_reason: 1 },
+              ],
+              sql_parts: [
+                {
+                  agent_index: -1,
+                  sub_question: {},
+                  semantic_equivalent: 1,
+                  result_set_match: 'true',
+                  text_similarity: Infinity,
+                },
+              ],
+            },
+          },
+        },
+        'a',
+      ),
+    ).toMatchObject({
+      reasoningEn: null,
+      reasoningAr: null,
+      sqlReasoningEn: null,
+      sqlReasoningAr: null,
+      privacyViolation: null,
+      checks: { followedManifest: null, sqlWellFormed: null, responseCorrect: null },
+      routeReview: { verdict: null, reasoningEn: null, reasoningAr: null },
+      deviations: [
+        { axis: null, type: null, textEn: null, textAr: null, dropped: null, droppedReason: null },
+      ],
+      sqlParts: [
+        {
+          agentIndex: null,
+          subQuestion: null,
+          semanticEquivalent: null,
+          resultSetMatch: null,
+          textSimilarity: null,
+        },
+      ],
+    });
+    expect(
+      crossReviewOf(
+        { cross_review: { a_on_b: { text_en: {}, text_ar: 4, agreement: 'yes', better_sql: 'unknown' } } },
+        'a_on_b',
+      ),
+    ).toEqual({ textEn: null, textAr: null, agreement: null, betterSql: null });
+    expect(judgeFactsOf({ judge_facts: [null, { text_en: [], source: 1 }] })).toEqual([
+      { textEn: null, source: null },
+    ]);
+    expect(
+      guardrailsOf({
+        guardrails: {
+          granted: { pii: 'yes', internals: 1, business_question: [] },
+          fired: [false, { stage: 'other', kind: 'other', rule_id: 1, text_en: {}, source: [] }],
+          replay_withheld: 'true',
+        },
+      }),
+    ).toEqual({
+      granted: { pii: null, internals: null, businessQuestion: null },
+      fired: [{ stage: null, kind: null, ruleId: null, textEn: null, source: null }],
+      replayWithheld: null,
+    });
+    expect(
+      deliveredOf({
+        delivered: {
+          charts: [
+            null,
+            {
+              kind: 'invalid',
+              type: {},
+              title: [],
+              categories: '10',
+              source_rows: NaN,
+              result: 'bad',
+              shown_in_answer: 1,
+            },
+          ],
+          methodology: [null, 'valid'],
+          data_notes: {},
+          dates_shown: 'false',
+          text_trimmed_for_chart: 0,
+        },
+      }),
+    ).toEqual({
+      charts: [
+        {
+          kind: null,
+          type: null,
+          title: null,
+          categories: null,
+          sourceRows: null,
+          result: null,
+          shownInAnswer: null,
+        },
+      ],
+      methodology: ['valid'],
+      dataNotes: [],
+      datesShown: null,
+      textTrimmedForChart: null,
+    });
+    expect(
+      questionContextOf({
+        question_context: {
+          enriched_question: 1,
+          previous_question: [],
+          previous_answer: {},
+          selected_excerpt: false,
+        },
+      }),
+    ).toEqual({
+      enrichedQuestion: null,
+      previousQuestion: null,
+      previousAnswer: null,
+      selectedExcerpt: null,
+    });
+    expect(
+      evalMetaOf({
+        eval_meta: {
+          rules_version: 1,
+          max_attempts: '3',
+          vision_judge_model: [],
+          stage_durations_s: { valid: 0, bad: '1', infinite: Infinity },
+        },
+      }),
+    ).toMatchObject({
+      rulesVersion: null,
+      maxAttempts: null,
+      visionJudgeModel: null,
+      stageDurations: { valid: 0 },
+    });
+    expect(servicesOf({ services: { future: { reason: {}, status: false } } })[0]).toMatchObject({
+      reason: null,
+      status: null,
+    });
+    expect(
+      sqlPartsOf([{ status: 'other', blocked: 'other', replay: { error: {}, skipped: 'other' } }])[0],
+    ).toMatchObject({ status: null, blocked: null, replay: { error: null, skipped: null } });
+  });
+
+  it.each(Object.entries(liveEvidenceTurns))('renders all seven tabs for the %s fixture', async (_, data) => {
+    const user = userEvent.setup();
+    const view = renderTurn(data);
+    for (const tab of screen.getAllByRole('tab')) {
+      await user.click(tab);
+      expect(screen.getByRole('tabpanel')).toBeInTheDocument();
+    }
+    view.unmount();
   });
 });
