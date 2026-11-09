@@ -267,6 +267,8 @@ export function DocumentsPanel({
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
         title="Delete document?"
+        requireText={deleting?.name}
+        inputLabel={`Type ${deleting?.name ?? ''} to confirm`}
         description={
           deleting
             ? `${deleting.name} will be removed from this project and from future analyses.`
