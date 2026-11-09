@@ -28,6 +28,7 @@ import { modelSeriesOf } from '@/features/runs-list/model';
 import {
   ActionTile,
   Button,
+  ClearFiltersButton,
   ConfirmDialog,
   DataTable,
   EmptyState,
@@ -384,7 +385,7 @@ export function TrashPage() {
         <Select
           label="Project"
           hideLabel
-          placeholder="All projects"
+          triggerVariant="bar"
           items={[
             { key: '', label: 'All projects' },
             ...(projects.data ?? []).map((p) => ({
@@ -402,7 +403,13 @@ export function TrashPage() {
             setSelected(new Set());
           }}
           searchable="auto"
-          width={260}
+        />
+        <ClearFiltersButton
+          count={(projectId ? 1 : 0) + (q ? 1 : 0)}
+          onClear={() => {
+            setSearch('');
+            setQuery({ project: null, q: null, page: null });
+          }}
         />
         <span className={styles.grow} />
       </div>
