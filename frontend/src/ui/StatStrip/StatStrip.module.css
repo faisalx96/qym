@@ -130,7 +130,12 @@
   color: var(--text-secondary);
 }
 
-.label > :not(:first-child) {
+/* The last word and the help marker never part. */
+.labelTail {
+  white-space: nowrap;
+}
+
+.labelTail > :not(:first-child) {
   margin-inline-start: var(--space-xs);
   vertical-align: middle;
 }

@@ -49,6 +49,28 @@ export interface StatStripProps {
 
 const ARROW = { good: '▲', bad: '▼', flat: '≈' } as const;
 
+/** A label and its help marker; the marker stays on the line of the last word when the label wraps (E-52). */
+function LabelWithHelp({ label, help }: { label: ReactNode; help: string }) {
+  const marker = <HelpMarker label={String(label)}>{help}</HelpMarker>;
+  if (typeof label !== 'string' || !label.includes(' '))
+    return (
+      <span className={styles.labelTail}>
+        <span>{label}</span>
+        {marker}
+      </span>
+    );
+  const cut = label.lastIndexOf(' ') + 1;
+  return (
+    <>
+      <span>{label.slice(0, cut)}</span>
+      <span className={styles.labelTail}>
+        <span>{label.slice(cut)}</span>
+        {marker}
+      </span>
+    </>
+  );
+}
+
 function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; variant: string }) {
   const flat = typeof item.value === 'string' || typeof item.value === 'number' ? item.value : null;
   const flash = useFlashOnChange(flat, live);
@@ -79,10 +101,11 @@ function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; var
       ) : null}
       <span className={styles.stack}>
         <span className={styles.label}>
-          <span>{item.label}</span>
           {item.help && !item.onPress ? (
-            <HelpMarker label={String(item.label)}>{item.help}</HelpMarker>
-          ) : null}
+            <LabelWithHelp label={item.label} help={item.help} />
+          ) : (
+            <span>{item.label}</span>
+          )}
         </span>
         <span className={styles.value} data-changed={flash ? '' : undefined}>
           {item.value}
