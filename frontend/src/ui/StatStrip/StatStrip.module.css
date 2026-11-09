@@ -122,13 +122,17 @@
   height: 20px;
 }
 
+/* The label is running text, so a wrapped label keeps its help marker right after the last word (E-52). */
 .label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
+  display: block;
   font-size: var(--font-md);
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.label > :not(:first-child) {
+  margin-inline-start: var(--space-xs);
+  vertical-align: middle;
 }
 
 .value {
