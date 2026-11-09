@@ -494,7 +494,7 @@ describe('visual language (redesign round 2)', () => {
 
   it('tones.css maps every tone, band and series to --tone/--tone-text', () => {
     const css = read(join(SRC, 'styles/tones.css'));
-    for (const t of ['success', 'info', 'warning', 'danger', 'accent', 'meta', 'neutral'])
+    for (const t of ['success', 'info', 'warning', 'danger', 'accent', 'meta', 'neutral', 'gold'])
       expect(css, `tone ${t}`).toContain(`[data-tone='${t}']`);
     for (let b = 1; b <= 5; b += 1) expect(css, `band ${b}`).toContain(`[data-band='${b}']`);
     for (let n = 1; n <= 8; n += 1) expect(css, `series ${n}`).toContain(`[data-series='${n}']`);
@@ -739,6 +739,11 @@ describe('buttons (C049, C136, C166, C232)', () => {
     const tsx = read(join(SRC, 'ui/Button/Button.tsx'));
     expect(tsx).toContain('disabledReason');
     expect(read(join(SRC, 'ui/Button/Button.module.css'))).toContain('content: attr(data-reason)');
+    // A-22: IconButton and LinkButton give the same hover reason
+    for (const f of ['ui/IconButton/IconButton.tsx', 'ui/LinkButton/LinkButton.tsx']) {
+      expect(read(join(SRC, f)), f).toContain('disabledReason');
+      expect(read(join(SRC, f)), f).toContain('reasonWrap');
+    }
   });
 
   it('keeps the solid accent fill for primary buttons; a selected segment is an accent wash', () => {
