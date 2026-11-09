@@ -83,7 +83,8 @@
 /* Band 2: seven labelled facts in one row of columns (4 and 2 columns as the column narrows). */
 .facts {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(7, auto);
+  justify-content: space-between;
   gap: var(--space-sm) var(--space-md);
   margin: 0;
 }
@@ -108,11 +109,9 @@
   min-block-size: var(--badge-height);
   min-inline-size: 0;
   margin: 0;
-  overflow: hidden;
   font-size: var(--font-base);
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--text-primary);
 }
 
@@ -299,12 +298,6 @@
 
   .name {
     font-size: var(--font-lg);
-  }
-
-  /* a Started value wraps instead of ending in an ellipsis */
-  .factValue {
-    white-space: normal;
-    overflow-wrap: anywhere;
   }
 
   .contextRow {
