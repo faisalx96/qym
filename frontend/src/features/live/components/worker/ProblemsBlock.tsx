@@ -188,6 +188,7 @@ export function ProblemsBlock({
           <FailedChecks event={e} path={`${location.pathname}${location.search}`} />
           <CopyButton
             label="Copy report"
+            className={styles.messageCopy}
             text={() =>
               problemReport({
                 source,

@@ -109,12 +109,18 @@
   padding: var(--card-padding-compact);
 }
 
+/* D-09: one line: the message, '× n in m min', the failed check and its fix link, then Copy report at the cell end. */
 .messageCell {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
   white-space: normal;
   min-inline-size: 0;
+}
+
+.messageCopy {
+  margin-inline-start: auto;
 }
 
 @container (width < 900px) {
