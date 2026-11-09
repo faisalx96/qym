@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatLatency, formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
 import { applyQueryUpdates } from '@/lib/url-state';
-import { Button, Card, Checkbox, Icon, SegmentedControl, Select, Text } from '@/ui';
+import { Button, Card, Checkbox, EmptyState, Icon, SegmentedControl, Select, Text } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   barFraction,
@@ -70,7 +70,7 @@ export function CategoriesTab() {
     [selectedKey, rows, metric, api.ctx, filters.domain],
   );
   if (!keys.length || !metric || !selectedKey) {
-    return <p className={panel.note}>No metadata categories to break down.</p>;
+    return <EmptyState compact title="No metadata categories to break down" />;
   }
   const numeric = model.metricTypes[metric] === 'numeric';
   const direction = model.metricDirections[metric] ?? null;
@@ -183,7 +183,7 @@ export function CategoriesTab() {
           fmt={fmt}
         />
       ) : (
-        <p className={panel.note}>No scored items for {selectedKey} with the current filters.</p>
+        <EmptyState compact title={`No scored items for ${selectedKey} with these filters`} />
       )}
     </div>
   );
