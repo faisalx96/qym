@@ -1,6 +1,6 @@
 import type { ChecklistItem } from '@/api/feedback';
 import { constrained } from '@/features/shell/layout';
-import { Button, Card, PageHeader, Skeleton, StatStrip, TabPanel, Tabs, Tag, Text } from '@/ui';
+import { Button, Card, PageHeader, Skeleton, TabPanel, Tabs, Tag, Text } from '@/ui';
 import { ChecklistRail } from './ChecklistRail';
 import styles from './feedback.module.css';
 
@@ -57,13 +57,15 @@ export function RequestLoadingFrame() {
   return (
     <div className={`${constrained} ${styles.page}`} aria-busy="true" data-testid="request-loading">
       <PageHeader
-        title="Loading request"
-        description="Opening the request…"
+        title={<Skeleton kind="value" width={320} height={22} label="Loading request" />}
+        description={<Skeleton kind="value" width={480} height={13} label="Loading summary" />}
         meta={[
-          <Tag key="id" kind="data">
-            FB-0000
-          </Tag>,
-          'Loading',
+          <Skeleton key="id" kind="value" width={56} height={18} />,
+          <Skeleton key="st" kind="value" width={72} height={18} />,
+          <Skeleton key="tg" kind="value" width={120} height={13} />,
+          <Skeleton key="by" kind="value" width={200} height={13} />,
+          <Skeleton key="pr" kind="value" width={96} height={13} />,
+          <Skeleton key="cx" kind="value" width={96} height={13} />,
         ]}
       />
       <Tabs
@@ -78,13 +80,6 @@ export function RequestLoadingFrame() {
         <TabPanel id="request">
           <div className={styles.split} data-request-split>
             <div className={styles.stackCol}>
-              <StatStrip
-                aria-label="Priority and complexity"
-                items={[
-                  { label: 'Priority', value: '—', sub: 'Loading…' },
-                  { label: 'Complexity', value: '—', sub: 'Loading…' },
-                ]}
-              />
               <Card as="section" aria-label="Loading request">
                 <Skeleton kind="rows" rows={4} rowHeight={48} label="Loading request" />
               </Card>
