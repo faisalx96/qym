@@ -209,6 +209,7 @@ export function TrashPage() {
   const total = list.data?.total ?? 0;
   const grace = list.data?.graceDays;
   const filtered = Boolean(q || projectId);
+  const unfiltered = (projects.data ?? []).reduce((n, p) => n + p.deleted_runs, 0);
   const purgeOn = Boolean(grace);
   const selectedIds = [...selected].map(String).filter((id) => byId.has(id));
   const purgesColumn: Column<TrashRun> = {
@@ -474,7 +475,7 @@ export function TrashPage() {
             rowState={(r) => (purgeInfo(r).soon ? 'warn' : undefined)}
           >
             <DataTable.Footer
-              summary={`${total} deleted run${total === 1 ? '' : 's'}`}
+              filterNote={filtered ? `Filtered from ${unfiltered} deleted runs` : undefined}
               pagination={{
                 total,
                 page,
