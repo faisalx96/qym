@@ -69,7 +69,7 @@ function DetailTable({ title, rawKey, table }: { title: string; rawKey: string; 
         density="compact"
         densityLocked
         columnMenu={false}
-        zebra={false}
+        stripe="report"
         variant="embedded"
         stickyHeader={false}
         responsive="scroll"

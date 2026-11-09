@@ -180,7 +180,7 @@ export function PassTable({ passes, model, metric, basePath, medianHint, queued 
         density="compact"
         densityLocked
         columnMenu={false}
-        zebra={false}
+        stripe="report"
         hoverEdge
         variant="embedded"
         stickyHeader={false}

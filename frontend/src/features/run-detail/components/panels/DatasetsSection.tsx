@@ -247,6 +247,7 @@ export function DatasetsSection() {
           <DataTable<Line>
             aria-label="Scores per dataset"
             density="regular"
+            stripe="report"
             rows={lines}
             rowKey={(l) => l.key}
             columns={columns}

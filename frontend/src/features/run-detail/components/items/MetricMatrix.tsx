@@ -275,7 +275,7 @@ export function MetricMatrix({
           density="compact"
           densityLocked
           columnMenu={false}
-          zebra={false}
+          stripe="report"
           variant="embedded"
           stickyHeader={false}
           responsive="scroll"

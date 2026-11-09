@@ -273,7 +273,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         rowKey={(it) => it.row.item_id}
         density="regular"
         densityLocked
-        zebra={false}
+        stripe="report"
         responsive="cards"
         empty="No items match the current filters."
         sort={sortState(sort)}
