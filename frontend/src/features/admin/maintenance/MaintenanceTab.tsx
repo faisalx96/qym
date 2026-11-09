@@ -197,7 +197,7 @@ export function MaintenanceTab() {
         title="Database"
         description={
           stats.data
-            ? `Statistics refreshed ${formatAgo(Date.now() - stats.data.db_stats_age_seconds * 1000)}`
+            ? `Statistics refreshed ${formatAgo(stats.dataUpdatedAt - stats.data.db_stats_age_seconds * 1000)}`
             : stats.isError
               ? 'Statistics unavailable'
               : 'Collecting statistics. This can take a few seconds on a large database.'
