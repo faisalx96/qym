@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import { ChartCard } from '@/features/run-detail/components/charts/ChartCard';
 import { BarColumns, useMeasuredWidth, type BarSpec } from '@/features/run-detail/components/charts/Charts';
-import { formatShortDayKey } from '@/lib/dates';
+import { formatDayKey, formatShortDayKey } from '@/lib/dates';
 import { useSearchParamsState } from '@/lib/url-state';
 import { SegmentedControl, type CardTone } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
@@ -78,15 +78,15 @@ export function TrendChart({
   const bars: BarSpec[] = columns.map((column) => ({
     key: column.day,
     count: column.total,
-    label: column.day.slice(8),
+    label: formatShortDayKey(column.day),
     zero: column.gap ? 'hide' : 'show',
     color: column.gap
       ? 'repeating-linear-gradient(135deg, var(--border-strong) 0 var(--space-xs), var(--bg-elevated) var(--space-xs) var(--space-sm))'
       : stackedFill(column.stacks, column.total),
-    name: `${column.day}: ${column.total} turns, ${primaryLabel} ${formatPrimaryMean(column.rate, primary)}${column.gap ? ', worker gap' : ''}`,
+    name: `${formatDayKey(column.day)}: ${column.total} turns, ${primaryLabel} ${formatPrimaryMean(column.rate, primary)}${column.gap ? ', worker gap' : ''}`,
     tip: (
       <div>
-        <strong>{column.day}</strong>
+        <strong>{formatDayKey(column.day)}</strong>
         {column.gap ? <p>Worker gap · heartbeat interval exceeded</p> : null}
         <p>
           {column.total} turns · {primaryLabel} {formatPrimaryMean(column.rate, primary)}

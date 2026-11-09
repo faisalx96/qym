@@ -163,7 +163,7 @@ describe('overview service and history blocks', () => {
     expect(points[0]?.closest('svg')).toHaveAttribute('aria-hidden', 'true');
     fireEvent.click(screen.getByRole('radio', { name: '30d' }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('source=worker&days_page=2&trend_days=30');
-    fireEvent.click(screen.getByRole('button', { name: /2026-10-28: 4 turns/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Oct 28, 2026: 4 turns/ }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('trend_days=30&day=2026-10-28');
     expect(screen.getByText('Problem', { exact: true })).toBeVisible();
   });
