@@ -23,19 +23,20 @@ export function trendColumns(
   specs: LiveMetricSpec[],
 ): {
   day: string;
-  stacks: { value: string | null; label: string; tone: CardTone; n: number }[];
+  stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; n: number }[];
   rate: number | null;
   gap: boolean;
   total: number;
 }[] {
   const spec = diagnosisSpec(specs);
   return trend.map((entry) => {
-    const stacks: { value: string | null; label: string; tone: CardTone; n: number }[] = mixSegments(
+    const stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; n: number }[] = mixSegments(
       entry.counts_by_label,
       spec,
-    ).map(({ value, label, tone, n }) => ({ value, label, tone, n }));
+    ).map(({ value, label, tone, dark, n }) => ({ value, label, tone, dark, n }));
     const undiagnosed = entry.turns - stacks.reduce((sum, stack) => sum + stack.n, 0);
-    if (undiagnosed > 0) stacks.push({ value: null, label: 'Undiagnosed', tone: 'neutral', n: undiagnosed });
+    if (undiagnosed > 0)
+      stacks.push({ value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: undiagnosed });
     return {
       day: entry.day,
       stacks,

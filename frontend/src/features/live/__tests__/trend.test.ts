@@ -55,7 +55,7 @@ describe('trendColumns', () => {
       values: [...diagnosis.values!].reverse(),
     };
     expect(trendColumns(trend, [secondary, diagnosis])[0]?.stacks).toMatchObject([
-      { value: 'ok', tone: 'accent', n: 4 },
+      { value: 'ok', tone: 'success', n: 4 },
       { value: 'problem', tone: 'danger', n: 2 },
       { value: 'other', tone: 'neutral', n: 0 },
       { value: 'new_label', tone: 'neutral', n: 1 },
@@ -72,7 +72,7 @@ describe('trendColumns', () => {
   it('retains undiagnosed turns in the stack denominator', () => {
     const column = trendColumns([{ ...trend[0]!, turns: 8, counts_by_label: { ok: 4 } }], [diagnosis])[0]!;
     expect(column.total).toBe(8);
-    expect(column.stacks.at(-1)).toEqual({ value: null, label: 'Undiagnosed', tone: 'neutral', n: 4 });
+    expect(column.stacks.at(-1)).toEqual({ value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: 4 });
     expect(column.stacks.find((stack) => stack.value === 'ok')!.n / column.total).toBe(0.5);
     expect(column.stacks.reduce((sum, stack) => sum + stack.n, 0)).toBe(8);
     expect(trendColumns([trend[2]!], [diagnosis])[0]?.stacks).toEqual([]);
