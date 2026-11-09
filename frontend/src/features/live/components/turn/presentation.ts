@@ -39,9 +39,6 @@ export function liveTime(value: string): string {
   return formatTableDate(value);
 }
 
-/** cv3-shim: remove after C-02 (renamed liveTime). */
-export const utcTime = liveTime;
-
 export function traceHref(value: string | null): string | null {
   if (!value) return null;
   try {

@@ -9,17 +9,13 @@ export function shiftDay(day: string, delta: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** cv3-shim: remove after C-02 (today becomes the required source 'today' key; a Date or no value reads the old key). */
-function todayKey(today: string | Date | undefined): string {
-  return typeof today === 'string' ? today : (today ?? new Date()).toISOString().slice(0, 10);
-}
-
-export function isToday(day: string, today?: string | Date): boolean {
-  return day === todayKey(today);
+/** `today` is the source's own 'today' key. */
+export function isToday(day: string, today: string): boolean {
+  return day === today;
 }
 
 /** 'Today · Nov 7, 2026' or 'Thu Nov 5, 2026'. */
-export function dayLabel(day: string, today?: string | Date): string {
+export function dayLabel(day: string, today: string): string {
   if (isToday(day, today)) return `Today · ${formatDayKey(day)}`;
   const weekday = WEEKDAYS[new Date(`${day}T00:00:00Z`).getUTCDay()];
   return `${weekday} ${formatDayKey(day)}`;
