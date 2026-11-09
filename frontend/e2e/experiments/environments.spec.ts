@@ -299,13 +299,13 @@ test.describe('environment page', () => {
           })
         : route.fallback(),
     );
-    await dialog.getByRole('button', { name: 'Save groups' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(dialog.locator('[data-slot-key="endpoint:primary"]').getByRole('alert')).toContainText(
       'Pointer belongs to two slots',
     );
     await page.unroute('**/model-slots');
 
-    await dialog.getByRole('button', { name: 'Save groups' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expectToast(page, 'LLM model groups saved for “staging”');
     await expect(dialog).toBeHidden();
     await expect(section.getByText('Primary model')).toBeVisible();
