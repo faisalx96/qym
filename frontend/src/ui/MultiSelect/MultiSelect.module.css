@@ -158,6 +158,14 @@
   min-height: var(--dropdown-option-height);
 }
 
+/* The Checkbox label part fills the row, so the count box sits at its end (B-32). */
+.checkbox > :last-child {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
 .optionLabel {
   overflow: hidden;
   text-overflow: ellipsis;
