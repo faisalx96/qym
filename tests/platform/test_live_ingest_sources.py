@@ -92,13 +92,17 @@ def _create_source(client, **values):
 
 def test_put_source_creates_then_updates(client, session_factory):
     created = _create_source(
-        client, product="Assistant", worker={"worker_version": "1"}
+        client,
+        product="Assistant",
+        worker={"worker_version": "1"},
+        day_key_timezone="Asia/Riyadh",
     )
     assert created == {
         "id": created["id"],
         "key": "worker-1",
         **SOURCE,
         "product": "Assistant",
+        "day_key_timezone": "Asia/Riyadh",
         "worker": {"worker_version": "1"},
         "created_at": created["created_at"],
     }
@@ -112,12 +116,49 @@ def test_put_source_creates_then_updates(client, session_factory):
     updated = response.json()
     assert updated["id"] == created["id"]
     assert updated["created_at"] == created["created_at"]
+    assert updated["day_key_timezone"] == "Asia/Riyadh"
     assert updated["name"] == "Renamed worker"
     assert updated["worker"] == {"worker_version": "2"}
     with session_factory() as session:
         source = session.query(LiveSource).one()
         assert source.name == "Renamed worker"
+        assert source.day_key_timezone == "Asia/Riyadh"
+
+
+@pytest.mark.parametrize("zone", [None, "UTC", "Asia/Riyadh"])
+def test_put_source_timezone_defaults_and_explicit_updates(
+    client, session_factory, zone
+):
+    created = _create_source(client)
+    assert created["day_key_timezone"] == "UTC"
+    with session_factory() as session:
+        source = session.query(LiveSource).one()
         assert source.day_key_timezone == "UTC"
+        source.day_key_timezone = "Asia/Riyadh"
+        session.commit()
+    response = client.put(
+        BASE, headers=_auth_headers(), json={**SOURCE, "day_key_timezone": zone}
+    )
+    assert response.status_code == 200, response.text
+    expected = zone or "Asia/Riyadh"
+    assert response.json()["day_key_timezone"] == expected
+    with session_factory() as session:
+        assert session.query(LiveSource).one().day_key_timezone == expected
+
+
+@pytest.mark.parametrize("zone", ["Unknown/Timezone", "/UTC", "../UTC", "Asia"])
+def test_put_source_unknown_timezone_is_422(client, session_factory, zone):
+    response = client.put(
+        BASE, headers=_auth_headers(), json={**SOURCE, "day_key_timezone": zone}
+    )
+    assert response.status_code == 422, response.text
+    assert any(
+        error["loc"] == ["body", "day_key_timezone"]
+        and "day_key_timezone is not a known timezone" in error["msg"]
+        for error in response.json()["detail"]
+    )
+    with session_factory() as session:
+        assert session.query(LiveSource).count() == 0
 
 
 def test_put_source_preserves_heartbeat_control(client, session_factory):

@@ -45,6 +45,7 @@ from qym_platform.services import (
     live_turns,
     live_worker_settings,
 )
+from qym_platform.services.live_days import source_today
 from qym_platform.settings import PlatformSettings
 
 logger = get_logger(__name__)
@@ -437,7 +438,7 @@ def project_live_worker(
     key = next((key for key in keys if key.id == selected.worker_key_id), None)
     now = live_overview.utcnow()
     status = live_overview.source_status(selected, PlatformSettings(), now)
-    today = now.date()
+    today = source_today(selected, now)
     day = db.query(LiveDay).filter_by(source_id=selected.id, day=today).first()
     in_qym = (
         db.query(func.count(LiveTurn.id))

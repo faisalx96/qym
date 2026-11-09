@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -52,6 +52,7 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     response = client.get(BASE, headers=ADMIN)
     assert response.status_code == 200, response.text
     body = response.json()
+    assert body["sources"][0]["day_key_timezone"] == "UTC"
     assert body["default_source"] == "worker-1"
     assert body["sources"][0]["desired_state"] == "running"
     assert body["sources"][0]["worker_key_set"] is False
@@ -66,12 +67,17 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     monkeypatch.setattr(live_overview, "utcnow", lambda: now)
     with session_factory() as db:
         source = db.query(LiveSource).one()
+        source.day_key_timezone = "Asia/Riyadh"
         source.last_heartbeat_at = now - timedelta(seconds=10)
         source.last_poll_at = now - timedelta(seconds=40)
         db.add(
             ApiKey(
-                id="worker-key", project_id="p", user_id="u", name="Worker",
-                prefix="worker", key_hash=b"hash",
+                id="worker-key",
+                project_id="p",
+                user_id="u",
+                name="Worker",
+                prefix="worker",
+                key_hash=b"hash",
             )
         )
         db.flush()
@@ -92,6 +98,8 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     body = client.get(BASE, headers=ADMIN).json()
     assert body["default_source"] == "worker-1"
     source = next(row for row in body["sources"] if row["key"] == "worker-1")
+    assert source["day_key_timezone"] == "Asia/Riyadh"
+    assert _overview(client)["status"]["day_key_timezone"] == "Asia/Riyadh"
     assert source["desired_state"] == "paused"
     assert source["worker_key_set"] is True
     assert source["errors_last_hour"] == 3
@@ -99,9 +107,10 @@ def test_sources_lists_stale_flag(client, session_factory, monkeypatch):
     assert source["seconds_since_heartbeat"] == 10
     assert source["last_heartbeat_at"] == "2026-11-01T11:59:50Z"
     assert source["last_poll_at"] == "2026-11-01T11:59:20Z"
-    assert _overview(client, source="worker-1")["status"]["last_poll_at"] == source[
-        "last_poll_at"
-    ]
+    assert (
+        _overview(client, source="worker-1")["status"]["last_poll_at"]
+        == source["last_poll_at"]
+    )
     assert source["last_turn_at"] == "2026-11-01T10:05:00Z"
     assert source["product"] == "Assistant"
     assert source["worker"]["judges"] == {"a": "judge-a", "b": "judge-b"}
@@ -272,6 +281,44 @@ def test_trend_ends_at_today_or_selected_future_day(client, day, expected_days):
         assert body["day"]["row"]["day"] == day
         assert body["day"]["in_qym"] == 6
         assert body["days"]["rows"][0]["day"] == "2026-11-01"
+
+
+@pytest.mark.parametrize("zone", ["Asia/Riyadh", "UTC", "Unknown/Timezone", "/UTC"])
+@pytest.mark.parametrize("day", [None, "2026-10-30", "2026-11-03"])
+@pytest.mark.parametrize("aware", [False, True])
+def test_overview_today_uses_source_timezone(
+    client, session_factory, monkeypatch, zone, day, aware
+):
+    now = datetime(2026, 11, 1, 22, 30, tzinfo=timezone.utc if aware else None)
+    monkeypatch.setattr("qym_platform.services.live_overview.utcnow", lambda: now)
+    with session_factory() as db:
+        source = db.query(LiveSource).one()
+        source.day_key_timezone = zone
+        db.query(LiveDay).delete()
+        db.add(
+            LiveTurn(
+                source_id=source.id,
+                day=date(2026, 11, 2),
+                turn_id="riyadh-next-day",
+                turn_at=datetime(2026, 11, 1, 22),
+                status="completed",
+                question="Question",
+            )
+        )
+        db.commit()
+    body = _overview(client, **({"day": day} if day else {}), trend_days=2)
+    today = date(2026, 11, 2 if zone == "Asia/Riyadh" else 1)
+    end = max(date.fromisoformat(day), today) if day else today
+    assert [row["day"] for row in body["trend"]] == [
+        (end - timedelta(days=1)).isoformat(),
+        end.isoformat(),
+    ]
+    assert body["status"]["day_key_timezone"] == (
+        "Asia/Riyadh" if zone == "Asia/Riyadh" else "UTC"
+    )
+    if day is None:
+        assert body["day"]["row"] is None
+        assert body["day"]["in_qym"] == (1 if zone == "Asia/Riyadh" else 6)
 
 
 def test_trend_has_one_entry_per_day_with_zeros(client, monkeypatch):

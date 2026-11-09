@@ -121,6 +121,7 @@ def test_read_without_version_and_with_version(client, session_factory, values):
             "name": "Worker",
             "environment": "test",
             "product": None,
+            "day_key_timezone": "UTC",
             "stale": True,
             "seconds_since_heartbeat": None,
             "last_heartbeat_at": None,
@@ -277,10 +278,18 @@ def test_read_jobs_limit_bounds(client, jobs_limit):
 
 
 @pytest.mark.parametrize("with_day", [False, True])
-def test_read_today_uses_utc_day_and_selected_source(client, session_factory, with_day):
+@pytest.mark.parametrize(
+    "zone", ["Asia/Riyadh", "UTC", "Unknown/Timezone", "/UTC", "Asia", "+03:00"]
+)
+def test_read_today_uses_source_timezone_and_selected_source(
+    client, session_factory, monkeypatch, with_day, zone
+):
+    now = datetime(2026, 11, 3, 22, 30)
+    monkeypatch.setattr("qym_platform.services.live_overview.utcnow", lambda: now)
+    today = now.date() + timedelta(days=1 if zone == "Asia/Riyadh" else 0)
     with session_factory() as db:
-        # It is already November 4 in the source timezone; the strip reports UTC today.
-        db.get(LiveSource, "source").day_key_timezone = "Asia/Riyadh"
+        # At 22:30 UTC it is already November 4 in Riyadh.
+        db.get(LiveSource, "source").day_key_timezone = zone
         db.add(
             LiveSource(
                 id="second",
@@ -297,7 +306,7 @@ def test_read_today_uses_utc_day_and_selected_source(client, session_factory, wi
             ("source", NOW.date() + timedelta(days=1), 100, 90, 10, 2),
             ("second", NOW.date(), 200, 180, 20, 4),
         ]:
-            if with_day or day != NOW.date() or source_id != "source":
+            if with_day or day != today or source_id != "source":
                 db.add(
                     LiveDay(
                         source_id=source_id,
@@ -319,12 +328,28 @@ def test_read_today_uses_utc_day_and_selected_source(client, session_factory, wi
                     )
                 )
         db.commit()
-    assert read(client, source="worker")["today"] == {
+    body = read(client, source="worker")
+    assert body["status"]["day_key_timezone"] == (
+        "Asia/Riyadh" if zone == "Asia/Riyadh" else "UTC"
+    )
+    seen, evaluated, failed, count = (
+        (100, 90, 10, 2) if zone == "Asia/Riyadh" else (12, 9, 2, 3)
+    )
+    assert body["today"] == {
+        "day": today.isoformat(),
+        "turns_seen": seen if with_day else 0,
+        "evaluated": evaluated if with_day else 0,
+        "failed": failed if with_day else 0,
+        "in_qym": count,
+    }
+    second = read(client, source="second")
+    assert second["status"]["day_key_timezone"] == "UTC"
+    assert second["today"] == {
         "day": "2026-11-03",
-        "turns_seen": 12 if with_day else 0,
-        "evaluated": 9 if with_day else 0,
-        "failed": 2 if with_day else 0,
-        "in_qym": 3,
+        "turns_seen": 200,
+        "evaluated": 180,
+        "failed": 20,
+        "in_qym": 4,
     }
 
 
@@ -664,9 +689,10 @@ def test_jobs_duplicate_insert_is_409(
             assert db.query(LiveJob).count() == 1
 
 
-def test_jobs_unknown_timezone_is_422(client, session_factory):
+@pytest.mark.parametrize("zone", ["UTC+03:00", "Asia"])
+def test_jobs_unknown_timezone_is_422(client, session_factory, zone):
     with session_factory() as db:
-        db.get(LiveSource, "source").day_key_timezone = "UTC+03:00"
+        db.get(LiveSource, "source").day_key_timezone = zone
         db.commit()
     response = client.post(BASE + "/jobs", headers=ADMIN, json=JOB)
     assert response.status_code == 422, response.text

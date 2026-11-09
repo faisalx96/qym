@@ -96,7 +96,7 @@ def create_job(
         raise JobError(422, f"limit must be 1 to {settings.live_job_max_limit}")
     try:
         zone = ZoneInfo(source.day_key_timezone)
-    except (ZoneInfoNotFoundError, ValueError):
+    except (ZoneInfoNotFoundError, ValueError, OSError):
         raise JobError(422, "source timezone not recognised") from None
     if until_day > ensure_utc(now).astimezone(zone).date():
         raise JobError(422, "until_day in the future")

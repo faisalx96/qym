@@ -73,9 +73,13 @@ DAY="2026-11-01"
 
 Send ISO 8601 timestamps with an explicit UTC offset, preferably `Z`. Stored
 timestamps are normalized to UTC; returned timestamps use `Z`. Naive timestamps
-are treated as UTC. A source's `day_key_timezone` is informational: send an
-explicit turn `day` to implement the worker's reporting boundary. Otherwise the
-API takes the date component of `turn_at` **before** converting it to UTC.
+are treated as UTC. A source's `day_key_timezone` is a validated IANA timezone
+name (for example `Asia/Riyadh`). It drives the source's "today", the overview's
+fallback day and trend window, and job day windows. An omitted or null value
+keeps the stored zone on re-registration; a new source defaults to `UTC`.
+Producers should still send an explicit turn `day` computed in that zone.
+Otherwise the API takes the date component of `turn_at` **before** converting it
+to UTC; it does not infer the turn's day from `day_key_timezone`.
 
 Heartbeat liveness uses the platform's **receive time**, not the supplied `at`.
 Replaying an old heartbeat therefore makes the source fresh now. Historical
@@ -109,7 +113,7 @@ these conversions.
 ```bash
 curl -sS -X PUT "$SOURCE" \
   -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{"name":"Evaluation worker","environment":"preprod","worker":{"poll_interval_s":60,"judges":{"a":"judge-a","b":"judge-b"},"eval_code_version":"v1"},"day_key_timezone":"UTC"}'
+  -d '{"name":"Evaluation worker","environment":"preprod","worker":{"poll_interval_s":60,"judges":{"a":"judge-a","b":"judge-b"},"eval_code_version":"v1"},"day_key_timezone":"Asia/Riyadh"}'
 ```
 
 | Field | Type | Required | Limits / default |
@@ -118,7 +122,7 @@ curl -sS -X PUT "$SOURCE" \
 | `environment` | string | yes | 1–50 characters; free text |
 | `product` | string or null | no | Up to 100 characters; default null; optional display label |
 | `worker` | object | no | Default `{}`; arbitrary metadata |
-| `day_key_timezone` | string | no | 1–40 characters; default `UTC`; no timezone-name validation |
+| `day_key_timezone` | string or null | no | 1–40 characters; validated IANA timezone name; unknown names return `422`; omitted/null keeps the stored zone, or defaults to `UTC` on creation |
 
 Recommended `worker` keys are `worker_version`, `eval_code_version`, `suite`,
 `judges: {a, b}`, `poll_interval_s`, `config_hash`, and `manifest_hash`.
@@ -126,14 +130,23 @@ Recommended `worker` keys are `worker_version`, `eval_code_version`, `suite`,
 Response (`201` on creation, `200` on replacement):
 
 ```json
-{"id":"source-uuid","key":"example-worker","name":"Evaluation worker","environment":"preprod","product":null,"worker":{"poll_interval_s":60,"judges":{"a":"judge-a","b":"judge-b"},"eval_code_version":"v1"},"created_at":"2026-11-01T00:00:00Z"}
+{"id":"source-uuid","key":"example-worker","name":"Evaluation worker","environment":"preprod","product":null,"worker":{"poll_interval_s":60,"judges":{"a":"judge-a","b":"judge-b"},"eval_code_version":"v1"},"day_key_timezone":"Asia/Riyadh","created_at":"2026-11-01T00:00:00Z"}
 ```
 
-The response always has these seven fields: `id` (UUID string), `key`, `name`,
-`environment` (strings), `product` (nullable string), `worker` (object), and
-`created_at` (UTC timestamp). It does not echo `day_key_timezone`. Re-registration
-preserves the source ID and creation time, and replaces the reported configuration;
-omitted optional fields take their defaults.
+The response always has these eight fields: `id` (UUID string), `key`, `name`,
+`environment`, `day_key_timezone` (strings), `product` (nullable string), `worker`
+(object), and `created_at` (UTC timestamp). Re-registration preserves the source ID
+and creation time, and replaces the reported configuration. An omitted or null
+`day_key_timezone` keeps the stored zone; other omitted optional fields take their
+defaults. An unknown timezone returns `422` with
+`day_key_timezone is not a known timezone` in the validation message.
+
+The effective source zone is returned in the UI read APIs: `sources[].day_key_timezone`
+in `GET /api/projects/{project_slug}/live`, and `status.day_key_timezone` in both
+`GET /api/projects/{project_slug}/live/overview` and
+`GET /api/projects/{project_slug}/live/worker`. These reads return `UTC` and use it
+for day calculations if a legacy stored zone is invalid; job creation still
+rejects an invalid stored zone with `422`.
 
 **Status codes:** `201` created; `200` replaced; `401` missing/invalid key; `403`
 project or owner access denied; `409` archived project or database conflict;
@@ -151,7 +164,7 @@ curl -sS -X POST "$SOURCE/heartbeat" \
 |---|---|---|---|
 | `at` | datetime | yes | Worker timestamp; accepted but does not drive liveness |
 | `last_poll_at` | datetime or null | no | Default null; replaces source `last_poll_at`, including when omitted |
-| `current_day` | date or null | no | Default null; when present, increments that day's heartbeat counters |
+| `current_day` | date or null | no | Default null; send the current date in the source's `day_key_timezone`; when present, increments that day's heartbeat counters |
 | `worker` | object or null | no | Default null; when present, shallow-merges top-level keys into source `worker` |
 
 Response: **`204 No Content`**, empty body. A nested `worker` object such as
@@ -412,7 +425,7 @@ shared caches. Continue control polling while paused so resume can be observed.
 | `settings.secrets_withheld` | boolean | `true` instead of `secrets` for other project keys, or when no worker key is selected |
 | `jobs` | array | Queued and running jobs, ordered by request time then ID |
 | `jobs[].id`, `jobs[].kind` | string | Job ID and `backfill_preview` or `backfill` |
-| `jobs[].params` | object | `since_day`, `until_day`, UTC `since`/`until`, `limit`, and `redo` |
+| `jobs[].params` | object | `since_day`, `until_day` in the source's `day_key_timezone`; UTC `since`/`until` bound those inclusive local days; `limit` and `redo` |
 | `jobs[].params.redo` | array of strings | Existing rows to re-evaluate: `failed`, `inconclusive`, or `all`; defaults to `["failed"]` for backfill, always `[]` for preview |
 | `jobs[].status`, `jobs[].progress` | string, object | Current status and counters |
 | `jobs[].cancel_requested` | boolean | Worker should stop this job between turns |
@@ -551,7 +564,7 @@ are character limits unless explicitly stated otherwise.
 | `turn_at` | datetime | yes | User turn time |
 | `status` | string | yes | `completed`, `failed`, `incomplete_ingest` |
 | `question` | string | yes | May be empty; strip NUL, keep first 200,000 characters |
-| `day` | date or null | no | Default: date component of supplied `turn_at`; explicit day wins |
+| `day` | date or null | no | Send explicitly, computed in the source's `day_key_timezone`; default: date component of supplied `turn_at`; explicit day wins |
 | `conversation_id` | string or null | no | Up to 200 characters; default null |
 | `turn_index` | integer or null | no | 0–2,147,483,647; default null |
 | `evaluated_at` | datetime or null | no | Evaluation time; default null |
@@ -685,8 +698,10 @@ null numeric score.
 
 ## 5. Idempotency, replacement, and limits
 
-- Source identity is `(project_id, key)`. Source PUT replaces configuration.
-  Heartbeat `worker` metadata alone uses a shallow merge.
+- Source identity is `(project_id, key)`. Source PUT replaces configuration, except
+  an omitted/null `day_key_timezone` preserves the stored zone (default `UTC` on
+  creation). A supplied zone must be a known IANA name. Heartbeat `worker`
+  metadata alone uses a shallow merge.
 - Metric PUT replaces the entire spec set atomically. It permits zero or one
   primary metric; more than one returns `422` with
   `at most one metric may be primary` in the validation message.
@@ -785,6 +800,7 @@ PROJECT_ID = "replace-with-project-id"
 import json
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 
 def call(method, path, body=None):
@@ -804,13 +820,15 @@ def call(method, path, body=None):
 
 
 now = datetime.now(timezone.utc)
-day = now.date().isoformat()
+day_key_timezone = "Asia/Riyadh"
+zone = ZoneInfo(day_key_timezone)
+day = now.astimezone(zone).date().isoformat()
 at = now.isoformat()
 source = f"/v1/projects/{PROJECT_ID}/live/sources/example-worker"
 worker = {"poll_interval_s": 60, "eval_code_version": "v1"}
 call("PUT", source, {
     "name": "Evaluation worker", "environment": "preprod",
-    "worker": worker, "day_key_timezone": "UTC",
+    "worker": worker, "day_key_timezone": day_key_timezone,
 })
 call("PUT", source + "/metric-specs", {"specs": [
     {"metric_name": "agent_success", "group": "quality", "label": "Agent success",
@@ -825,9 +843,10 @@ call("PUT", source + "/days/" + day, {
 })
 turns = []
 for index in range(1, 3):
+    turn_at = now - timedelta(seconds=60 * index)
     turns.append({
-        "turn_id": f"turn-{index}", "day": day,
-        "turn_at": (now - timedelta(seconds=60 * index)).isoformat(),
+        "turn_id": f"turn-{index}", "day": turn_at.astimezone(zone).date().isoformat(),
+        "turn_at": turn_at.isoformat(),
         "evaluated_at": at, "status": "completed", "outcome": "ok", "label": "ok",
         "question": f"How many records are in sample {index}?",
         "answer": f"There are {index * 12} records.",

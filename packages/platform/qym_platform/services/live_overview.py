@@ -20,6 +20,7 @@ from qym_platform.db.models import (
     LiveTurnScore,
 )
 from qym_platform.log import get_logger
+from qym_platform.services.live_days import source_today, source_zone
 from qym_platform.settings import PlatformSettings
 
 logger = get_logger(__name__)
@@ -55,6 +56,7 @@ def source_status(
         "name": source.name,
         "environment": source.environment,
         "product": source.product,
+        "day_key_timezone": source_zone(source).key,
         "stale": elapsed is None or elapsed > settings.live_stale_after_seconds,
         "seconds_since_heartbeat": int(elapsed) if elapsed is not None else None,
         "last_heartbeat_at": to_api_timestamp(source.last_heartbeat_at),
@@ -416,12 +418,13 @@ def overview_payload(
     page: int = 1,
 ) -> dict[str, Any]:
     """Assemble the selected day's activity and the source's overview context."""
+    today = source_today(source, now)
     if day is None:
         day = (
             db.query(func.max(LiveDay.day))
             .filter(LiveDay.source_id == source.id)
             .scalar()
-            or now.date()
+            or today
         )
     row = (
         db.query(LiveDay)
@@ -454,7 +457,7 @@ def overview_payload(
         "trend": trend(
             db,
             source,
-            max(day, now.date()),
+            max(day, today),
             max(1, min(trend_days, settings.live_trend_max_days)),
             primary_name=primary_name,
         ),
