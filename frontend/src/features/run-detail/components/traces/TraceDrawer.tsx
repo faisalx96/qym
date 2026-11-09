@@ -159,7 +159,7 @@ function Row({
           <Tag kind="count">try {node._attemptNumber}</Tag>
         ) : null}
         {model ? <span className={styles.sub}>{model}</span> : null}
-        {tokens ? <span className={styles.sub}>{tokens.toLocaleString('en-US')} tok</span> : null}
+        {tokens ? <span className={styles.sub}>{tokens.toLocaleString('en-US')} tokens</span> : null}
         {err ? <Tag tone="danger">error</Tag> : null}
       </span>
       <span className={styles.dur}>{formatDuration(node.duration_ms)}</span>
