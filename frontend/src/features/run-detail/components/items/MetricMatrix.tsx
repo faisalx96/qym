@@ -160,7 +160,7 @@ export function MetricMatrix({
       ? '—'
       : model.metricTypes[r.metric] === 'numeric'
         ? formatNumericValue(r.mean)
-        : formatPercent(r.mean, 0);
+        : formatPercent(r.mean, 1);
   const columns: Column<MatrixRow>[] = [
     {
       id: 'metric',

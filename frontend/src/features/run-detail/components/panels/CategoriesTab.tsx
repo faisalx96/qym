@@ -75,7 +75,7 @@ export function CategoriesTab() {
   const numeric = model.metricTypes[metric] === 'numeric';
   const direction = model.metricDirections[metric] ?? null;
   const fmt = (v: number | null) =>
-    v === null ? '—' : numeric ? formatNumericValue(v) : formatPercent(v, 0);
+    v === null ? '—' : numeric ? formatNumericValue(v) : formatPercent(v, 1);
   const choose = (key: string) =>
     setParams((prev) => applyQueryUpdates(prev, { category: key }), {
       replace: true,
@@ -396,7 +396,7 @@ function KeyCard({
                 </span>
               </span>
               <span className={styles.num}>{g.itemCount}</span>
-              <span className={styles.num}>{g.passRate === null ? '—' : formatPercent(g.passRate, 0)}</span>
+              <span className={styles.num}>{g.passRate === null ? '—' : formatPercent(g.passRate, 1)}</span>
               <span className={styles.num}>{g.avgLatency ? formatLatency(g.avgLatency) : '—'}</span>
             </button>
           );
