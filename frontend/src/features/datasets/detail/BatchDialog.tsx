@@ -231,7 +231,7 @@ export function BatchDialog({
           {action === 'disable' ? (
             <>
               <Textarea
-                label="Reason (optional)"
+                label="Reason"
                 rows={2}
                 value={reason}
                 onChange={(v) => setReason(v.slice(0, REASON_MAX))}

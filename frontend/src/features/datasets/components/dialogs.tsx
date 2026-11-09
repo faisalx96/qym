@@ -122,7 +122,7 @@ export function CreateDraftDialog({
       confirmLabel="Create draft"
       submittingLabel="Creating…"
       fields={[
-        { name: 'name', label: 'Name', autoFocus: true, placeholder: 'Optional, e.g. “fix typos”' },
+        { name: 'name', label: 'Name', autoFocus: true, placeholder: 'e.g. “fix typos”' },
         {
           name: 'from',
           label: 'Copy items from',
@@ -471,7 +471,7 @@ export function DisableItemDialog({
     >
       <Textarea
         ref={field}
-        label="Reason (optional)"
+        label="Reason"
         rows={3}
         value={reason}
         onChange={(v) => setReason(v.slice(0, REASON_MAX))}

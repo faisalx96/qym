@@ -516,13 +516,7 @@ function WizardInner({
               </div>
             )}
             {mode === 'new' ? (
-              <Textarea
-                label="Description"
-                value={description}
-                onChange={setDescription}
-                rows={2}
-                placeholder="Optional"
-              />
+              <Textarea label="Description" value={description} onChange={setDescription} rows={2} />
             ) : null}
             <FileDrop
               inputRef={fileInput}
@@ -670,7 +664,7 @@ function WizardInner({
                   label="Version name"
                   value={versionName}
                   onChange={setVersionName}
-                  placeholder="Optional, e.g. “Q3 refresh”"
+                  placeholder="e.g. “Q3 refresh”"
                 />
                 <Text variant="base" tone="muted">
                   {mode === 'new'
