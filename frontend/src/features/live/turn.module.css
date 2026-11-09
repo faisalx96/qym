@@ -47,10 +47,6 @@
   gap: var(--space-xs);
 }
 
-.tiles > [role='list'] {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
 .panel,
 .stack,
 .loading {
@@ -301,14 +297,6 @@
   .twoColumns,
   .threeColumns {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .tiles > [role='list'] {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-  }
-
-  .tiles > [role='list'] > [data-tile]:nth-child(n + 5) {
-    grid-column: span 6;
   }
 
   .loading {

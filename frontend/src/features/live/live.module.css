@@ -152,30 +152,6 @@
   font-size: var(--font-base);
 }
 
-.services {
-  display: grid;
-  grid-template-columns: repeat(var(--live-service-columns, 6), minmax(0, 1fr));
-}
-
-.service {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.service + .service {
-  border-inline-start: 1px solid var(--border-subtle);
-}
-
-.service > :first-child {
-  font-size: var(--font-xl);
-  font-weight: 700;
-}
-
 .canaries {
   display: flex;
   flex-wrap: wrap;
@@ -297,15 +273,6 @@
     grid-column: span 6;
   }
 
-  .services {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    row-gap: var(--space-md);
-  }
-
-  .service:nth-child(3n + 1) {
-    border-inline-start: 0;
-  }
-
   .loading {
     --live-tiles-height: calc(var(--space-xl) * 4 + var(--space-lg) - 1px);
     --live-mix-height: calc(var(--space-xl) * 6 + var(--space-md) + var(--space-xs));
@@ -318,18 +285,6 @@
 @container (width < 480px) {
   .mixLegend {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .services {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .service:nth-child(odd) {
-    border-inline-start: 0;
-  }
-
-  .service:nth-child(even) {
-    border-inline-start: 1px solid var(--border-subtle);
   }
 
   .loading {
