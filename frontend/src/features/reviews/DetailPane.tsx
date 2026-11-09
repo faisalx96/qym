@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useModelIndex } from '@/api/dashboard';
 import { useCorrection, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
+import { formatTableDate } from '@/lib/dates';
 import { textDirAttrs } from '@/lib/text';
 import {
   Button,
@@ -364,7 +365,7 @@ function FullDetail({ id }: { id: number }) {
           <ol className={styles.history}>
             {d.history.map((h) => (
               <li key={h.revision_id}>
-                <span className={styles.histWhen}>{formatDate(h.created_at)}</span>
+                <span className={styles.histWhen}>{formatTableDate(h.created_at)}</span>
                 <span>
                   Revision {h.revision_number} by{' '}
                   {h.actor_user ? (
