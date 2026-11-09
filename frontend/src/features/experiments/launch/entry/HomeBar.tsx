@@ -99,6 +99,7 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
           variant="accent"
           loading={isLaunching}
           isDisabled={readOnly || !review.canLaunch || review.items.length > 0 || isLaunching}
+          disabledReason={envCount === 0 ? 'Pick an environment' : undefined}
           onPress={() => void launch()}
         >
           Launch as is

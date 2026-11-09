@@ -73,14 +73,25 @@ export function MatrixCard({
             <Button
               variant="neutral"
               isDisabled={!liveRunIds.length || selected.length === liveRunIds.length}
+              disabledReason="Every run is selected"
               onPress={onSelectAll}
             >
               Select all runs
             </Button>
-            <Button variant="neutral" isDisabled={!selected.length} onPress={onClear}>
+            <Button
+              variant="neutral"
+              isDisabled={!selected.length}
+              disabledReason="No runs selected"
+              onPress={onClear}
+            >
               Clear
             </Button>
-            <Button variant="accent" isDisabled={selected.length < 2} onPress={onCompare}>
+            <Button
+              variant="accent"
+              isDisabled={selected.length < 2}
+              disabledReason="Select two runs to compare"
+              onPress={onCompare}
+            >
               Compare selected ({selected.length})
             </Button>
           </div>

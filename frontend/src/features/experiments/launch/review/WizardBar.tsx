@@ -101,6 +101,7 @@ export function WizardBar({
           variant="primary"
           loading={isLaunching}
           isDisabled={readOnly || !review.canLaunch || review.items.length > 0}
+          disabledReason={review.items.length > 0 ? 'Fix the problems first' : undefined}
           onPress={() => void launch()}
         >
           {launchLabel(review.count.runs, isLaunching)}

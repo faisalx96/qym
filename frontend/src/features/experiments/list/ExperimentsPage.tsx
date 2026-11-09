@@ -186,6 +186,8 @@ export function ExperimentsPage() {
       to={launchPath(slug)}
       variant="primary"
       size="md"
+      isDisabled={noActiveEnv}
+      disabledReason="Add an environment first"
       icon={<Icon name="plus" size={12} />}
       onPointerEnter={prefetchLaunch}
       onFocus={prefetchLaunch}
@@ -352,7 +354,9 @@ export function ExperimentsPage() {
           filteredEmpty={
             <EmptyState
               compact
-              title={needle ? `No experiments match “${search.trim()}”` : 'No experiments match these filters'}
+              title={
+                needle ? `No experiments match “${search.trim()}”` : 'No experiments match these filters'
+              }
             />
           }
         >
