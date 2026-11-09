@@ -1,8 +1,7 @@
 /* Recipe: DESIGN_LANGUAGE §3 sidebar-nav + editor card. */
-.saveCluster {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+.saveFoot {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-md);
 }
 
 .tools {

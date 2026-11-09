@@ -46,6 +46,7 @@ import {
   type CategoryDraft,
   type SubDraft,
 } from '../model/catalog';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import { rootCauseIssues } from '../model/rootCause';
 import s from './guidance.module.css';
 import d from './diagnosis.module.css';
@@ -295,13 +296,15 @@ function DiagnosisEditor({
       )
     : [];
 
-  return (
-    <div className={s.diag}>
-      <SectionHeader
-        title="Diagnosis categories"
-        description={`${categories.length} ${categories.length === 1 ? 'category' : 'categories'} · ${totalExamples} approved ${totalExamples === 1 ? 'example' : 'examples'}`}
-        aside={
-          <div className={d.saveCluster}>
+  const saveFoot = (
+    <div className={d.saveFoot}>
+      <SaveFooter
+        dirty={dirty}
+        saving={save.isPending}
+        onSave={() => void submit()}
+        hideSave={!canManage}
+        meta={
+          conflict || failure || (showProblems && hasProblems) ? (
             <StatusMark
               tone={badge.tone}
               shape={badge.shape}
@@ -309,16 +312,17 @@ function DiagnosisEditor({
               role="status"
               data-testid="catalog-save-state"
             />
-            <Button
-              variant="accent"
-              size="sm"
-              isDisabled={!canManage || !dirty || save.isPending}
-              onPress={() => void submit()}
-            >
-              Save changes
-            </Button>
-          </div>
+          ) : undefined
         }
+      />
+    </div>
+  );
+
+  return (
+    <div className={s.diag}>
+      <SectionHeader
+        title="Diagnosis categories"
+        description={`${categories.length} ${categories.length === 1 ? 'category' : 'categories'} · ${totalExamples} approved ${totalExamples === 1 ? 'example' : 'examples'}`}
       />
       {!canManage ? (
         <InlineNotice tone="neutral" icon="info">
@@ -397,17 +401,23 @@ function DiagnosisEditor({
       </div>
 
       {categories.length === 0 ? (
-        <EmptyState
-          compact
-          title="No categories yet"
-          body="Add a category, or approve diagnoses in Reviews."
-        />
+        <>
+          <EmptyState
+            compact
+            title="No categories yet"
+            body="Add a category, or approve diagnoses in Reviews."
+          />
+          {dirty ? saveFoot : null}
+        </>
       ) : !active ? (
-        <EmptyState
-          compact
-          title="No matching categories"
-          body={`No category name contains “${query.trim()}”.`}
-        />
+        <>
+          <EmptyState
+            compact
+            title="No matching categories"
+            body={`No category name contains “${query.trim()}”.`}
+          />
+          {dirty ? saveFoot : null}
+        </>
       ) : (
         <Tabs
           label="Categories"
@@ -633,6 +643,7 @@ function DiagnosisEditor({
                   )}
                 </TabPanel>
               </Tabs>
+              {saveFoot}
             </div>
           </TabPanel>
         </Tabs>
