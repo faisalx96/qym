@@ -15,8 +15,6 @@ export interface ToolbarProps {
   filters?: ReactNode;
   /** Active filter chip strip. */
   chips?: ReactNode;
-  /** cv3-shim: remove after D-11 (deprecated: a list count shows only in the footer range; this prop renders nothing). */
-  count?: ReactNode;
   /** Extra controls on the right (Select, Export …). */
   trailing?: ReactNode;
   /** Full-width rows under the main line (filter facets, chips). */
