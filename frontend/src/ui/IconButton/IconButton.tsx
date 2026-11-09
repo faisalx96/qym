@@ -1,6 +1,7 @@
 import { forwardRef, useId, type ReactNode } from 'react';
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import buttonStyles from '../Button/Button.module.css';
+import '../Button/reasonPlacement';
 import { Icon, type IconName } from '../Icon';
 import styles from './IconButton.module.css';
 

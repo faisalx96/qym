@@ -2,6 +2,7 @@ import { forwardRef, useId, type AnchorHTMLAttributes, type ReactNode } from 're
 import { Link } from 'react-router-dom';
 import type { ButtonSize, ButtonVariant } from '../Button';
 import buttonStyles from '../Button/Button.module.css';
+import '../Button/reasonPlacement';
 
 export interface LinkButtonProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
   /** In-app route (React Router) … */

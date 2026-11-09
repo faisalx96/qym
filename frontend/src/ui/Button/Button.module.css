@@ -67,6 +67,11 @@
   white-space: normal;
   pointer-events: none;
 }
+/* Placed (ui/Button/reasonPlacement.ts): a fixed box inside the window, so no overflow: hidden parent cuts it (A-09, A-11). */
+.reasonWrap[data-reason][data-reason-at]:hover::after {
+  position: fixed;
+  inset: var(--reason-y) auto auto var(--reason-x);
+}
 
 .button[data-hovered],
 a.button:hover:not([data-disabled]) {
