@@ -4,6 +4,12 @@
   padding-top: var(--space-md);
 }
 
+/* E-10: as the last row of the category detail card the hairline runs edge to edge, like the other save footers. */
+.editor > .saveFoot {
+  margin-inline: calc(-1 * var(--space-md));
+  padding-inline: var(--space-md);
+}
+
 .tools {
   display: flex;
   flex-wrap: wrap;
