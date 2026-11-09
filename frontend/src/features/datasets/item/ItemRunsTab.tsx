@@ -9,7 +9,6 @@ import {
   DataTable,
   EmptyState,
   RelativeTime,
-  ScoreBar,
   ScoreValue,
   StatStrip,
   StatusCell,
@@ -146,11 +145,13 @@ export function ItemRunsTab({
       type: 'score',
       sort: `metric:${m}`,
       width: 130,
+      align: 'center',
       priority: 2,
       cell: (r) => {
         const s = r.scores.find((x) => x.metric_name === m);
         return (
-          <ScoreBar
+          <ScoreValue
+            variant="plain"
             value={s?.score_numeric ?? null}
             direction={metricDir(r.metric_directions?.[m])}
             error={r.error ? 'task' : s && s.score_numeric === null ? 'metric' : null}

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { DATASET_RUNS_PAGE, useDatasetRuns, type DatasetRunRow, type DatasetVersion } from '@/api/datasets';
 import { runPath } from '@/app/routes';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
-import { DataTable, EmptyState, RelativeTime, ScoreBar, StatusCell, Text, type Column } from '@/ui';
+import { DataTable, EmptyState, RelativeTime, ScoreValue, StatusCell, Text, type Column } from '@/ui';
 import { formatLatency } from '../lib/itemValue';
 import { RunOnVersionLink, SdkLine } from './RunOnVersion';
 import { metricDir } from '../lib/metricDir';
@@ -85,9 +85,14 @@ export function RunsTab({
       group: 'Metrics',
       type: 'score',
       width: 130,
+      align: 'center',
       priority: 2,
       cell: (r) => (
-        <ScoreBar value={r.metric_averages?.[m] ?? null} direction={metricDir(r.metric_directions?.[m])} />
+        <ScoreValue
+          variant="plain"
+          value={r.metric_averages?.[m] ?? null}
+          direction={metricDir(r.metric_directions?.[m])}
+        />
       ),
     })),
   ];

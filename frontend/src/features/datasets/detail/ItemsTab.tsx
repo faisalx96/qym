@@ -30,7 +30,7 @@ import {
   Icon,
   MultiSelect,
   promptPreview,
-  ScoreBar,
+  ScoreValue,
   SearchField,
   Select,
   TagsCell,
@@ -386,11 +386,14 @@ export function ItemsTab({
       type: 'score',
       sort: `metric:${m}`,
       width: 130,
+      align: 'center',
       priority: 2,
       cell: (item) => (
-        <ScoreBar
+        <ScoreValue
           value={item.result_summary?.metrics?.[m]?.avg ?? null}
+          type="score"
           direction={metricDir(directions[m])}
+          variant="plain"
         />
       ),
     })),
