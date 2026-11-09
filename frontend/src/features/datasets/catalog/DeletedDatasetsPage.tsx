@@ -149,9 +149,13 @@ export function DeletedDatasetsPage() {
         ]}
       >
         <DataTable.Footer
-          summary={
-            query.data ? `${rows.length} deleted ${rows.length === 1 ? 'dataset' : 'datasets'}` : undefined
-          }
+          pagination={{
+            total: rows.length,
+            page: 1,
+            pageSize: Math.max(1, rows.length),
+            noun: 'deleted datasets',
+            onPageChange: () => {},
+          }}
         />
       </DataTable>
     </div>

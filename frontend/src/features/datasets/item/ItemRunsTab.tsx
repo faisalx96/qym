@@ -221,7 +221,15 @@ export function ItemRunsTab({
         onRowOpen={(r) => navigate(`${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`)}
         density="regular"
       >
-        <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'run' : 'runs'}`} />
+        <DataTable.Footer
+          pagination={{
+            total: rows.length,
+            page: 1,
+            pageSize: Math.max(1, rows.length),
+            noun: 'runs',
+            onPageChange: () => {},
+          }}
+        />
       </DataTable>
     </div>
   );

@@ -634,6 +634,11 @@ export function ItemsTab({
         />
         {/* Add item and Import live in the dataset header only (C116) */}
         <DataTable.Footer
+          filterNote={
+            query.data && (!noCriteria || route.state === 'disabled') && total < version.item_count
+              ? `Filtered from ${version.item_count} items`
+              : undefined
+          }
           pagination={{
             total,
             page: route.page + 1,

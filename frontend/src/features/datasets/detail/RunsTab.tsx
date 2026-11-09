@@ -8,7 +8,6 @@ import { DataTable, EmptyState, RelativeTime, ScoreValue, StatusCell, Text, type
 import { formatLatency } from '../lib/itemValue';
 import { RunOnVersionLink, SdkLine } from './RunOnVersion';
 import { metricDir } from '../lib/metricDir';
-import { APP_LOCALE } from '@/lib/dates';
 
 export function RunsTab({
   slug,
@@ -135,11 +134,8 @@ export function RunsTab({
         }
       >
         <DataTable.Footer
-          summary={
-            query.data ? `${total.toLocaleString(APP_LOCALE)} ${total === 1 ? 'run' : 'runs'}` : undefined
-          }
           pagination={
-            total > DATASET_RUNS_PAGE
+            query.data
               ? { total, page, pageSize: DATASET_RUNS_PAGE, noun: 'runs', onPageChange: setPage }
               : undefined
           }
