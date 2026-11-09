@@ -163,11 +163,12 @@ function Card({
                           <Button
                             size="sm"
                             variant="accent"
+                            icon={<Icon name="check" size={12} />}
                             onPress={() => decide(issue, key, 'approve')}
                             isDisabled={action.isPending || !!block}
                             aria-label={`Approve issue ${issue.category}`}
                           >
-                            ✓ Approve
+                            Approve
                           </Button>
                           <Button
                             size="sm"
