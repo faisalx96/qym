@@ -62,8 +62,8 @@
 }
 
 .meta {
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 
@@ -74,8 +74,8 @@
 
 .dates {
   grid-column: 1 / -1;
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 
