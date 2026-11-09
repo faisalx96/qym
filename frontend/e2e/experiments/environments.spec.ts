@@ -335,6 +335,7 @@ test.describe('environment page', () => {
     await confirm.getByRole('button', { name: 'Cancel' }).click();
     await expect(confirm).toBeHidden();
     await page.getByRole('button', { name: 'Delete environment' }).click();
+    await confirm.getByRole('textbox', { name: 'Type unused to confirm' }).fill('unused');
     await confirm.getByRole('button', { name: 'Delete environment' }).click();
     await expectToast(page, 'Deleted “unused”');
     await expect(page).toHaveURL(new RegExp(`/projects/${project.slug}/environments$`));
@@ -342,6 +343,7 @@ test.describe('environment page', () => {
 
     await grid(page).getByRole('button', { name: 'Manage used' }).click();
     await page.getByRole('button', { name: 'Delete environment' }).click();
+    await confirm.getByRole('textbox', { name: 'Type used to confirm' }).fill('used');
     await confirm.getByRole('button', { name: 'Delete environment' }).click();
     await expectToast(page, '“used” is in use, so it was disabled');
     await expect(grid(page).getByRole('row').filter({ hasText: 'used' })).toContainText('Disabled');
