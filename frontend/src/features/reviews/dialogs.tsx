@@ -69,7 +69,7 @@ function CommentInner({
       }
     >
       <Textarea
-        label={requireComment ? 'Comment' : 'Comment (optional)'}
+        label="Comment"
         isRequired={requireComment}
         value={comment}
         onChange={setComment}
