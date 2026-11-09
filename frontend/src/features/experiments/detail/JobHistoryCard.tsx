@@ -254,7 +254,7 @@ export function JobHistoryCard({
             rows={rows}
             rowKey={(j) => j.id}
             minWidth={1000}
-            empty="This experiment has no jobs."
+            empty="This experiment has no jobs"
             rowActions={rowActions}
             rowState={(j) => (j.status === 'FAILED' || j.status === 'TIMED_OUT' ? 'error' : undefined)}
             density="regular"
