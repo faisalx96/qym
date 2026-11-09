@@ -1,6 +1,6 @@
 /** Recursive rendering of the settings tree: leaves, objects (with extra keys), collections, role tables. */
 import { useId, useState, type ReactNode } from 'react';
-import { Collapse, Icon, IconButton, Tag } from '@/ui';
+import { Collapse, Icon, IconButton, RequiredFlag, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import {
   addKey,
@@ -202,7 +202,7 @@ function StackedCollection({ node, ...tree }: { node: CollectionNode } & TreePro
                 </span>
               </button>
               <h6 className={[styles.blockTitle, styles.blockTitleMono].join(' ')}>{item.key}</h6>
-              {item.required ? <Tag kind="role">required</Tag> : null}
+              {item.required ? <RequiredFlag /> : null}
               <span className={styles.spacer} />
               {item.removable ? (
                 <IconButton
