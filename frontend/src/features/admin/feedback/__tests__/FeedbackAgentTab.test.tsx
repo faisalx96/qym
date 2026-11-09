@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentAdmin } from '@/api/feedback';
@@ -38,7 +38,7 @@ function renderTab() {
   return {
     baseUrl: screen.getByRole('textbox', { name: /Base URL/ }),
     key: screen.getByLabelText(/API key/),
-    save: screen.getByRole('button', { name: 'Save connection' }),
+    save: within(screen.getByTestId('connection')).getByRole('button', { name: 'Save' }),
     test: screen.getByRole('button', { name: 'Test connection' }),
   };
 }

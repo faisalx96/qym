@@ -88,7 +88,7 @@ export function PublishPane({
           {rows.map((r) => (
             <li key={r.id} className={styles.change}>
               <span>{r.label}</span>
-              <Button size="sm" variant="ghost" onPress={() => goTo(r.id)} aria-label={`Edit: ${r.label}`}>
+              <Button size="sm" variant="neutral" onPress={() => goTo(r.id)} aria-label={`Edit: ${r.label}`}>
                 Edit
               </Button>
             </li>
@@ -96,7 +96,7 @@ export function PublishPane({
         </ul>
       ) : null}
       <Textarea
-        label="Release notes (required)"
+        label="Release notes"
         value={notes}
         onChange={onNotes}
         maxLength={NOTES_MAX}
@@ -140,7 +140,7 @@ export function PublishPane({
         </Callout>
       ) : null}
       <div className={styles.actions}>
-        <Button size="md" variant="ghost" onPress={onCancel} isDisabled={saving}>
+        <Button size="md" variant="neutral" onPress={onCancel} isDisabled={saving}>
           Cancel
         </Button>
         <Button
@@ -148,6 +148,7 @@ export function PublishPane({
           variant="primary"
           loading={saving}
           isDisabled={readOnly || Boolean(blocker) || saving}
+          disabledReason={blocker || undefined}
           onPress={onPublish}
         >
           {`Publish v${next}`}

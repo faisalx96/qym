@@ -56,28 +56,23 @@ export function AdminPage() {
               label: 'Users',
               icon: <Icon name="user" />,
               value: users.data?.length ?? '—',
-              sub: users.data ? (disabled ? plural(disabled, 'disabled user') : 'All active') : undefined,
+              sub: users.data && disabled ? plural(disabled, 'disabled user') : undefined,
             },
             {
               key: 'projects',
               label: 'Projects',
               icon: <Icon name="folder" />,
               value: projects.data?.length ?? '—',
-              sub: projects.data
-                ? archived.length
-                  ? plural(archived.length, 'archived project')
-                  : 'None archived'
-                : undefined,
+              sub: projects.data && archived.length ? plural(archived.length, 'archived project') : undefined,
             },
             {
               key: 'runs',
               label: 'Runs',
               icon: <Icon name="chart" />,
-              tone: 'accent',
               value: runs !== undefined ? runs.toLocaleString(APP_LOCALE) : '—',
               sub: archived.length
-                ? `All projects, incl. ${archived.reduce((n, p) => n + p.run_count, 0).toLocaleString(APP_LOCALE)} archived`
-                : 'All projects',
+                ? `Incl. ${archived.reduce((n, p) => n + p.run_count, 0).toLocaleString(APP_LOCALE)} archived`
+                : undefined,
               help: 'Sum of every project’s run count, including archived projects. Deleted runs are excluded. The lists below only show active projects.',
             },
           ]}

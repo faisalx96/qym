@@ -3,7 +3,7 @@
  * component's state until submit/cancel, then is wiped; it is never rendered back, stored or logged.
  */
 import { useState, type FormEvent } from 'react';
-import { Button, Checkbox, TextField } from '@/ui';
+import { Button, Checkbox, InlineNotice, TextField } from '@/ui';
 import { validateTemporaryModel, type TemporaryModelValues } from './temporaryModel';
 import styles from './AddEnvironmentDialog.module.css';
 
@@ -104,11 +104,7 @@ export function TemporaryModelForm({
           Save to project models
         </Checkbox>
       ) : null}
-      {error ? (
-        <div className={styles.callout} data-tone="error" role="alert">
-          {error}
-        </div>
-      ) : null}
+      {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
       <div>
         <Button
           variant="neutral"
@@ -119,7 +115,7 @@ export function TemporaryModelForm({
         >
           Cancel
         </Button>{' '}
-        <Button variant="accent" type="submit">
+        <Button variant="primary" type="submit">
           Add model
         </Button>
       </div>

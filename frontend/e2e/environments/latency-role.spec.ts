@@ -29,7 +29,7 @@ test('a manager changes the role and it persists; the options are the two copy l
   await page.keyboard.press('Escape');
   await pickSelect(page, /Who can launch latency-sensitive runs/, 'Project managers only');
   await expect(page.getByText('Unsaved changes')).toBeVisible();
-  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expectToast(page, /Saved “staging”/);
   const res = await request.get(`/v1/projects/${project.id}/eval-environments`);
   const saved = (await res.json()).environments[0];

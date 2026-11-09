@@ -141,7 +141,7 @@ test.describe('API keys (§8.7 scenario 9)', () => {
     await gotoApp(page, `/projects/${p.slug}/settings?tab=apikeys`);
     const loads = trackPageLoads(page);
     const card = page.locator('[data-api-keys]');
-    await expect(card.getByText('No API keys yet.')).toBeVisible();
+    await expect(card.getByText('No API keys yet')).toBeVisible();
     await card.getByRole('textbox', { name: 'Key name' }).fill('CI pipeline');
     await card.getByRole('button', { name: 'Create key' }).click();
 
@@ -151,7 +151,7 @@ test.describe('API keys (§8.7 scenario 9)', () => {
     const token = await secret.inputValue();
     expect(token.length).toBeGreaterThan(10);
     await dialog.getByRole('button', { name: 'Copy API key' }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'API key copied' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Copied' })).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(token);
     await dialog.getByRole('button', { name: 'Done' }).click();
     await expect(dialog).toBeHidden();
@@ -204,7 +204,7 @@ test.describe('LLM connections', () => {
     const p = await createProject(request, 'LLM Project', uniqueSlug('llm'));
     await gotoApp(page, `/projects/${p.slug}/settings?tab=llm`);
     const loads = trackPageLoads(page);
-    await expect(page.getByText('No LLM connections yet.')).toBeVisible();
+    await expect(page.getByText('No LLM connections yet')).toBeVisible();
     await page.getByRole('button', { name: 'Add connection' }).click();
     const form = page.locator('[data-llm-form]');
     await expect(form).toBeVisible();
@@ -225,7 +225,7 @@ test.describe('LLM connections', () => {
     await expect(form.getByText('Edit “OpenAI prod”')).toBeVisible();
     await expect(form.getByLabel(/^API key/)).toHaveAttribute('placeholder', /Keep current/);
     await form.getByRole('textbox', { name: /^Model/ }).fill('gpt-4.1-mini');
-    await form.getByRole('button', { name: 'Save changes' }).click();
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Connection updated' })).toBeVisible();
     await expect(row.getByText('gpt-4.1-mini')).toBeVisible();
 
@@ -237,10 +237,11 @@ test.describe('LLM connections', () => {
     await page.getByRole('menuitem', { name: /^Delete / }).click();
     const confirm = page.getByRole('alertdialog', { name: 'Delete “OpenAI prod”?' });
     await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await confirm.getByRole('textbox', { name: 'Type OpenAI prod to confirm' }).fill('OpenAI prod');
     await confirm.getByRole('button', { name: 'Delete connection' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Connection deleted' })).toBeVisible();
     await expect(row).toHaveCount(0);
-    await expect(page.getByText('No LLM connections yet.')).toBeVisible();
+    await expect(page.getByText('No LLM connections yet')).toBeVisible();
     expect(loads.count()).toBe(0);
   });
 });

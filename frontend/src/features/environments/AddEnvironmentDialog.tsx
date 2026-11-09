@@ -8,7 +8,18 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useCreateEnvironment, useEnvironmentForm, type EvalSlot } from '@/api/evalEnvironments';
 import type { EvalEnvironment } from '@/api/evalCommon';
-import { Button, Dialog, ErrorState, Icon, LinkButton, Skeleton, TextField, useToast } from '@/ui';
+import {
+  Button,
+  Dialog,
+  ErrorState,
+  Icon,
+  InlineNotice,
+  LinkButton,
+  Skeleton,
+  Stepper,
+  TextField,
+  useToast,
+} from '@/ui';
 import { mapEnvironmentError, type EnvironmentField, type FieldErrors } from './fieldErrors';
 import styles from './AddEnvironmentDialog.module.css';
 import { FormPreview } from './FormPreview';
@@ -161,38 +172,34 @@ function AddEnvironmentDialogInner({
       footer={footer}
       dismissOnBackdrop={false}
     >
-      <ol className={styles.steps} aria-label="Steps">
-        {STEPS.map((label, i) => (
-          <li
-            key={label}
-            className={styles.step}
-            aria-current={step === i + 1 ? 'step' : undefined}
-            data-done={step > i + 1 ? '' : undefined}
-          >
-            <span className={styles.stepNum}>{i + 1}</span>
-            {label}
-          </li>
-        ))}
-      </ol>
+      <Stepper
+        className={styles.steps}
+        aria-label="Steps"
+        steps={STEPS.map((label, i) => ({ id: String(i + 1), label }))}
+        current={String(step)}
+        onSelect={(id) => {
+          const n = Number(id) as 1 | 2 | 3;
+          if (n < step && n > 1) setStep(n);
+        }}
+      />
       {step === 1 ? (
         <form className={styles.form} autoComplete="off" noValidate onSubmit={(e) => void connect(e)}>
-          <div className={styles.callout} role="note">
-            <strong>Ingest with this project&apos;s key.</strong> The deployment must send its runs to qym
-            with an API key of <em>this</em> project (<code>QYM_API_KEY</code>), otherwise its results land in
-            another project.{' '}
+          <InlineNotice tone="neutral" icon="info" lead="Ingest with this project's key.">
+            The deployment must send its runs to qym with an API key of <em>this</em> project (
+            <code>QYM_API_KEY</code>), otherwise its results land in another project.{' '}
             {apiKeysTo ? (
               <LinkButton
                 to={apiKeysTo}
                 target="_blank"
                 rel="noopener"
-                variant="ghost"
-                icon={<Icon name="external" size={12} />}
+                variant="neutral"
+                iconEnd={<Icon name="external" size={12} />}
                 title="Opens in a new tab, so this dialog keeps what you typed"
               >
                 Create a project API key
               </LinkButton>
             ) : null}
-          </div>
+          </InlineNotice>
           <TextField
             label="Name"
             placeholder="e.g. staging"
@@ -250,11 +257,7 @@ function AddEnvironmentDialogInner({
             isRequired
             help="Stored encrypted; only its last four characters are shown afterwards."
           />
-          {error ? (
-            <div className={styles.callout} data-tone="error" role="alert">
-              {error}
-            </div>
-          ) : null}
+          {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
           <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
         </form>
       ) : step === 2 ? (

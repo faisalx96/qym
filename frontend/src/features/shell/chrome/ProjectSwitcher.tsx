@@ -20,7 +20,7 @@ export interface ProjectSwitcherProps {
 
 /**
  * Breadcrumb project switcher: popover with search (focused on open),
- * identicons, archived tag, check mark, "Create project" footer.
+ * identicons, archived tag, check mark, "New project" footer.
  * Selecting navigates in-app and remembers the slug.
  */
 export function ProjectSwitcher({ current, compact, className }: ProjectSwitcherProps) {
@@ -125,7 +125,7 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
                   data-create-project
                 >
                   <Icon name="plus" size={12} />
-                  <span>Create project</span>
+                  <span>New project</span>
                 </button>
               </div>
             ) : null}

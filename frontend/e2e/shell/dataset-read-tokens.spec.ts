@@ -40,7 +40,7 @@ test('an experiment token lists with its kind, links to the experiment and revok
   );
   const rows = card.getByRole('row');
   const experimentRow = rows.filter({ hasText: 'Evaluation Service · timeout sweep' });
-  await expect(experimentRow.getByTestId('token-kind-chip')).toHaveText('experiment');
+  await expect(experimentRow.getByTestId('token-kind-chip')).toHaveText('Experiment');
   const link = experimentRow.getByTestId('token-experiment-link');
   await expect(link).toHaveText('Experiment · timeout sweep');
   await expect(link).toHaveAttribute('href', new RegExp(`/experiments/${exp.id}$`));

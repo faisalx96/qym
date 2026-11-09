@@ -104,9 +104,9 @@ export function Summary({
             {(
               [
                 ['Min', latency.min],
-                ['P50', latency.p50],
-                ['P90', latency.p90],
-                ['P99', latency.p99],
+                ['p50', latency.p50],
+                ['p90', latency.p90],
+                ['p99', latency.p99],
                 ['Max', latency.max],
               ] as const
             ).map(([k, v]) => (

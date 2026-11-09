@@ -286,7 +286,7 @@ export function FacetPopover({ state }: { state: PopState }) {
         </div>
       )}
       <div className={styles.popoverFoot}>
-        <Button variant="ghost" size="sm">
+        <Button variant="neutral" size="sm">
           Cancel
         </Button>
         <Button variant="primary" size="sm" isDisabled={chosen.length === 0}>

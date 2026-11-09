@@ -16,11 +16,11 @@ export function NotFound() {
         body={`Nothing lives at ${location.pathname}. The link may be wrong.`}
         action={
           slug ? (
-            <LinkButton to={projectPath(slug)} variant="neutral">
+            <LinkButton to={projectPath(slug)} variant="neutral" icon={<Icon name="prev" size={12} />}>
               Runs
             </LinkButton>
           ) : (
-            <LinkButton to="/" variant="neutral">
+            <LinkButton to="/" variant="neutral" icon={<Icon name="prev" size={12} />}>
               Projects
             </LinkButton>
           )

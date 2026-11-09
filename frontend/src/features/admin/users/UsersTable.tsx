@@ -140,7 +140,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         storageKey="admin-users"
         density="comfortable"
         densityLocked
-        empty="No users yet."
+        empty="No users yet"
         isFiltered={q !== ''}
         filteredEmpty={<Text variant="sm">No users match “{query.trim()}”.</Text>}
         rowActions={(u) => {
@@ -152,6 +152,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
               ? {
                   id: 'disable',
                   label: 'You cannot disable your own account',
+                  hint: 'You cannot disable your own account',
                   icon: 'ban',
                   primary: true,
                   danger: true,
@@ -183,17 +184,25 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
           columnsMenu={false}
           search={
             <SearchField
-              label="Filter users"
-              placeholder="Filter by name or email"
+              label="Search users"
+              placeholder="Search users"
               value={query}
               onChange={setQuery}
               onClear={() => setQuery('')}
-              width={320}
+              width="var(--search-width)"
+              shortcut="/"
             />
           }
         />
         <DataTable.Footer
-          summary={q ? `${shown.length} of ${users.length} users` : `${users.length} users`}
+          filterNote={q ? `Filtered from ${users.length} users` : undefined}
+          pagination={{
+            total: shown.length,
+            page: 1,
+            pageSize: Math.max(1, shown.length),
+            noun: 'users',
+            onPageChange: () => {},
+          }}
         />
       </DataTable>
       <ConfirmDialog

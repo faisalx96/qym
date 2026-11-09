@@ -26,7 +26,7 @@ function EnvironmentDrawer({ environmentId, onClose }: { environmentId: string; 
       onOpenChange={(open) => !open && onClose()}
       title={env.data?.name ?? 'Environment'}
       subtitle={env.data?.base_url}
-      width={640}
+      width={560}
     >
       <EnvironmentPanelBody environmentId={environmentId} onClose={onClose} />
     </Drawer>
