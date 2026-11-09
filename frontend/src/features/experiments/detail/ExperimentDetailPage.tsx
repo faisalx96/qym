@@ -23,6 +23,7 @@ import {
   Skeleton,
   StatStrip,
   Text,
+  UserName,
   type MenuItemSpec,
 } from '@/ui';
 import { LatencyTag } from '../components/LatencyTag';
@@ -39,6 +40,9 @@ import { SelectionCard } from './SelectionCard';
 import { QueueStrip } from './QueueStrip';
 import { useExperimentFlows } from './useExperimentFlows';
 import styles from './detail.module.css';
+
+/** The creator's display name (B-25); the API sends it, the shared type gains it in api/. */
+type Named = { created_by_name?: string | null };
 
 export function ExperimentDetailPage({ experimentId }: { experimentId: string }) {
   const { project, slug } = useProjectContext();
@@ -155,7 +159,16 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
 
   const envNames = (x.environments ?? []).map((e) => `${e.name}${e.is_active ? '' : ' (disabled)'}`);
   const meta = [
-    x.created_by_email ?? 'unknown creator',
+    x.created_by_user_id || x.created_by_email ? (
+      <UserName
+        key="by"
+        id={x.created_by_user_id}
+        name={(x as ExperimentDetail & Named).created_by_name}
+        email={x.created_by_email}
+      />
+    ) : (
+      'unknown creator'
+    ),
     <span key="age" title={absTime(x.created_at)}>
       {relTime(x.created_at)}
     </span>,
