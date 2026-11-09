@@ -8,53 +8,32 @@
 
 .filterBlock {
   display: flex;
-  align-items: end;
-  gap: var(--space-md);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-sm);
   min-inline-size: 0;
 }
 
 .filters {
-  /* Keep absolutely positioned, visually hidden Select labels inside this scroller. */
+  /* Keep the visually hidden Charts Select label inside the row. */
   position: relative;
   display: flex;
-  align-items: end;
-  gap: var(--space-md);
-  min-inline-size: 0;
-  min-block-size: calc(var(--control-height) + var(--space-lg) + var(--space-xs) + 1px);
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.filterControl {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.trigger {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  min-block-size: var(--control-height);
-}
-
-.trigger button {
-  white-space: nowrap;
-}
-
-.filterControl[data-tone] .trigger > :first-child button {
-  color: var(--tone-text);
-}
-
-.search {
-  flex: 1;
-  min-inline-size: min(100%, var(--dropdown-width));
+  gap: var(--space-sm);
+  min-inline-size: 0;
 }
 
 .filterFields {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
   gap: var(--space-md);
-  min-inline-size: var(--dropdown-width);
+}
+
+.filterFields > * {
+  flex: 0 1 var(--dropdown-width);
+  min-inline-size: 0;
 }
 
 .table {
@@ -92,7 +71,7 @@
 .reason[dir='auto'] {
   display: -webkit-box;
   overflow: hidden;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   white-space: normal;
   overflow-wrap: normal;
@@ -108,8 +87,17 @@
 }
 
 .userRef {
-  overflow-wrap: anywhere;
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-inline-size: 100%;
+}
+
+.oneLine {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-inline-size: 100%;
 }
 
 .toneText,
@@ -123,11 +111,6 @@
 }
 
 @container (max-width: 479px) {
-  .filterBlock {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .loading {
     min-block-size: calc(
       var(--row-comfortable) * 6 + var(--space-lg) * 6 + var(--space-xs) + var(--space-md) * 2

@@ -120,68 +120,71 @@ afterEach(() => {
 });
 
 describe('Turns filters and table', () => {
-  it.each([false, true])(
-    'includes the visible value and count in every filter trigger name (selected: %s)',
-    (selected) => {
-      const { container } = render(
-        <MemoryRouter>
-          <TurnFilters
-            filters={
-              selected
-                ? {
-                    labels: ['agent_problem'],
-                    modes: ['chat'],
-                    statuses: ['completed'],
-                    outcomes: ['ok'],
-                    metric: 'quality',
-                    min: 0.5,
-                    service: 'service-a',
-                    service_status: 'not_ok',
-                    charts: 'failed',
-                  }
-                : {}
-            }
-            facets={facets}
-            specs={specs}
-          />
-        </MemoryRouter>,
-      );
-      const triggers = Array.from(container.querySelectorAll('[data-live-filter]'), (filter) =>
-        filter.querySelector('button')!,
-      );
-      expect(triggers).toHaveLength(7);
-      for (const trigger of triggers) {
-        const dimension = trigger.closest('[data-live-filter]')!.getAttribute('data-live-filter')!;
-        const visibleValue = trigger.textContent!.replace(/\s+/g, ' ').trim();
-        const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        expect(trigger).toHaveAccessibleName(new RegExp(escape(dimension)));
-        expect(trigger).toHaveAccessibleName(new RegExp(escape(visibleValue)));
-      }
-    },
-  );
+  it.each([false, true])('shows one bar trigger per filter (selected: %s)', (selected) => {
+    render(
+      <MemoryRouter>
+        <TurnFilters
+          filters={
+            selected
+              ? {
+                  labels: ['agent_problem'],
+                  modes: ['chat'],
+                  statuses: ['completed'],
+                  outcomes: ['ok'],
+                  metric: 'quality',
+                  min: 0.5,
+                  service: 'service-a',
+                  service_status: 'not_ok',
+                  charts: 'failed',
+                }
+              : {}
+          }
+          facets={facets}
+          specs={specs}
+        />
+      </MemoryRouter>,
+    );
+    const bar = within(screen.getByRole('group', { name: 'Turn filters' }));
+    for (const name of [
+      /^Diagnosis filter/,
+      /^Mode filter/,
+      /^Status filter/,
+      /^Outcome filter/,
+      /^Metric/,
+      /^Service/,
+    ])
+      expect(bar.getByRole('button', { name })).toBeVisible();
+    expect(bar.getAllByRole('button', { name: /Charts/ }).length).toBeGreaterThan(0);
+    if (selected) {
+      expect(bar.getByRole('button', { name: /^Metric/ })).toHaveTextContent('Quality ≥ 0.5');
+      expect(bar.getByRole('button', { name: 'Clear 7 filters' })).toBeVisible();
+    } else expect(bar.queryByTestId('filters-clear')).toBeNull();
+  });
 
-  it('removes a label chip, preserves source/day and resets the page', async () => {
+  it('clears the diagnosis filter, preserves source/day and resets the page', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={[initial]}>
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: 'Clear Diagnosis' }));
+    await user.click(screen.getByRole('button', { name: 'Diagnosis filter, 1 selected' }));
+    await user.click(screen.getByRole('button', { name: 'None' }));
     expect(currentUrl().searchParams.get('day')).toBe('2026-11-01');
     expect(currentUrl().searchParams.get('source')).toBe('worker');
     expect(currentUrl().searchParams.has('label')).toBe(false);
     expect(currentUrl().searchParams.has('page')).toBe(false);
   });
 
-  it('removes a day chip without writing default pagination or sort to the URL', async () => {
+  it('unticks the day without writing default pagination or sort to the URL', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={[`${initial}&page_size=50&sort=-turn_at`]}>
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: 'Remove 1 Nov 2026' }));
+    await user.click(screen.getByRole('button', { name: 'Day filter, 1 selected' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Day options' })).getByRole('checkbox'));
     for (const key of ['day', 'page', 'page_size', 'sort']) {
       expect(currentUrl().searchParams.has(key)).toBe(false);
     }
@@ -213,15 +216,13 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Status:/ }));
-    await user.click(
-      within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: /^Failed/ }),
-    );
+    await user.click(screen.getByRole('button', { name: /^Status filter/ }));
+    await user.click(screen.getByRole('button', { name: 'Only Failed' }));
     expect(currentUrl().searchParams.getAll('status')).toEqual(['failed']);
     expect(currentUrl().searchParams.has('page')).toBe(false);
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('textbox', { name: 'Minimum' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /^Metric:/ }));
+    await user.click(screen.getByRole('button', { name: /^Metric/ }));
     expect(screen.getByRole('textbox', { name: 'Minimum' })).toBeDisabled();
   });
 
@@ -235,29 +236,12 @@ describe('Turns filters and table', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search questions and answers' }), {
       target: { value: 'إجمالي' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Status:/ }));
-    fireEvent.click(
-      within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: /^Failed/ }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /^Status filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Only Failed' }));
     expect(currentUrl().searchParams.get('status')).toBe('failed');
     act(() => vi.advanceTimersByTime(300));
     expect(currentUrl().searchParams.get('q')).toBe('إجمالي');
     expect(currentUrl().searchParams.get('status')).toBe('failed');
-  });
-
-  it('keeps an active diagnosis trigger in its spec tone when no rows match', () => {
-    render(
-      <MemoryRouter>
-        <TurnFilters
-          filters={{ labels: ['agent_problem'] }}
-          facets={{ labels: {}, statuses: {}, outcomes: {}, modes: {}, services: {}, users: [] }}
-          specs={specs}
-        />
-      </MemoryRouter>,
-    );
-    expect(
-      screen.getByRole('button', { name: /Agent problem.*Diagnosis/ }).closest('[data-tone]'),
-    ).toHaveAttribute('data-tone', 'danger');
   });
 
   it('uses status/outcome facet options and counts, retaining selected values at zero', async () => {
@@ -271,39 +255,36 @@ describe('Turns filters and table', () => {
         />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Status:/ }));
-    const status = within(screen.getByRole('group', { name: 'Status' }));
-    expect(status.getByRole('button', { name: /^Failed\s*3$/ })).toBeVisible();
-    expect(status.getByRole('button', { name: /^Incomplete ingest\s*0$/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    expect(status.queryByRole('button', { name: /Completed/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^Status filter/ }));
+    const status = within(screen.getByRole('dialog', { name: 'Status options' }));
+    expect(status.getByRole('checkbox', { name: /^Failed\s*3$/ })).not.toBeChecked();
+    expect(status.getByRole('checkbox', { name: /^Incomplete ingest\s*0$/ })).toBeChecked();
+    expect(status.queryByRole('checkbox', { name: /Completed/ })).toBeNull();
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: /^Outcome:/ }));
-    const outcome = within(screen.getByRole('group', { name: 'Outcome' }));
-    expect(outcome.getByRole('button', { name: /^custom result\s*4$/ })).toBeVisible();
-    expect(outcome.getByRole('button', { name: /^absent\s*0$/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(outcome.queryByRole('button', { name: /cancelled/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^Outcome filter/ }));
+    const outcome = within(screen.getByRole('dialog', { name: 'Outcome options' }));
+    expect(outcome.getByRole('checkbox', { name: /^custom result\s*4$/ })).not.toBeChecked();
+    expect(outcome.getByRole('checkbox', { name: /^absent\s*0$/ })).toBeChecked();
+    expect(outcome.queryByRole('checkbox', { name: /cancelled/ })).toBeNull();
   });
 
-  it('can add a second mode while the first mode is selected', async () => {
+  it('ticking every mode clears the mode filter', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={[`${initial}&mode=chat`]}>
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Mode:/ }));
-    const mode = within(screen.getByRole('group', { name: 'Mode' }));
-    expect(mode.getByRole('button', { name: /^chat\s*2$/ })).toHaveAttribute('aria-pressed', 'true');
-    await user.click(mode.getByRole('button', { name: /^report\s*3$/ }));
-    expect(currentUrl().searchParams.getAll('mode')).toEqual(['chat', 'report']);
+    await user.click(screen.getByRole('button', { name: 'Mode filter, 1 selected' }));
+    const mode = within(screen.getByRole('dialog', { name: 'Mode options' }));
+    expect(mode.getByRole('checkbox', { name: /^chat\s*2$/ })).toBeChecked();
+    await user.click(mode.getByRole('checkbox', { name: /^report\s*3$/ }));
+    expect(currentUrl().searchParams.has('mode')).toBe(false);
     expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
     expect(currentUrl().searchParams.has('page')).toBe(false);
   });
 
-  it('uses one diagnosis select with counts and no repeated active-chip line', async () => {
+  it('uses one diagnosis list with counts and no repeated active-chip line', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={[initial]}>
@@ -312,14 +293,14 @@ describe('Turns filters and table', () => {
     );
     expect(screen.queryByRole('group', { name: 'Active filters' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Diagnosis' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /Agent problem.*Diagnosis/ }));
-    expect(screen.getByRole('option', { name: 'Agent problem 2' })).toBeVisible();
-    await user.click(screen.getByRole('option', { name: 'Any diagnosis' }));
+    await user.click(screen.getByRole('button', { name: 'Diagnosis filter, 1 selected' }));
+    expect(screen.getByRole('checkbox', { name: /^Agent problem\s*2$/ })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'None' }));
     expect(currentUrl().searchParams.has('label')).toBe(false);
     expect(currentUrl().searchParams.has('page')).toBe(false);
   });
 
-  it('uses a Select when a facet has more than five values', async () => {
+  it('uses the same list when a facet has more than five values', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter>
@@ -333,20 +314,20 @@ describe('Turns filters and table', () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.queryByRole('button', { name: /^Mode:/ })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /mode-6.*Mode/ }));
-    expect(screen.getAllByRole('option')).toHaveLength(7);
-    expect(screen.getByRole('option', { name: 'mode-1 1' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Mode filter, 1 selected' }));
+    const mode = within(screen.getByRole('dialog', { name: 'Mode options' }));
+    expect(mode.getAllByRole('checkbox')).toHaveLength(6);
+    expect(mode.getByRole('checkbox', { name: /^mode-1\s*1$/ })).toBeVisible();
   });
 
-  it('updates metric bounds inside one trigger and clears them together', async () => {
+  it('updates metric bounds in the field row and clears them together', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={[initial]}>
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Metric:/ }));
+    await user.click(screen.getByRole('button', { name: /^Metric/ }));
     await user.click(screen.getByRole('button', { name: /Any metric.*Metric/ }));
     await user.click(screen.getByRole('option', { name: 'Quality' }));
     const min = screen.getByRole('textbox', { name: 'Minimum' });
@@ -355,10 +336,12 @@ describe('Turns filters and table', () => {
     expect(currentUrl().searchParams.get('metric')).toBe('quality');
     expect(currentUrl().searchParams.get('min')).toBe('0.5');
     expect(currentUrl().searchParams.has('page')).toBe(false);
-    await user.keyboard('{Escape}');
-    expect(screen.getByRole('button', { name: /^Metric:/ })).toHaveTextContent('Quality ≥ 0.5');
+    await user.click(screen.getByRole('button', { name: /^Metric/ }));
+    expect(screen.getByRole('button', { name: /^Metric/ })).toHaveTextContent('Quality ≥ 0.5');
     expect(screen.queryByRole('textbox', { name: 'Minimum' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Clear Metric' }));
+    await user.click(screen.getByRole('button', { name: /^Metric/ }));
+    await user.click(screen.getByRole('button', { name: /Quality.*Metric/ }));
+    await user.click(screen.getByRole('option', { name: 'Any metric' }));
     expect(currentUrl().searchParams.has('metric')).toBe(false);
     expect(currentUrl().searchParams.has('min')).toBe(false);
     expect(currentUrl().searchParams.get('label')).toBe('agent_problem');
@@ -371,19 +354,19 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Service:/ }));
+    await user.click(screen.getByRole('button', { name: /^Service/ }));
     await user.click(screen.getByRole('button', { name: /Any service.*Service/ }));
     await user.click(screen.getByRole('option', { name: 'service-a 1' }));
     await user.click(screen.getByRole('button', { name: /Any status.*Service status/ }));
     await user.click(screen.getByRole('option', { name: 'Not OK' }));
-    await user.click(screen.getByRole('button', { name: 'Done' }));
     expect(currentUrl().searchParams.get('service')).toBe('service-a');
     expect(currentUrl().searchParams.get('service_status')).toBe('not_ok');
-    expect(screen.getByRole('button', { name: /^Service:/ })).toHaveTextContent('service-a · not ok 1');
-    await user.click(screen.getByRole('button', { name: /All turns.*Charts/ }));
+    expect(screen.getByRole('button', { name: /^Service/ })).toHaveTextContent('service-a · not ok');
+    await user.click(screen.getByRole('button', { name: /Charts/ }));
     await user.click(screen.getByRole('option', { name: 'Failed charts' }));
     expect(currentUrl().searchParams.get('charts')).toBe('failed');
-    await user.click(screen.getByRole('button', { name: 'Clear Service' }));
+    await user.click(screen.getByRole('button', { name: /service-a.*Service$/ }));
+    await user.click(screen.getByRole('option', { name: 'Any service' }));
     expect(currentUrl().searchParams.has('service')).toBe(false);
     expect(currentUrl().searchParams.has('service_status')).toBe(false);
     expect(currentUrl().searchParams.get('charts')).toBe('failed');
@@ -397,13 +380,12 @@ describe('Turns filters and table', () => {
         <Harness filtersOnly />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: /^Service:/ }));
+    await user.click(screen.getByRole('button', { name: /^Service/ }));
     await user.click(screen.getByRole('button', { name: /Any service.*Service/ }));
     expect(screen.getByRole('option', { name: 'service-a 1' })).toBeVisible();
     await user.click(screen.getByRole('option', { name: 'Visualization 2' }));
     expect(currentUrl().searchParams.get('service')).toBe('viz_agent');
-    await user.click(screen.getByRole('button', { name: 'Done' }));
-    expect(screen.getByRole('button', { name: 'Service: Visualization 2' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Service/ })).toHaveTextContent('Visualization');
   });
 
   it('keeps the full long question in its title and visible text', () => {
