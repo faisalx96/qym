@@ -7,7 +7,7 @@
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-md);
+  gap: var(--space-lg);
 }
 
 @container (min-width: 900px) {
@@ -20,7 +20,7 @@
 .side {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-lg);
   min-inline-size: 0;
 }
 
