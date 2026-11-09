@@ -32,11 +32,10 @@ test('QE-77 to QE-84: header, tabs, card, history and related panel at three wid
     const tabs = await box(page.getByRole('tablist', { name: 'Request sections' }));
     const card = await box(page.getByTestId('request-card'));
     const history = await box(page.getByTestId('history'));
-    const strip = await box(page.getByLabel('Priority and complexity'));
     near(header.w, COLUMN[w]);
     near(tabs.w, COLUMN[w]);
     expect(await overflowX(page)).toBe(0);
-    record(`request-${w}`, { header, tabs, card, history, strip });
+    record(`request-${w}`, { header, tabs, card, history });
     await shot(page, 'request', w);
   }
   await expect(page).toHaveTitle(/^FB-\d{4} · PDF export of the compare page/);

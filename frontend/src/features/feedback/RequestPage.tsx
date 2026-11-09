@@ -7,20 +7,8 @@ import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { useCrumbLabel } from '@/lib/crumb-label';
 import { useSearchParamsState } from '@/lib/url-state';
-import {
-  Card,
-  Eyebrow,
-  Icon,
-  PageHeader,
-  StatStrip,
-  TabPanel,
-  Tabs,
-  Tag,
-  Text,
-  TextBlock,
-  UserName,
-} from '@/ui';
-import { StatusBadge, cap } from './badges';
+import { Card, Eyebrow, Icon, PageHeader, TabPanel, Tabs, Tag, Text, TextBlock, UserName } from '@/ui';
+import { COMPLEXITY_LEVEL, LevelTag, PRIORITY_LEVEL, StatusBadge, cap } from './badges';
 import { MsgItem } from './Chat';
 import { clock, dateTime, eventText, headerDate, shortDate } from './format';
 import { RelatedList } from './RelatedList';
@@ -151,6 +139,28 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
           </Tag>,
           <StatusBadge key="st" status={r.status} />,
           targetMeta(detail),
+          ...(r.priority
+            ? [
+                <LevelTag
+                  key="pr"
+                  label="Priority"
+                  value={cap(r.priority)}
+                  level={PRIORITY_LEVEL[r.priority]}
+                  title={sentence('priority')}
+                />,
+              ]
+            : []),
+          ...(r.complexity
+            ? [
+                <LevelTag
+                  key="cx"
+                  label="Complexity"
+                  value={r.complexity}
+                  level={COMPLEXITY_LEVEL[r.complexity]}
+                  title={sentence('complexity')}
+                />,
+              ]
+            : []),
           <UserName key="by" id={r.submitter.id} name={r.submitter.name} />,
           headerDate(r.confirmed_at ?? r.created_at),
         ]}
@@ -185,13 +195,6 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
           {tab === 'request' ? (
             <div className={styles.split} data-request-split>
               <div className={styles.stackCol}>
-                <StatStrip
-                  aria-label="Priority and complexity"
-                  items={[
-                    { label: 'Priority', value: priority, sub: sentence('priority') },
-                    { label: 'Complexity', value: r.complexity ?? '—', sub: sentence('complexity') },
-                  ]}
-                />
                 <Card as="section" aria-label="Request details" data-testid="request-card">
                   <div className={styles.sections}>
                     <Section label="Description" text={r.description} />
