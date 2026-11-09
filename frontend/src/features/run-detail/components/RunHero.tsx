@@ -25,6 +25,7 @@ import {
   TaskTag,
   UserName,
 } from '@/ui';
+import { formatAgo } from '@/lib/dates';
 import { readJson, writeJson } from '@/lib/storage';
 import type { LiveRunState } from '../hooks/useLiveRun';
 import { useTicker } from '../hooks/useLiveRun';
@@ -88,10 +89,9 @@ function MetaLink({ to, title, children }: { to: string | null; title?: string; 
 export function LiveIndicator({ live, run }: { live: LiveRunState; run: Run }) {
   const now = useTicker(live.live);
   if (!live.live || !isLiveStatus(run.status)) return null;
-  const secs = live.updatedAt ? Math.max(0, Math.round((now - live.updatedAt) / 1000)) : 0;
   return (
     <span className={styles.live} data-testid="live-indicator">
-      Live · updated {secs}s ago
+      Live · updated {live.updatedAt ? formatAgo(live.updatedAt, now) : 'just now'}
     </span>
   );
 }
