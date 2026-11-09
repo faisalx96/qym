@@ -41,7 +41,7 @@ import {
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
 import { menuLabel } from '../lib/batchCopy';
-import { STATE_OPTIONS, stateCount, stateTotalText, stateUrlValue, type StateFilter } from '../lib/itemState';
+import { STATE_OPTIONS, stateCount, stateUrlValue, type StateFilter } from '../lib/itemState';
 import {
   addMetaFilter,
   metaFiltersToParams,
@@ -570,14 +570,6 @@ export function ItemsTab({
               />
               <ClearFiltersButton count={filterCount} onClear={clearFilters} />
             </div>
-          }
-          count={
-            query.data ? (
-              <span aria-live="polite">
-                {stateTotalText(route.state, counts, query.data.total)}
-                {route.search ? ` matching “${route.search}”` : ''}
-              </span>
-            ) : null
           }
           trailing={
             <>
