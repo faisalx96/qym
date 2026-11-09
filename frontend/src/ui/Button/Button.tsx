@@ -2,14 +2,7 @@ import { forwardRef, useId, useImperativeHandle, useLayoutEffect, useRef, type R
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import styles from './Button.module.css';
 
-export type ButtonVariant =
-  | 'neutral'
-  | 'accent'
-  | 'danger'
-  | 'primary'
-  | 'meta'
-  // cv3-shim: remove after A-01 (a deprecated alias: 'ghost' renders as 'neutral')
-  | 'ghost';
+export type ButtonVariant = 'neutral' | 'accent' | 'danger' | 'primary' | 'meta';
 export type ButtonSize = 'sm' | 'md';
 
 export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style' | 'children'> {
@@ -63,8 +56,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <AriaButton
       ref={inner}
       className={[styles.button, className].filter(Boolean).join(' ')}
-      // cv3-shim: remove after A-01 (the 'ghost' alias draws the neutral button)
-      data-variant={variant === 'ghost' ? 'neutral' : variant}
+      data-variant={variant}
       data-size={size}
       data-loading={loading ? '' : undefined}
       data-icon-only={!children && (icon || iconEnd) ? '' : undefined}

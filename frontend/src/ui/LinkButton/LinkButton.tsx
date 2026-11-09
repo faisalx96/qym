@@ -38,8 +38,6 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(functio
 ) {
   const reasonId = useId();
   const cls = [buttonStyles.button, className].filter(Boolean).join(' ');
-  // cv3-shim: remove after A-01 (the 'ghost' alias draws the neutral button)
-  const tone = variant === 'ghost' ? 'neutral' : variant;
   const inner = (
     <>
       {icon ? <span className={buttonStyles.icon}>{icon}</span> : null}
@@ -55,7 +53,7 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(functio
         aria-disabled="true"
         tabIndex={0}
         className={cls}
-        data-variant={tone}
+        data-variant={variant}
         data-size={size}
         data-disabled=""
         aria-describedby={disabledReason ? reasonId : undefined}
@@ -76,13 +74,13 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(functio
   }
   if (to) {
     return (
-      <Link ref={ref} to={to} className={cls} data-variant={tone} data-size={size} {...rest}>
+      <Link ref={ref} to={to} className={cls} data-variant={variant} data-size={size} {...rest}>
         {inner}
       </Link>
     );
   }
   return (
-    <a ref={ref} href={href} className={cls} data-variant={tone} data-size={size} {...rest}>
+    <a ref={ref} href={href} className={cls} data-variant={variant} data-size={size} {...rest}>
       {inner}
     </a>
   );
