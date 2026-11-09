@@ -4,6 +4,7 @@
  */
 import type { ReactNode } from 'react';
 import { isTerminalJob, type CredentialState, type ExperimentDetail } from '@/api/experiments';
+import { formatHeaderDate, toDate } from '@/lib/dates';
 import { Eyebrow, Text, StatusMark } from '@/ui';
 import { Callout } from '../launch/components/Callout';
 import {
@@ -18,13 +19,9 @@ import {
 } from './copy';
 import styles from './detail.module.css';
 
-/** `HH:mm` for today, `20 Oct 12:41` for another day. */
-export function revokedLabel(iso: string, now = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  if (d.toDateString() === now.toDateString()) return time;
-  return `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })} ${time}`;
+/** 'Nov 5, 2026, 23:37' (lib/dates header form). */
+export function revokedLabel(iso: string): string {
+  return toDate(iso) ? formatHeaderDate(iso) : '';
 }
 
 export interface TokenFacts {
