@@ -93,7 +93,14 @@ export function RunsTable({
       priority: 3,
       cell: (r) => sweepText(r.params) || '—',
     },
-    { id: 'age', header: 'Age', type: 'date', width: 80, priority: 3, cell: (r) => formatAge(r.age_seconds) },
+    {
+      id: 'age',
+      header: 'Age',
+      type: 'date',
+      width: 120,
+      priority: 3,
+      cell: (r) => formatAge(r.age_seconds),
+    },
   ];
   return (
     <div className={styles.tableWrap}>
