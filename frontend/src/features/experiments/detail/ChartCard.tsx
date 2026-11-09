@@ -1,7 +1,7 @@
 /** Setting vs metric: one swept setting on x, one metric on y, one line per environment. */
 import { useMemo, useState } from 'react';
 import type { ExperimentDetail } from '@/api/experiments';
-import { Select, SectionHeader, Card, ChartTooltipHost, EmptyState, Mark, TipBody } from '@/ui';
+import { Select, SectionHeader, Card, ChartTooltipHost, Disclosure, EmptyState, Mark, TipBody } from '@/ui';
 import { buildChart, chartTableRows, metricNames, CHART } from '../lib/chart';
 import { currentJobs, usableRun, type MatrixEnv } from '../lib/matrix';
 import styles from './detail.module.css';
@@ -128,8 +128,7 @@ export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: Ma
                 <line className={styles.axis} x1={left} x2={left} y1={top} y2={bottom} />
               </svg>
             </ChartTooltipHost>
-            <details className={styles.textTable}>
-              <summary>View as table</summary>
+            <Disclosure className={styles.textTable} title="View as table">
               <table className={styles.plain}>
                 <caption className={styles.srOnly}>{`${metric} by ${settingLabel}`}</caption>
                 <thead>
@@ -155,7 +154,7 @@ export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: Ma
                   ))}
                 </tbody>
               </table>
-            </details>
+            </Disclosure>
           </div>
         )}
       </div>

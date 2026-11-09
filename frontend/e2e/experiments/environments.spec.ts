@@ -134,8 +134,9 @@ test.describe('add environment', () => {
     );
     await expect(dialog.getByText('“added env” is saved.')).toBeVisible();
     // the read-only preview opens its first group
-    await expect(dialog.locator('details').first()).toHaveAttribute('open', '');
-    await expect(dialog.locator('details[open]')).toHaveCount(1);
+    const triggers = dialog.locator('button[aria-expanded]');
+    await expect(triggers.first()).toHaveAttribute('aria-expanded', 'true');
+    await expect(dialog.locator('button[aria-expanded="true"]')).toHaveCount(1);
     // the typed key is not kept anywhere in the page
     expect(await page.content()).not.toContain('typed-secret-key-1');
     const created = await (await request.get(`/v1/projects/${project.id}/eval-environments`)).json();

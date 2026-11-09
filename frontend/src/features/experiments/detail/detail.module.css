@@ -340,17 +340,6 @@
   background: var(--series);
 }
 
-.textTable summary {
-  color: var(--accent-primary);
-  font-size: var(--font-base);
-  cursor: pointer;
-}
-
-.textTable summary:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
-}
-
 .plain {
   width: 100%;
   margin-top: var(--space-sm);

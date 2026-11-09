@@ -6,7 +6,7 @@
  *   <RunExperimentPanel panel={run.experiment} slug={slug} runId={run.run_id} runStatus={run.status} />
  */
 import { Link } from 'react-router-dom';
-import { Flag, LinkButton, KeyValueGrid, Tag, Text, JsonTree, type KeyValueItem } from '@/ui';
+import { Disclosure, Flag, LinkButton, KeyValueGrid, Tag, Text, JsonTree, type KeyValueItem } from '@/ui';
 import { JobStatusBadge } from './components/StatusBadges';
 import { defaultPresetEditPath, experimentPath, launchPath } from './paths';
 import styles from './RunExperimentPanel.module.css';
@@ -268,10 +268,9 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
       ) : null}
       <KeyValueGrid items={items} columns={2} aria-label="Experiment details" />
       {panel.remote_result != null ? (
-        <details className={styles.result}>
-          <summary>Service result</summary>
+        <Disclosure className={styles.result} title="Service result">
           <JsonTree data={panel.remote_result} label="Service result" />
-        </details>
+        </Disclosure>
       ) : null}
     </section>
   );

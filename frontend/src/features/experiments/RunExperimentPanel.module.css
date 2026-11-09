@@ -70,8 +70,3 @@
   color: var(--text-secondary);
   font-size: var(--font-sm);
 }
-
-.result summary {
-  color: var(--text-secondary);
-  cursor: pointer;
-}
