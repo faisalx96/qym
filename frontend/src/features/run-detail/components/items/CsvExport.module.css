@@ -13,18 +13,6 @@
   overflow-y: auto;
 }
 
-.group summary {
-  cursor: pointer;
-  font-size: var(--font-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.count {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
 .cols {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

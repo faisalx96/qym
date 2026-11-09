@@ -4,6 +4,7 @@ import { projectPath } from '@/app/routes';
 import { JobStatusBadge } from '@/features/experiments/components/StatusBadges';
 import {
   Card,
+  Disclosure,
   Flag,
   InlineNotice,
   LinkButton,
@@ -262,10 +263,9 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
         ))}
       </dl>
       {p.remote_result != null ? (
-        <details className={styles.result} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-          <summary>Service result</summary>
+        <Disclosure className={styles.result} title="Service result" open={open} onOpenChange={setOpen}>
           <pre className={styles.json}>{JSON.stringify(p.remote_result, null, 2)}</pre>
-        </details>
+        </Disclosure>
       ) : null}
     </Card>
   );
