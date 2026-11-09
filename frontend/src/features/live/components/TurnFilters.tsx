@@ -219,6 +219,8 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
         <div className={styles.filterFields} role="group" aria-label="Metric bounds">
           <Select
             label="Metric"
+            hideLabel
+            width={160}
             items={[
               { key: '', label: 'Any metric' },
               ...specs
@@ -230,6 +232,9 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
           />
           <NumberField
             label="Minimum"
+            hideLabel
+            placeholder="Min"
+            width={80}
             value={filters.min ?? NaN}
             isDisabled={!filters.metric}
             maxValue={filters.max}
@@ -239,6 +244,9 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
           />
           <NumberField
             label="Maximum"
+            hideLabel
+            placeholder="Max"
+            width={80}
             value={filters.max ?? NaN}
             isDisabled={!filters.metric}
             minValue={filters.min}
@@ -252,6 +260,8 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
         <div className={styles.filterFields} role="group" aria-label="Service filter">
           <Select
             label="Service"
+            hideLabel
+            width="var(--dropdown-width)"
             value={filters.service ?? ''}
             items={[
               { key: '', label: 'Any service', count: undefined },
@@ -267,6 +277,8 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
           />
           <Select
             label="Service status"
+            hideLabel
+            width="var(--dropdown-width)"
             value={filters.service_status ?? ''}
             isDisabled={!filters.service}
             items={[

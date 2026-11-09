@@ -24,15 +24,16 @@
   min-inline-size: 0;
 }
 
+/* A-16: the field row has no labels above its controls: a 160px Select, then 80px Min and Max (26-10 picture). */
 .filterFields {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
-  gap: var(--space-md);
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .filterFields > * {
-  flex: 0 1 var(--dropdown-width);
+  flex: none;
   min-inline-size: 0;
 }
 
