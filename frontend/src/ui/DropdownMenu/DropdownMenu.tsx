@@ -10,6 +10,7 @@ import {
 } from 'react-aria-components';
 import { Icon } from '../Icon';
 import buttonStyles from '../Button/Button.module.css';
+import '../Button/reasonPlacement';
 import styles from './DropdownMenu.module.css';
 
 export interface MenuItemSpec {
@@ -99,6 +100,7 @@ function MenuItemWithSeparator({ item }: { item: MenuItemSpec }) {
             className={[buttonStyles.reasonWrap, styles.reasonItem].join(' ')}
             data-reason={reason}
             data-disabled-reason=""
+            data-reason-beside=""
           >
             {text}
           </span>
