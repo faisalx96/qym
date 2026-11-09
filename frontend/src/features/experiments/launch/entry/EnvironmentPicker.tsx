@@ -67,7 +67,7 @@ function EnvironmentTags({
 }
 
 /**
- * The environments checkbox list: health, schema, grouping and preset tags, "Details", "+ New environment".
+ * The environments checkbox list: health, schema, grouping and preset tags, "Details", "+ Add environment".
  * A ticked environment's box also shows the Evaluation Service versions it would record (`EnvVersions`).
  */
 export function EnvironmentPicker() {
@@ -147,7 +147,7 @@ export function EnvironmentPicker() {
             icon={<Icon name="plus" size={12} />}
             onPress={() => setAdding(true)}
           >
-            New environment
+            Add environment
           </Button>
         </div>
       ) : null}
