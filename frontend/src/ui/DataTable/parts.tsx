@@ -173,8 +173,6 @@ export interface FooterProps {
   ariaLabel?: string;
   /** "Filtered from 423 runs" at the far left, while a search or filter narrows the list (D-10). */
   filterNote?: string;
-  /** cv3-shim: remove after D-10 (deprecated: the count text moves to pagination or filterNote). */
-  summary?: ReactNode;
   pagination?: PaginationProps;
   /** "Last updated 16:30:12" and similar. */
   trailing?: ReactNode;
@@ -189,7 +187,6 @@ export function Footer({
   trailing,
   testId,
   ariaLabel,
-  summary, // cv3-shim: remove after D-10
 }: FooterProps) {
   const { selectedCount } = useDataTableCtx();
   return (
@@ -202,8 +199,6 @@ export function Footer({
     >
       <div className={styles.footerStart}>
         {filterNote ? <span className={styles.filterNote}>{filterNote}</span> : null}
-        {/* cv3-shim: remove after D-10 */}
-        {summary ? <span className={styles.count}>{summary}</span> : null}
         {selectedCount > 0 ? <span className={styles.count}>{selectedCount} selected</span> : null}
       </div>
       {pagination ? (
