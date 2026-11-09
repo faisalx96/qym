@@ -120,7 +120,7 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     await user.click(await screen.findByRole('radio', { name: /Only people listed below/ }));
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     // An empty restricted list is allowed to be saved and says who still has access.
-    expect(screen.getByText('No one is listed')).toBeInTheDocument();
+    expect(screen.getByText('No one is listed.')).toBeInTheDocument();
     expect(
       screen.getByText('Only project managers, admins and the creator can open this dataset.'),
     ).toBeInTheDocument();

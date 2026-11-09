@@ -486,7 +486,7 @@ function AccessBody({
             {rows.length ? (
               table
             ) : (
-              <Note tone="warning" title="No one is listed" data-testid="access-empty-note">
+              <Note tone="warning" title="No one is listed." data-testid="access-empty-note">
                 <span>Only project managers, admins and the creator can open this dataset.</span>
               </Note>
             )}
