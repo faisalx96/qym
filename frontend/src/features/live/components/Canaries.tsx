@@ -1,6 +1,15 @@
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
+import { formatDuration } from '@/lib/format';
+import { humanizeKey } from '@/lib/humanizeKey';
 import { StatusMark, Text } from '@/ui';
+import { statusWord } from './turn/presentation';
 import styles from '../live.module.css';
+
+/** A canary key as a name: 'judge_a' -> 'Judge A', any other key in plain words (B-08). */
+function canaryName(key: string): string {
+  const judge = /^judge_([a-z])$/i.exec(key);
+  return judge ? `Judge ${judge[1]!.toUpperCase()}` : humanizeKey(key);
+}
 
 export function Canaries({
   canaries,
@@ -26,11 +35,11 @@ export function Canaries({
             <StatusMark
               tone={probe.status === 'failed' ? 'danger' : probe.status === 'ok' ? 'success' : 'neutral'}
               shape={probe.status === 'failed' ? 'cross' : probe.status === 'ok' ? 'check' : 'pause'}
-              label={`${specs.find((spec) => spec.metric_name === `service.${probe.canary}`)?.label ?? probe.canary} ${probe.status}`}
+              label={`${specs.find((spec) => spec.metric_name === `service.${probe.canary}`)?.label ?? canaryName(probe.canary)} ${statusWord(probe.status)}`}
               title={probe.fault ?? undefined}
             />
             <span className={styles.number}>
-              {probe.latency_ms === null ? '—' : `${probe.latency_ms} ms`}
+              {probe.latency_ms === null ? '—' : formatDuration(probe.latency_ms)}
             </span>
           </span>
         ))}

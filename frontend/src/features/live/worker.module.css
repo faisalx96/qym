@@ -2,7 +2,7 @@
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-md);
+  gap: var(--space-lg);
   min-inline-size: 0;
 }
 
@@ -16,7 +16,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: var(--space-md);
+  gap: var(--space-lg);
   min-inline-size: 0;
 }
 
@@ -30,21 +30,8 @@
   min-inline-size: 0;
 }
 
-.actions,
-.saveRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.saveRow > :first-child {
-  flex: 1 1 16rem;
-  min-inline-size: 0;
-}
-
 .workerKey {
-  flex: 0 1 22rem;
+  max-inline-size: 22rem;
   min-inline-size: 0;
 }
 
@@ -93,14 +80,12 @@
   overflow-wrap: anywhere;
 }
 
-.problems,
 .versions {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.problem,
 .version {
   display: flex;
   flex-direction: column;
@@ -108,9 +93,28 @@
   padding-block: var(--space-md);
 }
 
-.problem + .problem,
 .version + .version {
   border-block-start: 1px solid var(--border-subtle);
+}
+
+.versionMeta {
+  min-block-size: var(--control-height);
+}
+
+.problemsFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--card-padding-compact);
+}
+
+.messageCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  white-space: normal;
+  min-inline-size: 0;
 }
 
 @container (width < 900px) {

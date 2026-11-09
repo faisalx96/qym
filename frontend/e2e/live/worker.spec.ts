@@ -44,7 +44,7 @@ test('waiting for the first version becomes Running v1 in the status strip and e
   const state = page.locator('[data-live-block="worker-status"]');
   await expect(state).toContainText('Waiting for settings version 1');
   const settings = page.locator('[data-live-block="worker-settings"]');
-  await expect(settings.getByText('waiting for version 1', { exact: true })).toHaveCount(5);
+  await expect(settings.getByText('Waiting for version 1', { exact: true })).toHaveCount(5);
 
   const configured = await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   expect(configured.version).toBe(1);
@@ -56,11 +56,11 @@ test('waiting for the first version becomes Running v1 in the status strip and e
   });
   await page.reload();
   await expect(state).toContainText('Running v1');
-  await expect(state.locator('[data-shape="orbit"][data-tone="success"]')).toHaveText('Running v1');
+  await expect(state.locator('[data-shape="orbit"][data-tone="info"]')).toHaveText('Running v1');
   for (const name of ['Evaluation', 'Models', 'Langfuse', 'Dataiku', 'Database']) {
     await expect(
-      settings.getByRole('region', { name, exact: true }).locator('[data-tone="success"]'),
-    ).toHaveText('running');
+      settings.getByRole('region', { name, exact: true }).locator('[data-tone="info"]'),
+    ).toHaveText('Running');
   }
   const response = await request.get(apiPath());
   expect(response.ok(), await response.text()).toBeTruthy();
@@ -86,7 +86,7 @@ test('a failed database verification shows the failed chip and worker error', as
   const database = page
     .locator('[data-live-block="worker-settings"]')
     .getByRole('region', { name: 'Database', exact: true });
-  await expect(database.getByText('failed', { exact: true })).toHaveAttribute('data-tone', 'danger');
+  await expect(database.locator('[data-shape="cross"][data-tone="danger"]')).toHaveText('Failed');
   await expect(database.getByText('could not translate host name', { exact: true })).toBeVisible();
 });
 
@@ -94,7 +94,7 @@ test('pausing requires confirmation and records who paused the worker', async ({
   await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   await gotoApp(page, workerPath());
   const state = page.locator('[data-live-block="worker-status"]');
-  await state.getByRole('button', { name: 'Pause evaluation', exact: true }).click();
+  await page.getByRole('button', { name: 'Pause evaluation', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Pause evaluation?' });
   await expect(dialog).toBeVisible();
   const before = await request.get(apiPath());
@@ -111,7 +111,7 @@ test('pausing requires confirmation and records who paused the worker', async ({
   expect(body.desired).toBe('paused');
   expect(body.changed_by).toBeTruthy();
   await expect(state).toContainText(`by ${body.changed_by}`);
-  await expect(state.getByRole('button', { name: 'Resume evaluation', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Resume evaluation', exact: true })).toBeVisible();
 });
 
 test('restoring v1 after saving v2 creates v3 with the restore note and original values', async ({
@@ -160,11 +160,8 @@ test('date range preview, run, progress and cancellation use the worker jobs API
 }) => {
   await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   await gotoApp(page, workerPath());
-  await page
-    .locator('[data-live-block="worker-status"]')
-    .getByRole('button', { name: 'Backfill a day range', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog', { name: 'Backfill a day range', exact: true });
+  await page.getByRole('button', { name: 'Backfill a day range', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Backfill these days?', exact: true });
   const day = seed.days[0]!.day;
   await dialog.getByLabel('From', { exact: true }).fill(day);
   await dialog.getByLabel('To', { exact: true }).fill(day);
@@ -190,7 +187,7 @@ test('date range preview, run, progress and cancellation use the worker jobs API
   const queued = page.waitForResponse(
     (response) => response.request().method() === 'POST' && response.url().endsWith(apiPath('/jobs')),
   );
-  await dialog.getByRole('button', { name: 'Run', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Run backfill', exact: true }).click();
   const runResponse = await queued;
   expect(runResponse.status(), await runResponse.text()).toBe(201);
   expect(runResponse.request().postDataJSON()).toEqual({
@@ -210,8 +207,8 @@ test('date range preview, run, progress and cancellation use the worker jobs API
     .locator('[data-live-block="worker-jobs"]')
     .getByRole('row')
     .filter({ has: page.getByText('Backfill', { exact: true }) });
-  await expect(row).toContainText('1 / 2 evaluated');
-  await row.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(row).toContainText('1/2');
+  await row.getByRole('button', { name: 'Cancel job', exact: true }).click();
   const cancel = page.getByRole('dialog', { name: 'Cancel job?' });
   const cancelled = page.waitForResponse(
     (response) =>
@@ -227,11 +224,8 @@ test('date range preview, run, progress and cancellation use the worker jobs API
 test('a 32-day range is refused before submitting either job kind', async ({ page, request }) => {
   await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   await gotoApp(page, workerPath());
-  await page
-    .locator('[data-live-block="worker-status"]')
-    .getByRole('button', { name: 'Backfill a day range', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog', { name: 'Backfill a day range', exact: true });
+  await page.getByRole('button', { name: 'Backfill a day range', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Backfill these days?', exact: true });
   await dialog.getByLabel('From', { exact: true }).fill('2025-01-01');
   await dialog.getByLabel('To', { exact: true }).fill('2025-02-01');
   const submissions: string[] = [];
@@ -239,7 +233,7 @@ test('a 32-day range is refused before submitting either job kind', async ({ pag
     if (request.method() === 'POST' && request.url().endsWith(apiPath('/jobs')))
       submissions.push(request.url());
   });
-  for (const name of ['Preview', 'Run']) {
+  for (const name of ['Preview', 'Run backfill']) {
     await dialog.getByRole('button', { name, exact: true }).click();
     await expect(dialog.getByRole('alert')).toHaveText('At most 31 days per job');
   }
@@ -287,7 +281,7 @@ test('Problems groups repeated errors, copies a source report and links from the
   const problems = page.locator('[data-live-block="worker-problems"]');
   await expect(problems.locator('[data-worker-event]')).toHaveCount(2);
   const row = problems.locator('[data-worker-event]').filter({ hasText: langfuse.code });
-  await expect(row).toContainText('× 3');
+  await expect(row).toContainText('×3');
   await row.getByRole('button', { name: 'Copy report', exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(langfuse.code);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(seed.sourceKey);
@@ -296,11 +290,12 @@ test('Problems groups repeated errors, copies a source report and links from the
     `/projects/${seed.projectSlug}/live?${new URLSearchParams({ source: seed.sourceKey })}`,
   );
   const status = page.locator('[data-live-block="status"]');
-  await expect(status).toContainText('Worker · running · v1');
-  await expect(status.getByRole('link', { name: 'Manage', exact: true })).toHaveAttribute(
+  await expect(status.getByText('Running v1')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Manage worker', exact: true })).toHaveAttribute(
     'href',
     workerPath(),
   );
+  await expect(status.getByRole('link', { name: 'Manage', exact: true })).toHaveCount(0);
   const badge = status.getByRole('link', { name: '4 problems in the last hour', exact: true });
   await expect(badge).toHaveAttribute('href', `${workerPath()}#problems`);
   await badge.click();

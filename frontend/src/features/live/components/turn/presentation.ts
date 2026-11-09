@@ -9,9 +9,14 @@ export function labelFor(value: string | null, specs: LiveMetricSpec[]) {
     mixSegments(value ? { [value]: 1 } : {}, diagnosisSpec(specs)).find((item) => item.value === value) ?? {
       label: value ?? '—',
       tone: 'neutral' as const,
+      specTone: undefined,
+      dark: false,
     }
   );
 }
+
+/** Time units print with no space before them ('13.3s', C-20). */
+const TIME_UNITS = new Set(['s', 'ms', 'min', 'h']);
 
 const STATUS_WORDS: Record<string, string> = { ok: 'OK', failed: 'Failed', skipped: 'Skipped' };
 
@@ -25,7 +30,8 @@ export function scoreText(value: number | null, spec?: LiveMetricSpec | null): s
   if (!spec || spec.score_type === 'percentage') return formatPercentValue(value, 1);
   if (spec.score_type === 'boolean') return value ? 'Pass' : 'Fail';
   if (spec.score_type === 'duration' && spec.unit === 'ms') return formatDurationMs(value);
-  return `${formatNumericValue(value, spec.precision ?? 2)}${spec.unit ? ` ${spec.unit}` : ''}`;
+  const unit = spec.unit ? (TIME_UNITS.has(spec.unit) ? spec.unit : ` ${spec.unit}`) : '';
+  return `${formatNumericValue(value, spec.precision ?? 2)}${unit}`;
 }
 
 /** A Live instant on the viewer clock: 'Nov 5 · 17:45' ('—' for an invalid value). */

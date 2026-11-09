@@ -83,6 +83,10 @@ describe('overview loading and error states', () => {
     failed = false;
     await userEvent.setup().click(screen.getByRole('button', { name: /retry/i }));
     await waitFor(() => expect(document.querySelector('[data-live-stat="turns"]')).toHaveTextContent('47'));
+    expect(screen.getByRole('link', { name: 'Manage worker' })).toHaveAttribute(
+      'href',
+      `/projects/demo/live/worker?${new URLSearchParams({ source })}`,
+    );
   });
 
   it('reserves the measured first-load frames through their CSS variables', async () => {
@@ -196,14 +200,14 @@ it.each([false, true])('changes the source and reloads the %s page numbers', asy
     }),
   );
   const { container } = mount(turns);
-  if (turns) expect(await screen.findByText('47 of 47 turns on 1 Nov 2026')).toBeVisible();
+  if (turns) expect(await screen.findByText('47 of 47 turns on Nov 1, 2026')).toBeVisible();
   else
     await waitFor(() => expect(container.querySelector('[data-live-stat="turns"]')).toHaveTextContent('47'));
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: /Live source/ }));
   await user.click(screen.getByRole('option', { name: 'Development worker' }));
   expect(screen.getByLabelText('URL')).toHaveTextContent('source=worker-dev');
-  if (turns) expect(await screen.findByText('3 of 3 turns on 1 Nov 2026')).toBeVisible();
+  if (turns) expect(await screen.findByText('3 of 3 turns on Nov 1, 2026')).toBeVisible();
   else
     await waitFor(() => expect(container.querySelector('[data-live-stat="turns"]')).toHaveTextContent('3'));
 });

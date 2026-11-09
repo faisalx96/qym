@@ -2,19 +2,23 @@ import { useEffect, useState } from 'react';
 import type { LiveSourceInfo } from '@/api/live';
 import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import { formatRelative } from '@/lib/format';
-import { Card, LinkButton, StatusMark, Tag } from '@/ui';
+import { Card, ModelTag, StatusMark, Tag, Text } from '@/ui';
 import { staleText, statusTime } from '../lib/stale';
+import { workerStateMark } from './worker/format';
 import styles from '../live.module.css';
 
 export function StatusLine({
   status,
   slug,
   source,
+  modelIndex,
 }: {
   status: LiveSourceInfo;
   slug: string;
   source: string;
+  modelIndex?: Record<string, number> | null;
 }) {
   const workerUrl = `${projectPath(slug, 'live/worker')}?${new URLSearchParams({ source })}`;
   const control = status.worker.control;
@@ -33,41 +37,47 @@ export function StatusLine({
   return (
     <Card
       compact
-      tone={stale ? 'danger' : undefined}
-      wash={stale ? 'danger' : undefined}
       data-live-block="status"
       data-live-stale={stale ? 'true' : 'false'}
     >
       <div className={styles.status} data-stale={stale ? '' : undefined}>
         <StatusMark
-          tone={stale ? 'danger' : 'success'}
-          data-tone={stale ? 'danger' : 'accent'}
+          tone={stale ? 'danger' : 'info'}
           shape={stale ? 'cross' : 'orbit'}
           label={stale ? 'Stale' : 'Running'}
         />
-        <span>{staleText(status, now)}</span>
+        {stale ? null : <span>{staleText(status, now)}</span>}
         <span title={formatRelative(status.last_turn_at, now)}>
-          Last turn <span className={styles.number}>{lastTurn}</span>
+          Last turn <span className={styles.time}>{lastTurn}</span>
         </span>
         {control ? (
-          <span>
-            Worker · {control.state}
-            {control.settings_version_applied != null ? ` · v${control.settings_version_applied}` : ''}
+          <span className={styles.inline}>
+            <Text as="span" tone="muted">
+              Worker
+            </Text>
+            <StatusMark
+              tone={workerStateMark(control.state)[0]}
+              shape={workerStateMark(control.state)[1]}
+              label={`${control.state}${control.settings_version_applied != null ? ` v${control.settings_version_applied}` : ''}`}
+            />
           </span>
         ) : null}
-        <LinkButton to={workerUrl}>Manage</LinkButton>
         {errors > 0 ? (
           <Link to={`${workerUrl}#problems`}>
-            <Tag tone="danger">{errors} problems in the last hour</Tag>
+            <Tag tone="danger">
+              {errors} {errors === 1 ? 'problem' : 'problems'} in the last hour
+            </Tag>
           </Link>
         ) : null}
         {judges.length > 0 ? (
           <span className={styles.inline}>
             Judges{' '}
             {judges.map((judge, index) => (
-              <Tag key={`${index}-${judge}`} kind="data" dir="auto">
-                {judge}
-              </Tag>
+              <ModelTag
+                key={`${index}-${judge}`}
+                name={judge}
+                series={modelSeriesOf(modelIndex ?? null, judge, false)}
+              />
             ))}
           </span>
         ) : null}
