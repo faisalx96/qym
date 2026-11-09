@@ -142,11 +142,11 @@ test('server 422 validation errors are listed, toasted and the first one is focu
   await launchButton(page).click();
   await expect(page.getByText('1 problem to fix before launching')).toBeVisible();
   await expect(review(page)).toContainText('samples is too large for Alpha');
-  await expect(page.getByRole('textbox', { name: 'Samples' })).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'Passes' })).toBeFocused();
   await expect(launchButton(page)).toBeDisabled();
   // Editing the form clears the stale server error.
   blocked = false;
-  await page.getByRole('textbox', { name: 'Samples' }).fill('3');
+  await page.getByRole('textbox', { name: 'Passes' }).fill('3');
   await expectReady(page);
   await expect(launchButton(page)).toBeEnabled();
 });

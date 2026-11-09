@@ -37,7 +37,7 @@ export function FieldControl({ field }: { field: EvaluatorFieldView }) {
   const text = formatInput(edit, field.value, field.invalid?.raw);
   const draft = useDraft(text);
   const swept = isSweepValue(field.value);
-  const label = entry.label || name;
+  const label = name === 'samples' ? 'Passes' : entry.label || name;
   const hint = hintText(edit);
   const missing = field.missingEnvs.map((id) => ctx.envs.find((e) => e.id === id)?.name ?? id);
   const error = field.invalid?.message;
