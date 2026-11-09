@@ -73,9 +73,6 @@ import {
 } from './lib';
 import styles from './QueuePage.module.css';
 
-/** The creator's display name (B-25); the API sends it, the shared type gains it in api/. */
-type Named = { created_by_name?: string | null };
-
 type DialogState = Pick<
   CancelSplitDialogProps,
   'title' | 'description' | 'sections' | 'actionable' | 'confirmLabel'
@@ -301,7 +298,7 @@ export function QueuePage() {
       cell: (j) => (
         <UserCell
           id={j.created_by_user_id}
-          name={(j as QueueJob & Named).created_by_name}
+          name={j.created_by_name}
           email={j.created_by_email}
         />
       ),

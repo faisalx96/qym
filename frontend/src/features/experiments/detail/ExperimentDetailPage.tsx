@@ -42,9 +42,6 @@ import { QueueStrip } from './QueueStrip';
 import { useExperimentFlows } from './useExperimentFlows';
 import styles from './detail.module.css';
 
-/** The creator's display name (B-25); the API sends it, the shared type gains it in api/. */
-type Named = { created_by_name?: string | null };
-
 export function ExperimentDetailPage({ experimentId }: { experimentId: string }) {
   const { project, slug } = useProjectContext();
   const query = useExperiment(project.id, experimentId);
@@ -168,7 +165,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
       <UserName
         key="by"
         id={x.created_by_user_id}
-        name={(x as ExperimentDetail & Named).created_by_name}
+        name={x.created_by_name}
         email={x.created_by_email}
       />
     ) : (

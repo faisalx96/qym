@@ -40,9 +40,6 @@ import { loadLaunchPage } from '../lazy';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
 
-/** The creator's display name (B-25); the API sends it, the shared type gains it in api/. */
-type Named = { created_by_name?: string | null };
-
 const PAGE_SIZE = 50;
 const ALL = '__all';
 
@@ -173,7 +170,7 @@ export function ExperimentsPage() {
       cell: (x) => (
         <UserCell
           id={x.created_by_user_id}
-          name={(x as Experiment & Named).created_by_name}
+          name={x.created_by_name}
           email={x.created_by_email}
         />
       ),
