@@ -26,7 +26,7 @@ import {
   TwoLine,
   useToast,
   type Column,
-  Card,
+  Section,
 } from '@/ui';
 import { experimentPath } from '../paths';
 import { relTime } from '../lib/format';
@@ -50,26 +50,31 @@ export function RemoteQueueSection({
   const stale = data?.environments.reduce((n, e) => n + e.stale_count, 0) ?? 0;
   const panelId = 'remote-queue-panel';
   return (
-    <Card as="section" className={styles.queueCard} aria-label="Remote queue">
-      <button
-        type="button"
-        className={styles.toggle}
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
-        <span className={styles.title}>Remote queue</span>
-        <span className={styles.sub}>
-          What the Evaluation Service holds, including jobs this project no longer tracks.
-        </span>
-        {open && data ? (
-          <span className={styles.tags}>
-            {orphans ? <Tag tone="warning">{plural(orphans, 'orphan')}</Tag> : null}
-            {stale ? <Tag tone="warning">{stale} stale</Tag> : null}
-          </span>
-        ) : null}
-      </button>
+    <Section
+      id="remote-queue"
+      title="Remote queue"
+      description="What the Evaluation Service holds, including jobs this project no longer tracks."
+      className={styles.queueSection}
+      actions={
+        <>
+          {open && data ? (
+            <span className={styles.tags}>
+              {orphans ? <Tag tone="warning">{plural(orphans, 'orphan')}</Tag> : null}
+              {stale ? <Tag tone="warning">{stale} stale</Tag> : null}
+            </span>
+          ) : null}
+          <Button
+            variant="neutral"
+            iconEnd={<Icon name={open ? 'chevron-up' : 'chevron-down'} size={12} />}
+            aria-expanded={open}
+            aria-controls={panelId}
+            onPress={() => setOpen((o) => !o)}
+          >
+            {open ? 'Hide' : 'Show'}
+          </Button>
+        </>
+      }
+    >
       {open ? (
         <div id={panelId} className={styles.body}>
           {query.isPending ? <Skeleton kind="table" count={3} label="Loading remote queue" /> : null}
@@ -91,7 +96,7 @@ export function RemoteQueueSection({
           ))}
         </div>
       ) : null}
-    </Card>
+    </Section>
   );
 }
 

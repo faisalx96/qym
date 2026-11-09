@@ -171,7 +171,7 @@ test.describe('axe', () => {
     await expect(page.getByTestId('cancel-split-dialog')).toBeVisible();
     await expectNoSeriousViolations(page, 'cancel split dialog');
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: /Remote queue/ }).click();
+    await page.getByRole('region', { name: 'Remote queue' }).getByRole('button', { name: 'Show' }).click();
     await expect(page.getByRole('grid', { name: 'Remote jobs on staging' })).toBeVisible();
     await expectNoSeriousViolations(page, 'remote queue open');
   });

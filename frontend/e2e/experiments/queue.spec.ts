@@ -270,7 +270,9 @@ test.describe('queue page', () => {
     await page.waitForTimeout(1500);
     expect(remoteCalls).toHaveLength(0);
 
-    const toggle = page.getByRole('button', { name: /Remote queue/ });
+    const toggle = page
+      .getByRole('region', { name: 'Remote queue' })
+      .getByRole('button', { name: /^(Show|Hide)$/ });
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
