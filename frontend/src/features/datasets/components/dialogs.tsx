@@ -174,7 +174,7 @@ export function PublishDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`Publish ${version.version}`}
+      title={`Publish ${version.version}?`}
       description={`Publishing freezes ${version.version} (${version.item_count.toLocaleString(APP_LOCALE)} items) as a snapshot; runs can target it and it can no longer be edited.`}
       notice={
         version.disabled_count > 0 ? (
