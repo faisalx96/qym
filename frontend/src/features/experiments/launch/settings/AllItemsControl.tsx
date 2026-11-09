@@ -14,7 +14,7 @@ import {
   type AllItemsField,
   type DescriptorEntry,
 } from '../model';
-import { Button, Popover } from '@/ui';
+import { Button, IconButton, Popover } from '@/ui';
 import { plural } from '../../lib/format';
 import { useLaunch } from '../LaunchContext';
 import { endpointNames, useSettingsActions } from './SettingsContext';
@@ -83,15 +83,11 @@ function AllItemsControlImpl(props: AllItemsControlProps) {
     <>
       <PlainAllControl {...props} />
       {canSweep ? (
-        <button
-          type="button"
-          className={styles.linkBtn}
-          aria-label={`Sweep values: ${field.label}`}
-          title="One run per value, for every item together"
-          onClick={() => setDoc((d) => startGlobalSweep(d, field.entry, targets, shared))}
-        >
-          Sweep values
-        </button>
+        <IconButton
+          label={`Sweep values: ${field.label}`}
+          icon="plus"
+          onPress={() => setDoc((d) => startGlobalSweep(d, field.entry, targets, shared))}
+        />
       ) : null}
     </>
   );

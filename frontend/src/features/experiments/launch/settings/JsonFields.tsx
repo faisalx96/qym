@@ -10,7 +10,7 @@
  * table cell, a container is edited as JSON text.
  */
 import { useId, useState } from 'react';
-import { Button, Icon } from '@/ui';
+import { Button, Icon, IconButton } from '@/ui';
 import { plural } from '../../lib/format';
 import { listTableModel, newListItem, uniformKeys, type JsonObject, type JsonValue } from '../model';
 import { AddRow } from './AddRow';
@@ -315,19 +315,17 @@ function ObjectView({ ed, path, obj, depth }: { ed: Editor; path: Path; obj: Jso
           <div className={styles.jsonKey}>
             <span>{key}</span>
             <span className={styles.spacer} />
-            <button
-              type="button"
-              className={styles.linkBtn}
-              aria-label={`Remove ${key} from ${labelFor(ed, path) || 'value'}`}
-              onClick={() =>
+            <IconButton
+              label={`Remove ${key} from ${labelFor(ed, path) || 'value'}`}
+              icon="close"
+              tone="danger"
+              onPress={() =>
                 ed.edit((d) => {
                   delete (getPath(d, path) as JsonObject)[key];
                   return d;
                 })
               }
-            >
-              Remove
-            </button>
+            />
           </div>
           <ValueView ed={ed} path={[...path, key]} value={obj[key] as JsonValue} depth={depth + 1} />
         </div>
@@ -353,19 +351,17 @@ function ObjectView({ ed, path, obj, depth }: { ed: Editor; path: Path; obj: Jso
 function ListView({ ed, path, list, depth }: { ed: Editor; path: Path; list: JsonValue[]; depth: number }) {
   const keys = uniformKeys(list);
   const removeItem = (i: number) => (
-    <button
-      type="button"
-      className={styles.linkBtn}
-      aria-label={`Remove item ${i + 1} of ${labelFor(ed, path) || 'list'}`}
-      onClick={() =>
+    <IconButton
+      label={`Remove item ${i + 1} of ${labelFor(ed, path) || 'list'}`}
+      icon="close"
+      tone="danger"
+      onPress={() =>
         ed.edit((d) => {
           (getPath(d, path) as JsonValue[]).splice(i, 1);
           return d;
         })
       }
-    >
-      Remove
-    </button>
+    />
   );
   const applyAll = (key: string | null) => (v: JsonValue) =>
     ed.edit((d) => {

@@ -298,57 +298,32 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
     node.value !== null;
   const canRemove = node.removable && removeList !== null;
   const reset = node.changed ? (
-    cell ? (
-      <IconButton
-        label={`Reset ${node.label}`}
-        icon="retry"
-        onPress={() => setDoc((d) => resetField(d, node.pointer))}
-      />
-    ) : (
-      <button
-        type="button"
-        className={styles.linkBtn}
-        aria-label={`Reset ${node.label}`}
-        onClick={() => setDoc((d) => resetField(d, node.pointer))}
-      >
-        Reset
-      </button>
-    )
+    <IconButton
+      label={`Reset ${node.label}`}
+      icon="retry"
+      onPress={() => setDoc((d) => resetField(d, node.pointer))}
+    />
   ) : null;
   const sweepBtn = sweepable ? (
-    cell ? (
-      <IconButton
-        label={`Sweep values: ${node.label}`}
-        icon="plus"
-        onPress={() => setDoc((d) => setValue(d, node.pointer, startSweep(entry, d.values[node.pointer])))}
-      />
-    ) : (
-      <button
-        type="button"
-        className={styles.linkBtn}
-        aria-label={`Sweep values: ${node.label}`}
-        title="Run the experiment once per value"
-        onClick={() => setDoc((d) => setValue(d, node.pointer, startSweep(entry, d.values[node.pointer])))}
-      >
-        Sweep values
-      </button>
-    )
+    <IconButton
+      label={`Sweep values: ${node.label}`}
+      icon="plus"
+      onPress={() => setDoc((d) => setValue(d, node.pointer, startSweep(entry, d.values[node.pointer])))}
+    />
   ) : null;
   const removeBtn = canRemove ? (
-    <button
-      type="button"
-      className={styles.linkBtn}
-      aria-label={`Remove ${node.label}`}
-      onClick={() =>
+    <IconButton
+      label={`Remove ${node.label}`}
+      icon="close"
+      tone="danger"
+      onPress={() =>
         setDoc((d) => {
           const key = unescapeSegment(splitPointer(node.pointer).slice(-1)[0] ?? '');
           if (removeList) return removeKey(d, removeList, node.pointer, key);
           return dropValuesUnder(d, node.pointer);
         })
       }
-    >
-      Remove
-    </button>
+    />
   ) : null;
   const editAsFields =
     !container &&

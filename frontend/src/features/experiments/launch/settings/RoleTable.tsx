@@ -1,6 +1,6 @@
 /** A role table as the "Role overrides" card: search, "Overridden only", "Reset roles", an "All roles" row. */
 import { useId, useState } from 'react';
-import { Button, Checkbox, SearchField, Tag } from '@/ui';
+import { Button, Checkbox, IconButton, SearchField, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import {
   addKey,
@@ -264,14 +264,12 @@ export function CollectionTable({
                 {removable ? (
                   <td>
                     {item.removable ? (
-                      <button
-                        type="button"
-                        className={styles.linkBtn}
-                        aria-label={`Remove ${item.key}`}
-                        onClick={() => setDoc((d) => removeKey(d, node.listKey, item.pointer, item.key))}
-                      >
-                        Remove
-                      </button>
+                      <IconButton
+                        label={`Remove ${item.key}`}
+                        icon="close"
+                        tone="danger"
+                        onPress={() => setDoc((d) => removeKey(d, node.listKey, item.pointer, item.key))}
+                      />
                     ) : null}
                   </td>
                 ) : null}

@@ -1,6 +1,6 @@
 /** Recursive rendering of the settings tree: leaves, objects (with extra keys), collections, role tables. */
 import { useId, useState, type ReactNode } from 'react';
-import { Collapse, Icon, Tag } from '@/ui';
+import { Collapse, Icon, IconButton, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import {
   addKey,
@@ -113,15 +113,15 @@ function ExtraKeys({ extra, ...tree }: { extra: ExtraKeysView } & TreeProps) {
       ) : null}
       {extra.items.map((item) =>
         item.node.type === 'object' ? (
-          <button
-            key={item.pointer}
-            type="button"
-            className={styles.linkBtn}
-            aria-label={`Remove ${item.key}`}
-            onClick={() => setDoc((d) => removeKey(d, extra.listKey, item.pointer, item.key))}
-          >
-            {`Remove ${item.key}`}
-          </button>
+          <span key={item.pointer} className={styles.headActions}>
+            <span className={styles.keyName}>{item.key}</span>
+            <IconButton
+              label={`Remove ${item.key}`}
+              icon="close"
+              tone="danger"
+              onPress={() => setDoc((d) => removeKey(d, extra.listKey, item.pointer, item.key))}
+            />
+          </span>
         ) : null,
       )}
       <AddRow
@@ -205,14 +205,12 @@ function StackedCollection({ node, ...tree }: { node: CollectionNode } & TreePro
               {item.required ? <Tag kind="role">required</Tag> : null}
               <span className={styles.spacer} />
               {item.removable ? (
-                <button
-                  type="button"
-                  className={styles.linkBtn}
-                  aria-label={`Remove ${node.keyParam} ${item.key}`}
-                  onClick={() => setDoc((d) => removeKey(d, node.listKey, item.pointer, item.key))}
-                >
-                  Remove
-                </button>
+                <IconButton
+                  label={`Remove ${node.keyParam} ${item.key}`}
+                  icon="close"
+                  tone="danger"
+                  onPress={() => setDoc((d) => removeKey(d, node.listKey, item.pointer, item.key))}
+                />
               ) : null}
             </div>
             <Collapse open={open} id={bodyId}>
