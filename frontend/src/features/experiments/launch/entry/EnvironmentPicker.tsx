@@ -3,6 +3,7 @@ import type { EvalEnvironment } from '@/api/evalCommon';
 import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDialog';
 import { SlotEditorDialog } from '@/features/environments/SlotEditor';
 import { Button, Checkbox, Icon, LinkButton, StatusMark, Tag } from '@/ui';
+import { titleCase } from '../../lib/format';
 import { environmentPath } from '../../paths';
 import { pairCount, PSEUDO, pointerToFieldName, unitsFor } from '../model';
 import { useLaunch } from '../LaunchContext';
@@ -52,7 +53,7 @@ function EnvironmentTags({
           Schema check failed
         </Tag>
       ) : null}
-      <Tag>Priority up to {env.max_priority}</Tag>
+      <Tag kind="data">Priority up to {titleCase(env.max_priority)}</Tag>
       {env.official_preset_version != null ? (
         <Tag kind="version">Default preset v{env.official_preset_version}</Tag>
       ) : null}
