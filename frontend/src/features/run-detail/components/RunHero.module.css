@@ -83,7 +83,8 @@
 /* Band 2: seven labelled facts in one row of columns (4 and 2 columns as the column narrows). */
 .facts {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(7, auto);
+  justify-content: space-between;
   gap: var(--space-sm) var(--space-md);
   margin: 0;
 }
@@ -98,8 +99,6 @@
 .factLabel {
   font-size: var(--font-sm);
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -110,11 +109,9 @@
   min-block-size: var(--badge-height);
   min-inline-size: 0;
   margin: 0;
-  overflow: hidden;
   font-size: var(--font-base);
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--text-primary);
 }
 
@@ -228,11 +225,6 @@
   min-block-size: calc(2 * var(--control-height) + 6px);
 }
 
-.flow[data-open] {
-  max-block-size: none;
-  overflow: visible;
-}
-
 .group {
   display: contents;
 }
@@ -263,6 +255,17 @@
 
 .moreBtn {
   flex: none;
+  align-self: flex-end;
+}
+
+.groupGrid {
+  display: grid;
+  flex: 1;
+  min-inline-size: 0;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-lg);
+  row-gap: var(--space-md);
+  align-items: start;
 }
 
 .moreFacts {
@@ -295,12 +298,6 @@
 
   .name {
     font-size: var(--font-lg);
-  }
-
-  /* a Started value wraps instead of ending in an ellipsis */
-  .factValue {
-    white-space: normal;
-    overflow-wrap: anywhere;
   }
 
   .contextRow {

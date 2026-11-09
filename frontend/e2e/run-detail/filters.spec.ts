@@ -145,13 +145,13 @@ test.describe('rule builder (scenario 5)', () => {
     await expect.poll(() => params(page).get('filters') ?? '').toContain('"value":"1000"');
     const raw = params(page).get('filters')!;
     expect(JSON.parse(raw).rules.children).toHaveLength(2);
-    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters2');
     const [n] = await itemsCount(page);
     expect(n).toBeLessThan(240);
     await page.reload();
     await expect(page.getByTestId('items-count')).toBeVisible();
     expect((await itemsCount(page))[0]).toBe(n);
-    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters2');
   });
 
   test('a ?filters= deep link applies, shows the chip and count, and is removable by keyboard', async ({
@@ -161,7 +161,7 @@ test.describe('rule builder (scenario 5)', () => {
     const [n] = await itemsCount(page);
     expect(n).toBeGreaterThan(0);
     expect(n).toBeLessThan(240);
-    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters2');
     const chip = page.getByRole('button', { name: /Remove filter 2 rules/ });
     await expect(chip).toBeVisible();
     await chip.focus();

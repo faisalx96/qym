@@ -37,7 +37,7 @@ for (const width of [1440, 390]) {
       expect(above).toBeLessThanOrEqual(5 + 2 + 1);
       const rows = page.getByTestId('category-row');
       await expect(rows).toHaveCount(6);
-      await page.getByRole('button', { name: 'Show all 24 values' }).click();
+      await page.getByRole('button', { name: 'Show 18 more' }).click();
       await expect(rows).toHaveCount(24);
       await page.getByRole('button', { name: 'Show fewer' }).click();
       await expect(rows).toHaveCount(6);

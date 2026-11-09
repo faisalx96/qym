@@ -220,7 +220,7 @@ for (const width of [1440, 390] as const) {
       // R3-12
       const log = panel.getByRole('grid', { name: 'Log table' });
       await expect(log.locator('[role=row]:has([role=gridcell])')).toHaveCount(12);
-      await panel.getByRole('button', { name: 'Show 2 more rows' }).click();
+      await panel.getByRole('button', { name: 'Show 2 more' }).click();
       await expect(log.locator('[role=row]:has([role=gridcell])')).toHaveCount(14);
       // R3-10: the panel never scrolls sideways
       const sw = await panel.evaluate((el) => el.scrollWidth - el.clientWidth);

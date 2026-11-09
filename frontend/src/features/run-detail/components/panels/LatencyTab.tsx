@@ -5,6 +5,7 @@
  */
 import { useMemo } from 'react';
 import { useStepLatencyQuery } from '@/api/runs';
+import { EmptyState } from '@/ui';
 import { isNotReceivedRow, isTaskErrorRow } from '@/lib/metrics';
 import { applyItemFilters, rowScoreFor } from '../../lib/filterRules';
 import type { LatencyItem } from '../../lib/latencyModel';
@@ -13,7 +14,6 @@ import { useRunPage } from '../../RunContext';
 import { InsideTraces } from '../latency/InsideTraces';
 import { ResponseTime } from '../latency/ResponseTime';
 import styles from './Latency.module.css';
-import panel from './Panels.module.css';
 
 export function LatencyTab() {
   const { items, api, runId, model, payload } = useRunPage();
@@ -58,7 +58,7 @@ export function LatencyTab() {
       .filter((i) => Number.isFinite(i.latency));
   }, [pageItems, metric, model.metricNames, api.ctx]);
   if (!latencyItems.length && !hasSpans)
-    return <p className={panel.note}>No latency or trace data for this run.</p>;
+    return <EmptyState compact title="No latency or trace data for this run" />;
   return (
     <div className={styles.root} data-testid="latency-panel">
       {latencyItems.length ? <ResponseTime items={latencyItems} metric={metric} /> : null}

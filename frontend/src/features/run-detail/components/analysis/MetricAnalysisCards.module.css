@@ -62,7 +62,6 @@
 }
 
 .conf {
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
   color: var(--text-muted);
 }

@@ -12,6 +12,7 @@ import {
   KeyTree,
   LinkButton,
   SegmentedControl,
+  StatusMark,
   Tag,
   TextBlock,
   allPaths,
@@ -19,6 +20,7 @@ import {
   useJsonView,
 } from '@/ui';
 import { bodyText } from '../../lib/itemText';
+import { VERDICT_MARK } from '../../lib/verdictMark';
 import { latencyLabel, rowStatus } from '../../lib/rowDisplay';
 import { shownPasses } from '../../lib/passSelection';
 import { useRunPage } from '../../RunContext';
@@ -115,7 +117,7 @@ export function OutputRegion({
               href={langfuseUrl}
               target="_blank"
               rel="noopener noreferrer"
-              icon={<Icon name="external" size={12} />}
+              iconEnd={<Icon name="external" size={12} />}
             >
               Open in Langfuse
             </LinkButton>
@@ -134,7 +136,7 @@ export function OutputRegion({
           />
           <Button
             size="sm"
-            variant="ghost"
+            variant="neutral"
             aria-label="Expand all output keys"
             isDisabled={view === 'raw' || !anyStructured}
             onPress={expandAll}
@@ -143,7 +145,7 @@ export function OutputRegion({
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="neutral"
             aria-label="Collapse all output keys"
             isDisabled={view === 'raw' || !anyStructured}
             onPress={() => setOpen(new Set(defaultOpen))}
@@ -188,9 +190,20 @@ export function OutputRegion({
                 {multi ? (
                   <div className={styles.colHead}>
                     <Tag kind="count">Pass {c.pass}</Tag>
-                    <Tag tone={tone} title={status.title || undefined}>
-                      {status.kind === 'pass' ? 'Pass' : status.kind === 'fail' ? 'Fail' : status.label}
-                    </Tag>
+                    <StatusMark
+                      tone={VERDICT_MARK[status.kind]?.[0] ?? 'neutral'}
+                      shape={VERDICT_MARK[status.kind]?.[1] ?? 'ring'}
+                      label={
+                        status.kind === 'pass'
+                          ? 'Pass'
+                          : status.kind === 'fail'
+                            ? 'Fail'
+                            : status.kind === 'error'
+                              ? 'Error'
+                              : status.label
+                      }
+                      title={status.title || undefined}
+                    />
                     {c.scoped.latency_ms != null ? (
                       <span className={styles.latency}>{latencyLabel(c.scoped.latency_ms)}</span>
                     ) : null}

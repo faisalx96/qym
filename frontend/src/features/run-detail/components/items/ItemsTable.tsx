@@ -11,6 +11,7 @@ import {
   DataTable,
   DatasetTag,
   IconButton,
+  promptPreview,
   ScoreValue,
   Skeleton,
   StatusMark,
@@ -154,11 +155,11 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       priority: 1,
       cell: ({ row }) => {
         const title = row.input_full ?? row.input ?? row.input_preview ?? '';
-        const text = (typeof title === 'string' ? title : JSON.stringify(title)).replace(/\s+/g, ' ').trim();
+        const text = promptPreview(title);
         // the item texts are a later row group: a bone holds the place until it arrives
         if (!text && !textLoaded) return <Skeleton kind="value" width="70%" label="Loading input" />;
         return (
-          <span title={text} {...textDirAttrs(text)}>
+          <span title={typeof title === 'string' ? title : JSON.stringify(title)} {...textDirAttrs(text)}>
             {text || '—'}
           </span>
         );
@@ -273,9 +274,9 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         rowKey={(it) => it.row.item_id}
         density="regular"
         densityLocked
-        zebra={false}
+        stripe="report"
         responsive="cards"
-        empty="No items match the current filters."
+        empty="No items match these filters"
         sort={sortState(sort)}
         allowUnsorted
         onSortChange={(s) => {

@@ -71,7 +71,7 @@ export function KindCards({ D, onOpenSteps }: { D: LatencyData; onOpenSteps: (fa
                     {rows.length > shown.length ? ` · top ${shown.length} of ${rows.length}` : ''}
                   </span>
                   <button type="button" className={styles.linkButton} onClick={() => onOpenSteps(p.family)}>
-                    Open in Step timings →
+                    Open in Step timings <Icon name="chevron-right" size={12} />
                   </button>
                 </div>
                 {shown.map(({ g, v }, i) => (

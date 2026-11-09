@@ -76,7 +76,7 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     const tree = page.getByRole('tree', { name: 'Span tree' });
     await tree.focus();
     await page.keyboard.press('/');
-    const search = page.getByRole('searchbox', { name: 'Filter spans' });
+    const search = page.getByRole('searchbox', { name: 'Search spans' });
     await expect(search).toBeFocused();
     await page.keyboard.type('lookup');
     await expect.poll(() => tree.getByRole('treeitem').count()).toBeLessThan(7);
@@ -94,7 +94,7 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await expect(page.getByRole('tree', { name: 'Span tree' })).toBeVisible();
     await page.getByRole('region', { name: 'Span details' }).click();
     await page.keyboard.press('/');
-    await expect(page.getByRole('searchbox', { name: 'Filter spans' })).toBeFocused();
+    await expect(page.getByRole('searchbox', { name: 'Search spans' })).toBeFocused();
   });
 
   test('selecting a span shows its tabs; the close button closes and removes ?trace=', async ({ page }) => {

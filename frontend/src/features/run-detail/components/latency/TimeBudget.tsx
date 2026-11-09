@@ -62,17 +62,28 @@ export function TimeBudget({ D }: { D: LatencyData }) {
           <Text variant="md" weight={600} as="h4" className={styles.title}>
             Time budget
           </Text>
-          {hasAgents ? (
-            <SegmentedControl
-              label="Time budget grouping"
-              options={[
-                { value: 'phase', label: 'By phase' },
-                { value: 'agent', label: 'By agent' },
-              ]}
-              value={mode}
-              onChange={setMode}
-            />
-          ) : null}
+          <div className={styles.headEnd}>
+            <ul className={styles.budgetLegend}>
+              {families.map((f) => (
+                <li key={f}>
+                  <i style={cssVars({ '--tone': FAMILY_TONE[f] })} aria-hidden="true" />
+                  {FAMILY_LABEL[f]} <b>{durText(byFamily[f]!)}</b>
+                  <em>{pct(byFamily[f]!, total).toFixed(0)}%</em>
+                </li>
+              ))}
+            </ul>
+            {hasAgents ? (
+              <SegmentedControl
+                label="Time budget grouping"
+                options={[
+                  { value: 'phase', label: 'By phase' },
+                  { value: 'agent', label: 'By agent' },
+                ]}
+                value={mode}
+                onChange={setMode}
+              />
+            ) : null}
+          </div>
         </div>
         <div className={styles.anatomy}>
           <div className={styles.summary}>
@@ -134,15 +145,6 @@ export function TimeBudget({ D }: { D: LatencyData }) {
               );
             })}
           </ChartTooltipHost>
-          <ul className={styles.budgetLegend}>
-            {families.map((f) => (
-              <li key={f}>
-                <i style={cssVars({ '--tone': FAMILY_TONE[f] })} aria-hidden="true" />
-                {FAMILY_LABEL[f]} <b>{durText(byFamily[f]!)}</b>
-                <em>{pct(byFamily[f]!, total).toFixed(0)}%</em>
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
     </Card>

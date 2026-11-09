@@ -88,7 +88,7 @@ test.describe('categories', () => {
     // topic has 24 values: 6 rows (round 3 P3), then Show all
     const rows = page.getByTestId('category-row');
     await expect(rows).toHaveCount(6);
-    await page.getByRole('button', { name: 'Show all 24 values' }).click();
+    await page.getByRole('button', { name: 'Show 18 more' }).click();
     await expect(rows).toHaveCount(24);
     // worst first: the first row's average is the lowest
     const avg = async (i: number) => Number((await rows.nth(i).innerText()).match(/(\d+)%/)![1]);

@@ -8,7 +8,7 @@ import { jsx, jsxs } from 'react/jsx-runtime';
 import { Link } from 'react-router-dom';
 import { toJsxRuntime, type Components } from 'hast-util-to-jsx-runtime';
 import type { Root } from 'hast';
-import { CopyButton, Icon, useToast } from '@/ui';
+import { CopyButton, Icon } from '@/ui';
 import { legacyHashToPath } from './content';
 import styles from './DocsArticle.module.css';
 
@@ -25,16 +25,11 @@ function CodeBlock({
   children,
 }: PreProps) {
   const pre = useRef<HTMLPreElement>(null);
-  const toast = useToast();
   return (
     <div className={styles.codeblock} data-docs-codeblock>
       <div className={styles.codeHead}>
         <span className={styles.codeLang}>{lang}</span>
-        <CopyButton
-          text={() => pre.current?.textContent ?? ''}
-          label="Copy code"
-          onCopied={() => toast.show('Copied to clipboard', { tone: 'success' })}
-        />
+        <CopyButton text={() => pre.current?.textContent ?? ''} label="Copy code" />
       </div>
       {/* scrollable code must be keyboard-focusable */}
       <pre

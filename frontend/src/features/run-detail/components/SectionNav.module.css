@@ -120,13 +120,20 @@ button.link {
 }
 
 .count {
-  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-xs);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--bg-active);
+  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
 }
 
 .link[data-tone='danger'] .count {

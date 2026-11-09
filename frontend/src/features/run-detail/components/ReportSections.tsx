@@ -211,7 +211,6 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
                 key: 'items',
                 label: 'Items',
                 icon: <Icon name="list" size={12} />,
-                tone: 'info',
                 value:
                   planned && received != null && received < planned ? (
                     <>
