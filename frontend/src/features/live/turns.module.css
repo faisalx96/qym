@@ -86,6 +86,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* C-02: a Live date-time, the runs Date recipe: sans, tabular figures, one line. */
+.time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .userRef {
   overflow: hidden;
   text-overflow: ellipsis;
