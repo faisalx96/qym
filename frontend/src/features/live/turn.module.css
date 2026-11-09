@@ -41,9 +41,10 @@
   white-space: normal;
 }
 
-.turnTitle {
-  display: block;
-  line-height: 1.6;
+.traceLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .tiles > [role='list'] {
@@ -116,6 +117,20 @@
 
 .deviation > :first-child {
   flex: none;
+}
+
+.axis {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.sevError {
+  color: var(--error);
+}
+
+.sevWarning {
+  color: var(--warning);
 }
 
 .deviation > p {
