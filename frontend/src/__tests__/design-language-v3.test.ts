@@ -635,7 +635,9 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
   });
 
   it('B-19: a role tag holds a role word only', () => {
-    const role = /^\s*(admin|manager|member|\{[^{}]*\b(me|m|project|u|p)\.role\b[^{}]*\})\s*$/i;
+    // D-28: a dataset access level (View, Modify) is a role word too: it takes the Members role Tag look
+    const role =
+      /^\s*(admin|manager|member|view|modify|\{[^{}]*\b(me|m|project|u|p)\.role\b[^{}]*\}|\{[^{}]*\br\.level\b[^{}]*\})\s*$/i;
     const problems: string[] = [];
     for (const f of noDev)
       for (const e of elements(read(f), ['Tag']))
