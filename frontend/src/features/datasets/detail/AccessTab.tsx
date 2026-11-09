@@ -1,6 +1,6 @@
 /**
  * Dataset → Access tab (E4, QA5-17 to QA5-78): who can open and change this dataset. Two cards (Access mode, People with
- * access), a sticky save bar, read-only summary for everyone who cannot manage access.
+ * access), a save footer in the card, read-only summary for everyone who cannot manage access.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Key } from 'react-aria-components';
@@ -35,6 +35,7 @@ import {
 } from '@/ui';
 import { Note } from '../components/Note';
 import { UserPill } from '../components/UserPill';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import { CardHead } from './SettingsTab';
 import styles from './AccessTab.module.css';
 import { formatDay, toDate } from '@/lib/dates';
@@ -160,7 +161,6 @@ function AccessBody({
   const [who, setWho] = useState<Key | null>(null);
   const [newLevel, setNewLevel] = useState<GrantLevel>('view');
   const [editingLevel, setEditingLevel] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
   const addRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -182,7 +182,6 @@ function AccessBody({
   }, [data.candidates, data.grants, rows]);
 
   async function onSave() {
-    setFailed(false);
     try {
       await save.mutateAsync({
         access_mode: mode,
@@ -190,7 +189,6 @@ function AccessBody({
       });
       toast.show('Access saved', { tone: 'success' });
     } catch (e) {
-      setFailed(true);
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t save access', { tone: 'error' });
     }
   }
@@ -199,7 +197,6 @@ function AccessBody({
     setMode(data.access_mode);
     setRows(savedRows);
     setWho(null);
-    setFailed(false);
   }
 
   function addPerson() {
@@ -212,7 +209,6 @@ function AccessBody({
       saved ? { ...saved, level: newLevel } : { person, level: newLevel, grantedBy: null, createdAt: null },
     ]);
     setWho(null);
-    setFailed(false);
   }
 
   // After a removal focus moves to the next row's Remove, or to the Add person select when none remains.
@@ -233,7 +229,6 @@ function AccessBody({
   function removeRow(index: number) {
     focusAfterRemove.current = index;
     setRows(rows.filter((_, i) => i !== index));
-    setFailed(false);
   }
 
   const sentence = archived
@@ -363,6 +358,23 @@ function AccessBody({
       : '';
   const peopleCount = rows.length === 1 ? '1 person' : `${rows.length} people`;
   const shownRestricted = editable ? restricted : data.access_mode === 'restricted';
+  const saveFooter = editable ? (
+    <SaveFooter
+      dirty={dirty}
+      saving={save.isPending}
+      onSave={() => void onSave()}
+      secondary={
+        <Button
+          variant="neutral"
+          isDisabled={!dirty || save.isPending}
+          disabledReason="No changes to discard"
+          onPress={discard}
+        >
+          Discard
+        </Button>
+      }
+    />
+  ) : undefined;
 
   return (
     <>
@@ -370,6 +382,7 @@ function AccessBody({
         as="section"
         aria-labelledby="ds-access-mode"
         data-testid="access-mode-card"
+        footer={shownRestricted ? undefined : saveFooter}
         header={
           <CardHead
             id="ds-access-mode"
@@ -394,7 +407,6 @@ function AccessBody({
               value={mode}
               onChange={(next) => {
                 setMode(next);
-                setFailed(false);
               }}
               options={[
                 {
@@ -430,6 +442,7 @@ function AccessBody({
           as="section"
           aria-labelledby="ds-access-people"
           data-testid="access-people"
+          footer={saveFooter}
           header={
             <CardHead
               id="ds-access-people"
@@ -490,48 +503,6 @@ function AccessBody({
             )}
           </div>
         </Card>
-      ) : null}
-
-      {editable ? (
-        <div
-          className={styles.saveBar}
-          data-testid="access-save-bar"
-          data-state={save.isPending ? 'saving' : failed ? 'failed' : dirty ? 'dirty' : 'clean'}
-        >
-          <span
-            className={styles.saveStatus}
-            data-part="status"
-            aria-live="polite"
-            data-tone={failed ? 'error' : undefined}
-          >
-            {save.isPending
-              ? 'Saving'
-              : failed
-                ? 'Couldn’t save access'
-                : dirty
-                  ? 'Unsaved changes'
-                  : 'No changes'}
-          </span>
-          <div className={styles.saveActions}>
-            <Button
-              variant="neutral"
-              isDisabled={!dirty || save.isPending}
-              disabledReason="No changes to discard"
-              onPress={discard}
-            >
-              Discard
-            </Button>
-            <Button
-              variant="primary"
-              isDisabled={!dirty}
-              disabledReason="No changes to save"
-              loading={save.isPending}
-              onPress={() => void onSave()}
-            >
-              Save access
-            </Button>
-          </div>
-        </div>
       ) : null}
     </>
   );

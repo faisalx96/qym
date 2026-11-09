@@ -1,4 +1,4 @@
-/* Access tab: cards, mode grid, add row on top, sticky save bar. Spec QA5-24 to QA5-72; the recipe is features/dev/QaDatasetsMocks.module.css. */
+/* Access tab: cards, mode grid, add row on top, save footer. Spec QA5-24 to QA5-72; the recipe is features/dev/QaDatasetsMocks.module.css. */
 .accessTab {
   container-type: inline-size;
   display: flex;
@@ -91,40 +91,4 @@
   .skeletonFrame {
     min-block-size: 206.1px;
   }
-}
-
-/* the save bar is sticky to the page's scroll host (compositor positioned, DESIGN_LANGUAGE 7) */
-.saveBar {
-  position: sticky;
-  inset-block-end: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm) var(--space-md);
-  min-block-size: var(--bar-action-h);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-}
-
-.saveStatus {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.saveStatus[data-tone='error'] {
-  color: var(--error-text);
-}
-
-/* unsaved changes read in primary text (QA5-45) */
-.saveBar[data-state='dirty'] .saveStatus {
-  color: var(--text-primary);
-}
-
-.saveActions {
-  display: flex;
-  gap: var(--space-sm);
-  margin-inline-start: auto;
 }

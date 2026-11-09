@@ -19,6 +19,7 @@ import { FieldEditor } from '../components/FieldEditor';
 import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
 import { useItemEditor } from '../item/useItemEditor';
 import { datasetPath } from '../lib/route';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import styles from './ItemPane.module.css';
 import { APP_LOCALE } from '@/lib/dates';
 
@@ -105,6 +106,11 @@ export function ItemPane({
           {disabled ? (
             <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
           ) : null}
+          {editable && item && !disabled ? (
+            <Button variant="danger" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
+              Disable item
+            </Button>
+          ) : null}
         </div>
         <div className={styles.headActions}>
           <IconButton label="Previous item" icon="chevron-up" onPress={() => onNavigate(-1)} />
@@ -185,27 +191,23 @@ export function ItemPane({
       </div>
       {editable ? (
         <footer className={styles.foot}>
-          {item && !disabled ? (
-            <Button variant="danger" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
-              Disable item
-            </Button>
-          ) : null}
-          <Text as="span" variant="sm" tone="muted" aria-live="polite" className={styles.status}>
-            {editor.dirty
-              ? editor.valid
-                ? 'Unsaved changes'
-                : 'Fix the invalid field to save'
-              : 'No changes'}
-          </Text>
-          <Button
-            variant="primary"
-            onPress={() => void saveAll()}
-            isDisabled={!editor.dirty || !editor.valid}
-            loading={editor.saving}
-            data-testid="pane-save"
-          >
-            Save changes
-          </Button>
+          <SaveFooter
+            dirty={editor.dirty}
+            saving={editor.saving}
+            onSave={() => void saveAll()}
+            isDisabled={!editor.valid}
+            disabledReason={editor.dirty && !editor.valid ? 'Fix the invalid field to save' : undefined}
+            secondary={
+              <Button
+                variant="neutral"
+                isDisabled={!editor.dirty || editor.saving}
+                disabledReason="No changes to discard"
+                onPress={editor.reset}
+              >
+                Discard
+              </Button>
+            }
+          />
         </footer>
       ) : null}
       {!readOnly && published && item && onCreateDraft ? (
