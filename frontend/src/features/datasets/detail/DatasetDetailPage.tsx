@@ -551,7 +551,7 @@ function DetailBody({
       <ConfirmDialog
         open={leaveTo !== null}
         onOpenChange={(o) => !o && setLeaveTo(null)}
-        title="Discard access changes?"
+        title="Discard unsaved changes?"
         description="You have unsaved changes to who can access this dataset. They are lost if you leave this tab."
         cancelLabel="Keep editing"
         confirmLabel="Discard changes"
