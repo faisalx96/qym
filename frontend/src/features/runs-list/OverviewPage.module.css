@@ -9,7 +9,7 @@
 
 .screen[data-constrained] {
   max-width: var(--page-max-w);
-  margin: 0 auto;
+  margin: 0;
 }
 
 .cardHead {
@@ -84,6 +84,9 @@
 }
 
 .viewAll {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   color: var(--accent-primary);
   font-size: var(--font-sm);
   font-weight: 600;
@@ -92,7 +95,8 @@
 }
 
 .viewAll:hover {
-  text-decoration: underline;
+  color: var(--accent-primary-hover);
+  text-decoration: none;
 }
 
 .viewAll:focus-visible {
@@ -150,14 +154,9 @@
 
 .reviewLink {
   flex: none;
-  color: var(--accent-primary);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   text-decoration: none;
-}
-
-.reviewLink:hover {
-  text-decoration: underline;
 }
 
 .reviewLink:focus-visible {

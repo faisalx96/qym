@@ -1,5 +1,5 @@
 /** Small pieces shared by the delta line, the analytics panel and the item rows. */
-import { Tag } from '@/ui';
+import { Icon, Tag } from '@/ui';
 import { formatBand, formatDelta, kindLabel, type BaselineStats, type DeltaKind } from '../lib/baseline';
 import type { MetricDirection } from '@/lib/metrics';
 import { runColor } from '../CompareContext';
@@ -70,7 +70,7 @@ export function CountButtons({
           aria-label={`${stats.counts.improved} items ${up} vs baseline on ${label}; filter items`}
           onClick={() => onToggle('improved')}
         >
-          {'▲'}
+          <Icon name="chevron-up" size={12} />
           {stats.counts.improved}
         </button>
       ) : null}
@@ -82,7 +82,7 @@ export function CountButtons({
           aria-label={`${stats.counts.regressed} items ${down} vs baseline on ${label}; filter items`}
           onClick={() => onToggle('regressed')}
         >
-          {'▼'}
+          <Icon name="chevron-down" size={12} />
           {stats.counts.regressed}
         </button>
       ) : null}
@@ -102,7 +102,12 @@ export function DeltaLine2({ stats, type, metric }: { stats: BaselineStats; type
       : ' (too few items for a noise band)');
   return (
     <span className={styles.delta} data-part="averages-delta" data-verdict={verdict} title={title}>
-      <span aria-hidden>{GLYPH[verdict]}</span> {formatDelta(stats.mean, type)}
+      {verdict === 'within_noise' ? null : (
+        <>
+          <span aria-hidden>{GLYPH[verdict]}</span>{' '}
+        </>
+      )}
+      {formatDelta(stats.mean, type)}
       <span className={styles.srOnly}> ({WORD[verdict]})</span>
       {band ? <i>{band}</i> : null}
     </span>

@@ -17,7 +17,7 @@
 }
 
 .search {
-  flex: 1 1 12rem;
+  flex: none;
   /* C217: at 390 px the field keeps room to type instead of shrinking to its icon */
   min-inline-size: min(10rem, 100%);
 }

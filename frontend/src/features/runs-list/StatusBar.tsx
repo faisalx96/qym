@@ -1,6 +1,6 @@
 /** Runs footer content: freshness note, "Last updated" and the shortcuts button (shown in DataTable.Footer). */
 import { Button, Kbd, Text } from '@/ui';
-import { formatClock } from '@/lib/format';
+import { formatAgo } from '@/lib/dates';
 import type { Freshness } from '@/api/dashboardTypes';
 import styles from './StatusBar.module.css';
 
@@ -18,11 +18,13 @@ export function FooterTrailing({
   updatedAt,
   freshness,
   failed,
+  loading,
   onHelp,
 }: {
   updatedAt: Date | null;
   freshness: Freshness | undefined;
   failed?: boolean;
+  loading?: boolean;
   /** Absent in card mode (C224): no Shortcuts button. */
   onHelp?: () => void;
 }) {
@@ -34,17 +36,20 @@ export function FooterTrailing({
         tone="muted"
         as="span"
         className={styles.updated}
-        role={note || failed ? 'status' : undefined}
+        role={note || failed || loading ? 'status' : undefined}
       >
-        {note ?? (
-          <>
-            Last updated <span className={styles.mono}>{updatedAt ? formatClock(updatedAt) : '—'}</span>
-            {failed ? ' · refresh failed' : ''}
-          </>
-        )}
+        {note ??
+          (loading ? (
+            'Loading runs…'
+          ) : (
+            <>
+              Last updated {updatedAt ? formatAgo(updatedAt) : '—'}
+              {failed ? ' · refresh failed · showing runs from an earlier refresh' : ''}
+            </>
+          ))}
       </Text>
       {onHelp ? (
-        <Button variant="ghost" onPress={onHelp} aria-label="Keyboard shortcuts">
+        <Button variant="neutral" onPress={onHelp} aria-label="Keyboard shortcuts">
           <Kbd>?</Kbd> Shortcuts
         </Button>
       ) : null}

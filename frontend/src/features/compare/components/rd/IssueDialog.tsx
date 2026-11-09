@@ -168,7 +168,7 @@ export function IssueDialog({
             </Button>
           ) : null}
           <Button
-            variant="accent"
+            variant="primary"
             onPress={() => submit(issue ? 'edit' : 'add')}
             loading={mutation.isPending}
             data-testid="issue-save"

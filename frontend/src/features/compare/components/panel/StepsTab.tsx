@@ -4,6 +4,7 @@ import { useCompareStepLatency } from '@/api/compare';
 import { formatLatency } from '@/lib/metrics';
 import { ErrorState, Skeleton, Tag, Text } from '@/ui';
 import { useCompare } from '../../CompareContext';
+import { latencyChange } from '../../lib/baseline';
 import { columnName } from '../../lib/columnName';
 import { RunTag } from '../RunTag';
 import avg from './AveragesMatrix.module.css';
@@ -57,7 +58,11 @@ export function StepsTab() {
   const bi = columns.indexOf(baseline);
   return (
     <div className={avg.scroll} data-part="steps-table">
-      <table className={avg.table} aria-label="Step latency" style={{ '--cols': columns.length } as CSSProperties}>
+      <table
+        className={avg.table}
+        aria-label="Step latency"
+        style={{ '--cols': columns.length } as CSSProperties}
+      >
         <thead>
           <tr>
             <th scope="col" className={avg.metricHead}>
@@ -94,9 +99,8 @@ export function StepsTab() {
                       <div className={avg.mark}>
                         <span className={avg.plainValue}>{v === null ? '—' : formatLatency(v)}</span>
                         {rel !== null ? (
-                          <span className={avg.latDelta}>
-                            {rel < -0.02 ? '▼' : rel > 0.02 ? '▲' : '≈'} {rel >= 0 ? '+' : '−'}
-                            {Math.abs(rel * 100).toFixed(0)}%
+                          <span className={avg.latDelta} data-verdict={latencyChange(rel).verdict}>
+                            {latencyChange(rel).text}
                           </span>
                         ) : null}
                       </div>

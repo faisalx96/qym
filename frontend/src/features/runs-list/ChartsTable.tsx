@@ -11,7 +11,7 @@ import { DataTable, Icon, NumberCell, ScoreBar, ScoreValue, Tag, Text, Tooltip, 
 import type { MetricDirection } from '@/lib/metrics';
 import { formatDateParts, formatLatency, formatNumericValue, formatPercentValue } from '@/lib/format';
 import { runPath } from '@/app/routes';
-import { Mono, ModelMark } from './cells';
+import { BoltLabel, Mono, ModelMark } from './cells';
 import { useRunsCtx } from './context';
 import { modelSlot } from './model';
 import {
@@ -313,7 +313,8 @@ export function ChartsTable(p: ChartsTableProps) {
       const agg = (g: ChartGroup) => <Mono>{aggValue(g)}</Mono>;
       cols.push({
         id,
-        header,
+        header: <BoltLabel label={header} />,
+        label: header,
         group: 'System',
         type: 'score',
         sort: { key: id, first: 'desc' },
@@ -332,7 +333,7 @@ export function ChartsTable(p: ChartsTableProps) {
     if (p.showLatency)
       system(
         'latency',
-        '⚡ Avg latency',
+        'Avg latency',
         (r) => r.latency,
         p.maxLatency,
         (g) => formatLatency(g.agg.avgLatency),
@@ -341,7 +342,7 @@ export function ChartsTable(p: ChartsTableProps) {
     if (p.showMedian)
       system(
         'median-latency',
-        '⚡ Median latency',
+        'Median latency',
         (r) => r.median_latency,
         p.maxMedian,
         (g) => formatLatency(g.agg.medianLatency),
@@ -351,7 +352,8 @@ export function ChartsTable(p: ChartsTableProps) {
       const agg = (g: ChartGroup) => <Mono>{t.format(g.agg.traceAverages[t.key])}</Mono>;
       cols.push({
         id: t.key,
-        header: `⚡ ${t.label}`,
+        header: <BoltLabel label={t.label} />,
+        label: t.label,
         group: 'System',
         type: 'score',
         sort: { key: t.key, first: 'desc' },
@@ -431,7 +433,6 @@ export function ChartsTable(p: ChartsTableProps) {
       <DataTable<Row>
         aria-label={`${p.task} · ${p.dataset} runs`}
         variant="embedded"
-        zebra={false}
         columnMenu={false}
         groupBand={false}
         columns={columns}
@@ -451,7 +452,7 @@ export function ChartsTable(p: ChartsTableProps) {
             if (next.has(g.id) !== was) toggle(g.id);
           }
         }}
-        empty={`No runs for ${p.dataset} match the current filters.`}
+        empty={`No runs for ${p.dataset} match the current filters`}
         rowProps={(row) =>
           row.kind === 'group' ? { 'data-chart-group': String(row.level) } : { 'data-chart-run': '' }
         }

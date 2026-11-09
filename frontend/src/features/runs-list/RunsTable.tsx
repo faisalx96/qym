@@ -21,6 +21,7 @@ import {
 import { formatNumericValue } from '@/lib/format';
 import {
   AnalysisCell,
+  BoltLabel,
   DatasetCell,
   DateCell,
   DurationCell,
@@ -364,7 +365,8 @@ export function RunsTable(p: RunsTableProps) {
       const rank = def.id.startsWith('metric-') ? metricRank++ : 0;
       return {
         id: def.id,
-        header: def.label,
+        header: def.bolt ? <BoltLabel label={def.label} /> : def.label,
+        label: def.label,
         hint: def.label,
         group: bandOf(def),
         sort: def.sortKey ? { key: def.sortKey, first: defaultDirection(def.sortKey) } : undefined,
@@ -465,15 +467,7 @@ export function RunsTable(p: RunsTableProps) {
         rowKey={(r) => r.key}
         loading={p.loading}
         refreshing={p.dimmed}
-        empty={
-          p.emptyState ?? (
-            <EmptyState
-              compact
-              title="No runs match current filters"
-              body="Clear a filter or widen the time range."
-            />
-          )
-        }
+        empty={p.emptyState ?? <EmptyState compact title="No runs match these filters" />}
         sort={{ key: p.sort.field, direction: p.sort.direction }}
         allowUnsorted
         onSortChange={(s) => (s ? p.onSort(s.key, s.direction) : p.onSort(null))}
@@ -581,6 +575,8 @@ export function RunsTable(p: RunsTableProps) {
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
         title={`Delete pass ${deleting?.n ?? ''}?`}
+        requireText={`Pass ${deleting?.n ?? ''}`}
+        inputLabel={`Type Pass ${deleting?.n ?? ''} to confirm`}
         description="The pass and its scores are removed from this run permanently. The run's means are recomputed."
         confirmLabel="Delete pass"
         tone="danger"

@@ -6,18 +6,10 @@
 }
 
 /* idle: the plain meta button (tinted fill, sparkle); done: the same with a filled sparkle and the count */
-.action[data-state='done'] {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-tertiary) 55%, transparent);
-}
-.action[data-state='done']:hover {
-  background: color-mix(in srgb, var(--accent-tertiary) var(--tint-soft), transparent);
-}
 
 .action[data-state='running'] {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--info) var(--tint-strong), transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 60%, transparent);
 }
 .action[data-state='running']:hover {
   background: color-mix(in srgb, var(--info) 32%, transparent);
