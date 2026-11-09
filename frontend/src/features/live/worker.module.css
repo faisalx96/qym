@@ -98,7 +98,7 @@
 }
 
 .versionMeta {
-  min-height: var(--control-height);
+  min-block-size: var(--control-height);
 }
 
 .problemsFilters {
