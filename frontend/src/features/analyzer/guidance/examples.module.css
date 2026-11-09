@@ -83,6 +83,10 @@
   vertical-align: top;
 }
 
+.table tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step), var(--bg-base));
+}
+
 .table tr[data-selected] td {
   background: var(--bg-hover);
 }

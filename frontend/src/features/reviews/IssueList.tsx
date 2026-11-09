@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import type { RootCauseIssue } from '@/api/reviews';
 import { useCategoryCatalogQuery } from '@/api/runs';
 import { textDirAttrs } from '@/lib/text';
-import { Button, IconButton, Select, Tag, Text, TextField, Textarea, Icon } from '@/ui';
+import { Button, Disclosure, IconButton, Select, Text, TextField, Textarea, Icon } from '@/ui';
 import styles from './IssueList.module.css';
 
 const NEW_CATEGORY = '__new__';
@@ -24,13 +24,7 @@ export function editableIssue(i: RootCauseIssue): RootCauseIssue {
 }
 
 export function IssueList({ issues, tone }: { issues: RootCauseIssue[]; tone: 'ai' | 'human' }) {
-  if (!issues.length) {
-    return (
-      <Text variant="base" tone="muted" data-empty>
-        {tone === 'ai' ? 'No AI diagnosis' : 'No human diagnosis'}
-      </Text>
-    );
-  }
+  if (!issues.length) return null;
   return (
     <ol className={styles.list} data-tone={tone}>
       {issues.map((i, n) => (
@@ -38,7 +32,9 @@ export function IssueList({ issues, tone }: { issues: RootCauseIssue[]; tone: 'a
           <div className={styles.issueHead}>
             <span className={styles.issueNum}>Issue {n + 1}</span>
             {typeof i.confidence === 'number' ? (
-              <Tag kind="count">{Math.round(i.confidence * 100)}%</Tag>
+              <Text as="span" variant="sm" tone="muted">
+                {Math.round(i.confidence * 100)}% confidence
+              </Text>
             ) : null}
           </div>
           <Text variant="md" weight={650} dir="auto">
@@ -55,10 +51,9 @@ export function IssueList({ issues, tone }: { issues: RootCauseIssue[]; tone: 'a
             </p>
           ) : null}
           {i.category_reason ? (
-            <details className={styles.why}>
-              <summary>Why this category</summary>
+            <Disclosure className={styles.why} title="Why this category">
               <p {...textDirAttrs(i.category_reason)}>{i.category_reason}</p>
-            </details>
+            </Disclosure>
           ) : null}
         </li>
       ))}
@@ -219,7 +214,7 @@ export function IssueEditForm({
         ) : (
           <Button
             icon={<Icon name="plus" size={12} />}
-            variant="ghost"
+            variant="neutral"
             size="sm"
             onPress={() => setIssues((l) => [...l, { ...BLANK }])}
           >
@@ -227,7 +222,7 @@ export function IssueEditForm({
           </Button>
         )}
         <span className={styles.grow} />
-        <Button variant="ghost" size="sm" onPress={onCancel}>
+        <Button variant="neutral" size="sm" onPress={onCancel}>
           Cancel
         </Button>
         <Button variant="primary" size="sm" type="submit" loading={saving} data-testid="edit-save">

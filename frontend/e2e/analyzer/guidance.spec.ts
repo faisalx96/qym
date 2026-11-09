@@ -60,7 +60,7 @@ test.describe('Rules tab as manager (10)', () => {
     await publish.getByRole('button', { name: 'Publish' }).click();
     await expect(page.getByText('v1 published and live').first()).toBeVisible();
     const list = page.getByRole('complementary', { name: 'Rule versions' });
-    await expect(list.getByText('Live')).toBeVisible();
+    await expect(list.getByText('Production', { exact: true })).toBeVisible();
     await expect(page.getByText('Read-only', { exact: true })).toBeVisible();
 
     // create a draft from the live version, change the rule
@@ -238,14 +238,14 @@ test.describe('Diagnosis (12)', () => {
     await page.getByRole('textbox', { name: 'New category name' }).fill('Brand Voice');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('tab', { name: /^Brand Voice/ })).toBeVisible();
-    await expect(page.getByTestId('catalog-save-state')).toHaveText('Unsaved changes');
+    await expect(page.locator('[data-save-footer]')).toContainText('Unsaved changes');
 
     let puts = 0;
     page.on(
       'request',
       (r) => r.method() === 'PUT' && /analysis-category-catalog/.test(r.url()) && (puts += 1),
     );
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByTestId('catalog-save-state')).toHaveText('Taxonomy required');
     await expect(page.getByText('Add both Description and Use when for: Brand Voice.')).toBeVisible();
     await expect(page.getByText('Description is required.')).toBeVisible();
@@ -257,7 +257,7 @@ test.describe('Diagnosis (12)', () => {
       .fill('Tone and wording that break the brand style guide.');
     await page.getByRole('textbox', { name: /^Use when/ }).fill('The answer is right but written off-brand.');
     const put = page.waitForRequest((r) => r.method() === 'PUT' && /analysis-category-catalog/.test(r.url()));
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     const body = (await put).postDataJSON() as {
       base_revision?: number;
       categories: Array<{ category?: string; name?: string }>;
@@ -265,7 +265,7 @@ test.describe('Diagnosis (12)', () => {
     expect('base_revision' in body).toBe(true);
     expect(JSON.stringify(body)).toContain('Brand Voice');
     await expect(page.getByText('Categories saved').first()).toBeVisible();
-    await expect(page.getByTestId('catalog-save-state')).toHaveText('Saved');
+    await expect(page.locator('[data-save-footer]')).toContainText('All changes saved');
     await expect(page.getByRole('tab', { name: /^Brand Voice/ })).toBeVisible();
   });
 
@@ -301,7 +301,7 @@ test.describe('Diagnosis (12)', () => {
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await page.getByRole('textbox', { name: /^Description/ }).fill('Tone and wording.');
     await page.getByRole('textbox', { name: /^Use when/ }).fill('Off-brand wording.');
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     const alert = page.getByRole('alert').filter({ hasText: 'The catalog changed while you were editing' });
     await expect(alert).toBeVisible();
     await expect(alert).toContainText('Someone saved revision 99.');
@@ -322,12 +322,12 @@ test.describe('Diagnosis (12)', () => {
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await page.getByRole('textbox', { name: /^Description/ }).fill('Drifts in tone.');
     await page.getByRole('textbox', { name: /^Use when/ }).fill('The tone changes mid answer.');
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(alert).toBeVisible();
     await alert.getByRole('button', { name: 'Reload latest' }).click();
     await expect(alert).toBeHidden();
     await expect(page.getByRole('tab', { name: /^Tone Drift/ })).toHaveCount(0);
-    await expect(page.getByTestId('catalog-save-state')).toHaveText('Saved');
+    await expect(page.locator('[data-save-footer]')).toContainText('All changes saved');
   });
 });
 
@@ -353,7 +353,7 @@ test.describe('read-only view (13)', () => {
     await gotoApp(page, guidanceUrl(seed.slug, 'categories'));
     await expect(page.getByText('Project manager access is required to edit categories.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add category' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveAttribute('readonly', '');
     await expect(page.getByRole('textbox', { name: /^Use when/ })).toHaveAttribute('readonly', '');
 

@@ -4,16 +4,16 @@ import styles from './badges.module.css';
 
 const STATUS_FIGURE: Record<FeedbackStatus, [StatusTone, StatusShape]> = {
   draft: ['warning', 'dot'],
-  new: ['neutral', 'ring'],
-  accepted: ['info', 'check'],
-  planned: ['info', 'hourglass'],
+  new: ['neutral', 'hourglass'],
+  accepted: ['success', 'check'],
+  planned: ['neutral', 'hourglass'],
   done: ['success', 'full'],
   declined: ['danger', 'cross'],
 };
-const PRIORITY_TONE: Record<FeedbackPriority, 'info' | 'warning' | 'danger' | undefined> = {
+const PRIORITY_TONE: Record<FeedbackPriority, 'warning' | 'danger' | undefined> = {
   low: undefined,
-  medium: 'info',
-  high: 'warning',
+  medium: 'warning',
+  high: 'danger',
   critical: 'danger',
 };
 const KIND_TONE: Record<RelatedKind, 'warning' | 'danger' | undefined> = {

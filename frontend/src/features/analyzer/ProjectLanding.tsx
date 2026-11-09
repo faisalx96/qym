@@ -11,7 +11,7 @@ export function ProjectLanding({ slug, onGuidance }: { slug: string; onGuidance?
       action={
         <>
           <LinkButton to={projectPath(slug)} variant="accent" size="md">
-            Open Runs
+            Open runs
           </LinkButton>
           {onGuidance ? (
             <Button size="md" onPress={onGuidance}>

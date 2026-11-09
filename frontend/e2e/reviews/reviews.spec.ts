@@ -229,7 +229,7 @@ test.describe('reviews: keyboard triage', () => {
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
     await row(page, c0.id).locator('[data-review-card]').focus();
     await page.keyboard.press('r');
-    const dialog = page.getByRole('dialog', { name: 'Reject diagnosis' });
+    const dialog = page.getByRole('dialog', { name: 'Reject this issue?' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('textbox', { name: /Comment/ })).toBeFocused();
     await page.keyboard.press('Escape');

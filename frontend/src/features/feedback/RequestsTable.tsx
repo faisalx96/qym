@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Button, DataTable, EmptyState, type Column, type Key, type SortState, Flag } from '@/ui';
+import { DataTable, EmptyState, UserName, type Column, type Key, type SortState, Flag } from '@/ui';
 import type { FeedbackList, FeedbackRow } from '@/api/feedback';
 import { ComplexityTag, PriorityBadge, StatusBadge } from './badges';
-import { shortDate } from './format';
+import { dateTime } from './format';
 import { RequestLink } from './RequestLink';
 import styles from './feedback.module.css';
 
@@ -113,8 +113,8 @@ function columns(skeleton: boolean): Column<FeedbackRow>[] {
           bone(60)
         ) : (
           <span className={styles.about}>
-            <span>{r.submitter.name}</span>
-            <span className={styles.aboutSub}>{shortDate(r.created_at)}</span>
+            <UserName id={r.submitter.id} name={r.submitter.name} />
+            <span className={styles.aboutSub}>{dateTime(r.created_at)}</span>
           </span>
         ),
     },
@@ -131,8 +131,8 @@ export interface RequestsTableProps {
   toolbar: React.ReactNode;
   footer: React.ReactNode;
   filtered: boolean;
-  /** Drops every filter and the search (the empty state of a filter that matches nothing offers it, QE-127). */
-  onClearFilters: () => void;
+  /** The list search text: the filtered empty state echoes it. */
+  q?: string;
   /** Rows the last loaded page had: the loading frame draws as many. */
   lastCount: number;
 }
@@ -176,17 +176,9 @@ export function RequestsTable(p: RequestsTableProps) {
       error={p.error && !p.data ? p.error : undefined}
       onRetry={p.onRetry}
       errorTitle="Couldn’t load feedback"
-      empty="No requests match."
+      empty="No requests match"
       filteredEmpty={
-        <EmptyState
-          compact
-          title="No requests match."
-          action={
-            <Button variant="neutral" size="sm" onPress={p.onClearFilters}>
-              Clear filters
-            </Button>
-          }
-        />
+        <EmptyState compact title={p.q ? `No requests match “${p.q}”` : 'No requests match these filters'} />
       }
       isFiltered={p.filtered}
       storageKey="feedback-requests"

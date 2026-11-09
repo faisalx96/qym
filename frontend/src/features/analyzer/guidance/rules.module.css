@@ -26,6 +26,13 @@
   flex-wrap: wrap;
 }
 
+.metaLine {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .versionsHead {
   justify-content: space-between;
 }
@@ -206,13 +213,6 @@
   padding: var(--space-sm) var(--space-md);
 }
 
-.diffItem summary {
-  cursor: pointer;
-  color: var(--text-primary);
-  font-size: var(--font-md);
-  font-weight: 600;
-}
-
 .diffPair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -252,10 +252,6 @@
 }
 
 .ruleToggle:hover,
-.diffItem summary:hover {
-  color: var(--accent-primary);
-}
-
 /* a read-only rule's instruction, as text (C213) */
 .ruleText {
   margin: 0;

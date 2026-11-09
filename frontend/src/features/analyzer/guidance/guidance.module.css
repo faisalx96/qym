@@ -57,31 +57,6 @@
   min-width: 0;
 }
 
-.banner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
-.banner[data-tone='danger'] {
-  border-color: var(--error);
-}
-
-.banner[data-tone='warning'] {
-  border-color: var(--warning);
-}
-
-.bannerText {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .spacer {
   flex: 1;
 }

@@ -55,7 +55,7 @@ test.describe('Test Selected (6)', () => {
       else await expect(box).toBeDisabled(); // the fourth is refused
     }
     const body = page.waitForRequest((r) => r.url().includes('/analyze-test'));
-    await rail(page).getByRole('button', { name: 'Test selected (3)' }).click();
+    await rail(page).getByRole('button', { name: /^Test selected\s?3$/ }).click();
     expect(((await body).postDataJSON() as { item_ids: string[] }).item_ids).toEqual([
       'item-1',
       'item-2',

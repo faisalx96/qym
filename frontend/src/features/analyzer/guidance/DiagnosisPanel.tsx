@@ -16,8 +16,11 @@ import {
   Button,
   ConfirmDialog,
   EmptyState,
+  Disclosure,
   ErrorState,
   Icon,
+  IconButton,
+  InlineNotice,
   SearchField,
   SectionHeader,
   SegmentedControl,
@@ -44,6 +47,7 @@ import {
   type CategoryDraft,
   type SubDraft,
 } from '../model/catalog';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import { rootCauseIssues } from '../model/rootCause';
 import s from './guidance.module.css';
 import d from './diagnosis.module.css';
@@ -293,13 +297,15 @@ function DiagnosisEditor({
       )
     : [];
 
-  return (
-    <div className={s.diag}>
-      <SectionHeader
-        title="Diagnosis categories"
-        description={`${categories.length} ${categories.length === 1 ? 'category' : 'categories'} · ${totalExamples} approved ${totalExamples === 1 ? 'example' : 'examples'}`}
-        aside={
-          <div className={d.saveCluster}>
+  const saveFoot = (
+    <div className={d.saveFoot}>
+      <SaveFooter
+        dirty={dirty}
+        saving={save.isPending}
+        onSave={() => void submit()}
+        hideSave={!canManage}
+        meta={
+          conflict || failure || (showProblems && hasProblems) ? (
             <StatusMark
               tone={badge.tone}
               shape={badge.shape}
@@ -307,68 +313,45 @@ function DiagnosisEditor({
               role="status"
               data-testid="catalog-save-state"
             />
-            <Button
-              variant="accent"
-              size="sm"
-              isDisabled={!canManage || !dirty || save.isPending}
-              onPress={() => void submit()}
-            >
-              Save changes
-            </Button>
-          </div>
+          ) : undefined
         }
       />
+    </div>
+  );
+
+  return (
+    <div className={s.diag}>
+      <SectionHeader
+        title="Diagnosis categories"
+        description={`${categories.length} ${categories.length === 1 ? 'category' : 'categories'} · ${totalExamples} approved ${totalExamples === 1 ? 'example' : 'examples'}`}
+      />
       {!canManage ? (
-        <div className={s.banner} role="note">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            Project manager access is required to edit categories. You can read the catalog and its examples.
-          </Text>
-        </div>
+        <InlineNotice tone="neutral" icon="info">
+          Project manager access is required to edit categories. You can read the catalog and its examples.
+        </InlineNotice>
       ) : null}
       {conflict ? (
-        <div className={s.banner} role="alert" data-tone="danger">
-          <Icon name="warning" size={14} />
-          <div className={s.bannerText}>
-            <Text variant="md" weight={600}>
-              The catalog changed while you were editing
-            </Text>
-            <Text variant="base" tone="secondary">
-              {`Someone saved revision ${conflict.version}. Your edits are still here. Reload to take theirs (your edits are discarded) or overwrite theirs with yours.`}
-            </Text>
-          </div>
+        <InlineNotice tone="danger" lead="The catalog changed while you were editing.">
+          {`Someone saved revision ${conflict.version}. Your edits are still here. Reload to take theirs (your edits are discarded) or overwrite theirs with yours.`}{' '}
           <Button size="sm" onPress={() => void reloadLatest()}>
             Reload latest
-          </Button>
+          </Button>{' '}
           <Button size="sm" variant="danger" onPress={() => void submit(conflict.version)}>
             Overwrite with my edits
           </Button>
-        </div>
+        </InlineNotice>
       ) : null}
-      {failure ? (
-        <div className={s.banner} role="alert" data-tone="danger">
-          <Icon name="warning" size={14} />
-          <Text variant="base" tone="secondary">
-            {failure}
-          </Text>
-        </div>
-      ) : null}
+      {failure ? <InlineNotice tone="danger">{failure}</InlineNotice> : null}
       {showProblems && hasProblems ? (
-        <div className={s.banner} role="alert" data-tone="warning">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            {`Add both Description and Use when for: ${[...problems.categories, ...problems.subcategories].join(', ')}.`}
-          </Text>
-        </div>
+        <InlineNotice tone="warning" icon="info">
+          {`Add both Description and Use when for: ${[...problems.categories, ...problems.subcategories].join(', ')}.`}
+        </InlineNotice>
       ) : null}
       {newApprovals ? (
-        <div className={s.banner} role="status" data-tone="warning">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            New approvals are available. Their examples are shown below; save or discard your edits to refresh
-            the catalog.
-          </Text>
-        </div>
+        <InlineNotice tone="warning" icon="info">
+          New approvals are available. Their examples are shown below; save or discard your edits to refresh
+          the catalog.
+        </InlineNotice>
       ) : null}
 
       <div className={d.tools}>
@@ -378,7 +361,7 @@ function DiagnosisEditor({
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}
-          width={240}
+          width="var(--search-width)"
         />
         {canManage ? (
           adding ? (
@@ -399,14 +382,14 @@ function DiagnosisEditor({
               />
               <Button
                 size="sm"
-                variant="accent"
+                variant="primary"
                 type="submit"
                 isDisabled={!newName.trim()}
                 disabledReason="Enter a category name"
               >
                 Add
               </Button>
-              <Button size="sm" variant="ghost" onPress={() => setAdding(false)}>
+              <Button size="sm" variant="neutral" onPress={() => setAdding(false)}>
                 Cancel
               </Button>
             </form>
@@ -419,17 +402,23 @@ function DiagnosisEditor({
       </div>
 
       {categories.length === 0 ? (
-        <EmptyState
-          compact
-          title="No categories yet"
-          body="Add a category, or approve diagnoses in Reviews."
-        />
+        <>
+          <EmptyState
+            compact
+            title="No categories yet"
+            body="Add a category, or approve diagnoses in Reviews."
+          />
+          {dirty ? saveFoot : null}
+        </>
       ) : !active ? (
-        <EmptyState
-          compact
-          title="No matching categories"
-          body={`No category name contains “${query.trim()}”.`}
-        />
+        <>
+          <EmptyState
+            compact
+            title="No matching categories"
+            body={`No category name contains “${query.trim()}”.`}
+          />
+          {dirty ? saveFoot : null}
+        </>
       ) : (
         <Tabs
           label="Categories"
@@ -556,19 +545,18 @@ function DiagnosisEditor({
                               ) : null}
                               <span className={s.spacer} />
                               {canManage && !x.exampleOnly ? (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  aria-label={`Remove subcategory ${x.name}`}
+                                <IconButton
+                                  tile
+                                  tone="danger"
+                                  icon="trash"
+                                  label={`Remove subcategory ${x.name}`}
                                   onPress={() =>
                                     editCategory(active.name, (c) => ({
                                       ...c,
                                       subs: c.subs.filter((y) => y.name !== x.name),
                                     }))
                                   }
-                                >
-                                  <Icon name="trash" size={12} />
-                                </Button>
+                                />
                               ) : null}
                             </div>
                             {x.exampleOnly ? (
@@ -615,14 +603,18 @@ function DiagnosisEditor({
                         });
                         return (
                           <li key={x.id}>
-                            <details className={d.example}>
-                              <summary>
-                                <span className={d.mono}>{x.item_id ?? `#${x.id}`}</span>
-                                {x.metric_name ? <Tag kind="data">{x.metric_name}</Tag> : null}
-                                <span>
-                                  {issues[0]?.finding || x.note || x.detail || 'Approved correction'}
-                                </span>
-                              </summary>
+                            <Disclosure
+                              className={d.example}
+                              title={
+                                <>
+                                  <span className={d.mono}>{x.item_id ?? `#${x.id}`}</span>{' '}
+                                  {x.metric_name ? <Tag kind="data">{x.metric_name}</Tag> : null}{' '}
+                                  <span>
+                                    {issues[0]?.finding || x.note || x.detail || 'Approved correction'}
+                                  </span>
+                                </>
+                              }
+                            >
                               <dl className={d.exampleBody}>
                                 {(
                                   [
@@ -642,7 +634,7 @@ function DiagnosisEditor({
                                     </div>
                                   ))}
                               </dl>
-                            </details>
+                            </Disclosure>
                           </li>
                         );
                       })}
@@ -656,6 +648,7 @@ function DiagnosisEditor({
                   )}
                 </TabPanel>
               </Tabs>
+              {saveFoot}
             </div>
           </TabPanel>
         </Tabs>

@@ -53,7 +53,7 @@ function CommentInner({
       description={description}
       footer={
         <>
-          <Button variant="ghost" onPress={() => onOpenChange(false)}>
+          <Button variant="neutral" onPress={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
@@ -69,7 +69,7 @@ function CommentInner({
       }
     >
       <Textarea
-        label={requireComment ? 'Comment' : 'Comment (optional)'}
+        label="Comment"
         isRequired={requireComment}
         value={comment}
         onChange={setComment}
@@ -99,7 +99,7 @@ export function ShortcutsDialog({
 }) {
   const [single, setSingle] = useSingleKeyShortcuts();
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Keyboard shortcuts" size="sm">
+    <Dialog open={open} onOpenChange={onOpenChange} title="Keyboard shortcuts">
       <dl className={styles.keys}>
         {SHORTCUTS.map((s) => (
           <div key={s.label} className={styles.keyRow}>
@@ -146,7 +146,7 @@ export function ConflictDialog({ detail, onReload }: { detail: string | null; on
       }
     >
       <p className={styles.conflictNote}>
-        Another reviewer decided some of these diagnoses after you selected them. Nothing was changed.
+        Another reviewer decided some of these issues after you selected them. Nothing was changed.
       </p>
     </Dialog>
   );
