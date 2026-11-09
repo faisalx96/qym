@@ -3,6 +3,8 @@ import type { LiveMetricSpec } from '@/api/live';
 import {
   Card,
   CopyButton,
+  DataTable,
+  Disclosure,
   KeyValueGrid,
   ScoreValue,
   StatusMark,
@@ -10,7 +12,7 @@ import {
   Text,
   TextBlock,
 } from '@/ui';
-import type { SqlPart } from '../../lib/summary';
+import type { SqlPart, SqlResult } from '../../lib/summary';
 import { labelFor, scoreText } from './presentation';
 import styles from '../../turn.module.css';
 
@@ -107,6 +109,48 @@ export function Facts({ value, label }: { value: Record<string, unknown> | null;
   );
 }
 
+function SqlPreview({ result }: { result: SqlResult }) {
+  // A sample without column names cannot be laid out, so no preview is offered.
+  if (result.rows === 0 || !result.sample.length || !result.columns.length) return null;
+  const title = `First ${result.sample.length}${result.rows === null ? '' : ` of ${result.rows}`} rows`;
+  return (
+    <Disclosure title={title}>
+      <DataTable<{ cells: (string | null)[]; index: number }>
+        aria-label={title}
+        rows={result.sample.map((cells, index) => ({ cells, index }))}
+        rowKey={(row) => row.index}
+        columns={result.columns.map((name, index) => ({
+          id: String(index),
+          header: <span dir="auto">{name}</span>,
+          label: name,
+          resizable: false,
+          cell: (row) => (
+            <span dir="auto" className={styles.tableText}>
+              {row.cells[index] == null ? (
+                <Text as="span" tone="muted">
+                  NULL
+                </Text>
+              ) : (
+                row.cells[index]
+              )}
+            </span>
+          ),
+        }))}
+        density="compact"
+        densityLocked
+        variant="embedded"
+        responsive="scroll"
+        stickyHeader={false}
+      />
+      {result.columnsTotal !== null && result.columnsTotal > result.columns.length ? (
+        <Text tone="muted" variant="sm">
+          Showing {result.columns.length} of {result.columnsTotal} columns
+        </Text>
+      ) : null}
+    </Disclosure>
+  );
+}
+
 export function SqlParts({ parts }: { parts: SqlPart[] }) {
   if (!parts.length) return <Text tone="muted">No SQL available for this turn.</Text>;
   return (
@@ -135,6 +179,15 @@ export function SqlParts({ parts }: { parts: SqlPart[] }) {
             <div className={styles.error} data-tone="danger">
               <TextBlock text={part.error} dir="auto" />
             </div>
+          ) : null}
+          <SqlPreview result={part} />
+          {part.replay ? (
+            <>
+              <Text tone="muted" variant="sm" as="p">
+                Replayed for comparison: {part.replay.rows ?? '—'} rows
+              </Text>
+              <SqlPreview result={part.replay} />
+            </>
           ) : null}
         </div>
       ))}

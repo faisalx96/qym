@@ -574,7 +574,7 @@ are character limits unless explicitly stated otherwise.
 | `label` | string or null | no | Up to 60 characters; default null; diagnosis category |
 | `label_reason` | string or null | no | Default null; plain explanation; no explicit text cap |
 | `answer` | string or null | no | Default null; strip NUL, keep first 200,000 characters |
-| `sql` | array of objects | no | Default `[]`; entries conventionally `{text, executed, rows, error}` |
+| `sql` | array of objects | no | Default `[]`; entries conventionally `{text, executed, rows, error, replay?}` |
 | `latency_ms` | number or null | no | Default null; milliseconds; must be finite if supplied |
 | `result_rows` | integer or null | no | 0–2,147,483,647; default null |
 | `tool_calls` | integer or null | no | 0–2,147,483,647; default null |
@@ -588,6 +588,14 @@ are character limits unless explicitly stated otherwise.
 `error` a string or null. These entry keys are conventions, not nested Pydantic
 validation. `id`, `source_id`, `received_at`, and `rejected` are server-owned
 fields and must not be sent as Turn fields.
+
+An optional `sql[].replay` object describes the result when the worker re-runs
+the agent's statement for comparison: `{rows, columns, columns_total, sample}`.
+Its `rows` is the replay's total row count (or null); the original entry's
+`executed`, `rows`, and `error` retain their original meaning. `columns` is an
+array of at most 20 column names, `columns_total` is the real column count,
+and `sample` contains the first rows as arrays of strings or null aligned with
+`columns`. All replay keys are optional; `sample: []` means counts only.
 
 ### 4.2 Summary contract
 
@@ -605,7 +613,7 @@ do not recognize them.
 | `judges.a.model`, `judges.b.model` | string | Judge model identifier |
 | `judges.a.compliance`, `judges.b.compliance` | `{sql: number, response: number, overall: number}` | Compliance axes, conventionally 0–1 |
 | `judges.a.reasoning`, `judges.b.reasoning` | string | Plain-language explanation of the judgment |
-| `judges.a.sql_parts`, `judges.b.sql_parts` | `[{text, executed, rows, error}]` | Judge SQL, execution flag, row count and nullable error |
+| `judges.a.sql_parts`, `judges.b.sql_parts` | `[{text, executed, rows, error, columns?, columns_total?, sample?}]` | Judge SQL, execution flag, total row count and nullable error; optional result preview uses the same `columns`, `columns_total`, and `sample` shape as `sql[].replay` above (`sample: []` for counts only) |
 | `judges.a.vs_agent`, `judges.b.vs_agent` | `{equivalent: boolean, result_set_match: boolean, coverage: {covered, total}}` | Judge comparison with the evaluated answer/query |
 | `judges_agree` | boolean | Whether the judges agree on the evaluation |
 | `coverage` | `{covered: integer, total: integer}` | Requirements addressed out of requirements checked |
@@ -641,7 +649,7 @@ A worked `summary` for a turn whose answer missed a requested region:
       "model": "judge-a",
       "compliance": {"sql": 0.6, "response": 0.5, "overall": 0.55},
       "reasoning": "The result omits one of the requested regions.",
-      "sql_parts": [{"text": "SELECT region, SUM(population) FROM population_sample GROUP BY region", "executed": true, "rows": 3, "error": null}],
+      "sql_parts": [{"text": "SELECT region, SUM(population) FROM population_sample GROUP BY region", "executed": true, "rows": 3, "error": null, "columns": ["region", "sum"], "columns_total": 2, "sample": [["الرياض", "1250"], ["مكة", null]]}],
       "vs_agent": {"equivalent": false, "result_set_match": false, "coverage": {"covered": 2, "total": 3}}
     },
     "b": {

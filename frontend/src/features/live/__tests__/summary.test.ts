@@ -22,6 +22,60 @@ import {
 } from '../lib/summary';
 
 describe('live turn summary readers', () => {
+  it('reads optional SQL previews and keeps replay counts separate from original counts', () => {
+    const preview = {
+      rows: 124,
+      columns: ['region', 'total'],
+      columns_total: 3,
+      sample: [
+        ['الرياض', '1250'],
+        ['مكة', null],
+      ],
+    };
+    const expected = { rows: 124, columns: preview.columns, columnsTotal: 3, sample: preview.sample };
+    expect(judgeOf({ judges: { a: { sql_parts: [preview] } } }, 'a')?.sqlParts[0]).toMatchObject(expected);
+    expect(sqlPartsOf([{ rows: 0, replay: preview }])[0]).toMatchObject({ rows: 0, replay: expected });
+    expect(sqlPartsOf([{}])[0]).toEqual({
+      text: null,
+      executed: null,
+      rows: null,
+      error: null,
+      columns: [],
+      columnsTotal: null,
+      sample: [],
+      replay: null,
+    });
+  });
+
+  it.each([null, false, 1, 'bad', {}, []])('ignores malformed SQL preview fields %#', (value) => {
+    expect(
+      sqlPartsOf([{ columns: value, columns_total: '2', sample: value, replay: value }])[0],
+    ).toMatchObject({ columns: [], columnsTotal: null, sample: [] });
+    expect(sqlPartsOf([{ replay: value }])[0]?.replay).toEqual(
+      value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? { rows: null, columns: [], columnsTotal: null, sample: [] }
+        : null,
+    );
+  });
+
+  it('preserves sample positions without coercing malformed cells or column names', () => {
+    expect(
+      sqlPartsOf([
+        {
+          columns: ['region', false, 'total'],
+          columns_total: Infinity,
+          sample: [null, 'bad', ['الرياض', {}, 7, false, null, '']],
+          replay: { rows: '124', columns: {}, columns_total: NaN, sample: [false, [null, 'مكة']] },
+        },
+      ])[0],
+    ).toMatchObject({
+      columns: [],
+      columnsTotal: null,
+      sample: [['الرياض', null, null, null, null, '']],
+      replay: { rows: null, columns: [], columnsTotal: null, sample: [[null, 'مكة']] },
+    });
+  });
+
   it('reads both judges and preserves the SQL execution evidence', () => {
     expect(judgeOf(turnDetail.summary, 'a')).toMatchObject({
       model: 'judge-a',
@@ -237,6 +291,94 @@ function renderTurn(data: LiveTurnDetail = turnDetail, search = '', error?: ApiE
 }
 
 describe('live turn evidence presentation', () => {
+  it('shows a collapsed judge preview with Arabic, NULL and a truncated-column note in both tabs', async () => {
+    const user = userEvent.setup();
+    renderTurn({
+      ...turnDetail,
+      summary: {
+        judges: {
+          a: {
+            sql_parts: [
+              {
+                text: 'SELECT region, total',
+                executed: true,
+                rows: 124,
+                columns: ['region', 'total'],
+                columns_total: 3,
+                sample: [
+                  ['الرياض', '1250'],
+                  ['مكة', null],
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+    for (const tab of ['Diagnosis', 'Judges']) {
+      await user.click(screen.getByRole('tab', { name: tab }));
+      expect(screen.getByText('124 rows')).toBeInTheDocument();
+      const disclosure = screen.getByRole('button', { name: 'First 2 of 124 rows' });
+      expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('grid')).not.toBeInTheDocument();
+      await user.click(disclosure);
+      const table = screen.getByRole('grid');
+      expect(within(table).getAllByRole('columnheader')).toHaveLength(2);
+      expect(within(table).getByText('الرياض')).toHaveAttribute('dir', 'auto');
+      expect(within(table).getByText('NULL')).toHaveAttribute('data-tone', 'muted');
+      expect(screen.getByText('Showing 2 of 3 columns')).toBeInTheDocument();
+    }
+  });
+
+  it('shows agent replay counts separately and previews with an unknown total', async () => {
+    const user = userEvent.setup();
+    renderTurn({
+      ...turnDetail,
+      turn: {
+        ...turnDetail.turn,
+        sql: [
+          {
+            text: 'SELECT region',
+            rows: 7,
+            replay: {
+              rows: null,
+              columns: ['region'],
+              sample: [['الرياض']],
+            },
+          },
+          { text: 'SELECT total', replay: { rows: 124, sample: [] } },
+        ],
+      },
+    });
+    expect(screen.getByText('7 rows')).toBeInTheDocument();
+    expect(screen.getByText('Replayed for comparison: — rows')).toBeInTheDocument();
+    expect(screen.getByText('Replayed for comparison: 124 rows')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'First 1 rows' }));
+    expect(screen.getByRole('grid')).toHaveTextContent('الرياض');
+    expect(screen.queryByText(/Showing .* columns/)).not.toBeInTheDocument();
+  });
+
+  it('keeps old SQL evidence unchanged and never previews zero rows', () => {
+    renderTurn({
+      ...turnDetail,
+      summary: {
+        judges: {
+          a: {
+            sql_parts: [
+              { text: 'SELECT old', executed: true },
+              { text: 'SELECT empty', rows: 0, columns: ['region'], sample: [['unexpected']] },
+            ],
+          },
+        },
+      },
+    });
+    expect(screen.getByText('SELECT old')).toBeInTheDocument();
+    expect(screen.getByText('— rows')).toBeInTheDocument();
+    expect(screen.getByText('0 rows')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^First / })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Replayed for comparison/)).not.toBeInTheDocument();
+  });
+
   it('uses the specific not-found message only for a real 404', () => {
     renderTurn(turnDetail, '', new ApiError(404, 'Turn not found'));
     expect(screen.getByRole('alert')).toHaveTextContent('This turn is not in qym');

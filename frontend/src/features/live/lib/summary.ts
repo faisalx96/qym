@@ -21,20 +21,45 @@ const recordsOf = (value: unknown): Record<string, unknown>[] =>
       })
     : [];
 
-export interface SqlPart {
+export interface SqlResult {
+  rows: number | null;
+  columns: string[];
+  columnsTotal: number | null;
+  sample: (string | null)[][];
+}
+
+export interface SqlPart extends SqlResult {
   text: string | null;
   executed: boolean | null;
-  rows: number | null;
   error: string | null;
+  replay: SqlResult | null;
+}
+
+function sqlResultOf(part: Record<string, unknown>): SqlResult {
+  return {
+    rows: numberOf(part.rows),
+    columns:
+      Array.isArray(part.columns) && part.columns.every((column) => typeof column === 'string')
+        ? part.columns
+        : [],
+    columnsTotal: numberOf(part.columns_total),
+    sample: Array.isArray(part.sample)
+      ? part.sample.filter(Array.isArray).map((row) => row.map(stringOf))
+      : [],
+  };
 }
 
 export function sqlPartsOf(value: unknown): SqlPart[] {
-  return recordsOf(value).map((part) => ({
-    text: stringOf(part.text),
-    executed: booleanOf(part.executed),
-    rows: numberOf(part.rows),
-    error: stringOf(part.error),
-  }));
+  return recordsOf(value).map((part) => {
+    const replay = recordOf(part.replay);
+    return {
+      ...sqlResultOf(part),
+      text: stringOf(part.text),
+      executed: booleanOf(part.executed),
+      error: stringOf(part.error),
+      replay: replay ? sqlResultOf(replay) : null,
+    };
+  });
 }
 
 interface Coverage {
