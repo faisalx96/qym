@@ -58,7 +58,7 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
         {issues.map((i, idx) => (
           <li key={idx} className={s.issue}>
             <div className={s.issueTags}>
-              <Tag kind="role">{i.category || 'Uncategorized'}</Tag>
+              <Tag kind="data">{i.category || 'Uncategorized'}</Tag>
               {i.subcategory ? <Tag kind="data">{i.subcategory}</Tag> : null}
               {i.confidence != null ? (
                 <Text

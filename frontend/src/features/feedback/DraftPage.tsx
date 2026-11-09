@@ -382,7 +382,9 @@ function DraftConversation({
         title="New feedback"
         description="Answer the assistant’s questions. Nothing is submitted until you confirm a proposal."
         meta={[
-          <Tag key="s">{subjectTag}</Tag>,
+          <Tag key="s" kind="data">
+            {subjectTag}
+          </Tag>,
           'Draft, only you can see it',
           `Deleted after ${info.retention_days} days without a submit`,
         ]}
