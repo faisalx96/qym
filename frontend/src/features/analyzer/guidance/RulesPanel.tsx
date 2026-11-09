@@ -32,6 +32,7 @@ import {
   Flag,
   StatusMark,
 } from '@/ui';
+import { formatAgo } from '@/lib/dates';
 import { formatDateParts } from '@/lib/format';
 import { useDraftRules } from '../useDraftRules';
 import { useRuleGenerator } from '../useRuleGenerator';
@@ -41,14 +42,7 @@ import { ExamplePicker, allExampleFields, type ExampleSelection } from './Exampl
 import s from './rules.module.css';
 
 function relative(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (seconds < 60) return 'just now';
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
+  return iso ? formatAgo(iso) : '';
 }
 
 export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canManage: boolean }) {
