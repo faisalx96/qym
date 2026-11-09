@@ -52,8 +52,6 @@ export interface ScopeBarProps {
   shown: number;
   total: number;
   chips: ScopeChip[];
-  /** cv3-shim: remove after C-44 (deprecated: the ScopeBar has no Clear all; this prop does nothing). */
-  onClearAll?: () => void;
   onJumpToItems: () => void;
   /** Wide: the inline sidebar is shown. Narrow: the drawer is open. */
   sidebarOpen: boolean;

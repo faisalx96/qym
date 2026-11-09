@@ -1,7 +1,6 @@
-/** The report's scope: whether the reader narrowed the item set, the removable chips, "N of M", and Clear all. */
-import { useCallback, useMemo } from 'react';
+/** The report's scope: whether the reader narrowed the item set, its chips and "N of M" (the one Clear is in the nav, C-44). */
+import { useMemo } from 'react';
 import type { ScopeChip } from '@/ui';
-import { emptyFilters } from '../lib/filterRules';
 import { scopeChips } from '../lib/scopeFilters';
 import { useRunPage } from '../RunContext';
 
@@ -12,7 +11,6 @@ export interface RunScope {
   chips: ScopeChip[];
   shown: number;
   total: number;
-  clearAll: () => void;
 }
 
 export function useScope(): RunScope {
@@ -23,16 +21,11 @@ export function useScope(): RunScope {
     () => entries.map((e) => ({ key: e.key, label: e.label, onClear: () => replaceView(e.clear(view)) })),
     [entries, view, replaceView],
   );
-  const clearAll = useCallback(
-    () => replaceView({ ...view, q: '', show: 'all', dataset: null, page: 1, filters: emptyFilters() }),
-    [view, replaceView],
-  );
   return {
     active: entries.length > 0,
     searchOnly: entries.length > 0 && entries.every((e) => e.key === 'q'),
     chips,
     shown: items.length,
     total: payload.snapshot.rows.length,
-    clearAll,
   };
 }

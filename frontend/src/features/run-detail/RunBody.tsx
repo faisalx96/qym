@@ -137,10 +137,6 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
             shown={scope.shown}
             total={scope.total}
             chips={scope.chips}
-            onClearAll={() => {
-              setDrawerOpen(false);
-              scope.clearAll();
-            }}
             onJumpToItems={jumpToItems}
             narrow={!wide}
             sidebarOpen={wide ? sidebarShown : drawerOpen}
