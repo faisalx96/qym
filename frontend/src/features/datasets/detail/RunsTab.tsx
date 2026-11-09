@@ -101,6 +101,7 @@ export function RunsTab({
       <DataTable<DatasetRunRow>
         aria-label="Runs on this dataset"
         storageKey="datasets.runs.v3"
+        groupBand={false}
         rows={runs}
         rowKey={(r) => r.id}
         rowHref={(r) => runPath(slug, r.id)}

@@ -207,6 +207,7 @@ export function ItemRunsTab({
       <DataTable<ItemRunRow>
         aria-label="Runs for this item"
         storageKey="datasets.item.runs.v4"
+        groupBand={false}
         rows={rows}
         rowKey={(r) => r.run_id}
         sort={sort}
