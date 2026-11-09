@@ -136,7 +136,7 @@ test('leaving the editor with unpublished changes asks first', async ({ page }) 
   await (await maxAttempts(page)).fill('4');
   await expect(pane(page)).toContainText('1 change');
   await pane(page).getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog(page)).toContainText('Leave without publishing?');
+  await expect(dialog(page)).toContainText('Discard unsaved changes?');
   await dialog(page).getByRole('button', { name: 'Keep editing' }).click();
   await expect(page).toHaveURL(/default-preset\/edit/);
 });

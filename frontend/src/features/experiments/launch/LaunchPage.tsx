@@ -120,9 +120,9 @@ function LaunchBody({
         onOpenChange={(open) => {
           if (!open && blocker.state === 'blocked') blocker.reset();
         }}
-        title="Leave without launching?"
+        title="Discard unsaved changes?"
         description="Your changes to this experiment will be lost."
-        confirmLabel="Leave"
+        confirmLabel="Discard changes"
         cancelLabel="Keep editing"
         tone="danger"
         onConfirm={() => {
