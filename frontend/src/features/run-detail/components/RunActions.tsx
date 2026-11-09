@@ -18,6 +18,7 @@ import { RunDialogs, type DialogState } from '@/features/runs-list/RunDialogs';
 import {
   ActionTile,
   Button,
+  CountTile,
   DropdownMenu,
   Icon,
   LinkButton,
@@ -203,7 +204,7 @@ export function ReviewLog({ runId, enabled }: { runId: string; enabled: boolean 
       testId="review-log-popover"
       trigger={
         <Button size="sm" variant="neutral" aria-expanded={open} data-testid="review-history-button">
-          History {events.length}
+          History<CountTile>{events.length}</CountTile>
           <Icon name={open ? 'chevron-up' : 'chevron-down'} size={12} />
         </Button>
       }

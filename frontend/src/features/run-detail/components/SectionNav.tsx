@@ -10,6 +10,7 @@ import { Button as AriaButton } from 'react-aria-components';
 import {
   Button,
   ClearFiltersButton,
+  CountTile,
   DropdownMenu,
   Icon,
   IconButton,
@@ -108,7 +109,7 @@ function NavFilters() {
             icon={<Icon name="list" size={12} />}
             data-testid="nav-open-filters"
           >
-            Filters{count ? ` (${count})` : ''}
+            Filters{count ? <CountTile>{count}</CountTile> : null}
           </Button>
         }
       >
@@ -323,7 +324,15 @@ export function SectionNav({ onSection }: SectionNavProps) {
             }
             items={overflow.map((e) => ({
               id: e.id,
-              label: typeof e.count === 'number' ? `${e.label} (${e.count})` : e.label,
+              label:
+                typeof e.count === 'number' ? (
+                  <>
+                    {e.label}
+                    <CountTile>{e.count}</CountTile>
+                  </>
+                ) : (
+                  e.label
+                ),
             }))}
             onAction={(id) => onSection(id as SectionId)}
           />
