@@ -273,7 +273,7 @@ function AccessBody({
             }}
           />
         ) : (
-          <Tag tone={r.level === 'modify' ? 'accent' : undefined}>
+          <Tag kind="role" tone={r.level === 'modify' ? 'accent' : undefined}>
             {r.level === 'modify' ? 'Modify' : 'View'}
           </Tag>
         ),
