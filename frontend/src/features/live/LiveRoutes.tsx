@@ -51,7 +51,11 @@ export function LiveOverviewRoute() {
       <LiveOverviewPage
         slug={slug}
         source={source}
-        day={get('day') || new Date().toISOString().slice(0, 10)}
+        day={
+          get('day') ||
+          query.data?.sources.find((s) => s.key === source)?.today ||
+          new Date().toISOString().slice(0, 10)
+        }
       />
     );
   }
