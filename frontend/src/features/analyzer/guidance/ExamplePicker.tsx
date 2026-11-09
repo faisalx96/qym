@@ -3,6 +3,7 @@ import { useExamples, type AnalysisScope, type ExampleQuery } from '@/api/analys
 import {
   Button,
   Checkbox,
+  CountTile,
   Dialog,
   EmptyState,
   ErrorState,
@@ -274,7 +275,7 @@ function PickerBody({
               })
             }
           >
-            {`Select all filtered${data ? ` (${data.matching_ids.length})` : ''}`}
+            Select all filtered{data ? <CountTile>{data.matching_ids.length}</CountTile> : null}
           </Checkbox>
           <Checkbox isSelected={selectedOnly} onChange={reset(setSelectedOnly)}>
             View selected

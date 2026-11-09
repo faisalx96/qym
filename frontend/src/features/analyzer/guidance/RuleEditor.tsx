@@ -4,6 +4,7 @@ import {
   Button,
   Checkbox,
   ConfirmDialog,
+  CountTile,
   EmptyState,
   Icon,
   IconButton,
@@ -88,7 +89,7 @@ export function RuleEditor({
               disabledReason="Select the rules to delete"
               onPress={() => setDeleting([...checked])}
             >
-              {`Delete selected${checked.size ? ` (${checked.size})` : ''}`}
+              Delete selected{checked.size ? <CountTile>{checked.size}</CountTile> : null}
             </Button>
             <span className={s.spacer} />
             <Button
