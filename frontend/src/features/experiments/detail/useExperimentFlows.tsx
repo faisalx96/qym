@@ -322,7 +322,7 @@ export function useExperimentFlows(
             required: true,
             autoFocus: true,
           },
-          { name: 'notes', label: 'Notes', type: 'textarea', rows: 2, placeholder: 'Optional' },
+          { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
         ]}
         confirmLabel="Save preset"
         onSubmit={async (values) => {

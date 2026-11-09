@@ -103,7 +103,7 @@ function Inner({
         ))}
         {actionable > 0 ? (
           <Textarea
-            label="Reason (optional)"
+            label="Reason"
             placeholder="Why are you cancelling?"
             value={reason}
             onChange={(v) => setReason(v.slice(0, 1000))}

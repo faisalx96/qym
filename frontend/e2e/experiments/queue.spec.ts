@@ -157,7 +157,7 @@ test.describe('queue page', () => {
     await expect(dialog.locator('[data-split="remote"]')).toHaveCount(0);
     // focus starts on the safe choice
     await expect(dialog.getByRole('button', { name: 'Keep jobs' })).toBeFocused();
-    await dialog.getByLabel('Reason (optional)').fill('wrong sweep range');
+    await dialog.getByLabel('Reason', { exact: true }).fill('wrong sweep range');
     await dialog.getByTestId('cancel-split-confirm').click();
     await expectToast(page, '2 cancelled');
 
@@ -296,7 +296,7 @@ test.describe('queue page', () => {
     const dialog = page.getByTestId('cancel-split-dialog');
     await expect(dialog).toContainText('Cancel 1 orphan job on staging?');
     await expect(dialog.locator('[data-split="orphans"]')).toContainText('Orphans on the service');
-    await dialog.getByLabel('Reason (optional)').fill('left over');
+    await dialog.getByLabel('Reason', { exact: true }).fill('left over');
     await dialog.getByTestId('cancel-split-confirm').click();
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toMatchObject({ environment_id: staging.id, reason: 'left over' });
