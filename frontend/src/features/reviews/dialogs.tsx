@@ -99,7 +99,7 @@ export function ShortcutsDialog({
 }) {
   const [single, setSingle] = useSingleKeyShortcuts();
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Keyboard shortcuts" size="sm">
+    <Dialog open={open} onOpenChange={onOpenChange} title="Keyboard shortcuts">
       <dl className={styles.keys}>
         {SHORTCUTS.map((s) => (
           <div key={s.label} className={styles.keyRow}>
