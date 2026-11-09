@@ -279,7 +279,7 @@ describe('overview service and history blocks', () => {
     const gap = container.querySelector('[data-live-day="2026-10-29"]')!;
     expect(gap.querySelector('[data-tone="warning"][data-shape="hourglass"]')).toHaveAttribute(
       'title',
-      'Worker gap: 7200 s between heartbeats',
+      'Worker gap: 7200s between heartbeats',
     );
     const running = container.querySelector('[data-live-day="2026-10-28"]')!;
     expect(running.querySelector('[data-shape="orbit"]')).not.toBeNull();

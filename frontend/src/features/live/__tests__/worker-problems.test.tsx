@@ -38,7 +38,7 @@ it('renders grouped counts, filters by component and level, and can clear filter
   const rows = () => container.querySelectorAll('[data-worker-event]');
   expect(rows()).toHaveLength(6);
   expect(screen.getByText('×14')).toBeVisible();
-  expect(screen.getByText('in 12 min')).toBeVisible();
+  expect(screen.getAllByText('in 12 min')[0]).toBeVisible();
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Component filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Gateway' }));

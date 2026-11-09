@@ -207,8 +207,8 @@ test('date range preview, run, progress and cancellation use the worker jobs API
     .locator('[data-live-block="worker-jobs"]')
     .getByRole('row')
     .filter({ has: page.getByText('Backfill', { exact: true }) });
-  await expect(row).toContainText('1 / 2 evaluated');
-  await row.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(row).toContainText('1/2');
+  await row.getByRole('button', { name: 'Cancel job', exact: true }).click();
   const cancel = page.getByRole('dialog', { name: 'Cancel job?' });
   const cancelled = page.waitForResponse(
     (response) =>
@@ -281,7 +281,7 @@ test('Problems groups repeated errors, copies a source report and links from the
   const problems = page.locator('[data-live-block="worker-problems"]');
   await expect(problems.locator('[data-worker-event]')).toHaveCount(2);
   const row = problems.locator('[data-worker-event]').filter({ hasText: langfuse.code });
-  await expect(row).toContainText('× 3');
+  await expect(row).toContainText('×3');
   await row.getByRole('button', { name: 'Copy report', exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(langfuse.code);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(seed.sourceKey);

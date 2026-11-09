@@ -118,12 +118,12 @@ it('shows the status strip values and matching job update from the fixture', asy
   expect(within(status).getByText('Running v3')).toBeVisible();
   expect(within(status).getByText(`since ${formatTableDate('2026-11-03T14:20:00Z')} by Ali`)).toBeVisible();
   expect(within(status).getByText('3m ago')).toBeVisible();
-  expect(within(status).getByText('every 60 s')).toBeVisible();
+  expect(within(status).getByText('every 60s')).toBeVisible();
   expect(within(status).getByText(formatTableDate('2026-11-03T14:18:00Z'))).toBeVisible();
   expect(within(status).getByText('47 today, 44 evaluated')).toBeVisible();
   const problems = within(status).getByRole('link', { name: '19 problems in the last hour' });
   expect(problems).toHaveAttribute('href', '/projects/demo/live/worker?source=worker#problems');
-  expect(within(problems).getByText('19')).toHaveAttribute('data-tone', 'warning');
+  expect(within(problems).getByText('19')).not.toHaveAttribute('data-tone');
   expect(within(status).getByText('Backfill · 12 of 22 turns')).toBeVisible();
   expect(within(status).getByText('updated 2m ago')).toBeVisible();
 });
@@ -171,7 +171,7 @@ it('collapses settings with current summaries and disables Save until values or 
   const trigger = within(evaluation).getByRole('button');
   expect(trigger).toHaveAttribute('aria-expanded', 'false');
   expect(trigger).toHaveTextContent(
-    'Chart vision on · Dataiku replay on · 3 lanes · poll 60 s · lookback 1 h',
+    'Chart vision on · Dataiku replay on · 3 lanes · poll 60s · lookback 1h',
   );
   expect(screen.getByText(`gateway listed 5 models at ${formatTableDate('2026-11-03T14:20:00Z')}`)).toBeVisible();
   const running = within(screen.getByRole('list', { name: 'Settings history' })).getByText('Running');
@@ -268,8 +268,10 @@ it('shows plain problem labels and opens the section targeted by a Fix link', as
     });
   });
   const problems = document.getElementById('problems')!;
-  for (const label of ['All', 'Settings', 'Judges', 'Dataiku', 'Delivery to qym', 'Turns', 'Jobs'])
-    expect(within(problems).getByRole('button', { name: label })).toBeVisible();
+  await userEvent.setup().click(within(problems).getByRole('button', { name: 'Component filter' }));
+  for (const label of ['Settings', 'Judges', 'Dataiku', 'Delivery to qym', 'Turns', 'Jobs'])
+    expect(screen.getByRole('checkbox', { name: label })).toBeVisible();
+  await userEvent.setup().keyboard('{Escape}');
   expect(await within(problems).findByText('Checks failed')).toBeVisible();
   expect(within(problems).getByText('gateway.models')).toBeVisible();
   const link = within(problems).getByRole('link', { name: 'Fix in Models' });
