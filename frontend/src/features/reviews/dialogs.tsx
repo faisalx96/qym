@@ -146,7 +146,7 @@ export function ConflictDialog({ detail, onReload }: { detail: string | null; on
       }
     >
       <p className={styles.conflictNote}>
-        Another reviewer decided some of these diagnoses after you selected them. Nothing was changed.
+        Another reviewer decided some of these issues after you selected them. Nothing was changed.
       </p>
     </Dialog>
   );

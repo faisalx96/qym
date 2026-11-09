@@ -41,7 +41,7 @@ export function ReviewRow({
   const issue = row.human_root_cause_issues?.[0] ?? row.ai_root_cause_issues?.[0];
   const summary = issue
     ? [issue.category, issue.subcategory, issue.finding].filter(Boolean).join(' · ')
-    : 'No diagnosis';
+    : 'No issue';
   const blocked = Boolean(row.review_block);
   const decideDisabled = busy || blocked;
   const blockTip = row.review_block ?? '';
@@ -56,7 +56,7 @@ export function ReviewRow({
       <Checkbox
         isSelected={selected}
         onChange={onToggleSelected}
-        aria-label={`Select diagnosis ${row.id}`}
+        aria-label={`Select issue ${row.id}`}
         hideLabel
         className={styles.check}
       />
@@ -106,7 +106,7 @@ export function ReviewRow({
           <>
             <Tooltip content={blocked ? blockTip : 'Approve'}>
               <IconButton
-                label={`Approve diagnosis ${row.id}`}
+                label={`Approve issue ${row.id}`}
                 icon="check"
                 tone="approve"
                 isDisabled={decideDisabled}
@@ -115,7 +115,7 @@ export function ReviewRow({
             </Tooltip>
             <Tooltip content={blocked ? blockTip : REJECT_TIP}>
               <IconButton
-                label={`Reject diagnosis ${row.id}`}
+                label={`Reject issue ${row.id}`}
                 icon="close"
                 tone="reject"
                 isDisabled={decideDisabled}
@@ -126,7 +126,7 @@ export function ReviewRow({
         ) : (
           <Tooltip content={blocked ? blockTip : 'Reset to pending'}>
             <IconButton
-              label={`Reset diagnosis ${row.id}`}
+              label={`Reset issue ${row.id}`}
               icon="retry"
               isDisabled={decideDisabled}
               onPress={onReset}

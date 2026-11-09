@@ -24,13 +24,7 @@ export function editableIssue(i: RootCauseIssue): RootCauseIssue {
 }
 
 export function IssueList({ issues, tone }: { issues: RootCauseIssue[]; tone: 'ai' | 'human' }) {
-  if (!issues.length) {
-    return (
-      <Text variant="base" tone="muted" data-empty>
-        {tone === 'ai' ? 'No AI diagnosis' : 'No human diagnosis'}
-      </Text>
-    );
-  }
+  if (!issues.length) return null;
   return (
     <ol className={styles.list} data-tone={tone}>
       {issues.map((i, n) => (

@@ -68,7 +68,7 @@ export function DetailPane(p: DetailPaneProps) {
     : null;
   const pending = row.status === 'pending';
   return (
-    <aside className={styles.pane} aria-label={`Diagnosis ${row.id}`} data-detail-pane={row.id}>
+    <aside className={styles.pane} aria-label={`Issue ${row.id}`} data-detail-pane={row.id}>
       <header className={styles.head}>
         <div className={styles.titleRow}>
           <Text as="h2" variant="lg" mono>
@@ -220,15 +220,29 @@ export function DetailPane(p: DetailPaneProps) {
 
       <div className={styles.columns}>
         <section aria-label="AI root-cause issues">
-          <Text variant="sm" tone="muted" weight={650} className={styles.colHead}>
-            AI ROOT-CAUSE ISSUES
-          </Text>
+          <div className={styles.colHeadRow}>
+            <Text variant="sm" tone="muted" weight={650} className={styles.colHead}>
+              AI ROOT-CAUSE ISSUES
+            </Text>
+            {(row.ai_root_cause_issues ?? []).length ? null : (
+              <Text variant="sm" tone="muted">
+                No AI issues
+              </Text>
+            )}
+          </div>
           <IssueList issues={row.ai_root_cause_issues ?? []} tone="ai" />
         </section>
         <section aria-label="Human root-cause issues">
-          <Text variant="sm" tone="muted" weight={650} className={styles.colHead}>
-            HUMAN ROOT-CAUSE ISSUES
-          </Text>
+          <div className={styles.colHeadRow}>
+            <Text variant="sm" tone="muted" weight={650} className={styles.colHead}>
+              HUMAN ROOT-CAUSE ISSUES
+            </Text>
+            {!p.editing && !(row.human_root_cause_issues ?? []).length ? (
+              <Text variant="sm" tone="muted">
+                No human issues
+              </Text>
+            ) : null}
+          </div>
           {p.editing ? (
             <IssueEditForm
               initial={editSeed(row)}

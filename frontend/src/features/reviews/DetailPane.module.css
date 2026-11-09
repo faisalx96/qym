@@ -94,8 +94,14 @@
   }
 }
 
-.colHead {
+.colHeadRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
   margin-bottom: var(--space-xs);
+}
+
+.colHead {
   letter-spacing: 0.05em;
 }
 

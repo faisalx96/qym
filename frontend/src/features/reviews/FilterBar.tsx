@@ -151,7 +151,7 @@ export function FacetRow({
 }) {
   const count = activeFilterCount(filters);
   return (
-    <div className={styles.facetRow} role="toolbar" aria-label="Diagnosis filters" data-testid="filter-bar">
+    <div className={styles.facetRow} role="toolbar" aria-label="Issue filters" data-testid="filter-bar">
       {FACETS.map((f) => (
         <FacetTrigger key={f.key} facet={f} filters={filters} facets={facets} onChange={onChange} />
       ))}

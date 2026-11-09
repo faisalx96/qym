@@ -124,7 +124,7 @@ export function ReviewsPage() {
         setLinked(row);
         if (filters.status !== 'all' && filters.status !== row.status) setFilters({ status: row.status });
       })
-      .catch(() => toast.show(`Diagnosis #${linkedId} could not be opened`, { tone: 'error' }));
+      .catch(() => toast.show(`Issue #${linkedId} could not be opened`, { tone: 'error' }));
     return () => {
       cancelled = true;
     };
@@ -278,9 +278,9 @@ export function ReviewsPage() {
       applyUpdate(current, updated); // may carry a new id (new revision)
       setCurrentId(updated.id);
       setEditing(false);
-      toast.show('Diagnosis saved', { tone: 'success' });
+      toast.show('Issue saved', { tone: 'success' });
     } catch (e) {
-      toast.show(actionErrorMessage('save the diagnosis', e), { tone: 'error' });
+      toast.show(actionErrorMessage('save the issue', e), { tone: 'error' });
     }
   }
 
@@ -290,11 +290,11 @@ export function ReviewsPage() {
       await deleteMut.mutateAsync(row.id);
       applyUpdate(row, { ...row, status: 'rejected' });
       if (currentId === row.id) moveTo(next);
-      toast.show(`Diagnosis #${row.id} deleted: it left the run’s root causes and Reviews`, {
+      toast.show(`Issue #${row.id} deleted: it left the run’s root causes and Reviews`, {
         tone: 'success',
       });
     } catch (e) {
-      toast.show(actionErrorMessage('delete the diagnosis', e), { tone: 'error' });
+      toast.show(actionErrorMessage('delete the issue', e), { tone: 'error' });
       throw e;
     }
   }
@@ -335,15 +335,15 @@ export function ReviewsPage() {
       } else invalidateCorrections(qc);
       setSelected(new Set());
       toast.show(
-        `${r.affected ?? ids.length} ${(r.affected ?? ids.length) === 1 ? 'diagnosis' : 'diagnoses'} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reset' ? 'reset' : 'deleted'}`,
+        `${r.affected ?? ids.length} ${(r.affected ?? ids.length) === 1 ? 'issue' : 'issues'} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reset' ? 'reset' : 'deleted'}`,
         { tone: 'success' },
       );
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        setConflict(e.detail || 'The selected diagnoses changed.');
+        setConflict(e.detail || 'The selected issues changed.');
         return;
       }
-      toast.show(actionErrorMessage('update the selected diagnoses', e), { tone: 'error' });
+      toast.show(actionErrorMessage('update the selected issues', e), { tone: 'error' });
       throw e;
     }
   }
@@ -381,7 +381,7 @@ export function ReviewsPage() {
       });
     },
     bulkApprove: () => {
-      if (!selected.size) toast.show('Select diagnoses with x first.', { tone: 'info' });
+      if (!selected.size) toast.show('Select issues with x first.', { tone: 'info' });
       else openBulk('approve');
     },
     focusSearch: () => searchRef.current?.focus(),
@@ -430,7 +430,7 @@ export function ReviewsPage() {
     <div className={fullWidth} data-reviews-page>
       <PageHeader
         title="Reviews"
-        description="Approve or reject root-cause diagnoses. Approved ones become examples for auto-analysis."
+        description="Approve or reject root-cause issues. Approved ones become examples for auto-analysis."
         meta={[
           <span key="q">Queue: {known ? stats.pending : '–'} to review</span>,
           <span key="p" className={styles.progress}>
@@ -463,13 +463,13 @@ export function ReviewsPage() {
               isSelected={allSelected}
               isIndeterminate={!allSelected && selected.size > 0}
               onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.id)) : new Set())}
-              aria-label="Select all visible diagnoses"
+              aria-label="Select all visible issues"
               hideLabel
             />
             <SearchField
               ref={searchRef}
-              label="Search diagnoses"
-              placeholder="Search diagnoses"
+              label="Search issues"
+              placeholder="Search issues"
               hint="/"
               value={search}
               onChange={setSearch}
@@ -487,7 +487,7 @@ export function ReviewsPage() {
               width={170}
             />
             <Text as="span" variant="sm" tone="muted" aria-live="polite" data-testid="result-count">
-              {first ? `${first.total} ${first.total === 1 ? 'diagnosis' : 'diagnoses'}` : ''}
+              {first ? `${first.total} ${first.total === 1 ? 'issue' : 'issues'}` : ''}
             </Text>
             <IconButton label="Keyboard shortcuts" icon="info" onPress={() => setHelp(true)} />
           </div>
@@ -559,7 +559,7 @@ export function ReviewsPage() {
           </div>
 
           {showSkeleton ? (
-            <Skeleton kind="table" rows={7} label="Loading diagnoses" />
+            <Skeleton kind="table" rows={7} label="Loading issues" />
           ) : list.isError ? (
             <ErrorState
               error={list.error}
@@ -592,7 +592,7 @@ export function ReviewsPage() {
             />
           ) : first ? (
             <div className={styles.layout} data-has-pane={current ? '' : undefined}>
-              <ul className={styles.rows} aria-label="Diagnoses" aria-busy={list.isFetching || undefined}>
+              <ul className={styles.rows} aria-label="Issues" aria-busy={list.isFetching || undefined}>
                 {rows.map((r) => (
                   <ReviewRow
                     key={r.id}
@@ -689,10 +689,10 @@ export function ReviewsPage() {
         onOpenChange={(o) => !o && setDialog(null)}
         title={
           dialog?.kind === 'bulk'
-            ? `${dialog.action === 'approve' ? 'Approve' : 'Reject'} ${bulkSelection(rows, selected, dialog.action).ids.length} diagnoses`
+            ? `${dialog.action === 'approve' ? 'Approve' : 'Reject'} ${bulkSelection(rows, selected, dialog.action).ids.length} issues`
             : ''
         }
-        description={`Applies to the selected diagnoses in ${describeView(filters)}.`}
+        description={`Applies to the selected issues in ${describeView(filters)}.`}
         requireComment={dialog?.kind === 'bulk' && dialog.action === 'reject'}
         confirmLabel={dialog?.kind === 'bulk' && dialog.action === 'reject' ? 'Reject' : 'Approve'}
         tone={dialog?.kind === 'bulk' && dialog.action === 'reject' ? 'danger' : 'primary'}
@@ -703,7 +703,7 @@ export function ReviewsPage() {
       <ConfirmDialog
         open={dialog?.kind === 'delete'}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={dialog?.kind === 'delete' ? `Delete diagnosis #${dialog.row.id}?` : ''}
+        title={dialog?.kind === 'delete' ? `Delete issue #${dialog.row.id}?` : ''}
         description="It leaves the run’s root causes and Reviews; an audit record is kept. To keep it on the run as wrong, use Reject instead."
         confirmLabel="Delete"
         tone="danger"
@@ -714,7 +714,7 @@ export function ReviewsPage() {
       <ConfirmDialog
         open={dialog?.kind === 'bulk-delete'}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={`Delete ${selected.size} ${selected.size === 1 ? 'diagnosis' : 'diagnoses'}?`}
+        title={`Delete ${selected.size} ${selected.size === 1 ? 'issue' : 'issues'}?`}
         description="They leave the runs’ root causes and Reviews; an audit record is kept. To keep them on the runs as wrong, use Reject instead."
         confirmLabel="Delete"
         tone="danger"
