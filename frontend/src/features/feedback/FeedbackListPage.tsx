@@ -337,9 +337,10 @@ export function FeedbackListPage() {
 function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (f: ExportFormat) => void }) {
   const trigger = (
     <Button
-      variant="neutral"
+      variant="accent"
       size="sm"
       icon={<Icon name="download" size={12} />}
+      iconEnd={<Icon name="chevron-down" size={12} />}
       isDisabled={disabled}
       data-testid="export-menu"
     >
