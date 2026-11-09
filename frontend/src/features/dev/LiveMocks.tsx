@@ -448,13 +448,7 @@ function Overview() {
           responsive="scroll"
           minWidth={850}
         >
-          <DataTable.Toolbar
-            count={
-              <Text variant="md" weight={600}>
-                Days
-              </Text>
-            }
-          />
+          <DataTable.Toolbar />
           <DataTable.Footer
             pagination={{ total: 7, page: 1, pageSize: 30, noun: 'days', onPageChange: noop }}
           />
