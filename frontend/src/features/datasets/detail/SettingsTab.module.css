@@ -27,10 +27,7 @@
 .fields {
   display: flex;
   flex-direction: column;
-}
-
-.fields > :last-child > div {
-  border-block-end: 0;
+  gap: var(--space-md);
 }
 
 .tags {
@@ -43,13 +40,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
-}
-
-.footRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-md);
 }
 
 .cardHead {
