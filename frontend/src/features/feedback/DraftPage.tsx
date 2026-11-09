@@ -472,9 +472,11 @@ function DraftConversation({
       <ConfirmDialog
         open={blocker.state === 'blocked'}
         onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
-        title="Leave this page?"
+        title="Discard unsaved changes?"
         description="You changed the proposal. Your edits are lost if you leave; the draft itself is kept."
-        confirmLabel="Leave"
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        tone="danger"
         onConfirm={() => {
           if (blocker.state === 'blocked') blocker.proceed();
         }}
