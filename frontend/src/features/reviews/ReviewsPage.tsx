@@ -432,9 +432,7 @@ export function ReviewsPage() {
         title="Reviews"
         description="Approve or reject root-cause diagnoses. Approved ones become examples for auto-analysis."
         meta={[
-          <span key="q">
-            Queue: <strong>{known ? stats.pending : '–'}</strong> to review
-          </span>,
+          <span key="q">Queue: {known ? stats.pending : '–'} to review</span>,
           <span key="p" className={styles.progress}>
             {known ? `${reviewed} of ${stats.total}` : '–'} reviewed
             <span
