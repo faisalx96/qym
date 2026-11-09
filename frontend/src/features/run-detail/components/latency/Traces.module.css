@@ -26,6 +26,14 @@
   margin: 0;
 }
 
+.headEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 /* Kind glyphs: the icon of a kind of work on a tint of its colour. */
 .glyph {
   display: inline-flex;
