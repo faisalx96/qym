@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useBlocker, useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/app/routes';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import {
   feedbackKeys,
@@ -116,6 +117,7 @@ export function DraftPage({ refId }: { refId: string }) {
           error={detail.error ?? messages.error}
           title="Couldn’t open this request"
           notFoundMessage="This request does not exist or is not yours"
+          parent={{ to: ROUTES.feedback, label: 'Feedback' }}
           onRetry={() => {
             void detail.refetch();
             void messages.refetch();
