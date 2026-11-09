@@ -1,8 +1,8 @@
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { LiveWorkerRead } from '@/api/liveWorker';
 import { formatHeaderDate } from '@/lib/dates';
 import { formatRelative } from '@/lib/format';
-import { Icon, LinkButton, StatStrip, StatusMark, Text } from '@/ui';
+import { Icon, StatStrip, StatusMark } from '@/ui';
 import { workerStateMark, workerTime } from './format';
 import styles from '../../worker.module.css';
 
@@ -40,10 +40,11 @@ export function StatusStrip({ read }: { read: LiveWorkerRead }) {
           {
             label: 'Last poll',
             icon: <Icon name="retry" />,
+            // D-29: band values are white band numbers, not secondary text.
             value: (
-              <Text as="span" title={poll ?? undefined} className={styles.wrap}>
+              <span title={poll ?? undefined} className={styles.wrap}>
                 {read.status.stale ? workerTime(poll) : formatRelative(poll)}
-              </Text>
+              </span>
             ),
             sub: read.status.stale
               ? interval != null
@@ -58,12 +59,9 @@ export function StatusStrip({ read }: { read: LiveWorkerRead }) {
             label: 'Last turn',
             icon: <Icon name="feedback" />,
             value: (
-              <Text
-                as="span"
-                title={read.status.last_turn_at ? formatHeaderDate(read.status.last_turn_at) : undefined}
-              >
+              <span title={read.status.last_turn_at ? formatHeaderDate(read.status.last_turn_at) : undefined}>
                 {workerTime(read.status.last_turn_at)}
-              </Text>
+              </span>
             ),
             sub: `${read.today.turns_seen} today, ${read.today.evaluated} evaluated`,
           },
@@ -71,15 +69,13 @@ export function StatusStrip({ read }: { read: LiveWorkerRead }) {
             label: 'Problems, last hour',
             icon: <Icon name="warning" />,
             value: (
-              <LinkButton
+              <Link
                 to={`${location.pathname}${location.search}#problems`}
-                variant="neutral"
+                className={styles.statLink}
                 aria-label={`${errors} ${errors === 1 ? 'problem' : 'problems'} in the last hour`}
               >
-                <Text as="span" mono>
-                  {errors}
-                </Text>
-              </LinkButton>
+                {errors}
+              </Link>
             ),
             tone: errors > 0 ? 'warning' : undefined,
           },
@@ -87,11 +83,11 @@ export function StatusStrip({ read }: { read: LiveWorkerRead }) {
             label: 'Current job',
             icon: <Icon name="clock" />,
             value: (
-              <Text as="span" className={styles.wrap}>
+              <span className={styles.wrap}>
                 {job
                   ? `${job.kind === 'backfill_preview' ? 'Preview' : 'Backfill'} · ${evaluated} of ${found} turns`
                   : 'None'}
-              </Text>
+              </span>
             ),
             sub: currentJob ? `updated ${formatRelative(currentJob.updated_at)}` : undefined,
           },

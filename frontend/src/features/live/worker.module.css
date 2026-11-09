@@ -123,6 +123,22 @@
   margin-inline-start: auto;
 }
 
+/* D-29: the Problems count is a white band number that links to the block: accent on hover, no underline (E-52). */
+.statLink {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--control-radius);
+}
+
+.statLink:hover {
+  color: var(--accent-primary);
+}
+
+.statLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 @container (width < 900px) {
   .fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
