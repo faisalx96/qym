@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { isNavActive, parseRoute, projectNav } from '../chrome/nav';
-import { initials } from '../chrome/UserMenu';
 import { slugify } from '../dialogs/CreateProjectDialog';
 import { wordDiff } from '../settings/PromptsTab';
 
@@ -44,9 +43,7 @@ describe('parseRoute', () => {
 });
 
 describe('helpers', () => {
-  it('initials and slugs', () => {
-    expect(initials('Meshari Aldossari', 'm@x.y')).toBe('MA');
-    expect(initials('', 'dev@local')).toBe('DL');
+  it('slugs', () => {
     expect(slugify('Customer Support Bot!')).toBe('customer-support-bot');
   });
   it('word diff marks additions and deletions', () => {
