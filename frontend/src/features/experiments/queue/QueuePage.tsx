@@ -51,6 +51,7 @@ import {
   Card,
   StatusMark,
   SearchField,
+  StatStrip,
 } from '@/ui';
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
@@ -622,11 +623,20 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
             <StatusMark tone="neutral" shape="ring" label="Unknown" />
           )}
         </div>
-        <div className={styles.counts}>
-          <Stat label="In flight" value={env.inflight} />
-          <Stat label="Queued" value={env.queued} />
-          <Stat label="Blocked" value={env.blocked} warn />
-        </div>
+        <StatStrip
+          aria-label={`Jobs on ${env.name}`}
+          items={[
+            { key: 'inflight', label: 'In flight', icon: <Icon name="play" />, value: env.inflight },
+            { key: 'queued', label: 'Queued', icon: <Icon name="clock" />, value: env.queued },
+            {
+              key: 'blocked',
+              label: 'Blocked',
+              icon: <Icon name="ban" />,
+              value: env.blocked,
+              tone: env.blocked ? 'warning' : undefined,
+            },
+          ]}
+        />
         {!healthy && env.health_error ? (
           <p className={styles.note2}>Dispatch is paused until the health check passes: {env.health_error}</p>
         ) : null}
@@ -645,18 +655,5 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
         ) : null}
       </div>
     </Card>
-  );
-}
-
-function Stat({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
-  return (
-    <div className={styles.stat}>
-      <Text variant="stat" tone={warn && value ? 'warning' : 'primary'}>
-        {value}
-      </Text>
-      <Text variant="sm" tone="secondary">
-        {label}
-      </Text>
-    </div>
   );
 }

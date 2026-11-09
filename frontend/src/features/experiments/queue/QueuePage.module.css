@@ -42,17 +42,6 @@
   justify-content: space-between;
 }
 
-.counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-lg);
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-}
-
 .note2 {
   margin: 0;
   color: var(--text-secondary);
