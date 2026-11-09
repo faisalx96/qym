@@ -347,7 +347,6 @@ function AccessBody({
         variant="embedded"
         density="regular"
         densityLocked
-        zebra={false}
         rows={rows}
         rowKey={(r) => r.person.id}
         columns={columns}

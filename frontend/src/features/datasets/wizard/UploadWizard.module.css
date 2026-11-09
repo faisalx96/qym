@@ -146,6 +146,11 @@
   white-space: nowrap;
 }
 
+/* page stripe on every second preview row (D-01, D-Q1) */
+.preview tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step), var(--bg-base));
+}
+
 .mapTable td,
 .preview td {
   font-size: var(--font-base);
