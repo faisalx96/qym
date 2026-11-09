@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { DataTable, EmptyState, type Column, type Key, type SortState, Flag } from '@/ui';
+import { DataTable, EmptyState, UserName, type Column, type Key, type SortState, Flag } from '@/ui';
 import type { FeedbackList, FeedbackRow } from '@/api/feedback';
 import { ComplexityTag, PriorityBadge, StatusBadge } from './badges';
 import { shortDate } from './format';
@@ -113,7 +113,7 @@ function columns(skeleton: boolean): Column<FeedbackRow>[] {
           bone(60)
         ) : (
           <span className={styles.about}>
-            <span>{r.submitter.name}</span>
+            <UserName id={r.submitter.id} name={r.submitter.name} />
             <span className={styles.aboutSub}>{shortDate(r.created_at)}</span>
           </span>
         ),

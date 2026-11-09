@@ -26,6 +26,7 @@ import {
   SectionHeader,
   Skeleton,
   Text,
+  UserName,
   useToast,
   Flag,
   StatusMark,
@@ -258,8 +259,12 @@ function RulesView({
                   </Text>
                   {stateBadge(v, productionId)}
                 </span>
-                <Text variant="sm" tone="muted">
-                  {`${v.rule_count} ${v.rule_count === 1 ? 'rule' : 'rules'} · ${v.created_by?.display_name ?? 'unknown'} · ${relative(v.updated_at ?? v.created_at)}`}
+                <Text variant="sm" tone="muted" className={s.metaLine}>
+                  <span>{`${v.rule_count} ${v.rule_count === 1 ? 'rule' : 'rules'}`}</span>
+                  <span>·</span>
+                  <UserName id={v.created_by?.id} name={v.created_by?.display_name ?? 'unknown'} />
+                  <span>·</span>
+                  <span>{relative(v.updated_at ?? v.created_at)}</span>
                 </Text>
               </button>
               <DropdownMenu
@@ -581,12 +586,17 @@ function VersionWorkspace({
           </div>
         }
       />
-      <Text variant="sm" tone="muted" as="p" data-testid="version-meta">
-        {[
-          `Created ${formatDateParts(version.created_at).full || '—'}`,
-          `Updated ${formatDateParts(version.updated_at).full || '—'}`,
-          `By ${version.created_by?.display_name ?? '—'}`,
-        ].join(' · ')}
+      <Text variant="sm" tone="muted" as="p" data-testid="version-meta" className={s.metaLine}>
+        <span>{`Created ${formatDateParts(version.created_at).full || '—'}`}</span>
+        <span>·</span>
+        <span>{`Updated ${formatDateParts(version.updated_at).full || '—'}`}</span>
+        <span>·</span>
+        <span>By</span>
+        {version.created_by ? (
+          <UserName id={version.created_by.id} name={version.created_by.display_name} />
+        ) : (
+          <span>—</span>
+        )}
       </Text>
       {generation}
       <RuleEditor draft={draft} editable={editable} />

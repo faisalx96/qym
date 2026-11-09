@@ -617,7 +617,7 @@
   gap: var(--space-xs) var(--space-sm);
 }
 
-.eventHead strong {
+.actor {
   color: var(--text-primary);
 }
 

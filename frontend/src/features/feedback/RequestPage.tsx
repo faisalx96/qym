@@ -7,10 +7,22 @@ import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { useCrumbLabel } from '@/lib/crumb-label';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Card, Eyebrow, Icon, PageHeader, StatStrip, TabPanel, Tabs, Tag, Text, TextBlock } from '@/ui';
+import {
+  Card,
+  Eyebrow,
+  Icon,
+  PageHeader,
+  StatStrip,
+  TabPanel,
+  Tabs,
+  Tag,
+  Text,
+  TextBlock,
+  UserName,
+} from '@/ui';
 import { StatusBadge, cap } from './badges';
 import { MsgItem } from './Chat';
-import { clock, dateTime, eventText, shortDate } from './format';
+import { clock, dateTime, eventText, headerDate, shortDate } from './format';
 import { RelatedList } from './RelatedList';
 import { RequestLink } from './RequestLink';
 import { TriagePanel } from './TriagePanel';
@@ -34,7 +46,12 @@ export function HistoryCard({ events }: { events: FeedbackEvent[] }) {
         {events.map((e) => (
           <li key={e.id} className={styles.event} data-event={e.kind}>
             <span className={styles.eventHead}>
-              <strong>{e.actor || 'System'}</strong> <span>{eventText(e)}</span>
+              {e.actor ? (
+                <UserName id={e.actor_user_id} name={e.actor} className={styles.actor} />
+              ) : (
+                <span>System</span>
+              )}{' '}
+              <span>{eventText(e)}</span>
               <time>{dateTime(e.created_at)}</time>
             </span>
             {e.note ? <span className={styles.eventNote}>{e.note}</span> : null}
@@ -134,7 +151,8 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
           </Tag>,
           <StatusBadge key="st" status={r.status} />,
           targetMeta(detail),
-          `${r.submitter.name} · ${dateTime(r.confirmed_at ?? r.created_at)}`,
+          <UserName key="by" id={r.submitter.id} name={r.submitter.name} />,
+          headerDate(r.confirmed_at ?? r.created_at),
         ]}
       />
       {declined ? (

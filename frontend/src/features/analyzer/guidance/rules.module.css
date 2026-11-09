@@ -26,6 +26,13 @@
   flex-wrap: wrap;
 }
 
+.metaLine {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .versionsHead {
   justify-content: space-between;
 }
