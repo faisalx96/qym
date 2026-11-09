@@ -5,8 +5,7 @@
 import type { ReactNode } from 'react';
 import { isTerminalJob, type CredentialState, type ExperimentDetail } from '@/api/experiments';
 import { formatHeaderDate, toDate } from '@/lib/dates';
-import { Eyebrow, Text, StatusMark } from '@/ui';
-import { Callout } from '../launch/components/Callout';
+import { Eyebrow, InlineNotice, Text, StatusMark } from '@/ui';
 import {
   CREDENTIALS_TITLE,
   CRED_API_KEY,
@@ -14,8 +13,8 @@ import {
   TOKEN_ENV_KEY,
   TOKEN_UNAVAILABLE_REASON,
   notSentLead,
+  notSentReason,
   notSentTail,
-  revokedWarning,
 } from './copy';
 import styles from './detail.module.css';
 
@@ -102,21 +101,23 @@ export function Credentials({ detail }: { detail: ExperimentDetail }) {
   let notice: ReactNode = null;
   if (facts.revokedStillNeeded) {
     notice = (
-      <Callout tone="warning">
-        <span data-testid="token-notice">{revokedWarning(at(token))}</span>
-      </Callout>
+      <InlineNotice
+        tone="warning"
+        lead={`Dataset read token revoked ${at(token)}.`}
+        data-testid="token-notice"
+      >
+        Retry the blocked jobs to issue a new one.
+      </InlineNotice>
     );
   } else if (facts.notDeclared.length) {
     notice = (
-      <Callout tone="info">
-        <span data-testid="token-notice">
-          {notSentLead(facts.notDeclared)}{' '}
-          <Text variant="base" as="span" mono>
-            {TOKEN_ENV_KEY}
-          </Text>
-          {notSentTail(facts.notDeclared)}
-        </span>
-      </Callout>
+      <InlineNotice tone="warning" lead={notSentLead(facts.notDeclared)} data-testid="token-notice">
+        {notSentReason(facts.notDeclared)}{' '}
+        <Text variant="base" as="span" mono>
+          {TOKEN_ENV_KEY}
+        </Text>
+        {notSentTail(facts.notDeclared)}
+      </InlineNotice>
     );
   }
   return (
