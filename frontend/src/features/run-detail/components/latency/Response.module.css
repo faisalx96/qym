@@ -99,7 +99,6 @@
 }
 
 .heroValue small {
-  margin-left: var(--space-xs);
   color: var(--text-muted);
   font-size: var(--font-md);
   font-weight: 600;

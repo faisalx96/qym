@@ -78,7 +78,6 @@
 }
 
 .total small {
-  margin-left: 2px;
   color: var(--text-muted);
   font-size: var(--font-sm);
 }
@@ -307,7 +306,6 @@
 }
 
 .kvalue small {
-  margin-left: 2px;
   color: var(--text-muted);
   font-size: var(--font-sm);
   font-weight: 600;

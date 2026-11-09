@@ -4,6 +4,7 @@
  * a pin filters to the items at or above it.
  */
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { formatDuration } from '@/lib/format';
 import { Card, ChartTooltipHost, Chip, Text, useMarkTip } from '@/ui';
 import {
   durParts,
@@ -74,7 +75,7 @@ function Pin({
       onClick={onPick}
     >
       <em>{pin.key}</em>
-      <b>{durParts(pin.ms)[0]}</b>
+      <b>{formatDuration(pin.ms)}</b>
     </button>
   );
 }
