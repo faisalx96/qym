@@ -217,10 +217,12 @@
   font-size: var(--font-sm);
 }
 
-/* Chart */
+/* Chart. The empty box has the plot's box: the same 720px cap and the chart aspect, so the chart height (C-35). */
 .chartEmpty {
   display: grid;
   place-items: center;
+  width: 100%;
+  max-width: 720px;
 }
 
 .chartBox {
