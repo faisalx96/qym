@@ -135,8 +135,12 @@ export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: Ma
                 <thead>
                   <tr>
                     <th scope="col">Environment</th>
-                    <th scope="col">{settingLabel}</th>
-                    <th scope="col">{metric}</th>
+                    <th scope="col" className={styles.num}>
+                      {settingLabel}
+                    </th>
+                    <th scope="col" className={styles.num}>
+                      {metric}
+                    </th>
                     <th scope="col">Combination</th>
                   </tr>
                 </thead>
@@ -144,8 +148,8 @@ export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: Ma
                   {rows.map((r, i) => (
                     <tr key={i}>
                       <td>{r.environment}</td>
-                      <td className={styles.mono}>{r.x}</td>
-                      <td className={styles.mono}>{r.y}</td>
+                      <td className={`${styles.mono} ${styles.num}`}>{r.x}</td>
+                      <td className={`${styles.mono} ${styles.num}`}>{r.y}</td>
                       <td>{r.combo || '—'}</td>
                     </tr>
                   ))}

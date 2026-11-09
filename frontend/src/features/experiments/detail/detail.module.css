@@ -360,16 +360,29 @@
 
 .plain th,
 .plain td {
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 var(--space-sm);
+  block-size: var(--row-compact);
   color: var(--text-secondary);
   text-align: start;
 }
 
 .plain th {
+  block-size: var(--table-header-height);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
   color: var(--text-muted);
   font-size: var(--font-sm);
   font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.plain .num {
+  text-align: center;
+}
+
+.plain tbody tr:nth-child(even) > td {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step-report), var(--card-bg));
 }
 
 /* Job history */
