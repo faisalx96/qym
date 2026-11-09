@@ -35,9 +35,17 @@ test('overview, settings and projects are as wide as the runs page at 1440px', a
   expect(max.trim()).toBe('1233px');
 });
 
-test('the profile page asks for the narrow container', async ({ page }) => {
-  await gotoApp(page, '/profile');
-  const el = page.locator('[data-profile-page]');
-  await expect(el).toBeVisible();
-  expect((await el.boundingBox())!.width).toBeLessThanOrEqual(1120);
+test('the profile page uses the constrained container', async ({ page }) => {
+  const width = async (path: string, selector: string) => {
+    await gotoApp(page, path);
+    const el = page.locator(selector).first();
+    await expect(el).toBeVisible();
+    await settled(page);
+    return Math.round((await el.boundingBox())!.width);
+  };
+  const settings = await width(`/projects/${tour.slug}/settings`, '[data-settings-page]');
+  const profile = await width('/profile', '[data-profile-page]');
+  expect(Math.abs(profile - settings), `profile ${profile}px vs settings ${settings}px`).toBeLessThanOrEqual(
+    2,
+  );
 });
