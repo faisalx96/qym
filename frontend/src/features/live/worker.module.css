@@ -97,6 +97,10 @@
   border-block-start: 1px solid var(--border-subtle);
 }
 
+.versionMeta {
+  min-height: var(--control-height);
+}
+
 .problemsFilters {
   display: flex;
   flex-wrap: wrap;
