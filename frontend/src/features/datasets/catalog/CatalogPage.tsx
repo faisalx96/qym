@@ -81,26 +81,6 @@ export function CatalogPage() {
       }
       actions={
         <>
-          {datasets.length ? (
-            <>
-              <SearchField
-                label="Search datasets"
-                placeholder="Search datasets"
-                value={search}
-                onChange={setSearch}
-                width={240}
-              />
-              <Select
-                label="Sort"
-                hideLabel
-                items={CATALOG_SORTS.map((s) => ({ key: s.key, label: s.label }))}
-                value={sort}
-                onChange={(k) => replaceUrlQuery({ sort: k === 'updated_desc' ? null : String(k) })}
-                searchable={false}
-                width={150}
-              />
-            </>
-          ) : null}
           <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="neutral">
             Deleted datasets
           </LinkButton>
@@ -137,6 +117,27 @@ export function CatalogPage() {
   return (
     <div className={fullWidth} data-datasets-catalog>
       {header}
+      {datasets.length ? (
+        <div className={styles.toolbar}>
+          <SearchField
+            label="Search datasets"
+            placeholder="Search datasets"
+            value={search}
+            onChange={setSearch}
+            width="var(--search-width)"
+            shortcut="/"
+          />
+          <Select
+            label="Sort"
+            hideLabel
+            items={CATALOG_SORTS.map((s) => ({ key: s.key, label: s.label }))}
+            value={sort}
+            onChange={(k) => replaceUrlQuery({ sort: k === 'updated_desc' ? null : String(k) })}
+            searchable={false}
+            width={150}
+          />
+        </div>
+      ) : null}
       {showSkeleton ? (
         <Skeleton kind="cards" count={6} label="Loading datasets" />
       ) : query.isError ? (
