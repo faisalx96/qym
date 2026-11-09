@@ -135,7 +135,7 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
       header={
         <div className={styles.railHead}>
           <Text variant="md">Triage</Text>
-          <Tag kind="accent">Admin</Tag>
+          <Tag kind="role">admin</Tag>
         </div>
       }
       footer={
