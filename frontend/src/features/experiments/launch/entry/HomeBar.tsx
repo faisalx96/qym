@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Button, TextField, Icon } from '@/ui';
+import { Button, TextField } from '@/ui';
 import { plural } from '../../lib/format';
 import { NAME_MAX, PSEUDO, pointerToFieldName } from '../model';
 import { useLaunch } from '../LaunchContext';
@@ -103,11 +103,7 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
         >
           Launch as is
         </Button>
-        <Button
-          variant="neutral"
-          iconEnd={<Icon name="chevron-right" size={12} />}
-          onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}
-        >
+        <Button variant="neutral" onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}>
           Customize
         </Button>
       </div>
