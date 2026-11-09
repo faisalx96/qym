@@ -46,7 +46,7 @@ test('Launch navigates to the experiment detail, the experiment exists, no guard
   await expectReady(page);
   await launchButton(page).click();
   await expect(page).toHaveURL(EXPERIMENT_URL);
-  await expect(dialog(page).filter({ hasText: 'Leave without launching?' })).toHaveCount(0);
+  await expect(dialog(page).filter({ hasText: 'Discard unsaved changes?' })).toHaveCount(0);
   await expect(page.getByText('first launch').first()).toBeVisible();
   const id = page.url().split('/').pop()!;
   const exp = await getExperiment(request, f.project.id, id);
@@ -142,11 +142,11 @@ test('server 422 validation errors are listed, toasted and the first one is focu
   await launchButton(page).click();
   await expect(page.getByText('1 problem to fix before launching')).toBeVisible();
   await expect(review(page)).toContainText('samples is too large for Alpha');
-  await expect(page.getByRole('textbox', { name: 'Samples' })).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'Passes' })).toBeFocused();
   await expect(launchButton(page)).toBeDisabled();
   // Editing the form clears the stale server error.
   blocked = false;
-  await page.getByRole('textbox', { name: 'Samples' }).fill('3');
+  await page.getByRole('textbox', { name: 'Passes' }).fill('3');
   await expectReady(page);
   await expect(launchButton(page)).toBeEnabled();
 });
@@ -156,11 +156,11 @@ test('unsaved changes: leaving asks first; Keep editing stays, Leave goes', asyn
   await nameBox(page).fill('draft');
   await page.getByRole('link', { name: 'All experiments' }).click();
   const d = dialog(page);
-  await expect(d).toContainText('Leave without launching?');
+  await expect(d).toContainText('Discard unsaved changes?');
   await d.getByRole('button', { name: 'Keep editing' }).click();
   await expect(nameBox(page)).toHaveValue('draft');
   await page.getByRole('link', { name: 'All experiments' }).click();
-  await dialog(page).getByRole('button', { name: 'Leave' }).click();
+  await dialog(page).getByRole('button', { name: 'Discard changes' }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${f.project.slug}/experiments(\\?.*)?$`));
 });
 

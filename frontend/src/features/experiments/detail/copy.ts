@@ -7,16 +7,15 @@ export const TOKEN_ENV_KEY = 'QYM_DATASET_READ_TOKEN';
 
 /** Names of the environments whose schema does not declare the key, joined by `, `. */
 export const notSentLead = (names: readonly string[]): string =>
-  `Dataset read token not sent to ${names.join(', ')}: ${
-    names.length === 1 ? 'the environment’s schema does not' : 'the environments’ schemas do not'
-  } declare`;
+  `Dataset read token not sent to ${names.join(', ')}:`;
+export const notSentReason = (names: readonly string[]): string =>
+  names.length === 1
+    ? 'the environment’s schema does not declare'
+    : 'the environments’ schemas do not declare';
 export const notSentTail = (names: readonly string[]): string =>
   names.length === 1
     ? '. Its jobs read datasets with the Evaluation Service’s own token.'
     : '. Their jobs read datasets with the Evaluation Service’s own token.';
-
-export const revokedWarning = (at: string): string =>
-  `Dataset read token revoked ${at}. Retry the blocked jobs to issue a new one.`;
 
 /** The backend's wait reason of a job whose token is gone (api `DATASET_TOKEN_UNAVAILABLE`). */
 export const TOKEN_UNAVAILABLE_REASON =

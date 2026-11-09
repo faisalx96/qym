@@ -1,4 +1,4 @@
-import { Button, DropdownMenu, IconButton } from '@/ui';
+import { ActionTile, Button, DropdownMenu, Icon } from '@/ui';
 import { useMediaQuery } from '@/features/shell';
 import { plural } from '../../lib/format';
 import { launchLabel } from '../model';
@@ -34,8 +34,8 @@ export function WizardBar({
   const optional = step === 'models' || step === 'settings' || step === 'evaluation';
   const problem = first ? `Fix ${plural(review.items.length, 'problem')} first: ${first.label}` : '';
   const overflow = [
-    ...(phone && first ? [{ id: 'problem', label: problem }] : []),
-    ...(phone && showCancel ? [{ id: 'cancel', label: 'Cancel' }] : []),
+    ...(phone && first ? [{ id: 'problem', label: problem, icon: <ActionTile icon="warning" /> }] : []),
+    ...(phone && showCancel ? [{ id: 'cancel', label: 'Cancel', icon: <ActionTile icon="close" /> }] : []),
   ];
   return (
     <div className={styles.wizardBar} role="region" aria-label="Launch">
@@ -79,7 +79,11 @@ export function WizardBar({
         {overflow.length ? (
           <DropdownMenu
             label="More launch options"
-            trigger={<IconButton label="More launch options" icon="more" />}
+            trigger={
+              <Button size="sm" variant="neutral" icon={<Icon name="more" size={14} />}>
+                Actions
+              </Button>
+            }
             items={overflow}
             onAction={(id) => {
               if (id === 'problem' && first) focusIssue(first);
@@ -88,7 +92,7 @@ export function WizardBar({
           />
         ) : null}
         {showCancel && !phone ? (
-          <Button size="sm" variant="ghost" onPress={onCancel}>
+          <Button size="sm" variant="neutral" onPress={onCancel}>
             Cancel
           </Button>
         ) : null}
@@ -97,6 +101,7 @@ export function WizardBar({
           variant="primary"
           loading={isLaunching}
           isDisabled={readOnly || !review.canLaunch || review.items.length > 0}
+          disabledReason={review.items.length > 0 ? 'Fix the problems first' : undefined}
           onPress={() => void launch()}
         >
           {launchLabel(review.count.runs, isLaunching)}

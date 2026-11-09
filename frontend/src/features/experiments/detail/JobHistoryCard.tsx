@@ -1,7 +1,7 @@
 /**
  * Every job, current attempts first; earlier (superseded) attempts on demand. The card starts as one closed line,
  * 'Job history · 6 jobs, 1 earlier attempt', because the matrix already lists the current jobs (C206); it opens in
- * place, and the matrix's '↻ n earlier' link opens it.
+ * place, and the matrix's 'n earlier' button opens it.
  */
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
@@ -9,6 +9,7 @@ import type { ExperimentDetail, ExperimentJob } from '@/api/experiments';
 import { runPath } from '@/app/routes';
 import {
   Checkbox,
+  CountTile,
   DataTable,
   Disclosure,
   RelativeTime,
@@ -179,7 +180,12 @@ export function JobHistoryCard({
         j.run_id && !j.run?.deleted ? (
           <TwoLine
             primary={
-              <Link className={styles.runLink} to={runPath(slug, j.run_id)} title={j.run_name || j.run_id}>
+              <Link
+                className={styles.runLink}
+                to={runPath(slug, j.run_id)}
+                title={j.run_name || j.run_id}
+                data-link="name"
+              >
                 <span className={styles.truncate}>{j.run_name || j.run_id}</span>
               </Link>
             }
@@ -204,7 +210,7 @@ export function JobHistoryCard({
           {
             id: 'cancel',
             label: `Cancel job #${j.combo_index} on ${j.environment_name ?? 'environment'}`,
-            icon: 'close',
+            icon: 'ban',
             primary: true,
             danger: true,
             disabled: !canControl || flows.busy.has(j.id),
@@ -233,13 +239,11 @@ export function JobHistoryCard({
         <div className={styles.stack}>
           <div className={styles.cardHead}>
             <Text variant="base" tone="muted" as="p" className={styles.note}>
-              {live
-                ? 'Refreshing automatically while jobs are queued or running.'
-                : 'Every job has finished.'}
+              {live ? 'Updates automatically' : 'Every job has finished.'}
             </Text>
             {supersededCount ? (
               <Checkbox isSelected={showEarlier} onChange={onShowEarlier}>
-                Show earlier attempts ({supersededCount})
+                Show earlier attempts<CountTile>{supersededCount}</CountTile>
               </Checkbox>
             ) : null}
           </div>
@@ -250,7 +254,7 @@ export function JobHistoryCard({
             rows={rows}
             rowKey={(j) => j.id}
             minWidth={1000}
-            empty="This experiment has no jobs."
+            empty="This experiment has no jobs"
             rowActions={rowActions}
             rowState={(j) => (j.status === 'FAILED' || j.status === 'TIMED_OUT' ? 'error' : undefined)}
             density="regular"
@@ -269,7 +273,15 @@ export function JobHistoryCard({
                 : undefined
             }
           >
-            <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'job' : 'jobs'}`} />
+            <DataTable.Footer
+              pagination={{
+                total: rows.length,
+                page: 1,
+                pageSize: Math.max(1, rows.length),
+                noun: 'jobs',
+                onPageChange: () => {},
+              }}
+            />
           </DataTable>
         </div>
       </Disclosure>

@@ -113,9 +113,9 @@ test.describe('experiment detail', () => {
     await matrix.locator('label').first().click();
     await expect(compare).toBeDisabled();
     await matrix.getByRole('button', { name: 'Select all runs' }).click();
-    await expect(compare).toHaveText('Compare selected (2)');
+    await expect(compare).toHaveText('Compare selected2');
     await matrix.getByRole('button', { name: 'Clear' }).click();
-    await expect(compare).toHaveText('Compare selected (0)');
+    await expect(compare).toHaveText('Compare selected0');
     await matrix.getByRole('button', { name: 'Select all runs' }).click();
     await compare.click();
 
@@ -244,7 +244,7 @@ test.describe('experiment detail', () => {
     await expect(cell).toContainText('Failed');
     await expect(cell).toContainText('worker crashed');
     await page.getByTestId('exp-actions').click();
-    await expect(page.getByRole('menuitem', { name: 'Retry failed (1)' })).not.toHaveAttribute(
+    await expect(page.getByRole('menuitem', { name: /^Retry failed\s?1$/ })).not.toHaveAttribute(
       'aria-disabled',
       'true',
     );
@@ -266,7 +266,7 @@ test.describe('experiment detail', () => {
     expect(after.jobs).toHaveLength(2);
     expect(after.jobs.filter((j) => j.superseded)).toHaveLength(1);
     // the matrix cell now shows the new attempt and a link to the earlier one
-    await expect(page.getByRole('button', { name: '↻ 1 earlier' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '1 earlier', exact: true })).toBeVisible();
     await expect(stat(page.getByLabel('Job totals'), 'Failed')).toContainText('0');
 
     // Job history starts closed (C206): one line with the counts
@@ -276,14 +276,14 @@ test.describe('experiment detail', () => {
     );
     await history.getByRole('button', { name: /Job history/ }).click();
     await expect(history.getByRole('row')).toHaveCount(2); // header + current attempt
-    await history.getByText('Show earlier attempts (1)').click();
+    await history.getByText(/^Show earlier attempts\s?1$/).click();
     await expect(history.getByRole('row')).toHaveCount(3);
     await expect(history.getByText('retried')).toBeVisible();
     await expect(history.getByText('worker crashed')).toBeVisible();
     // the matrix shortcut opens the history and scrolls to the superseded row
-    await history.getByText('Show earlier attempts (1)').click();
+    await history.getByText(/^Show earlier attempts\s?1$/).click();
     await expect(history.getByRole('row')).toHaveCount(2);
-    await page.getByRole('button', { name: '↻ 1 earlier' }).click();
+    await page.getByRole('button', { name: '1 earlier', exact: true }).click();
     await expect(history.getByRole('row')).toHaveCount(3);
     // the new HIGH attempt would block every other priority on the shared fake service
     await stopExperiment(request, project.id, x.id);
@@ -425,7 +425,7 @@ test.describe('experiment detail', () => {
     });
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
     await cellAction(page.locator(`[data-exp-cell="${x.jobs[0]!.id}"]`), 'Save as preset');
-    const dialog = page.getByRole('dialog', { name: 'Save as preset' });
+    const dialog = page.getByRole('dialog', { name: 'Save as a preset?' });
     const name = dialog.getByRole('textbox', { name: /Preset name/ });
     await expect(name).toBeFocused();
     await expect(name).not.toHaveValue('');

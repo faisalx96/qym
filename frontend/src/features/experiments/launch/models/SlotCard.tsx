@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TemporaryModelForm } from '@/features/environments/TemporaryModelForm';
-import { Button, SegmentedControl, Select, Tag, Card, Icon } from '@/ui';
+import { Button, RequiredFlag, SegmentedControl, Select, Tag, Card, Icon } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import {
   bindingChanged,
@@ -101,7 +101,7 @@ export function SlotCard({ slot }: { slot: UnionSlot }) {
           ) : null}
           <span className={styles.title}>{slot.label}</span>
           <Tag kind="data">{key}</Tag>
-          {slot.required ? <Tag kind="role">required</Tag> : null}
+          {slot.required ? <RequiredFlag /> : null}
           {slot.extra ? <Tag kind="accent">this experiment</Tag> : null}
           {g && isEndpoint ? (
             follows ? (
@@ -122,7 +122,7 @@ export function SlotCard({ slot }: { slot: UnionSlot }) {
           <span className={styles.spacer} />
           {slot.extra && name ? (
             <Button
-              variant="ghost"
+              variant="danger"
               aria-label={`Remove ${slot.label}`}
               onPress={() => setDoc((d) => removeExtraEndpoint(d, name, secrets))}
             >
@@ -131,7 +131,7 @@ export function SlotCard({ slot }: { slot: UnionSlot }) {
           ) : null}
           {changed ? (
             <Button
-              variant="ghost"
+              variant="neutral"
               aria-label={`Reset ${slot.label} to the starting model`}
               onPress={() => {
                 setFormOpen(false);
@@ -198,10 +198,10 @@ export function SlotCard({ slot }: { slot: UnionSlot }) {
                   <TemporaryChip binding={binding}>
                     {follows ? null : (
                       <>
-                        <Button variant="ghost" onPress={() => setFormOpen(true)}>
+                        <Button variant="neutral" onPress={() => setFormOpen(true)}>
                           Replace
                         </Button>
-                        <Button variant="ghost" onPress={() => bind(null)}>
+                        <Button variant="danger" onPress={() => bind(null)}>
                           Remove
                         </Button>
                       </>

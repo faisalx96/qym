@@ -2,7 +2,7 @@ import { Fragment, useMemo, type ReactNode } from 'react';
 import type { EnvTasksPayload } from '@/api/launch';
 import { useEnvTaskLists } from '@/api/launch';
 import { readOnlyReason, useOptionalProject } from '@/features/shell';
-import { Button, Card, KeyValueGrid, Text, StatusMark } from '@/ui';
+import { Button, Card, Disclosure, KeyValueGrid, Text, StatusMark } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
 import { VersionsSummary } from '../entry/VersionsBlock';
@@ -156,7 +156,7 @@ function ChangesByStep() {
           {rows.map((r) => (
             <li key={r.key} className={styles.change}>
               <span>{r.label}</span>
-              <Button size="sm" variant="ghost" onPress={r.onEdit} aria-label={`Edit: ${r.label}`}>
+              <Button size="sm" variant="neutral" onPress={r.onEdit} aria-label={`Edit: ${r.label}`}>
                 Edit
               </Button>
             </li>
@@ -354,8 +354,7 @@ export function ReviewPane({
           )}
         </section>
         {names.names.length > 1 ? (
-          <details>
-            <summary>Run names</summary>
+          <Disclosure title="Run names">
             <ol className={styles.names}>
               {names.names.map((n, i) => (
                 <li key={i}>{n}</li>
@@ -366,7 +365,7 @@ export function ReviewPane({
                 and {names.more} more
               </Text>
             ) : null}
-          </details>
+          </Disclosure>
         ) : null}
         {readOnly ? (
           <Callout tone="warning">

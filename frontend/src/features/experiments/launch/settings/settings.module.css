@@ -1,4 +1,4 @@
-/* Environment configurations + Sweeps: the settings tree, native controls on the 24px recipe, chips. */
+/* Environment configurations + Sweeps: the settings tree, ui form controls, chips. */
 .toolbar {
   display: flex;
   align-items: center;
@@ -7,9 +7,7 @@
 }
 
 .toolbarSearch {
-  flex: 1 1 200px;
-  max-width: 320px;
-  min-width: 160px;
+  flex: none;
 }
 
 .spacer {
@@ -148,59 +146,6 @@
   border-radius: 50%;
   background: var(--info);
   flex: none;
-}
-
-.control {
-  width: 100%;
-  min-width: 0;
-  block-size: var(--control-height);
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--font-sm);
-  line-height: 1;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.control[data-mono] {
-  font-family: var(--font-mono);
-}
-
-.control:hover:not(:disabled) {
-  border-color: var(--border-strong);
-}
-
-.control:focus-visible {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: var(--focus-ring);
-}
-
-.control[aria-invalid='true'] {
-  border-color: var(--error);
-}
-
-.control:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-select.control {
-  padding-inline-end: var(--space-xs);
-}
-
-textarea.control {
-  height: auto;
-  min-height: 64px;
-  padding: var(--space-xs) var(--space-sm);
-  line-height: 1.4;
-  resize: vertical;
-  font-family: var(--font-mono);
 }
 
 .hint {

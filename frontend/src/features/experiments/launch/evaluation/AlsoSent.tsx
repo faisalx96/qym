@@ -19,7 +19,7 @@ export function AlsoSent() {
               {item.key} = {JSON.stringify(item.value)}
             </span>
             <Button
-              variant="ghost"
+              variant="danger"
               aria-label={`Stop sending ${item.key}`}
               onPress={() => setDoc((d) => removeAlsoSent(d, item.key as 'report_k' | 'dataset_version'))}
             >

@@ -38,10 +38,10 @@ describe('RunExperimentPanel states', () => {
 
   it('opens the service result on demand', async () => {
     wrap(<RunExperimentPanel panel={base} slug="p" runId="r1" runStatus="COMPLETED" />);
-    const summary = screen.getByText('Service result');
-    expect(summary.closest('details')?.open).toBe(false);
-    await userEvent.click(summary);
-    expect(summary.closest('details')?.open).toBe(true);
+    const trigger = screen.getByRole('button', { name: 'Service result' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('a deleted experiment disables rerun and says the job is gone', () => {

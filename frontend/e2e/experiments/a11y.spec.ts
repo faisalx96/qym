@@ -171,7 +171,7 @@ test.describe('axe', () => {
     await expect(page.getByTestId('cancel-split-dialog')).toBeVisible();
     await expectNoSeriousViolations(page, 'cancel split dialog');
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: /Remote queue/ }).click();
+    await page.getByRole('region', { name: 'Remote queue' }).getByRole('button', { name: 'Show' }).click();
     await expect(page.getByRole('grid', { name: 'Remote jobs on staging' })).toBeVisible();
     await expectNoSeriousViolations(page, 'remote queue open');
   });
@@ -185,7 +185,7 @@ test.describe('axe', () => {
     await page.keyboard.press('Escape');
     await page.locator('[data-exp-cell]').first().locator('[data-row-menu]').click();
     await page.getByRole('menuitem', { name: 'Save as preset' }).click();
-    await expect(page.getByRole('dialog', { name: 'Save as preset' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Save as a preset?' })).toBeVisible();
     await expectNoSeriousViolations(page, 'save as preset');
   });
 
@@ -264,7 +264,7 @@ test.describe('keyboard', () => {
     await expect(boxes.first()).toBeChecked();
     await tabTo(page, boxes.nth(1));
     await page.keyboard.press('Space');
-    const compare = matrix.getByRole('button', { name: /Compare selected \(2\)/ });
+    const compare = matrix.getByRole('button', { name: /Compare selected\s?2/ });
     await expect(compare).toBeEnabled();
     await tabTo(page, compare);
     await page.keyboard.press('Enter');

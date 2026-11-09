@@ -16,7 +16,7 @@ import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import {
-  Checkbox,
+  ClearFiltersButton,
   DataTable,
   EmptyState,
   Icon,
@@ -35,10 +35,13 @@ import { ExperimentsTabs } from '../ExperimentsTabs';
 import { ConnectFirst } from '../components/ConnectFirst';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
-import { baseSourceLabel, jobsText, plural, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
+import { baseSourceLabel, jobsText, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
 import { loadLaunchPage } from '../lazy';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
+
+/** The creator's display name (B-25); the API sends it, the shared type gains it in api/. */
+type Named = { created_by_name?: string | null };
 
 const PAGE_SIZE = 50;
 const ALL = '__all';
@@ -167,7 +170,13 @@ export function ExperimentsPage() {
       type: 'text',
       width: 180,
       priority: 3,
-      cell: (x) => <UserCell name={x.created_by_email} />,
+      cell: (x) => (
+        <UserCell
+          id={x.created_by_user_id}
+          name={(x as Experiment & Named).created_by_name}
+          email={x.created_by_email}
+        />
+      ),
     },
     {
       id: 'age',
@@ -186,6 +195,8 @@ export function ExperimentsPage() {
       to={launchPath(slug)}
       variant="primary"
       size="md"
+      isDisabled={noActiveEnv}
+      disabledReason="Add an environment first"
       icon={<Icon name="plus" size={12} />}
       onPointerEnter={prefetchLaunch}
       onFocus={prefetchLaunch}
@@ -195,17 +206,23 @@ export function ExperimentsPage() {
   );
 
   const emptyAll = Boolean(query.data) && !filtered && total === 0;
-  const filters = (
-    <div className={styles.filters} role="group" aria-label="Filter experiments">
-      <SearchField
-        label="Search experiments"
-        placeholder="Search experiments"
-        value={search}
-        onChange={setSearch}
-        width={260}
-      />
+  const searchField = (
+    <SearchField
+      label="Search experiments"
+      placeholder="Search experiments"
+      value={search}
+      onChange={setSearch}
+      width="var(--search-width)"
+      shortcut="/"
+    />
+  );
+  const activeCount =
+    (status ? 1 : 0) + Object.keys(versioning).length + (mine ? 1 : 0) + (latency ? 1 : 0) + (needle ? 1 : 0);
+  const filterRow = (
+    <div className={styles.filterRow} role="group" aria-label="Filter experiments">
       <Select
         label="Status"
+        triggerVariant="bar"
         items={[
           { key: ALL, label: 'All statuses' },
           ...EXPERIMENT_STATUSES.map((s) => ({ key: s, label: titleCase(s) })),
@@ -219,7 +236,6 @@ export function ExperimentsPage() {
           })
         }
         searchable={false}
-        width={150}
       />
       {versioningKeys.map((key) => {
         const selected = versioning[key];
@@ -229,39 +245,55 @@ export function ExperimentsPage() {
           <span key={key} title={`Evaluation Service versioning: ${key}`} data-exp-versioning={key}>
             <Select
               label={versioningLabel(key)}
+              triggerVariant="bar"
               items={[{ key: ALL, label: 'All values' }, ...options.map((v) => ({ key: v, label: v }))]}
               value={selected ?? ALL}
               onChange={(k) => setVersioning(key, !k || k === ALL ? null : String(k))}
-              width={170}
             />
           </span>
         );
       })}
-      <Checkbox
-        isSelected={mine}
-        onChange={(on) =>
+      <Select
+        label="Created by"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'Everyone' },
+          { key: 'me', label: 'Me' },
+        ]}
+        value={mine ? 'me' : ''}
+        onChange={(k) =>
           update((next) => {
-            if (on) next.set('mine', '1');
+            if (k === 'me') next.set('mine', '1');
             else next.delete('mine');
             resetPage(next);
           })
         }
-      >
-        Created by me
-      </Checkbox>
-      <Checkbox
-        isSelected={latency}
-        data-testid="filter-latency"
-        onChange={(on) =>
+      />
+      <Select
+        label="Latency-sensitive"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'All' },
+          { key: '1', label: LATENCY_FILTER_LABEL },
+        ]}
+        value={latency ? '1' : ''}
+        onChange={(k) =>
           update((next) => {
-            if (on) next.set('latency', '1');
+            if (k === '1') next.set('latency', '1');
             else next.delete('latency');
             resetPage(next);
           })
         }
-      >
-        {LATENCY_FILTER_LABEL}
-      </Checkbox>
+      />
+      <ClearFiltersButton
+        count={activeCount}
+        onClear={() => {
+          setSearch('');
+          setParams({}, { replace: true });
+        }}
+      />
     </div>
   );
 
@@ -282,13 +314,6 @@ export function ExperimentsPage() {
           rowKey={(x) => x.id}
           rowHref={(x) => experimentPath(slug, x.id)}
           rowActions={(x) => [
-            {
-              id: 'open',
-              label: 'Open',
-              icon: 'external',
-              primary: true,
-              onPress: () => navigate(experimentPath(slug, x.id)),
-            },
             ...(readOnly
               ? []
               : [
@@ -305,6 +330,7 @@ export function ExperimentsPage() {
           loading={tableLoading(query.isPending, showSkeleton)}
           refreshing={query.isFetching && !showSkeleton && live}
           error={query.isError && !query.data ? query.error : undefined}
+          errorTitle="Couldn’t load experiments"
           onRetry={() => void query.refetch()}
           isFiltered={filtered}
           empty={
@@ -338,42 +364,43 @@ export function ExperimentsPage() {
           filteredEmpty={
             <EmptyState
               compact
-              title="No matching experiments"
-              body="Nothing matches these filters."
-              action={
-                <button
-                  type="button"
-                  className={styles.linkButton}
-                  onClick={() => setParams({}, { replace: true })}
-                >
-                  Clear filters
-                </button>
+              title={
+                needle ? `No experiments match “${search.trim()}”` : 'No experiments match these filters'
               }
             />
           }
         >
           <DataTable.Toolbar
-            filters={filters}
+            search={searchField}
+            rows={filterRow}
             trailing={
               live ? (
                 <Text variant="sm" tone="muted">
-                  Refreshes automatically while experiments run
+                  Updates automatically
                 </Text>
               ) : null
             }
           />
           <DataTable.Footer
-            summary={query.data ? plural(total, 'experiment') : undefined}
+            filterNote={needle ? `Filtered from ${loaded.length} experiments` : undefined}
             pagination={
-              query.data && total > PAGE_SIZE
-                ? {
-                    total,
-                    page,
-                    pageSize: PAGE_SIZE,
-                    noun: 'experiments',
-                    onPageChange: (p) =>
-                      update((next) => (p > 1 ? next.set('page', String(p)) : next.delete('page'))),
-                  }
+              query.data
+                ? needle
+                  ? {
+                      total: experiments.length,
+                      page: 1,
+                      pageSize: Math.max(1, experiments.length),
+                      noun: 'experiments',
+                      onPageChange: () => {},
+                    }
+                  : {
+                      total,
+                      page,
+                      pageSize: PAGE_SIZE,
+                      noun: 'experiments',
+                      onPageChange: (p) =>
+                        update((next) => (p > 1 ? next.set('page', String(p)) : next.delete('page'))),
+                    }
                 : undefined
             }
           />

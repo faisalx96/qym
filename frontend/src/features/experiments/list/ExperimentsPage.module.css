@@ -1,8 +1,9 @@
-.filters {
+.filterRow {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-md);
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
 }
 
 .truncate {
@@ -59,24 +60,6 @@
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.linkButton {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent-primary);
-  font: inherit;
-  cursor: pointer;
-}
-
-.linkButton:hover {
-  text-decoration: underline;
-}
-
-.linkButton:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
 }
 
 /* Name and the Latency-sensitive tag: the tag wraps under a long name (the name is never cut). */

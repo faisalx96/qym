@@ -14,6 +14,7 @@ import {
   waitForSubmitted,
   pageOverflow,
 } from './support';
+import { pickSelect } from './ui';
 
 test.setTimeout(120_000);
 test.use({ actionTimeout: 10_000 });
@@ -50,13 +51,13 @@ test('the list tags flagged experiments and filters them from the URL', async ({
   expect(Math.round(tag!.width * 10) / 10).toBeCloseTo(98.4, 0);
   expect(Math.round(tag!.height)).toBe(20);
 
-  await page.locator('label').filter({ hasText: 'Latency-sensitive only' }).click();
+  await pickSelect(page, /Latency-sensitive/, 'Latency-sensitive only');
   await expect(page).toHaveURL(/latency=1/);
   await expect(grid.getByRole('row')).toHaveCount(2);
   await expect(grid).not.toContainText('ordinary');
   await page.reload();
-  await expect(page.getByRole('checkbox', { name: 'Latency-sensitive only' })).toBeChecked();
-  await page.locator('label').filter({ hasText: 'Latency-sensitive only' }).click();
+  await expect(page.getByRole('button', { name: /Latency-sensitive/ })).toContainText('Latency-sensitive only');
+  await pickSelect(page, /Latency-sensitive/, /^All$/);
   await expect(page).not.toHaveURL(/latency=1/);
   expect(await pageOverflow(page)).toBe('');
 });
@@ -68,7 +69,7 @@ test('the queue tags flagged jobs, filters them and warns that others wait', asy
   const note = page.getByTestId('queue-latency-note');
   await expect(note).toHaveText('A latency-sensitive job is active on staging. Other jobs wait until it finishes.');
   expect(Math.round((await note.boundingBox())!.height * 10) / 10).toBeCloseTo(25.4, 0);
-  await page.locator('label').filter({ hasText: 'Latency-sensitive only' }).click();
+  await pickSelect(page, /Latency-sensitive/, 'Latency-sensitive only');
   await expect(page).toHaveURL(/latency=1/);
   const grid = page.getByRole('grid', { name: 'Queued jobs in dispatch order' });
   await expect(grid.getByText('ordinary')).toHaveCount(0);
@@ -119,8 +120,8 @@ test('the list tag keeps its numbers at three widths and never changes a row hei
         .getByRole('row')
         .evaluateAll((rows) => rows.slice(1).map((r) => Math.round(r.getBoundingClientRect().height)));
       expect(heights).toEqual([40, 40]);
-      const filter = await page.getByTestId('filter-latency').boundingBox();
-      expect([Math.round(filter!.width * 10) / 10, Math.round(filter!.height * 10) / 10]).toEqual([141.9, 16.8]);
+      const filter = await page.getByRole('button', { name: /Latency-sensitive/ }).boundingBox();
+      expect(Math.round(filter!.height)).toBe(24);
     }
     expect(await pageOverflow(page)).toBe('');
   }

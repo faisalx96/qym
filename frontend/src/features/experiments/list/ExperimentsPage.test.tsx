@@ -109,8 +109,8 @@ describe('ExperimentsPage versioning facets', () => {
     const user = userEvent.setup();
     mount('/projects/demo/experiments');
     await waitFor(() => expect(names()).toHaveLength(2));
-    expect(screen.getByRole('button', { name: /Agent version/ })).toHaveTextContent('All values');
-    expect(screen.getByRole('button', { name: /KB version/ })).toHaveTextContent('All values');
+    expect(screen.getByRole('button', { name: /Agent version/ })).toHaveTextContent(/^Agent version$/);
+    expect(screen.getByRole('button', { name: /KB version/ })).toHaveTextContent(/^KB version$/);
 
     await user.click(screen.getByRole('button', { name: /KB version/ }));
     await user.click(await screen.findByRole('option', { name: '381' }));

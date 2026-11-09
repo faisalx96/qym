@@ -114,7 +114,8 @@ export function locate(pointer: string, ctx: FormContext): Located {
         return { label: segs[3] ? `Run metadata › ${segs[3]}` : 'Run metadata', stepId: 'eval' };
       }
       const entry = configEntry(ctx.evaluatorPanel, segs[2]);
-      return { label: `Evaluation inputs › ${entry?.label || segs[2]}`, stepId: 'eval' };
+      const label = segs[2] === 'samples' ? 'Passes' : entry?.label || segs[2];
+      return { label: `Evaluation inputs › ${label}`, stepId: 'eval' };
     }
     if (segs[1] === 'report_k') return { label: 'Evaluation inputs › Report K', stepId: 'eval' };
     return { label: `Evaluation › ${segs.slice(1).join(' › ')}`, stepId: 'eval' };

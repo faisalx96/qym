@@ -6,7 +6,7 @@
  *   <RunExperimentPanel panel={run.experiment} slug={slug} runId={run.run_id} runStatus={run.status} />
  */
 import { Link } from 'react-router-dom';
-import { LinkButton, KeyValueGrid, Tag, Text, JsonTree, type KeyValueItem } from '@/ui';
+import { Disclosure, Flag, LinkButton, KeyValueGrid, Tag, Text, JsonTree, type KeyValueItem } from '@/ui';
 import { JobStatusBadge } from './components/StatusBadges';
 import { defaultPresetEditPath, experimentPath, launchPath } from './paths';
 import styles from './RunExperimentPanel.module.css';
@@ -108,7 +108,7 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
       label: 'Experiment',
       value:
         openable && !isExport ? (
-          <Link to={experimentPath(slug, panel.experiment_id ?? '')} className={styles.link}>
+          <Link to={experimentPath(slug, panel.experiment_id ?? '')} data-link="name">
             {panel.experiment_name || String(panel.experiment_id).slice(0, 8)}
           </Link>
         ) : (
@@ -211,7 +211,9 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
             <h3 id="run-experiment-title" className={styles.title}>
               Experiment
             </h3>
-            <Tag kind="accent">Official run</Tag>
+            <Flag tone="info" icon="shield">
+              Official run
+            </Flag>
           </div>
           <Text variant="sm" tone="secondary">
             Launched by qym on a registered environment. Settings show this run’s combination.
@@ -266,10 +268,9 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
       ) : null}
       <KeyValueGrid items={items} columns={2} aria-label="Experiment details" />
       {panel.remote_result != null ? (
-        <details className={styles.result}>
-          <summary>Service result</summary>
+        <Disclosure className={styles.result} title="Service result">
           <JsonTree data={panel.remote_result} label="Service result" />
-        </details>
+        </Disclosure>
       ) : null}
     </section>
   );
