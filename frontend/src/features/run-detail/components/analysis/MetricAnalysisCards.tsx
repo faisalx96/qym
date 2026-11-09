@@ -209,7 +209,7 @@ function Card({
                 {isRejecting ? (
                   <div className={styles.rejectForm} data-testid="reject-form">
                     <Textarea
-                      label="Why reject it? (optional)"
+                      label="Why reject it?"
                       value={rejecting.comment}
                       onChange={(comment) => setRejecting({ key, comment })}
                       rows={2}
