@@ -21,8 +21,8 @@ import {
   Card,
   DataTable,
   ErrorState,
-  Icon,
   IconButton,
+  InlineNotice,
   RadioGroup,
   Select,
   Skeleton,
@@ -420,10 +420,9 @@ function AccessBody({
               <dd>{data.your_level === 'view' ? 'View' : 'Modify'}</dd>
             </dl>
           )}
-          <p className={styles.always} data-testid="access-always">
-            <Icon name="lock" size={12} />
-            <span>Project managers, admins and the creator always have full access.</span>
-          </p>
+          <InlineNotice tone="neutral" icon="lock" data-testid="access-always">
+            Project managers, admins and the creator always have full access.
+          </InlineNotice>
         </div>
       </Card>
 

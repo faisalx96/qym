@@ -25,15 +25,6 @@
   }
 }
 
-.always {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin: 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
 .summary {
   display: grid;
   grid-template-columns: var(--field-label-width) minmax(0, 1fr);
