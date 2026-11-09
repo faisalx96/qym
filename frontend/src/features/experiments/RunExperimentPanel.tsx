@@ -6,7 +6,7 @@
  *   <RunExperimentPanel panel={run.experiment} slug={slug} runId={run.run_id} runStatus={run.status} />
  */
 import { Link } from 'react-router-dom';
-import { LinkButton, KeyValueGrid, Tag, Text, JsonTree, type KeyValueItem } from '@/ui';
+import { Flag, LinkButton, KeyValueGrid, Tag, Text, JsonTree, type KeyValueItem } from '@/ui';
 import { JobStatusBadge } from './components/StatusBadges';
 import { defaultPresetEditPath, experimentPath, launchPath } from './paths';
 import styles from './RunExperimentPanel.module.css';
@@ -211,7 +211,9 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
             <h3 id="run-experiment-title" className={styles.title}>
               Experiment
             </h3>
-            <Tag kind="accent">Official run</Tag>
+            <Flag tone="info" icon="shield">
+              Official run
+            </Flag>
           </div>
           <Text variant="sm" tone="secondary">
             Launched by qym on a registered environment. Settings show this run’s combination.
