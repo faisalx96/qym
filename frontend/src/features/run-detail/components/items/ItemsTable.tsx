@@ -275,7 +275,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         densityLocked
         stripe="report"
         responsive="cards"
-        empty="No items match the current filters."
+        empty="No items match these filters"
         sort={sortState(sort)}
         allowUnsorted
         onSortChange={(s) => {
