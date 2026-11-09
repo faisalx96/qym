@@ -94,7 +94,7 @@ it.each([0, 10, 11, undefined])(
   },
 );
 
-it.each(['gateway', 'Errors'])(
+it.each(['Gateway', 'Errors'])(
   'requests the next page and resets to page one on the %s filter',
   async (filter) => {
     const { requests } = paginatedProblems(25);
@@ -107,8 +107,8 @@ it.each(['gateway', 'Errors'])(
     await user.click(screen.getByRole('button', { name: filter }));
     await screen.findByText('Problem 1');
     expect(requests.at(-1)!.get('page')).toBe('1');
-    expect(requests.at(-1)!.get(filter === 'gateway' ? 'component' : 'level')).toBe(
-      filter === 'gateway' ? 'gateway' : 'error',
+    expect(requests.at(-1)!.get(filter === 'Gateway' ? 'component' : 'level')).toBe(
+      filter === 'Gateway' ? 'gateway' : 'error',
     );
   },
 );
@@ -244,11 +244,11 @@ it('renders grouped counts, filters by component and level, and can clear filter
   expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(6);
   expect(screen.getByText(/× 14/)).toHaveTextContent('in 12 min');
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: 'gateway' }));
+  await user.click(screen.getByRole('button', { name: 'Gateway' }));
   expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(2);
   await user.click(screen.getByRole('button', { name: 'Errors' }));
   expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(1);
-  await user.click(screen.getByRole('button', { name: 'gateway' }));
+  await user.click(screen.getByRole('button', { name: 'Gateway' }));
   expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(4);
   await user.click(screen.getByRole('button', { name: 'Settings' }));
   expect(screen.getByText('No problems reported by the worker')).toBeVisible();

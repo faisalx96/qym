@@ -19,6 +19,14 @@ const componentLabels: Record<string, string> = {
   turn: 'Turns',
   job: 'Jobs',
 };
+/* Shown only when the worker has reported a problem from that part, so the chip row stays short. */
+const occasionalLabels: Record<string, string> = {
+  poller: 'Polling',
+  langfuse: 'Langfuse',
+  gateway: 'Gateway',
+  renderer: 'Charts',
+  config: 'Worker environment',
+};
 const checkSections: Record<string, { id: string; title: string }> = {
   gateway: { id: 'models', title: 'Models' },
   database: { id: 'database', title: 'Database' },
@@ -123,7 +131,7 @@ export function ProblemsBlock({
               onEventsFilters({ ...eventsFilters, component: selected ? component : undefined, page: 1 })
             }
           >
-            {componentLabels[component] ?? component}
+            {componentLabels[component] ?? occasionalLabels[component] ?? component}
           </Chip>
         ))}
         {(['error', 'warning'] as const).map((level) => (
