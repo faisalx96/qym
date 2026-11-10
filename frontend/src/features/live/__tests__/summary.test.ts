@@ -321,7 +321,7 @@ function renderTurn(data: LiveTurnDetail = turnDetail, search = '', error?: ApiE
 }
 
 describe('live turn evidence presentation', () => {
-  it('shows a collapsed judge preview with Arabic, NULL and a truncated-column note in both tabs', async () => {
+  it('keeps the Diagnosis preview and links compact judge SQL to the comparison tab', async () => {
     const user = userEvent.setup();
     renderTurn({
       ...turnDetail,
@@ -345,7 +345,7 @@ describe('live turn evidence presentation', () => {
         },
       },
     });
-    for (const tab of ['Diagnosis', 'Judges']) {
+    for (const tab of ['Diagnosis']) {
       await user.click(screen.getByRole('tab', { name: tab }));
       expect(screen.getByText('124 rows')).toBeInTheDocument();
       const disclosure = screen.getByRole('button', { name: 'First 2 of 124 rows' });
@@ -358,6 +358,13 @@ describe('live turn evidence presentation', () => {
       expect(within(table).getByText('NULL')).toHaveAttribute('data-tone', 'muted');
       expect(screen.getByText('Showing 2 of 3 columns')).toBeInTheDocument();
     }
+    await user.click(screen.getByRole('tab', { name: 'Judges' }));
+    expect(screen.getByText('124 rows')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'First 2 of 124 rows' })).not.toBeInTheDocument();
+    const link = screen.getByRole('link', { name: "Compare with the agent's SQL" });
+    expect(link).toHaveAttribute('href', expect.stringContaining('tab=answer&vs=a#part-1'));
+    await user.click(link);
+    expect(screen.getByRole('tab', { name: 'Answer and SQL' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('shows agent replay counts separately and previews with an unknown total', async () => {
@@ -421,12 +428,15 @@ describe('live turn evidence presentation', () => {
     expect(screen.queryByText('This turn is not in qym')).not.toBeInTheDocument();
   });
 
-  it('renders six comparisons and falls back to the original reasoning without parsing it', () => {
+  it('keeps the six comparison fallback and separates old reasoning into language blocks', () => {
     const data = {
       ...turnDetail,
       summary: {
         judges: {
-          a: { reasoning: 'Deviations:\n- missing year filter' },
+          a: {
+            reasoning:
+              'Deviations: missing year filter in the generated SQL query. / الانحرافات: شرط السنة مفقود في الاستعلام الذي أنشأه الوكيل.',
+          },
           b: { reasoning: 'النتيجة غير مكتملة' },
         },
       },
@@ -434,8 +444,9 @@ describe('live turn evidence presentation', () => {
     const { container } = render(createElement(DiagnosisTab, { data }));
     expect(container.querySelectorAll('[data-live-block="why"] dt')).toHaveLength(6);
     expect(screen.getByText('What each judge said')).toBeInTheDocument();
-    expect(screen.getByText(/missing year filter/)).toHaveAttribute('dir', 'auto');
-    expect(screen.getByText('النتيجة غير مكتملة')).toHaveAttribute('dir', 'auto');
+    expect(screen.getByText(/missing year filter/)).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText(/الانحرافات:/)).toHaveAttribute('dir', 'rtl');
+    expect(screen.getByText('النتيجة غير مكتملة')).toHaveAttribute('dir', 'rtl');
     expect(screen.queryByText('Deviations the judges found')).not.toBeInTheDocument();
   });
 
@@ -986,5 +997,266 @@ describe('contract evidence readers', () => {
       expect(screen.getByRole('tabpanel')).toBeInTheDocument();
     }
     view.unmount();
+  });
+});
+
+// Presentation deliberately splits legacy bilingual reasoning; it does not infer deviations from prose.
+describe('root cause and judge facets', () => {
+  function block(container: HTMLElement, name: string) {
+    return within(container.querySelector<HTMLElement>(`[data-live-block="${name}"]`)!);
+  }
+
+  it('orders verdict, rules, turn facts and deviations and shows numbered bilingual steps', () => {
+    const data = liveEvidenceTurns['privacy-refusal'];
+    const { container } = renderTurn(data);
+    const verdict = block(container, 'why');
+    expect(verdict.getByText('an Insightor rule')).toBeInTheDocument();
+    expect(verdict.getByText('0.96')).toBeInTheDocument();
+    const steps = verdict.getByRole('list');
+    expect(steps.tagName).toBe('OL');
+    expect(within(steps).getByText('Rule')).toBeInTheDocument();
+    expect(within(steps).getByText('check-scope')).toBeInTheDocument();
+    expect(within(steps).getByText(verdictOf(data.summary)!.steps[0]!.textEn!)).toHaveAttribute('dir', 'ltr');
+    expect(within(steps).getByText(verdictOf(data.summary)!.steps[0]!.textAr!)).toHaveAttribute('dir', 'rtl');
+    const order = [...container.querySelectorAll('[role="tabpanel"] > [data-live-block]')].map((node) =>
+      node.getAttribute('data-live-block'),
+    );
+    expect(order.slice(0, 4)).toEqual(['why', 'rules', 'turn-facts', 'deviations']);
+  });
+
+  it.each([
+    ['rule', 'an Insightor rule'],
+    ['judges', 'the two judges'],
+    ['outcome', 'how the turn ended'],
+    ['skipped', 'not evaluated'],
+  ])('explains the %s decision basis', (basis, words) => {
+    const { container } = renderTurn({ ...turnDetail, summary: { verdict: { basis, confidence: 0 } } });
+    expect(block(container, 'why').getByText(words)).toBeInTheDocument();
+    expect(block(container, 'why').getByText('0')).toBeInTheDocument();
+  });
+
+  it('uses the manifest explanation and Arabic label reason for old verdicts', () => {
+    const en = 'The answer omits the requested year.';
+    const ar = 'لا تتضمن الإجابة السنة المطلوبة.';
+    const { container } = renderTurn({
+      ...turnDetail,
+      turn: { ...turnDetail.turn, label_reason: ar },
+      scores: [
+        {
+          ...turnDetail.scores[0]!,
+          metric_name: 'manifest_eval',
+          explanation: `agent_problem — ${en}`,
+          meta: { confidence: 0.8 },
+        },
+      ],
+    });
+    const verdict = block(container, 'why');
+    expect(verdict.getByText(en)).toHaveAttribute('dir', 'ltr');
+    expect(verdict.getByText(ar)).toHaveAttribute('dir', 'rtl');
+    expect(verdict.getByText('0.8')).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-live-block="why"] dt')).toHaveLength(7);
+    expect(container.querySelector('[data-live-block="rules"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-live-block="turn-facts"]')).not.toBeInTheDocument();
+    expect(screen.getByRole('tabpanel')).not.toHaveTextContent('undefined');
+  });
+
+  it('preserves an em dash inside an unprefixed old diagnosis reason', () => {
+    const explanation = 'The query — including its filters — answers the question.';
+    const { container } = renderTurn({
+      ...turnDetail,
+      scores: [{ ...turnDetail.scores[0]!, metric_name: 'manifest_eval', explanation }],
+    });
+    expect(block(container, 'why').getByText(explanation)).toHaveAttribute('dir', 'ltr');
+  });
+
+  it('places deciding rules first, with the version aside and judge instructions below', () => {
+    const decided = rulesAppliedOf(liveEvidenceTurns['privacy-refusal'].summary)[0]!;
+    const data = liveEvidenceTurns['chart-summary'];
+    const rules = data.summary.rules_applied as unknown[];
+    const { container } = renderTurn({
+      ...data,
+      summary: {
+        ...data.summary,
+        rules_applied: [...rules, { id: decided.id, title_en: decided.titleEn, role: 'decided' }],
+      },
+    });
+    const region = container.querySelector('[data-live-block="rules"]')!;
+    expect(region.querySelector('aside')).toHaveTextContent('3fa9c1d2e4b7');
+    expect(region.textContent!.indexOf('G5')).toBeLessThan(
+      region.textContent!.indexOf('Also given to the judges'),
+    );
+    expect(region.textContent!.indexOf('Also given to the judges')).toBeLessThan(
+      region.textContent!.indexOf('B1'),
+    );
+  });
+
+  it('shows privacy refusal, the fired guardrail and why replay was withheld', () => {
+    const { container } = renderTurn(liveEvidenceTurns['privacy-refusal']);
+    const facts = block(container, 'turn-facts');
+    expect(facts.getByText('Refused for privacy, at the router')).toBeInTheDocument();
+    expect(facts.getByText('Privacy').closest('dt')?.nextElementSibling).toHaveTextContent('Active');
+    expect(facts.getByText('Privacy fired')).toBeInTheDocument();
+    expect(facts.getByText('G5')).toBeInTheDocument();
+    expect(
+      facts.getByText('For privacy the evaluator ran no SQL of its own on this turn and stored no rows.'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows chart delivery, counts, trimming and follow-up context', () => {
+    const data = liveEvidenceTurns['chart-summary'];
+    const { container } = renderTurn(data);
+    const facts = block(container, 'turn-facts');
+    expect(container.querySelector('[data-live-block="turn-facts"]')).toHaveTextContent(
+      'Bar chart, 10 categories, built from 10 rows, shown in the answer',
+    );
+    for (const label of ['Methodology items beside the answer', 'Data notes beside the answer'])
+      expect(facts.getByText(label).closest('dt')?.nextElementSibling).toHaveTextContent('1');
+    expect(
+      facts.getByText('Insightor trimmed the text because a chart shows the values.'),
+    ).toBeInTheDocument();
+    const context = questionContextOf(data.summary)!;
+    for (const text of [context.enrichedQuestion, context.previousQuestion, context.selectedExcerpt])
+      expect(facts.getByText(text!)).toHaveAttribute('dir', 'auto');
+  });
+
+  it('keeps unknown classes readable and does not turn missing facts into zero counts', () => {
+    const { container } = renderTurn({
+      ...turnDetail,
+      summary: {
+        turn_class: { name: 'future_route' },
+        delivered: {},
+        guardrails: { granted: { pii: false } },
+      },
+    });
+    const facts = block(container, 'turn-facts');
+    expect(facts.getByText('future_route')).toBeInTheDocument();
+    expect(facts.getByText('Privacy').closest('dt')?.nextElementSibling).toHaveTextContent('Not active');
+    expect(facts.getByText('Internal details').closest('dt')?.nextElementSibling).toHaveTextContent(
+      'Unknown',
+    );
+    expect(facts.queryByText('Methodology items beside the answer')).not.toBeInTheDocument();
+  });
+
+  it.each(['', 'tab=judges'])(
+    'retains dropped deviations, both languages and quoted evidence on %s',
+    (search) => {
+      const data = structuredClone(liveEvidenceTurns['sql-mismatch']);
+      const judges = data.summary.judges as Record<string, { deviations: Record<string, unknown>[] }>;
+      judges.a!.deviations[0]!.quote = 'GROUP BY region';
+      const { container } = renderTurn(data, search);
+      const region = block(container, search ? 'judge-a' : 'deviations');
+      expect(region.getByText('GROUP BY region')).toBeInTheDocument();
+      expect(region.getAllByText('The answer omits the period.')[0]).toHaveAttribute('dir', 'ltr');
+      expect(region.getAllByText('لا يذكر الجواب الفترة.')[0]).toHaveAttribute('dir', 'rtl');
+      const dropped = region
+        .getAllByText('Not counted: contradicts fact: the answer explicitly says 2025')[0]!
+        .closest('li');
+      expect(dropped).toHaveAttribute('data-dropped', 'true');
+      expect(dropped).toHaveTextContent('missing_date');
+    },
+  );
+
+  it('uses old flat deviations including their Arabic text when there is no judge object', () => {
+    const { container } = renderTurn({
+      ...turnDetail,
+      summary: {
+        deviations: [{ judge: 'a', axis: 'sql', text: 'Missing filter.', text_ar: 'الشرط مفقود.' }],
+      },
+    });
+    const region = block(container, 'deviations');
+    expect(region.getByText('Missing filter.')).toHaveAttribute('dir', 'ltr');
+    expect(region.getByText('الشرط مفقود.')).toHaveAttribute('dir', 'rtl');
+    expect(region.getByText('No reasoning available for this judge.')).toBeInTheDocument();
+  });
+
+  it('renders new judge facets, pass scores, common facts and SQL navigation without disclosures', () => {
+    const data = liveEvidenceTurns['chart-summary'];
+    const { container } = renderTurn(data, 'tab=judges&list=day%3D2026-11-01');
+    expect(screen.getByLabelText('Judge comparison')).toHaveTextContent(
+      'Judges agreeYesDiagnosis confidence0.96',
+    );
+    expect(block(container, 'judge-facts').getByText('Tool: suggest_chart')).toBeInTheDocument();
+    for (const side of ['a', 'b'] as const) {
+      const judge = block(container, `judge-${side}`);
+      const card = container.querySelector(`[data-live-block="judge-${side}"]`)!;
+      expect(card.querySelectorAll('[data-verdict="pass"]')).toHaveLength(3);
+      expect(judge.getByText(`judge-${side}`)).toHaveAttribute('data-kind', 'model');
+      expect(judge.getByText('Followed manifest')).toBeInTheDocument();
+      expect(judge.getByText('Results match')).toBeInTheDocument();
+      expect(judge.getByText('1/1')).toBeInTheDocument();
+      expect(judge.getByText('Better SQL').closest('dt')?.nextElementSibling).toHaveTextContent('equivalent');
+      const link = judge.getByRole('link', { name: "Compare with the agent's SQL" });
+      expect(link).toHaveAttribute('href', expect.stringContaining(`vs=${side}#part-1`));
+      expect(link).toHaveAttribute('href', expect.stringContaining('source='));
+      expect(link).toHaveAttribute('href', expect.stringContaining('list='));
+      expect(card.querySelector('[aria-expanded]')).not.toBeInTheDocument();
+      expect(judge.getByText(judgeOf(data.summary, side)!.sqlReasoningAr!)).toHaveAttribute('dir', 'rtl');
+    }
+    expect(screen.queryByText('Cross-review score')).not.toBeInTheDocument();
+  });
+
+  it('falls back to old score checks and applies the spec threshold including zero', () => {
+    const data = structuredClone(turnDetail);
+    data.specs = data.specs.map((spec) =>
+      spec.metric_name === 'compliance_a' ? { ...spec, pass_threshold: 0.7 } : spec,
+    );
+    data.scores = [
+      {
+        ...data.scores[0]!,
+        metric_name: 'compliance_a',
+        meta: { followed_manifest: false, sql_well_formed: true, response_correct: false },
+        score_numeric: 0,
+      },
+    ];
+    const judges = data.summary.judges as Record<string, { compliance: Record<string, number> }>;
+    judges.a!.compliance = { sql: 0, response: 0.7, overall: 0.69 };
+    const { container } = renderTurn(data, 'tab=judges');
+    const judge = block(container, 'judge-a');
+    expect(judge.getByText('Followed manifest').closest('dt')?.nextElementSibling).toHaveTextContent('No');
+    expect(judge.getByText('SQL well formed').closest('dt')?.nextElementSibling).toHaveTextContent('Yes');
+    expect(judge.getByText('0%').closest('[data-verdict]')).toHaveAttribute('data-verdict', 'fail');
+    expect(judge.getByText('70%').closest('[data-verdict]')).toHaveAttribute('data-verdict', 'pass');
+    expect(judge.getByText('69%').closest('[data-verdict]')).toHaveAttribute('data-verdict', 'fail');
+    expect(container.querySelector('[data-live-block="judge-facts"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-judge-facet="route"]')).not.toBeInTheDocument();
+    expect(screen.getByRole('tabpanel')).not.toHaveTextContent('undefined');
+  });
+
+  it.each([
+    ['correct', 'Correct route'],
+    ['wrong', 'Wrong route'],
+    ['unsure', 'Unsure'],
+  ])('renders %s route review and privacy findings', (verdict, label) => {
+    const data = structuredClone(liveEvidenceTurns['privacy-refusal']);
+    const judges = data.summary.judges as Record<string, Record<string, unknown>>;
+    judges.a!.privacy_violation = true;
+    judges.a!.route_review = {
+      verdict,
+      reasoning_en: 'This is the route review.',
+      reasoning_ar: 'هذه مراجعة المسار.',
+    };
+    const { container } = renderTurn(data, 'tab=judges');
+    const judge = block(container, 'judge-a');
+    expect(judge.getByText(label)).toBeInTheDocument();
+    expect(judge.getByText('This is the route review.')).toHaveAttribute('dir', 'ltr');
+    expect(judge.getByText('هذه مراجعة المسار.')).toHaveAttribute('dir', 'rtl');
+    expect(
+      judge.getByText("This judge found the answer reveals one person's data.").closest('[data-tone]'),
+    ).toHaveAttribute('data-tone', 'danger');
+  });
+
+  it('shows failed and degraded service reasons on Diagnosis', () => {
+    const { container } = renderTurn({
+      ...turnDetail,
+      summary: {
+        services: {
+          sql_execution: { status: 'failed', reason: 'Warehouse unavailable.' },
+          finalize_report: { status: 'degraded', reason: 'Answer was incomplete.' },
+        },
+      },
+    });
+    const services = block(container, 'turn-services');
+    expect(services.getByText('Warehouse unavailable.')).toBeInTheDocument();
+    expect(services.getByText('Answer was incomplete.')).toBeInTheDocument();
   });
 });

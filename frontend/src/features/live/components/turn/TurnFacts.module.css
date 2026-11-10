@@ -1,0 +1,18 @@
+.stack {
+  display: grid;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.number {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

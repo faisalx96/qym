@@ -1,0 +1,26 @@
+.stack {
+  display: grid;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.steps {
+  display: grid;
+  gap: var(--space-lg);
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+}
+
+.steps > li::marker {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}

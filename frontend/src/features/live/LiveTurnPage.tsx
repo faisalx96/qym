@@ -12,6 +12,7 @@ import { DiagnosisTab } from './components/turn/DiagnosisTab';
 import { EvaluatorTab } from './components/turn/EvaluatorTab';
 import { EvidenceCard } from './components/turn/Evidence';
 import { JudgesTab } from './components/turn/JudgesTab';
+import { JudgesLoading } from './components/turn/JudgesLoading';
 import { ServicesTab } from './components/turn/ServicesTab';
 import { TurnHeader } from './components/turn/TurnHeader';
 import { TurnTiles } from './components/turn/TurnTiles';
@@ -78,16 +79,26 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
                 ))}
               </div>
             </div>
+          ) : tab === 'judges' ? (
+            <JudgesLoading />
           ) : (
             <>
-              <div className={styles.twoColumns}>
-                <Skeleton kind="chart" height="var(--turn-why-height)" label="Loading diagnosis" />
-                <Skeleton
-                  kind="chart"
-                  height="var(--turn-deviations-height)"
-                  label="Loading judge deviations"
-                />
-              </div>
+              <EvidenceCard title="Verdict">
+                <div className={styles.loadingVerdict}>
+                  <Skeleton kind="lines" rows={3} label="Loading diagnosis" />
+                  <Skeleton kind="lines" rows={2} label="Loading verdict reason" />
+                  <Skeleton kind="lines" rows={6} label="Loading how we got here" />
+                </div>
+              </EvidenceCard>
+              <EvidenceCard title="Insightor rules behind this verdict">
+                <Skeleton kind="lines" rows={3} label="Loading Insightor rules" />
+              </EvidenceCard>
+              <EvidenceCard title="What Insightor did">
+                <Skeleton kind="lines" rows={4} label="Loading turn facts" />
+              </EvidenceCard>
+              <EvidenceCard title="Deviations the judges found">
+                <Skeleton kind="lines" rows={4} label="Loading judge deviations" />
+              </EvidenceCard>
               <div className={styles.twoColumns}>
                 <Skeleton kind="chart" height="var(--turn-agent-sql-height)" label="Loading agent SQL" />
                 <Skeleton kind="chart" height="var(--turn-judge-sql-height)" label="Loading judge SQL" />
