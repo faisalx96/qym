@@ -1,4 +1,5 @@
 /** Static API-shaped examples for the Live design round. Vocabulary matches scripts/seed_live.py. */
+import evidenceFixtures from './liveEvidenceFixtures.json';
 import { workerDefaults, type LiveWorkerRead, type LiveWorkerEvent } from '@/api/liveWorker';
 import type { LiveMetricSpec, LiveOverview, LiveTurnDetail, LiveTurnsPage } from '@/api/live';
 
@@ -42,8 +43,8 @@ export const liveServiceNames = [
   'retrieval',
   'sql_generation',
   'sql_execution',
-  'visualization',
-  'finalize',
+  'viz_agent',
+  'finalize_report',
 ];
 export const liveSpecs: LiveMetricSpec[] = [
   metric({ metric_name: 'agent_success', label: 'Agent success', is_primary: true }),
@@ -157,7 +158,7 @@ export const liveOverview: LiveOverview = {
     services: liveServiceNames.map((name, i): LiveOverview['day']['services'][number] => ({
       name,
       ok_rate: [1, 0.98, 0.36, 0.89, 0.84, 0.98][i]!,
-      n: name === 'visualization' ? 19 : 47,
+      n: name === 'viz_agent' ? 19 : 47,
       fault_breakdown: name === 'sql_generation' ? { agent: 30 } : {},
     })),
     latency: { median_ms: 84000, p90_ms: 214000, over_5min: 3 },
@@ -165,8 +166,8 @@ export const liveOverview: LiveOverview = {
   },
   canaries: liveServiceNames.map((canary, i) => ({
     canary,
-    status: canary === 'visualization' ? 'failed' : 'ok',
-    fault: canary === 'visualization' ? 'system' : null,
+    status: canary === 'viz_agent' ? 'failed' : 'ok',
+    fault: canary === 'viz_agent' ? 'system' : null,
     latency_ms: [32, 128, 440, 210, 1200, 28][i]!,
     checked_at: '2026-11-01T09:18:00Z',
   })),
@@ -226,7 +227,7 @@ export const liveTurnsPage: LiveTurnsPage = {
     charts: { count: chartCounts[i]!, failed: failedChartCounts[i]! },
     services_not_ok: [
       { name: 'sql_generation', fault: 'agent' },
-      ...(failedChartCounts[i]! > 0 ? [{ name: 'visualization', fault: i === 5 ? 'system' : 'agent' }] : []),
+      ...(failedChartCounts[i]! > 0 ? [{ name: 'viz_agent', fault: i === 5 ? 'system' : 'agent' }] : []),
     ],
     scores: Object.fromEntries(
       [
@@ -250,7 +251,7 @@ export const liveTurnsPage: LiveTurnsPage = {
     statuses: { completed: 6 },
     outcomes: { agent_failed: 6 },
     modes: { inquiry: 47 },
-    services: { sql_generation: 30, sql_execution: 5, visualization: 3 },
+    services: { sql_generation: 30, sql_execution: 5, viz_agent: 3 },
     users: [
       { user_ref: 'u-4821', n: 3 },
       { user_ref: 'u-4822', n: 3 },
@@ -325,10 +326,16 @@ export const liveTurnEvidence = {
     [...liveServiceNames, 'eval_health'].map((name) => [
       name,
       {
-        status: ['sql_generation', 'visualization'].includes(name) ? 'failed' : 'ok',
-        score: ['sql_generation', 'visualization'].includes(name) ? 0 : 1,
-        fault: ['sql_generation', 'visualization'].includes(name) ? 'agent' : null,
+        status: ['sql_generation', 'viz_agent'].includes(name) ? 'failed' : 'ok',
+        score: ['sql_generation', 'viz_agent'].includes(name) ? 0 : 1,
+        fault: ['sql_generation', 'viz_agent'].includes(name) ? 'agent' : null,
         signals: { latency_ms: 120 },
+        reason:
+          name === 'sql_generation'
+            ? reason
+            : name === 'viz_agent'
+              ? 'The chart is missing a category label.'
+              : 'The service completed.',
       },
     ]),
   ),
@@ -403,6 +410,65 @@ export const liveTurnDetail: LiveTurnDetail = {
       current: r.turn_id === firstTurn.turn_id,
     })),
   specs: liveSpecs,
+};
+
+/** Synthetic evidence built from Insightor code (recon A/B), not captured traces.
+ * Shared with seed_live.py --evidence-cases. liveTurnDetail above retains the old evidence shape.
+ */
+function evidenceTurn(key: keyof typeof evidenceFixtures, index: number): LiveTurnDetail {
+  const fixture = evidenceFixtures[key];
+  const specs = liveSpecs.map((spec) =>
+    spec.metric_name === 'diagnosis'
+      ? {
+          ...spec,
+          values: [...(spec.values ?? []), { value: 'agent_ok', label: 'Agent OK', tone: 'accent' }],
+        }
+      : spec,
+  );
+  const scores = liveTurnDetail.scores.map((score) => ({
+    ...score,
+    turn_pk: index + 2,
+    score_numeric: score.metric_name === 'agent_success' ? Number(fixture.label === 'agent_ok') : null,
+    score_raw: score.metric_name === 'diagnosis' ? fixture.label : null,
+    label: score.metric_name === 'diagnosis' ? fixture.label : null,
+    explanation: fixture.summary.verdict.reason_en,
+    spec: specs.find((spec) => spec.metric_name === score.metric_name) ?? null,
+  }));
+  return {
+    ...liveTurnDetail,
+    summary: fixture.summary,
+    detail: { sample: true },
+    scores,
+    specs,
+    chart_images: Object.fromEntries(fixture.summary.charts.map((chart) => [chart.ref, liveChartImage])),
+    turn: {
+      ...liveTurnDetail.turn,
+      ...fixture,
+      status: 'completed',
+      id: index + 2,
+      detail: { sample: true },
+      conversation_id: `conversation-${key}`,
+      turn_index: 0,
+      trace_url: null,
+      eval_trace_url: null,
+    },
+    conversation: [
+      {
+        turn_id: fixture.turn_id,
+        turn_at: liveTurnDetail.turn.turn_at,
+        turn_index: 0,
+        question: fixture.question,
+        label: fixture.label,
+        current: true,
+      },
+    ],
+  };
+}
+export const liveEvidenceTurns = {
+  'privacy-refusal': evidenceTurn('privacy-refusal', 0),
+  'chart-summary': evidenceTurn('chart-summary', 1),
+  'sql-mismatch': evidenceTurn('sql-mismatch', 2),
+  'query-blocked': evidenceTurn('query-blocked', 3),
 };
 
 const workerValues = workerDefaults();

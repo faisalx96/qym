@@ -259,13 +259,16 @@
   background: var(--bg-selected);
 }
 
-/* Reserved frames match the approved mock's measured LV-22–LV-27 heights. */
+/* The narrative frame follows the loaded full-width evidence blocks. Optional evidence
+   and its text length are unknown until the turn response arrives. */
+.loadingVerdict {
+  display: grid;
+  gap: var(--space-md);
+}
 .loading {
   --turn-chart-image-height: 420px;
   --turn-header-height: 117px;
   --turn-tiles-height: 74px;
-  --turn-why-height: 411px;
-  --turn-deviations-height: 411px;
   --turn-agent-sql-height: 231px;
   --turn-judge-sql-height: 231px;
   --turn-answer-height: 347px;
@@ -294,7 +297,6 @@
   .loading {
     --turn-header-height: 138px;
     --turn-tiles-height: 147px;
-    --turn-deviations-height: 209px;
     --turn-answer-height: 136px;
     --turn-chart-height: 239px;
     --turn-services-height: 324px;
@@ -310,8 +312,6 @@
     --turn-chart-image-height: 280px;
     --turn-header-height: 300px;
     --turn-tiles-height: 257px;
-    --turn-why-height: 447px;
-    --turn-deviations-height: 247px;
     --turn-agent-sql-height: 299px;
     --turn-judge-sql-height: 251px;
     --turn-answer-height: 157px;

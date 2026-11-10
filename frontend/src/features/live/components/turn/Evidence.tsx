@@ -2,6 +2,9 @@ import type { ReactNode } from 'react';
 import type { LiveMetricSpec } from '@/api/live';
 import {
   Card,
+  ClampedText,
+  Eyebrow,
+  Tag,
   CopyButton,
   DataTable,
   Disclosure,
@@ -12,7 +15,7 @@ import {
   Text,
   TextBlock,
 } from '@/ui';
-import type { SqlPart, SqlResult } from '../../lib/summary';
+import type { AppliedRule, SqlPart, SqlResult } from '../../lib/summary';
 import { labelFor, scoreText } from './presentation';
 import styles from '../../turn.module.css';
 
@@ -62,9 +65,25 @@ export function DiagnosisLabel({ value, specs }: { value: string | null; specs: 
 export function ServiceStatus({ status }: { status: string | null }) {
   return (
     <StatusMark
-      tone={status === 'failed' ? 'danger' : status === 'ok' ? 'success' : 'neutral'}
+      tone={
+        status === 'failed'
+          ? 'danger'
+          : status === 'ok'
+            ? 'success'
+            : status === 'degraded'
+              ? 'warning'
+              : 'neutral'
+      }
       shape={
-        status === 'failed' ? 'cross' : status === 'ok' ? 'check' : status === 'skipped' ? 'pause' : 'ring'
+        status === 'failed'
+          ? 'cross'
+          : status === 'ok'
+            ? 'check'
+            : status === 'skipped'
+              ? 'pause'
+              : status === 'degraded'
+                ? 'hourglass'
+                : 'ring'
       }
       label={status ?? '—'}
       dir="auto"
@@ -109,12 +128,12 @@ export function Facts({ value, label }: { value: Record<string, unknown> | null;
   );
 }
 
-function SqlPreview({ result }: { result: SqlResult }) {
+export function SqlPreview({ result, expanded = false }: { result: SqlResult; expanded?: boolean }) {
   // A sample without column names cannot be laid out, so no preview is offered.
   if (result.rows === 0 || !result.sample.length || !result.columns.length) return null;
   const title = `First ${result.sample.length}${result.rows === null ? '' : ` of ${result.rows}`} rows`;
-  return (
-    <Disclosure title={title}>
+  const content = (
+    <>
       <DataTable<{ cells: (string | null)[]; index: number }>
         aria-label={title}
         rows={result.sample.map((cells, index) => ({ cells, index }))}
@@ -147,7 +166,17 @@ function SqlPreview({ result }: { result: SqlResult }) {
           Showing {result.columns.length} of {result.columnsTotal} columns
         </Text>
       ) : null}
-    </Disclosure>
+    </>
+  );
+  return expanded ? (
+    <div>
+      <Text as="p" tone="muted" variant="sm">
+        {title}
+      </Text>
+      {content}
+    </div>
+  ) : (
+    <Disclosure title={title}>{content}</Disclosure>
   );
 }
 
@@ -189,6 +218,59 @@ export function SqlParts({ parts }: { parts: SqlPart[] }) {
               <SqlPreview result={part.replay} />
             </>
           ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Languages stay visible together; direction applies to prose, never to the surrounding controls. */
+export function Bilingual({ en, ar, clamp }: { en: string | null; ar: string | null; clamp?: number }) {
+  if (en === null && ar === null) return null;
+  return (
+    <div className={styles.sqlParts}>
+      {(
+        [
+          { text: en, label: 'English', dir: 'ltr' },
+          { text: ar, label: 'Arabic', dir: 'rtl' },
+        ] as const
+      ).map(({ text, label, dir }) =>
+        text === null ? null : (
+          <div key={label}>
+            <Eyebrow>{label}</Eyebrow>
+            {clamp === undefined ? (
+              <TextBlock text={text} dir={dir} code={false} />
+            ) : (
+              <ClampedText text={text} dir={dir} code={false} lines={clamp} />
+            )}
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+export function RulesApplied({ rules }: { rules: AppliedRule[] }) {
+  if (!rules.length) return null;
+  return (
+    <div className={styles.sqlParts}>
+      {rules.map((rule, index) => (
+        <div key={`${rule.id}-${index}`}>
+          <div className={styles.inline}>
+            {rule.id !== null ? <Tag kind="data">{rule.id}</Tag> : null}
+            {rule.titleEn !== null ? <TextBlock text={rule.titleEn} dir="ltr" code={false} /> : null}
+            {rule.verdictEn !== null ? <TextBlock text={rule.verdictEn} dir="ltr" code={false} /> : null}
+            {rule.titleAr !== null ? <TextBlock text={rule.titleAr} dir="rtl" code={false} /> : null}
+            {rule.verdictAr !== null ? <TextBlock text={rule.verdictAr} dir="rtl" code={false} /> : null}
+            {rule.sources.map((source, sourceIndex) => (
+              <span key={`${source}-${sourceIndex}`} className={styles.inline}>
+                <Text as="span" mono dir="ltr" className={styles.userRef}>
+                  {source}
+                </Text>
+                <CopyButton text={source} label="Copy rule source" />
+              </span>
+            ))}
+          </div>
         </div>
       ))}
     </div>

@@ -1,0 +1,5 @@
+.fields {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+}

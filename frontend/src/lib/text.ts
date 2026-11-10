@@ -9,6 +9,55 @@ export function isRTL(text: unknown): boolean {
   return rtl > latin;
 }
 
+/** Split a bilingual analysis at its strongest script transition, retaining quoted foreign words. */
+export function splitBilingual(text: string): { en: string | null; ar: string | null } {
+  if (!text.trim()) return { en: null, ar: null };
+  const arabic = new Uint32Array(text.length + 1);
+  const latin = new Uint32Array(text.length + 1);
+  const isArabic = (char: string) => /\p{Script=Arabic}/u.test(char) && /\p{L}/u.test(char);
+  for (let i = 0; i < text.length; i++) {
+    arabic[i + 1] = arabic[i]! + Number(isArabic(text[i]!));
+    latin[i + 1] = latin[i]! + Number(/[A-Za-z]/.test(text[i]!));
+  }
+  const totalAr = arabic[text.length]!;
+  const totalEn = latin[text.length]!;
+  let best: { cut: number; score: number; arFirst: boolean } | null = null;
+  for (let i = 1; i < text.length; i++) {
+    if (!/[\s/.:;—\-|]/.test(text[i - 1]!) || (!/[A-Za-z]/.test(text[i]!) && !isArabic(text[i]!))) continue;
+    const beforeAr = arabic[i]!;
+    const beforeEn = latin[i]!;
+    const afterAr = totalAr - beforeAr;
+    const afterEn = totalEn - beforeEn;
+    const arFirst = beforeAr > beforeEn;
+    if (arFirst === afterAr > afterEn) continue;
+    if (arFirst ? beforeAr < 20 || afterEn < 20 : beforeEn < 20 || afterAr < 20) continue;
+    const score = (beforeEn - beforeAr + afterAr - afterEn) * (arFirst ? -1 : 1);
+    if (!best || score > best.score) best = { cut: i, score, arFirst };
+  }
+  // An embedded SQL statement is evidence inside the Arabic explanation, not an English translation.
+  if (best) {
+    const english = (best.arFirst ? text.slice(best.cut) : text.slice(0, best.cut)).trim();
+    if (
+      /^(?:select|with|insert|update|delete|create|alter|drop|explain)\b/i.test(english) &&
+      looksLikeCode(english)
+    )
+      best = null;
+  }
+  if (!best) return isRTL(text) ? { en: null, ar: text } : { en: text, ar: null };
+  const before = text
+    .slice(0, best.cut)
+    .trim()
+    .replace(/\s*[/|:;—-]+\s*$/, '')
+    .trim();
+  const after = text
+    .slice(best.cut)
+    .trim()
+    .replace(/^[/|:;—-]+\s*/, '')
+    .trim();
+  if (isRTL(before) === isRTL(after)) return isRTL(text) ? { en: null, ar: text } : { en: text, ar: null };
+  return best.arFirst ? { en: after, ar: before } : { en: before, ar: after };
+}
+
 /* ── search folding (C066), the same fold as the server (services/text_search.py) ── */
 
 // Combining marks in the Arabic blocks, the alef variants and alef maqsura, tatweel, and Arabic-Indic and Persian digits.
