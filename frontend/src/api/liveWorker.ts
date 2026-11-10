@@ -48,7 +48,13 @@ export interface LiveWorkerControl {
   models: { listed_at: string; ids: string[] } | null;
   errors_last_hour: number;
   last_error: { at: string; component: string; code: string; message: string } | null;
-  job: { id: string; kind: string; progress: Record<string, unknown> } | null;
+  job: {
+    id?: string;
+    kind?: string;
+    progress?: Record<string, unknown>;
+    waiting_reason?: string;
+    blocked_job_id?: string;
+  } | null;
 }
 export interface LiveWorkerVersion {
   version: number;
@@ -89,6 +95,7 @@ export interface LiveJob {
     recorded?: number;
     incomplete?: number;
     fetch_failed?: number;
+    deferred?: number;
     limit_reached?: boolean;
     remaining?: number;
     would_evaluate?: number;
@@ -96,6 +103,7 @@ export interface LiveJob {
     beyond_limit?: number;
     waiting?: string;
     rejected?: {
+      [key: string]: unknown;
       other_names?: number;
       no_session?: number;
       excluded_users?: number;

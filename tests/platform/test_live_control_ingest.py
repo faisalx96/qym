@@ -357,7 +357,7 @@ def test_control_other_project_key_is_403(client):
 
 
 @pytest.mark.parametrize(
-    "counter", ["found", "skipped_existing", "evaluated", "failed", "redone", "listed"]
+    "counter", ["found", "skipped_existing", "evaluated", "failed"]
 )
 def test_progress_monotonic_counters(client, session_factory, counter):
     assert _progress(client, progress={counter: 3}).status_code == 200
@@ -370,6 +370,32 @@ def test_progress_monotonic_counters(client, session_factory, counter):
     _assert_error(_progress(client), 422, "counters must not decrease")
     with session_factory() as db:
         assert db.get(LiveJob, "new").progress == {counter: 3}
+
+
+@pytest.mark.parametrize("counter", ["redone", "listed"])
+@pytest.mark.parametrize("terminal", ["done", "failed", "cancelled"])
+def test_old_worker_resumed_counters_keep_maximum(
+    client, session_factory, counter, terminal
+):
+    # Deployed workers can reset these counters when resuming a job.
+    assert _progress(client, progress={counter: 5}).status_code == 200
+    for progress in ({counter: 2}, {}):
+        response = _progress(client, progress=progress)
+        assert response.status_code == 200, response.text
+        assert response.json()["progress"][counter] == 5
+    response = _progress(client, status=terminal, progress={counter: 1})
+    assert response.status_code == 200, response.text
+    assert response.json()["progress"][counter] == 5
+    with session_factory() as db:
+        job = db.get(LiveJob, "new")
+        assert job.status == terminal
+        assert job.progress[counter] == 5
+
+
+@pytest.mark.parametrize("counter", ["redone", "listed"])
+@pytest.mark.parametrize("value", [-1, True, 1.5, "2", None])
+def test_progress_retained_counters_require_nonnegative_integers(client, counter, value):
+    assert _progress(client, progress={counter: value}).status_code == 422
 
 
 @pytest.mark.parametrize("terminal", ["done", "failed", "cancelled"])
@@ -602,6 +628,7 @@ NEW_PROGRESS = {
     "recorded": 1,
     "incomplete": 1,
     "fetch_failed": 1,
+    "deferred": 3,
     "limit_reached": True,
     "remaining": 8,
     "would_evaluate": 4,
@@ -615,6 +642,9 @@ NEW_PROGRESS = {
         "excluded_users": 3,
         "other_environment": 4,
         "bad_timestamp": 1,
+        "outside_window": 3,
+        "duplicate": 2,
+        "no_id": 1,
     },
     "future_key": {"unchanged": [True, None, "value"]},
 }
@@ -636,6 +666,7 @@ def test_progress_preserves_optional_and_unknown_keys(client, session_factory):
         "recorded",
         "incomplete",
         "fetch_failed",
+        "deferred",
         "remaining",
         "would_evaluate",
         "would_redo",
@@ -677,3 +708,10 @@ def test_progress_optional_counters_require_nonnegative_integers(
 )
 def test_progress_optional_fields_validate_types(client, progress):
     assert _progress(client, progress=progress).status_code == 422
+
+
+@pytest.mark.parametrize("value", [0, 3])
+def test_progress_deferred_accepts_zero_and_positive(client, value):
+    response = _progress(client, progress={"deferred": value})
+    assert response.status_code == 200, response.text
+    assert response.json()["progress"] == {"deferred": value}

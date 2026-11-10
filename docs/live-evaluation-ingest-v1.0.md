@@ -474,12 +474,17 @@ running work also finishes it immediately when the source's server-recorded
 `cancelled while the worker was not responding`; later worker posts get 409.
 With a recent heartbeat, cancellation remains a request for the worker to stop.
 
-The counters `found`, `listed`, `skipped_existing`, `evaluated`, `redone` and `failed` must be
+The counters `found`, `skipped_existing`, `evaluated` and `failed` must be
 nonnegative integers (not booleans) and must never decrease. An omitted counter
 is treated as zero, so send the complete latest counters on every update,
 including completion and cancellation.
 
-Progress is stored exactly as supplied, including unknown extra keys (which must
+`redone` and `listed` must also be nonnegative integers, not booleans. A decrease
+(including omission on a later report) is accepted: qym stores the larger of the
+stored and reported values. This lets older workers finish jobs after resuming
+with reset counters. If neither report supplies a counter, it remains absent.
+
+Other progress is stored exactly as supplied, including unknown extra keys (which must
 still be finite JSON). Older workers may omit every new field below. Optional
 counts must be nonnegative integers, not booleans; these new counts are not
 subject to the monotonic check.
@@ -489,11 +494,12 @@ subject to the monotonic check.
 | `resumed` | integer | Turns written by an earlier attempt of this job |
 | `judged`, `recorded`, `incomplete` | integers | Breakdown of `evaluated`: judged, recorded without judges (cancelled or failed in Insightor), and incomplete; `evaluated = judged + recorded + incomplete` |
 | `fetch_failed` | integer | Turns that could not be fetched and can be retried by the next backfill |
+| `deferred` | integer | Turns still arriving in Langfuse, left to the live loop |
 | `limit_reached` | boolean | The job stopped at its selection limit |
 | `remaining` | integer | Turns in the range still not evaluated |
 | `would_evaluate`, `would_redo`, `beyond_limit` | integers | Preview selections and turns beyond the limit |
 | `waiting` | string | Why work is waiting |
-| `rejected` | object | Optional nonnegative integer counts: `other_names`, `no_session`, `excluded_users`, `other_environment`, `bad_timestamp`; explains `listed − found` |
+| `rejected` | object | Optional nonnegative integer counts: `other_names`, `no_session`, `excluded_users`, `other_environment`, `bad_timestamp`; explains `listed − found`. Extra keys such as `outside_window`, `duplicate`, and `no_id` are accepted and stored; the page ignores them |
 | `effective_until` | ISO timestamp string | Effective cutoff; later turns are left to the live loop |
 
 `evaluated` counts rows written without an evaluation failure. `redone` counts
@@ -506,14 +512,15 @@ Both preview and backfill jobs carry the same `params.limit` and `params.redo`
 in their read and control documents. Both default to `redo: ["failed"]` when
 omitted; an explicit empty list disables redo. Preview uses the new counts when
 available; for older workers the UI uses `found − skipped_existing` and does not
-infer a redo or beyond-limit count.
+infer a redo or beyond-limit count. The stopped-at-limit warning is shown only
+for real backfills, never for preview rows or the preview dialog.
 
 | HTTP / scope | `error.code` | Exact detail or message | Meaning / action |
 |---|---|---|---|
 | `404` | `job_not_found` | `job not found` | Unknown job, or job belongs to another source |
 | `409` | `job_already_finished` | `job already finished` | Job is already done, failed or cancelled |
 | `409` | `job_cancelled` | `job cancelled` | Cancellation is pending; stop sending `running` |
-| `422` | `counters_must_not_decrease` | `counters must not decrease` | Send all counters as nonnegative, nondecreasing integers |
+| `422` | `counters_must_not_decrease` | `counters must not decrease` | Send `found`, `skipped_existing`, `evaluated`, and `failed` as nonnegative, nondecreasing integers |
 
 ### 3.11 `POST /sources/{key}/events` — Worker events
 
@@ -573,7 +580,12 @@ state. Send the whole block each time: heartbeat merging is shallow.
 | `models` | `{listed_at, ids}` | Available model IDs and when they were listed |
 | `errors_last_hour` | nonnegative integer | Recent problem count, also shown on the overview badge |
 | `last_error` | `{at, component, code, message}` | Latest reported problem |
-| `job` | `{id, kind, progress}` | Active job and its counters |
+| `job` | `{id?, kind?, progress?, waiting_reason?, blocked_job_id?}` | Active job counters, or the reason a queued job is blocked |
+
+`job.waiting_reason` is text (for example, `worker paused` or `another job is running`).
+The queued row matching `job.blocked_job_id` shows `Waiting: <reason>`. Other queued
+rows, and older workers that omit these fields, show `Queued`. These fields come
+from heartbeat status because an unclaimed job cannot report progress.
 
 The worker verifies a candidate version before applying it and reports the
 verification and effective running version here. A saved version is not proof

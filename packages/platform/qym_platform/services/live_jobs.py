@@ -49,8 +49,6 @@ def report_progress(
         "skipped_existing",
         "evaluated",
         "failed",
-        "redone",
-        "listed",
     ):
         value = progress.get(counter, 0)
         if (
@@ -59,12 +57,22 @@ def report_progress(
             or value < (job.progress or {}).get(counter, 0)
         ):
             raise JobError(422, "counters must not decrease")
+    # Older workers reset these on resume, including in their terminal report.
+    # Keep the high-water values without preventing the job from finishing.
+    progress = dict(progress)
+    for counter in ("redone", "listed"):
+        value = progress.get(counter, 0)
+        if type(value) is not int or value < 0:
+            raise JobError(422, f"{counter} must be a nonnegative integer")
+        if counter in progress or counter in (job.progress or {}):
+            progress[counter] = max(value, (job.progress or {}).get(counter, 0))
     for counter in (
         "resumed",
         "judged",
         "recorded",
         "incomplete",
         "fetch_failed",
+        "deferred",
         "remaining",
         "would_evaluate",
         "would_redo",

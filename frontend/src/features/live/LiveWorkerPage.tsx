@@ -65,6 +65,7 @@ export function WorkerPageView({
         <ProblemsBlock {...problems} read={read} />
         <JobsBlock
           jobs={read.jobs}
+          workerJob={read.running?.job}
           zone={read.status.day_key_timezone}
           busy={busy}
           onBackfill={() => setRange(true)}

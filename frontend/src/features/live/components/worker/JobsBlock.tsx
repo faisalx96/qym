@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { jobPreviewSentence, type LiveJob } from '@/api/liveWorker';
+import { jobPreviewSentence, type LiveJob, type LiveWorkerControl } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
 import { Button, ConfirmDialog, DataTable, EmptyState, ErrorState, Tag, Text, type Column } from '@/ui';
@@ -11,16 +11,21 @@ import styles from '../../worker.module.css';
 
 export function JobsBlock({
   jobs,
+  workerJob,
   zone,
   onBackfill,
   onCancelJob,
   busy,
   jobsLimit,
   onJobsLimit,
-}: { jobs: LiveJob[]; zone?: string; busy: WorkerBusy; onBackfill: () => void; jobsLimit: number } & Pick<
-  WorkerCallbacks,
-  'onCancelJob' | 'onJobsLimit'
->) {
+}: {
+  jobs: LiveJob[];
+  workerJob?: LiveWorkerControl['job'];
+  zone?: string;
+  busy: WorkerBusy;
+  onBackfill: () => void;
+  jobsLimit: number;
+} & Pick<WorkerCallbacks, 'onCancelJob' | 'onJobsLimit'>) {
   const [cancel, setCancel] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const columns: Column<LiveJob>[] = [
@@ -84,7 +89,14 @@ export function JobsBlock({
       id: 'progress',
       header: 'Progress',
       priority: 2,
-      cell: (row) => <JobProgress key={row.id} job={row} zone={zone} />,
+      cell: (row) => (
+        <JobProgress
+          key={row.id}
+          job={row}
+          zone={zone}
+          waitingReason={row.id === workerJob?.blocked_job_id ? workerJob.waiting_reason : undefined}
+        />
+      ),
     },
     {
       id: 'requested_by',
@@ -179,7 +191,7 @@ export function JobsBlock({
   );
 }
 
-function JobProgress({ job, zone }: { job: LiveJob; zone?: string }) {
+function JobProgress({ job, zone, waitingReason }: { job: LiveJob; zone?: string; waitingReason?: string }) {
   const p = job.progress;
   const [hadRedone, setHadRedone] = useState((p.redone ?? 0) > 0);
   if (!hadRedone && (p.redone ?? 0) > 0) setHadRedone(true);
@@ -213,8 +225,8 @@ function JobProgress({ job, zone }: { job: LiveJob; zone?: string }) {
   return (
     <div className={styles.wrap}>
       {job.status === 'queued'
-        ? p.waiting?.trim()
-          ? `Waiting: ${p.waiting}`
+        ? waitingReason?.trim()
+          ? `Waiting: ${waitingReason}`
           : 'Queued'
         : job.kind === 'backfill_preview'
           ? jobPreviewSentence(job)
@@ -225,7 +237,7 @@ function JobProgress({ job, zone }: { job: LiveJob; zone?: string }) {
           failed in Insightor), {p.incomplete ?? 0} incomplete
         </Text>
       ) : null}
-      {p.limit_reached ? (
+      {job.kind === 'backfill' && p.limit_reached ? (
         <Text as="div" variant="sm" tone="warning">
           Stopped at the limit of {job.params.limit}. {p.remaining ?? 0} turns in this range are still not
           evaluated.
@@ -234,6 +246,11 @@ function JobProgress({ job, zone }: { job: LiveJob; zone?: string }) {
       <Text as="div" variant="sm" tone="muted">
         Limit {job.params.limit} · redo {job.params.redo?.join(', ') || 'none'}
       </Text>
+      {(p.deferred ?? 0) > 0 ? (
+        <Text as="div" variant="sm" tone="muted">
+          {p.deferred} left to the live loop (still arriving)
+        </Text>
+      ) : null}
       {p.effective_until ? (
         <Text as="div" variant="sm" tone="muted">
           Covers turns up to {zoneDateTime(p.effective_until, zone)} {zoneLabel(zone)}; later turns are left

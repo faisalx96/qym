@@ -1017,13 +1017,13 @@ it('hides empty breakdowns and zero rejection categories', async () => {
   expect(table.getByText('6 traces listed: 4 user turns, 2 other traces')).toBeVisible();
 });
 
-it.each(['running', 'queued'] as const)('explains why a %s job is waiting', async (status) => {
+it('explains why a running job is waiting from progress', async () => {
   setup({
     ...liveWorkerRead,
     jobs: [
       {
         ...liveWorkerRead.jobs[0]!,
-        status,
+        status: 'running',
         updated_at: '2026-01-01T00:00:00Z',
         progress: { waiting: 'worker paused' },
       },
@@ -1034,7 +1034,7 @@ it.each(['running', 'queued'] as const)('explains why a %s job is waiting', asyn
   expect(table.queryByText(/no update for/)).toBeNull();
 });
 
-it('shows Queued when a queued job has no reason', async () => {
+it('shows Queued for an old worker without heartbeat waiting fields', async () => {
   setup({ ...liveWorkerRead, jobs: [{ ...liveWorkerRead.jobs[0]!, status: 'queued', progress: {} }] });
   const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
   expect(table.getByText('Queued')).toBeVisible();
@@ -1058,7 +1058,15 @@ it('shows the reason for cancelling an unresponsive worker job', async () => {
 it.each([
   [{ found: 12, skipped_existing: 10 }, '12 turns, 10 already evaluated, 2 to evaluate'],
   [
-    { found: 50, skipped_existing: 10, would_evaluate: 20, would_redo: 5, beyond_limit: 15 },
+    {
+      found: 50,
+      skipped_existing: 10,
+      would_evaluate: 20,
+      would_redo: 5,
+      beyond_limit: 15,
+      limit_reached: true,
+      remaining: 15,
+    },
     '20 to evaluate · 5 to redo · 10 already evaluated · 15 beyond the limit of 25',
   ],
   [
@@ -1082,6 +1090,7 @@ it.each([
   const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
   expect(table.getByText(sentence)).toBeVisible();
   expect(table.getByText('Limit 25 · redo none')).toBeVisible();
+  expect(table.queryByText(/Stopped at the limit/)).toBeNull();
 });
 
 it('previews the same limit and redo as Run and hides the preview when redo changes', async () => {
@@ -1097,7 +1106,14 @@ it('previews the same limit and redo as Run and hides the preview when redo chan
       limit: 25,
       redo: ['failed'],
     },
-    progress: { would_evaluate: 20, would_redo: 5, skipped_existing: 10, beyond_limit: 15 },
+    progress: {
+      would_evaluate: 20,
+      would_redo: 5,
+      skipped_existing: 10,
+      beyond_limit: 15,
+      limit_reached: true,
+      remaining: 15,
+    },
   };
   const { fetch } = setup(liveWorkerRead, () => response(job, 201));
   const user = await openRange();
@@ -1112,6 +1128,7 @@ it('previews the same limit and redo as Run and hides the preview when redo chan
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   const sentence = '20 to evaluate · 5 to redo · 10 already evaluated · 15 beyond the limit of 25';
   expect(await screen.findByText(sentence)).toBeVisible();
+  expect(within(screen.getByRole('dialog')).queryByText(/Stopped at the limit/)).toBeNull();
   await user.click(screen.getByRole('checkbox', { name: 'Also redo turns labelled Inconclusive' }));
   expect(screen.queryByText(sentence)).toBeNull();
   await user.click(screen.getByRole('checkbox', { name: 'Also redo turns labelled Inconclusive' }));
@@ -1158,4 +1175,66 @@ it('does not invent a rejection gap when listed equals found', async () => {
   const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
   expect(table.getByText('4 traces listed')).toBeVisible();
   expect(table.queryByText(/user turns/)).toBeNull();
+});
+
+it.each([
+  'worker paused',
+  'another job is running',
+  'waiting for runtime settings',
+  "finishing a previous job's report",
+])('shows the heartbeat waiting reason only on its queued job: %s', async (reason) => {
+  const job = liveWorkerRead.jobs[0]!;
+  setup({
+    ...liveWorkerRead,
+    running: {
+      ...liveWorkerRead.running!,
+      job: { waiting_reason: reason, blocked_job_id: 'blocked' },
+    },
+    jobs: [
+      { ...job, id: 'blocked', status: 'queued', progress: {} },
+      { ...job, id: 'other', status: 'queued', progress: {} },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getAllByText(`Waiting: ${reason}`)).toHaveLength(1);
+  expect(table.getAllByText('Queued')).toHaveLength(1);
+});
+
+it.each(['running', 'done', 'failed', 'cancelled'] as const)(
+  'ignores a heartbeat queued reason for a %s job',
+  async (status) => {
+    const job = liveWorkerRead.jobs[0]!;
+    setup({
+      ...liveWorkerRead,
+      running: {
+        ...liveWorkerRead.running!,
+        job: { waiting_reason: 'worker paused', blocked_job_id: job.id },
+      },
+      jobs: [{ ...job, status, progress: {} }],
+    });
+    const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+    expect(table.queryByText('Waiting: worker paused')).toBeNull();
+  },
+);
+
+it.each([undefined, 0, 3])('shows only positive deferred counts: %s', async (deferred) => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        progress: {
+          deferred,
+          found: 2,
+          listed: 9,
+          rejected: { other_names: 1, outside_window: 3, duplicate: 2, no_id: 1 },
+        },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  if (deferred) expect(table.getByText('3 left to the live loop (still arriving)')).toBeVisible();
+  else expect(table.queryByText(/left to the live loop/)).toBeNull();
+  expect(table.getByText('9 traces listed: 2 user turns, 1 other traces')).toBeVisible();
+  expect(table.queryByText(/outside_window|duplicate|no_id/)).toBeNull();
 });

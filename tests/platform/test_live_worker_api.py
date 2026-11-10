@@ -105,6 +105,31 @@ def test_read_defensive_worker_metadata(
     assert body["model_ids"] == model_ids
 
 
+@pytest.mark.parametrize(
+    "job",
+    [
+        {"id": "active", "kind": "backfill", "progress": {}},  # Old worker.
+        {"waiting_reason": "worker paused", "blocked_job_id": "queued-job"},
+        {
+            "id": "active",
+            "kind": "backfill",
+            "progress": {},
+            "waiting_reason": "another job is running",
+            "blocked_job_id": "queued-job",
+        },
+    ],
+)
+def test_read_preserves_heartbeat_job_waiting_reason(client, session_factory, job):
+    control = {"state": "paused", "errors_last_hour": 0, "last_error": None, "job": job}
+    with session_factory() as db:
+        record_heartbeat(
+            db, db.get(LiveSource, "source"), NOW, None, None, {"control": control}, NOW
+        )
+        db.commit()
+        assert db.get(LiveSource, "source").worker["control"]["job"] == job
+    assert read(client)["running"] == control
+
+
 def test_read_without_version_and_with_version(client, session_factory, values):
     body = read(client)
     assert body == {
