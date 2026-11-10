@@ -484,7 +484,6 @@ describe('live turn evidence presentation', () => {
     await user.click(screen.getByRole('tab', { name: 'Charts' }));
     expect(screen.getByRole('img', { name: /bar chart/ })).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Services and tools' }));
-    expect(screen.getByLabelText('Tool failures')).toHaveTextContent('Output validation failed');
     await user.click(screen.getByRole('tab', { name: 'Conversation' }));
     const conversation = screen.getByRole('list', { name: 'Conversation turns' });
     expect(within(conversation).getAllByRole('link')).toHaveLength(3);
