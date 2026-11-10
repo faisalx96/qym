@@ -321,7 +321,7 @@ function renderTurn(data: LiveTurnDetail = turnDetail, search = '', error?: ApiE
 }
 
 describe('live turn evidence presentation', () => {
-  it('keeps the Diagnosis preview and links compact judge SQL to the comparison tab', async () => {
+  it('opens visible SQL previews from the compact Diagnosis and Judges links', async () => {
     const user = userEvent.setup();
     renderTurn({
       ...turnDetail,
@@ -345,19 +345,13 @@ describe('live turn evidence presentation', () => {
         },
       },
     });
-    for (const tab of ['Diagnosis']) {
-      await user.click(screen.getByRole('tab', { name: tab }));
-      expect(screen.getByText('124 rows')).toBeInTheDocument();
-      const disclosure = screen.getByRole('button', { name: 'First 2 of 124 rows' });
-      expect(disclosure).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.queryByRole('grid')).not.toBeInTheDocument();
-      await user.click(disclosure);
-      const table = screen.getByRole('grid');
-      expect(within(table).getAllByRole('columnheader')).toHaveLength(2);
-      expect(within(table).getByText('الرياض')).toHaveAttribute('dir', 'auto');
-      expect(within(table).getByText('NULL')).toHaveAttribute('data-tone', 'muted');
-      expect(screen.getByText('Showing 2 of 3 columns')).toBeInTheDocument();
-    }
+    await user.click(screen.getByRole('link', { name: 'Open the full comparison' }));
+    expect(screen.getByText('First 2 of 124 rows')).toBeInTheDocument();
+    const table = screen.getByRole('grid');
+    expect(within(table).getAllByRole('columnheader')).toHaveLength(2);
+    expect(within(table).getByText('الرياض')).toHaveAttribute('dir', 'auto');
+    expect(within(table).getByText('NULL')).toHaveAttribute('data-tone', 'muted');
+    expect(screen.getByText('Showing 2 of 3 columns')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Judges' }));
     expect(screen.getByText('124 rows')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'First 2 of 124 rows' })).not.toBeInTheDocument();
@@ -371,6 +365,7 @@ describe('live turn evidence presentation', () => {
     const user = userEvent.setup();
     renderTurn({
       ...turnDetail,
+      summary: {},
       turn: {
         ...turnDetail.turn,
         sql: [
@@ -396,21 +391,24 @@ describe('live turn evidence presentation', () => {
   });
 
   it('keeps old SQL evidence unchanged and never previews zero rows', () => {
-    renderTurn({
-      ...turnDetail,
-      summary: {
-        judges: {
-          a: {
-            sql_parts: [
-              { text: 'SELECT old', executed: true },
-              { text: 'SELECT empty', rows: 0, columns: ['region'], sample: [['unexpected']] },
-            ],
+    renderTurn(
+      {
+        ...turnDetail,
+        summary: {
+          judges: {
+            a: {
+              sql_parts: [
+                { text: 'SELECT old', executed: true },
+                { text: 'SELECT empty', rows: 0, columns: ['region'], sample: [['unexpected']] },
+              ],
+            },
           },
         },
       },
-    });
+      'tab=answer',
+    );
     expect(screen.getByText('SELECT old')).toBeInTheDocument();
-    expect(screen.getByText('— rows')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Judge A results')[0]).toHaveTextContent('No result sample available');
     expect(screen.getByText('0 rows')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^First / })).not.toBeInTheDocument();
     expect(screen.queryByText(/Replayed for comparison/)).not.toBeInTheDocument();
@@ -441,7 +439,7 @@ describe('live turn evidence presentation', () => {
         },
       },
     };
-    const { container } = render(createElement(DiagnosisTab, { data }));
+    const { container } = render(createElement(MemoryRouter, null, createElement(DiagnosisTab, { data })));
     expect(container.querySelectorAll('[data-live-block="why"] dt')).toHaveLength(6);
     expect(screen.getByText('What each judge said')).toBeInTheDocument();
     expect(screen.getByText(/missing year filter/)).toHaveAttribute('dir', 'ltr');
@@ -486,7 +484,7 @@ describe('live turn evidence presentation', () => {
     }
     await user.click(screen.getByRole('tab', { name: 'Answer and SQL' }));
     expect(screen.getByLabelText('Current URL')).toHaveTextContent('tab=answer');
-    expect(screen.getByRole('button', { name: 'Copy SQL' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy Agent SQL' })).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Judges' }));
     const judgeA = screen.getByLabelText('Judge A compliance');
     expect(

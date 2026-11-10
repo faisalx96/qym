@@ -1,7 +1,7 @@
 import type { LiveTurnDetail } from '@/api/live';
 import { TextBlock } from '@/ui';
-import { sqlPartsOf } from '../../lib/summary';
-import { EvidenceCard, SqlParts } from './Evidence';
+import { EvidenceCard } from './Evidence';
+import { SqlCompare } from './SqlCompare';
 import styles from '../../turn.module.css';
 
 export function AnswerSqlTab({ data }: { data: LiveTurnDetail }) {
@@ -16,11 +16,11 @@ export function AnswerSqlTab({ data }: { data: LiveTurnDetail }) {
           />
         </div>
       </EvidenceCard>
-      <EvidenceCard title="Agent SQL" block="agent-sql">
+      <EvidenceCard title="SQL comparison" block="sql-comparison">
         <p className={styles.copy}>
           Result rows: <span className={styles.number}>{data.turn.result_rows ?? '—'}</span>
         </p>
-        <SqlParts parts={sqlPartsOf(data.turn.sql)} />
+        <SqlCompare data={data} />
       </EvidenceCard>
     </>
   );

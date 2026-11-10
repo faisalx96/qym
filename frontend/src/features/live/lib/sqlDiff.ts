@@ -89,6 +89,52 @@ export interface StatementPairing {
   unpaired: number[];
 }
 
+/** Top-level clause names touched by the token diff; nested queries belong to their outer clause. */
+export function clauseDiff(left: string, right: string, { ignoreFormatting = true } = {}) {
+  const diff = sqlDiff(left, right, { ignoreFormatting });
+  if (diff.tooLarge) return { clauses: [] as string[], leftOnly: 0, rightOnly: 0 };
+  const clauses = new Set<string>();
+  const inspect = (text: string, segments: Segment[]) => {
+    const tokens = sqlTokens(text);
+    const comment = (token: string) => /^(--|\/\*)/.test(token);
+    let depth = 0;
+    let clause = '';
+    let offset = 0;
+    let segmentIndex = 0;
+    let segmentEnd = segments[0]?.text.length ?? 0;
+    let fragments = 0;
+    let wasDifferent = false;
+    tokens.forEach((token, index) => {
+      while (offset >= segmentEnd && segmentIndex < segments.length - 1) {
+        segmentEnd += segments[++segmentIndex]!.text.length;
+      }
+      const different = segments[segmentIndex]?.kind === 'only';
+      const key = token.toUpperCase();
+      if (depth === 0 && !comment(token)) {
+        if (['WITH', 'SELECT', 'FROM', 'WHERE', 'HAVING', 'LIMIT'].includes(key)) clause = key;
+        else if (key === 'GROUP' || key === 'ORDER') {
+          const next = tokens.slice(index + 1).find((item) => !whitespace(item) && !comment(item));
+          if (next?.toUpperCase() === 'BY') clause = `${key} BY`;
+        }
+      }
+      if (different) {
+        if (clause) clauses.add(clause);
+        if (!wasDifferent) fragments++;
+        wasDifferent = true;
+      } else if (!whitespace(token)) wasDifferent = false;
+      if (token === '(') depth++;
+      if (token === ')') depth = Math.max(0, depth - 1);
+      if (token === ';' && depth === 0) clause = '';
+      offset += token.length;
+    });
+    return fragments;
+  };
+  const leftOnly = inspect(left, diff.left);
+  const rightOnly = inspect(right, diff.right);
+  const order = ['WITH', 'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT'];
+  return { clauses: order.filter((clause) => clauses.has(clause)), leftOnly, rightOnly };
+}
+
 export function pairStatements(
   agent: string[],
   judge: { text: string | null; agentIndex: number | null }[],

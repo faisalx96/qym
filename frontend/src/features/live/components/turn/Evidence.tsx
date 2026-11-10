@@ -128,12 +128,12 @@ export function Facts({ value, label }: { value: Record<string, unknown> | null;
   );
 }
 
-function SqlPreview({ result }: { result: SqlResult }) {
+export function SqlPreview({ result, expanded = false }: { result: SqlResult; expanded?: boolean }) {
   // A sample without column names cannot be laid out, so no preview is offered.
   if (result.rows === 0 || !result.sample.length || !result.columns.length) return null;
   const title = `First ${result.sample.length}${result.rows === null ? '' : ` of ${result.rows}`} rows`;
-  return (
-    <Disclosure title={title}>
+  const content = (
+    <>
       <DataTable<{ cells: (string | null)[]; index: number }>
         aria-label={title}
         rows={result.sample.map((cells, index) => ({ cells, index }))}
@@ -166,7 +166,17 @@ function SqlPreview({ result }: { result: SqlResult }) {
           Showing {result.columns.length} of {result.columnsTotal} columns
         </Text>
       ) : null}
-    </Disclosure>
+    </>
+  );
+  return expanded ? (
+    <div>
+      <Text as="p" tone="muted" variant="sm">
+        {title}
+      </Text>
+      {content}
+    </div>
+  ) : (
+    <Disclosure title={title}>{content}</Disclosure>
   );
 }
 

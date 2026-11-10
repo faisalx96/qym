@@ -1,22 +1,13 @@
 import type { LiveTurnDetail } from '@/api/live';
 import { formatDurationMs } from '@/lib/format';
-import { Disclosure, StatusMark, Tag, Text, TextBlock } from '@/ui';
-import {
-  booleanOf,
-  chartsOf,
-  evalMetaOf,
-  judgeOf,
-  numberOf,
-  recordOf,
-  servicesOf,
-  sqlPartsOf,
-  stringOf,
-} from '../../lib/summary';
+import { Tag, Text, TextBlock } from '@/ui';
+import { chartsOf, evalMetaOf, judgeOf, numberOf, recordOf, servicesOf, stringOf } from '../../lib/summary';
 import { ChartEvidenceBody } from './ChartsTab';
-import { Bilingual, EvidenceCard, MetricValue, ServiceStatus, SqlParts } from './Evidence';
+import { Bilingual, EvidenceCard, MetricValue, ServiceStatus } from './Evidence';
 import { DiagnosisRules, DiagnosisVerdict } from './DiagnosisVerdict';
 import { deviationEvidence } from './deviationEvidence';
 import { JudgeDeviations } from './JudgeDeviations';
+import { SqlCompare } from './SqlCompare';
 import { TurnFacts } from './TurnFacts';
 import styles from '../../turn.module.css';
 
@@ -25,8 +16,6 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
   const judges = { a: judgeOf(summary, 'a'), b: judgeOf(summary, 'b') };
   const deviations = { a: deviationEvidence(summary, 'a'), b: deviationEvidence(summary, 'b') };
   const hasDeviations = deviations.a.length > 0 || deviations.b.length > 0;
-  const notes = recordOf(summary.sql_notes);
-  const reused = booleanOf(notes?.reused_by_judges);
   const chart = chartsOf(summary, data.chart_images)[0];
   const services = servicesOf(summary);
   const meta = evalMetaOf(summary);
@@ -66,35 +55,9 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
           );
         })}
       </EvidenceCard>
-      <div className={styles.twoColumns}>
-        <EvidenceCard title="Agent SQL" block="agent-sql">
-          <SqlParts parts={sqlPartsOf(turn.sql)} />
-          {notes ? (
-            <div className={styles.notes}>
-              {reused !== null ? <span>{reused ? 'Reused by judges' : 'Not reused by judges'}</span> : null}
-              {(['dialect_ok', 'validator_ok'] as const).map((key) => {
-                const ok = booleanOf(notes[key]);
-                return ok === null ? null : (
-                  <StatusMark
-                    key={key}
-                    tone={ok ? 'success' : 'danger'}
-                    shape={ok ? 'check' : 'cross'}
-                    label={`${key === 'dialect_ok' ? 'Dialect' : 'Validator'} ${ok ? 'OK' : 'failed'}`}
-                  />
-                );
-              })}
-            </div>
-          ) : null}
-        </EvidenceCard>
-        <EvidenceCard title="Judge A SQL" block="judge-sql">
-          <SqlParts parts={judges.a?.sqlParts ?? []} />
-          <div data-live-block="judge-b">
-            <Disclosure title="Judge B SQL" summary={`${judges.b?.sqlParts.length ?? 0} statements`}>
-              <SqlParts parts={judges.b?.sqlParts ?? []} />
-            </Disclosure>
-          </div>
-        </EvidenceCard>
-      </div>
+      <EvidenceCard title="SQL comparison" block="sql-comparison">
+        <SqlCompare data={data} compact />
+      </EvidenceCard>
       <div className={styles.threeColumns}>
         <EvidenceCard title="Final answer" block="answer">
           <div data-live-answer dir="auto">
