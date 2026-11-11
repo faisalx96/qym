@@ -17,7 +17,6 @@ from base64 import b64encode
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import itsdangerous
 import pytest
@@ -31,8 +30,6 @@ ROOT = Path(__file__).resolve().parents[2]
 for src in (ROOT / "packages" / "platform", ROOT / "packages" / "sdk"):
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
 from qym_platform.db.base import Base

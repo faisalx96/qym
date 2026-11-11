@@ -1,6 +1,7 @@
 """A negative or zero page size is a client error (422), not a server error (C191)."""
 
 import pytest
+from _helpers import api_routes
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -54,10 +55,8 @@ def test_every_limit_and_offset_query_has_a_lower_bound():
 
     app = create_app()
     missing = []
-    for route in app.routes:
-        endpoint = getattr(route, "endpoint", None)
-        if endpoint is None:
-            continue
+    for _, route in api_routes(app.routes):
+        endpoint = route.endpoint
         for name, param in inspect.signature(endpoint).parameters.items():
             if not (name.endswith("limit") or name.endswith("offset")):
                 continue

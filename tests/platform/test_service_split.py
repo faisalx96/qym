@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-import sys
 import threading
 import time
 import types
@@ -18,12 +17,10 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text, update
+from sqlalchemy import create_engine, text, update
 from sqlalchemy.orm import Session, sessionmaker
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform import main, serve
 from qym_platform.api.ingest import router as ingest_router

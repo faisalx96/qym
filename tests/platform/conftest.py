@@ -5,7 +5,7 @@ module that needs different behavior (auth env, seed data, database backend)
 defines a fixture with the same name, and that local fixture wins.
 
 qym_platform is imported inside the fixture bodies: some test modules set env
-defaults or stub ``openai`` before they import the app, and loading this file
+defaults before they import the app, and loading this file
 first must not change that order. Plain helpers live in ``_helpers.py``.
 """
 
