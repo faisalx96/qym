@@ -216,7 +216,8 @@ describe('SettingsSection', () => {
     await openGroup(user, /LLM routing/);
     await openGroup(user, /Feature toggles/);
     expect(await axe(container)).toHaveNoViolations();
-  }, 60_000);
+    // axe over both open groups takes 60-85 s on the CI runner since the round 9/10 form grew
+  }, 180_000);
 });
 
 describe('SweepsSection', () => {
