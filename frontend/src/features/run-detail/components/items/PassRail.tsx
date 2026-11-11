@@ -1,5 +1,5 @@
 /** The pass rail of an item (round 3 P5): one chip per pass, number plus verdict glyph; a pass has no colour of its own. */
-import { Chip } from '@/ui';
+import { Chip, Icon, type IconName } from '@/ui';
 import type { StatusKind } from '../../lib/rowDisplay';
 import { MAX_SHOWN_PASSES } from '../../lib/passSelection';
 import styles from './OutputRegion.module.css';
@@ -9,7 +9,7 @@ export interface RailPass {
   kind: StatusKind;
 }
 
-const GLYPH: Partial<Record<StatusKind, string>> = { pass: '✓', fail: '✕', error: '✕' };
+const GLYPH: Partial<Record<StatusKind, IconName>> = { pass: 'check', fail: 'close', error: 'close' };
 const WORD: Partial<Record<StatusKind, string>> = { pass: 'passed', fail: 'failed', error: 'failed' };
 
 export function PassRail({
@@ -37,7 +37,7 @@ export function PassRail({
           >
             <span className={styles.railChip}>
               <span className={styles.mono}>{p.pass}</span>
-              <span aria-hidden="true">{GLYPH[p.kind] ?? '·'}</span>
+              <span aria-hidden="true">{GLYPH[p.kind] ? <Icon name={GLYPH[p.kind]!} size={12} /> : '·'}</span>
             </span>
           </Chip>
         );

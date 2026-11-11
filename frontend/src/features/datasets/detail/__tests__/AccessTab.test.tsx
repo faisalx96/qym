@@ -105,9 +105,9 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
       screen.getByText('Project managers, admins and the creator always have full access.'),
     ).toBeInTheDocument();
     // Save and Discard are disabled while nothing changed.
-    expect(screen.getByRole('button', { name: 'Save access' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
-    expect(screen.getByText('No changes')).toBeInTheDocument();
+    expect(screen.getByText('All changes saved')).toBeInTheDocument();
   });
 
   it('choosing the restricted mode marks the section dirty and saves the full state with one PUT', async () => {
@@ -120,11 +120,11 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     await user.click(await screen.findByRole('radio', { name: /Only people listed below/ }));
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     // An empty restricted list is allowed to be saved and says who still has access.
-    expect(screen.getByText('No one is listed')).toBeInTheDocument();
+    expect(screen.getByText('No one is listed.')).toBeInTheDocument();
     expect(
       screen.getByText('Only project managers, admins and the creator can open this dataset.'),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Save access' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.puts).toHaveLength(1));
     expect(calls.puts[0]).toEqual({ access_mode: 'restricted', grants: [] });
     expect(await screen.findByText('Access saved')).toBeInTheDocument();
@@ -144,7 +144,7 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Discard' }));
     expect(within(screen.getByTestId('access-grants-table')).getByText('Noura Alharbi')).toBeInTheDocument();
-    expect(screen.getByText('No changes')).toBeInTheDocument();
+    expect(screen.getByText('All changes saved')).toBeInTheDocument();
   });
 
   it('adds a person at the chosen level', async () => {
@@ -155,8 +155,8 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     });
     renderSection();
     const add = await screen.findByTestId('access-add');
-    const levels = within(add).getByRole('radiogroup', { name: 'Level for the new person' });
-    await user.click(within(levels).getByRole('radio', { name: 'Modify' }));
+    await user.click(within(add).getByRole('button', { name: /Level/ }));
+    await user.click(await screen.findByRole('option', { name: 'Modify' }));
     const addButton = within(add).getByRole('button', { name: /^Add person$/ });
     expect(addButton).toBeDisabled();
     await user.click(within(add).getByRole('button', { name: /Choose a project member/ }));
@@ -166,7 +166,7 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     const table = screen.getByTestId('access-grants-table');
     expect(within(table).getByText('Omar Alharbi')).toBeInTheDocument();
     expect(screen.getByText('2 people')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Save access' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.puts).toHaveLength(1));
     expect(calls.puts[0]).toEqual({
       access_mode: 'restricted',
@@ -215,7 +215,7 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
       screen.getByText('Only project managers and admins can change who has access.'),
     ).toBeInTheDocument();
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Save access' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Remove / })).not.toBeInTheDocument();
     expect(within(screen.getByTestId('access-grants-table')).getByText('Modify')).toBeInTheDocument();
   });
@@ -247,7 +247,7 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     expect(screen.getByRole('heading', { name: 'Access mode' })).toBeInTheDocument();
     expect(await screen.findByText('Couldn’t load access')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Access mode' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Save access' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
@@ -293,7 +293,7 @@ describe('Access tab: new rules of the QA round', () => {
     expect(screen.queryByTestId('access-people')).not.toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: /Only people listed below/ }));
     expect(within(screen.getByTestId('access-grants-table')).getByText('Noura Alharbi')).toBeInTheDocument();
-    expect(screen.getByText('No changes')).toBeInTheDocument(); // back to the saved state is clean (QA5-47)
+    expect(screen.getByText('All changes saved')).toBeInTheDocument(); // back to the saved state is clean (QA5-47)
   });
 
   it('shows the grant date, Unknown user for a deleted granter and You / Not saved for a new row (QA5-40, QA5-41)', async () => {
@@ -332,7 +332,7 @@ describe('Access tab: new rules of the QA round', () => {
     await user.click(within(add).getByRole('button', { name: /Choose a project member/ }));
     await user.click(await screen.findByRole('option', { name: /Noura Alharbi/ }));
     await user.click(within(add).getByRole('button', { name: /^Add person$/ }));
-    expect(screen.getByText('No changes')).toBeInTheDocument();
+    expect(screen.getByText('All changes saved')).toBeInTheDocument();
     expect(within(screen.getByTestId('access-grants-table')).getByText('Oct 20, 2026')).toBeInTheDocument();
   });
 
@@ -363,10 +363,10 @@ describe('Access tab: new rules of the QA round', () => {
     );
     renderSection();
     await user.click(await screen.findByRole('button', { name: 'Remove Noura Alharbi' }));
-    await user.click(screen.getByRole('button', { name: 'Save access' }));
-    expect(await screen.findAllByText('Couldn’t save access')).not.toHaveLength(0);
-    expect(screen.getByTestId('access-save-bar')).toHaveAttribute('data-state', 'failed');
-    expect(screen.getByRole('button', { name: 'Save access' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('nope')).toBeInTheDocument();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'Remove Noura Alharbi' })).not.toBeInTheDocument();
   });
 
@@ -384,7 +384,7 @@ describe('Access tab: new rules of the QA round', () => {
     await screen.findByTestId('access-summary');
     expect(screen.getByText('Restricted')).toBeInTheDocument();
     expect(screen.queryByTestId('access-add')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('access-save-bar')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(within(screen.getByTestId('access-grants-table')).getByText('Added')).toBeInTheDocument();
   });
 });

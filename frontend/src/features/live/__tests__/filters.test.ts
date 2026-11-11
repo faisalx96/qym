@@ -35,7 +35,7 @@ describe('filterChips', () => {
     ).toEqual(['Diagnosis: Agent problem', 'compliance_a ≥ 0.5']);
   });
 
-  it('labels UTC days, ranges, service status, searches and zero bounds', () => {
+  it('labels Live days, ranges, service status, searches and zero bounds', () => {
     const filters: LiveFilters = {
       day: '2026-11-01',
       service: 'x',
@@ -46,14 +46,14 @@ describe('filterChips', () => {
       max: 0.5,
     };
     expect(filterChips(filters, undefined, specs).map((chip) => chip.label)).toEqual([
-      '1 Nov 2026',
+      'Nov 1, 2026',
       'compliance_a ≥ 0',
       'compliance_a ≤ 0.5',
       'x not ok',
       'Search: إجمالي',
     ]);
     expect(filterChips({ from: '2026-10-31', to: '2026-11-01' }, undefined, []).map((c) => c.label)).toEqual([
-      '31 Oct 2026 – 1 Nov 2026',
+      'Oct 31, 2026 – Nov 1, 2026',
     ]);
   });
 

@@ -324,7 +324,7 @@ function columnsFor(opts: {
       cell: (r) => {
         if (r.kind === 'error')
           return (
-            <Button variant="ghost" size="sm">
+            <Button variant="neutral" size="sm">
               Retry
             </Button>
           );

@@ -219,7 +219,7 @@ export function TargetList({
                   ) : null}
                 </span>
                 {causes.slice(0, 2).map((c) => (
-                  <Tag key={c} kind="role">
+                  <Tag key={c} kind="data">
                     {c}
                   </Tag>
                 ))}

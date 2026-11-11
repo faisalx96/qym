@@ -59,7 +59,7 @@ export function BestRunNotices() {
                       {p.label || p.model || 'temporary model'}
                       {p.model && p.label && p.label !== p.model ? ` (${p.model})` : ''}
                     </span>
-                    <Button variant="ghost" isDisabled={bound} onPress={() => reuse(p)}>
+                    <Button variant="neutral" isDisabled={bound} onPress={() => reuse(p)}>
                       {bound ? 'In use' : 'Use it again'}
                     </Button>
                   </li>

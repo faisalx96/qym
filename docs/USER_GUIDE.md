@@ -352,7 +352,7 @@ Only received, non-skipped scores contribute to Live metric means. A dash means 
 
 ### Where the data comes from
 
-The evaluation worker registers the source and metric definitions, sends a heartbeat after each poll, and uploads daily counters, turns with scores and evidence, and canary results through the project API-key-authenticated ingest API. qym stores and presents these reports; it does not run the evaluation worker from this tab. Republishing the same source and turn ID replaces that turn's evidence and scores. The explicit reporting day supplied by the evaluation worker determines the day grouping; times in the UI are UTC.
+The evaluation worker registers the source and metric definitions, sends a heartbeat after each poll, and uploads daily counters, turns with scores and evidence, and canary results through the project API-key-authenticated ingest API. qym stores and presents these reports; it does not run the evaluation worker from this tab. Republishing the same source and turn ID replaces that turn's evidence and scores. The explicit reporting day supplied by the evaluation worker determines the day grouping. A Live day is a day in the source time zone (day_key_timezone); times in the UI show your own clock.
 
 For authentication, payloads, limits and reconciliation, see the [Live evaluation ingest guide v1.0](live-evaluation-ingest-v1.0.md).
 

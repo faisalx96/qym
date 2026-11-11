@@ -1,4 +1,4 @@
-import { EmptyState, Skeleton, Tag, Text, Flag } from '@/ui';
+import { Disclosure, EmptyState, Skeleton, Tag, Text, Flag } from '@/ui';
 import type { AnalysisResultPayload } from '@/api/analysis';
 import { rootCauseIssues } from '../model/rootCause';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -29,13 +29,11 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
           <Flag tone="danger" icon="warning">
             {r.error_code || 'Error'}
           </Flag>
+        ) : issues.length && confidence != null ? (
+          <Text variant="sm" tone="muted" as="span">{`${Math.round(confidence * 100)}% confidence`}</Text>
         ) : (
           <Flag tone={issues.length ? 'info' : 'warning'}>
-            {issues.length && confidence != null
-              ? `${Math.round(confidence * 100)}% confidence`
-              : issues.length
-                ? 'Diagnosed'
-                : 'No diagnosis'}
+            {issues.length ? 'Diagnosed' : 'No diagnosis'}
           </Flag>
         )}
         {r.retry_count ? (
@@ -58,17 +56,16 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
         {issues.map((i, idx) => (
           <li key={idx} className={s.issue}>
             <div className={s.issueTags}>
-              <Tag kind="role">{i.category || 'Uncategorized'}</Tag>
+              <Tag kind="data">{i.category || 'Uncategorized'}</Tag>
               {i.subcategory ? <Tag kind="data">{i.subcategory}</Tag> : null}
               {i.confidence != null ? (
                 <Text
                   variant="sm"
-                  mono
                   tone="muted"
                   as="span"
                   aria-label={`confidence ${Math.round(i.confidence * 100)} percent`}
                 >
-                  {`${Math.round(i.confidence * 100)}%`}
+                  {`${Math.round(i.confidence * 100)}% confidence`}
                 </Text>
               ) : null}
             </div>
@@ -76,12 +73,11 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
               {i.finding}
             </Text>
             {i.category_reason ? (
-              <details className={s.details}>
-                <summary>Why this category</summary>
+              <Disclosure className={s.details} title="Why this category">
                 <Text variant="base" tone="secondary" as="p" dir="auto">
                   {i.category_reason}
                 </Text>
-              </details>
+              </Disclosure>
             ) : null}
           </li>
         ))}
@@ -97,12 +93,11 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
         ))}
       </div>
       {context ? (
-        <details className={s.details}>
-          <summary>Item context</summary>
+        <Disclosure className={s.details} title="Item context">
           <pre className={s.messageBody} dir="auto">
             {context}
           </pre>
-        </details>
+        </Disclosure>
       ) : null}
     </article>
   );

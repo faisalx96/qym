@@ -76,7 +76,7 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     const tree = page.getByRole('tree', { name: 'Span tree' });
     await tree.focus();
     await page.keyboard.press('/');
-    const search = page.getByRole('searchbox', { name: 'Filter spans' });
+    const search = page.getByRole('searchbox', { name: 'Search spans' });
     await expect(search).toBeFocused();
     await page.keyboard.type('lookup');
     await expect.poll(() => tree.getByRole('treeitem').count()).toBeLessThan(7);
@@ -94,7 +94,7 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await expect(page.getByRole('tree', { name: 'Span tree' })).toBeVisible();
     await page.getByRole('region', { name: 'Span details' }).click();
     await page.keyboard.press('/');
-    await expect(page.getByRole('searchbox', { name: 'Filter spans' })).toBeFocused();
+    await expect(page.getByRole('searchbox', { name: 'Search spans' })).toBeFocused();
   });
 
   test('selecting a span shows its tabs; the close button closes and removes ?trace=', async ({ page }) => {
@@ -187,11 +187,11 @@ test.describe('latency and traces panel (J5)', () => {
     await bars.nth(8).click(); // 2.25s to 2.5s: 26 items
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(240);
     await expect.poll(() => params(page).get('filters') ?? '').toContain('latency');
-    const chip = page.getByRole('button', { name: /Remove filter .*(ms|s)/i }).first();
+    const chip = page.locator('[data-run-filters]').getByText(/(ms|s)/i).first();
     await expect(chip).toBeVisible();
     const [n] = await itemsCount(page);
     expect(n).toBeGreaterThan(0);
-    await chip.click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);
   });
 

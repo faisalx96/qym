@@ -51,7 +51,7 @@ test.describe('projects landing (J4)', () => {
     await gotoApp(page, '/');
     const loads = trackPageLoads(page);
     await page.locator('[data-new-project]').click();
-    const dialog = page.getByRole('dialog', { name: 'Create project' });
+    const dialog = page.getByRole('dialog', { name: 'New project' });
     await expect(dialog).toBeVisible();
     const name = dialog.getByRole('textbox', { name: /^Name/ });
     await expect(name).toBeFocused();
@@ -76,7 +76,7 @@ test.describe('projects landing (J4)', () => {
     const existing = await createProject(request, 'Taken Slug', uniqueSlug('taken'));
     await gotoApp(page, '/');
     await page.locator('[data-new-project]').click();
-    const dialog = page.getByRole('dialog', { name: 'Create project' });
+    const dialog = page.getByRole('dialog', { name: 'New project' });
     await dialog.getByRole('textbox', { name: /^Name/ }).fill('Another name');
     await dialog.getByRole('textbox', { name: /^Slug/ }).fill(existing.slug);
     await dialog.getByRole('button', { name: 'Create project' }).click();
@@ -134,7 +134,7 @@ test.describe('project switcher (§8.7 scenario 5)', () => {
     const loads = trackPageLoads(page);
     await page.locator('[data-project-switcher]').click();
     await page.locator('[data-create-project]').click();
-    const dialog = page.getByRole('dialog', { name: 'Create project' });
+    const dialog = page.getByRole('dialog', { name: 'New project' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('textbox', { name: /^Name/ })).toBeFocused();
     const slug = uniqueSlug('viapop');

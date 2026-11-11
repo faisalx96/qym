@@ -1,9 +1,15 @@
 /** The review step of the editor, "Review and publish": Summary, Release notes, Changes and Checks. */
-import { Button, Card, Text, Textarea } from '@/ui';
+import { Button, Card, DatasetTag, TaskTag, Text, Textarea } from '@/ui';
 import { plural } from '@/features/experiments/lib/format';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import { useGoToSection } from '@/features/experiments/launch/components/goToSection';
-import { ChangesCard, ChecksCard, ReviewKv, ReviewCard, type ChangeRow } from '@/features/experiments/launch/review/ReviewParts';
+import {
+  ChangesCard,
+  ChecksCard,
+  ReviewKv,
+  ReviewCard,
+  type ChangeRow,
+} from '@/features/experiments/launch/review/ReviewParts';
 import styles from '@/features/experiments/launch/review/reviewStep.module.css';
 import { datasetValue, NOTES_MAX } from '@/features/experiments/launch/model';
 import { SECTION_TITLES, useLaunch } from '@/features/experiments/launch/LaunchContext';
@@ -42,7 +48,12 @@ export function PublishReview({ notes, onNotes, saving, failure, blocker, onRelo
   const rows: ChangeRow[] = [];
   for (const id of ['models', 'settings', 'evaluation'] as const) {
     const changes = sectionSummary(id).changes;
-    if (changes) rows.push({ key: id, label: `${SECTION_TITLES[id]}: ${plural(changes, 'change')}`, onEdit: () => goTo(id) });
+    if (changes)
+      rows.push({
+        key: id,
+        label: `${SECTION_TITLES[id]}: ${plural(changes, 'change')}`,
+        onEdit: () => goTo(id),
+      });
   }
   return (
     <div className={styles.stack} data-testid="publish-review">
@@ -50,8 +61,12 @@ export function PublishReview({ notes, onNotes, saving, failure, blocker, onRelo
         <ReviewKv
           rows={[
             { key: 'env', label: 'Environment', value: selectedEnvs.map((e) => e.name).join(', ') || '—' },
-            { key: 'task', label: 'Task', value: taskName },
-            { key: 'ds', label: 'Dataset', value: datasetValue(doc) || 'None', mono: Boolean(datasetValue(doc)) },
+            { key: 'task', label: 'Task', value: taskId ? <TaskTag name={taskName} /> : taskName },
+            {
+              key: 'ds',
+              label: 'Dataset',
+              value: datasetValue(doc) ? <DatasetTag name={datasetValue(doc)} /> : 'None',
+            },
             { key: 'base', label: 'Compared with', value: doc.base.label || comparedWith },
             {
               key: 'diff',
@@ -68,7 +83,7 @@ export function PublishReview({ notes, onNotes, saving, failure, blocker, onRelo
               Release notes
             </Text>
             <Textarea
-              label="Release notes (required)"
+              label="Release notes"
               value={notes}
               onChange={onNotes}
               maxLength={NOTES_MAX}
@@ -92,7 +107,11 @@ export function PublishReview({ notes, onNotes, saving, failure, blocker, onRelo
         </ChecksCard>
       </div>
       {failure ? (
-        <Callout tone="error" live title={failure.kind === 'conflict' ? 'The default preset changed' : 'Not published'}>
+        <Callout
+          tone="error"
+          live
+          title={failure.kind === 'conflict' ? 'The default preset changed' : 'Not published'}
+        >
           <div>{failure.message}</div>
           {failure.kind === 'conflict' ? (
             <div>

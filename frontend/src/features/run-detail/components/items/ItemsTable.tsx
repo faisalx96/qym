@@ -11,6 +11,7 @@ import {
   DataTable,
   DatasetTag,
   IconButton,
+  promptPreview,
   ScoreValue,
   Skeleton,
   StatusMark,
@@ -18,8 +19,6 @@ import {
   type Column,
   type Key,
   type SortState,
-  type StatusShape,
-  type StatusTone,
 } from '@/ui';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs } from '@/lib/text';
@@ -27,6 +26,7 @@ import { metricPassesFor, type FilteredItem, type SortBy } from '../../lib/filte
 import { metricHasPassThreshold } from '../../lib/runModel';
 import { latencyLabel, metricCell, rowStatus } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
+import { VERDICT_MARK } from '../../lib/verdictMark';
 import type { Row } from '../../types';
 import { defaultPageSize } from '../../lib/itemsPaging';
 import { isUnionRun } from '../../lib/heroModel';
@@ -37,15 +37,6 @@ import styles from './ItemsTable.module.css';
 
 const PAGE_SIZE_KEY = 'qym:run-page-size';
 const PAGE_SIZES = [20, 50, 100, 500];
-
-/** The Status column's StatusMark for an item outcome: the pixel figure is the non-colour cue. */
-const STATUS_MARK: Record<string, [StatusTone, StatusShape]> = {
-  pass: ['success', 'check'],
-  fail: ['danger', 'cross'],
-  error: ['danger', 'cross'],
-  not_received: ['warning', 'pause'],
-  running: ['info', 'orbit'],
-};
 
 function usePageSize(total: number): [number, (n: number) => void] {
   const [chosen, setChosen] = useState<number | null>(() => {
@@ -144,7 +135,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       priority: 1,
       cell: ({ row }) => {
         const status = rowStatus(ctx, row, selectedMetric);
-        const [tone, shape] = STATUS_MARK[status.kind] ?? ['neutral', 'ring'];
+        const [tone, shape] = VERDICT_MARK[status.kind] ?? ['neutral', 'ring'];
         return (
           <StatusMark
             tone={tone}
@@ -164,11 +155,11 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       priority: 1,
       cell: ({ row }) => {
         const title = row.input_full ?? row.input ?? row.input_preview ?? '';
-        const text = (typeof title === 'string' ? title : JSON.stringify(title)).replace(/\s+/g, ' ').trim();
+        const text = promptPreview(title);
         // the item texts are a later row group: a bone holds the place until it arrives
         if (!text && !textLoaded) return <Skeleton kind="value" width="70%" label="Loading input" />;
         return (
-          <span title={text} {...textDirAttrs(text)}>
+          <span title={typeof title === 'string' ? title : JSON.stringify(title)} {...textDirAttrs(text)}>
             {text || '—'}
           </span>
         );
@@ -283,9 +274,9 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         rowKey={(it) => it.row.item_id}
         density="regular"
         densityLocked
-        zebra={false}
+        stripe="report"
         responsive="cards"
-        empty="No items match the current filters."
+        empty="No items match these filters"
         sort={sortState(sort)}
         allowUnsorted
         onSortChange={(s) => {

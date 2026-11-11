@@ -2,8 +2,8 @@ import { useState } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDialog';
 import { SlotEditorDialog } from '@/features/environments/SlotEditor';
-import { Link } from 'react-router-dom';
-import { Button, Checkbox, Icon, Tag } from '@/ui';
+import { Button, Checkbox, Icon, LinkButton, StatusMark, Tag } from '@/ui';
+import { titleCase } from '../../lib/format';
 import { environmentPath } from '../../paths';
 import { pairCount, PSEUDO, pointerToFieldName, unitsFor } from '../model';
 import { useLaunch } from '../LaunchContext';
@@ -38,13 +38,11 @@ function EnvironmentTags({
   return (
     <span className={styles.envTags}>
       {env.health_status === 'ok' ? (
-        <Tag tone="success">Healthy</Tag>
+        <StatusMark tone="success" shape="check" label="Healthy" />
       ) : env.health_status === 'error' ? (
-        <Tag tone="danger" title={env.health_error ?? undefined}>
-          Unhealthy
-        </Tag>
+        <StatusMark tone="danger" shape="cross" label="Error" title={env.health_error ?? undefined} />
       ) : (
-        <Tag>Not checked</Tag>
+        <StatusMark tone="neutral" shape="ring" label="Unknown" />
       )}
       {!env.current_schema_id ? <Tag tone="warning">No schema</Tag> : null}
       {env.model_slots?.needs_confirmation ? <Tag tone="warning">Needs LLM grouping</Tag> : null}
@@ -54,7 +52,7 @@ function EnvironmentTags({
           Schema check failed
         </Tag>
       ) : null}
-      <Tag>Priority up to {env.max_priority}</Tag>
+      <Tag kind="data">Priority up to {titleCase(env.max_priority)}</Tag>
       {env.official_preset_version != null ? (
         <Tag kind="version">Default preset v{env.official_preset_version}</Tag>
       ) : null}
@@ -68,7 +66,7 @@ function EnvironmentTags({
 }
 
 /**
- * The environments checkbox list: health, schema, grouping and preset tags, "Details", "+ New environment".
+ * The environments checkbox list: health, schema, grouping and preset tags, "Details", "+ Add environment".
  * A ticked environment's box also shows the Evaluation Service versions it would record (`EnvVersions`).
  */
 export function EnvironmentPicker() {
@@ -133,15 +131,17 @@ export function EnvironmentPicker() {
                   </Button>
                 ) : null}
                 {selected ? <EnvRefresh env={env} projectId={projectId} /> : null}
-                <Link
+                <LinkButton
                   to={environmentPath(slug, env.id)}
-                  className={styles.detailsLink}
+                  variant="neutral"
+                  size="sm"
+                  iconEnd={<Icon name="external" size={12} />}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Details of ${env.name} (opens in a new tab)`}
                 >
                   Details
-                </Link>
+                </LinkButton>
               </span>
               {selected ? <EnvVersions env={env} projectId={projectId} /> : null}
               {flag ? (
@@ -158,8 +158,13 @@ export function EnvironmentPicker() {
       </p>
       {canManage && !readOnly ? (
         <div>
-          <Button size="sm" variant="neutral" icon={<Icon name="plus" />} onPress={() => setAdding(true)}>
-            New environment
+          <Button
+            size="sm"
+            variant="neutral"
+            icon={<Icon name="plus" size={12} />}
+            onPress={() => setAdding(true)}
+          >
+            Add environment
           </Button>
         </div>
       ) : null}

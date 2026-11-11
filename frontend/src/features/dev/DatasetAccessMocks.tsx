@@ -782,9 +782,6 @@ function ToolbarMock({ variant }: { variant: ToolbarVariant }) {
             </div>
           ) : null
         }
-        count={
-          variant === 'loading' ? null : <span aria-live="polite">{filtered ? '40 items' : '124 items'}</span>
-        }
         trailing={
           variant === 'viewer' ? null : (
             <>
@@ -891,7 +888,7 @@ function MetaPopover({ state }: { state: FacetState }) {
             </Text>
           ) : null}
           <div className={styles.popoverFoot}>
-            <Button variant="ghost" size="sm">
+            <Button variant="neutral" size="sm">
               Cancel
             </Button>
             <Button variant="primary" size="sm">
@@ -1280,7 +1277,7 @@ function HistoryCompare() {
         <div className={styles.revHead}>
           <Badge tone="warning">disabled</Badge>
           <Tag kind="count">#4</Tag>
-          <UserPill user={NOURA} label="Edited By:" />
+          <UserPill user={NOURA} label="Edited by" />
           <span>Oct 20, 2026, 4:12 PM</span>
         </div>
         <p className={styles.revText}>Reason: duplicate of faq-014</p>
@@ -1289,7 +1286,7 @@ function HistoryCompare() {
         <div className={styles.revHead}>
           <Badge tone="success">enabled</Badge>
           <Tag kind="count">#5</Tag>
-          <UserPill user={DEV} label="Edited By:" />
+          <UserPill user={DEV} label="Edited by" />
           <span>Oct 20, 2026, 4:30 PM</span>
         </div>
         <p className={styles.revText}>No reason given</p>

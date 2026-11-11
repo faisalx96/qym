@@ -15,6 +15,7 @@ import { useDelayedPending } from '@/lib/pending';
 import {
   ActionTile,
   Button,
+  CountTile,
   DropdownMenu,
   ErrorState,
   Icon,
@@ -23,6 +24,7 @@ import {
   Skeleton,
   StatStrip,
   Text,
+  UserName,
   type MenuItemSpec,
 } from '@/ui';
 import { LatencyTag } from '../components/LatencyTag';
@@ -139,7 +141,11 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
   if (retryable.length)
     actions.push({
       id: 'retry',
-      label: `Retry failed (${retryable.length})`,
+      label: (
+        <>
+          Retry failed<CountTile>{retryable.length}</CountTile>
+        </>
+      ),
       icon: <ActionTile icon="retry" />,
       disabled: !canControl || flows.busy.size > 0,
     });
@@ -149,13 +155,22 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
       label: 'Cancel experiment',
       tone: 'danger',
       separatorBefore: actions.length > 0,
-      icon: <ActionTile icon="stop" tone="danger" />,
+      icon: <ActionTile icon="ban" tone="danger" />,
       disabled: !canControl || flows.busy.has('all'),
     });
 
   const envNames = (x.environments ?? []).map((e) => `${e.name}${e.is_active ? '' : ' (disabled)'}`);
   const meta = [
-    x.created_by_email ?? 'unknown creator',
+    x.created_by_user_id || x.created_by_email ? (
+      <UserName
+        key="by"
+        id={x.created_by_user_id}
+        name={x.created_by_name}
+        email={x.created_by_email}
+      />
+    ) : (
+      'unknown creator'
+    ),
     <span key="age" title={absTime(x.created_at)}>
       {relTime(x.created_at)}
     </span>,
@@ -183,39 +198,35 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
           x.description || 'Jobs launched by this experiment, one per combination and environment.'
         }
         meta={meta}
+        actions={
+          <>
+            {readOnly ? null : (
+              <LinkButton
+                to={launchPath(slug, { clone: x.id })}
+                variant="accent"
+                icon={<Icon name="retry" size={12} />}
+                title="Open the launch form as a copy of this experiment"
+                data-testid="exp-run-again"
+              >
+                Run again
+              </LinkButton>
+            )}
+            {actions.length ? (
+              <DropdownMenu
+                label="Experiment actions"
+                trigger={
+                  <Button variant="neutral" icon={<Icon name="more" size={14} />} data-testid="exp-actions">
+                    Actions
+                  </Button>
+                }
+                items={actions}
+                onAction={(id) => (id === 'retry' ? flows.retryFailed() : flows.cancelExperiment())}
+              />
+            ) : null}
+          </>
+        }
       />
       <Credentials detail={x} />
-      <div className={styles.headerActions}>
-        {readOnly ? null : (
-          <LinkButton
-            to={launchPath(slug, { clone: x.id })}
-            variant="accent"
-            size="md"
-            icon={<Icon name="retry" size={14} />}
-            title="Open the launch form as a copy of this experiment"
-            data-testid="exp-run-again"
-          >
-            Run again
-          </LinkButton>
-        )}
-        {actions.length ? (
-          <DropdownMenu
-            label="Experiment actions"
-            trigger={
-              <Button
-                size="md"
-                variant="neutral"
-                icon={<Icon name="more" size={14} />}
-                data-testid="exp-actions"
-              >
-                Actions
-              </Button>
-            }
-            items={actions}
-            onAction={(id) => (id === 'retry' ? flows.retryFailed() : flows.cancelExperiment())}
-          />
-        ) : null}
-      </div>
       {!canControl && !readOnly && actions.length ? (
         <Text variant="base" tone="muted" className={styles.note}>
           {flows.denied
@@ -227,20 +238,43 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
       <StatStrip
         aria-label="Job totals"
         items={[
-          { key: 'jobs', label: 'Jobs', value: stats.jobs },
+          { key: 'jobs', label: 'Jobs', value: stats.jobs, icon: <Icon name="flask" /> },
           {
             key: 'ok',
             label: 'Succeeded',
             value: stats.succeeded,
-            tone: stats.succeeded ? 'success' : undefined,
+            icon: <Icon name="check" />,
+            tone: 'success',
           },
-          { key: 'failed', label: 'Failed', value: stats.failed, tone: stats.failed ? 'danger' : undefined },
+          {
+            key: 'failed',
+            label: 'Failed',
+            value: stats.failed,
+            icon: <Icon name="close" />,
+            tone: stats.failed ? 'danger' : undefined,
+          },
           // In progress and Cancelled are normal at 0: they show only when they hold a job (C137)
           ...(stats.inProgress
-            ? [{ key: 'live', label: 'In progress', value: stats.inProgress, tone: 'accent' as const }]
+            ? [
+                {
+                  key: 'live',
+                  label: 'In progress',
+                  value: stats.inProgress,
+                  icon: <Icon name="clock" />,
+                  tone: 'info' as const,
+                },
+              ]
             : []),
           ...(stats.cancelled
-            ? [{ key: 'cancelled', label: 'Cancelled', value: stats.cancelled, tone: 'warning' as const }]
+            ? [
+                {
+                  key: 'cancelled',
+                  label: 'Cancelled',
+                  value: stats.cancelled,
+                  icon: <Icon name="stop" />,
+                  tone: 'warning' as const,
+                },
+              ]
             : []),
         ]}
       />

@@ -290,6 +290,12 @@ export function LaunchWizard({
   const launchPrimary: BarPrimary = primary ?? {
     label: launchLabel(review.count.runs, isLaunching),
     disabled: readOnly || !review.canLaunch || review.items.length > 0 || needsAck,
+    reason:
+      review.items.length > 0
+        ? 'Fix the problems first'
+        : needsAck
+          ? 'Confirm that High runs can preempt other work'
+          : undefined,
     loading: isLaunching,
     onPress: () => void launch(),
   };

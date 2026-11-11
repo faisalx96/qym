@@ -51,16 +51,19 @@ export function DateRangeDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Backfill a day range"
+      title="Backfill these days?"
       size="md"
       description="Days in the source's timezone, at most 31 days"
       footer={
         <>
-          <Button onPress={() => void submit('backfill_preview')} isDisabled={busy}>
+          <Button variant="neutral" onPress={() => onOpenChange(false)} isDisabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="accent" onPress={() => void submit('backfill_preview')} isDisabled={busy}>
             Preview
           </Button>
-          <Button variant="accent" onPress={() => void submit('backfill')} isDisabled={busy}>
-            Run
+          <Button variant="primary" onPress={() => void submit('backfill')} isDisabled={busy}>
+            Run backfill
           </Button>
         </>
       }

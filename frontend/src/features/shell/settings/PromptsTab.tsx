@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useBlocker } from 'react-router-dom';
 import { useAnalysisPrompts, useSavePrompt } from '@/api/projectSettings';
+import { formatAgo } from '@/lib/dates';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
@@ -48,14 +49,7 @@ function editorRows(text: string): number {
 }
 
 function relative(iso: string | null | undefined, now: number): string {
-  if (!iso) return 'never';
-  const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
-  if (s < 60) return 'just now';
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60);
-  if (h < 48) return `${h} h ago`;
-  return `${Math.round(h / 24)} d ago`;
+  return iso ? formatAgo(iso, now) : 'never';
 }
 
 /**
@@ -208,6 +202,7 @@ export function PromptsTab() {
                   variant="danger"
                   icon={<Icon name="retry" size={12} />}
                   isDisabled={!isCustom}
+                  disabledReason="Already the default"
                   onPress={() => setConfirmRestore(true)}
                 >
                   Restore default

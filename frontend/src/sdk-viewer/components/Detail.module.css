@@ -101,6 +101,10 @@
 .link:hover {
   text-decoration: underline;
 }
+.externalGlyph {
+  margin-inline-start: var(--space-xs);
+  vertical-align: -1px;
+}
 .text {
   margin: 0;
   padding: var(--space-sm);

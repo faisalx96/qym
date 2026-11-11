@@ -58,7 +58,7 @@ export function StepsBar10({ step, runs = 2, problem, editor = false, blocked = 
         <Button size="sm" variant="neutral" isDisabled={onReview} data-part="bar-skip" aria-label={editor ? 'Skip to review and publish' : 'Skip to review and launch'}>
           Skip<span className={styles.long}> to review</span>
         </Button>
-        <Button size="sm" variant="ghost" data-part="bar-cancel">
+        <Button size="sm" variant="neutral" data-part="bar-cancel">
           Cancel
         </Button>
       </div>
@@ -376,7 +376,7 @@ function HomeFrame({ children, bar }: { children: ReactNode; bar: ReactNode }) {
         title="New experiment"
         description="Pick where it runs and what to start from. You can change anything in Customize."
         actions={
-          <Button variant="ghost" size="sm">
+          <Button variant="neutral" size="sm">
             All experiments
           </Button>
         }
@@ -439,10 +439,10 @@ function CustomizeFrame10({ step, children, runs = 2, problem, changes }: { step
         meta={['Exp Demo · Starting point: Clone of model x threshold x timeout']}
         actions={
           <>
-            <Button variant="ghost" size="sm">
+            <Button variant="neutral" size="sm">
               ← Start
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="neutral" size="sm">
               All experiments
             </Button>
           </>
@@ -740,7 +740,7 @@ function ReviewBody10() {
             {['Models: 1 change', 'Environment configurations: 1 change', 'Sweeps: Primary model + Milvus Search Threshold (linked), Timeout'].map((t) => (
               <li key={t} className={r9.changeRow}>
                 <span>{t}</span>
-                <Button size="sm" variant="ghost">
+                <Button size="sm" variant="neutral">
                   Edit
                 </Button>
               </li>

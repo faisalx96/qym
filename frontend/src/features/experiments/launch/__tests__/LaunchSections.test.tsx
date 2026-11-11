@@ -40,7 +40,7 @@ describe('entry block', () => {
     renderWith(<EntryBlock />, { toggleEnv });
     expect(screen.getByRole('group', { name: 'Environments' })).toBeInTheDocument();
     expect(screen.getByText('Healthy')).toBeInTheDocument();
-    expect(screen.getByText('Priority up to HIGH')).toBeInTheDocument();
+    expect(screen.getByText('Priority up to High')).toBeInTheDocument();
     expect(screen.getByText('Default preset v1')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: 'staging' }));
     expect(toggleEnv).toHaveBeenCalledWith('e1', true);

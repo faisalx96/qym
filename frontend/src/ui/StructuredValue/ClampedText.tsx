@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react';
+import { Button } from '../Button';
 import { TextBlock, type TextBlockProps } from '../TextBlock';
 import styles from './StructuredValue.module.css';
 
@@ -22,9 +23,9 @@ export function ClampedText({ text, lines = 12, ...rest }: ClampedTextProps) {
         <TextBlock text={text} {...rest} />
       </div>
       {long ? (
-        <button type="button" className={styles.more} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Button variant="neutral" size="sm" aria-expanded={open} onPress={() => setOpen(!open)}>
           {open ? 'Show less' : 'Show more'}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

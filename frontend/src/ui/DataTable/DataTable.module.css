@@ -4,6 +4,7 @@
   /* Row separators are a faint hairline, and none where zebra stripes already separate the rows: a full-strength line
      on every row read as a grid of boxes (round 10). */
   --row-line: color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  --zebra-step: var(--stripe-step);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -23,6 +24,11 @@
 
 .card[data-zebra] {
   --row-line: transparent;
+}
+
+/* D-01: a table inside a run, compare or experiment report section takes the fainter report stripe. */
+.card[data-stripe='report'] {
+  --zebra-step: var(--stripe-step-report);
 }
 
 .card[data-variant='embedded'] {
@@ -427,6 +433,9 @@
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.35;
+  /* D-05: no block room, so a clamped cell shows no pixels of a third line */
+  padding-block: 0;
+  margin-block: 0;
 }
 
 .twoLine {
@@ -693,7 +702,7 @@
 }
 
 .tr[data-zebra] {
-  --row-base: var(--card-bg);
+  --row-base: color-mix(in srgb, var(--text-primary) var(--zebra-step), var(--bg-base));
 }
 
 .tr[data-clickable] {
@@ -789,6 +798,23 @@
     inset 0 2px 0 var(--accent-primary),
     inset 0 -2px 0 var(--accent-primary),
     var(--pin-line, 0 0 0 transparent);
+}
+
+/* E-49: one closed ring. After a collapsed (0px) select cell, the first visible cell draws the start edge. */
+.tr:focus-visible td[data-collapsed] + td {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+/* E-49: at the scroll end the folded fold cell keeps the end edge (beats the fold rule that drops its shadow). */
+.bodyHost[data-scroll-end] .tr:focus-visible .td[data-fold]:not(:has(.fold[data-open])) {
+  box-shadow:
+    inset -2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary);
 }
 
 .selectionCluster {
@@ -1075,9 +1101,11 @@
   padding-block: var(--space-sm);
 }
 
+/* D-10: the pager sits in the exact centre; the start (filter note) and end slots share the free space. */
 .footer {
   min-height: var(--table-footer-height);
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   border-top: 1px solid var(--border-subtle);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
@@ -1091,6 +1119,39 @@
   flex-wrap: wrap;
   gap: var(--space-sm);
   min-width: 0;
+}
+
+.footerEnd {
+  justify-content: flex-end;
+}
+
+/* Narrow screens keep the flex footer: the note, the pager and the end items wrap. */
+@media (width < 640px) {
+  .footer {
+    display: flex;
+    justify-content: space-between;
+  }
+}
+
+/* A-01: a centred control (the 'Show N more' button): the start and end parts take equal widths, so it sits in the
+   middle of the footer. */
+.footer[data-center] > .footerStart,
+.footer[data-center] > .footerEnd {
+  flex: 1 1 0;
+}
+.footer[data-center] > .footerEnd {
+  justify-content: flex-end;
+}
+.footerCenter {
+  display: flex;
+  justify-content: center;
+  flex: none;
+}
+
+/* D-10: the filter note at the far left of the footer. */
+.filterNote {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
 .toolbarMain {
@@ -1124,9 +1185,9 @@
   gap: var(--space-xs);
 }
 
+/* E-37: a phrase with a count is sans (inherited), with tabular figures. */
 .count,
 .selCount {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-sm);
   color: var(--text-muted);

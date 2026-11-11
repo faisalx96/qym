@@ -1252,6 +1252,7 @@ def _serialize_experiment(
     experiment: EvalExperiment,
     *,
     creator_email: Optional[str],
+    creator_name: Optional[str] = None,
     job_counts: Optional[Dict[str, int]] = None,
     priorities: Optional[Dict[str, int]] = None,
     summary: bool = False,
@@ -1282,6 +1283,7 @@ def _serialize_experiment(
         "job_counts": job_counts or {},
         "created_by_user_id": experiment.created_by_user_id,
         "created_by_email": creator_email,
+        "created_by_name": creator_name,
         "created_at": to_api_timestamp(experiment.created_at),
         "updated_at": to_api_timestamp(experiment.updated_at),
         "cancelled_at": to_api_timestamp(experiment.cancelled_at),
@@ -1293,11 +1295,20 @@ def _serialize_experiment(
     return payload
 
 
-def _user_emails(db: Session, user_ids: List[Optional[str]]) -> Dict[str, str]:
+def _user_emails(
+    db: Session, user_ids: List[Optional[str]]
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Emails and display names by user id, in one query.
+
+    The name is the user's display_name, or the email local part when it is empty.
+    """
     ids = sorted({uid for uid in user_ids if uid})
     if not ids:
-        return {}
-    return {u.id: u.email for u in db.query(User).filter(User.id.in_(ids))}
+        return {}, {}
+    users = db.query(User).filter(User.id.in_(ids)).all()
+    emails = {u.id: u.email for u in users}
+    names = {u.id: u.display_name or u.email.split("@")[0] for u in users}
+    return emails, names
 
 
 def _current_status_counts(db: Session, experiment_ids: List[str]) -> Dict[str, Dict[str, int]]:
@@ -1497,10 +1508,11 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
         {r.id: r for r in db.query(Run).filter(Run.id.in_(run_ids))} if run_ids else {}
     )
     superseded = superseded_job_ids(jobs)
-    emails = _user_emails(db, [experiment.created_by_user_id])
+    emails, names = _user_emails(db, [experiment.created_by_user_id])
     payload = _serialize_experiment(
         experiment,
         creator_email=emails.get(experiment.created_by_user_id or ""),
+        creator_name=names.get(experiment.created_by_user_id or ""),
         job_counts=_status_counts(jobs),
         priorities=_priority_counts(jobs, experiment),
     )
@@ -2096,12 +2108,13 @@ def list_experiments(
     )
     counts = _current_status_counts(db, [x.id for x in experiments])
     priority_counts = _current_priority_counts(db, experiments)
-    emails = _user_emails(db, [x.created_by_user_id for x in experiments])
+    emails, names = _user_emails(db, [x.created_by_user_id for x in experiments])
     result: Dict[str, Any] = {
         "experiments": [
             _serialize_experiment(
                 x,
                 creator_email=emails.get(x.created_by_user_id or ""),
+                creator_name=names.get(x.created_by_user_id or ""),
                 job_counts=counts.get(x.id, {}),
                 priorities=priority_counts.get(x.id),
                 summary=True,

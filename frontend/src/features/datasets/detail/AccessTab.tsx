@@ -1,6 +1,6 @@
 /**
  * Dataset → Access tab (E4, QA5-17 to QA5-78): who can open and change this dataset. Two cards (Access mode, People with
- * access), a sticky save bar, read-only summary for everyone who cannot manage access.
+ * access), a save footer in the card, read-only summary for everyone who cannot manage access.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Key } from 'react-aria-components';
@@ -21,20 +21,21 @@ import {
   Card,
   DataTable,
   ErrorState,
-  Icon,
   IconButton,
+  InlineNotice,
   RadioGroup,
-  SegmentedControl,
   Select,
   Skeleton,
   Tag,
   Text,
+  UserName,
   useToast,
   type Column,
   Flag,
 } from '@/ui';
 import { Note } from '../components/Note';
 import { UserPill } from '../components/UserPill';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import { CardHead } from './SettingsTab';
 import styles from './AccessTab.module.css';
 import { formatDay, toDate } from '@/lib/dates';
@@ -159,7 +160,7 @@ function AccessBody({
   const [rows, setRows] = useState<Row[]>(savedRows);
   const [who, setWho] = useState<Key | null>(null);
   const [newLevel, setNewLevel] = useState<GrantLevel>('view');
-  const [failed, setFailed] = useState(false);
+  const [editingLevel, setEditingLevel] = useState<string | null>(null);
   const addRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -181,7 +182,6 @@ function AccessBody({
   }, [data.candidates, data.grants, rows]);
 
   async function onSave() {
-    setFailed(false);
     try {
       await save.mutateAsync({
         access_mode: mode,
@@ -189,7 +189,6 @@ function AccessBody({
       });
       toast.show('Access saved', { tone: 'success' });
     } catch (e) {
-      setFailed(true);
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t save access', { tone: 'error' });
     }
   }
@@ -198,7 +197,6 @@ function AccessBody({
     setMode(data.access_mode);
     setRows(savedRows);
     setWho(null);
-    setFailed(false);
   }
 
   function addPerson() {
@@ -211,7 +209,6 @@ function AccessBody({
       saved ? { ...saved, level: newLevel } : { person, level: newLevel, grantedBy: null, createdAt: null },
     ]);
     setWho(null);
-    setFailed(false);
   }
 
   // After a removal focus moves to the next row's Remove, or to the Add person select when none remains.
@@ -232,7 +229,6 @@ function AccessBody({
   function removeRow(index: number) {
     focusAfterRemove.current = index;
     setRows(rows.filter((_, i) => i !== index));
-    setFailed(false);
   }
 
   const sentence = archived
@@ -249,14 +245,7 @@ function AccessBody({
       minWidth: 200,
       priority: 1,
       cardTitle: true,
-      cell: (r) => (
-        <span className={styles.personCell}>
-          <span className={styles.personName} dir="auto">
-            {r.person.name}
-          </span>
-          <span className={styles.personEmail}>{r.person.email}</span>
-        </span>
-      ),
+      cell: (r) => <UserName id={r.person.id} name={r.person.name} email={r.person.email} showEmail />,
     },
     {
       id: 'level',
@@ -264,18 +253,27 @@ function AccessBody({
       width: 160,
       priority: 1,
       cell: (r) =>
-        editable ? (
-          <SegmentedControl
+        editable && editingLevel === r.person.id ? (
+          <Select
             label={`Level for ${r.person.name}`}
-            options={LEVEL_OPTIONS}
+            hideLabel
+            items={LEVEL_OPTIONS.map((o) => ({ key: o.value, label: o.label }))}
             value={r.level}
-            onChange={(level) => {
-              setRows(rows.map((x) => (x.person.id === r.person.id ? { ...x, level } : x)));
-              setFailed(false);
+            defaultOpen
+            autoFocus
+            width={110}
+            searchable={false}
+            onOpenChange={(open) => {
+              if (!open) setEditingLevel(null);
+            }}
+            onChange={(k) => {
+              if (!k) return;
+              setRows(rows.map((x) => (x.person.id === r.person.id ? { ...x, level: k as GrantLevel } : x)));
+              setEditingLevel(null);
             }}
           />
         ) : (
-          <Tag tone={r.level === 'modify' ? 'accent' : undefined}>
+          <Tag kind="role" tone={r.level === 'modify' ? 'accent' : undefined}>
             {r.level === 'modify' ? 'Modify' : 'View'}
           </Tag>
         ),
@@ -311,16 +309,26 @@ function AccessBody({
       ? [
           {
             id: 'remove',
-            header: 'Remove',
+            header: 'Actions',
             hideLabel: true,
-            width: 48,
+            width: 72,
             priority: 1,
             cell: (r: Row) => (
-              <IconButton
-                label={`Remove ${r.person.name}`}
-                icon="close"
-                onPress={() => removeRow(rows.findIndex((x) => x.person.id === r.person.id))}
-              />
+              <span className={styles.rowActions}>
+                <IconButton
+                  tile
+                  icon="edit"
+                  label={`Change the level of ${r.person.name}`}
+                  onPress={() => setEditingLevel(r.person.id)}
+                />
+                <IconButton
+                  tile
+                  tone="danger"
+                  icon="ban"
+                  label={`Remove ${r.person.name}`}
+                  onPress={() => removeRow(rows.findIndex((x) => x.person.id === r.person.id))}
+                />
+              </span>
             ),
           } satisfies Column<Row>,
         ]
@@ -334,7 +342,6 @@ function AccessBody({
         variant="embedded"
         density="regular"
         densityLocked
-        zebra={false}
         rows={rows}
         rowKey={(r) => r.person.id}
         columns={columns}
@@ -351,6 +358,23 @@ function AccessBody({
       : '';
   const peopleCount = rows.length === 1 ? '1 person' : `${rows.length} people`;
   const shownRestricted = editable ? restricted : data.access_mode === 'restricted';
+  const saveFooter = editable ? (
+    <SaveFooter
+      dirty={dirty}
+      saving={save.isPending}
+      onSave={() => void onSave()}
+      secondary={
+        <Button
+          variant="neutral"
+          isDisabled={!dirty || save.isPending}
+          disabledReason="No changes to discard"
+          onPress={discard}
+        >
+          Discard
+        </Button>
+      }
+    />
+  ) : undefined;
 
   return (
     <>
@@ -358,6 +382,7 @@ function AccessBody({
         as="section"
         aria-labelledby="ds-access-mode"
         data-testid="access-mode-card"
+        footer={shownRestricted ? undefined : saveFooter}
         header={
           <CardHead
             id="ds-access-mode"
@@ -382,7 +407,6 @@ function AccessBody({
               value={mode}
               onChange={(next) => {
                 setMode(next);
-                setFailed(false);
               }}
               options={[
                 {
@@ -407,10 +431,9 @@ function AccessBody({
               <dd>{data.your_level === 'view' ? 'View' : 'Modify'}</dd>
             </dl>
           )}
-          <p className={styles.always} data-testid="access-always">
-            <Icon name="lock" size={12} />
-            <span>Project managers, admins and the creator always have full access.</span>
-          </p>
+          <InlineNotice tone="neutral" icon="lock" data-testid="access-always">
+            Project managers, admins and the creator always have full access.
+          </InlineNotice>
         </div>
       </Card>
 
@@ -419,14 +442,15 @@ function AccessBody({
           as="section"
           aria-labelledby="ds-access-people"
           data-testid="access-people"
+          footer={saveFooter}
           header={
             <CardHead
               id="ds-access-people"
               title="People with access"
-              aside={
-                <Text variant="sm" tone="muted" as="span" data-testid="access-count">
+              count={
+                <Tag kind="count" data-testid="access-count">
                   {peopleCount}
-                </Text>
+                </Tag>
               }
             />
           }
@@ -445,11 +469,15 @@ function AccessBody({
                       width="100%"
                     />
                   </div>
-                  <SegmentedControl
-                    label="Level for the new person"
-                    options={LEVEL_OPTIONS}
+                  <Select
+                    label="Level"
+                    items={LEVEL_OPTIONS.map((o) => ({ key: o.value, label: o.label }))}
                     value={newLevel}
-                    onChange={setNewLevel}
+                    onChange={(k) => {
+                      if (k) setNewLevel(k as GrantLevel);
+                    }}
+                    searchable={false}
+                    width={160}
                   />
                   <Button
                     variant="neutral"
@@ -469,54 +497,12 @@ function AccessBody({
             {rows.length ? (
               table
             ) : (
-              <Note tone="warning" title="No one is listed" data-testid="access-empty-note">
+              <Note tone="warning" title="No one is listed." data-testid="access-empty-note">
                 <span>Only project managers, admins and the creator can open this dataset.</span>
               </Note>
             )}
           </div>
         </Card>
-      ) : null}
-
-      {editable ? (
-        <div
-          className={styles.saveBar}
-          data-testid="access-save-bar"
-          data-state={save.isPending ? 'saving' : failed ? 'failed' : dirty ? 'dirty' : 'clean'}
-        >
-          <span
-            className={styles.saveStatus}
-            data-part="status"
-            aria-live="polite"
-            data-tone={failed ? 'error' : undefined}
-          >
-            {save.isPending
-              ? 'Saving'
-              : failed
-                ? 'Couldn’t save access'
-                : dirty
-                  ? 'Unsaved changes'
-                  : 'No changes'}
-          </span>
-          <div className={styles.saveActions}>
-            <Button
-              variant="neutral"
-              isDisabled={!dirty || save.isPending}
-              disabledReason="No changes to discard"
-              onPress={discard}
-            >
-              Discard
-            </Button>
-            <Button
-              variant="primary"
-              isDisabled={!dirty}
-              disabledReason="No changes to save"
-              loading={save.isPending}
-              onPress={() => void onSave()}
-            >
-              Save access
-            </Button>
-          </div>
-        </div>
       ) : null}
     </>
   );

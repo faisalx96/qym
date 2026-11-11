@@ -31,8 +31,9 @@
 }
 
 .when {
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--text-muted);
 }
 

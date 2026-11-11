@@ -130,8 +130,8 @@ describe('BestRunPicker', () => {
     await user.click(screen.getByRole('button', { name: 'Find best runs' }));
     const table = await screen.findByRole('grid', { name: 'Best runs' });
     expect(within(table).getAllByRole('row')).toHaveLength(4);
-    expect(within(table).getByText('0.91')).toBeInTheDocument();
-    expect(within(table).getByText('0.86')).toBeInTheDocument(); // pass@3
+    expect(within(table).getByText('91.0%')).toBeInTheDocument();
+    expect(within(table).getByText('86.0%')).toBeInTheDocument(); // pass@3
     expect(within(table).getByText('40 (3 err)')).toBeInTheDocument();
     expect(within(table).getAllByText('agent_version 1.4 / kb_version kb-7')).toHaveLength(3);
     expect(within(table).getAllByText('timeout=25')).toHaveLength(3);

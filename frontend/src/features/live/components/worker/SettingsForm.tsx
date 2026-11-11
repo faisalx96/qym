@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   failedCheckText,
@@ -8,16 +8,19 @@ import {
   type LiveWorkerSecrets,
   type LiveWorkerValues,
 } from '@/api/liveWorker';
+import { modelSeriesOf } from '@/features/runs-list/model';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import { actionErrorMessage, ApiError, errorSentence, fieldErrorsOf } from '@/lib/http';
 import {
   Button,
   Disclosure,
   ErrorState,
   InlineNotice,
+  ModelTag,
   NumberField,
   Select,
+  StatusMark,
   Switch,
-  Tag,
   Text,
   TextField,
   useToast,
@@ -50,7 +53,7 @@ function SettingsSection({
   section: keyof LiveWorkerValues;
   title: string;
   read: LiveWorkerRead;
-  summary: string;
+  summary: ReactNode;
   differsFromRunning: boolean;
   invalid: boolean;
   targeted: boolean;
@@ -69,19 +72,21 @@ function SettingsSection({
         title={
           <span className={styles.inline}>
             {title}
-            <Tag
-              tone={
+            <StatusMark
+              tone={status === 'running' ? 'info' : status === 'failed' ? 'danger' : 'neutral'}
+              shape={status === 'running' ? 'orbit' : status === 'failed' ? 'cross' : 'ring'}
+              label={
                 status === 'running'
-                  ? 'success'
+                  ? 'Running'
                   : status === 'pending'
-                    ? 'warning'
+                    ? 'Pending'
                     : status === 'failed'
-                      ? 'danger'
-                      : undefined
+                      ? 'Failed'
+                      : status === 'waiting'
+                        ? 'Waiting for version 1'
+                        : status
               }
-            >
-              {status === 'waiting' ? 'waiting for version 1' : status}
-            </Tag>
+            />
           </span>
         }
         summary={
@@ -112,8 +117,16 @@ function SettingsSection({
 export function SettingsForm({
   read,
   onSave,
+  onKey,
   busy,
-}: { read: LiveWorkerRead; busy?: boolean } & Pick<WorkerCallbacks, 'onSave'>) {
+  busyKey,
+  modelIndex,
+}: {
+  read: LiveWorkerRead;
+  busy?: boolean;
+  busyKey?: boolean;
+  modelIndex?: Record<string, number> | null;
+} & Pick<WorkerCallbacks, 'onSave' | 'onKey'>) {
   const [values, setValues] = useState(() => read.settings?.values ?? workerDefaults());
   const [loaded, setLoaded] = useState(() => ({ version: read.settings?.version, values }));
   const [seenVersion, setSeenVersion] = useState(read.settings?.version);
@@ -121,6 +134,15 @@ export function SettingsForm({
   const [secrets, setSecrets] = useState<LiveWorkerSecrets>({});
   const [note, setNote] = useState('');
   const [error, setError] = useState<unknown>(null);
+  const [keyError, setKeyError] = useState<unknown>(null);
+  async function changeKey(id: string | null) {
+    setKeyError(null);
+    try {
+      await onKey(id);
+    } catch (e) {
+      setKeyError(e);
+    }
+  }
   const toast = useToast();
   const modelsId = useId();
   const errors = fieldErrorsOf(error);
@@ -137,9 +159,23 @@ export function SettingsForm({
     typedSecret ||
     sections.some((section) => sectionChanged(section, values, latest.values));
   const evaluation = values.evaluation;
-  const summaries: Record<keyof LiveWorkerValues, string> = {
-    evaluation: `Chart vision ${evaluation.chart_vision_enabled ? 'on' : 'off'} · Dataiku replay ${evaluation.dataiku_execution ? 'on' : 'off'} · ${evaluation.parallel_turns} lanes · poll ${evaluation.poll_interval_s} s · lookback ${evaluation.lookback_hours} h`,
-    models: `${values.models.judge_a || '—'} (A) · ${values.models.judge_b || '—'} (B) · ${values.models.vision_judge || '—'} (vision)`,
+  const judgeSummary = (name: string, role: string) => (
+    <>
+      {name ? <ModelTag name={name} series={modelSeriesOf(modelIndex ?? null, name, false)} /> : '—'}
+      <Text as="span" tone="muted">
+        {' '}
+        ({role})
+      </Text>
+    </>
+  );
+  const summaries: Record<keyof LiveWorkerValues, ReactNode> = {
+    evaluation: `Chart vision ${evaluation.chart_vision_enabled ? 'on' : 'off'} · Dataiku replay ${evaluation.dataiku_execution ? 'on' : 'off'} · ${evaluation.parallel_turns} lanes · poll ${evaluation.poll_interval_s}s · lookback ${evaluation.lookback_hours}h`,
+    models: (
+      <>
+        {judgeSummary(values.models.judge_a, 'A')} · {judgeSummary(values.models.judge_b, 'B')} ·{' '}
+        {judgeSummary(values.models.vision_judge, 'vision')}
+      </>
+    ),
     langfuse: `${values.langfuse.host || '—'} · secret ${secrets.langfuse_secret_key || read.settings?.secret_hints.langfuse_secret_key ? 'set' : 'not set'}`,
     dataiku: `${values.dataiku.url || '—'} · ${values.dataiku.database || '—'}`,
     database: `${values.database.host || '—'}:${values.database.port} / ${values.database.database || '—'} · user ${values.database.user || '—'} · SSL ${values.database.sslmode}`,
@@ -226,15 +262,61 @@ export function SettingsForm({
         toast.show(actionErrorMessage('save the settings', e), { tone: 'error' });
     }
   }
+  const savedText = `No changes since v${latestVersion}`;
+  const formRef = useRef<HTMLFormElement>(null);
   return (
-    <WorkerBlock name="settings" title="Settings">
+    <WorkerBlock
+      name="settings"
+      title="Settings"
+      footer={
+        <SaveFooter
+          dirty={hasChanges}
+          saving={busy}
+          onSave={() => formRef.current?.requestSubmit()}
+          label={`Save as v${latestVersion + 1}`}
+          savedText={savedText}
+          disabledReason={savedText}
+        />
+      }
+    >
       <form
+        ref={formRef}
         className={styles.stack}
         onSubmit={(event) => {
           event.preventDefault();
           void save();
         }}
       >
+        <div className={styles.workerKey}>
+          <Select
+            label="Worker key"
+            value={read.worker_key?.id ?? ''}
+            items={[
+              { key: '', label: 'No worker key' },
+              ...read.api_keys.map((key) => ({ key: key.id, label: `${key.name} · ${key.prefix}…` })),
+            ]}
+            onChange={(id) => void changeKey(id ? String(id) : null)}
+            isDisabled={busyKey}
+            help="Secrets are delivered to this key only."
+            wrapValue
+            renderValue={(item) => (
+              <span className={styles.wrap} dir="auto">
+                {item.label}
+              </span>
+            )}
+          />
+        </div>
+        {!read.worker_key ? (
+          <InlineNotice tone="warning">Choose the worker key before saving settings</InlineNotice>
+        ) : null}
+        {keyError ? (
+          <ErrorState
+            compact
+            error={keyError}
+            title="Couldn’t change the worker"
+            message={errorSentence(keyError)}
+          />
+        ) : null}
         {incoming ? (
           <div className={styles.stack}>
             <InlineNotice tone="warning">
@@ -405,28 +487,14 @@ export function SettingsForm({
           />
           {secret('database_password', 'Database password')}
         </SettingsSection>
-        <div className={styles.saveRow}>
-          <TextField
-            label="Note"
-            help="Optional"
-            value={note}
-            onChange={setNote}
-            errorMessage={errors.note}
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            isDisabled={busy || !hasChanges}
-            loading={busy}
-            disabledReason={`No changes since v${latestVersion}`}
-          >
-            Save as v{latestVersion + 1}
-          </Button>
-        </div>
-        {!hasChanges ? <Text tone="muted">No changes since v{latestVersion}</Text> : null}
-        <Text tone="muted">
-          After Save: the worker checks every connection and model, finishes its current turn, then switches.
-        </Text>
+        <TextField
+          label="Note"
+          help="After Save: the worker checks every connection and model, finishes its current turn, then switches."
+          width={400}
+          value={note}
+          onChange={setNote}
+          errorMessage={errors.note}
+        />
         {error ? (
           <ErrorState
             compact

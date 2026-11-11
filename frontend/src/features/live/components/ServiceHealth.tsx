@@ -1,13 +1,8 @@
-import type { CSSProperties, ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
-import { Card, HelpMarker, ScoreValue, Text } from '@/ui';
+import { Card, HelpMarker, Icon, ScoreValue, StatStrip, Text } from '@/ui';
 import styles from '../live.module.css';
-
-/** One framed strip of equal cells (DESIGN_LANGUAGE stat tiles: seven or fewer in a row). */
-function serviceColumns(count: number): number {
-  return Math.min(Math.max(count, 1), 7);
-}
 
 export function ServiceHealth({
   services,
@@ -20,6 +15,7 @@ export function ServiceHealth({
   linkTo: (filters?: Record<string, string>) => string;
   children?: ReactNode;
 }) {
+  const navigate = useNavigate();
   return (
     <Card
       data-live-block="services"
@@ -35,28 +31,21 @@ export function ServiceHealth({
         </div>
       }
     >
-      <div
-        className={styles.services}
-        style={{ '--live-service-columns': serviceColumns(services.length) } as CSSProperties}
-      >
-        {services.map((service) => {
+      <StatStrip
+        aria-label="Service health"
+        items={services.map((service) => {
           // Overview rates carry metric names; the turns filter takes the bare service key.
           const name = service.name.replace(/^service\./, '');
-          return (
-            <Link
-              key={service.name}
-              data-live-service={name}
-              to={linkTo({ service: name, service_status: 'not_ok' })}
-              className={styles.service}
-            >
-              <ScoreValue value={service.ok_rate} direction="higher" variant="plain" />
-              <span dir="auto">
-                {specs.find((spec) => spec.metric_name === `service.${name}`)?.label ?? name}
-              </span>
-            </Link>
-          );
+          return {
+            key: name,
+            label: <span dir="auto">{specs.find((spec) => spec.metric_name === `service.${name}`)?.label ?? name}</span>,
+            icon: <Icon name="shield" />,
+            value: <ScoreValue value={service.ok_rate} direction="higher" variant="plain" />,
+            onPress: () => void navigate(linkTo({ service: name, service_status: 'not_ok' })),
+            data: { 'data-live-service': name },
+          };
         })}
-      </div>
+      />
       {children}
     </Card>
   );

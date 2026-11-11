@@ -20,11 +20,9 @@ test('deep-linked filters, CSV, trigger clearing and Arabic search stay in the U
     timeZone: 'UTC',
   });
   const filters = page.locator('[data-live-block="filters"]');
+  await expect(filters.getByRole('button', { name: 'Day filter, 1 selected', exact: true })).toBeVisible();
   await expect(
-    filters.getByRole('button', { name: `${dateLabel} ${day.turns.length}`, exact: true }),
-  ).toBeVisible();
-  await expect(
-    filters.getByRole('button', { name: `${diagnosis.label} ${matching} Diagnosis`, exact: true }),
+    filters.getByRole('button', { name: 'Diagnosis filter, 1 selected', exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText(`${matching} of ${day.turns.length} turns on ${dateLabel}`, { exact: true }),
@@ -43,7 +41,9 @@ test('deep-linked filters, CSV, trigger clearing and Arabic search stay in the U
   const download = await downloadReady;
   expect(await download.failure()).toBeNull();
 
-  await filters.getByRole('button', { name: 'Clear Diagnosis' }).click();
+  await filters.getByRole('button', { name: 'Diagnosis filter, 1 selected' }).click();
+  await page.getByRole('button', { name: 'None', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(page).toHaveURL(
     (url) => !url.searchParams.has('label') && url.searchParams.get('day') === day.day,
   );

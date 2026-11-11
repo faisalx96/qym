@@ -5,7 +5,7 @@
  */
 import { useMemo } from 'react';
 import type { Key } from 'react-aria-components';
-import { Button, Icon, MultiSelect, Popover, SegmentedControl, Slider } from '@/ui';
+import { BarTrigger, ClearFiltersButton, MultiSelect, Popover, SegmentedControl, Slider } from '@/ui';
 import type { CorrectionsPage, ReviewFilters, ReviewSource } from '@/api/reviews';
 import styles from './FilterBar.module.css';
 
@@ -105,13 +105,12 @@ function ConfidenceTrigger({
       label="Confidence"
       placement="bottom start"
       trigger={
-        <Button
-          variant={set ? 'accent' : 'neutral'}
-          iconEnd={<Icon name="chevron-down" size={12} />}
+        <BarTrigger
+          label="Confidence"
+          value={set ? `${filters.confMin}–${filters.confMax}%` : undefined}
+          active={set}
           data-testid="confidence-trigger"
-        >
-          Confidence{set ? ` · ${filters.confMin}–${filters.confMax}%` : ''}
-        </Button>
+        />
       }
     >
       <div className={styles.band} role="group" aria-label="Confidence band">
@@ -152,23 +151,12 @@ export function FacetRow({
 }) {
   const count = activeFilterCount(filters);
   return (
-    <div className={styles.facetRow} role="toolbar" aria-label="Diagnosis filters" data-testid="filter-bar">
+    <div className={styles.facetRow} role="toolbar" aria-label="Issue filters" data-testid="filter-bar">
       {FACETS.map((f) => (
         <FacetTrigger key={f.key} facet={f} filters={filters} facets={facets} onChange={onChange} />
       ))}
       <ConfidenceTrigger filters={filters} onChange={onChange} />
-      {count ? (
-        <Button
-          variant="danger"
-          icon={<Icon name="close" size={12} />}
-          onPress={onClear}
-          className={styles.clear}
-          aria-label={`Clear ${count} filter${count === 1 ? '' : 's'}`}
-          data-testid="clear-filters"
-        >
-          Clear <span className={styles.clearCount}>{count}</span>
-        </Button>
-      ) : null}
+      <ClearFiltersButton count={count} onClear={onClear} testId="clear-filters" />
     </div>
   );
 }

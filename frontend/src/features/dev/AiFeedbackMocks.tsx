@@ -459,7 +459,6 @@ export function RequestsTable({ rows, loading }: { rows: Req[]; loading?: boolea
       <DataTable.Toolbar
         search={<SearchField label="Search requests" placeholder="Search requests" width="100%" />}
         rows={<FilterRow />}
-        count={`${rows.length} requests`}
         columnsMenu={false}
         densityMenu={false}
       />
@@ -478,7 +477,7 @@ function DraftsStrip() {
             <Button size="sm" variant="neutral">
               Resume
             </Button>
-            <Button size="sm" variant="ghost">
+            <Button size="sm" variant="neutral">
               Discard
             </Button>
           </span>
@@ -490,7 +489,7 @@ function DraftsStrip() {
             <Button size="sm" variant="neutral">
               Resume
             </Button>
-            <Button size="sm" variant="ghost">
+            <Button size="sm" variant="neutral">
               Discard
             </Button>
           </span>
@@ -564,7 +563,7 @@ function NewForm({ subject, text }: { subject: 'platform' | 'product'; text?: st
             <Icon name="eye" size={14} /> Visible to everyone signed in
           </span>
           <span className={styles.footActions}>
-            <Button variant="ghost">Cancel</Button>
+            <Button variant="neutral">Cancel</Button>
             <Button variant="accent" isDisabled={!msg.trim()}>
               Start conversation
             </Button>
@@ -932,7 +931,7 @@ const DRAFT_HEADER = (
     description="Answer the assistant’s questions. Nothing is submitted until you confirm a proposal."
     meta={[<Tag key="s">Platform</Tag>, 'Draft, only you can see it', 'Deleted after 30 days without a submit']}
     actions={
-      <Button variant="ghost" size="md">
+      <Button variant="neutral" size="md">
         Discard draft
       </Button>
     }
@@ -1242,7 +1241,7 @@ function TriageCard({ pending = true, declineError }: { pending?: boolean; decli
       }
       footer={
         <div className={styles.footActions}>
-          <Button variant="ghost" isDisabled={!pending}>
+          <Button variant="neutral" isDisabled={!pending}>
             Reset
           </Button>
           <Button variant="accent" isDisabled={!pending}>

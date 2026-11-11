@@ -24,8 +24,8 @@
   text-decoration: none;
 }
 
-/* One size per role (C049): every button is 24px; 32px only in a dialog footer, even when a page asks for size md. */
-:global([data-dialog-footer]) .button[data-size='md'] {
+/* One size per role (C049, A-02): every button is 24px; every button in a dialog footer is 32px, whatever size the page asks for. */
+:global([data-dialog-footer]) .button {
   height: 32px;
   min-height: 32px;
   padding: 0 var(--space-md);
@@ -37,7 +37,7 @@
   width: var(--control-height);
 }
 
-:global([data-dialog-footer]) .button[data-icon-only][data-size='md'] {
+:global([data-dialog-footer]) .button[data-icon-only] {
   width: 32px;
 }
 
@@ -66,6 +66,11 @@
   line-height: 1.4;
   white-space: normal;
   pointer-events: none;
+}
+/* Placed (ui/Button/reasonPlacement.ts): a fixed box inside the window, so no overflow: hidden parent cuts it (A-09, A-11). */
+.reasonWrap[data-reason][data-reason-at]:hover::after {
+  position: fixed;
+  inset: var(--reason-y) auto auto var(--reason-x);
 }
 
 .button[data-hovered],
@@ -117,16 +122,6 @@ a.button[data-variant='danger']:hover:not([data-disabled]) {
   background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
 }
 
-.button[data-variant='ghost'] {
-  color: var(--text-secondary);
-  background: transparent;
-}
-.button[data-variant='ghost'][data-hovered],
-a.button[data-variant='ghost']:hover:not([data-disabled]) {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
 /* Disabled reads as inert but stays legible: muted text (6:1) in every variant, instead of fading the variant's own fill
    (a faded accent fill with void text fell below 3:1 against the ground). Round 10: the same flat shape as a resting
    button at half its fill and no outline, so a locked button reads as the button switched off; an outline made it look
@@ -139,7 +134,7 @@ a.button[data-variant='ghost']:hover:not([data-disabled]) {
 
 /* One rule for every coloured button (round 11): disabled keeps the button's own colour, faded, so a locked Save is
    still the green Save and a locked Restore default is still red. A green tint for a locked primary read as a
-   different, accent button. Neutral and ghost buttons keep the muted flat look above. */
+   different, accent button. Neutral buttons keep the muted flat look above. */
 .button:is([data-variant='primary'], [data-variant='accent'], [data-variant='danger'])[data-disabled] {
   opacity: 0.45;
   box-shadow: none;

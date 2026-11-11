@@ -17,13 +17,7 @@
 
 /* No description yet: a link to Settings › General, the one place to edit it (C169) */
 .addDescription {
-  color: var(--accent-secondary);
-  text-decoration: underline; /* a link inside running text must not rely on colour alone */
-}
-
-.inlineLink {
-  font-family: var(--font-mono);
-  color: var(--accent-secondary);
+  color: var(--accent-primary);
   text-decoration: underline; /* a link inside running text must not rely on colour alone */
 }
 

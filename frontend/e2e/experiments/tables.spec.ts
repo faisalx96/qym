@@ -51,7 +51,7 @@ test('queue: selecting jobs adds the selection actions and keeps the filters', a
   await jobsGrid(page).getByRole('row').nth(1).locator('label').first().click();
   const bar = page.getByRole('region', { name: 'Selection actions' });
   await expect(bar).toContainText('1 selected');
-  await expect(bar.getByRole('button', { name: 'Cancel selected (1)' })).toBeEnabled();
+  await expect(bar.getByRole('button', { name: /^Cancel selected\s?1$/ })).toBeEnabled();
   await expect(page.getByText('Environment', { exact: true }).first()).toBeVisible();
   await bar.getByRole('button', { name: 'Clear selection' }).click();
   await expect(bar).toHaveCount(0);

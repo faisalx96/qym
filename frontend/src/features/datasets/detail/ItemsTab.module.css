@@ -1,4 +1,4 @@
-/* Items tab toolbar/table/footer; composes SearchField/DataTable/Pagination/Chip. */
+/* Items tab toolbar/table/footer; composes SearchField/DataTable/Pagination. */
 .wrap {
   display: flex;
   flex-direction: column;
@@ -74,17 +74,12 @@
   gap: var(--space-xs) var(--space-sm);
 }
 
-.countLabel {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  margin-inline-start: var(--space-xs);
-  color: inherit;
-}
-
-.chipRow {
+.filterRow {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-xs);
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
 }
 
 /* Item text reads in the sans face (design-language rule 4); JSON such as metadata stays mono (C153). */

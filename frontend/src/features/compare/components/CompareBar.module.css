@@ -42,18 +42,3 @@
     flex-wrap: wrap;
   }
 }
-/* Clear's count on its own red disc, as in the runs-list filter bar (owner, Oct 26 and Nov 1). */
-.clearCount {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 var(--space-xs);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--error) 32%, transparent);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}

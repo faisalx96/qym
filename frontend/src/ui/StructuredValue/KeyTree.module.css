@@ -154,20 +154,6 @@
   overflow: hidden;
 }
 
-.showFull {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--accent-primary);
-  cursor: pointer;
-}
-
-.showFull:focus-visible {
-  outline: 2px solid var(--accent-primary);
-}
-
 .more {
   padding-block: var(--space-xs);
 }

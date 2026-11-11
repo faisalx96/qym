@@ -75,7 +75,7 @@ export function EndpointControls() {
         ) : null}
         {canManage && mode === 'launch'
           ? selectedEnvs.map((env) => (
-              <Button key={env.id} variant="ghost" onPress={() => dialog.open(env.id)}>
+              <Button key={env.id} variant="neutral" onPress={() => dialog.open(env.id)}>
                 {selectedEnvs.length > 1 ? `Edit LLM groups · ${env.name}` : 'Edit LLM groups'}
               </Button>
             ))

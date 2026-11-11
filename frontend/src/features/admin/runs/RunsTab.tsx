@@ -8,7 +8,16 @@ import {
 } from '@/api/admin';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { DataTable, ErrorState, SearchField, Section, Select, Skeleton, useToast } from '@/ui';
+import {
+  ClearFiltersButton,
+  DataTable,
+  ErrorState,
+  SearchField,
+  Section,
+  Select,
+  Skeleton,
+  useToast,
+} from '@/ui';
 import { ForceStopDialog } from './ForceStopDialog';
 import { RunTable } from './RunTables';
 
@@ -66,13 +75,19 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
             runs={live.data.runs}
             onForceStop={setTarget}
             emptyState="No live runs"
-            footerSummary={`${live.data.runs.length} live`}
+            pagination={{
+              total: live.data.runs.length,
+              page: 1,
+              pageSize: Math.max(1, live.data.runs.length),
+              noun: 'live runs',
+              onPageChange: () => {},
+            }}
           />
         )}
       </Section>
       <Section
         id="recent-runs"
-        title="Most recent eval runs"
+        title="Most recent runs"
         description={
           filtered
             ? `${recent.data?.total_count ?? 0} matching finished runs`
@@ -98,7 +113,7 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
               storageKey="admin-recent-runs"
               runs={recent.data.runs}
               onForceStop={setTarget}
-              emptyState={filtered ? 'No finished runs match' : 'No recent eval runs'}
+              emptyState={filtered ? 'No finished runs match' : 'No recent runs'}
               toolbar={
                 <DataTable.Toolbar
                   columnsMenu={false}
@@ -109,25 +124,34 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
                       value={search}
                       onChange={setSearch}
                       onClear={() => setSearch('')}
-                      width={280}
+                      width="var(--search-width)"
+                      shortcut="/"
                     />
                   }
                   filters={
-                    <Select
-                      label="Project"
-                      hideLabel
-                      placeholder="All projects"
-                      items={[
-                        { key: '', label: 'All projects' },
-                        ...(projects.data ?? [])
-                          .filter((p) => p.is_active)
-                          .map((p) => ({ key: p.id, label: p.name })),
-                      ]}
-                      value={projectId ?? ''}
-                      onChange={(k) => replaceUrlQuery({ project: k ? String(k) : null, page: null })}
-                      searchable="auto"
-                      width={220}
-                    />
+                    <>
+                      <Select
+                        label="Project"
+                        hideLabel
+                        triggerVariant="bar"
+                        items={[
+                          { key: '', label: 'All projects' },
+                          ...(projects.data ?? [])
+                            .filter((p) => p.is_active)
+                            .map((p) => ({ key: p.id, label: p.name })),
+                        ]}
+                        value={projectId ?? ''}
+                        onChange={(k) => replaceUrlQuery({ project: k ? String(k) : null, page: null })}
+                        searchable="auto"
+                      />
+                      <ClearFiltersButton
+                        count={(projectId ? 1 : 0) + (search ? 1 : 0)}
+                        onClear={() => {
+                          setSearch('');
+                          replaceUrlQuery({ project: null, q: null, page: null });
+                        }}
+                      />
+                    </>
                   }
                 />
               }

@@ -90,7 +90,7 @@ test('C-state-3: runs missing: the count, up to five ids then "+ N more", a Back
   await expect(alert).toContainText('7 of the runs in this link were deleted or are not visible to you');
   for (const id of ids.slice(0, 5)) await expect(alert).toContainText(id);
   await expect(alert).not.toContainText(ids[5]!);
-  await expect(alert).toContainText('+ 2 more');
+  await expect(alert).toContainText('and 2 more');
   await expect(alert).toContainText('404');
   await expect(page.getByRole('link', { name: /Back to runs/ })).toBeVisible();
   await noSidewaysScroll(page);

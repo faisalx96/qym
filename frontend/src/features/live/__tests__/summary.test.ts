@@ -274,15 +274,15 @@ describe('live turn evidence presentation', () => {
       summary: { judges: { a: { compliance: { overall: 0 } } } },
     };
     const { container } = render(createElement(TurnTiles, { data }));
-    expect(screen.getAllByRole('listitem')).toHaveLength(6);
+    expect(container.querySelectorAll('[data-tile]')).toHaveLength(6);
     expect(container.querySelectorAll('[data-live-stat]')).toHaveLength(6);
     expect(container.querySelector('[data-live-stat="rows"]')).toHaveTextContent('0');
-    expect(container.querySelector('[data-tile="compliance_a"] [data-part="value"]')).toHaveTextContent('0%');
-    expect(container.querySelector('[data-tile="compliance_b"] [data-part="value"]')).toHaveTextContent(
-      '38%',
+    expect(container.querySelector('[data-tile="compliance_a"] [data-live-stat]')).toHaveTextContent('0%');
+    expect(container.querySelector('[data-tile="compliance_b"] [data-live-stat]')).toHaveTextContent(
+      '38.0%',
     );
-    expect(container.querySelector('[data-tile="latency"] [data-part="value"]')).toHaveTextContent('0ms');
-    expect(container.querySelector('[data-tile="rows"] [data-part="value"]')).toHaveTextContent('0');
+    expect(container.querySelector('[data-tile="latency"] [data-live-stat]')).toHaveTextContent('0ms');
+    expect(container.querySelector('[data-tile="rows"] [data-live-stat]')).toHaveTextContent('0');
   });
 
   it('renders the approved diagnosis and changes all seven panels through URL tabs', async () => {
@@ -290,7 +290,7 @@ describe('live turn evidence presentation', () => {
     const { container } = renderTurn();
     expect(container.querySelector('[data-live-block="turn-header"] [data-live-question]')).toHaveAttribute(
       'dir',
-      'auto',
+      'rtl',
     );
     expect(document.title).toContain(turnDetail.turn.question);
     expect(screen.getByRole('link', { name: /Product trace/ })).toHaveAttribute(
@@ -308,7 +308,7 @@ describe('live turn evidence presentation', () => {
     const judgeA = screen.getByLabelText('Judge A compliance');
     expect(
       within(judgeA).getByText('Overall compliance').closest('dt')?.nextElementSibling,
-    ).toHaveTextContent('42%');
+    ).toHaveTextContent('42.0%');
     await user.click(screen.getByRole('tab', { name: 'Charts' }));
     expect(screen.getByRole('img', { name: /bar chart/ })).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Services and tools' }));

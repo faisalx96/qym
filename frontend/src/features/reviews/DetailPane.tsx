@@ -1,8 +1,10 @@
 /** Right-hand diagnosis detail: header actions, AI vs Human issues, previews, lazy full detail (o), inline edit. */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { useModelIndex } from '@/api/dashboard';
 import { useCorrection, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
+import { formatTableDate } from '@/lib/dates';
 import { textDirAttrs } from '@/lib/text';
 import {
   Button,
@@ -21,6 +23,7 @@ import {
   UserName,
 } from '@/ui';
 import { formatDate } from '../datasets/lib/itemValue';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import { IssueEditForm, IssueList } from './IssueList';
 import { correctionPriority } from './lib/filters';
 import styles from './DetailPane.module.css';
@@ -58,13 +61,14 @@ export function editSeed(row: CorrectionRow): CorrectionRow['human_root_cause_is
 
 export function DetailPane(p: DetailPaneProps) {
   const { row } = p;
+  const modelIndex = useModelIndex(row.project_slug);
   const priority = correctionPriority(row);
   const runHref = row.run_id
     ? `${runPath(row.project_slug, row.run_id)}${new URLSearchParams({ ...(row.pass_number != null && !row.pass_deleted_at ? { pass: String(row.pass_number) } : {}), ...(row.item_id ? { item: row.item_id } : {}) }).toString().replace(/^(?=.)/, '?')}`
     : null;
   const pending = row.status === 'pending';
   return (
-    <aside className={styles.pane} aria-label={`Diagnosis ${row.id}`} data-detail-pane={row.id}>
+    <aside className={styles.pane} aria-label={`Issue ${row.id}`} data-detail-pane={row.id}>
       <header className={styles.head}>
         <div className={styles.titleRow}>
           <Text as="h2" variant="lg" mono>
@@ -83,7 +87,7 @@ export function DetailPane(p: DetailPaneProps) {
         </div>
         <div className={styles.meta}>
           {typeof row.ai_confidence === 'number' ? (
-            <span>AI confidence {Math.round(row.ai_confidence * 100)}%</span>
+            <span>{Math.round(row.ai_confidence * 100)}% confidence</span>
           ) : null}
           {row.corrected_by ? (
             <span>
@@ -155,7 +159,7 @@ export function DetailPane(p: DetailPaneProps) {
             </span>
           </Button>
           <Button
-            variant="ghost"
+            variant="neutral"
             size="sm"
             onPress={p.onToggle}
             aria-expanded={p.expanded}
@@ -202,21 +206,43 @@ export function DetailPane(p: DetailPaneProps) {
         <Chipline
           label="Model"
           value={row.model}
-          node={row.model ? <ModelTag name={row.model} reasoning={!!row.has_reasoning} /> : null}
+          node={
+            row.model ? (
+              <ModelTag
+                name={row.model}
+                reasoning={!!row.has_reasoning}
+                series={modelSeriesOf(modelIndex, row.model, !!row.has_reasoning)}
+              />
+            ) : null
+          }
         />
       </div>
 
       <div className={styles.columns}>
         <section aria-label="AI root-cause issues">
-          <Text variant="sm" tone="muted" weight={650} className={styles.colHead}>
-            AI ROOT-CAUSE ISSUES
-          </Text>
+          <div className={styles.colHeadRow}>
+            <Text variant="sm" tone="muted" weight={650} className={styles.colHead}>
+              AI ROOT-CAUSE ISSUES
+            </Text>
+            {(row.ai_root_cause_issues ?? []).length ? null : (
+              <Text variant="sm" tone="muted">
+                No AI issues
+              </Text>
+            )}
+          </div>
           <IssueList issues={row.ai_root_cause_issues ?? []} tone="ai" />
         </section>
         <section aria-label="Human root-cause issues">
-          <Text variant="sm" tone="muted" weight={650} className={styles.colHead}>
-            HUMAN ROOT-CAUSE ISSUES
-          </Text>
+          <div className={styles.colHeadRow}>
+            <Text variant="sm" tone="muted" weight={650} className={styles.colHead}>
+              HUMAN ROOT-CAUSE ISSUES
+            </Text>
+            {!p.editing && !(row.human_root_cause_issues ?? []).length ? (
+              <Text variant="sm" tone="muted">
+                No human issues
+              </Text>
+            ) : null}
+          </div>
           {p.editing ? (
             <IssueEditForm
               initial={editSeed(row)}
@@ -278,7 +304,7 @@ function Chipline({
       {node ? (
         node
       ) : href ? (
-        <Link to={href} className={styles.chipLink}>
+        <Link to={href} className={styles.chipLink} data-link="name">
           {value}
         </Link>
       ) : (
@@ -353,7 +379,7 @@ function FullDetail({ id }: { id: number }) {
           <ol className={styles.history}>
             {d.history.map((h) => (
               <li key={h.revision_id}>
-                <span className={styles.histWhen}>{formatDate(h.created_at)}</span>
+                <span className={styles.histWhen}>{formatTableDate(h.created_at)}</span>
                 <span>
                   Revision {h.revision_number} by{' '}
                   {h.actor_user ? (

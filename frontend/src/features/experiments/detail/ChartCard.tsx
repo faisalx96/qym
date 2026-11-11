@@ -1,7 +1,7 @@
 /** Setting vs metric: one swept setting on x, one metric on y, one line per environment. */
 import { useMemo, useState } from 'react';
 import type { ExperimentDetail } from '@/api/experiments';
-import { Select, SectionHeader, Card } from '@/ui';
+import { Select, SectionHeader, Card, ChartTooltipHost, Disclosure, EmptyState, Mark, TipBody } from '@/ui';
 import { buildChart, chartTableRows, metricNames, CHART } from '../lib/chart';
 import { currentJobs, usableRun, type MatrixEnv } from '../lib/matrix';
 import styles from './detail.module.css';
@@ -50,54 +50,14 @@ export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: Ma
           </div>
         </div>
         {model.empty ? (
-          <p className={styles.empty}>Nothing to plot yet: points appear as runs finish and report scores.</p>
+          <div className={styles.chartEmpty} style={{ aspectRatio: `${CHART.width} / ${CHART.height}` }}>
+            <EmptyState
+              title="No scores to plot yet"
+              body="Points appear as runs finish and report scores."
+            />
+          </div>
         ) : (
           <div className={styles.chartBox}>
-            <svg
-              className={styles.svg}
-              viewBox={`0 0 ${CHART.width} ${CHART.height}`}
-              role="img"
-              aria-label={`${metric} by ${settingLabel}, one line per environment`}
-            >
-              {model.yTicks.map((t, i) => (
-                <g key={i}>
-                  <line className={styles.grid} x1={left} x2={right} y1={t.py} y2={t.py} />
-                  <text className={styles.tick} x={left - 6} y={t.py + 4} textAnchor="end">
-                    {t.label}
-                  </text>
-                </g>
-              ))}
-              <line className={styles.axis} x1={left} x2={right} y1={bottom} y2={bottom} />
-              {model.xTicks.map((t, i) => (
-                <text key={i} className={styles.tick} x={t.px} y={bottom + 16} textAnchor="middle">
-                  {t.label.length > 18 ? `${t.label.slice(0, 17)}…` : t.label}
-                </text>
-              ))}
-              <text
-                className={styles.axisTitle}
-                x={left + (right - left) / 2}
-                y={CHART.height - 4}
-                textAnchor="middle"
-              >
-                {settingLabel}
-              </text>
-              {model.series.map((s) => (
-                <g key={s.envId} className={styles.series} data-slot={s.slot}>
-                  {s.line.length > 1 ? (
-                    <polyline
-                      className={styles.line}
-                      points={s.line.map((p) => `${p.px},${p.py}`).join(' ')}
-                    />
-                  ) : null}
-                  {s.points.map((p) => (
-                    <circle key={p.jobId} className={styles.dot} cx={p.px} cy={p.py} r={4}>
-                      <title>{`${s.name} · ${settingLabel}=${p.xLabel} · ${metric} ${formatMetric(p.y)}${p.comboLabel ? ` · ${p.comboLabel}` : ''}`}</title>
-                    </circle>
-                  ))}
-                </g>
-              ))}
-              <line className={styles.axis} x1={left} x2={left} y1={top} y2={bottom} />
-            </svg>
             <ul className={styles.legend} aria-label="Legend">
               {model.series.map((s) => (
                 <li key={s.envId} className={styles.legendItem} data-slot={s.slot}>
@@ -106,15 +66,80 @@ export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: Ma
                 </li>
               ))}
             </ul>
-            <details className={styles.textTable}>
-              <summary>View as table</summary>
+            <ChartTooltipHost>
+              <svg
+                className={styles.svg}
+                viewBox={`0 0 ${CHART.width} ${CHART.height}`}
+                role="img"
+                aria-label={`${metric} by ${settingLabel}, one line per environment`}
+              >
+                {model.yTicks.map((t, i) => (
+                  <g key={i}>
+                    <line className={styles.grid} x1={left} x2={right} y1={t.py} y2={t.py} />
+                    <text className={styles.tick} x={left - 6} y={t.py + 4} textAnchor="end">
+                      {t.label}
+                    </text>
+                  </g>
+                ))}
+                <line className={styles.axis} x1={left} x2={right} y1={bottom} y2={bottom} />
+                {model.xTicks.map((t, i) => (
+                  <text key={i} className={styles.tick} x={t.px} y={bottom + 16} textAnchor="middle">
+                    {t.label.length > 18 ? `${t.label.slice(0, 17)}…` : t.label}
+                  </text>
+                ))}
+                <text
+                  className={styles.axisTitle}
+                  x={left + (right - left) / 2}
+                  y={CHART.height - 4}
+                  textAnchor="middle"
+                >
+                  {settingLabel}
+                </text>
+                {model.series.map((s) => (
+                  <g key={s.envId} className={styles.series} data-slot={s.slot}>
+                    {s.line.length > 1 ? (
+                      <polyline
+                        className={styles.line}
+                        points={s.line.map((p) => `${p.px},${p.py}`).join(' ')}
+                      />
+                    ) : null}
+                    {s.points.map((p) => (
+                      <Mark
+                        as="circle"
+                        key={p.jobId}
+                        className={styles.dot}
+                        cx={p.px}
+                        cy={p.py}
+                        r={4}
+                        tip={
+                          <TipBody
+                            title={s.name}
+                            rows={[
+                              [settingLabel, p.xLabel],
+                              [metric, formatMetric(p.y)],
+                              ...(p.comboLabel ? [['Combination', p.comboLabel] as [string, string]] : []),
+                            ]}
+                          />
+                        }
+                      />
+                    ))}
+                  </g>
+                ))}
+                <line className={styles.axis} x1={left} x2={left} y1={top} y2={bottom} />
+              </svg>
+            </ChartTooltipHost>
+            <Disclosure className={styles.textTable} title="View as table">
               <table className={styles.plain}>
                 <caption className={styles.srOnly}>{`${metric} by ${settingLabel}`}</caption>
                 <thead>
                   <tr>
                     <th scope="col">Environment</th>
-                    <th scope="col">{settingLabel}</th>
-                    <th scope="col">{metric}</th>
+                    <th scope="col" className={styles.num}>
+                      {settingLabel}
+                    </th>
+                    <th scope="col" className={styles.num}>
+                      {metric}
+                    </th>
                     <th scope="col">Combination</th>
                   </tr>
                 </thead>
@@ -122,14 +147,14 @@ export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: Ma
                   {rows.map((r, i) => (
                     <tr key={i}>
                       <td>{r.environment}</td>
-                      <td className={styles.mono}>{r.x}</td>
-                      <td className={styles.mono}>{r.y}</td>
+                      <td className={`${styles.mono} ${styles.num}`}>{r.x}</td>
+                      <td className={`${styles.mono} ${styles.num}`}>{r.y}</td>
                       <td>{r.combo || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </details>
+            </Disclosure>
           </div>
         )}
       </div>

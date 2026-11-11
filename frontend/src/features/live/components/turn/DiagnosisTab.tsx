@@ -1,6 +1,7 @@
 import type { LiveTurnDetail } from '@/api/live';
 import { formatDurationMs } from '@/lib/format';
-import { Disclosure, KeyValueGrid, StatusMark, Tag, Text, TextBlock } from '@/ui';
+import { modelSeriesOf } from '@/features/runs-list/model';
+import { Disclosure, EmptyState, Icon, KeyValueGrid, ModelTag, StatusMark, Tag, Text, TextBlock } from '@/ui';
 import {
   booleanOf,
   chartsOf,
@@ -19,7 +20,13 @@ import { EvidenceCard, MetricValue, ServiceStatus, SqlParts } from './Evidence';
 import { labelFor } from './presentation';
 import styles from '../../turn.module.css';
 
-export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
+export function DiagnosisTab({
+  data,
+  modelIndex,
+}: {
+  data: LiveTurnDetail;
+  modelIndex?: Record<string, number> | null;
+}) {
   const { turn, summary, specs } = data;
   const deviations = deviationsOf(summary);
   const judges = { a: judgeOf(summary, 'a'), b: judgeOf(summary, 'b') };
@@ -31,7 +38,7 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
   const meta = evalMetaOf(summary);
   const models = recordOf(meta?.models);
   const judgeModels = [judges.a?.model ?? stringOf(models?.a), judges.b?.model ?? stringOf(models?.b)].filter(
-    Boolean,
+    (model): model is string => Boolean(model),
   );
   const codeVersion = stringOf(meta?.eval_code_version);
   const manifest = stringOf(summary.manifest_hash);
@@ -75,14 +82,17 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
                     .filter((item) => item.judge === judge)
                     .map((item, index) => (
                       <div key={index} className={styles.deviation}>
-                        <Tag
-                          tone={
-                            item.axis === 'sql' ? 'danger' : item.axis === 'response' ? 'warning' : undefined
-                          }
-                          dir="auto"
-                        >
-                          {item.axis}
-                        </Tag>
+                        <span className={styles.axis}>
+                          {item.axis === 'sql' || item.axis === 'response' ? (
+                            <Icon
+                              name="warning"
+                              size={12}
+                              className={item.axis === 'sql' ? styles.sevError : styles.sevWarning}
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <Tag dir="auto">{item.axis}</Tag>
+                        </span>
                         <p className={styles.copy} dir="auto">
                           {item.text}
                         </p>
@@ -154,7 +164,7 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
           {chart ? (
             <ChartEvidenceBody chart={chart} specs={specs} reading={false} size="thumb" />
           ) : (
-            <Text tone="muted">No charts available for this turn.</Text>
+            <EmptyState compact title="No charts for this turn" />
           )}
         </EvidenceCard>
         <EvidenceCard title="Services on this turn" block="turn-services">
@@ -172,12 +182,16 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
               </div>
             ))
           ) : (
-            <Text tone="muted">No services available for this turn.</Text>
+            <EmptyState compact title="No services for this turn" />
           )}
           <div className={styles.evaluator} data-live-block="evaluator-line">
-            <span dir="auto">
-              {judgeModels.length ? judgeModels.join(' · ') : 'Judge models unavailable'}
-            </span>
+            {judgeModels.length ? (
+              judgeModels.map((m) => (
+                <ModelTag key={m} name={m} series={modelSeriesOf(modelIndex ?? null, m, false)} />
+              ))
+            ) : (
+              <span>Judge models unavailable</span>
+            )}
             {codeVersion ? (
               <Tag kind="version" dir="auto">
                 {codeVersion}

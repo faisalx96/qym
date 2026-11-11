@@ -4,6 +4,7 @@
  */
 import type { ExperimentJob } from '@/api/experiments';
 import { isTerminalJob } from '@/api/experiments';
+import { formatHeaderDate, formatTime, toDate } from '@/lib/dates';
 import { isCancellable } from './cancel';
 
 export type AdmissionJob = Pick<
@@ -21,15 +22,13 @@ export interface AdmissionLine {
   text: string;
   /** Error text (red). */
   error?: boolean;
-  /** The absolute value for the `title` (the admitted time). */
+  /** The absolute value for the `title` (the admitted time, header form 'Nov 5, 2026, 23:37'). */
   title?: string;
 }
 
 /** `HH:mm` in the viewer's time zone. */
 export function clockTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return toDate(iso) ? formatTime(iso) : '';
 }
 
 /**
@@ -46,7 +45,7 @@ export function admissionLine(job: AdmissionJob, latency = true): AdmissionLine 
       return { text: `deferred ×${job.deferrals}${reason}` };
     }
     if (job.status === 'RUNNING' && job.admitted_at)
-      return { text: `admitted ${clockTime(job.admitted_at)}`, title: job.admitted_at };
+      return { text: `admitted ${clockTime(job.admitted_at)}`, title: formatHeaderDate(job.admitted_at) };
     if (job.contaminated_attempts > 0 && job.status !== 'RUNNING')
       return { text: `re-queued ×${job.contaminated_attempts} · contaminated` };
   }

@@ -1,5 +1,5 @@
 import { forwardRef, type ReactNode } from 'react';
-import { Button, type ButtonProps } from '@/ui';
+import { Button, Icon, type ButtonProps } from '@/ui';
 import type { WizardStepDef, WizardStepId } from '../wizard/steps';
 import styles from './launchBar.module.css';
 
@@ -39,6 +39,8 @@ export const BarButton = forwardRef<HTMLButtonElement, BarButtonProps>(function 
 export interface BarPrimary {
   label: string;
   disabled: boolean;
+  /** Why the locked primary cannot run yet: the reason box on hover (A-22). */
+  reason?: string;
   loading?: boolean;
   onPress: () => void;
 }
@@ -63,7 +65,16 @@ export interface StepsBarProps {
  * centre, Back and the primary slot at the far right. The primary slot is "Continue" on every step but the last and the
  * launch (or publish) on the last; it keeps one minimum width, so Back never moves. There is no launch on earlier steps.
  */
-export function StepsBar({ steps, step, onBack, onGo, onCancel, primary, action = 'launch', status }: StepsBarProps) {
+export function StepsBar({
+  steps,
+  step,
+  onBack,
+  onGo,
+  onCancel,
+  primary,
+  action = 'launch',
+  status,
+}: StepsBarProps) {
   const index = steps.findIndex((s) => s.id === step);
   const prev = index > 0 ? steps[index - 1] : null;
   const next = index >= 0 && index < steps.length - 1 ? steps[index + 1] : null;
@@ -80,7 +91,7 @@ export function StepsBar({ steps, step, onBack, onGo, onCancel, primary, action 
         >
           Skip<span className={styles.long}> to review</span>
         </BarButton>
-        <BarButton part="bar-cancel" variant="ghost" onPress={onCancel}>
+        <BarButton part="bar-cancel" variant="neutral" onPress={onCancel}>
           Cancel
         </BarButton>
       </div>
@@ -91,8 +102,13 @@ export function StepsBar({ steps, step, onBack, onGo, onCancel, primary, action 
         <BarButton
           part="bar-back"
           variant="neutral"
+          icon={prev ? undefined : <Icon name="prev" size={12} />}
           aria-label={
-            prev ? `Back to ${prev.label.toLowerCase()}` : action === 'publish' ? 'Back to the environment' : 'Back to the start'
+            prev
+              ? `Back to ${prev.label.toLowerCase()}`
+              : action === 'publish'
+                ? 'Back to the environment'
+                : 'Back to the start'
           }
           onPress={() => (prev ? onGo(prev.id) : onBack())}
         >
@@ -105,6 +121,7 @@ export function StepsBar({ steps, step, onBack, onGo, onCancel, primary, action 
           className={styles.primary}
           loading={next ? undefined : primary.loading}
           isDisabled={next ? undefined : primary.disabled}
+          disabledReason={next ? undefined : primary.reason}
           aria-label={next ? `Continue to ${next.label.toLowerCase()}` : undefined}
           onPress={() => (next ? onGo(next.id) : primary.onPress())}
         >

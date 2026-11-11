@@ -59,7 +59,7 @@ test.describe('experiments list', () => {
     await expect(table.getByText('finished one')).toBeVisible();
     await expect(table.getByText('still going')).toBeVisible();
     await expect(page.getByText('2 experiments').first()).toBeVisible();
-    await expect(page.getByText('Refreshes automatically while experiments run')).toBeVisible();
+    await expect(page.getByText('Updates automatically')).toBeVisible();
     // env names are resolved client-side
     await expect(table.getByText('staging').first()).toBeVisible();
 
@@ -69,14 +69,14 @@ test.describe('experiments list', () => {
     await expect(table.getByText('still going')).toHaveCount(0);
     await expect(table.getByText('finished one')).toBeVisible();
     // nothing queued or running is listed any more: no auto-refresh promise
-    await expect(page.getByText('Refreshes automatically while experiments run')).toHaveCount(0);
+    await expect(page.getByText('Updates automatically')).toHaveCount(0);
 
     // created by me (dev@local is the creator of both)
-    await page.getByText('Created by me').click();
+    await pickSelect(page, /Created by/, 'Me');
     await expect.poll(() => query(page).get('mine')).toBe('1');
 
     await page.reload();
-    await expect(page.getByRole('checkbox', { name: 'Created by me' })).toBeChecked();
+    await expect(page.getByRole('button', { name: /Created by/ })).toContainText('Me');
     await expect(page.getByRole('button', { name: /Status$/ })).toContainText('Failed');
     await expect(table.getByText('finished one')).toBeVisible();
     await expect(table.getByText('still going')).toHaveCount(0);
@@ -84,10 +84,10 @@ test.describe('experiments list', () => {
     // no history entries were added by the filters (replace, not push)
     expect(await page.evaluate(() => history.length)).toBeLessThanOrEqual(3);
 
-    // a status without rows: no-match state with Clear filters
+    // a status without rows: no-match state, cleared by the red Clear of the filter bar
     await pickSelect(page, /Status$/, 'Cancelled');
-    await expect(page.getByText('No matching experiments')).toBeVisible();
-    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page.getByText('No experiments match these filters')).toBeVisible();
+    await page.getByTestId('filters-clear').click();
     await expect.poll(() => page.url().includes('?')).toBe(false);
     await expect(table.getByText('still going')).toBeVisible();
 
@@ -111,15 +111,15 @@ test.describe('experiments list', () => {
     // facets come from run versioning metadata; with no runs the toolbar has no facet selects,
     // while a ?versioning= param in the URL still filters (and survives reload).
     await gotoApp(page, `${expPath(project.slug)}?versioning=agent_version%3Dnope`);
-    await expect(page.getByText('No matching experiments')).toBeVisible();
+    await expect(page.getByText('No experiments match these filters')).toBeVisible();
     // the key in the URL keeps its select: the key as reported (round 10, C-3-10), value, and the key in the tooltip
     const facet = page.locator('[data-exp-versioning="agent_version"]');
     await expect(facet).toHaveAttribute('title', 'Evaluation Service versioning: agent_version');
     await expect(facet.getByRole('button', { name: /agent_version/ })).toContainText('nope');
     await page.reload();
-    await expect(page.getByText('No matching experiments')).toBeVisible();
+    await expect(page.getByText('No experiments match these filters')).toBeVisible();
     expect(query(page).getAll('versioning')).toEqual(['agent_version=nope']);
-    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await page.getByTestId('filters-clear').click();
     await expect(page.getByRole('grid', { name: 'Experiments' }).getByText('versioned')).toBeVisible();
   });
 

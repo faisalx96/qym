@@ -109,9 +109,9 @@ describe('ExperimentsPage versioning facets', () => {
     const user = userEvent.setup();
     mount('/projects/demo/experiments');
     await waitFor(() => expect(names()).toHaveLength(2));
-    // R10 C-3-10: the key as reported, "All values"
-    expect(screen.getByRole('button', { name: /agent_version/ })).toHaveTextContent('All values');
-    expect(screen.getByRole('button', { name: /kb_version/ })).toHaveTextContent('All values');
+    // R10 C-3-10: the key as reported; D-16: a bar trigger shows only its label until a value is set
+    expect(screen.getByRole('button', { name: /agent_version/ })).toHaveTextContent(/^agent_version$/);
+    expect(screen.getByRole('button', { name: /kb_version/ })).toHaveTextContent(/^kb_version$/);
     expect(screen.queryByText(/KB version/)).toBeNull();
 
     await user.click(screen.getByRole('button', { name: /kb_version/ }));

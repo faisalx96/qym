@@ -27,6 +27,7 @@ import {
   Dialog,
   RadioGroup,
   Select,
+  Stepper,
   Tag,
   Text,
   TextField,
@@ -436,7 +437,7 @@ function WizardInner({
         isKeyboardDismissDisabled={submitting}
         footer={
           <div className={styles.footer}>
-            <Button variant="ghost" onPress={requestClose} isDisabled={submitting}>
+            <Button variant="neutral" onPress={requestClose} isDisabled={submitting}>
               Cancel
             </Button>
             <div className={styles.footerEnd}>
@@ -463,21 +464,19 @@ function WizardInner({
           </div>
         }
       >
-        <ol className={styles.steps} aria-label="Steps">
-          {steps.map((label, i) => (
-            <li
-              key={label}
-              className={styles.step}
-              aria-current={i + 1 === visualStep ? 'step' : undefined}
-              data-done={i + 1 < visualStep ? '' : undefined}
-            >
-              <span className={styles.stepNum} aria-hidden="true">
-                {i + 1}
-              </span>
-              {label}
-            </li>
-          ))}
-        </ol>
+        <Stepper
+          className={styles.steps}
+          aria-label="Steps"
+          steps={steps.map((label, i) => ({ id: String(i + 1), label }))}
+          current={String(visualStep)}
+          onSelect={(id) => {
+            const n = Number(id) as 1 | 2 | 3;
+            if (n < step) {
+              setErrors({});
+              setStep(n);
+            }
+          }}
+        />
 
         {step === 1 ? (
           <div className={styles.body}>
@@ -517,13 +516,7 @@ function WizardInner({
               </div>
             )}
             {mode === 'new' ? (
-              <Textarea
-                label="Description"
-                value={description}
-                onChange={setDescription}
-                rows={2}
-                placeholder="Optional"
-              />
+              <Textarea label="Description" value={description} onChange={setDescription} rows={2} />
             ) : null}
             <FileDrop
               inputRef={fileInput}
@@ -671,7 +664,7 @@ function WizardInner({
                   label="Version name"
                   value={versionName}
                   onChange={setVersionName}
-                  placeholder="Optional, e.g. “Q3 refresh”"
+                  placeholder="e.g. “Q3 refresh”"
                 />
                 <Text variant="base" tone="muted">
                   {mode === 'new'
@@ -770,7 +763,7 @@ function WizardInner({
                     data-indeterminate={progress.fraction === null ? '' : undefined}
                   />
                 </div>
-                <Button variant="ghost" size="sm" onPress={() => abortRef.current?.abort()}>
+                <Button variant="neutral" size="sm" onPress={() => abortRef.current?.abort()}>
                   Cancel upload
                 </Button>
               </div>

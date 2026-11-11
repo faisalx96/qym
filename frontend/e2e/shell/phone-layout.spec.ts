@@ -57,7 +57,7 @@ test('Project settings: the Name input and Save fit the card', async ({ page, re
 
 test('Admin users: the filter and the table stay inside the card', async ({ page }) => {
   await gotoApp(page, '/admin/users');
-  const filter = page.getByRole('searchbox', { name: 'Filter users' });
+  const filter = page.getByRole('searchbox', { name: 'Search users' });
   await expect(filter).toBeVisible();
   const box = (await filter.boundingBox())!;
   expect(box.x + box.width).toBeLessThanOrEqual(390);

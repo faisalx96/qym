@@ -151,24 +151,10 @@
   color: var(--text-muted);
 }
 
-.footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-height: var(--bar-action-h);
-  box-sizing: border-box;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-popover);
-}
-
-.footerSpacer {
-  flex: 1;
+.sectionFooter {
+  margin: 0 calc(-1 * var(--space-lg)) calc(-1 * var(--space-md));
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
 }
 
 /* presets */
@@ -191,6 +177,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--control-radius);
   background: var(--bg-base);
+  padding-inline: var(--space-md);
 }
 
 .versionSummary {
@@ -198,15 +185,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  cursor: pointer;
   font-size: var(--font-base);
   color: var(--text-secondary);
-}
-
-.versionSummary:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: -2px;
 }
 
 .versionNotes {
@@ -224,6 +204,7 @@
   gap: var(--space-md);
   padding: var(--space-md);
   border-top: 1px solid var(--border-subtle);
+  margin-inline: calc(-1 * var(--space-md));
 }
 
 .kvList {
@@ -244,17 +225,6 @@
   font-family: var(--font-mono);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
-}
-
-.jsonDetails summary {
-  cursor: pointer;
-  font-size: var(--font-base);
-  color: var(--text-muted);
-}
-
-.jsonDetails summary:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
 }
 
 .empty {

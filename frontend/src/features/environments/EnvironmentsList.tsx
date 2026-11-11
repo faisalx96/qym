@@ -1,4 +1,4 @@
-/** The environments table with its row actions (Run default preset, Manage/View, Test). Page and settings share it. */
+/** The environments table with its row actions (Run default preset, Test). Page and settings share it. */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTestEnvironment } from '@/api/evalEnvironments';
@@ -15,6 +15,7 @@ import {
   type Column,
   type RowAction,
 } from '@/ui';
+import { titleCase } from '@/features/experiments/lib/format';
 import { DefaultPresetTag, HealthCell, SchemaCell, SlotsStatusTag } from './cells';
 import styles from './EnvironmentsTable.module.css';
 import { canRunDefaultPreset, useRunDefaultPreset } from './runDefaultPreset';
@@ -27,15 +28,6 @@ export interface EnvironmentsListProps {
   /** Where a row opens (the whole row, and the name as a real link). */
   rowHref: (env: EvalEnvironment) => string;
   storageKey?: string;
-}
-
-/** Closes every row at rest: the row opens the environment (spec point 9). */
-function Chevron() {
-  return (
-    <span className={styles.chev} data-part="env-row-chevron" aria-hidden="true">
-      <Icon name="chevron-right" size={14} />
-    </span>
-  );
 }
 
 export function EnvironmentsList({
@@ -99,10 +91,10 @@ export function EnvironmentsList({
       pin: 'start',
       hideable: false,
       priority: 1,
-      cell: (env, ctx) => (
+      cell: (env) => (
         <div className={styles.name} data-part="env-row-name">
           <span className={styles.nameRow}>
-            <Link className={styles.nameLink} to={rowHref(env)} data-part="env-row-link">
+            <Link className={styles.nameLink} to={rowHref(env)} data-part="env-row-link" data-link="name">
               {env.name}
             </Link>
             {env.is_active ? null : <Tag tone="warning">Disabled</Tag>}
@@ -112,7 +104,6 @@ export function EnvironmentsList({
               {env.description}
             </span>
           ) : null}
-          {ctx.card ? <Chevron /> : null}
         </div>
       ),
     },
@@ -156,17 +147,7 @@ export function EnvironmentsList({
       header: 'Priority cap',
       width: 125,
       priority: 3,
-      cell: (env) => <Tag kind="data">{env.max_priority || '—'}</Tag>,
-    },
-    // No card priority: in the stacked cards the chevron sits at the end of the name line (name cell).
-    {
-      id: 'open',
-      header: 'Open',
-      hideLabel: true,
-      width: 40,
-      align: 'end',
-      hideable: false,
-      cell: () => <Chevron />,
+      cell: (env) => <Tag kind="data">{env.max_priority ? titleCase(env.max_priority) : '—'}</Tag>,
     },
   ];
 
@@ -188,6 +169,8 @@ export function EnvironmentsList({
           {
             id: 'test',
             label: `Test ${env.name}`,
+            icon: 'wrench',
+            primary: true,
             disabled: testingId === env.id,
             onPress: () => void runTest(env),
           },

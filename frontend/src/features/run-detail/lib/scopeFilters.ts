@@ -12,7 +12,7 @@ export function scopeChips(view: RunView, defs: FieldDef[], metric: string | nul
   if (view.q.trim() !== '')
     chips.push({
       key: 'q',
-      label: `Search: ${view.q.length > 32 ? view.q.slice(0, 31) + '…' : view.q}`,
+      label: `Search: ${view.q}`,
       clear: (v) => ({ ...v, q: '', page: 1 }),
     });
   return chips;

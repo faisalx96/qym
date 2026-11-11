@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useEvalEnvironment } from '@/api/evalEnvironments';
 import { useDelayedPending } from '@/lib/pending';
 import { useProjectContext } from '@/features/shell';
+import { environmentsPath } from '@/features/experiments/paths';
 import { ErrorState, Skeleton } from '@/ui';
 import styles from './EnvironmentPage.module.css';
 import { SchemaSection, SlotsSection, StatusSection, TasksSection } from './EnvironmentSections';
@@ -32,6 +33,7 @@ export function EnvironmentPanelBody({ environmentId, onDeleted }: EnvironmentPa
         title="Couldn’t load the environment"
         notFoundTitle="Environment not found"
         notFoundMessage="This environment does not exist in this project, or it was deleted."
+        parent={{ to: environmentsPath(slug), label: 'Environments' }}
         onRetry={() => void query.refetch()}
       />
     );

@@ -30,18 +30,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* C-02: a Live date-time, the runs Date recipe: sans, tabular figures, one line. */
+.time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .userRef {
   overflow-wrap: anywhere;
   white-space: normal;
 }
 
-.turnTitle {
-  display: block;
-  line-height: 1.6;
-}
-
-.tiles > [role='list'] {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+.traceLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .panel,
@@ -110,6 +113,20 @@
 
 .deviation > :first-child {
   flex: none;
+}
+
+.axis {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.sevError {
+  color: var(--error);
+}
+
+.sevWarning {
+  color: var(--warning);
 }
 
 .deviation > p {
@@ -280,14 +297,6 @@
   .twoColumns,
   .threeColumns {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .tiles > [role='list'] {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-  }
-
-  .tiles > [role='list'] > [data-tile]:nth-child(n + 5) {
-    grid-column: span 6;
   }
 
   .loading {

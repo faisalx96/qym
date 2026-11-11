@@ -69,19 +69,20 @@ describe('Settings tab (QA5-3 to QA5-16)', () => {
   it('save is disabled until the form is dirty and the status says so (QA5-10)', async () => {
     const user = userEvent.setup();
     renderTab();
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
-    expect(screen.getByText('No changes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByText('All changes saved')).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: 'Name' }), 'x');
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     await user.clear(screen.getByRole('textbox', { name: 'Name' }));
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
   it('a reader has read-only fields and no footer (QA5-10)', () => {
     renderTab({}, { readOnly: true });
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveAttribute('readonly');
-    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Tags' })).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: /Private test set/ })).toBeDisabled();
   });

@@ -59,6 +59,11 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     >
       <Label className={fieldStyles.label} data-hidden={hideLabel ? '' : undefined}>
         {label}
+        {rest.isRequired ? (
+          <span className={fieldStyles.required} aria-hidden="true">
+            *
+          </span>
+        ) : null}
       </Label>
       <AriaTextArea
         ref={ref}

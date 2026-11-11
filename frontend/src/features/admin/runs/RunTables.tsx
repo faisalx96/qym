@@ -35,7 +35,6 @@ export interface RunTableProps {
   emptyState: string;
   storageKey: string;
   'aria-label': string;
-  footerSummary?: string;
   pagination?: PaginationProps;
   /** A toolbar over the table (the recent runs search and Project filter, C093). */
   toolbar?: ReactNode;
@@ -50,7 +49,6 @@ export function RunTable({
   emptyState,
   storageKey,
   variant,
-  footerSummary,
   pagination,
   toolbar,
   'aria-label': label,
@@ -134,7 +132,7 @@ export function RunTable({
               {
                 id: 'force-stop',
                 label: stoppingIds?.has(r.run_id) ? `Stopping ${runName(r)}` : `Force stop ${runName(r)}`,
-                icon: 'stop',
+                icon: 'ban',
                 primary: true,
                 danger: true,
                 disabled: Boolean(stoppingIds?.has(r.run_id)),
@@ -145,7 +143,7 @@ export function RunTable({
       rowState={(r) => (variant === 'live' ? 'live' : /^FAILED$/i.test(r.status) ? 'error' : undefined)}
     >
       {toolbar}
-      <DataTable.Footer summary={footerSummary} pagination={pagination} />
+      <DataTable.Footer pagination={pagination} />
     </DataTable>
   );
 }

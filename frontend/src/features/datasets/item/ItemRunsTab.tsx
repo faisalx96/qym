@@ -8,8 +8,8 @@ import {
   Button,
   DataTable,
   EmptyState,
+  Icon,
   RelativeTime,
-  ScoreBar,
   ScoreValue,
   StatStrip,
   StatusCell,
@@ -81,6 +81,7 @@ export function ItemRunsTab({
         <Link
           to={`${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`}
           className={styles.runLink}
+          data-link="name"
         >
           {r.run_name || r.external_run_id || r.run_id}
         </Link>
@@ -109,7 +110,7 @@ export function ItemRunsTab({
       header: (
         <span className={styles.outputHead}>
           Output
-          <Button variant="ghost" size="sm" onPress={() => setExpandAll((v) => !v)}>
+          <Button variant="neutral" size="sm" onPress={() => setExpandAll((v) => !v)}>
             {expandAll ? 'Collapse' : 'Expand'}
           </Button>
         </span>
@@ -145,11 +146,13 @@ export function ItemRunsTab({
       type: 'score',
       sort: `metric:${m}`,
       width: 130,
+      align: 'center',
       priority: 2,
       cell: (r) => {
         const s = r.scores.find((x) => x.metric_name === m);
         return (
-          <ScoreBar
+          <ScoreValue
+            variant="plain"
             value={s?.score_numeric ?? null}
             direction={metricDir(r.metric_directions?.[m])}
             error={r.error ? 'task' : s && s.score_numeric === null ? 'metric' : null}
@@ -166,6 +169,7 @@ export function ItemRunsTab({
           <Link
             to={`${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}&trace=1`}
             className={styles.runLink}
+            data-link="name"
           >
             Trace
           </Link>
@@ -186,11 +190,21 @@ export function ItemRunsTab({
           aria-label="Run aggregates"
           variant="compact-header"
           items={[
-            { label: 'Runs', value: agg.run_count },
-            { label: 'Errors', value: agg.error_count, tone: agg.error_count ? 'danger' : undefined },
-            { label: 'Avg latency', value: formatLatency(agg.avg_latency_ms) },
+            { label: 'Runs', value: agg.run_count, icon: <Icon name="chart" size={12} /> },
+            {
+              label: 'Errors',
+              value: agg.error_count,
+              tone: agg.error_count ? 'danger' : undefined,
+              icon: <Icon name="warning" size={12} />,
+            },
+            {
+              label: 'Avg latency',
+              value: formatLatency(agg.avg_latency_ms),
+              icon: <Icon name="clock" size={12} />,
+            },
             ...metrics.map((m) => ({
               label: m,
+              icon: <Icon name="shield" size={12} />,
               value: (
                 <ScoreValue
                   value={agg.metrics[m]?.avg ?? null}
@@ -204,6 +218,7 @@ export function ItemRunsTab({
       <DataTable<ItemRunRow>
         aria-label="Runs for this item"
         storageKey="datasets.item.runs.v4"
+        groupBand={false}
         rows={rows}
         rowKey={(r) => r.run_id}
         sort={sort}
@@ -211,12 +226,21 @@ export function ItemRunsTab({
         columns={columns}
         loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
+        errorTitle="Couldn’t load runs of this item"
         onRetry={() => void query.refetch()}
         rowHref={(r) => `${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`}
         onRowOpen={(r) => navigate(`${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`)}
         density="regular"
       >
-        <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'run' : 'runs'}`} />
+        <DataTable.Footer
+          pagination={{
+            total: rows.length,
+            page: 1,
+            pageSize: Math.max(1, rows.length),
+            noun: 'runs',
+            onPageChange: () => {},
+          }}
+        />
       </DataTable>
     </div>
   );

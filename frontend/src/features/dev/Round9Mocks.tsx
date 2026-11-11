@@ -203,7 +203,7 @@ export function LaunchBar({ step, runs = 1, problem, launchLabel, launchDisabled
         {problem ? <span className={styles.barProblem}>{problem}</span> : <span className={styles.barOk}>Ready</span>}
       </div>
       <div className={styles.barEnd}>
-        <Button size="sm" variant="ghost" data-part="bar-cancel">
+        <Button size="sm" variant="neutral" data-part="bar-cancel">
           Cancel
         </Button>
         <Button size="sm" variant="primary" isDisabled={launchDisabled ?? Boolean(problem)} data-part="bar-launch">
@@ -466,7 +466,7 @@ function HomePage({ ticked = 'both' as 'none' | 'staging' | 'both', flagged = fa
         title="New experiment"
         description="Pick where it runs and what to start from. You can change anything in Customize."
         actions={
-          <Button variant="ghost" size="sm">
+          <Button variant="neutral" size="sm">
             All experiments
           </Button>
         }
@@ -494,8 +494,8 @@ function CustomizeFrame({ step, children, runs = 2, problem, changes }: { step: 
         meta={['Exp Demo · Starting point: Default preset v1']}
         actions={
           <>
-            <Button variant="ghost" size="sm">← Start</Button>
-            <Button variant="ghost" size="sm">All experiments</Button>
+            <Button variant="neutral" size="sm">← Start</Button>
+            <Button variant="neutral" size="sm">All experiments</Button>
           </>
         }
       />
@@ -788,7 +788,7 @@ function ReviewBody({ publish = false }: { publish?: boolean }) {
             ).map((t) => (
               <li key={t} className={styles.changeRow}>
                 <span>{t}</span>
-                <Button size="sm" variant="ghost">Edit</Button>
+                <Button size="sm" variant="neutral">Edit</Button>
               </li>
             ))}
           </ul>
@@ -843,7 +843,7 @@ function EditorFrame({ step, children, changes }: { step: StepId; children: Reac
       <PageHeader
         title="Default preset · staging"
         meta={['Exp Demo · Compared with: Default preset v1']}
-        actions={<Button variant="ghost" size="sm">← Back to the environment</Button>}
+        actions={<Button variant="neutral" size="sm">← Back to the environment</Button>}
       />
       <div className={styles.page} data-part="customize" data-mode="editor">
         <Stepper aria-label="Steps" current={step} onSelect={noop} steps={EDITOR_STEPS.map((s) => ({ ...s, changes: changes?.[s.id as StepId] }))} />
@@ -862,7 +862,7 @@ function PresetEditPage() {
           <div className={styles.cardBody} data-part="compared-with">
             <div className={styles.cardTitleRow}>
               <h3 className={styles.title}>Compared with</h3>
-              <Button size="sm" variant="ghost">Undo all changes</Button>
+              <Button size="sm" variant="neutral">Undo all changes</Button>
             </div>
             <span className={styles.runsTools}>
               <b>Default preset v1</b>

@@ -31,35 +31,10 @@
   color: var(--accent-primary);
 }
 
-/* The row is the target: hovering or focusing anywhere in it underlines the name. */
+/* The row is the target: hovering or focusing anywhere in it turns the name green (A-17: never underlined). */
 tr:hover .nameLink,
 tr:focus-visible .nameLink {
-  text-decoration: underline;
-}
-
-.chev {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  color: var(--text-muted);
-  line-height: 0;
-}
-
-tr:hover .chev,
-tr:focus-visible .chev {
-  color: var(--text-primary);
-}
-
-/* Stacked card: the chevron closes the name line. */
-.name:has(> .chev) {
-  position: relative;
-  padding-inline-end: var(--space-lg);
-}
-
-.name > .chev {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
+  color: var(--accent-primary);
 }
 
 .nameLink:focus-visible {
@@ -85,30 +60,6 @@ tr:focus-visible .chev {
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
-}
-
-.health {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.dot {
-  width: var(--space-sm);
-  height: var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--text-muted);
-  flex: none;
-}
-
-.health[data-status='ok'] .dot {
-  background: var(--success);
-}
-
-.health[data-status='error'] .dot {
-  background: var(--error);
 }
 
 .healthCell {

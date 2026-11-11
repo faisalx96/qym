@@ -80,7 +80,7 @@ export interface SaveFooterProps {
   dirty: boolean;
   saving?: boolean;
   onSave: () => void;
-  /** Default 'Save'; name the object when the card holds more than one thing ('Save rules'). */
+  /** Always 'Save'. Only the Live worker passes its version label ('Save as v4'). */
   label?: string;
   /** Extra facts before the state text (a character count, when it was last edited). */
   meta?: ReactNode;
@@ -88,6 +88,12 @@ export interface SaveFooterProps {
   secondary?: ReactNode;
   /** No Save at all (read-only or no permission); the state text stays. */
   hideSave?: boolean;
+  /** The state text when nothing is unsaved (default 'All changes saved'). */
+  savedText?: string;
+  /** Locks Save even with changes (a required field is empty, a blocker). Pass disabledReason with it. */
+  isDisabled?: boolean;
+  /** Why Save is locked (default 'No changes to save'). */
+  disabledReason?: string;
 }
 
 /** C145: every settings card ends the same way: what state it is in, then Save. */
@@ -99,13 +105,16 @@ export function SaveFooter({
   meta,
   secondary,
   hideSave,
+  savedText = 'All changes saved',
+  isDisabled,
+  disabledReason,
 }: SaveFooterProps) {
   return (
     <div className={styles.saveFooter} data-save-footer>
       <div className={styles.saveState}>
         {meta}
         <span data-dirty={dirty ? '' : undefined}>
-          {saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved'}
+          {saving ? 'Saving…' : dirty ? 'Unsaved changes' : savedText}
         </span>
       </div>
       {hideSave ? null : (
@@ -113,8 +122,8 @@ export function SaveFooter({
           {secondary}
           <Button
             variant="primary"
-            isDisabled={!dirty}
-            disabledReason="No changes to save"
+            isDisabled={!dirty || Boolean(isDisabled)}
+            disabledReason={disabledReason ?? 'No changes to save'}
             loading={saving}
             onPress={onSave}
           >

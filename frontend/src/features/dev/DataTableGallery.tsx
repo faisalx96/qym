@@ -227,6 +227,7 @@ export function DataTableGallery() {
           rowKey={(r) => r.id}
           loading={phase === 'loading'}
           error={phase === 'error' ? new Error('Request failed') : undefined}
+          errorTitle="Couldn’t load runs"
           onRetry={() => setPhase('ready')}
           empty="No runs yet"
           isFiltered={q !== ''}
@@ -257,10 +258,15 @@ export function DataTableGallery() {
         >
           <DataTable.Toolbar
             search={<SearchField label="Search runs" value={q} onChange={setQ} placeholder="Search runs" />}
-            count={`${rows.length} runs`}
           />
           <DataTable.Footer
-            summary={`1-${rows.length} of ${rows.length} runs`}
+            pagination={{
+              total: rows.length,
+              page: 1,
+              pageSize: Math.max(1, rows.length),
+              noun: 'runs',
+              onPageChange: () => {},
+            }}
             trailing="Last updated 16:30:12"
           />
         </DataTable>

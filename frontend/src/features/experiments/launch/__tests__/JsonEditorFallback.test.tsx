@@ -19,11 +19,14 @@ describe('JSON editor fallback', () => {
   it('stays a working textarea when the editor chunk fails', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(<JsonConfigEditor label="Raw JSON" value="{}" onChange={onChange} />);
+    // The loading textarea is replaced by the boundary's textarea when the chunk fails. Type only after that swap,
+    // or a slow runner types into the node that is about to leave (React logs the caught error at the swap).
+    await waitFor(() => expect(logged).toHaveBeenCalled());
     const box = await screen.findByLabelText('Raw JSON');
-    await waitFor(() => expect(box.tagName).toBe('TEXTAREA'));
-    await user.type(await screen.findByLabelText('Raw JSON'), 'x');
+    expect(box.tagName).toBe('TEXTAREA');
+    await user.type(box, 'x');
     expect(onChange).toHaveBeenCalled();
   });
 });

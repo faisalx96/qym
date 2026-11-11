@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react';
-import { Button as AriaButton } from 'react-aria-components';
 import { formatDurationMs, formatNumericValue, formatRelative } from '@/lib/format';
 import { metricBand, type MetricDirection, type MetricType } from '@/lib/metrics';
 import { CopyButton } from '../../CopyButton';
 import { staggerIndex, useEntrance, useFlashOnChange } from '../../motion';
-import { Identicon } from '../../Identicon';
 import { Popover } from '../../Popover';
 import { RunStatusBadge } from '../../RunStatusBadge';
-import { Tag } from '../../Tag';
+import { MoreTag, Tag } from '../../Tag';
+import { UserName } from '../../UserName';
 import { middleTruncate } from '../model';
 import styles from './cells.module.css';
 import { formatHeaderDate, toDate } from '@/lib/dates';
@@ -99,7 +98,7 @@ export function ScoreBar({
   const band = max === undefined ? metricBand(value, type, dir) : null;
   const ratio = max === undefined ? value : max > 0 ? value / max : 0;
   const pct = Math.max(0, Math.min(1, ratio)) * 100;
-  const label = text ?? (max === undefined ? `${Math.round(value * 100)}%` : formatNumericValue(value));
+  const label = text ?? (max === undefined ? `${(value * 100).toFixed(1)}%` : formatNumericValue(value));
   return (
     <span
       className={styles.scoreBar}
@@ -242,11 +241,7 @@ export function TagsCell({
       {rest.length ? (
         <Popover
           label={`More ${label}`}
-          trigger={
-            <AriaButton className={styles.more} aria-label={`${rest.length} more ${label}`}>
-              +{rest.length}
-            </AriaButton>
-          }
+          trigger={<MoreTag count={rest.length} aria-label={`${rest.length} more ${label}`} />}
         >
           <span className={styles.tagPop}>
             {rest.map((t) => (
@@ -263,35 +258,67 @@ export function TagsCell({
 
 /* ── UserCell ──────────────────────────────────────────────────────────── */
 
-export function UserCell({ name, seed }: { name: string | null | undefined; seed?: string }) {
-  if (!name) return <span>—</span>;
-  return (
-    <span className={styles.user}>
-      <Identicon seed={seed ?? name} cell={4} gap={1} />
-      <span className={styles.userName}>{name}</span>
-    </span>
-  );
+/** A person in a table: UserName (initials disc in the person's colour, then the name), B-25. */
+export function UserCell({
+  id,
+  name,
+  email,
+}: {
+  id?: string | null;
+  name?: string | null;
+  email?: string | null;
+}) {
+  if (!name && !email) return <span>—</span>;
+  return <UserName id={id} name={name} email={email} />;
 }
 
 /* ── ProgressCell ──────────────────────────────────────────────────────── */
 
-export function ProgressCell({ done, total }: { done: number; total: number }) {
+/**
+ * Progress: a bar, then 'done/total' mono. With `failed` (Live worker Jobs, B-35) the bar has a green evaluated part
+ * and a red failed part, and `showFailed` adds a red 'N failed' count tag.
+ */
+export function ProgressCell({
+  done,
+  total,
+  failed,
+  showFailed = false,
+}: {
+  done: number;
+  total: number;
+  failed?: number;
+  showFailed?: boolean;
+}) {
   const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+  const failedPct = total > 0 && failed ? Math.min(100 - pct, (failed / total) * 100) : 0;
   return (
     <span className={styles.progress}>
       <span
         className={styles.track}
+        data-parts={failed === undefined ? undefined : ''}
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={total}
         aria-valuenow={done}
         aria-label="Progress"
       >
-        <span className={styles.fill} style={{ inlineSize: `${pct}%` }} data-plain="" />
+        {failed === undefined ? (
+          <span className={styles.fill} style={{ inlineSize: `${pct}%` }} data-plain="" />
+        ) : (
+          <>
+            <span className={styles.part} data-part="ok" style={{ inlineSize: `${pct}%` }} />
+            <span className={styles.part} data-part="failed" style={{ inlineSize: `${failedPct}%` }} />
+          </>
+        )}
       </span>
-      <span className={styles.scoreText}>
+      <span className={failed === undefined ? styles.scoreText : styles.partsText}>
         {done}/{total}
       </span>
+      {showFailed && failed ? (
+        <Tag kind="count" tone="danger">
+          {failed} failed
+        </Tag>
+      ) : null}
     </span>
   );
 }

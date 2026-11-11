@@ -6,20 +6,10 @@ import { useId, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDeleteDataset, usePatchDataset, type Dataset } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import {
-  Button,
-  Checkbox,
-  Chip,
-  ConfirmDialog,
-  FieldRow,
-  Text,
-  TextField,
-  Textarea,
-  useToast,
-  Card,
-} from '@/ui';
+import { Button, Checkbox, Chip, ConfirmDialog, Text, TextField, Textarea, useToast, Card } from '@/ui';
 import { catalogPath, datasetPath } from '../lib/route';
 import { DELETE_RULE } from '../lib/versions';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import styles from './SettingsTab.module.css';
 
 /** A card header: title (`h2`) and a muted description under it, in the Card header slot (QA5-3, QD16). */
@@ -28,18 +18,31 @@ export function CardHead({
   title,
   description,
   aside,
+  count,
 }: {
   id: string;
   title: string;
   description?: ReactNode;
   aside?: ReactNode;
+  /** A count Tag right after the title (B-27: '2 people'). */
+  count?: ReactNode;
 }) {
+  const heading = (
+    <Text variant="md" as="h2" id={id}>
+      {title}
+    </Text>
+  );
   return (
     <div className={styles.cardHead} data-testid="card-head">
       <div className={styles.cardHeadText}>
-        <Text variant="lg" weight={600} as="h2" id={id}>
-          {title}
-        </Text>
+        {count ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+            {heading}
+            {count}
+          </div>
+        ) : (
+          heading
+        )}
         {description ? (
           <Text variant="sm" tone="muted" as="p">
             {description}
@@ -128,81 +131,68 @@ export function SettingsTab({
           header={<CardHead id={ids.general} title="General" />}
           footer={
             readOnly ? undefined : (
-              <div className={styles.footRow}>
-                <Button
-                  variant="primary"
-                  onPress={() => void save()}
-                  isDisabled={!dirty || !name.trim()}
-                  loading={patch.isPending}
-                >
-                  Save changes
-                </Button>
-                <Text variant="sm" tone="muted" as="span" aria-live="polite">
-                  {dirty ? 'Unsaved changes' : 'No changes'}
-                </Text>
-              </div>
+              <SaveFooter
+                dirty={dirty}
+                isDisabled={!name.trim()}
+                disabledReason={!name.trim() ? 'Enter a dataset name' : undefined}
+                saving={patch.isPending}
+                onSave={() => void save()}
+              />
             )
           }
         >
           <div className={styles.fields}>
-            <FieldRow label="Name" measure="full" labelCase="sentence" labelAnchor="start">
-              <TextField
-                label="Name"
-                hideLabel
-                value={name}
-                onChange={setName}
-                isReadOnly={readOnly}
-                isRequired
-              />
-            </FieldRow>
-            <FieldRow label="Description" measure="full" labelCase="sentence" labelAnchor="start">
-              <Textarea
-                label="Description"
-                hideLabel
-                value={description}
-                onChange={setDescription}
-                rows={3}
-                isReadOnly={readOnly}
-              />
-            </FieldRow>
-            <FieldRow label="Tags" measure="full" labelCase="sentence" labelAnchor="start">
-              <div className={styles.tags}>
-                {readOnly ? null : (
-                  <TextField
-                    label="Tags"
-                    hideLabel
-                    value={tagDraft}
-                    onChange={(v) => {
-                      setTagDraft(v);
-                      setTagError(null);
-                    }}
-                    placeholder="Type a tag and press Enter"
-                    help={tagError ? undefined : 'Press Enter to add a tag.'}
-                    errorMessage={tagError ?? undefined}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addTag();
-                      }
-                    }}
-                  />
-                )}
-                {tags.length ? (
-                  <div className={styles.chipRow} role="group" aria-label="Tags">
-                    {tags.map((t) => (
-                      <Chip
-                        key={t}
-                        isSelected
-                        onRemove={readOnly ? undefined : () => setTags(tags.filter((x) => x !== t))}
-                        removeLabel={`Remove tag ${t}`}
-                      >
-                        {t}
-                      </Chip>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </FieldRow>
+            <TextField
+              label="Name"
+              value={name}
+              onChange={setName}
+              isReadOnly={readOnly}
+              isRequired
+              width={400}
+            />
+            <Textarea
+              label="Description"
+              value={description}
+              onChange={setDescription}
+              rows={3}
+              isReadOnly={readOnly}
+            />
+            <div className={styles.tags}>
+              {readOnly ? null : (
+                <TextField
+                  label="Tags"
+                  width={400}
+                  value={tagDraft}
+                  onChange={(v) => {
+                    setTagDraft(v);
+                    setTagError(null);
+                  }}
+                  placeholder="Type a tag and press Enter"
+                  help={tagError ? undefined : 'Press Enter to add a tag.'}
+                  errorMessage={tagError ?? undefined}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addTag();
+                    }
+                  }}
+                />
+              )}
+              {tags.length ? (
+                <div className={styles.chipRow} role="group" aria-label="Tags">
+                  {tags.map((t) => (
+                    <Chip
+                      key={t}
+                      isSelected
+                      onRemove={readOnly ? undefined : () => setTags(tags.filter((x) => x !== t))}
+                      removeLabel={`Remove tag ${t}`}
+                    >
+                      {t}
+                    </Chip>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         </Card>
 
@@ -234,7 +224,6 @@ export function SettingsTab({
           <Card
             as="section"
             aria-labelledby={ids.danger}
-            tone="danger"
             data-testid="settings-danger"
             header={
               <CardHead

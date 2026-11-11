@@ -122,7 +122,7 @@ test.describe('summary latency', () => {
     await page.goto(url);
     await expect(rows(page)).toHaveCount(8);
     const latency = page.getByLabel('Latency', { exact: true });
-    for (const k of ['Min', 'P50', 'P90', 'P99', 'Max'])
+    for (const k of ['Min', 'p50', 'p90', 'p99', 'Max'])
       await expect(latency.getByText(k, { exact: true })).toBeVisible();
   });
 });

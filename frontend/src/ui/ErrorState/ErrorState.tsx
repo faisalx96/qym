@@ -3,6 +3,7 @@ import { errorIdentifiers, errorReport } from '@/lib/error-report';
 import { CopyButton } from '../CopyButton';
 import { classifyError, loginUrl } from '@/lib/http';
 import { Button } from '../Button';
+import { Icon } from '../Icon';
 import { LinkButton } from '../LinkButton';
 import { Text } from '../Text';
 import styles from './ErrorState.module.css';
@@ -51,8 +52,11 @@ export function ErrorState({
     meta.push(info.detail);
   }
   const identifiers = errorIdentifiers(error);
-  if (identifiers.code) meta.push(identifiers.code);
-  if (identifiers.request_id) meta.push(`request ${identifiers.request_id}`);
+  // C-38: a not-found shows no error code and no request line.
+  if (!notFound) {
+    if (identifiers.code) meta.push(identifiers.code);
+    if (identifiers.request_id) meta.push(`request ${identifiers.request_id}`);
+  }
   const retryable = ['server', 'network', 'unknown', 'client'].includes(info.kind);
   return (
     <div
@@ -61,6 +65,11 @@ export function ErrorState({
       data-error-kind={info.kind}
       data-compact={compact ? '' : undefined}
     >
+      {notFound && !compact ? (
+        <div className={styles.icon} aria-hidden="true">
+          <Icon name="warning" />
+        </div>
+      ) : null}
       <Text variant={compact ? 'md' : 'xl'} as="h2" className={styles.title}>
         {heading}
       </Text>
@@ -83,12 +92,12 @@ export function ErrorState({
           </Button>
         ) : null}
         {notFound && parent ? (
-          <LinkButton to={parent.to} variant="neutral">
+          <LinkButton to={parent.to} variant="neutral" icon={<Icon name="prev" size={12} />}>
             {parent.label}
           </LinkButton>
         ) : null}
         {action}
-        {identifiers.code || identifiers.request_id ? (
+        {!notFound && (identifiers.code || identifiers.request_id) ? (
           <CopyButton label="Copy report" text={() => errorReport(error, { title: heading })} />
         ) : null}
       </div>

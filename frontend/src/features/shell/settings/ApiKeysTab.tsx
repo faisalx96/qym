@@ -140,6 +140,7 @@ function KeysCard({
       cell: (k) =>
         k.experiment_id && k.experiment_name ? (
           <Link
+            data-link="name"
             className={styles.tokenLink}
             to={experimentPath(slug, k.experiment_id)}
             data-testid="key-experiment-link"
@@ -240,7 +241,7 @@ function KeysCard({
               rows={own}
               rowKey={(k) => k.id}
               storageKey="settings-api-keys"
-              empty="No API keys yet."
+              empty="No API keys yet"
             />
             <IssuedGroup title="Evaluation Service keys" count={grouped.length}>
               <DataTable<ApiKey>
@@ -251,7 +252,7 @@ function KeysCard({
                 rows={grouped}
                 rowKey={(k) => k.id}
                 storageKey="settings-api-keys-experiment"
-                empty="No Evaluation Service keys."
+                empty="No Evaluation Service keys"
               />
             </IssuedGroup>
           </>
@@ -316,13 +317,16 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
             primary={
               <span className={styles.tokenName}>
                 {t.name || 'Unnamed token'}
-                <Tag data-testid="token-kind-chip">experiment</Tag>
+                <Tag kind="data" data-testid="token-kind-chip">
+                  Experiment
+                </Tag>
                 <RevokedMark at={t.revoked_at} />
               </span>
             }
             secondary={
               t.experiment ? (
                 <Link
+                  data-link="name"
                   className={styles.tokenLink}
                   to={experimentPath(slug, t.experiment.id)}
                   data-testid="token-experiment-link"
@@ -450,7 +454,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
               columns={columns}
               rows={own}
               rowKey={(t) => t.id}
-              empty="No read tokens."
+              empty="No read tokens"
             />
             <IssuedGroup title="Experiment tokens" count={grouped.length}>
               <DataTable<DatasetReadToken>
@@ -460,7 +464,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
                 columns={columns}
                 rows={grouped}
                 rowKey={(t) => t.id}
-                empty="No experiment tokens."
+                empty="No experiment tokens"
               />
             </IssuedGroup>
           </>

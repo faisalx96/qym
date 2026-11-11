@@ -91,7 +91,7 @@ function EnvRow({ name, preset, selected = true }: { name: string; preset?: bool
         {preset ? <Tag kind="version">Default preset v1</Tag> : null}
       </span>
       <span className={entry.envActions}>
-        <Button size="sm" variant="ghost" onPress={noop}>
+        <Button size="sm" variant="neutral" onPress={noop}>
           Details
         </Button>
       </span>
@@ -223,7 +223,7 @@ function VersionsBlockMock({ rows }: { rows: Array<[string, VersionState]> }) {
           </Text>
           <span className={entry.help}>{VERSIONS_HELP}</span>
           <span className={entry.versionsActions}>
-            <Button variant="ghost" onPress={noop}>
+            <Button variant="neutral" onPress={noop}>
               Refresh
             </Button>
           </span>

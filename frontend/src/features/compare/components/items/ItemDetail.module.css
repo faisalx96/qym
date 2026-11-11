@@ -7,13 +7,6 @@
   border-block-start: 1px solid var(--border-subtle);
 }
 
-.alert {
-  padding: var(--space-sm);
-  border: 1px solid var(--error);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-}
-
 .muted {
   margin: 0;
   color: var(--text-muted);
@@ -126,6 +119,11 @@
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding-block-end: var(--space-xs);
+}
+
+.more {
+  display: flex;
+  justify-content: center;
 }
 
 .grid {

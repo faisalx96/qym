@@ -57,6 +57,10 @@
   background: var(--bg-surface);
 }
 
+.foot > [data-save-footer] {
+  flex: 1;
+}
+
 .banner {
   display: flex;
   flex-direction: column;
@@ -66,10 +70,6 @@
 
 .bannerAction {
   display: flex;
-}
-
-.status {
-  margin-inline-start: auto;
 }
 
 /* A disabled item reads in the muted text colour (spec A2-25). */

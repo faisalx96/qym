@@ -30,18 +30,29 @@
   color: var(--tone);
 }
 
+/* C-45: one flowing line: the title in the tone colour, then the reason after one space, wrapping as text. */
 .body {
   flex: 1;
   min-inline-size: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: block;
+}
+
+.body > * {
+  display: inline;
+}
+
+.body > * + *::before {
+  content: ' ';
 }
 
 .body strong {
-  font-size: var(--font-md);
+  font-size: inherit;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--tone);
+}
+
+.note[data-tone='danger'] .body strong {
+  color: var(--error-text);
 }
 
 .body span,

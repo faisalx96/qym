@@ -11,7 +11,7 @@ import { useModelsStats, useOverview, usePoints, useRunsPage } from '@/api/dashb
 import type { Combo, GroupStats, MetricType, RunRow } from '@/api/dashboardTypes';
 import { Button, Card, EmptyState, ErrorState, SegmentedControl, Skeleton, Tabs, TabPanel, Text } from '@/ui';
 import { useAuth, useDocumentTitle, useProjectContext } from '@/features/shell';
-import { formatClock } from '@/lib/format';
+import { formatAgo } from '@/lib/dates';
 import { useDelayedPending } from '@/lib/pending';
 import { Mono, ModelMark } from './cells';
 import { ChartsTable } from './ChartsTable';
@@ -194,7 +194,7 @@ export function ChartsPage() {
                 </ToggleButton>
               ))}
               {view.models.length ? (
-                <Button variant="ghost" onPress={() => setView({ models: [] })}>
+                <Button variant="neutral" onPress={() => setView({ models: [] })}>
                   Show all
                 </Button>
               ) : null}
@@ -218,9 +218,7 @@ export function ChartsPage() {
           )
         ) : overview.chart_data.tasks.length === 0 ? (
           <EmptyState
-            title={
-              countActiveFilters(view) ? 'No runs match current filters' : 'No data available for charts'
-            }
+            title={countActiveFilters(view) ? 'No runs match these filters' : 'No data available for charts'}
             body={
               countActiveFilters(view)
                 ? 'Clear a filter or widen the time range.'
@@ -253,7 +251,7 @@ export function ChartsPage() {
         )}
         {d.overviewQ.dataUpdatedAt ? (
           <Text variant="sm" tone="muted" as="p" aria-live="polite">
-            Last updated <Mono>{formatClock(new Date(d.overviewQ.dataUpdatedAt))}</Mono>
+            Last updated {formatAgo(d.overviewQ.dataUpdatedAt)}
           </Text>
         ) : null}
       </div>
@@ -477,7 +475,6 @@ function TaskCard({
       </header>
       <Tabs
         label={`${task} datasets`}
-        variant="dense"
         items={combos.map((c) => ({ id: c.dataset, label: c.dataset, count: c.totalRuns }))}
         selected={activeDataset}
         onSelect={(id) => {
@@ -546,7 +543,7 @@ function TaskCard({
                     },
                   ]}
                 />
-                <Button variant="ghost" onPress={() => setAll(!openAll)}>
+                <Button variant="neutral" onPress={() => setAll(!openAll)}>
                   {openAll ? 'Collapse all' : 'Expand all'}
                 </Button>
               </>

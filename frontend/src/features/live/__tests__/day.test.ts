@@ -1,25 +1,20 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { dayLabel, isToday, shiftDay } from '../lib/day';
 
-afterEach(() => vi.useRealTimers());
-
-describe('UTC day navigation', () => {
+describe('Live day keys', () => {
   it('crosses month, year and leap-day boundaries', () => {
     expect(shiftDay('2026-11-01', -1)).toBe('2026-10-31');
     expect(shiftDay('2026-12-31', 1)).toBe('2027-01-01');
     expect(shiftDay('2024-03-01', -1)).toBe('2024-02-29');
   });
 
-  it('compares UTC keys even when the local day differs', () => {
-    const now = new Date('2026-11-02T01:00:00+03:00');
-    expect(isToday('2026-11-01', now)).toBe(true);
-    expect(isToday('2026-11-02', now)).toBe(false);
+  it('compares the key with the source today', () => {
+    expect(isToday('2026-11-01', '2026-11-01')).toBe(true);
+    expect(isToday('2026-11-02', '2026-11-01')).toBe(false);
   });
 
-  it('labels today and historical days without shifting the day', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-11-01T22:00:00Z'));
-    expect(dayLabel('2026-11-01')).toBe('Today · 1 Nov 2026');
-    expect(dayLabel('2026-10-31')).toBe('Sat 31 Oct 2026');
+  it('labels today and other days month first without shifting the day', () => {
+    expect(dayLabel('2026-11-01', '2026-11-01')).toBe('Today · Nov 1, 2026');
+    expect(dayLabel('2026-10-31', '2026-11-01')).toBe('Sat Oct 31, 2026');
   });
 });

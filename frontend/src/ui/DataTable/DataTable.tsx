@@ -26,9 +26,10 @@ import { Checkbox } from '../Checkbox';
 import { DropdownMenu, type MenuItemSpec } from '../DropdownMenu';
 import { EmptyState } from '../EmptyState';
 import { ErrorState } from '../ErrorState';
-import { Icon, type IconName } from '../Icon';
+import { Icon } from '../Icon';
 import { Tooltip } from '../Tooltip';
-import { IconButton } from '../IconButton';
+import { ActionTile, IconButton } from '../IconButton';
+import { ScoreValue } from '../ScoreValue';
 import { Button } from '../Button';
 import { EnterContext, ENTER_MS } from '../motion';
 import { DataTableContext } from './context';
@@ -57,7 +58,6 @@ import {
 } from './model';
 import { FoldCell } from './FoldCell';
 import { Footer, SelectionBar, Toolbar } from './parts';
-import { ScoreBar } from './cells';
 import { RelativeTime, DurationCell, NumberCell } from './cells';
 import { useDataTableModel, type DataTableModel } from './useDataTableModel';
 import { useStickyShift } from './useStickyShift';
@@ -98,7 +98,10 @@ export interface DataTableProps<R> {
   density?: Density;
   /** The page fixes the density; hides the density menu. */
   densityLocked?: boolean;
+  /** Stripes every second row; on by default ('auto' and true are the same); only false turns them off (D-01). */
   zebra?: boolean | 'auto';
+  /** 'report': the fainter stripe of a table inside a run, compare or experiment report section. */
+  stripe?: 'page' | 'report';
   /** The row under the pointer lights its edge in the accent (round 10: the first qym's By pass table). */
   hoverEdge?: boolean;
   variant?: 'card' | 'embedded';
@@ -378,7 +381,7 @@ function defaultCell<R>(col: Column<R>, row: R): ReactNode {
     case 'duration':
       return typeof raw === 'number' ? <DurationCell ms={raw} /> : String(raw);
     case 'score':
-      return typeof raw === 'number' ? <ScoreBar value={raw} /> : String(raw);
+      return typeof raw === 'number' ? <ScoreValue value={raw} variant="plain" /> : String(raw);
     case 'date':
       return <RelativeTime iso={String(raw)} />;
     case 'id':
@@ -416,6 +419,7 @@ function DataTableInner<R>({
   density: densityProp,
   densityLocked,
   zebra = 'auto',
+  stripe = 'page',
   hoverEdge = false,
   variant = 'card',
   stickyHeader = true,
@@ -561,7 +565,6 @@ function DataTableInner<R>({
     virtualize === true || vcfg !== null || (virtualize === undefined && display.length > VIRTUAL_AFTER);
   const scrollParent = vcfg?.scrollParent ?? null;
   const [scrollMargin, setScrollMargin] = useState(0);
-  const dataRows = display.filter((d): d is Extract<DisplayRow<R>, { kind: 'row' }> => d.kind === 'row');
   // Selectable / focusable entries: run rows and their child rows, in display order.
   const entries = display.filter((d): d is TableEntry<R> => d.kind === 'row' || d.kind === 'child');
   // Data marks (ScoreBar fills) grow in once, during the table's first paint of data; rows that scroll in
@@ -626,6 +629,7 @@ function DataTableInner<R>({
           {
             id: '__actions',
             pseudo: 'actions',
+            foldLabel: () => 'Row actions',
             width: 16 + 26 * actionSlots,
             pin: 'end',
             resizable: false,
@@ -1385,8 +1389,7 @@ function DataTableInner<R>({
     const w = floorWidth(c);
     return w + w * capped.share;
   };
-  const zebraOn =
-    zebra === 'auto' ? !embedded && model.density !== 'comfortable' && dataRows.length > 8 : zebra;
+  const zebraOn = zebra !== false;
 
   /* visible width of the scroller, for detailFit="viewport" */
   const [scrollerW, setScrollerW] = useState(0);
@@ -1438,7 +1441,7 @@ function DataTableInner<R>({
     selection.selectAllMatching.total > selected.size ? (
       <div className={styles.banner} role="status">
         {selected.size} selected.
-        <Button variant="ghost" onPress={selection.selectAllMatching.onSelectAll}>
+        <Button variant="neutral" onPress={selection.selectAllMatching.onSelectAll}>
           Select all {selection.selectAllMatching.total} {selection.selectAllMatching.noun ?? 'rows'}
         </Button>
       </div>
@@ -1648,35 +1651,50 @@ function DataTableInner<R>({
       const primary = lone ? [...shown, lone] : shown;
       const more = lone ? [] : rest;
       return (
-        <td key={col.id} {...common} role="gridcell" data-pseudo="actions">
-          <span className={styles.rowActions}>
-            {primary.map((a) => (
-              <Tooltip key={a.id} content={a.hint ?? a.label}>
-                <IconButton
-                  label={a.label}
-                  icon={a.icon ?? (a.danger ? 'trash' : 'more')}
-                  tone={a.danger ? 'danger' : 'default'}
-                  isDisabled={a.disabled}
-                  onPress={() => a.onPress(r)}
+        <td key={col.id} {...common} role="gridcell" data-pseudo="actions" data-fold="">
+          <FoldCell label="Row actions">
+            <span className={styles.rowActions}>
+              {primary.map((a) => {
+                const button = (
+                  <IconButton
+                    key={a.id}
+                    label={a.label}
+                    icon={a.icon ?? (a.danger ? 'trash' : 'more')}
+                    tone={a.danger ? 'danger' : 'default'}
+                    tile
+                    isDisabled={a.disabled}
+                    disabledReason={a.disabled ? a.hint : undefined}
+                    onPress={() => a.onPress(r)}
+                  />
+                );
+                // A locked action with a hint shows it in the reason box (A-22), not a tooltip.
+                return a.disabled && a.hint ? (
+                  button
+                ) : (
+                  <Tooltip key={a.id} content={a.hint ?? a.label}>
+                    {button}
+                  </Tooltip>
+                );
+              })}
+              {more.length ? (
+                <DropdownMenu
+                  label="Row actions"
+                  trigger={<IconButton label="Row actions" icon="more" />}
+                  items={more.map((a) => ({
+                    id: a.id,
+                    label: a.label,
+                    icon: a.icon ? (
+                      <ActionTile icon={a.icon} tone={a.danger ? 'danger' : 'default'} />
+                    ) : undefined,
+                    tone: a.danger ? ('danger' as const) : undefined,
+                    disabled: a.disabled,
+                    description: a.hint,
+                  }))}
+                  onAction={(id) => more.find((a) => a.id === id)?.onPress(r)}
                 />
-              </Tooltip>
-            ))}
-            {more.length ? (
-              <DropdownMenu
-                label="Row actions"
-                trigger={<IconButton label="Row actions" icon="more" />}
-                items={more.map((a) => ({
-                  id: a.id,
-                  label: a.label,
-                  icon: typeof a.icon === 'string' ? <Icon name={a.icon as IconName} size={12} /> : a.icon,
-                  tone: a.danger ? ('danger' as const) : undefined,
-                  disabled: a.disabled,
-                  description: a.hint,
-                }))}
-                onAction={(id) => more.find((a) => a.id === id)?.onPress(r)}
-              />
-            ) : null}
-          </span>
+              ) : null}
+            </span>
+          </FoldCell>
         </td>
       );
     }
@@ -1975,6 +1993,7 @@ function DataTableInner<R>({
         data-variant={variant}
         data-density={model.density}
         data-zebra={zebraOn ? '' : undefined}
+        data-stripe={stripe === 'report' ? 'report' : undefined}
         data-hover-edge={hoverEdge ? '' : undefined}
         data-testid="data-table"
       >
@@ -2195,7 +2214,7 @@ function CardList<R>({
           </label>
           {sort ? (
             <Button
-              variant="ghost"
+              variant="neutral"
               onPress={() => setSort({ ...sort, direction: sort.direction === 'asc' ? 'desc' : 'asc' })}
             >
               {sort.direction === 'asc' ? 'Ascending' : 'Descending'}
@@ -2412,7 +2431,7 @@ function CardList<R>({
                     </dl>
                   ) : null}
                   <Button
-                    variant="ghost"
+                    variant="neutral"
                     aria-expanded={isMore}
                     onPress={() =>
                       setMore((s) => {

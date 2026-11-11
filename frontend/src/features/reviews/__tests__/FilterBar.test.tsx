@@ -45,7 +45,7 @@ describe('Reviews filter bar (C152)', () => {
     );
     expect(screen.getByRole('button', { name: /^Task/ })).toHaveTextContent('qa');
     expect(screen.getByRole('button', { name: /^Dataset/ })).toHaveTextContent('None');
-    expect(screen.getByTestId('confidence-trigger')).toHaveTextContent('Confidence · 20–80%');
+    expect(screen.getByTestId('confidence-trigger')).toHaveTextContent(/Confidence\s?· 20–80%/);
     expect(screen.getByTestId('clear-filters')).toHaveTextContent('Clear 3');
   });
 });

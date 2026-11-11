@@ -207,7 +207,7 @@ function ContextBand({ entries, plain }: { entries: DsEntry[]; plain?: boolean }
         </div>
         {hidden > 0 ? (
           <Button
-            variant="ghost"
+            variant="neutral"
             size="sm"
             className={hero.moreBtn}
             data-testid="hero-more"

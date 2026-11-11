@@ -8,7 +8,7 @@
  * (passes) or red (fails) against it instead of a band (C220).
  */
 import { useMemo } from 'react';
-import { Card, HelpMarker, Icon, Tag } from '@/ui';
+import { Card, EmptyState, HelpMarker, Icon, Tag } from '@/ui';
 import { useRunPage } from '../../RunContext';
 import { metricBand } from '@/lib/metrics';
 import { metricPassesFor } from '../../lib/filterRules';
@@ -232,7 +232,7 @@ export function OverviewTab() {
     [cards, api.ctx, rows],
   );
   const tokens = useMemo(() => traceEntries(rows, 'tokens'), [rows]);
-  if (!cards.length) return <p className={styles.note}>No scored items for the current filters.</p>;
+  if (!cards.length) return <EmptyState compact title="No scored items for these filters" />;
   // Box plot cards (numeric metrics, tokens) share their own rows: a short plot never sits beside a tall histogram,
   // so no card stretches over dead space (round 5 R2).
   const scoreCards = cards.filter((c) => c.kind !== 'numeric');

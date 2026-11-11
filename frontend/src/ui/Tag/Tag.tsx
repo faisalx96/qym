@@ -3,7 +3,7 @@ import styles from './Tag.module.css';
 
 export type TagKind =
   'role' | 'accent' | 'count' | 'data' | 'version' | 'task' | 'config' | 'dataset' | 'model' | 'origin';
-export type TagTone = 'success' | 'info' | 'warning' | 'danger' | 'meta' | 'accent';
+export type TagTone = 'success' | 'info' | 'warning' | 'danger' | 'meta' | 'accent' | 'gold';
 
 export interface TagProps extends HTMLAttributes<HTMLSpanElement> {
   kind?: TagKind;
@@ -22,12 +22,12 @@ const KIND_TONE: Partial<Record<TagKind, TagTone>> = {
 };
 
 /**
- * A role tag's tone follows the role, so an admin never reads as a member (round 10): admin blue, manager green, member
- * and other labels neutral. Purple stays reserved for definition metadata.
+ * A role tag's tone follows the role, so an admin never reads as a member (round 10): admin gold (B-17), manager green,
+ * member and other labels neutral. Purple stays reserved for definition metadata.
  */
 function roleTone(children: ReactNode): TagTone | undefined {
   const role = typeof children === 'string' ? children.trim().toLowerCase() : '';
-  return role === 'admin' ? 'info' : role === 'manager' ? 'accent' : undefined;
+  return role === 'admin' ? 'gold' : role === 'manager' ? 'accent' : undefined;
 }
 
 /** Role/metadata tag: borderless, --control-radius, tinted fill; mono for role/count/data/version/task/config. */

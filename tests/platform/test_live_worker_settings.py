@@ -119,6 +119,7 @@ def test_create_version_validates_and_encrypts(session_factory, values):
             "version": 1,
             "created_at": "2026-11-03T12:00:00Z",
             "created_by": "u",
+            "created_by_user_id": "u",
             "note": "initial",
         }
         assert settings.version_payload(row) == {
@@ -281,6 +282,7 @@ def test_restore_copies_values_and_secrets(session_factory, values, monkeypatch)
             "version": 3,
             "created_at": "2026-11-03T12:00:00Z",
             "created_by": "u",
+            "created_by_user_id": "u",
             "note": "restored from v1",
         }
         assert settings.current_version(db, source) is restored

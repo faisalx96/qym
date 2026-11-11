@@ -6,6 +6,7 @@ import { metricCell } from '../lib/metric-cell';
 import { wordDiff } from '../lib/diff';
 import { copyText, STATUS_LABEL } from './format';
 import { Flag } from '@/ui/Flag';
+import { Icon } from '@/ui/Icon';
 import { StatusBadge } from './StatusBadge';
 import s from './Detail.module.css';
 
@@ -283,12 +284,14 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
                 {row.trace_url && /^https?:\/\//i.test(row.trace_url) ? (
                   <a className={s.link} href={row.trace_url} target="_blank" rel="noreferrer noopener">
                     Open trace
+                    <Icon name="external" size={12} className={s.externalGlyph} />
                   </a>
                 ) : null}
               </>
             ) : row.trace_url && /^https?:\/\//i.test(row.trace_url) ? (
               <a className={s.link} href={row.trace_url} target="_blank" rel="noreferrer noopener">
                 Open trace
+                <Icon name="external" size={12} className={s.externalGlyph} />
               </a>
             ) : (
               '—'

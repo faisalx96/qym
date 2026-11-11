@@ -9,6 +9,8 @@ import {
   type PopoverProps,
 } from 'react-aria-components';
 import { Icon } from '../Icon';
+import buttonStyles from '../Button/Button.module.css';
+import '../Button/reasonPlacement';
 import styles from './DropdownMenu.module.css';
 
 export interface MenuItemSpec {
@@ -18,8 +20,12 @@ export interface MenuItemSpec {
   /** danger: red (delete, reject); meta: purple (auto-analysis, owner decision Nov 1). */
   tone?: 'danger' | 'meta';
   disabled?: boolean;
+  /** Why the item is locked; shown in the reason box of the disabled-control recipe (A-22). */
+  disabledReason?: string;
   /** Renders as a link (full navigation). */
   href?: string;
+  /** '_blank' opens a new tab; only then the item shows the 'external' Icon. */
+  target?: '_blank';
   separatorBefore?: boolean;
   description?: string;
 }
@@ -68,22 +74,40 @@ export function DropdownMenu({
 }
 
 function MenuItemWithSeparator({ item }: { item: MenuItemSpec }) {
+  const reason = item.disabled && item.disabledReason ? item.disabledReason : null;
+  // A locked item with a reason shows it on hover (the Button recipe); the reason is part of the item's text.
+  const text = (
+    <span className={styles.text}>
+      {item.label}
+      {item.description ? <span className={styles.description}>{item.description}</span> : null}
+      {reason ? <span className={buttonStyles.srOnly}>{reason}</span> : null}
+    </span>
+  );
   return (
     <>
       {item.separatorBefore ? <Separator className={styles.separator} /> : null}
       <MenuItem
         id={item.id}
         href={item.href}
+        target={item.target}
         className={styles.item}
         data-tone={item.tone}
         textValue={typeof item.label === 'string' ? item.label : item.id}
       >
         {item.icon ? <span className={styles.icon}>{item.icon}</span> : null}
-        <span className={styles.text}>
-          {item.label}
-          {item.description ? <span className={styles.description}>{item.description}</span> : null}
-        </span>
-        {item.href ? <Icon name="external" size={12} /> : null}
+        {reason ? (
+          <span
+            className={[buttonStyles.reasonWrap, styles.reasonItem].join(' ')}
+            data-reason={reason}
+            data-disabled-reason=""
+            data-reason-beside=""
+          >
+            {text}
+          </span>
+        ) : (
+          text
+        )}
+        {item.target === '_blank' ? <Icon name="external" size={12} /> : null}
       </MenuItem>
     </>
   );

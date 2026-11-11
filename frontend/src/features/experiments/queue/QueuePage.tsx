@@ -32,7 +32,8 @@ import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
-  Checkbox,
+  ClearFiltersButton,
+  CountTile,
   EmptyState,
   ErrorState,
   Icon,
@@ -48,9 +49,9 @@ import {
   useToast,
   type Column,
   Card,
-  Flag,
   StatusMark,
   SearchField,
+  StatStrip,
 } from '@/ui';
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
@@ -224,7 +225,7 @@ export function QueuePage() {
         <TwoLine
           primary={
             <span className={styles.jobTitle}>
-              <Link to={experimentPath(slug, j.experiment_id)} className={styles.link}>
+              <Link to={experimentPath(slug, j.experiment_id)} className={styles.link} data-link="name">
                 {j.experiment_name || 'Experiment'} {comboText(j)}
               </Link>
               {j.priority === 'HIGH' ? <Tag tone="warning">HIGH</Tag> : null}
@@ -263,9 +264,11 @@ export function QueuePage() {
           <span className={styles.envCell}>
             {j.environment_name}
             {env && env.health_status && env.health_status !== 'ok' ? (
-              <Flag tone="warning" icon="warning">
-                {env.health_status}
-              </Flag>
+              env.health_status === 'error' ? (
+                <StatusMark tone="danger" shape="cross" label="Error" />
+              ) : (
+                <StatusMark tone="neutral" shape="ring" label="Unknown" />
+              )
             ) : null}
           </span>
         );
@@ -292,7 +295,13 @@ export function QueuePage() {
       width: 140,
       priority: 3,
       defaultHidden: true,
-      cell: (j) => <UserCell name={j.created_by_email} />,
+      cell: (j) => (
+        <UserCell
+          id={j.created_by_user_id}
+          name={j.created_by_name}
+          email={j.created_by_email}
+        />
+      ),
     },
     {
       id: 'age',
@@ -337,7 +346,7 @@ export function QueuePage() {
               <span className={styles.progressText}>{j.run.items_done ?? 0} items</span>
             )}
             <span className={styles.progressText}>
-              <Link to={runPath(slug, runId)} className={styles.link}>
+              <Link to={runPath(slug, runId)} className={styles.link} data-link="name">
                 {jobLabel(j)} run
               </Link>
             </span>
@@ -347,44 +356,77 @@ export function QueuePage() {
     },
   ];
 
-  const filterControls = (
-    <div className={styles.filters} role="group" aria-label="Queue filters">
-      <SearchField
-        label="Search jobs"
-        placeholder="Search experiment or environment"
-        value={search}
-        onChange={setSearch}
-        width={260}
-      />
+  const searchField = (
+    <SearchField
+      label="Search jobs"
+      placeholder="Search experiment or environment"
+      value={search}
+      onChange={setSearch}
+      width="var(--search-width)"
+      shortcut="/"
+    />
+  );
+  const activeCount =
+    (filters.environment ? 1 : 0) +
+    (filters.statuses?.length ? 1 : 0) +
+    (filters.mine ? 1 : 0) +
+    (filters.latency ? 1 : 0) +
+    (filters.experiment ? 1 : 0) +
+    (search.trim() ? 1 : 0);
+  const filterRow = (
+    <div className={styles.filterRow} role="group" aria-label="Queue filters">
       <Select
         label="Environment"
+        triggerVariant="bar"
         items={envItems}
         value={filters.environment ?? ''}
         onChange={(k) => replaceUrlQuery({ environment: k ? String(k) : null })}
         searchable={false}
-        width={190}
       />
       <Select
         label="Status"
+        triggerVariant="bar"
         items={statusItems}
         value={filters.statuses?.[0] ?? ''}
         onChange={(k) => replaceUrlQuery({ status: k ? String(k) : null })}
         searchable={false}
-        width={160}
       />
       <Select
         label="Experiment"
+        triggerVariant="bar"
         items={experimentItems}
         value={filters.experiment ?? ''}
         onChange={(k) => replaceUrlQuery({ experiment: k ? String(k) : null })}
-        width={240}
       />
-      <Checkbox isSelected={filters.mine} onChange={(v) => replaceUrlQuery({ mine: v })}>
-        Only my jobs
-      </Checkbox>
-      <Checkbox isSelected={filters.latency} onChange={(v) => replaceUrlQuery({ latency: v })}>
-        {LATENCY_FILTER_LABEL}
-      </Checkbox>
+      <Select
+        label="Created by"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'Everyone' },
+          { key: 'me', label: 'Me' },
+        ]}
+        value={filters.mine ? 'me' : ''}
+        onChange={(k) => replaceUrlQuery({ mine: k === 'me' })}
+      />
+      <Select
+        label="Latency-sensitive"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'All' },
+          { key: '1', label: LATENCY_FILTER_LABEL },
+        ]}
+        value={filters.latency ? '1' : ''}
+        onChange={(k) => replaceUrlQuery({ latency: k === '1' })}
+      />
+      <ClearFiltersButton
+        count={activeCount}
+        onClear={() => {
+          setSearch('');
+          replaceUrlQuery({ environment: null, status: null, mine: null, latency: null, experiment: null });
+        }}
+      />
     </div>
   );
 
@@ -400,7 +442,12 @@ export function QueuePage() {
         description="Jobs waiting for or running on this project’s Evaluation Service environments, in dispatch order."
         tabs={<ExperimentsTabs current="queue" />}
       />
-      {query.data ? null : filterControls}
+      {query.data ? null : (
+        <div className={styles.filters}>
+          {searchField}
+          {filterRow}
+        </div>
+      )}
       {showSkeleton ? (
         <Skeleton kind="table" count={6} label="Loading queue" />
       ) : query.isError && !query.data ? (
@@ -434,14 +481,14 @@ export function QueuePage() {
                   isDisabled={!selected.size || readOnly}
                   onPress={() => openCancel(selectedJobs)}
                 >
-                  Cancel selected ({selected.size})
+                  Cancel selected<CountTile>{selected.size}</CountTile>
                 </Button>
               }
               rowActions={(j) => [
                 {
                   id: 'cancel',
                   label: j.status === 'CANCELLING' ? 'Stopping…' : 'Cancel',
-                  icon: 'close',
+                  icon: 'ban',
                   primary: true,
                   danger: true,
                   disabled: !j.can_cancel || readOnly || j.status === 'CANCELLING',
@@ -472,38 +519,25 @@ export function QueuePage() {
                 <EmptyState
                   compact
                   icon={<Icon name="clock" />}
-                  title="No jobs match these filters"
-                  body="Clear a filter to see more jobs."
-                  action={
-                    <Button
-                      variant="neutral"
-                      onPress={() =>
-                        replaceUrlQuery({
-                          environment: null,
-                          status: null,
-                          mine: null,
-                          latency: null,
-                          experiment: null,
-                        })
-                      }
-                    >
-                      Clear filters
-                    </Button>
-                  }
+                  title={search.trim() ? `No jobs match “${search.trim()}”` : 'No jobs match these filters'}
                 />
               }
             >
               <DataTable.Toolbar
-                filters={filterControls}
+                search={searchField}
+                rows={filterRow}
                 trailing={
                   <>
+                    <Text variant="sm" tone="muted">
+                      Updates automatically
+                    </Text>
                     <Button
                       size="sm"
                       variant="neutral"
                       isDisabled={!cancellableJobs.length}
                       onPress={() => setSelected(new Set(cancellableJobs.map((j) => j.id)))}
                     >
-                      Select all I can cancel ({cancellableJobs.length})
+                      Select all I can cancel<CountTile>{cancellableJobs.length}</CountTile>
                     </Button>
                     {filters.experiment ? (
                       <Button
@@ -519,12 +553,20 @@ export function QueuePage() {
                 }
               />
               <DataTable.Footer
-                summary={
-                  query.data.total > jobs.length
-                    ? `Showing the first ${jobs.length} of ${query.data.total} jobs`
-                    : plural(query.data.total, 'job')
+                filterNote={
+                  query.data.total > query.data.jobs.length
+                    ? `Showing the first ${query.data.jobs.length} of ${query.data.total} jobs`
+                    : search.trim()
+                      ? `Filtered from ${query.data.jobs.length} jobs`
+                      : undefined
                 }
-                trailing="Refreshes automatically; paused while this tab is hidden"
+                pagination={{
+                  total: jobs.length,
+                  page: 1,
+                  pageSize: Math.max(1, jobs.length),
+                  noun: 'jobs',
+                  onPageChange: () => {},
+                }}
               />
             </DataTable>
             {!jobs.every((j) => j.can_cancel) && jobs.length ? (
@@ -571,18 +613,27 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
             <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
           ) : null}
           {healthy ? (
-            <StatusMark tone="success" shape="full" label="Healthy" />
-          ) : env.health_status === 'unknown' || !env.health_status ? (
-            <StatusMark tone="neutral" shape="ring" label="Unknown" />
+            <StatusMark tone="success" shape="check" label="Healthy" />
+          ) : env.health_status === 'error' ? (
+            <StatusMark tone="danger" shape="cross" label="Error" />
           ) : (
-            <StatusMark tone="warning" shape="cross" label={env.health_status} />
+            <StatusMark tone="neutral" shape="ring" label="Unknown" />
           )}
         </div>
-        <div className={styles.counts}>
-          <Stat label="In flight" value={env.inflight} />
-          <Stat label="Queued" value={env.queued} />
-          <Stat label="Blocked" value={env.blocked} warn />
-        </div>
+        <StatStrip
+          aria-label={`Jobs on ${env.name}`}
+          items={[
+            { key: 'inflight', label: 'In flight', icon: <Icon name="play" />, value: env.inflight },
+            { key: 'queued', label: 'Queued', icon: <Icon name="clock" />, value: env.queued },
+            {
+              key: 'blocked',
+              label: 'Blocked',
+              icon: <Icon name="ban" />,
+              value: env.blocked,
+              tone: env.blocked ? 'warning' : undefined,
+            },
+          ]}
+        />
         {!healthy && env.health_error ? (
           <p className={styles.note2}>Dispatch is paused until the health check passes: {env.health_error}</p>
         ) : null}
@@ -601,18 +652,5 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
         ) : null}
       </div>
     </Card>
-  );
-}
-
-function Stat({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
-  return (
-    <div className={styles.stat}>
-      <Text variant="stat" tone={warn && value ? 'warning' : 'primary'}>
-        {value}
-      </Text>
-      <Text variant="sm" tone="secondary">
-        {label}
-      </Text>
-    </div>
   );
 }

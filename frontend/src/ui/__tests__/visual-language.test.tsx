@@ -187,7 +187,7 @@ describe('tone primitives', () => {
     expect(screen.getByText('m').querySelector('[data-series="4"]')).not.toBeNull();
   });
 
-  it('a role Tag takes its tone from the role: admin blue, manager green, member neutral (round 10)', () => {
+  it('a role Tag takes its tone from the role: admin gold, manager green, member neutral (round 10)', () => {
     render(
       <>
         <Tag kind="role">admin</Tag>
@@ -198,7 +198,7 @@ describe('tone primitives', () => {
         </Tag>
       </>,
     );
-    expect(screen.getByText('admin')).toHaveAttribute('data-tone', 'info');
+    expect(screen.getByText('admin')).toHaveAttribute('data-tone', 'gold');
     expect(screen.getByText('MANAGER')).toHaveAttribute('data-tone', 'accent');
     expect(screen.getByText('member')).not.toHaveAttribute('data-tone');
     expect(screen.getByText('x')).toHaveAttribute('data-tone', 'warning');

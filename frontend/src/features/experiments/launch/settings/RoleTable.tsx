@@ -1,6 +1,6 @@
 /** A role table as the "Role overrides" card: search, "Overridden only", "Reset roles", an "All roles" row. */
 import { useId, useState } from 'react';
-import { Button, Checkbox, Tag } from '@/ui';
+import { Button, Checkbox, IconButton, SearchField, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import {
   addKey,
@@ -66,13 +66,13 @@ export function RoleTable({ node, errors }: { node: RoleTableNode } & TreeProps)
         </Tag>
       </div>
       <div className={styles.addRow}>
-        <input
-          className={[styles.control, styles.addInput].join(' ')}
-          type="search"
-          aria-label={`Search ${noun}s`}
+        <SearchField
+          label={`Search ${noun}s`}
+          hideLabel
           placeholder={`Search ${noun}s`}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={setQuery}
+          width="var(--search-width)"
         />
         <Checkbox isSelected={overriddenOnly} onChange={setOverriddenOnly}>
           Overridden only
@@ -264,14 +264,12 @@ export function CollectionTable({
                 {removable ? (
                   <td>
                     {item.removable ? (
-                      <button
-                        type="button"
-                        className={styles.linkBtn}
-                        aria-label={`Remove ${item.key}`}
-                        onClick={() => setDoc((d) => removeKey(d, node.listKey, item.pointer, item.key))}
-                      >
-                        Remove
-                      </button>
+                      <IconButton
+                        label={`Remove ${item.key}`}
+                        icon="close"
+                        tone="danger"
+                        onPress={() => setDoc((d) => removeKey(d, node.listKey, item.pointer, item.key))}
+                      />
                     ) : null}
                   </td>
                 ) : null}

@@ -35,21 +35,22 @@ function Problems({ events = liveWorkerEvents }: { events?: LiveWorkerEvent[] })
 }
 it('renders grouped counts, filters by component and level, and can clear filters', async () => {
   const { container } = render(<Problems />);
-  expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(6);
-  expect(screen.getByText(/× 14/)).toHaveTextContent('in 12 min');
+  const rows = () => container.querySelectorAll('[data-worker-event]');
+  expect(rows()).toHaveLength(6);
+  expect(screen.getByText('×14')).toBeVisible();
+  expect(screen.getAllByText('in 12 min')[0]).toBeVisible();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: 'gateway' }));
-  expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(2);
-  await user.click(screen.getByRole('button', { name: 'Errors' }));
-  expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(1);
-  await user.click(screen.getByRole('button', { name: 'gateway' }));
-  expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(4);
-  await user.click(screen.getByRole('button', { name: 'Settings' }));
-  expect(screen.getByText('No problems reported by the worker')).toBeVisible();
-  await user.click(screen.getByRole('button', { name: 'All' }));
-  expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(4);
-  await user.click(screen.getByRole('button', { name: 'Errors' }));
-  expect(container.querySelectorAll('[data-worker-event]')).toHaveLength(6);
+  await user.click(screen.getByRole('button', { name: 'Component filter' }));
+  await user.click(screen.getByRole('button', { name: 'Only Gateway' }));
+  expect(rows()).toHaveLength(2);
+  await user.keyboard('{Escape}');
+  await user.click(screen.getByRole('button', { name: 'Level filter' }));
+  await user.click(screen.getByRole('button', { name: 'Only Errors' }));
+  expect(rows()).toHaveLength(1);
+  await user.keyboard('{Escape}');
+  await user.click(screen.getByRole('button', { name: 'Clear 2 filters' }));
+  expect(rows()).toHaveLength(6);
+  expect(screen.queryByTestId('filters-clear')).toBeNull();
 });
 it('copies the full problem report including code and message', async () => {
   const user = userEvent.setup();
@@ -150,7 +151,7 @@ it('shows a failed events request instead of an empty state', () => {
   expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load worker problems');
   expect(screen.queryByText('No problems reported by the worker')).toBeNull();
 });
-it('always shows Manage and shows the problems badge only above zero with or without control', () => {
+it('shows no Manage link and shows the problems badge only above zero with or without control', () => {
   const control = liveWorkerRead.running!;
   const base = { ...liveOverview.status, worker: { ...liveOverview.status.worker, control } };
   const { rerender } = render(
@@ -158,42 +159,40 @@ it('always shows Manage and shows the problems badge only above zero with or wit
       <StatusLine slug="demo" source="worker & prod" status={base} />
     </MemoryRouter>,
   );
-  expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute(
-    'href',
-    '/projects/demo/live/worker?source=worker+%26+prod',
-  );
+  expect(screen.queryByRole('link', { name: 'Manage' })).toBeNull();
   expect(screen.getByRole('link', { name: '19 problems in the last hour' })).toHaveAttribute(
     'href',
     '/projects/demo/live/worker?source=worker+%26+prod#problems',
   );
-  expect(screen.getByText('Worker · running · v3')).toBeVisible();
+  expect(screen.getByText('Worker')).toBeVisible();
+  expect(screen.getByText('Running v3').closest('[data-shape]')).toHaveAttribute('data-tone', 'info');
   rerender(
     <MemoryRouter>
       <StatusLine slug="demo" source="worker" status={{ ...base, errors_last_hour: 0 }} />
     </MemoryRouter>,
   );
   expect(screen.queryByRole('link', { name: /problems in the last hour/ })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Manage' })).toBeVisible();
   rerender(
     <MemoryRouter>
       <StatusLine slug="demo" source="worker" status={{ ...liveOverview.status, errors_last_hour: 2 }} />
     </MemoryRouter>,
   );
-  expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute(
-    'href',
-    '/projects/demo/live/worker?source=worker',
-  );
-  expect(screen.queryByText(/Worker ·/)).toBeNull();
+  expect(screen.queryByText('Worker')).toBeNull();
   expect(screen.getByRole('link', { name: '2 problems in the last hour' })).toHaveAttribute(
     'href',
     '/projects/demo/live/worker?source=worker#problems',
   );
   rerender(
     <MemoryRouter>
+      <StatusLine slug="demo" source="worker" status={{ ...liveOverview.status, errors_last_hour: 1 }} />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole('link', { name: '1 problem in the last hour' })).toBeVisible();
+  rerender(
+    <MemoryRouter>
       <StatusLine slug="demo" source="worker" status={liveOverview.status} />
     </MemoryRouter>,
   );
-  expect(screen.getByRole('link', { name: 'Manage' })).toBeVisible();
   expect(screen.queryByRole('link', { name: /problems in the last hour/ })).toBeNull();
 });
 it.each([

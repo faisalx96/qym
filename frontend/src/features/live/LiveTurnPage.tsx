@@ -1,5 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useModelIndex } from '@/api/dashboard';
 import { useLiveTurn, type LiveTurnsPage } from '@/api/live';
+import { projectPath } from '@/app/routes';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
@@ -30,6 +32,7 @@ const tabs = [
 export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: string; turnId: string }) {
   const queryClient = useQueryClient();
   const query = useLiveTurn(slug, turnId, source);
+  const modelIndex = useModelIndex(slug);
   const { get, replaceUrlQuery } = useSearchParamsState();
   const selected = get('tab', 'diagnosis');
   const tab = tabs.some((item) => item.id === selected) ? selected : 'diagnosis';
@@ -50,6 +53,10 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
           error={query.error}
           title="Couldn’t load this turn"
           notFoundMessage="This turn is not in qym"
+          parent={{
+            to: `${projectPath(slug, 'live/turns')}?source=${encodeURIComponent(source)}`,
+            label: 'Turns',
+          }}
           onRetry={() => void query.refetch()}
         />
       ) : null}
@@ -107,7 +114,7 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
               onSelect={(next) => replaceUrlQuery({ tab: next === 'diagnosis' ? null : next })}
             >
               <TabPanel id="diagnosis" className={styles.panel}>
-                <DiagnosisTab data={data} />
+                <DiagnosisTab data={data} modelIndex={modelIndex} />
               </TabPanel>
               <TabPanel id="answer" className={styles.panel}>
                 <AnswerSqlTab data={data} />

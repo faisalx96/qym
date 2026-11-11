@@ -26,7 +26,16 @@ import { entryKey, locationKey, useStep } from '@/features/experiments/launch/st
 import { LaunchWizard } from '@/features/experiments/launch/wizard/LaunchWizard';
 import { EDITOR_STEPS, type RevealStep } from '@/features/experiments/launch/wizard/steps';
 import { environmentPath } from '@/features/experiments/paths';
-import { ConfirmDialog, EmptyState, ErrorState, Icon, LinkButton, PageHeader, Skeleton, useToast } from '@/ui';
+import {
+  ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  Icon,
+  LinkButton,
+  PageHeader,
+  Skeleton,
+  useToast,
+} from '@/ui';
 import { changeText, useEditorChangeCount } from './editor/ComparedWithCard';
 import { EditorWhere } from './editor/EditorWhere';
 import { PublishReview, type PublishFailure } from './editor/PublishReview';
@@ -194,7 +203,11 @@ function EditorBody({
           title="Only managers publish the default preset"
           body="You can read the default preset on the environment page."
           action={
-            <LinkButton to={environmentPath(slug, envId)} variant="accent">
+            <LinkButton
+              to={environmentPath(slug, envId)}
+              variant="neutral"
+              icon={<Icon name="prev" size={12} />}
+            >
               Back to the environment
             </LinkButton>
           }
@@ -244,6 +257,7 @@ function EditorBody({
         primary={{
           label: `Publish v${editor.nextVersion}`,
           disabled: readOnly || Boolean(blockedBy) || saving,
+          reason: blockedBy || undefined,
           loading: saving,
           onPress: () => void onPublish(),
         }}
@@ -265,9 +279,9 @@ function EditorBody({
         onOpenChange={(open) => {
           if (!open && blocker.state === 'blocked') blocker.reset();
         }}
-        title="Leave without publishing?"
+        title="Discard unsaved changes?"
         description="Your changes to the default preset will be lost."
-        confirmLabel="Leave"
+        confirmLabel="Discard changes"
         cancelLabel="Keep editing"
         tone="danger"
         onConfirm={() => {
@@ -303,8 +317,8 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
           : 'Edit the environment’s default preset against its current version and publish it as a new version.'
       }
       actions={
-        <LinkButton to={back} variant="ghost" icon={<Icon name="chevron-left" size={12} />}>
-          Back to the environment
+        <LinkButton to={back} variant="neutral" icon={<Icon name="prev" size={12} />}>
+          {envName ?? 'Back to the environment'}
         </LinkButton>
       }
     />
@@ -330,7 +344,7 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
         title="Only managers publish the default preset"
         body="Project managers and admins edit and publish it. You can read the current version on the environment page."
         action={
-          <LinkButton to={back} variant="accent">
+          <LinkButton to={back} variant="neutral" icon={<Icon name="prev" size={12} />}>
             Back to the environment
           </LinkButton>
         }
@@ -342,7 +356,7 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
         title="This project is archived"
         body="Nothing can be published while the project is read only."
         action={
-          <LinkButton to={back} variant="accent">
+          <LinkButton to={back} variant="neutral" icon={<Icon name="prev" size={12} />}>
             Back to the environment
           </LinkButton>
         }

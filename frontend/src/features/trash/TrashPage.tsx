@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Key } from 'react-aria-components';
 import { useSearchParams } from 'react-router-dom';
 import { useAllProjects } from '@/api/admin';
+import { useModelIndex } from '@/api/dashboard';
 import {
   PURGE_MAX,
   RESTORE_MAX,
@@ -23,9 +24,11 @@ import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useAuth, useDocumentTitle } from '@/features/shell';
 import { constrained, fullWidth } from '@/features/shell/layout';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import {
   ActionTile,
   Button,
+  ClearFiltersButton,
   ConfirmDialog,
   DataTable,
   EmptyState,
@@ -79,6 +82,12 @@ function plural(n: number) {
 
 function fmtDate(iso: string) {
   return formatDay(iso);
+}
+
+/** A trashed run's model in its own project's model colour (rows come from many projects). */
+function TrashModelCell({ slug, name, reasoning }: { slug: string; name: string; reasoning: boolean }) {
+  const modelIndex = useModelIndex(slug);
+  return <ModelTag name={name} reasoning={reasoning} series={modelSeriesOf(modelIndex, name, reasoning)} />;
 }
 
 export function TrashPage() {
@@ -201,6 +210,7 @@ export function TrashPage() {
   const total = list.data?.total ?? 0;
   const grace = list.data?.graceDays;
   const filtered = Boolean(q || projectId);
+  const unfiltered = (projects.data ?? []).reduce((n, p) => n + p.deleted_runs, 0);
   const purgeOn = Boolean(grace);
   const selectedIds = [...selected].map(String).filter((id) => byId.has(id));
   const purgesColumn: Column<TrashRun> = {
@@ -271,8 +281,8 @@ export function TrashPage() {
       width: 130,
       cell: (r) => (
         <span className={styles.stack}>
-          <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
-          {r.deleted_by_name ? <UserName name={r.deleted_by_name} /> : null}
+          <span className={styles.day}>{fmtDate(r.deleted_at)}</span>
+          {r.deleted_by_name ? <UserName id={r.deleted_by_user_id} name={r.deleted_by_name} /> : null}
         </span>
       ),
     },
@@ -289,7 +299,12 @@ export function TrashPage() {
       priority: 3,
       header: 'Model',
       width: 130,
-      cell: (r) => (r.model ? <ModelTag name={r.model} reasoning={!!r.trace_stats?.has_reasoning} /> : '—'),
+      cell: (r) =>
+        r.model ? (
+          <TrashModelCell slug={r.project_slug} name={r.model} reasoning={!!r.trace_stats?.has_reasoning} />
+        ) : (
+          '—'
+        ),
     },
     { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => <TaskTag name={r.task} /> },
     {
@@ -364,12 +379,13 @@ export function TrashPage() {
           placeholder="Search run name or ID"
           value={search}
           onChange={setSearch}
-          width={260}
+          width="var(--search-width)"
+          shortcut="/"
         />
         <Select
           label="Project"
           hideLabel
-          placeholder="All projects"
+          triggerVariant="bar"
           items={[
             { key: '', label: 'All projects' },
             ...(projects.data ?? []).map((p) => ({
@@ -387,7 +403,13 @@ export function TrashPage() {
             setSelected(new Set());
           }}
           searchable="auto"
-          width={260}
+        />
+        <ClearFiltersButton
+          count={(projectId ? 1 : 0) + (q ? 1 : 0)}
+          onClear={() => {
+            setSearch('');
+            setQuery({ project: null, q: null, page: null });
+          }}
         />
         <span className={styles.grow} />
       </div>
@@ -460,7 +482,7 @@ export function TrashPage() {
             rowState={(r) => (purgeInfo(r).soon ? 'warn' : undefined)}
           >
             <DataTable.Footer
-              summary={`${total} deleted run${total === 1 ? '' : 's'}`}
+              filterNote={filtered ? `Filtered from ${unfiltered} deleted runs` : undefined}
               pagination={{
                 total,
                 page,

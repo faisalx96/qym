@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import { ChartCard } from '@/features/run-detail/components/charts/ChartCard';
 import { BarColumns, useMeasuredWidth, type BarSpec } from '@/features/run-detail/components/charts/Charts';
+import { formatDayKey, formatShortDayKey } from '@/lib/dates';
 import { useSearchParamsState } from '@/lib/url-state';
 import { SegmentedControl, type CardTone } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
@@ -24,7 +25,7 @@ function stackedFill(stacks: ReturnType<typeof trendColumns>[number]['stacks'], 
   let start = 0;
   const stops = stacks.map((stack) => {
     const end = start + (stack.n / total) * 100;
-    const stop = `${toneFill[stack.tone]} ${start}% ${end}%`;
+    const stop = `${stack.dark ? 'var(--text-dim)' : toneFill[stack.tone]} ${start}% ${end}%`;
     start = end;
     return stop;
   });
@@ -63,9 +64,12 @@ export function TrendChart({
   for (const item of spec?.values ?? []) {
     if (typeof item.value === 'string') legendCounts[item.value] = legendCounts[item.value] || 1;
   }
-  const labels: { value: string | null; label: string; tone: CardTone }[] = mixSegments(legendCounts, spec);
+  const labels: { value: string | null; label: string; tone: CardTone; dark: boolean }[] = mixSegments(
+    legendCounts,
+    spec,
+  );
   if (columns.some((column) => column.stacks.some((stack) => stack.value === null))) {
-    labels.push({ value: null, label: 'Undiagnosed', tone: 'neutral' });
+    labels.push({ value: null, label: 'Undiagnosed', tone: 'neutral', dark: false });
   }
   const primary =
     specs.find((item) => item.is_primary) ?? specs.find((item) => item.metric_name === primaryMetric);
@@ -74,15 +78,15 @@ export function TrendChart({
   const bars: BarSpec[] = columns.map((column) => ({
     key: column.day,
     count: column.total,
-    label: column.day.slice(8),
+    label: formatShortDayKey(column.day),
     zero: column.gap ? 'hide' : 'show',
     color: column.gap
       ? 'repeating-linear-gradient(135deg, var(--border-strong) 0 var(--space-xs), var(--bg-elevated) var(--space-xs) var(--space-sm))'
       : stackedFill(column.stacks, column.total),
-    name: `${column.day}: ${column.total} turns, ${primaryLabel} ${formatPrimaryMean(column.rate, primary)}${column.gap ? ', worker gap' : ''}`,
+    name: `${formatDayKey(column.day)}: ${column.total} turns, ${primaryLabel} ${formatPrimaryMean(column.rate, primary)}${column.gap ? ', worker gap' : ''}`,
     tip: (
       <div>
-        <strong>{column.day}</strong>
+        <strong>{formatDayKey(column.day)}</strong>
         {column.gap ? <p>Worker gap · heartbeat interval exceeded</p> : null}
         <p>
           {column.total} turns · {primaryLabel} {formatPrimaryMean(column.rate, primary)}
@@ -113,41 +117,43 @@ export function TrendChart({
     <ChartCard
       title="Turns over time"
       data-live-block="trend"
+      titleMeta={
+        columns.length
+          ? `${formatShortDayKey(columns[0]!.day)} – ${formatShortDayKey(columns.at(-1)!.day)}`
+          : undefined
+      }
       legend={
-        showRate ? (
-          <span className={styles.inline}>
-            <span className={styles.lineKey} aria-hidden="true" />
-            {primaryLabel} · 0–100%
-          </span>
-        ) : null
+        <span className={styles.inline}>
+          {labels.map((label) => (
+            <span
+              key={JSON.stringify(label.value)}
+              className={styles.inline}
+              data-tone={label.tone}
+              data-dark={label.dark ? '' : undefined}
+            >
+              <span className={styles.swatch} aria-hidden="true" />
+              <span dir="auto">{label.label}</span>
+            </span>
+          ))}
+          {showRate ? (
+            <span className={styles.inline}>
+              <span className={styles.lineKey} aria-hidden="true" />
+              {primaryLabel} · 0–100%
+            </span>
+          ) : null}
+        </span>
       }
       controls={
         <SegmentedControl
           label="Trend period"
           options={[
-            { value: '14', label: '14 days' },
-            { value: '30', label: '30' },
-            { value: '90', label: '90' },
+            { value: '14', label: '14d' },
+            { value: '30', label: '30d' },
+            { value: '90', label: '90d' },
           ]}
           value={String(days)}
           onChange={(value) => onDays(Number(value))}
         />
-      }
-      caption={
-        <div className={styles.trendCaption}>
-          <div className={styles.inline}>
-            {labels.map((label) => (
-              <span key={JSON.stringify(label.value)} className={styles.inline} data-tone={label.tone}>
-                <span className={styles.swatch} aria-hidden="true" />
-                <span dir="auto">{label.label}</span>
-              </span>
-            ))}
-          </div>
-          <span>
-            {columns.length ? `${columns[0]!.day} – ${columns.at(-1)!.day} · ` : ''}
-            UTC · hatched column: worker gap
-          </span>
-        </div>
       }
     >
       <div ref={plotRef}>

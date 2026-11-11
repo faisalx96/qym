@@ -15,7 +15,7 @@ export function DisabledBanner({ item, published }: { item: DatasetItem; publish
       tone="warning"
       icon="warning"
       data-testid="disabled-banner"
-      title={`Disabled by ${who} on ${formatDate(item.disabled?.at, 'date')}`}
+      title={`Disabled by ${who} on ${formatDate(item.disabled?.at, 'date')}.`}
     >
       <span>{reason ? `Reason: ${reason}` : 'No reason given'}</span>
       {published ? <span>Runs on this version skip it. Create a draft to change that.</span> : null}

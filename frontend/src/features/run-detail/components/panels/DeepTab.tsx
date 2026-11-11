@@ -249,11 +249,12 @@ function CorrelationMatrix({
                     type="button"
                     className={chart.matrixCell}
                     style={{ width: '100%', height: side, background: correlationTone(v) }}
+                    data-empty={v === null ? '' : undefined}
                     aria-label={`${rowName} versus ${colName}: ${v === null ? 'not enough data' : signedR(v)}`}
                     aria-pressed={i === selected[0] && j === selected[1]}
                     onClick={() => onPick(j, i)}
                   >
-                    {colWidth >= MATRIX_NUMBER_MIN ? (v === null ? '—' : signedR(v)) : null}
+                    {v === null ? '–' : colWidth >= MATRIX_NUMBER_MIN ? signedR(v) : null}
                   </button>
                 </span>
               );

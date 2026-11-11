@@ -4,11 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { DATASET_RUNS_PAGE, useDatasetRuns, type DatasetRunRow, type DatasetVersion } from '@/api/datasets';
 import { runPath } from '@/app/routes';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
-import { DataTable, EmptyState, RelativeTime, ScoreBar, StatusCell, Text, type Column } from '@/ui';
+import { DataTable, EmptyState, RelativeTime, ScoreValue, StatusCell, Text, type Column } from '@/ui';
 import { formatLatency } from '../lib/itemValue';
 import { RunOnVersionLink, SdkLine } from './RunOnVersion';
 import { metricDir } from '../lib/metricDir';
-import { APP_LOCALE } from '@/lib/dates';
 
 export function RunsTab({
   slug,
@@ -85,9 +84,14 @@ export function RunsTab({
       group: 'Metrics',
       type: 'score',
       width: 130,
+      align: 'center',
       priority: 2,
       cell: (r) => (
-        <ScoreBar value={r.metric_averages?.[m] ?? null} direction={metricDir(r.metric_directions?.[m])} />
+        <ScoreValue
+          variant="plain"
+          value={r.metric_averages?.[m] ?? null}
+          direction={metricDir(r.metric_directions?.[m])}
+        />
       ),
     })),
   ];
@@ -96,6 +100,7 @@ export function RunsTab({
       <DataTable<DatasetRunRow>
         aria-label="Runs on this dataset"
         storageKey="datasets.runs.v3"
+        groupBand={false}
         rows={runs}
         rowKey={(r) => r.id}
         rowHref={(r) => runPath(slug, r.id)}
@@ -103,6 +108,7 @@ export function RunsTab({
         columns={columns}
         loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
+        errorTitle="Couldn’t load runs on this dataset"
         onRetry={() => void query.refetch()}
         empty={
           query.data ? (
@@ -128,11 +134,8 @@ export function RunsTab({
         }
       >
         <DataTable.Footer
-          summary={
-            query.data ? `${total.toLocaleString(APP_LOCALE)} ${total === 1 ? 'run' : 'runs'}` : undefined
-          }
           pagination={
-            total > DATASET_RUNS_PAGE
+            query.data
               ? { total, page, pageSize: DATASET_RUNS_PAGE, noun: 'runs', onPageChange: setPage }
               : undefined
           }

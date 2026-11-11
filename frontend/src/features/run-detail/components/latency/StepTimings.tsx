@@ -7,6 +7,7 @@ import { forwardRef, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { stepLatencyUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import {
+  ActionTile,
   Button,
   Card,
   ChartTooltipHost,
@@ -216,13 +217,13 @@ export const StepTimings = forwardRef<
           </div>
           <div className={styles.tools}>
             <SearchField
-              label="Find a step or model"
+              label="Search steps and models"
               hideLabel
-              placeholder="Find a step or model"
+              placeholder="Search steps and models"
               value={view.query}
               onChange={(query) => patch({ query })}
               onClear={() => patch({ query: '' })}
-              width={200}
+              width="var(--search-width)"
             />
             <SegmentedControl
               label="Group steps"
@@ -245,14 +246,24 @@ export const StepTimings = forwardRef<
             <DropdownMenu
               label="Export step timings"
               trigger={
-                <Button variant="accent" icon={<Icon name="download" size={12} />}>
+                <Button
+                  variant="accent"
+                  icon={<Icon name="download" size={12} />}
+                  iconEnd={<Icon name="chevron-down" size={12} />}
+                >
                   Export
                 </Button>
               }
               items={[
-                { id: 'csv-summary', label: 'CSV summary' },
-                { id: 'csv-spans', label: 'CSV raw spans' },
-                { id: 'svg', label: 'SVG plot', disabled: !rows.length },
+                { id: 'csv-summary', label: 'CSV summary', icon: <ActionTile icon="sheet" /> },
+                { id: 'csv-spans', label: 'CSV raw spans', icon: <ActionTile icon="sheet" /> },
+                {
+                  id: 'svg',
+                  label: 'SVG plot',
+                  icon: <ActionTile icon="picture" />,
+                  disabled: !rows.length,
+                  disabledReason: rows.length ? undefined : 'No step matches the search',
+                },
               ]}
               onAction={onExport}
             />

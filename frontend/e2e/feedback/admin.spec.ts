@@ -84,12 +84,12 @@ test('QE-116, QE-120, QE-121: behaviour numbers, keep the key, remove the connec
   await setViewport(page, 1440);
   await gotoApp(page, '/admin/feedback');
   await page.getByLabel('Keep drafts for (days)', { exact: true }).first().fill('14');
-  await page.getByRole('button', { name: 'Save behaviour' }).click();
+  await page.getByRole('region', { name: 'Behaviour' }).getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Behaviour saved')).toBeVisible();
   await page.getByLabel('Keep drafts for (days)', { exact: true }).first().fill('30');
-  await page.getByRole('button', { name: 'Save behaviour' }).click();
+  await page.getByRole('region', { name: 'Behaviour' }).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByLabel('Model').fill('feedback:ask_then_propose');
-  await page.getByRole('button', { name: 'Save connection' }).click();
+  await page.getByTestId('connection').getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Connection saved')).toBeVisible();
   const body = (await (await request.get('/v1/admin/feedback-agent')).json()) as {
     connection: { llm_api_key_hint: string; llm_base_url: string };

@@ -194,21 +194,11 @@
   margin: 0;
 }
 
-/* The acknowledgement for High runs. */
+/* The acknowledgement for High runs: the warning InlineNotice, then its checkbox (owner, merge review Q5). */
 .ack {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--warning);
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--warning) var(--tint-soft), transparent);
-  font-size: var(--font-base);
-  color: var(--text-primary);
-}
-
-.ackTitle {
-  font-weight: 600;
 }
 
 /* Changes | Checks side by side from 960 px. */
@@ -313,13 +303,11 @@
   color: var(--text-muted);
 }
 
-/* A swept setting's column header: its name as the form writes it (data, not the uppercase of the fixed headers) and,
-   only when two columns share the name, the section on a second line. */
+/* A swept setting's column header: in capitals like every other column title (owner, merge review Q3) and, only when
+   two columns share the name, the section on a second line. */
 .axisHead {
   display: inline-flex;
   flex-direction: column;
-  text-transform: none;
-  letter-spacing: 0;
   white-space: normal;
 }
 

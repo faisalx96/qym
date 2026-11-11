@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import styles from './KeyValueTag.module.css';
 
 export interface KeyValueTagProps {
-  /** The key (already clipped by the caller; muted). */
+  /** The key (muted; wraps inside its 20ch cap). */
   label: string;
   /** The value text (mono, primary), or `children` for a richer value. */
   text?: string;
@@ -14,7 +14,7 @@ export interface KeyValueTagProps {
 
 /**
  * Passive key / value chip (Tag family, round 3 P6): 24px, `--bg-elevated`, the key in `--font-sm` muted, the value in mono.
- * It never acts: no hover, no focus. Both parts ellipsise; the full text is in `title`.
+ * It never acts: no hover, no focus. Both parts wrap, never '…' (C-25); the full text is also in `title`.
  */
 export function KeyValueTag({ label, text, title, className, children }: KeyValueTagProps) {
   return (

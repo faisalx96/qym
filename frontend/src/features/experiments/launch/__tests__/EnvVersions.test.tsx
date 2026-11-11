@@ -142,7 +142,10 @@ describe('EnvVersions', () => {
   });
 
   it('R10 C-3-4 loads as three placeholder cells with no label text, aria-busy and a hidden status', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => undefined)),
+    );
     renderLine();
     const frame = row().querySelector('[aria-busy="true"]') as HTMLElement;
     expect(frame).not.toBeNull();
@@ -157,7 +160,13 @@ describe('EnvVersions', () => {
   it('R10 C-3-1 / C-3-2 the five-key payload: response order, strings in tags, scalars and JSON in mono, wide cells', async () => {
     const routing = { primary: 'gpt-4o', fallback: 'claude-sonnet', judge: 'gpt-4o-mini' };
     stubVersioning([
-      ok({ agent_version: 'agent-1.5.0', kb_version: 'kb-81', prompt_set: 'prompts-2026-11-01', model_routing: routing, build: 4127 }),
+      ok({
+        agent_version: 'agent-1.5.0',
+        kb_version: 'kb-81',
+        prompt_set: 'prompts-2026-11-01',
+        model_routing: routing,
+        build: 4127,
+      }),
     ]);
     renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
@@ -167,11 +176,14 @@ describe('EnvVersions', () => {
     expect(values[0]!.textContent).toBe('agent-1.5.0');
     const json = values[3]!;
     expect(json).toHaveAttribute('data-kind', 'json');
-    expect(json.textContent).toBe(`${JSON.stringify(routing).slice(0, 48)}…`);
-    expect(json).toHaveAttribute('title', JSON.stringify(routing));
+    // merge review Q9: a long value wraps in full, never cut with '…'
+    expect(json.textContent).toBe(JSON.stringify(routing));
+    expect(json).not.toHaveAttribute('title');
     expect(values[4]!).toHaveAttribute('data-kind', 'scalar');
     expect(values[4]!.textContent).toBe('4127');
-    const wide = Array.from(row().querySelectorAll('[data-wide]')).map((c) => c.querySelector('dt')?.textContent);
+    const wide = Array.from(row().querySelectorAll('[data-wide]')).map(
+      (c) => c.querySelector('dt')?.textContent,
+    );
     expect(wide).toEqual(['prompt_set', 'model_routing']);
   });
 

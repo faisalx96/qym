@@ -122,8 +122,7 @@ export function RunDialogs({
             label: 'Comment',
             type: 'textarea',
             rows: 3,
-            placeholder:
-              wf?.action === 'reject' ? 'Why the run is rejected' : 'Optional note for the history',
+            placeholder: wf?.action === 'reject' ? 'Why the run is rejected' : 'Note for the history',
             required: wf?.action === 'reject',
           },
         ]}
@@ -168,7 +167,7 @@ export function RunDialogs({
             label: 'Comment',
             type: 'textarea',
             rows: 3,
-            placeholder: 'Optional note for the reviewer',
+            placeholder: 'Note for the reviewer',
           },
         ]}
         onSubmit={async (v) => {
@@ -261,7 +260,6 @@ export function RunDialogs({
         open={Boolean(er)}
         onOpenChange={close}
         title={er ? (er.metric ? `${er.metric} errors` : `Errors in ${name(er.row)}`) : 'Errors'}
-        size="sm"
         footer={
           <Button variant="neutral" onPress={onClose}>
             Close

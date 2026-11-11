@@ -702,17 +702,6 @@
   gap: var(--space-sm);
 }
 
-.details summary {
-  cursor: pointer;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.details summary:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
 /* Collapsible */
 .collapsible {
   border: 1px solid var(--border-subtle);
@@ -763,8 +752,4 @@
 
 .collapsibleBody[hidden] {
   display: none;
-}
-
-.details summary:hover {
-  color: var(--text-primary);
 }

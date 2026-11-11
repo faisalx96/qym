@@ -405,7 +405,7 @@ test.describe('versions inside the environment box on step 1', () => {
       at('Alpha'),
       at('Refresh versions of Alpha'),
       at('Details of Alpha'),
-      at('New environment'),
+      at('Add environment'),
       Math.max(at('golden'), at('Choose a dataset')),
     ];
     expect(order.every((i) => i >= 0)).toBe(true);

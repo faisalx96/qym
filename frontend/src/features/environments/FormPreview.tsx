@@ -1,7 +1,7 @@
 /** Read-only preview of the launch form generated from an environment's schema. */
 import type { CSSProperties, ReactNode } from 'react';
 import type { DescriptorEntry, FormDescriptor } from '@/api/evalEnvironments';
-import { Tag } from '@/ui';
+import { Disclosure, RequiredFlag, Tag } from '@/ui';
 import { countFields } from './slotLogic';
 import styles from './FormPreview.module.css';
 
@@ -15,7 +15,7 @@ function tagsFor(entry: DescriptorEntry) {
   return (
     <>
       {kind ? <Tag kind="data">{kind}</Tag> : null}
-      {entry.required ? <Tag>Required</Tag> : null}
+      {entry.required ? <RequiredFlag /> : null}
       {entry.secret ? <Tag tone="warning">Secret</Tag> : null}
       {entry.sweepable ? <Tag kind="accent">Sweepable</Tag> : null}
     </>
@@ -164,19 +164,25 @@ export function FormPreview({ descriptor }: { descriptor: FormDescriptor }) {
       ) : null}
       {groups.length ? (
         groups.map((group, i) => (
-          <details key={group.id} className={styles.group} open={i === 0}>
-            <summary className={styles.groupHeader}>
-              <span>{group.label}</span>
-              <Tag kind="count" title="Settings in this group">
-                {countIn(fields, group.pointers)}
-              </Tag>
-            </summary>
+          <Disclosure
+            key={group.id}
+            className={styles.group}
+            defaultOpen={i === 0}
+            title={
+              <span className={styles.groupHeader}>
+                <span>{group.label}</span>
+                <Tag kind="count" title="Settings in this group">
+                  {countIn(fields, group.pointers)}
+                </Tag>
+              </span>
+            }
+          >
             <div className={styles.groupBody}>
               {group.pointers.map((p) => (
                 <FieldRow key={p} fields={fields} pointer={p} depth={0} seen={seen} />
               ))}
             </div>
-          </details>
+          </Disclosure>
         ))
       ) : (
         <div className={styles.empty}>The schema has no settings.</div>

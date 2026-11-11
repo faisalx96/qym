@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import type { Key } from 'react-aria-components';
 import type { Facets } from '@/api/dashboardTypes';
-import { Button, Drawer, Icon, MultiSelect, Popover, SearchField } from '@/ui';
+import { Button, ClearFiltersButton, Drawer, Icon, MultiSelect, Popover, SearchField } from '@/ui';
 import { FACET_SINGULAR, inlineFacets } from './filterBarModel';
 import { buildFacetDefs, FiltersPanel, TimeOriginControls, type FacetDef } from './FiltersPopover';
 import {
@@ -159,25 +159,8 @@ function FacetRow({
           </div>
         </Popover>
       ) : null}
-      <ClearButton count={count} onClear={onClear} />
+      <ClearFiltersButton count={count} onClear={onClear} />
     </div>
-  );
-}
-
-/** `× Clear n`: resets every filter and the search; red, so it reads as the one undo for the whole bar. */
-function ClearButton({ count, onClear }: { count: number; onClear: () => void }) {
-  if (count <= 0) return null;
-  return (
-    <Button
-      variant="danger"
-      icon={<Icon name="close" size={12} />}
-      onPress={onClear}
-      className={styles.clear}
-      aria-label={`Clear ${count} filter${count === 1 ? '' : 's'}`}
-      data-testid="filters-clear"
-    >
-      Clear <span className={styles.clearCount}>{count}</span>
-    </Button>
   );
 }
 
@@ -232,7 +215,7 @@ function PhoneFilters({
           onDone={() => setOpen(false)}
         />
       </Drawer>
-      <ClearButton count={countActiveFilters(view)} onClear={onClear} />
+      <ClearFiltersButton count={countActiveFilters(view)} onClear={onClear} />
     </>
   );
 }
@@ -295,12 +278,12 @@ export function useFilterBarParts({
         ref={searchRef}
         label="Search run or dataset names"
         placeholder="Search run or dataset names"
-        hint="/"
+        shortcut="/"
         value={search.text}
         onChange={search.change}
         onClear={() => search.flush('')}
         onSubmit={(v) => search.flush(v)}
-        width={phone ? 220 : 280}
+        width={phone ? 220 : 'var(--search-width)'}
       />
     ) : null,
     filters: phone ? (

@@ -132,7 +132,7 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
             <LinkButton
               to={datasetPath(slug, dataset.slug)}
               variant="neutral"
-              icon={<Icon name="chevron-left" size={12} />}
+              icon={<Icon name="prev" size={12} />}
             >
               Back to the dataset
             </LinkButton>
@@ -216,10 +216,10 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
               searchable="auto"
               width={220}
             />
-            <LinkButton to={datasetPath(slug, dataset.slug, { v: base.version })} variant="ghost">
+            <LinkButton to={datasetPath(slug, dataset.slug, { v: base.version })} variant="neutral">
               Open base
             </LinkButton>
-            <LinkButton to={datasetPath(slug, dataset.slug, { v: head.version })} variant="ghost">
+            <LinkButton to={datasetPath(slug, dataset.slug, { v: head.version })} variant="neutral">
               Open head
             </LinkButton>
             <DownloadDiff
@@ -261,7 +261,7 @@ function DownloadDiff({
   const toast = useToast();
   return (
     <Button
-      variant="neutral"
+      variant="accent"
       icon={<Icon name="download" size={12} />}
       loading={busy}
       data-testid="download-diff"
@@ -458,7 +458,7 @@ function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaul
           {fields.length ? ` · fields: ${fields.map(fieldLabel).join(', ')}` : ''}
         </span>
         <span className={styles.rowSide}>
-          <UserPill user={entry.edited_by} label="Edited By:" />
+          <UserPill user={entry.edited_by} label="Edited by" />
         </span>
       </button>
       {open ? (
@@ -521,7 +521,7 @@ function ItemRow({
               : ''}
         </span>
         <span className={styles.rowSide}>
-          <UserPill user={item.edited_by} label="Edited By:" />
+          <UserPill user={item.edited_by} label="Edited by" />
         </span>
       </button>
       {open ? (

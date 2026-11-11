@@ -56,46 +56,8 @@
   gap: var(--space-xs);
 }
 
-.side {
-  padding: 0 var(--space-xs);
-  border-radius: var(--control-radius);
-  background: var(--bg-active);
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .remove {
-  display: inline-flex;
   flex: none;
-  align-items: center;
-  justify-content: center;
-  inline-size: 24px;
-  block-size: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--control-radius);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.remove:hover {
-  background: color-mix(in srgb, var(--error) 14%, transparent);
-  color: var(--error-text);
-}
-
-.remove:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 1px;
-}
-
-.strip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-xs);
-  margin: 0;
 }
 
 .passes {
@@ -103,33 +65,6 @@
   color: var(--text-muted);
   font-size: var(--font-sm);
   text-align: center;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  block-size: 36px;
-  padding-inline: var(--space-sm);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-}
-
-.stat dt {
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-}
-
-.stat dd {
-  margin: 0;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--font-md);
-  font-weight: 650;
-}
-
-.stat[data-danger] dd {
-  color: var(--error-text);
 }
 
 .facts {

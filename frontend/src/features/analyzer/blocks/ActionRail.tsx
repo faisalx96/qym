@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import type { AnalysisConfig } from '@/api/analysis';
-import { Button, DropdownMenu, IconButton, LinkButton, Select, Text } from '@/ui';
+import { ActionTile, Button, CountTile, DropdownMenu, Icon, LinkButton, Select, Text } from '@/ui';
 import type { PhaseView } from '../useAnalysisPhase';
 import type { RunnerState } from '../useAnalysisRunner';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -44,7 +45,13 @@ export function ActionRail({
   const noTargets = ws.targetCount === 0;
   const locked = phase.live || test.testing;
   // C213: with nothing ticked the test takes the first target, and the label says so
-  const testLabel = ws.testKeys.length ? `Test selected (${ws.testKeys.length})` : 'Test the first target';
+  const testLabel: ReactNode = ws.testKeys.length ? (
+    <>
+      Test selected<CountTile>{ws.testKeys.length}</CountTile>
+    </>
+  ) : (
+    'Test the first target'
+  );
   const sum = job && phase.finished ? summarize(job) : null;
   const blocked = notice(config, ws);
 
@@ -205,14 +212,24 @@ export function ActionRail({
             <DropdownMenu
               label="More analysis actions"
               placement="top end"
-              trigger={<IconButton label="More analysis actions" icon="more" />}
+              trigger={
+                <Button size="sm" variant="neutral" icon={<Icon name="more" size={14} />}>
+                  Actions
+                </Button>
+              }
               items={[
                 {
                   id: 'test',
                   label: test.testing ? 'Cancel test' : testLabel,
+                  icon: <ActionTile icon="play" />,
                   disabled: test.testing ? false : locked || !ws.llmReady || noTargets,
                 },
-                { id: 'preview', label: 'Prompt preview', disabled: !preview.hasTarget },
+                {
+                  id: 'preview',
+                  label: 'Prompt preview',
+                  icon: <ActionTile icon="eye" />,
+                  disabled: !preview.hasTarget,
+                },
               ]}
               onAction={(id) => {
                 if (id === 'preview') onPreview();

@@ -6,7 +6,7 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { restoreScroll } from '@/lib/scrollToElement';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useDocumentTitle, useOptionalProject } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
@@ -14,6 +14,7 @@ import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
 import { KEYS, readLocal } from '@/lib/storage';
 import {
+  DatasetTag,
   EmptyState,
   ErrorState,
   Icon,
@@ -50,7 +51,11 @@ function compareExportUrl(bases: string[]): string {
 }
 
 function BackLink({ slug }: { slug: string | undefined }) {
-  return <Link to={slug ? projectPath(slug) : '/'}>{'←'} Back to runs</Link>;
+  return (
+    <LinkButton to={slug ? projectPath(slug) : '/'} variant="neutral" icon={<Icon name="prev" size={12} />}>
+      Back to runs
+    </LinkButton>
+  );
 }
 
 export function ComparePage() {
@@ -120,7 +125,7 @@ export function ComparePage() {
             ? 'A run in this comparison was not found'
             : 'Runs in this comparison were not found'
         }
-        body={`${c.missing.length || 'Some'} of the runs in this link ${c.missing.length === 1 ? 'was' : 'were'} deleted or ${c.missing.length === 1 ? 'is' : 'are'} not visible to you. A comparison needs at least 2 runs.${c.missing.length ? ` Missing: ${c.missing.slice(0, 5).join(', ')}${c.missing.length > 5 ? ` + ${c.missing.length - 5} more` : ''}` : ''}`}
+        body={`${c.missing.length || 'Some'} of the runs in this link ${c.missing.length === 1 ? 'was' : 'were'} deleted or ${c.missing.length === 1 ? 'is' : 'are'} not visible to you. A comparison needs at least 2 runs.${c.missing.length ? ` Missing: ${c.missing.slice(0, 5).join(', ')}${c.missing.length > 5 ? ` and ${c.missing.length - 5} more` : ''}` : ''}`}
         action={<BackLink slug={slug} />}
       />
     );
@@ -259,7 +264,20 @@ function CompareLoaded({
             <h1 className={styles.title} data-testid="compare-title">
               {title}
             </h1>
-            <BaselineSelect />
+            <LinkButton
+              href={compareExportUrl(model.bases)}
+              download
+              variant="accent"
+              icon={<Icon name="download" size={12} />}
+              isDisabled={model.bases.length < 2 || model.bases.length > MAX_EXPORT_RUNS}
+              title={
+                model.bases.length > MAX_EXPORT_RUNS
+                  ? `Export at most ${MAX_EXPORT_RUNS} runs at once`
+                  : 'Download this comparison as one self-contained HTML file'
+              }
+            >
+              Export HTML
+            </LinkButton>
           </div>
           <p className={styles.meta}>
             <span>
@@ -268,7 +286,7 @@ function CompareLoaded({
             {first?.dataset_name ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span className={styles.mono}>{first.dataset_name}</span>
+                <DatasetTag name={first.dataset_name} />
               </>
             ) : null}
             {model.unpaired ? null : (
@@ -278,33 +296,20 @@ function CompareLoaded({
               </>
             )}
           </p>
-        </div>
-        <div className={styles.actions}>
-          {c.cohorts ? (
-            <SegmentedControl<'compare' | 'sweep'>
-              label="View"
-              value={sweep ? 'sweep' : 'compare'}
-              onChange={(v) => c.setView({ tab: v })}
-              options={[
-                { value: 'compare', label: 'Compare' },
-                { value: 'sweep', label: 'Sweep' },
-              ]}
-            />
-          ) : null}
-          <LinkButton
-            href={compareExportUrl(model.bases)}
-            download
-            variant="accent"
-            icon={<Icon name="download" size={14} />}
-            isDisabled={model.bases.length < 2 || model.bases.length > MAX_EXPORT_RUNS}
-            title={
-              model.bases.length > MAX_EXPORT_RUNS
-                ? `Export at most ${MAX_EXPORT_RUNS} runs at once`
-                : 'Download this comparison as one self-contained HTML file'
-            }
-          >
-            Export HTML
-          </LinkButton>
+          <div className={styles.controls}>
+            {c.cohorts ? (
+              <SegmentedControl<'compare' | 'sweep'>
+                label="View"
+                value={sweep ? 'sweep' : 'compare'}
+                onChange={(v) => c.setView({ tab: v })}
+                options={[
+                  { value: 'compare', label: 'Compare' },
+                  { value: 'sweep', label: 'Sweep' },
+                ]}
+              />
+            ) : null}
+            <BaselineSelect />
+          </div>
         </div>
       </header>
       <Notices />

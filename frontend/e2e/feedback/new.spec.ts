@@ -100,10 +100,8 @@ test('QE-34, QE-123: not configured replaces the form with the not-set-up page',
     await shot(page, 'unconfigured', 1440);
     await gotoApp(page, '/feedback');
     await expect(page.getByText('The feedback assistant is not set up')).toBeVisible();
-    await expect(page.getByTestId('new-feedback-disabled').first()).toHaveAttribute(
-      'title',
-      'An administrator has to connect a model first',
-    );
+    await expect(page.getByTestId('new-feedback-disabled').first()).toBeDisabled();
+    await expect(page.locator('[data-reason="An admin must connect a model first"]').first()).toBeAttached();
   } finally {
     await configureAgent(request);
   }

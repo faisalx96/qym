@@ -1,5 +1,12 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button as AriaButton, Dialog, DialogTrigger, Popover, type Key } from 'react-aria-components';
+import {
+  Button as AriaButton,
+  Dialog,
+  DialogTrigger,
+  Popover,
+  type ButtonProps as AriaButtonProps,
+  type Key,
+} from 'react-aria-components';
 import { Checkbox } from '../Checkbox';
 import { Icon } from '../Icon';
 import styles from './MultiSelect.module.css';
@@ -257,33 +264,44 @@ export function MultiSelect<T extends MultiSelectItem>({
 
   return (
     <DialogTrigger isOpen={open} onOpenChange={setOpen}>
-      <AriaButton
-        className={[styles.trigger, className].filter(Boolean).join(' ')}
-        isDisabled={isDisabled}
-        aria-haspopup="dialog"
-        aria-controls={open ? listId : undefined}
-        aria-label={
-          nameSuffix
-            ? `${label}${selectedCount && triggerVariant === 'bar' ? ` · ${summaryOf ? summaryOf(value) : selectedCount}` : ''} ${nameSuffix}`
-            : triggerVariant === 'bar'
-              ? `${label} filter${selectedCount ? `, ${selectedCount} selected` : ''}`
+      {triggerVariant === 'bar' ? (
+        <BarTrigger
+          label={label}
+          value={
+            selectedCount
+              ? summaryOf
+                ? summaryOf(value)
+                : selectedCount === 1
+                  ? summary
+                  : String(selectedCount)
               : undefined
-        }
-        data-variant={triggerVariant}
-        data-active={selectedCount ? '' : undefined}
-      >
-        <span className={styles.triggerLabel}>{label}</span>
-        {triggerVariant === 'bar' ? (
-          selectedCount ? (
-            <span className={styles.triggerValue}>
-              · {summaryOf ? summaryOf(value) : selectedCount === 1 ? summary : selectedCount}
-            </span>
-          ) : null
-        ) : (
+          }
+          active={selectedCount > 0}
+          className={className}
+          isDisabled={isDisabled}
+          aria-haspopup="dialog"
+          aria-controls={open ? listId : undefined}
+          aria-label={
+            nameSuffix
+              ? `${label}${selectedCount ? ` · ${summaryOf ? summaryOf(value) : selectedCount}` : ''} ${nameSuffix}`
+              : `${label} filter${selectedCount ? `, ${selectedCount} selected` : ''}`
+          }
+        />
+      ) : (
+        <AriaButton
+          className={[styles.trigger, className].filter(Boolean).join(' ')}
+          isDisabled={isDisabled}
+          aria-haspopup="dialog"
+          aria-controls={open ? listId : undefined}
+          aria-label={nameSuffix ? `${label} ${nameSuffix}` : undefined}
+          data-variant={triggerVariant}
+          data-active={selectedCount ? '' : undefined}
+        >
+          <span className={styles.triggerLabel}>{label}</span>
           <span className={styles.triggerValue}>{summary}</span>
-        )}
-        <Icon name="chevron-down" size={12} />
-      </AriaButton>
+          <Icon name="chevron-down" size={12} />
+        </AriaButton>
+      )}
       <Popover className={styles.popover} placement="bottom start" offset={4}>
         <Dialog
           className={styles.dialog}
@@ -295,5 +313,33 @@ export function MultiSelect<T extends MultiSelectItem>({
         </Dialog>
       </Popover>
     </DialogTrigger>
+  );
+}
+
+export type BarTriggerProps = {
+  label: string;
+  /** The set value, shown after the label as `· value`. */
+  value?: string;
+  /** A set filter: accent tint. */
+  active?: boolean;
+  className?: string;
+} & Omit<AriaButtonProps, 'children' | 'className'> & { [key: `data-${string}`]: string | undefined };
+
+/**
+ * The 24px filter-bar trigger (D-16): the label inside the button, then `· value` when set, accent tint when active.
+ * The trigger of a 'bar' MultiSelect or Select, or of a filter Popover with its own fields.
+ */
+export function BarTrigger({ label, value, active, className, ...rest }: BarTriggerProps) {
+  return (
+    <AriaButton
+      {...rest}
+      className={[styles.trigger, className].filter(Boolean).join(' ')}
+      data-variant="bar"
+      data-active={active ? '' : undefined}
+    >
+      <span className={styles.triggerLabel}>{label}</span>
+      {value ? <span className={styles.triggerValue}>· {value}</span> : null}
+      <Icon name="chevron-down" size={12} />
+    </AriaButton>
   );
 }
