@@ -5,7 +5,6 @@ import os
 import sys
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.orm import Session
@@ -18,8 +17,6 @@ SDK_SRC = ROOT / "packages" / "sdk"
 for src in (PLATFORM_SRC, SDK_SRC):
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.api import product_evals
 from qym_platform.datetime_utils import utc_now_naive

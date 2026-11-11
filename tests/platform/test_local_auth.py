@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,8 +15,6 @@ SDK_SRC = ROOT / "packages" / "sdk"
 for src in (PLATFORM_SRC, SDK_SRC):
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
 from qym_platform.auth_oidc import ProviderIdentity

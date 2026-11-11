@@ -34,8 +34,6 @@ ROOT = Path(__file__).resolve().parents[2]
 for src in (ROOT / "packages" / "platform", ROOT / "packages" / "sdk"):
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
 from qym_platform.auth import clear_api_key_cache

@@ -621,7 +621,9 @@ def test_deeply_nested_json_returns_422_without_server_error(
         response = client.post(
             BASE + "/turns",
             headers={**_auth_headers(), "Content-Type": "application/json"},
-            content="[" * 1200 + "]" * 1200,
+            # Deeper than every JSON decoder recursion guard: Python 3.9-3.11
+            # stop near 1,000 levels, 3.12+ near 10,000.
+            content="[" * 100_000 + "]" * 100_000,
         )
     assert response.status_code == 422, response.text
     assert response.json()["detail"] == [
