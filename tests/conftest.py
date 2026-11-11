@@ -109,20 +109,42 @@ def postgres_engine():
         admin.dispose()
 
 
-def pytest_collection_modifyitems(config, items):
-    """QYM_TEST_SHARD="K/N" keeps the K-th of N stable slices of the tests (CI runs N jobs in parallel).
+DURATIONS = Path(__file__).with_name(".test_durations.json")
 
-    A test's slice is a hash of its node id, so every xdist worker deselects the same tests.
+
+def duration_key(nodeid: str) -> str:
+    """The JUnit "classname::name" of a node id (the key of tests/.test_durations.json)."""
+    path, *parts = nodeid.split("::")
+    classname = ".".join([path[:-3].replace("/", ".")] + parts[:-1])
+    return f"{classname}::{parts[-1]}" if parts else classname
+
+
+def pytest_collection_modifyitems(config, items):
+    """QYM_TEST_SHARD="K/N" keeps the K-th of N slices of the tests (CI runs N jobs in parallel).
+
+    Slices have about equal time: tests/.test_durations.json holds each test's last CI time
+    (scripts/test_durations.py writes it from the CI JUnit files). The longest tests are placed
+    first, each in the slice with the least time so far; a test with no time counts as the median.
+    The order is fixed by time then node id, so every xdist worker keeps the same tests.
     """
     shard = os.environ.get("QYM_TEST_SHARD")
     if not shard:
         return
-    import zlib
+    import json
+    import statistics
 
     index, total = (int(part) for part in shard.split("/"))
+    known = json.loads(DURATIONS.read_text()) if DURATIONS.is_file() else {}
+    default = statistics.median(known.values()) if known else 1.0
+    cost = {item.nodeid: known.get(duration_key(item.nodeid), default) for item in items}
+    loads = [0.0] * total
+    slot_of = {}
+    for nodeid in sorted(cost, key=lambda n: (-cost[n], n)):
+        slot = min(range(total), key=lambda k: (loads[k], k))
+        loads[slot] += cost[nodeid]
+        slot_of[nodeid] = slot
     keep, drop = [], []
     for item in items:
-        slot = zlib.crc32(item.nodeid.encode()) % total
-        (keep if slot == index - 1 else drop).append(item)
+        (keep if slot_of[item.nodeid] == index - 1 else drop).append(item)
     items[:] = keep
     config.hook.pytest_deselected(items=drop)
