@@ -19,9 +19,15 @@ def main(paths: list[str]) -> None:
         for case in ET.parse(path).getroot().iter("testcase"):
             if case.find("skipped") is not None:
                 continue
-            key = f"{case.get('classname')}::{case.get('name')}"
-            times[key] = round(float(case.get("time") or 0), 3)
-    OUT.write_text(json.dumps(dict(sorted(times.items())), indent=0) + "\n")
+            seconds = float(case.get("time") or 0)
+            # Tests under 0.5 s are left out (about half of them, 8% of the time): the slicer
+            # counts each missing test as SMALL_TEST seconds in tests/conftest.py.
+            if seconds >= 0.5:
+                times[f"{case.get('classname')}::{case.get('name')}"] = round(
+                    seconds, 1
+                )
+    body = ",\n".join(f"{json.dumps(k)}: {v}" for k, v in sorted(times.items()))
+    OUT.write_text("{\n" + body + "\n}\n")
     print(f"wrote {OUT} ({len(times)} tests, {sum(times.values()):.0f} s)")
 
 
