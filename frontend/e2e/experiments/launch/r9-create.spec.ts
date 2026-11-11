@@ -707,8 +707,8 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
       ]);
     const ack = page.locator('[data-part=review-ack]');
     await expect(ack).toContainText('1 run is High.');
-    const border = (await computed(ack, ['border-top-color']))['border-top-color'];
-    expect(border).toBe(await tokenColor(page, '--warning'));
+    // merge review Q5: the warning InlineNotice, then the checkbox
+    await expect(ack.locator('[data-tone="warning"]').first()).toBeVisible();
     await expect(ack.getByRole('checkbox')).not.toBeChecked();
     const launch = page.locator('[data-part=bar-continue][data-action=launch]');
     await expect(launch).toBeDisabled();

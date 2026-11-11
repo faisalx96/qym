@@ -10,7 +10,7 @@ import {
 } from '@/api/evalEnvironments';
 import { errorMessage, type EvalEnvironment } from '@/api/evalCommon';
 import { useEnvTasks } from '@/api/launch';
-import { Button, ErrorState, InlineNotice, KeyValueGrid, Skeleton, Tag, useToast } from '@/ui';
+import { Button, ErrorState, InlineNotice, KeyValueGrid, Skeleton, Tag, TaskTag, useToast } from '@/ui';
 import { DefaultPresetTag, HealthCell } from './cells';
 import { absTime, relTime, shortHash } from './format';
 import styles from './EnvironmentPage.module.css';
@@ -330,12 +330,14 @@ export function TasksSection({ projectId, env }: Omit<BaseProps, 'canEdit'>) {
         ) : (
           <>
             {listed.map((t) => (
-              <Tag key={t.id} kind="task" title={t.description ?? t.id} data-task-id={t.id}>
-                {t.name || t.id}
-              </Tag>
+              <span key={t.id} data-task-id={t.id} title={t.description ?? t.id}>
+                <TaskTag name={t.name || t.id} />
+              </span>
             ))}
             {listed.find((t) => t.default) ? (
-              <span className={styles.help}>default: {listed.find((t) => t.default)?.name}</span>
+              <span className={styles.help}>
+                Default: <TaskTag name={listed.find((t) => t.default)?.name} />
+              </span>
             ) : null}
           </>
         )}

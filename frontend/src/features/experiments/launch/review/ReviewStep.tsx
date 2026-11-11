@@ -2,7 +2,17 @@ import { Fragment, useMemo, useRef } from 'react';
 import type { EnvTasksPayload } from '@/api/launch';
 import { useEnvTaskLists } from '@/api/launch';
 import { readOnlyReason, useMediaQuery, useOptionalProject } from '@/features/shell';
-import { Button, Checkbox, DataTable, Select, Tag, type Column } from '@/ui';
+import {
+  Button,
+  Checkbox,
+  DataTable,
+  DatasetTag,
+  InlineNotice,
+  Select,
+  Tag,
+  TaskTag,
+  type Column,
+} from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
 import { useGoToSection } from '../components/goToSection';
@@ -59,12 +69,12 @@ function taskName(id: string | null, lists: Readonly<Record<string, EnvTasksPayl
 function DatasetValue() {
   const { doc } = useLaunch();
   const entries = datasetEntries(doc);
-  if (entries.length < 2 && pairCount(doc) < 2) return <>{datasetValue(doc) || '—'}</>;
+  if (entries.length < 2 && pairCount(doc) < 2) return <DatasetTag name={datasetValue(doc)} />;
   return (
     <>
       {entries.map((e) => (
         <span key={e.name}>
-          {e.name}{' '}
+          <DatasetTag name={e.name} />{' '}
           <span className={styles.kvSub}>
             {e.refs.map((r) => refLabel(r).replace(/^Latest version$/, 'latest')).join(', ')}
           </span>
@@ -142,14 +152,19 @@ function SummaryCard({ taskLists }: { taskLists: Record<string, EnvTasksPayload 
     {
       key: 'task',
       label: 'Task',
-      value: mixed ? 'Different per environment' : taskName(doc.selection.task, taskLists),
+      value: mixed ? (
+        'Different per environment'
+      ) : doc.selection.task ? (
+        <TaskTag name={taskName(doc.selection.task, taskLists)} />
+      ) : (
+        'Worker default'
+      ),
     },
     { key: 'env', label: 'Environments', value: selectedEnvs.map((e) => e.name).join(', ') || '—' },
     {
       key: 'ds',
       label: pairs >= 2 || datasetEntries(doc).length > 1 ? 'Datasets' : 'Dataset',
       value: <DatasetValue />,
-      mono: true,
     },
   ];
   if (pairs >= 2)
@@ -433,13 +448,13 @@ function RunsCard({
       ) : null}
       {highCount > 0 ? (
         <div className={styles.ack} data-part="review-ack" ref={onAckRef}>
-          <span className={styles.ackTitle}>
-            {highCount === 1 ? '1 run is High.' : `${highCount} runs are High.`}
-          </span>
-          <span>
+          <InlineNotice
+            tone="warning"
+            lead={highCount === 1 ? '1 run is High.' : `${highCount} runs are High.`}
+          >
             {preview.data?.preemption_warning ??
               `High runs can preempt other work on ${highEnvs.join(', ')}.`}
-          </span>
+          </InlineNotice>
           <Checkbox isSelected={preemptionAck} isDisabled={readOnly} onChange={setPreemptionAck}>
             I understand that High runs can preempt other work
           </Checkbox>

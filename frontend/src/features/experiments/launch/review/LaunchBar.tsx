@@ -1,5 +1,5 @@
 import { forwardRef, type ReactNode } from 'react';
-import { Button, type ButtonProps } from '@/ui';
+import { Button, Icon, type ButtonProps } from '@/ui';
 import type { WizardStepDef, WizardStepId } from '../wizard/steps';
 import styles from './launchBar.module.css';
 
@@ -102,6 +102,7 @@ export function StepsBar({
         <BarButton
           part="bar-back"
           variant="neutral"
+          icon={prev ? undefined : <Icon name="prev" size={12} />}
           aria-label={
             prev
               ? `Back to ${prev.label.toLowerCase()}`

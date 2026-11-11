@@ -22,7 +22,17 @@ const envsPath = (slug: string) => `/projects/${slug}/environments`;
 const settingsList = (slug: string) => `/projects/${slug}/settings?tab=environments`;
 const rows = (page: Page) => page.locator('tr[data-row-id]');
 const row = (page: Page, name: string) => rows(page).filter({ hasText: name });
-const SECTIONS = ['status', 'schema', 'tasks', 'groups', 'preset', 'saved-presets', 'ranking', 'policies', 'connection'];
+const SECTIONS = [
+  'status',
+  'schema',
+  'tasks',
+  'groups',
+  'preset',
+  'saved-presets',
+  'ranking',
+  'policies',
+  'connection',
+];
 
 interface World {
   slug: string;
@@ -49,7 +59,8 @@ async function seed(request: Parameters<typeof seedProject>[0], tasks = true): P
   return { slug: project.slug, staging, loose };
 }
 
-const normal = (s: string) => s.replace(/(\d+\s?\w+|just now|a few seconds) ago/g, 'T ago').replace(/\s+/g, ' ');
+const normal = (s: string) =>
+  s.replace(/(\d+\s?\w+|just now|a few seconds) ago/g, 'T ago').replace(/\s+/g, ' ');
 
 async function pageFacts(page: Page) {
   await expect(page.locator('[data-part="env-page"]')).toBeVisible();
@@ -74,14 +85,20 @@ async function pageFacts(page: Page) {
 test.describe('r9 environment page (C-7)', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('both entries land on the same page; header, footer and Tasks as specified', async ({ page, request }) => {
+  test('both entries land on the same page; header, footer and Tasks as specified', async ({
+    page,
+    request,
+  }) => {
     const w = await seed(request);
     // C-7-1: Experiments -> Environments, click the URL cell (not the name)
     await gotoApp(page, envsPath(w.slug));
     await row(page, 'staging').locator('td').nth(1).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${w.slug}/environments/${w.staging.id}$`));
     const a = await pageFacts(page);
-    await expect(page.getByRole('link', { name: 'All environments' })).toHaveAttribute('href', envsPath(w.slug));
+    await expect(page.getByRole('link', { name: 'All environments' })).toHaveAttribute(
+      'href',
+      envsPath(w.slug),
+    );
     // C-7-5
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('staging');
     await expect(page.getByRole('tab', { name: 'Environments' })).toHaveAttribute('aria-selected', 'true');
@@ -174,21 +191,20 @@ test.describe('r9 environment tables (C-9)', () => {
       await expect(tr).toHaveAttribute('data-clickable', '');
       expect(await cssOf(tr, 'cursor')).toBe('pointer');
       expect(Math.round((await tr.boundingBox())!.height)).toBe(40);
-      // C-9-7: a chevron on every row at rest, 14 x 14, visible
-      const chev = page.locator('tr[data-row-id] [data-part="env-row-chevron"]');
-      await expect(chev).toHaveCount(2);
-      const cb = await chev.first().locator('svg').boundingBox();
-      expect([Math.round(cb!.width), Math.round(cb!.height)]).toEqual([14, 14]);
-      const rowChev = tr.locator('[data-part="env-row-chevron"]');
-      const mutedColour = await cssOf(rowChev, 'color');
+      // merge review Q6: no decorative open chevron (the whole row opens)
+      await expect(page.locator('[data-part="env-row-chevron"]')).toHaveCount(0);
       // C-9-6: the name is a real link
       const link = tr.getByRole('link', { name: 'staging' });
-      await expect(link).toHaveAttribute('href', new RegExp(`/environments/${w.staging.id}(\\?from=settings)?$`));
+      await expect(link).toHaveAttribute(
+        'href',
+        new RegExp(`/environments/${w.staging.id}(\\?from=settings)?$`),
+      );
       // C-9-3: hover on the URL cell
       await tr.locator('td').nth(1).hover();
-      for (const td of await tr.locator('td').all()) expect(await cssOf(td, 'background-color')).toBe('rgb(42, 42, 60)');
-      expect(await cssOf(link, 'text-decoration-line')).toBe('underline');
-      expect(await cssOf(rowChev, 'color')).not.toBe(mutedColour);
+      for (const td of await tr.locator('td').all())
+        expect(await cssOf(td, 'background-color')).toBe('rgb(42, 42, 60)');
+      // A-17: the name turns green on row hover, never underlined
+      expect(await cssOf(link, 'text-decoration-line')).toBe('none');
       // C-9-4: keyboard focus draws the accent ring; C-9-5: Enter opens
       await page.mouse.move(0, 0);
       await tr.focus();
@@ -203,7 +219,10 @@ test.describe('r9 environment tables (C-9)', () => {
       // ctrl-click on a row opens a new tab
       await gotoApp(page, path);
       const popup = context.waitForEvent('page');
-      await row(page, 'staging').locator('td').nth(1).click({ modifiers: ['Control'] });
+      await row(page, 'staging')
+        .locator('td')
+        .nth(1)
+        .click({ modifiers: ['Control'] });
       const tab = await popup;
       await expect(tab).toHaveURL(new RegExp(`/environments/${w.staging.id}`));
       await tab.close();
@@ -252,20 +271,23 @@ test.describe('r9 environment tables (C-9)', () => {
 test.describe('r9 environment cards (C-9-8)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('the whole card opens, the chevron is there, More does not navigate', async ({ page, request }) => {
+  test('the whole card opens, no chevron, More does not navigate', async ({ page, request }) => {
     const w = await seed(request);
     for (const path of [envsPath(w.slug), settingsList(w.slug)]) {
       await gotoApp(page, path);
       const cards = page.locator('li[data-row-key][data-clickable]');
       await expect(cards).toHaveCount(2);
-      await expect(page.locator('li[data-row-key] [data-part="env-row-chevron"]')).toHaveCount(2);
+      await expect(page.locator('li[data-row-key] [data-part="env-row-chevron"]')).toHaveCount(0);
       const card = cards.filter({ hasText: 'staging' });
       expect(Math.round((await card.boundingBox())!.width)).toBeGreaterThanOrEqual(277);
       expect(await cssOf(card, 'cursor')).toBe('pointer');
       await card.getByRole('button', { name: 'More' }).click();
       await expect(card.getByRole('button', { name: 'Less' })).toBeVisible();
       await expect(page).toHaveURL(new RegExp(path.replace('?', '\\?') + '$'));
-      await card.locator('dl').first().click({ position: { x: 4, y: 4 } });
+      await card
+        .locator('dl')
+        .first()
+        .click({ position: { x: 4, y: 4 } });
       await expect(page).toHaveURL(new RegExp(`/environments/${w.staging.id}`));
     }
   });
@@ -281,12 +303,15 @@ test.describe('r9 after-shots', () => {
       await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
       await gotoApp(page, `${envsPath(w.slug)}/${w.staging.id}`);
       await pageFacts(page);
-      await page.screenshot({ path: `${dir}/after-page-environment-experiments-${width}.png`, fullPage: true });
+      await page.screenshot({
+        path: `${dir}/after-page-environment-experiments-${width}.png`,
+        fullPage: true,
+      });
       await gotoApp(page, `${envsPath(w.slug)}/${w.staging.id}?from=settings`);
       await pageFacts(page);
       await page.screenshot({ path: `${dir}/after-page-environment-settings-${width}.png`, fullPage: true });
       await gotoApp(page, envsPath(w.slug));
-      await expect(page.locator('[data-part="env-row-chevron"]').first()).toBeVisible();
+      await expect(page.locator('tr[data-row-id]').first()).toBeVisible();
       await page.screenshot({ path: `${dir}/after-page-environments-table-${width}.png` });
     }
     await page.setViewportSize({ width: 1440, height: 900 });

@@ -1,5 +1,5 @@
 /** The review step of the editor, "Review and publish": Summary, Release notes, Changes and Checks. */
-import { Button, Card, Text, Textarea } from '@/ui';
+import { Button, Card, DatasetTag, TaskTag, Text, Textarea } from '@/ui';
 import { plural } from '@/features/experiments/lib/format';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import { useGoToSection } from '@/features/experiments/launch/components/goToSection';
@@ -61,12 +61,11 @@ export function PublishReview({ notes, onNotes, saving, failure, blocker, onRelo
         <ReviewKv
           rows={[
             { key: 'env', label: 'Environment', value: selectedEnvs.map((e) => e.name).join(', ') || '—' },
-            { key: 'task', label: 'Task', value: taskName },
+            { key: 'task', label: 'Task', value: taskId ? <TaskTag name={taskName} /> : taskName },
             {
               key: 'ds',
               label: 'Dataset',
-              value: datasetValue(doc) || 'None',
-              mono: Boolean(datasetValue(doc)),
+              value: datasetValue(doc) ? <DatasetTag name={datasetValue(doc)} /> : 'None',
             },
             { key: 'base', label: 'Compared with', value: doc.base.label || comparedWith },
             {

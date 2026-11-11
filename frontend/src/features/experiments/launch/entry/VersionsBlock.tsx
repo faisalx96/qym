@@ -17,8 +17,6 @@ export function versionValueText(value: unknown): string {
   return String(value);
 }
 
-/** Longest JSON shown in a cell; the whole text is the cell's title. */
-const JSON_MAX = 48;
 /** A value longer than this (or any object / array) takes the whole row of the grid. */
 const WIDE = 16;
 /** Placeholder cells of the loading frame (one row at every box width, round 10 L1). */
@@ -37,15 +35,13 @@ function VersionValue({ value }: { value: unknown }) {
       </Tag>
     );
   const text = versionValueText(value);
-  const cut = text.length > JSON_MAX;
   return (
     <span
       className={styles.vText}
       data-part="version-value"
       data-kind={value !== null && typeof value === 'object' ? 'json' : 'scalar'}
-      title={cut ? text : undefined}
     >
-      {cut ? `${text.slice(0, JSON_MAX)}…` : text}
+      {text}
     </span>
   );
 }
