@@ -6,15 +6,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { archiveProject, unarchiveProject } from '../../helpers';
 import { axeSeriousViolations, describeViolations, resetFakes, test } from '../support';
-import {
-  captureExperimentPosts,
-  nameBox,
-  openHome,
-  openLaunch,
-  review,
-  seedLaunch,
-  type LaunchFixture,
-} from './launchSupport';
+import { captureExperimentPosts, nameBox, openHome, openLaunch, review, seedLaunch, type LaunchFixture, toReview, goStep } from './launchSupport';
 
 test.setTimeout(120_000);
 test.use({ actionTimeout: 10_000 });
@@ -125,7 +117,9 @@ test.describe('home view', () => {
     await expect(page).toHaveURL(/step=where/);
     await expect(checkbox(page)).toBeChecked();
     await expect(control(page)).toHaveCount(1);
+    await toReview(page);
     await expect(review(page).getByLabel('Summary')).toContainText('yes');
+    await goStep(page, 'where');
     await checkbox(page).uncheck({ force: true });
     await page.getByRole('button', { name: /Start/ }).first().click();
     await expect(page).not.toHaveURL(/step=/);

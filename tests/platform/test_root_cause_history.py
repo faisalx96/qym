@@ -4,12 +4,11 @@ import asyncio
 import json
 import math
 import os
-import sys
 from datetime import datetime
 from io import BytesIO
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -17,8 +16,6 @@ from sqlalchemy import Text, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.api.analysis import (
     AnalysisContextUpdate,

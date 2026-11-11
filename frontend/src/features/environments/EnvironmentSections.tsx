@@ -9,6 +9,7 @@ import {
   type SchemaDiff,
 } from '@/api/evalEnvironments';
 import { errorMessage, type EvalEnvironment } from '@/api/evalCommon';
+import { useEnvTasks } from '@/api/launch';
 import { Button, ErrorState, InlineNotice, KeyValueGrid, Skeleton, Tag, useToast } from '@/ui';
 import { DefaultPresetTag, HealthCell } from './cells';
 import { absTime, relTime, shortHash } from './format';
@@ -276,6 +277,69 @@ export function SlotsSection({
           onOpenChange={onDialogOpenChange}
         />
       ) : null}
+    </Section>
+  );
+}
+
+// ------------------------------------------------------------------ Tasks
+
+const NO_TASKS = 'This service does not offer task selection.';
+
+/** Read-only: what the service offers for an experiment's task (`GET .../tasks`), the default marked. */
+export function TasksSection({ projectId, env }: Omit<BaseProps, 'canEdit'>) {
+  const declared = Boolean(env.evaluator_capabilities?.task);
+  const query = useEnvTasks(projectId, env.id, declared);
+  const data = query.data;
+  const listed = data?.status === 'ok' ? data.tasks : [];
+  const loading = declared && (query.isPending || query.isFetching);
+  return (
+    <Section
+      id="env-tasks"
+      title="Tasks"
+      description="What this service offers for an experiment's task."
+      actions={
+        declared ? (
+          <Button variant="neutral" loading={query.isFetching} onPress={() => void query.refetch()}>
+            Refresh
+          </Button>
+        ) : null
+      }
+    >
+      <div
+        className={styles.taskLine}
+        data-tasks-status={
+          loading ? 'loading' : declared ? (query.isError ? 'error' : data?.status) : 'unsupported'
+        }
+      >
+        {loading ? (
+          <>
+            <span className={styles.srOnly} role="status">
+              Reading tasks…
+            </span>
+            <span className={styles.taskSkel} aria-hidden="true" />
+          </>
+        ) : !declared || data?.status === 'unsupported' ? (
+          <span className={styles.help}>{NO_TASKS}</span>
+        ) : query.isError || data?.status === 'error' ? (
+          <span className={styles.help} role="alert">
+            Could not read tasks:{' '}
+            {data?.error || (query.error instanceof Error ? query.error.message : 'unknown error')}
+          </span>
+        ) : !listed.length ? (
+          <span className={styles.help}>The service lists no tasks.</span>
+        ) : (
+          <>
+            {listed.map((t) => (
+              <Tag key={t.id} kind="task" title={t.description ?? t.id} data-task-id={t.id}>
+                {t.name || t.id}
+              </Tag>
+            ))}
+            {listed.find((t) => t.default) ? (
+              <span className={styles.help}>default: {listed.find((t) => t.default)?.name}</span>
+            ) : null}
+          </>
+        )}
+      </div>
     </Section>
   );
 }

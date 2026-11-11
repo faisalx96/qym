@@ -49,25 +49,26 @@ test.describe('wizard', () => {
     await nameBox(page).fill('wizard run');
     await page.getByRole('button', { name: /Customize/ }).click();
     await expect(rail(page).locator('[aria-current="step"]')).toContainText('Where it runs');
-    // the bottom bar keeps its shape on every step: Back shows on step 1 too, disabled (C171)
-    await expect(page.getByRole('button', { name: 'Back' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Skip to review' })).toHaveCount(0);
-    await expect(review(page)).toBeVisible();
+    // Round 9: the same five buttons on every step (Back leads to the Start view from step 1); no review beside the step.
+    await expect(page.locator('[data-part=bar-back]')).toBeEnabled();
+    await expect(page.getByTestId('review-step')).toHaveCount(0);
 
     const labels = STEPS.map((s) => STEP_LABELS[s]);
     for (let i = 1; i < 5; i++) {
       await page.getByRole('button', { name: `Continue to ${labels[i]!.toLowerCase()}` }).click();
       await expect(page.getByRole('heading', { name: labels[i]!, level: 2 })).toBeFocused();
       await expect(page).toHaveURL(new RegExp(`step=${STEPS[i]}`));
-      const optional = i >= 2;
-      await expect(page.getByRole('button', { name: 'Skip to review' })).toHaveCount(optional ? 1 : 0);
-      await expect(page.getByRole('button', { name: 'Back' })).toBeEnabled();
+      await expect(page.getByRole('button', { name: 'Skip to review' })).toBeEnabled();
+      await expect(page.getByRole('button', { name: 'Back', exact: false }).first()).toBeVisible();
     }
     await page.getByRole('button', { name: 'Skip to review' }).click();
     await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible();
     // On the last step the review fills the main column (one pane) and Raw JSON sits under it.
     await expect(review(page)).toHaveCount(1);
-    await expect(page.getByRole('button', { name: /Continue to/ })).toHaveCount(0);
+    // round 10, C-1-3 / C-1-4: Skip is disabled in place; the primary slot is the launch
+    await expect(page.locator('[data-part=bar-continue]')).toHaveAttribute('data-action', 'launch');
+    await expect(page.locator('[data-part=bar-continue]')).toHaveText(/^Launch/);
+    await expect(page.locator('[data-part=bar-skip]')).toBeDisabled();
     await expect(page.getByRole('region', { name: /^Raw JSON/ })).toBeVisible();
     await expectReady(page);
     await launchButton(page).click();
@@ -118,7 +119,7 @@ test.describe('wizard', () => {
       .getByRole('button', { name: /Edit: Environment configurations/ })
       .click();
     await expect(page).toHaveURL(/step=settings/);
-    await page.getByRole('button', { name: 'Start' }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expect(page).not.toHaveURL(/step=/);
     await expect(nameBox(page)).toHaveValue('edit run');
   });
@@ -156,19 +157,17 @@ test.describe('layout', () => {
     });
   }
 
-  test('1920px: the rail is six across and the aside stays beside the step', async ({ page }) => {
+  test('1920px: the rail is six across and the step uses the full column', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1000 });
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     const tops = await rail(page)
       .getByRole('button')
       .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
     expect(new Set(tops).size).toBe(1);
-    const aside = await review(page).boundingBox();
-    const panel = await page.getByRole('heading', { name: 'Where it runs', level: 2 }).boundingBox();
-    expect(aside!.x).toBeGreaterThan(panel!.x);
+    await expect(page.locator('aside[aria-label="Review"]')).toHaveCount(0);
   });
 
-  test('390px: Continue lives in the one launch bar, which keeps Launch on the review step', async ({
+  test('390px: Continue lives in the one launch bar, on every step including the review', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 800 });
@@ -181,9 +180,7 @@ test.describe('layout', () => {
     expect(nb!.y).toBeGreaterThanOrEqual(bb!.y);
     expect(nb!.y + nb!.height).toBeLessThanOrEqual(bb!.y + bb!.height + 1);
     await goStep(page, 'review');
-    // one bar on every step (C171): the review step keeps it, with Launch in the same place
-    await expect(bar.getByRole('button', { name: /^Launch/ })).toBeVisible();
-    await expect(bar.getByRole('button', { name: /Continue to/ })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Launch', exact: true })).toBeVisible();
   });
 });
 
@@ -276,28 +273,23 @@ test.describe('polish', () => {
     expect(lowest, tops.slice(0, 60).join(',')).toBeGreaterThan(0);
   });
 
-  test('390px: step navigation and the launch bar are one --bar-action-h row', async ({ page }) => {
+  test('390px: the launch bar is three rows with all four buttons (round 10, C-1-9)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
-    const nav = page.getByRole('navigation', { name: 'Step navigation' });
     const bar = page.getByRole('region', { name: 'Launch', exact: true });
-    const [nb, bb] = [await nav.boundingBox(), await bar.boundingBox()];
-    expect(nb!.height).toBeLessThan(50);
-    expect(bb!.height).toBeGreaterThanOrEqual(56);
-    expect(bb!.height).toBeLessThanOrEqual(57);
-    await expect(bar.getByRole('navigation', { name: 'Step navigation' })).toBeVisible();
-    await expect(nav.getByRole('button', { name: 'Back' })).toBeVisible();
-    await expect(bar.getByRole('button', { name: 'Continue to environment configurations' })).toBeVisible();
-    await expect(bar.getByRole('button', { name: 'Skip to review' })).toBeVisible();
+    const bb = await bar.boundingBox();
+    expect(bb!.height).toBeLessThanOrEqual(92);
+    await expect(bar.locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(4);
+    await expect(page.getByRole('navigation', { name: 'Step navigation' })).toHaveCount(0);
   });
 
-  test('home: Launch as is is the accent action; saved presets and "Other" are separate rows', async ({
+  test('home: Launch as is is the primary action (the one bar); saved presets and "Other" are separate rows', async ({
     page,
   }) => {
     await openHome(page, f.project.slug, `?env=${f.env.id}`);
     await expect(page.getByRole('button', { name: 'Launch as is' })).toHaveAttribute(
       'data-variant',
-      'accent',
+      'primary',
     );
     await expect(page.getByRole('button', { name: /Customize/ })).toHaveAttribute('data-variant', 'neutral');
     await expect(page.getByText('Saved presets', { exact: true })).toBeVisible();
@@ -331,11 +323,5 @@ test.describe('raw JSON behind a button', () => {
     // one visible trigger: the review step's pane has no second Raw JSON button, and a closed card has no heading
     await expect(review(page).getByRole('button', { name: 'Raw JSON' })).toHaveCount(0);
     await expect(raw.getByRole('heading', { name: 'Raw JSON' })).toHaveCount(0);
-    // the action of the other steps opens the same collapse
-    await goStep(page, 'models');
-    await review(page).getByRole('button', { name: 'Raw JSON' }).click();
-    await expect(page).toHaveURL(/step=review/);
-    await expect(raw.locator('.cm-content')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Hide raw JSON' })).toBeVisible();
   });
 });

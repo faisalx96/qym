@@ -117,7 +117,9 @@ test.describe('settings (4, 15, 16, 21)', () => {
     await issues.blur();
     await expect(issues).toHaveValue(beforeIssues);
     const body = page.waitForRequest((r) => r.url().includes('/analyze-test'));
-    await rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })
+      .click();
     expect(((await body).postDataJSON() as { timeout_seconds: number }).timeout_seconds).toBe(Number(before));
   });
 
@@ -216,7 +218,9 @@ test.describe('connection without a key (11)', () => {
     await expect(option).toHaveAttribute('aria-disabled', 'true');
     await option.click({ force: true });
     await page.keyboard.press('Escape');
-    await expect(rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })).toBeEnabled();
+    await expect(
+      rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }),
+    ).toBeEnabled();
     await expect(rail(page).getByRole('button', { name: /LLM connection/ })).not.toContainText('nokey');
   });
 });

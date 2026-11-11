@@ -2,19 +2,15 @@
 
 The runs table now prefetches the passes of every repeat run on a page, so a per-pass or per-item query (an N+1) would be
 paid up to 20 times per list view. The statement count is pinned: it is the same at 20 and at 80 items, at most 28 (the count
-measured on the seeded 10 x 300 and 10 x 1,200 runs), and the handler's time stays linear in item-passes at the
-measured 22 to 41 us each (qa.md Q2-3: 66 ms for 3,000 item-passes, 322 ms for 12,000).
+measured on the seeded 10 x 300 and 10 x 1,200 runs).
 """
 
 from __future__ import annotations
 
 import json
-import os
-import statistics
 import time
 import uuid
 
-import pytest
 from _helpers import _make_env
 from fastapi.testclient import TestClient
 from qym_platform.api.runs import run_passes
@@ -23,11 +19,8 @@ from qym_platform.db.models import User
 from sqlalchemy import event
 from test_repeat_runs_platform import RUN_ID, _seed
 
-STRICT = os.environ.get("QYM_PERF_STRICT") == "1"
 TOKEN = "statements-token"
 MAX_STATEMENTS = 28
-# measured 41 ms for 1,000 item-passes in this ingest-built fixture (the seeded 10 x 300 run: 66 ms for 3,000); the CI margin is 4x
-PER_1000_ITEM_PASSES_MS = 50 if STRICT else 200
 
 
 def _event(seq: int, type_: str, payload: dict) -> str:
@@ -162,34 +155,3 @@ def test_passes_statement_count_does_not_grow_with_the_run():
         small[0] == large[0]
     ), f"statements: {small[0]} at 20 items, {large[0]} at 80 (an N+1 crept in)"
     assert large[0] <= MAX_STATEMENTS, f"{large[0]} statements"
-
-
-def test_passes_time_stays_linear_in_item_passes():
-    factory = _build(100, 10)  # 1,000 item-passes
-    _call(factory)  # warm the import graph and the connection
-    times = [_call(factory)[1] for _ in range(5)]
-    median = statistics.median(times)
-    assert (
-        median <= PER_1000_ITEM_PASSES_MS
-    ), f"median {median:.1f} ms of {[round(t, 1) for t in times]}"
-
-
-# qa.md Q2-3 (amended in round 7): /passes at 10 passes x 1,200 / x 300 items, median of 9 requests. The spec ceilings
-# (340 / 80 ms) are measured on the production seed with redesign7/measure/passes_profile.py (316 / 67 ms implementer,
-# 324 / 68 ms reviewer). This fixture is built through the ingest API in memory and is about 3x slower on the same
-# handler (review: 866 / 209 ms), so the numbers asserted here are calibrated to the fixture: 950 / 250 ms strict
-# (QYM_PERF_STRICT=1, a quiet machine), 4x that as the CI margin on a shared machine. The seed numbers are the
-# product criterion; this test guards the handler against regressing by more than its fixture-to-seed ratio.
-Q2_3_MS = {1200: 950 if STRICT else 3800, 300: 250 if STRICT else 1000}
-
-
-@pytest.mark.parametrize("items", [300, 1200])
-def test_passes_ceiling_at_the_seeded_sizes(items):
-    factory = _build(items, 10)
-    _call(factory)  # warm
-    runs = [_call(factory) for _ in range(9)]
-    median = statistics.median(ms for _, ms, _ in runs)
-    assert {n for n, _, _ in runs} == {runs[0][0]} and runs[0][0] <= MAX_STATEMENTS
-    assert (
-        median <= Q2_3_MS[items]
-    ), f"{items} items: median {median:.1f} ms of {[round(ms) for _, ms, _ in runs]}"

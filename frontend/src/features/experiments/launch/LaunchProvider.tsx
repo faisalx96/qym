@@ -50,6 +50,7 @@ import {
   createDocument,
   deriveGlobalModel,
   describeBaseChange,
+  defaultRunPriority,
   diffCount,
   droppedChangesMessage,
   emptyBaseInfo,
@@ -58,6 +59,7 @@ import {
   layerConfigAsEdits,
   presetConfigKey,
   promoteWarningLines,
+  highRunCount,
   highWarnings,
   loadedBaseFromBestRun,
   loadedBaseFromClone,
@@ -69,6 +71,7 @@ import {
   pickBaseEnv,
   prefillFromClone,
   pruneBindings,
+  pruneJobPriorities,
   pruneOrphanValues,
   resetAll as resetAllModel,
   scratchBase,
@@ -224,6 +227,7 @@ export function LaunchProvider({
   const [baseNote, setBaseNote] = useState('');
   const [editorLoad, setEditorLoad] = useState<EditorLoad>(EDITOR_LOADING);
   const [launching, setLaunching] = useState(false);
+  const [preemptionAck, setPreemptionAck] = useState(false);
   const launchingRef = useRef(false);
   const launchedRef = useRef(false);
   const touchedRef = useRef(false);
@@ -292,12 +296,25 @@ export function LaunchProvider({
     panel,
     secrets,
     enabled: mode === 'launch' && initState === 'ready' && envs.length > 0 && !envsLoading && !baseLoading,
+    onStaleJobPriorities: () =>
+      setDoc((d) => (Object.keys(d.jobPriorities).length ? { ...d, jobPriorities: {} } : d)),
   });
+  // Changes that name a run the preview no longer has (a sweep or an environment changed) are dropped.
+  useEffect(() => {
+    if (preview.loading || !preview.data?.jobs) return;
+    const jobs = preview.data.jobs;
+    setDoc((d) => pruneJobPriorities(d, jobs));
+  }, [preview.loading, preview.data, setDoc]);
   const maxJobs = preview.data?.max_jobs ?? null;
   const ctx = useMemo<FormContext>(
     () => (maxJobs == null ? ctxBase : { ...ctxBase, maxJobs }),
     [ctxBase, maxJobs],
   );
+  // The acknowledgement is for the High runs there are now: none left, nothing acknowledged.
+  const highRuns = highRunCount(doc, preview.data?.jobs, defaultRunPriority(doc, ctx, preview.data));
+  useEffect(() => {
+    if (!highRuns) setPreemptionAck(false);
+  }, [highRuns]);
   const ctxRef = useRef(ctx);
   const [launchFailure, setLaunchFailure] = useState<{ key: string; errors: ServerError[] } | null>(null);
   const launchErrors = useMemo(
@@ -856,6 +873,10 @@ export function LaunchProvider({
     [setDoc, secrets],
   );
 
+  const ackRef = useRef(false);
+  useEffect(() => {
+    ackRef.current = preemptionAck;
+  });
   const launch = useCallback(async () => {
     if (launchingRef.current || readOnly) return;
     const { view: v, preview: pv, dryKey: key } = latest.current;
@@ -866,10 +887,13 @@ export function LaunchProvider({
     }
     const d = docRef.current;
     const c = ctxRef.current;
-    const high =
-      d.priority === 'HIGH' || (d.priority === '' && c.envs.some((e) => e.defaultPriority === 'HIGH'));
-    let acknowledge = false;
-    if (high) {
+    const fallback = defaultRunPriority(d, c, pv.data);
+    const high = pv.data?.jobs?.length
+      ? highRunCount(d, pv.data.jobs, fallback) > 0
+      : d.priority === 'HIGH' || (d.priority === '' && c.envs.some((e) => e.defaultPriority === 'HIGH'));
+    // The review step's checkbox is the acknowledgement; without it (Launch as is) the dialog asks.
+    let acknowledge = ackRef.current;
+    if (high && !acknowledge) {
       const ok = await ask({
         title: 'Launch at HIGH priority?',
         description: highWarnings(c, pv.data),
@@ -888,7 +912,7 @@ export function LaunchProvider({
           const body = buildLaunchRequest(
             docRef.current,
             secrets,
-            { dryRun: false, acknowledgePreemption: acknowledge },
+            { dryRun: false, acknowledgePreemption: acknowledge, jobs: pv.data?.jobs },
             c.evaluatorPanel,
           );
           const res = await postExperiment<{ id: string }>(projectId, body);
@@ -1043,6 +1067,8 @@ export function LaunchProvider({
     confirm: ask,
     isLaunching: launching,
     launch,
+    preemptionAck,
+    setPreemptionAck,
     flags: {
       initState,
       envsLoading,

@@ -39,7 +39,7 @@ test.describe('390px', () => {
         await expectNoPageOverflow(page);
       }
     }
-    await openSection(page, 'Models'); // the sticky launch bar is hidden on the review step
+    // Round 10: the launch is the review step's primary slot (Raw JSON, the last section above, is on that step).
     // Scroll to the very bottom: the sticky bar is still in the viewport with an enabled Launch.
     await page.mouse.move(200, 300);
     await page.mouse.wheel(0, 100000);
@@ -54,10 +54,12 @@ test.describe('390px', () => {
     await expect(page).toHaveURL(/\/experiments\/[0-9a-f-]{36}$/);
   });
 
-  test('the bar names the first problem (in its overflow menu) and jumps to it', async ({ page }) => {
+  test('the bar links to the first problem (a link in its status row, no overflow menu; at 390 the field name is hidden, amended C-3-7) and jumps to it', async ({
+    page,
+  }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
-    await page.getByRole('button', { name: 'Actions', exact: true }).click();
-    const problem = page.getByRole('menuitem', { name: /^Fix 1 problem first: Name/ });
+    await expect(page.getByRole('button', { name: 'More launch options' })).toHaveCount(0);
+    const problem = page.getByRole('button', { name: /^Fix 1 problem first/ });
     await expect(problem).toBeVisible();
     await problem.click();
     await expect(nameBox(page)).toBeFocused();

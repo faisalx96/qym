@@ -160,7 +160,10 @@ export function useEnvTasks(projectId: string | undefined, envId: string | undef
 }
 
 /** The same entries for several environments (the review and validation need the ids). */
-export function useEnvTaskLists(projectId: string, envs: ReadonlyArray<Pick<EvalEnvironment, 'id' | 'evaluator_capabilities'>>) {
+export function useEnvTaskLists(
+  projectId: string,
+  envs: ReadonlyArray<Pick<EvalEnvironment, 'id' | 'evaluator_capabilities'>>,
+) {
   const results = useQueries({
     queries: envs.map((e) => ({
       queryKey: launchKeys.tasks(projectId, e.id),
@@ -227,7 +230,9 @@ export interface LaunchDataset {
 }
 
 export async function fetchLaunchDatasets(projectId: string): Promise<LaunchDataset[]> {
-  const res = await api.get<{ datasets?: LaunchDataset[] }>(`${project(projectId)}/experiments/launch-datasets`);
+  const res = await api.get<{ datasets?: LaunchDataset[] }>(
+    `${project(projectId)}/experiments/launch-datasets`,
+  );
   return res.datasets ?? [];
 }
 

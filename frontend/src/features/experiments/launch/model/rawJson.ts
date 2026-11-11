@@ -741,11 +741,14 @@ export function applyRawDocument(
   const evaluatorExtra = { ...doc.evaluatorExtra };
   if (ev.report_k == null) delete evaluatorExtra['report_k'];
   if (!leftoverVersion) delete evaluatorExtra['dataset_version'];
-  const tasks: Record<string, string | null> = {};
-  if (typeof ev.task === 'string') {
-    for (const id of doc.environmentIds) tasks[id] = ev.task;
-  } else if (ev.task) {
-    for (const [id, value] of Object.entries(ev.task)) tasks[id] = value;
+  let task: string | null = null;
+  let mixedTasks: Record<string, string> | null = null;
+  if (typeof ev.task === 'string') task = ev.task;
+  else if (ev.task && Object.keys(ev.task).length) {
+    const values = Array.from(new Set(Object.values(ev.task)));
+    if (values.length === 1 && Object.keys(ev.task).length === doc.environmentIds.length)
+      task = values[0] as string;
+    else mixedTasks = { ...ev.task };
   }
   let next: LaunchDocument = {
     ...doc,
@@ -754,7 +757,8 @@ export function applyRawDocument(
       extraRefs: list ? list.extraRefs : [],
       more: list ? list.more : [],
       runShape: ev.run_shape ?? doc.selection.runShape,
-      tasks,
+      task,
+      mixedTasks,
     },
     bindings: read.bindings ?? {},
     values: read.values ?? {},

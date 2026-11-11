@@ -19,7 +19,9 @@ test.beforeAll(async () => {
 
 const cards = (page: Page) => page.getByTestId('run-card');
 
-test('four runs: summary, the change against the baseline in the averages and the Metrics table', async ({ page }) => {
+test('four runs: summary, the change against the baseline in the averages and the Metrics table', async ({
+  page,
+}) => {
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c]));
   await waitLoaded(page);

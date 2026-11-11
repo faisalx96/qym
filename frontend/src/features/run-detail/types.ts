@@ -132,6 +132,8 @@ export interface Run {
   experiment?: RunExperiment | null;
   versioning_details?: Record<string, unknown>;
   live_revision?: string;
+  /** With `live_revision`: the deployment's probe interval in seconds. */
+  live_refresh_seconds?: number;
   items_restricted?: boolean;
   /** why item contents are hidden: an admin-only private test set, or a restricted dataset the reader cannot open */
   items_restricted_reason?: 'private_test_set' | 'dataset_access' | null;
@@ -309,6 +311,8 @@ export interface LiveStatus {
   ended_at?: string | null;
   last_event_at?: string | null;
   revision: string;
+  /** The deployment's probe interval (QYM_RUN_LIVE_REFRESH_SECONDS); the page follows it. */
+  live_refresh_seconds?: number;
   server_time?: string;
 }
 

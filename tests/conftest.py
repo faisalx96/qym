@@ -107,3 +107,22 @@ def postgres_engine():
         with admin.begin() as conn:
             conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
         admin.dispose()
+
+
+def pytest_collection_modifyitems(config, items):
+    """QYM_TEST_SHARD="K/N" keeps the K-th of N stable slices of the tests (CI runs N jobs in parallel).
+
+    A test's slice is a hash of its node id, so every xdist worker deselects the same tests.
+    """
+    shard = os.environ.get("QYM_TEST_SHARD")
+    if not shard:
+        return
+    import zlib
+
+    index, total = (int(part) for part in shard.split("/"))
+    keep, drop = [], []
+    for item in items:
+        slot = zlib.crc32(item.nodeid.encode()) % total
+        (keep if slot == index - 1 else drop).append(item)
+    items[:] = keep
+    config.hook.pytest_deselected(items=drop)

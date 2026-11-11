@@ -181,3 +181,21 @@ def setup(session):
     item.item_metadata = {"metric_analyses": {"accuracy": analysis, "style": {"keep": True}}}
     session.commit()
     return actor, run, item, Principal(user=actor, auth_type="none")
+
+
+def api_routes(routes, prefix=""):
+    """Yield ``(full_path, APIRoute)`` for every API route, inside included routers too.
+
+    FastAPI up to 0.141 copies included routes into ``app.routes``; newer releases keep
+    each included router as one entry holding ``original_router`` and its prefix.
+    """
+    from fastapi.routing import APIRoute
+
+    for route in routes:
+        if isinstance(route, APIRoute):
+            yield prefix + route.path, route
+        elif hasattr(route, "original_router"):
+            context = getattr(route, "include_context", None)
+            yield from api_routes(
+                route.original_router.routes, prefix + getattr(context, "prefix", "")
+            )

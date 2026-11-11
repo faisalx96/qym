@@ -112,10 +112,10 @@ test.describe('experiments list', () => {
     // while a ?versioning= param in the URL still filters (and survives reload).
     await gotoApp(page, `${expPath(project.slug)}?versioning=agent_version%3Dnope`);
     await expect(page.getByText('No experiments match these filters')).toBeVisible();
-    // the key in the URL keeps its select: humanised label, value, and the key in the tooltip
+    // the key in the URL keeps its select: the key as reported (round 10, C-3-10), value, and the key in the tooltip
     const facet = page.locator('[data-exp-versioning="agent_version"]');
     await expect(facet).toHaveAttribute('title', 'Evaluation Service versioning: agent_version');
-    await expect(facet.getByRole('button', { name: /Agent version/ })).toContainText('nope');
+    await expect(facet.getByRole('button', { name: /agent_version/ })).toContainText('nope');
     await page.reload();
     await expect(page.getByText('No experiments match these filters')).toBeVisible();
     expect(query(page).getAll('versioning')).toEqual(['agent_version=nope']);

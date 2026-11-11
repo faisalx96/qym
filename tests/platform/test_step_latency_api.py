@@ -3,7 +3,6 @@
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.orm import Session
@@ -12,8 +11,6 @@ ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SRC = ROOT / "packages" / "platform"
 if str(PLATFORM_SRC) not in sys.path:
     sys.path.insert(0, str(PLATFORM_SRC))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 

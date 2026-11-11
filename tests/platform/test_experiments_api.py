@@ -1190,3 +1190,181 @@ def test_clone_prefills_form_without_secrets(client, session_factory, env, conn)
         _url(suffix=f"/{created['id']}/clone"), headers=_headers(OUTSIDER)
     )
     assert outsider.status_code == 403
+
+
+# --------------------------------------------------------------------------- per-job priority (round 9)
+
+
+def _sweep_spec(*values) -> dict:
+    spec = _spec()
+    spec["env_overrides"]["MILVUS_SEARCH_THRESHOLD"] = {"sweep": list(values)}
+    return spec
+
+
+def _preview_jobs(client, env_ids, spec, **extra):
+    res = _create(client, env_ids, spec=spec, dry_run=True, email=MANAGER, **extra)
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def _key(job, priority):
+    return {
+        "environment_id": job["environment_id"],
+        "combo_index": job["combo_index"],
+        "dataset_index": job["dataset_index"],
+        "priority": priority,
+    }
+
+
+def test_job_priorities_are_stored_per_job_and_counted(client, session_factory):
+    high_env = _add_env(session_factory, "high", max_priority=EvalPriority.HIGH)
+    spec = _sweep_spec(0.5, 0.7, 0.9)
+    preview = _preview_jobs(client, [high_env.id], spec)
+    assert {j["priority"] for j in preview["jobs"]} == {"NORMAL"}
+    assert preview["preemption_warning"] is None
+    picks = [_key(preview["jobs"][2], "HIGH"), _key(preview["jobs"][0], "LOW")]
+
+    dry = _preview_jobs(client, [high_env.id], spec, job_priorities=picks)
+    assert [j["priority"] for j in dry["jobs"]] == ["LOW", "NORMAL", "HIGH"]
+    assert dry["priority"] == "NORMAL" and "high" in dry["preemption_warning"]
+
+    # Any HIGH job needs the acknowledgement, even when the experiment is NORMAL.
+    res = _create(client, [high_env.id], spec=spec, email=MANAGER, job_priorities=picks)
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "preemption_acknowledgement_required"
+    body = _created(
+        client,
+        [high_env.id],
+        spec=spec,
+        email=MANAGER,
+        job_priorities=picks,
+        acknowledge_preemption=True,
+    )
+    assert body["priority"] == "NORMAL" and body["preemption_acknowledged_at"]
+    assert body["priorities"] == {"LOW": 1, "NORMAL": 1, "HIGH": 1}
+    stored = {j["combo_index"]: j["priority"] for j in body["jobs"]}
+    assert stored == {0: "LOW", 1: "NORMAL", 2: "HIGH"}
+    rows = {j.combo_index: j for j in _jobs(session_factory, body["id"])}
+    assert [rows[i].priority for i in range(3)] == ["LOW", "NORMAL", "HIGH"]
+    assert [rows[i].request_body["priority"] for i in range(3)] == ["LOW", "NORMAL", "HIGH"]
+
+
+def test_all_normal_launch_stores_the_resolved_priority(client, session_factory, env):
+    body = _created(client, [env.id], spec=_sweep_spec(0.5, 0.7))
+    assert {j.priority for j in _jobs(session_factory, body["id"])} == {"NORMAL"}
+    assert body["priorities"] == {"LOW": 0, "NORMAL": 2, "HIGH": 0}
+
+
+def test_job_priority_is_capped_by_its_own_environment(client, session_factory, env):
+    high_env = _add_env(session_factory, "high", max_priority=EvalPriority.HIGH)
+    preview = _preview_jobs(client, [high_env.id, env.id], _spec())
+    by_env = {j["environment_id"]: j for j in preview["jobs"]}
+    ok = _create(
+        client,
+        [high_env.id, env.id],
+        email=MANAGER,
+        job_priorities=[_key(by_env[high_env.id], "HIGH")],
+        acknowledge_preemption=True,
+    )
+    assert ok.status_code == 200, ok.text
+    bad = _create(
+        client,
+        [high_env.id, env.id],
+        email=MANAGER,
+        job_priorities=[_key(by_env[env.id], "HIGH")],
+        acknowledge_preemption=True,
+    )
+    assert bad.status_code == 422 and "exceeds" in bad.json()["detail"]
+    assert env.name in bad.json()["detail"]
+
+
+def test_job_priority_high_needs_a_project_manager(client, session_factory):
+    high_env = _add_env(session_factory, "high", max_priority=EvalPriority.HIGH)
+    preview = _preview_jobs(client, [high_env.id], _spec())
+    picks = [_key(preview["jobs"][0], "HIGH")]
+    res = _create(
+        client,
+        [high_env.id],
+        job_priorities=picks,
+        acknowledge_preemption=True,
+    )
+    assert res.status_code == 403
+    low = [_key(preview["jobs"][0], "LOW")]
+    assert _create(client, [high_env.id], job_priorities=low).status_code == 200
+
+
+def test_job_priority_unknown_key_is_a_422(client, env):
+    res = _create(
+        client,
+        [env.id],
+        job_priorities=[
+            {"environment_id": env.id, "combo_index": 9, "priority": "LOW"}
+        ],
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "job_priority_unknown"
+    dry = _create(
+        client,
+        [env.id],
+        dry_run=True,
+        job_priorities=[{"environment_id": "nope", "combo_index": 0, "priority": "LOW"}],
+    )
+    assert dry.status_code == 422
+
+
+def test_retry_keeps_the_jobs_own_priority(client, session_factory):
+    high_env = _add_env(session_factory, "high", max_priority=EvalPriority.HIGH)
+    spec = _sweep_spec(0.5, 0.7)
+    preview = _preview_jobs(client, [high_env.id], spec)
+    created = _created(
+        client,
+        [high_env.id],
+        spec=spec,
+        email=MANAGER,
+        job_priorities=[_key(preview["jobs"][1], "HIGH")],
+        acknowledge_preemption=True,
+    )
+    rows = {j.combo_index: j for j in _jobs(session_factory, created["id"])}
+    for job in rows.values():
+        _set_job(session_factory, job.id, status=EvalJobStatus.FAILED)
+    path = lambda job: _url(suffix=f"/{created['id']}/jobs/{job.id}/retry")  # noqa: E731
+    # The NORMAL job retries without the acknowledgement and stays NORMAL.
+    assert client.post(path(rows[0]), headers=_headers(MANAGER)).status_code == 200
+    # The HIGH job still needs it.
+    res = client.post(path(rows[1]), headers=_headers(MANAGER))
+    assert res.status_code == 422
+    assert client.post(
+        path(rows[1]), headers=_headers(MANAGER), json={"acknowledge_preemption": True}
+    ).status_code == 200
+    again = {(j.combo_index, j.attempt): j.priority for j in _jobs(session_factory, created["id"])}
+    assert again[(0, 1)] == "NORMAL" and again[(1, 1)] == "HIGH"
+
+
+def test_dispatch_order_submits_high_runs_first_within_an_experiment(
+    client, session_factory
+):
+    from qym_platform.services.eval_queue import dispatch_order
+
+    high_env = _add_env(session_factory, "high", max_priority=EvalPriority.HIGH)
+    spec = _sweep_spec(0.5, 0.7, 0.9)
+    preview = _preview_jobs(client, [high_env.id], spec)
+    created = _created(
+        client,
+        [high_env.id],
+        spec=spec,
+        email=MANAGER,
+        job_priorities=[_key(preview["jobs"][2], "HIGH"), _key(preview["jobs"][0], "LOW")],
+        acknowledge_preemption=True,
+    )
+    with session_factory() as s:
+        ordered = (
+            s.query(EvalExperimentJob)
+            .filter(EvalExperimentJob.experiment_id == created["id"])
+            .order_by(*dispatch_order())
+            .all()
+        )
+    assert [(j.combo_index, j.priority) for j in ordered] == [
+        (2, "HIGH"),
+        (1, "NORMAL"),
+        (0, "LOW"),
+    ]

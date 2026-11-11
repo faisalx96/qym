@@ -11,12 +11,15 @@ import {
   captureExperimentPosts,
   dialog,
   expectReady,
+  goStep,
+  launchBar,
   launchButton,
   maxAttempts,
   nameBox,
   openLaunch,
   review,
   seedLaunch,
+  toReview,
   type LaunchFixture,
 } from './launchSupport';
 
@@ -44,6 +47,7 @@ test('Launch navigates to the experiment detail, the experiment exists, no guard
   const field = await maxAttempts(page);
   await field.fill('3');
   await expectReady(page);
+  await toReview(page);
   await launchButton(page).click();
   await expect(page).toHaveURL(EXPERIMENT_URL);
   await expect(dialog(page).filter({ hasText: 'Discard unsaved changes?' })).toHaveCount(0);
@@ -58,7 +62,7 @@ test('Launch navigates to the experiment detail, the experiment exists, no guard
   await expect.poll(async () => (await fakeJobs(request)).length).toBe(1);
 });
 
-test('HIGH priority asks for confirmation first and sends acknowledge_preemption', async ({
+test('HIGH priority needs the acknowledgement on the Review step, then sends acknowledge_preemption', async ({
   page,
   request,
 }) => {
@@ -66,16 +70,17 @@ test('HIGH priority asks for confirmation first and sends acknowledge_preemption
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   await nameBox(page).fill('high run');
   await pickSelect(page, /Priority/, /^HIGH/);
-  await expectReady(page);
-  await launchButton(page).click();
-  const d = dialog(page);
-  await expect(d).toContainText('Launch at HIGH priority?');
-  await d.getByRole('button', { name: 'Do not launch' }).click();
-  await expect(page).not.toHaveURL(EXPERIMENT_URL);
+  // Round 9 (C-6-6): any High run needs the checkbox; the bar says why (round 10: no launch before the review step).
+  await expect(launchButton(page)).toHaveCount(0);
+  await expect(launchBar(page)).toContainText('Acknowledge the preemption to launch', { timeout: 15_000 });
+  await toReview(page);
+  const ack = page.locator('[data-part=review-ack]');
+  await expect(ack).toContainText('1 run is High.');
+  await expect(launchButton(page)).toBeDisabled();
+  await ack.getByText('I understand that High runs can preempt other work').click();
+  await expect(launchButton(page)).toBeEnabled();
   expect(posts.launches).toHaveLength(0);
-
   await launchButton(page).click();
-  await dialog(page).getByRole('button', { name: 'Launch at HIGH' }).click();
   await expect(page).toHaveURL(EXPERIMENT_URL);
   expect(posts.launches.at(-1)!.body.priority).toBe('HIGH');
   expect(posts.launches.at(-1)!.body.acknowledge_preemption).toBe(true);
@@ -110,6 +115,7 @@ test('a server preemption_acknowledgement_required answer is confirmed and resen
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   await nameBox(page).fill('preempt run');
   await expectReady(page);
+  await toReview(page);
   await launchButton(page).click();
   const d = dialog(page);
   await expect(d).toContainText('Launch at HIGH priority?');
@@ -139,15 +145,20 @@ test('server 422 validation errors are listed, toasted and the first one is focu
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   await nameBox(page).fill('bad run');
   await expectReady(page);
+  await toReview(page);
   await launchButton(page).click();
   await expect(page.getByText('1 problem to fix before launching')).toBeVisible();
-  await expect(review(page)).toContainText('samples is too large for Alpha');
   await expect(page.getByRole('textbox', { name: 'Passes' })).toBeFocused();
+  await toReview(page);
+  await expect(review(page)).toContainText('samples is too large for Alpha');
   await expect(launchButton(page)).toBeDisabled();
+  await goStep(page, 'evaluation');
+  await expect(launchBar(page)).toContainText(/problem/);
   // Editing the form clears the stale server error.
   blocked = false;
   await page.getByRole('textbox', { name: 'Passes' }).fill('3');
   await expectReady(page);
+  await toReview(page);
   await expect(launchButton(page)).toBeEnabled();
 });
 
@@ -178,7 +189,7 @@ test('typing quickly sends at most one dry run per 600 ms window', async ({ page
   const field = await maxAttempts(page);
   const before = posts.dryRuns.length;
   await field.pressSequentially('12345', { delay: 70 });
-  await expect(review(page).getByText('Ready to launch')).toBeVisible();
+  await expect(launchBar(page).getByText('Ready to launch')).toBeVisible();
   await page.waitForTimeout(900);
   const fresh = posts.dryRuns.slice(before);
   expect(fresh.length, 'dry runs after 5 quick keystrokes').toBe(1);
@@ -199,6 +210,10 @@ test('keyboard only: pick the environment, name the run, launch', async ({ page,
   await nameBox(page).focus();
   await page.keyboard.type('keyboard run');
   await expectReady(page);
+  // round 10: Skip to review, then the review's launch (the primary slot)
+  await page.locator('[data-part=bar-skip]').focus();
+  await page.keyboard.press('Enter');
+  await expect(review(page)).toBeVisible({ timeout: 25_000 });
   await launchButton(page).focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(EXPERIMENT_URL);

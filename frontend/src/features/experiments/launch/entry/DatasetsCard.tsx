@@ -105,7 +105,7 @@ function DatasetBox({
     setDoc((d) => setEntryRefs(d, entry.name, refs));
   };
   return (
-    <li className={styles.dsBox} data-dataset-box={entry.name}>
+    <li className={styles.dsBox} data-part="dataset-box" data-dataset-box={entry.name}>
       <span className={styles.dsName}>
         <span>{entry.name}</span>
         {chip ? <Tag data-testid="dataset-chip">{chip}</Tag> : null}

@@ -70,7 +70,8 @@ test.describe('environments list', () => {
     await expectToast(page, /“ungrouped” failed/);
     await expect(row('ungrouped').getByText('Error')).toBeVisible();
 
-    await row('ungrouped').getByRole('button', { name: 'ungrouped', exact: true }).click();
+    // the whole row opens the environment (round 9, point 9): click the URL cell, not the name
+    await row('ungrouped').getByText('127.0.0.1').click();
     await expect(page).toHaveURL(new RegExp(`/environments/${loose.id}$`));
     await expect(page.locator('[data-environment-page]')).toBeVisible();
   });
@@ -342,7 +343,7 @@ test.describe('environment page', () => {
     await expect(page).toHaveURL(new RegExp(`/projects/${project.slug}/environments$`));
     await expect(grid(page).getByRole('row').filter({ hasText: 'unused' })).toHaveCount(0);
 
-    await grid(page).getByRole('button', { name: 'used', exact: true }).click();
+    await grid(page).getByRole('link', { name: 'used', exact: true }).click();
     await page.getByRole('button', { name: 'Delete environment' }).click();
     await confirm.getByRole('textbox', { name: 'Type used to confirm' }).fill('used');
     await confirm.getByRole('button', { name: 'Delete environment' }).click();
@@ -421,21 +422,21 @@ test.describe('run default preset', () => {
 });
 
 test.describe('settings Environments tab', () => {
-  test('lists the same environments and opens the drawer from ?env=', async ({ page, request }) => {
+  test('a row opens the one environment page; ?env= redirects to it', async ({ page, request }) => {
     const { project } = await seedProject(request, 'envset');
     const env = await createEnvironment(request, project.id, 'staging');
     await gotoApp(page, settingsPath(project.slug, ''));
     await expect(page.locator('[data-environments-panel]')).toBeVisible();
-    await grid(page).getByRole('button', { name: 'staging', exact: true }).click();
-    await expect.poll(() => new URL(page.url()).searchParams.get('env')).toBe(env.id);
-    const drawer = page.getByRole('dialog', { name: /staging/ });
-    await expect(drawer.locator(`[data-env-body="${env.id}"]`)).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(drawer).toBeHidden();
-    await expect.poll(() => new URL(page.url()).searchParams.get('env')).toBeNull();
+    await grid(page).getByRole('row').filter({ hasText: 'staging' }).getByText('127.0.0.1').click();
+    await expect(page).toHaveURL(new RegExp(`/environments/${env.id}\\?from=settings$`));
+    await expect(page.locator(`[data-env-body="${env.id}"]`)).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.locator('#shell-content').getByRole('link', { name: 'Project settings' }).click();
+    await expect(page).toHaveURL(/settings\?tab=environments$/);
 
-    // deep link straight to the drawer
+    // the legacy deep link lands on the same page (replace: Back leaves instead of looping)
     await gotoApp(page, settingsPath(project.slug, `&env=${env.id}`));
+    await expect(page).toHaveURL(new RegExp(`/environments/${env.id}\\?from=settings$`));
     await expect(page.locator(`[data-env-body="${env.id}"]`)).toBeVisible();
   });
 

@@ -29,7 +29,9 @@ test.describe('Test Selected (6)', () => {
     const seed = await seedAnalyzer(request);
     const t = trackErrors(page);
     await openRun(page, seed.slug, seed.runId);
-    await rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })
+      .click();
     const card = page.getByRole('article', { name: 'Test result for item item-1' });
     await expect(card).toBeVisible();
     await expect(card).toContainText('82% confidence');
@@ -67,11 +69,15 @@ test.describe('Test Selected (6)', () => {
   test('Cancel test aborts a slow connection', async ({ page, request }) => {
     const seed = await seedAnalyzer(request, { model: 'slow-model' });
     await openRun(page, seed.slug, seed.runId);
-    await rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })
+      .click();
     await expect(page.getByText('Testing against the connection')).toBeVisible();
     await rail(page).getByRole('button', { name: 'Cancel test' }).click();
     await expect(page.getByText('Test cancelled.')).toBeVisible();
-    await expect(rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })).toBeEnabled();
+    await expect(
+      rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }),
+    ).toBeEnabled();
   });
 });
 

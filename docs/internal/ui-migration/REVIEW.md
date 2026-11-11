@@ -437,6 +437,131 @@ sure to analyze each component and it's design decisions and reflect them in the
 | Playwright `e2e/visual-language` | 82 passed, 2 skipped (first attempt at cost 3 killed by `systemd-oomd` in the hover audit; re-run at cost 4) |
 | Playwright `e2e/runs-list`, `e2e/datasets` | 463 passed |
 
+## Redesign round 9 (2026-10-28/29, `ui/redesign9-create`, `ui/redesign9-envs`, `ui/redesign9-review`)
+
+Owner, after QA of the new features, nine points: 1 the dataset and environment boxes in experiment creation are too dark
+and confusing; 2 the task should not be inside the environments; 3 one unified bottom bar in Customize (tabs such as "skip
+to review" and "launch" suddenly appear on some pages); 4 the review section shows in the environment configurations; 5 a
+more readable review; 6 a per-run priority dropdown in the review for higher-priority runs within the sweep; 7 Project
+settings > Environments must show the page that Experiments > Environments opens; 8 edit and publish of the default preset
+use the Customize UI of experiment creation; 9 environment tables must read as clickable and open on a click anywhere in
+the row. Owner decisions (I1-I3): one task per experiment, Low / Normal / High per run, the Experiments environment page
+is the reference. The owner asked not to be shown the mocks this time: the orchestrator reviewed them and decided the
+spec's open questions (J1 `?from=settings` is honoured and the back link reads "Project settings"; J2 a named task on an
+environment that does not offer it flags the box and blocks the launch; J3 "Set every run to" stays; J4 High runs are
+submitted first within one experiment).
+
+- Design (`redesign9/experiments.md`, 72 criteria C-<point>-<n>, composed mocks `/__ui#round9` and `/__mock/round9/*`,
+  measurements `redesign9/measure/`, 74 shots): the boxes measured darker than their card with a selected state that read
+  like an unticked one; the task sat in each environment box; the bar was three different components (home bar, step
+  navigation, wizard bar) with buttons that appeared per step; the review sat in a 352 px aside beside the settings
+  tables; the environment page from settings was a 640 px drawer; the table rows opened only from the name.
+- Implementation A (`redesign9/impl-notes-create.md`, points 1-6 and 8, 3b8a06d1): boxes on `--bg-elevated` with an
+  accent rail when selected and a red rail with a line of text when flagged; one `TaskCard` above the environments
+  (union of the services' task lists, who offers each); one `LaunchBar` with six fixed slots (Back, Skip, Continue,
+  status, Cancel, Launch) on the home view and all six steps, disabled slots never removed; the review on its own step
+  with summary rows and one row per run carrying a Low / Normal / High select; per-job priority stored by migration 0102
+  (`eval_experiment_jobs.priority`, backfilled), validated per run against the environment cap and the manager rule, the
+  acknowledgement required when any run is High, retry keeps the job's priority, High runs claimed first within an
+  experiment (`priority_rank()` in the claim order); the default preset editor is `LaunchWizard mode="editor"`. Four
+  amendments with measured numbers (C-1-6 tags on an opaque surface, 4.0 to 4.2:1 stacked; C-2-2 the card's content
+  block; C-5-7 two 589.5 px columns; C-5-9 a 1440x1000 frame).
+- Implementation B (`redesign9/impl-notes-envs.md`, points 7 and 9, d8183bdb): the drawer deleted; one route and one
+  `EnvironmentPage` for both entries (identical DOM, 1193 / 279 px, only the back link differs), a read-only Tasks
+  section, the shared 56 px footer; rows take `rowHref`: the name is a link, a chevron closes every row at rest, hover
+  fills the row and underlines the name, focus draws the 2 px ring, Enter opens, Ctrl-click opens a tab; cards at 390.
+- Review (`redesign9/review-experiments.md`, fa20f32b): MEETS WITH FIXES, 64 / 6 / 2, J1-J4 meet, backend verified on
+  both databases. Required: the bar's top edge moved between short and long steps (819 / 745 / 844 at 1440); the 390 home
+  bar grew to 127-131 px against 110; C-5-7 asserted no number; the editor's Models step has 8 controls against 16 and
+  step 1 keeps one dataset picker, both undocumented; two numbers the e2e carried without the spec. Fix pass
+  (`redesign9/fix-pass.md`, 6ffb601c..652edc0a): the page fills the scroller and the bar is pinned to its bottom edge (844
+  on every step at 1440, 712 at 1024); at 390 the status keeps one line ("Ready" / "Fix N problems first", the detail in
+  the field) so the bar is 90.8 px in every state; 589.5 asserted; the editor differences written into the spec and
+  asserted (Models minus five named per-launch controls, single `DatasetPicker`); C-1-7 135.8 and C-3-7 91 written in;
+  also the flagged task named by its listed name, the priority column 240 px, the queue priority as a Tag.
+- Merged with: `feat/experiment-key-scopes` (97b4564c: auto-minted Evaluation Service keys enforce `runs:write` and
+  `datasets:read`, the API keys tab groups them in a closed disclosure), `fix/multi-dataset-default-one-each` (58b22943:
+  One run each is the default run shape) and `fix/pin-dataset-version` (4a63c4db: "Latest version" and alias entries are
+  resolved at launch and written into every job as `dataset_version`, after a deployment ran both on the worker's
+  `EVAL_DATASET_VERSION`). Round 9 merged 68582c0e.
+- Open: with one run the launch button reads "Launch" (the status says "1 run to launch"); an empty band above the Queue
+  and Matrix card titles on the experiment page predates the round; `final-polish.spec.ts` (round 7) asserted the old
+  step navigation and the 57 px phone bar and was rewritten to the round 9 contract on the merged tip; the six
+  `test_xss_rendering_browser.py` errors on every gate are python-playwright asking for chromium build 1243 on a machine
+  that has 1248.
+
+### Gate on `UI-redesign` 68582c0e
+
+| Suite | Result |
+|---|---|
+| `pytest tests/platform` SQLite, 5 chunks | 887 / 891 / 458 / 650 / 325 passed; 6 errors in the last chunk (chromium build, see Open) |
+| `pytest tests/platform` PostgreSQL 16, 5 chunks | 1086 / 1114 / 641 / 792 / 419 passed; the same 6 errors; one timing flake (`test_maintenance_and_terminal_closure_coexist`, the SDK upload thread still alive at the assertion; passed 3 of 3 alone) |
+| `pytest tests/sdk` | 556 passed |
+| `npm run check` | clean; Vitest 210 files / 1719 tests, design-language 54 |
+| `npm run build`, `npm run build:sdk` | ok |
+| Playwright `e2e/experiments` | 295 passed, 1 skipped, 2 flaky under load (`qa-b-versions` tab order, `queue` remote orphan link; both passed 2 of 2 alone) |
+| Playwright `e2e/run-detail`, `e2e/runs-list`, `e2e/shell`, `e2e/compare` | 464 / 246 / 99 / 228 passed; `r8-expanded` C-exp-1 flaky under load (passed 2 of 2 alone) |
+| Playwright `e2e/admin`, `e2e/analyzer`, `e2e/docs`, `e2e/environments`, `e2e/feedback`, `e2e/trash` | 27 / 69 / 14 / 2 / 64 / 17 passed |
+| Playwright `e2e/datasets` | 216 passed, 3 skipped (first run spoiled by a concurrent spec run that cleared `test-results`; the re-run's one failure, `meta-list-filter` chip focus, passed alone 16 of 16) |
+| Playwright `e2e/visual-language` | 79 passed, 2 skipped; the 3 round-7 assertions of `final-polish.spec.ts` (step navigation inside the bar, a 57 px phone bar, the old home card selector) rewritten to the round 9 contract and green, 8 of 8 |
+| `npm run e2e:sdk` | 44 passed |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+
+## Redesign round 10 (2026-11-03/04, `ui/redesign10-experiments`, `ui/redesign10-impl`, `ui/redesign10-review`)
+
+Owner, four points on the experiments design: 1 Continue and Back at the far right, no Launch shortcut, Skip to review at
+the far left; 2 the swept parameters in the review are very hard to read; 3 the environment always shows image version
+though deprecated: a scalable solution that reads any versioning details and presents them as is; 4 a weird empty band
+between the boxes and the bottom bar on the creation home page. The orchestrator decided (K1-K5): the slots
+[Skip][Cancel] status [Back][Continue], the primary slot launching or publishing on the last step only; one column per
+swept axis from the dry run; every key of `versioning_details` in the service's order, named as the service names it,
+UI only; the bar follows the content on the home view and every step (sticky only while the content overflows), which
+amends round 9's pinned bar (C-3-1). The orchestrator reviewed the mocks and amended one design rule (L1: the versions
+grid takes the height of its keys; the "at least three cells" padding left a 37 px empty row at 390 under one or two keys).
+
+- Design (`redesign10/experiments.md`, 40 criteria C-<point>-<n>, decisions D10-1..8, composed mocks `/__ui#round10` and
+  `/__mock/round10/*`, `redesign10/measure/`): the far right held Cancel and a Launch button on every step; the editor's
+  390 bar was 110.2 px; the "Swept setting" column was 160 px holding one 214 px tag (`primary=gpt-4o thr=0.5 timeout=10`)
+  and the `#` column 102 px (the table sized it from its accessible label); a payload without `image_version` still drew
+  "image not set" and the review printed only the fixed three keys; the band between the content and the bar measured
+  53.7 to 735.3 px across views and viewports.
+- Implementation (`redesign10/impl-notes.md`, c130897d): five fixed parts on every launch and editor step (Skip 227,
+  Back 1208, the primary's right edge 15 px from the bar's, on every step; `bar-continue[data-action]` continue / launch /
+  publish; 0 Launch or Publish controls before the review; 390 bar 90.8 px in both modes); one column per swept setting
+  named by its form label (`#` 48, four flex columns 225.8 at 1440 / 121.8 at 1024, linked band 451.5, 6 columns before
+  a horizontal scroll at 1440 and 3 at 1024), a "Swept settings" row in the Summary, the Changes card names the axes,
+  one phone card row per axis; `VersionsGrid` renders the keys as reported in payload order (5 / 3 / 2 columns, objects
+  as compact JSON cut at 48 chars with the full text in `title`, "No versioning details reported" for `{}`), the fixed
+  key lists deleted from the launch page, the review, the best-run picker, the drift lines and the list filters, a Vitest
+  asserts no key list returns; the bar in flow 14 px under the content on the home view and every step at 1440x900 and
+  1440x1400, sticky at the viewport bottom while the content overflows; `DataTable.headerMinWidth` measures the drawn
+  header (the run detail Median column kept at 215.8 / 138.5 by an explicit width). Amended with numbers: C-3-7 at 390
+  (the Versions line 61.8 px for 1-2 keys, 103.2 for 3). Existing specs moved to the new contract (`r9-create`,
+  `r9-editor`, `wizard`, `final-polish`, `qa-b-versions`, `launchSupport.launchButton`, every caller that pressed Launch
+  on a non-review step).
+- Review (`redesign10/review.md`, 49f8b4d6): MEETS WITH FIXES, 39 / 1 / 0, L1 and D10-8 meet, every number re-measured
+  on the production build. Required: C-3-9's grep also matched the API reference HTML that documents real request fields
+  (spec scope amended to `*.ts` / `*.tsx` / `*.css`); `final-polish.spec.ts` still expected a sticky element in the
+  bottom 140 px (the bar now sits 14 px under a short step). Fix pass (`redesign10/fix-pass.md`, ed516263): both, plus
+  the editor's first-step Back labelled "Back to the environment". Merged 7ba5d3c6.
+- Open: the runs list's own versioning facets still humanise key names ("Agent version"); outside the round's surfaces.
+  The gate below ran on a machine shared with another project's session: three browser folder runs at two workers were
+  killed by the kernel OOM killer below their own 4 GB cgroup cap, so every browser run was repeated with one worker and
+  the visual-language folder file by file. No backend code changed in the round (only the regenerated feedback knowledge
+  pack), so the backend chunks were not re-run on this tip; `test_feedback_pack` and the design test were.
+
+### Gate on `UI-redesign` 7ba5d3c6
+
+| Suite | Result |
+|---|---|
+| `pytest` design test + `test_feedback_pack` | 4 passed |
+| `npm run check` | Vitest 1740 (214 files), design test 54 passed |
+| `npm run build`, `npm run build:sdk` | both pass (build at cost 3: it ran out of heap in a 2 GB cgroup with no free swap) |
+| `e2e/experiments` (1 worker) | 330 passed, 1 skipped, 2 failed under load (`qa-b-versions` tab-order sweep, `queue` orphan link); 19 / 19 and 10 / 10 alone |
+| `e2e/run-detail`, `compare`, `runs-list`, `analyzer`, `feedback`, `shell`, `reviews`, `admin`, `trash`, `docs`, `environments`, `perf`, `datasets` (1 worker) | 464, 229, 245, 69, 64, 99, 31, 27, 17, 14, 2, 25, 216 passed; one load failure each in `runs-list` (`passes-rows` focus), `perf` (`runs-passes-load` 500 ms budget) and `datasets` (`meta-list-filter` chip focus): 27 / 27, 12 / 12 and 16 / 16 alone |
+| `e2e/visual-language` file by file (1 worker) | 70 passed (`final-polish` 8 incl. the rewritten bar test, `hover-audit` 31, `link-cards` 11, `heading-scale` 9, `contrast` 6 on its re-run, `sticky-bars` 4, `motion` 3, `page-width` 2, `table-edges` 2); `frozen-static` killed by the kernel OOM killer on all three attempts (3.1 GB peak) and not completed on this tip; the reviewer ran it alone to pass on c130897d (9.8 min), whose app code differs from this tip only by one `aria-label` |
+| `e2e:sdk` | 44 passed |
+
 ## Post-mortem
 
 The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding

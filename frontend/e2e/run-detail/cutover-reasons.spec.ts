@@ -131,11 +131,7 @@ test('compare: structured item metadata never renders as [object Object]', async
   const [a, b] = [await make('cmp-meta-a'), await make('cmp-meta-b')];
   await page.goto(compareUrl([a, b]));
   await waitLoaded(page);
-  await page
-    .getByTestId('item-row')
-    .nth(0)
-    .locator('[data-part="item-head"]')
-    .click();
+  await page.getByTestId('item-row').nth(0).locator('[data-part="item-head"]').click();
   // scalars and lists show as badges; the structured value shows as nothing wrong, never as [object Object]
   await expect(page.locator('body')).toContainText('hard');
   await expect(page.locator('body')).toContainText('finance');

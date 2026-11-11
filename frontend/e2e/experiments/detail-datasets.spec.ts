@@ -43,12 +43,20 @@ const PAIRS = [
   { dataset: 'billing-faq', version: 'v2' },
   { dataset: 'billing-faq', version: 'v1' },
 ];
-async function launchMulti(request: Parameters<typeof launchExperiment>[0], shape: 'combined' | 'one_each' = 'combined') {
+async function launchMulti(
+  request: Parameters<typeof launchExperiment>[0],
+  shape: 'combined' | 'one_each' = 'combined',
+) {
   const x = await launchExperiment(request, f.project.id, {
     name: 'nightly multi-dataset',
     environment_ids: [f.production.id, f.staging.id],
     spec: {
-      evaluator: { datasets: PAIRS, run_shape: shape, task: { [f.production.id]: 'answer-ticket' }, config: { samples: 1 } },
+      evaluator: {
+        datasets: PAIRS,
+        run_shape: shape,
+        task: { [f.production.id]: 'answer-ticket' },
+        config: { samples: 1 },
+      },
       slot_bindings: { 'endpoint:primary': { connection_id: f.connectionId } },
       env_overrides: {},
     },
@@ -86,7 +94,9 @@ test.describe('experiment detail with several dataset versions', () => {
       ]);
       m['card'] = await sized(card(page));
       // QD-55: the stat strip counts the current jobs (1 combined + 4 pairs).
-      await expect(page.getByRole('group', { name: 'Job totals' }).or(page.getByLabel('Job totals'))).toContainText('5');
+      await expect(
+        page.getByRole('group', { name: 'Job totals' }).or(page.getByLabel('Job totals')),
+      ).toContainText('5');
       m['strip'] = await sized(page.getByLabel('Job totals'));
       // QD-56: one row per (combination, dataset): the combined row first, then four pairs.
       const rows = matrix(page).locator('tbody tr');
@@ -119,7 +129,8 @@ test.describe('experiment detail with several dataset versions', () => {
       }
       m['history'] = await sized(history);
       await expectNoPageOverflow(page);
-      if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `after-d-detail-${width}.png`), fullPage: true });
+      if (SHOTS)
+        await page.screenshot({ path: path.join(SHOTS, `after-d-detail-${width}.png`), fullPage: true });
       save(`measure-d-detail-${width}`, m);
     });
   }
@@ -140,10 +151,15 @@ test.describe('experiment detail with several dataset versions', () => {
     await expect(card(page)).toHaveCount(0);
     await expect(matrix(page).locator('tbody tr')).toHaveCount(1);
     await expect(page.locator('[data-job-group]')).toHaveCount(0);
-    save('measure-d-detail-plain-1440', { header: await sized(page.getByRole('heading', { level: 1 }).first()) });
+    save('measure-d-detail-plain-1440', {
+      header: await sized(page.getByRole('heading', { level: 1 }).first()),
+    });
   });
 
-  test('QD-59: retrying one fanned-out pair makes attempt 2 of the same pair and supersedes only it', async ({ page, request }) => {
+  test('QD-59: retrying one fanned-out pair makes attempt 2 of the same pair and supersedes only it', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const x = await launchMulti(request, 'one_each');
     const detail: any = await getExperiment(request, f.project.id, x.id);
@@ -157,7 +173,12 @@ test.describe('experiment detail with several dataset versions', () => {
     const after: any = await getExperiment(request, f.project.id, x.id);
     const retry = after.jobs.find((j: any) => j.retry_of_job_id === target.id);
     expect(retry).toMatchObject({ combo_index: 0, dataset_index: 1, attempt: 1 });
-    expect(retry.dataset).toEqual({ dataset: 'support-tickets', version: 'v2', alias: null });
+    expect(retry.dataset).toEqual({
+      dataset: 'support-tickets',
+      version: 'v2',
+      alias: null,
+      resolved_version: 'v2',
+    });
     expect(after.jobs.filter((j: any) => j.superseded).map((j: any) => j.id)).toEqual([target.id]);
     // The other pairs are untouched and the strip counts current jobs only.
     await expect(page.getByLabel('Job totals')).toContainText('8');
@@ -178,7 +199,15 @@ test.describe('experiment detail with several dataset versions', () => {
     const history = page.locator('[data-exp-jobs]');
     await history.getByRole('button', { name: /Job history/ }).click(); // starts closed (C206)
     await expect(history.locator('[data-job-group]')).toHaveCount(5);
-    const snapshot = () => history.locator('tr').evaluateAll((rows) => rows.map((r) => `${r.className.length}:${Math.round(r.getBoundingClientRect().height)}:${r.textContent?.slice(0, 20)}`));
+    const snapshot = () =>
+      history
+        .locator('tr')
+        .evaluateAll((rows) =>
+          rows.map(
+            (r) =>
+              `${r.className.length}:${Math.round(r.getBoundingClientRect().height)}:${r.textContent?.slice(0, 20)}`,
+          ),
+        );
     const first = await snapshot();
     await page.waitForTimeout(5500); // at least one detail poll
     expect(await snapshot()).toEqual(first);

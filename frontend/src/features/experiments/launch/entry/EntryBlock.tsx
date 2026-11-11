@@ -5,6 +5,7 @@ import panel from '../components/launch.module.css';
 import { DatasetsCard } from './DatasetsCard';
 import { EnvironmentPicker } from './EnvironmentPicker';
 import { RunSettings } from './RunSettings';
+import { TaskCard } from './TaskCard';
 import styles from './entry.module.css';
 
 /** Step 1, "Where it runs": name, priority and latency, the environments (each ticked box with its service versions) and the dataset. */
@@ -20,17 +21,22 @@ export function EntryBlock() {
           <RunSettings />
         </div>
       </Card>
+      <TaskCard />
       <div className={styles.where}>
-        <Card>
-          <div className={panel.cardStack}>
-            <EnvironmentPicker />
-          </div>
-        </Card>
-        <Card>
-          <div className={panel.cardStack}>
-            <DatasetsCard />
-          </div>
-        </Card>
+        <div data-part="env-section" className={styles.whereCell}>
+          <Card>
+            <div className={panel.cardStack}>
+              <EnvironmentPicker />
+            </div>
+          </Card>
+        </div>
+        <div data-part="dataset-section" className={styles.whereCell}>
+          <Card>
+            <div className={panel.cardStack}>
+              <DatasetsCard />
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

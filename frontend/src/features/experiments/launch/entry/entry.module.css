@@ -40,19 +40,58 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--space-xs);
 }
 
+/* Option box (round 9, point 1): a selectable box inside a card is --bg-elevated with --border-default (never --bg-base),
+   hover --bg-hover, selected = accent border + --rail-width rail + --tint-soft tint, flagged = --error border + rail. */
 .env {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-xs) var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
-.env:nth-child(even) {
-  background: color-mix(in srgb, var(--text-primary) var(--stripe-step), var(--bg-base));
+.env:hover {
+  background: var(--bg-hover);
+}
+
+.env[data-state='selected'] {
+  border-color: var(--accent-primary);
+  border-inline-start: var(--rail-width) solid var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-elevated));
+}
+
+/* Tags inside the tinted selected box sit on the plain elevated fill, so their tone tint does not stack on the box tint
+   (axe: success and meta text kept 4.0 to 4.2:1 on the stacked fill, 4.5:1 needed). */
+.env[data-state='selected'] [data-tone] {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), var(--bg-elevated));
+}
+
+.env[data-state='selected'] .envTags > span:not([data-tone]) {
+  background: color-mix(in srgb, var(--text-primary) var(--tint-soft), var(--bg-elevated));
+}
+
+.env[data-state='flagged'] {
+  border-color: var(--error);
+  border-inline-start: var(--rail-width) solid var(--error);
+  background: var(--bg-elevated);
+}
+
+.envFlag {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--font-sm);
+  /* --error alone is 4.2:1 on the elevated fill; lift it to clear 4.5:1 */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
 }
 
 .envTags {
@@ -69,7 +108,7 @@
   grid-row: 1;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-md);
 }
 
 .help {
@@ -291,7 +330,6 @@
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
-  padding-bottom: var(--space-md);
 }
 
 .where {
@@ -299,6 +337,17 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-md);
   align-items: stretch;
+}
+
+/* Environments / Datasets cell: the wrapper carries the data-part, the card stretches to the row's height. */
+.whereCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.whereCell > * {
+  flex: 1 1 auto;
 }
 
 .homeBar {
@@ -418,59 +467,126 @@
   overflow-wrap: anywhere;
 }
 
-/* Evaluation Service versions inside a ticked environment box (home view and step 1):
-   row 1 = label | Refresh, then the values in a grid whose column count depends on the box width
-   only (never on the values), so the loading placeholders and the loaded tags wrap identically and
-   the box keeps its height when it fills (rule 7). */
-.versionLine {
+/* Evaluation Service versions inside a ticked environment box (home view and step 1) and in the review's Versions row
+   (round 10, point 3): the label on its own line, then a grid of key-over-value cells in the service's order. The grid
+   takes the height of its keys (L1); the loading frame is three placeholder cells on one row. */
+.versions {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-xs) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
   padding-block-start: var(--space-xs);
   border-block-start: 1px solid var(--border-subtle);
 }
 
 .versionLabel {
-  grid-row: 1;
-  grid-column: 1;
   font-size: var(--font-sm);
   font-weight: 600;
-  line-height: var(--badge-height);
   color: var(--text-secondary);
 }
 
-.versionRefresh {
-  grid-row: 1;
-  grid-column: 2;
-  display: inline-flex;
-  justify-self: end;
-}
-
-.versionLine .versionList {
-  grid-column: 1 / -1;
+.vGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
   gap: var(--space-xs) var(--space-md);
+  min-inline-size: 0;
+  margin: 0;
 }
 
-.versionLine .versionItem {
-  min-width: 0;
-  /* A loaded row is exactly the placeholder's height: the key's line box matches the tag, and the
-     value cell is a flex box so the inline tag adds no descender space. */
-  line-height: var(--badge-height);
-}
-
-.versionLine .versionItem dd {
+.vLoading {
   display: flex;
-  min-width: 0;
+  gap: var(--space-xs) var(--space-md);
+  min-inline-size: 0;
 }
 
-.versionState {
+.vItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+/* the key as the service wrote it: no transform, breaks at its words (KeyName's soft breaks), never truncated */
+.vKey {
+  max-inline-size: 100%;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.vItem dd {
+  display: flex;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+/* a value longer than 16 characters, or an object / array, spans the whole row */
+.vItem[data-wide] {
   grid-column: 1 / -1;
-  min-width: 0;
+}
+
+.vText {
+  min-block-size: var(--badge-height);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
   line-height: var(--badge-height);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.vEmpty {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: var(--badge-height);
+  color: var(--text-muted);
+}
+
+.vError {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: var(--badge-height);
+  /* --error alone is 3.3:1 on the tinted selected box, 4.2:1 on the plain one; lift it to clear AA */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+}
+
+.skelKey {
+  display: inline-block;
+  inline-size: 4rem;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+/* the review's Versions row: one line per environment, its name then the same grid */
+.reviewVersions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.reviewEnv {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-md);
+  align-items: start;
+}
+
+.reviewEnvName {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .reviewEnv {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* The gallery mocks of the earlier block design (QaExperimentsMocks) keep these recipes. */
@@ -537,7 +653,8 @@
 .errorText {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--error);
+  /* --error alone is 3.3:1 on the tinted selected box, 4.2:1 on the plain one; lift it to clear AA */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
 }
 
 .versionSummary {
@@ -605,10 +722,10 @@
   border-block-start: 1px solid var(--border-subtle);
 }
 
-/* A loading version row is the loaded DOM with a placeholder per value (QA4-7). */
+/* A loading version cell: a value bar under the key bar (round 10: 3.5rem, three fit one row in a 237 px box). */
 .skelValue {
   display: block;
-  inline-size: 64px;
+  inline-size: 3.5rem;
   block-size: var(--badge-height);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
@@ -638,10 +755,15 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-xs) var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--control-radius);
-  background: var(--bg-base);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  transition: background-color var(--transition-fast);
+}
+
+.dsBox:hover {
+  background: var(--bg-hover);
 }
 
 .dsName {
@@ -698,26 +820,66 @@
   border-block-start: 1px solid var(--border-subtle);
 }
 
-/* The task row of an environment box: label, then the select on the control height. */
-.taskLine {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
+.taskStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.taskHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
   gap: var(--space-xs) var(--space-md);
-  min-block-size: var(--control-height);
+}
+
+/* The Task section (point 2): one select, an availability row, one line of help. */
+.taskRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-lg);
+}
+
+.taskSelect {
+  inline-size: 360px;
+  max-inline-size: 100%;
 }
 
 .taskSkel {
   display: block;
-  inline-size: 100%;
+  inline-size: 360px;
+  max-inline-size: 100%;
   block-size: var(--control-height);
   border-radius: var(--control-radius);
   background: var(--bg-active);
 }
 
-.taskError {
+.avail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
   min-block-size: var(--control-height);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.availLabel {
+  color: var(--text-muted);
+}
+
+.taskError {
   display: flex;
   align-items: center;
+  min-block-size: var(--control-height);
+}
+
+@media (max-width: 760px) {
+  .taskSelect,
+  .taskSkel {
+    inline-size: 100%;
+  }
 }

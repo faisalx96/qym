@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EnvVersions } from '../entry/VersionsBlock';
+import { EnvRefresh, EnvVersions } from '../entry/VersionsBlock';
 import { envRecord, newClient, Providers } from './helpers';
 
 /**
@@ -41,6 +41,7 @@ const ok = (details: Record<string, unknown>) => () =>
 const client = newClient();
 const line = (
   <Providers client={client}>
+    <EnvRefresh env={envRecord({ name: 'Staging' })} projectId="p1" />
     <EnvVersions env={envRecord({ name: 'Staging' })} projectId="p1" />
   </Providers>
 );
@@ -59,7 +60,7 @@ afterEach(() => {
 });
 
 describe('EnvVersions', () => {
-  it('reads the versions once, shows "not set" for a missing key and reads again only on Refresh', async () => {
+  it('R10 C-3-1 reads the versions once, draws only the reported keys as written and reads again only on Refresh', async () => {
     const reads = stubVersioning([
       ok({ agent_version: 'v2.4.0', kb_version: '4b0535c' }),
       ok({ agent_version: 'v2.4.0', kb_version: '4b0535c', image_version: '2026.10.11' }),
@@ -68,16 +69,25 @@ describe('EnvVersions', () => {
     const { rerender } = renderLine();
     expect(row()).toHaveTextContent('Versions');
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
-    expect(value('agent')).toBe('v2.4.0');
-    expect(value('kb')).toBe('4b0535c');
-    expect(value('image')).toBe('not set');
+    expect(value('agent_version')).toBe('v2.4.0');
+    expect(value('kb_version')).toBe('4b0535c');
+    // a key the service does not report is not drawn (round 10, point 3)
+    expect(row().querySelectorAll('[data-part=version-key]')).toHaveLength(2);
+    expect(row()).not.toHaveTextContent(/image|not set/);
+    expect(row().querySelector('[data-unset]')).toBeNull();
     expect(reads).toHaveLength(1);
 
     rerender(line);
     expect(reads).toHaveLength(1);
 
     await user.click(refresh());
-    await waitFor(() => expect(value('image')).toBe('2026.10.11'));
+    await waitFor(() => expect(value('image_version')).toBe('2026.10.11'));
+    // the response's order, not a fixed one
+    expect(Array.from(row().querySelectorAll('[data-part=version-key]')).map((k) => k.textContent)).toEqual([
+      'agent_version',
+      'kb_version',
+      'image_version',
+    ]);
     expect(reads).toHaveLength(2);
   });
 
@@ -124,22 +134,53 @@ describe('EnvVersions', () => {
     stubVersioning([ok({ agent_version: 'v1' })]);
     renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
-    expect(within(row()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+    // Refresh moved to the box's head row (round 9): the versions line itself has no control
+    expect(within(row()).queryAllByRole('button')).toHaveLength(0);
     expect(refresh()).toHaveAccessibleName('Refresh versions of Staging');
     expect(row()).not.toHaveTextContent('Add versioning details');
     expect(row().querySelector('input, textarea, select, [contenteditable]')).toBeNull();
   });
 
-  it('loads as the loaded layout: label, placeholders, aria-busy and a hidden status (QA4-7)', async () => {
+  it('R10 C-3-4 loads as three placeholder cells with no label text, aria-busy and a hidden status', async () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
     renderLine();
-    const list = row().querySelector('dl') as HTMLElement;
-    expect(list).toHaveAttribute('aria-busy', 'true');
-    // The hidden status is not a child of the definition list (axe: dl may hold only dt / dd groups).
-    expect(list.querySelector('[role="status"]')).toBeNull();
-    expect(within(list).getAllByText(/^(agent|image|kb)$/, { selector: 'dt' })).toHaveLength(3);
-    expect(list.querySelectorAll('dd')).toHaveLength(3);
+    const frame = row().querySelector('[aria-busy="true"]') as HTMLElement;
+    expect(frame).not.toBeNull();
+    expect(frame.querySelector('[role="status"]')).toBeNull();
+    const cells = frame.querySelectorAll('[data-part=version-placeholder]');
+    expect(cells).toHaveLength(3);
+    cells.forEach((c) => expect(c).toHaveAttribute('aria-hidden', 'true'));
+    expect(frame.textContent?.trim().replace(/\u00a0/g, '')).toBe('');
     expect(within(row()).getByRole('status')).toHaveTextContent('Reading…');
+  });
+
+  it('R10 C-3-1 / C-3-2 the five-key payload: response order, strings in tags, scalars and JSON in mono, wide cells', async () => {
+    const routing = { primary: 'gpt-4o', fallback: 'claude-sonnet', judge: 'gpt-4o-mini' };
+    stubVersioning([
+      ok({ agent_version: 'agent-1.5.0', kb_version: 'kb-81', prompt_set: 'prompts-2026-11-01', model_routing: routing, build: 4127 }),
+    ]);
+    renderLine();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    const keys = Array.from(row().querySelectorAll('[data-part=version-key]')).map((k) => k.textContent);
+    expect(keys).toEqual(['agent_version', 'kb_version', 'prompt_set', 'model_routing', 'build']);
+    const values = Array.from(row().querySelectorAll('[data-part=version-value]')) as HTMLElement[];
+    expect(values[0]!.textContent).toBe('agent-1.5.0');
+    const json = values[3]!;
+    expect(json).toHaveAttribute('data-kind', 'json');
+    expect(json.textContent).toBe(`${JSON.stringify(routing).slice(0, 48)}…`);
+    expect(json).toHaveAttribute('title', JSON.stringify(routing));
+    expect(values[4]!).toHaveAttribute('data-kind', 'scalar');
+    expect(values[4]!.textContent).toBe('4127');
+    const wide = Array.from(row().querySelectorAll('[data-wide]')).map((c) => c.querySelector('dt')?.textContent);
+    expect(wide).toEqual(['prompt_set', 'model_routing']);
+  });
+
+  it('R10 C-3-5 an empty payload says so, with no cells', async () => {
+    stubVersioning([ok({})]);
+    renderLine();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    expect(row()).toHaveTextContent('No versioning details reported');
+    expect(row().querySelectorAll('[data-part=version-key]')).toHaveLength(0);
   });
 
   it('Refresh pressed twice while loading asks once more, not twice (QA4-11)', async () => {

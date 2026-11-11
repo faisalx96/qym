@@ -40,8 +40,10 @@ export function useDryRun(args: {
   panel: EvaluatorPanel | null;
   secrets: SecretStore;
   enabled: boolean;
+  /** A per-run priority named a run the form no longer has (a sweep changed): the changes are dropped. */
+  onStaleJobPriorities?: () => void;
 }): { preview: PreviewState; key: string } {
-  const { projectId, doc, panel, secrets, enabled } = args;
+  const { projectId, doc, panel, secrets, enabled, onStaleJobPriorities } = args;
   const key = useMemo(() => dryRunKey(doc, panel), [doc, panel]);
   const [settled, setSettled] = useState<Settled | null>(null);
   const latest = useRef({ doc, panel });
@@ -49,17 +51,29 @@ export function useDryRun(args: {
     latest.current = { doc, panel };
   });
   const hadResult = useRef(false);
+  // The runs of the last answer: `job_priorities` only names runs the preview knows.
+  const lastJobs = useRef<DryRunResponse['jobs']>(undefined);
+  const stale = useRef(onStaleJobPriorities);
+  useEffect(() => {
+    stale.current = onStaleJobPriorities;
+  });
 
   useEffect(() => {
     if (!enabled) return;
     const abort = new AbortController();
     const timer = setTimeout(
       () => {
-        const body = buildLaunchRequest(latest.current.doc, secrets, { dryRun: true }, latest.current.panel);
+        const body = buildLaunchRequest(
+          latest.current.doc,
+          secrets,
+          { dryRun: true, jobs: lastJobs.current },
+          latest.current.panel,
+        );
         postExperiment(projectId, body, abort.signal).then(
           (data) => {
             if (abort.signal.aborted) return;
             hadResult.current = true;
+            lastJobs.current = data.jobs;
             setSettled({ key, data, error: '' });
           },
           (error: unknown) => {
@@ -67,6 +81,12 @@ export function useDryRun(args: {
               return;
             hadResult.current = true;
             if (error instanceof ApiError) {
+              const code = ((error.body as { detail?: { code?: string } } | null)?.detail ?? {}).code;
+              if (error.status === 422 && code === 'job_priority_unknown') {
+                lastJobs.current = undefined;
+                stale.current?.();
+                return;
+              }
               const failure = parseLaunchFailure(error.status, error.body);
               if (failure.kind === 'validation') {
                 const detail = (error.body as { detail?: unknown } | null)?.detail;

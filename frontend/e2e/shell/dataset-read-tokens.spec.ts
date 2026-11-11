@@ -39,6 +39,15 @@ test('an experiment token lists with its kind, links to the experiment and revok
     'Experiment tokens are issued at launch and revoked when the experiment settles.',
   );
   const rows = card.getByRole('row');
+  // The experiment token sits in a closed group under the admin tokens (the main table lists only those).
+  const group = card.getByRole('button', { name: /Experiment tokens/ });
+  await expect(group).toHaveAttribute('aria-expanded', 'false');
+  await expect(group).toContainText('1 · issued at launch, revoked when the experiment settles');
+  await expect(
+    card.getByRole('grid', { name: 'Dataset read tokens' }).getByText('timeout sweep'),
+  ).toHaveCount(0);
+  await group.click();
+  await expect(group).toHaveAttribute('aria-expanded', 'true');
   const experimentRow = rows.filter({ hasText: 'Evaluation Service · timeout sweep' });
   await expect(experimentRow.getByTestId('token-kind-chip')).toHaveText('Experiment');
   const link = experimentRow.getByTestId('token-experiment-link');

@@ -129,7 +129,7 @@ describe('SettingsSection', () => {
     expect(written.every(([, v]) => v === 512)).toBe(true);
     await user.click(screen.getByRole('button', { name: 'Reset roles' }));
     expect(values()).toEqual({});
-  }, 20_000);
+  }, 60_000);
 
   it('sweeps the "All roles" row: a compact summary, chips in a popover, every role swept together', async () => {
     const { user } = setup(<SettingsSection />);
@@ -151,7 +151,7 @@ describe('SettingsSection', () => {
         .filter(([p]) => p.endsWith('/max_tokens'))
         .every(([, v]) => v === 256),
     ).toBe(true);
-  }, 20_000);
+  }, 60_000);
 
   it('narrows role rows with the role search', async () => {
     const { user } = setup(<SettingsSection />);

@@ -391,6 +391,17 @@ preselected.
   an embedded `DataTable` (no card in a card): the table is flush with the card edges and has no frame of its own (one
   frame, Q40 B).
 
+- **Bottom action bar** (round 10, point 4): a bottom action bar is the next sibling of the content (the page gap above it),
+  `position: sticky; bottom: 0`, never `margin-block-start: auto` and never a page stretched to the scroller to push it down; it
+  rides at the viewport bottom only while the content overflows (owner 2026-11-03: a pinned bar left a 374 to 735 px band on a
+  tall screen). A negative end margin may cancel the page's bottom padding so the bar still ends at the viewport bottom at the
+  end of a long page.
+
+- **Option box** (round 9, point 1): a selectable box inside a card (an environment, a dataset entry) is `--bg-elevated` with
+  `--border-default` (1.10:1 and 1.59:1 on `--bg-surface`), padding `--space-sm` `--space-md`, hover `--bg-hover`, selected =
+  accent border + `--rail-width` rail + `--tint-soft` accent tint over `--bg-elevated` (the Start-from card recipe), flagged =
+  `--error` border + rail with a `--error` line of text. Never `--bg-base` inside a card: a box darker than its card reads as a hole.
+
 - **Calm surface** (run detail, applies everywhere): a container (card, drawer, expanded item) is the only filled layer; inside
   it at most one more fill level, reserved for code and JSON viewers, inputs and the selected or open state. Parts are
   separated by a `--border-subtle` hairline and `--space-md` rhythm, never by nested tiles (a `ReportSection` panel holding inset cards is one level of containment, not nesting: the cards read `--bg-surface`/`--card-edge`, which the body redefines, owner decision H6); colour carries status, band,
@@ -402,6 +413,10 @@ preselected.
   `--bar-link-h` 36px (round 8, owner decision H5: it carries links only, no selects or buttons); an action bar (the experiment home launch bar,
   the analysis action rail, the run items toolbar) is `--bar-action-h`. Pages set `min-height` from the token, never a
   number. Enforced by `design-language.test.ts`.
+  The action-bar family is one recipe (`LaunchBar`, round 9, point 3): `--bg-elevated`, `--border-default`, `--shadow-popover`,
+  `--bar-action-h`, every button 24px; the 42px surface-coloured step nav is retired. A wizard bar keeps **the same slots on
+  every step** (Back, Skip to review, Continue, status, Cancel, Launch): a slot that does not apply is disabled, never removed,
+  and the labels do not change (the destination is the accessible name).
 
 - **Page hero** (`PageHeader`): `Text` roles: title `--font-title` / 650 /
   primary; description `--font-base` / muted, one line with ellipsis; meta line
@@ -551,6 +566,11 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   blocks a new `<Badge>` outside `features/dev` mock pages. Counts and categories (priority, kind, diff counts,
   change types) are a `Tag`.
 
+- **Service-reported key/value data** (round 10, point 3): versioning details and any other key/value data a service reports
+  are drawn as reported: every key, in the payload's order, the key as written (no humanised label, no `text-transform`); a
+  missing key is not drawn ("not set" is not a value); no fixed key list in the UI. Long values and objects take the whole row
+  of the grid; JSON is compact mono, cut at 48 characters with the whole text in its title.
+
 - **Tag** (`Tag`): roles, provenance, versions, passive metadata and compact
   counts; 20px minimum, borderless, `--control-radius`, tinted or elevated
   fill. Roles, counts, data and versions are mono; other tags are sans. A tag
@@ -669,7 +689,8 @@ or popover stay full width. No raw `<input type="search">` in feature code. A li
 range; a toolbar has no count. A count tag after a card title or a name is not a list count.
 
 - **Data table** (`DataTable`, own `<table>` markup, `role="grid"`; `treegrid` when rows expand): sticky header
-  `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650;
+  `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650 (a
+  header's minimum width is measured on the drawn header string, never on its accessible `label`: round 10, D10-8);
   body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
   Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (two-line
   and wrapped cells raise the minimum to comfortable); a wrap cell clamps with no block padding. Every table stripes
@@ -1238,6 +1259,19 @@ rules for any future surface, not for the pages that taught them.
   question once. When a defect cannot be reproduced in the test environment (a trackpad fling on a compositor thread in
   headless Chromium), the spec says so, fixes the structural cause anyway, and the reviewer verifies on the owner's
   device rather than closing the point on a measurement that could not fail.
+
+- **A control the user needs on every step appears on every step.** Optional controls are disabled in place; a bar that gains
+  buttons on some pages is read as a different page (owner QA 2026-10-28, point 3). Criterion: the part count of the bar is
+  identical on every step. The step bar's primary slot changes its label, never its position: Continue on every step, the
+  launch or publish on the last. A launch shortcut on earlier steps is not a control the user needs on every step (owner
+  2026-11-03; round 10: Skip to review and Cancel at the far left, Back and the primary slot at the far right).
+- **A step shows its own content only.** The summary and the launch decision live in the bar (run count, first problem) and on
+  the Review step; a review card under an unrelated step is a layout workaround, not a design (owner QA 2026-10-28, point 4).
+  Criterion: the review exists on the Review step only; the other steps use the full column width.
+- **Facts in cells, not sentences.** A list of runs is a table with one fact per cell (`#`, environment, dataset, one column per
+  swept setting, task, priority), and a column that carries one value for every run is not drawn. A swept setting's column is
+  named as the form names it; a value is the value the user picked (a connection's name), never a platform abbreviation
+  (round 10, owner 2026-11-03). Criterion: one row per run, 0 disclosures.
 
 ---
 

@@ -1,42 +1,25 @@
 /**
- * Project settings -> Environments tab: the list with "Add environment" and the environment
- * detail drawer. Deep link `?tab=environments&env=<id>[&promote=run|job&id=<id>]` opens the
- * drawer; with `promote` it goes straight to the default-preset editor.
+ * Project settings -> Environments tab: the list with "Add environment" on the card's title row. A row opens the
+ * one environment page (`/projects/:slug/environments/:id?from=settings`, whose back link returns here). The legacy
+ * deep link `?tab=environments&env=<id>[&promote=run|job&id=<id>]` redirects there; with `promote` it goes straight
+ * to the default-preset editor.
  */
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/features/shell';
-import { defaultPresetEditPath } from '@/features/experiments/paths';
+import { defaultPresetEditPath, environmentPath } from '@/features/experiments/paths';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Button, Drawer, Icon } from '@/ui';
+import { Button, Icon } from '@/ui';
 import { SettingsCard } from '@/features/shell/settings/SettingsCard';
-import { useEvalEnvironment } from '@/api/evalEnvironments';
 import { projectPath } from '@/app/routes';
 import { AddEnvironmentDialog } from './AddEnvironmentDialog';
-import { EnvironmentPanelBody } from './EnvironmentPanelBody';
 import { EnvironmentsList } from './EnvironmentsList';
 import styles from './EnvironmentPage.module.css';
-
-function EnvironmentDrawer({ environmentId, onClose }: { environmentId: string; onClose: () => void }) {
-  const { project } = useProjectContext();
-  const env = useEvalEnvironment(project.id, environmentId);
-  return (
-    <Drawer
-      open
-      onOpenChange={(open) => !open && onClose()}
-      title={env.data?.name ?? 'Environment'}
-      subtitle={env.data?.base_url}
-      width={560}
-    >
-      <EnvironmentPanelBody environmentId={environmentId} onClose={onClose} />
-    </Drawer>
-  );
-}
 
 export function EnvironmentsPanel() {
   const { project, slug, canManage, readOnly } = useProjectContext();
   const navigate = useNavigate();
-  const { params, replaceUrlQuery } = useSearchParamsState();
+  const { params } = useSearchParamsState();
   const [adding, setAdding] = useState(false);
   const envId = params.get('env');
   const promote = params.get('promote');
@@ -51,12 +34,13 @@ export function EnvironmentsPanel() {
   }, [envId, promote, promoteId, slug, navigate]);
 
   const handingOff = Boolean(envId && promote && promoteId);
-  const open = (id: string) => replaceUrlQuery({ env: id, promote: null, id: null });
-  const close = () => replaceUrlQuery({ env: null, promote: null, id: null });
+  const fromSettings = (id: string) => `${environmentPath(slug, id)}?from=settings`;
+
+  if (envId && !handingOff) return <Navigate replace to={fromSettings(envId)} />;
 
   return (
     <div className={styles.body}>
-      {/* One Add button, on the card's title row; the empty list no longer repeats it (round 10). */}
+      {/* One Add button, on the card's title row; the empty list does not repeat it. */}
       <SettingsCard
         title="Environments"
         description={
@@ -78,10 +62,9 @@ export function EnvironmentsPanel() {
           slug={slug}
           canManage={canManage}
           readOnly={readOnly}
-          onOpen={(env) => open(env.id)}
+          rowHref={(env) => fromSettings(env.id)}
         />
       </SettingsCard>
-      {envId && !handingOff ? <EnvironmentDrawer environmentId={envId} onClose={close} /> : null}
       {canAdd ? (
         <AddEnvironmentDialog
           projectId={project.id}

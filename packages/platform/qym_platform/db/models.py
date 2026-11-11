@@ -476,6 +476,22 @@ class ApiKey(Base):
     scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # 'user' (created in Project Settings) or 'experiment' (minted at launch for one
+    # Evaluation Service experiment, ``services/eval_submitter_keys``); migration 0101.
+    # Only experiment keys have their scopes enforced (``auth.require_api_key_scope``).
+    kind: Mapped[str] = mapped_column(
+        String(16), default="user", server_default="user", nullable=False
+    )
+    experiment_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_experiments.id",
+            ondelete="SET NULL",
+            name="fk_api_keys_experiment_id",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
 
     user: Mapped["User"] = relationship(back_populates="api_keys")
 
@@ -949,6 +965,9 @@ class EvalExperimentJob(Base):
     attempt: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    # LOW / NORMAL / HIGH this job is submitted with (0102). Always set at launch;
+    # NULL only on rows older than the migration (read as the experiment's priority).
+    priority: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     # The attempt this row retries (kept for history, left out of the aggregate).
     retry_of_job_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey(

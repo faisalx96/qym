@@ -61,12 +61,10 @@ export interface SettingsFormProps {
   projectId: string;
   env: EvalEnvironment;
   canEdit: boolean;
-  /** Show the Close button next to Save (drawer). */
-  onClose?: () => void;
   onDeleted: () => void;
 }
 
-export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: SettingsFormProps) {
+export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFormProps) {
   const update = useUpdateEnvironment(projectId, env.id);
   const remove = useDeleteEnvironment(projectId, env.id);
   const toast = useToast();
@@ -290,18 +288,7 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
             />
             {general ? <InlineNotice tone="danger">{general}</InlineNotice> : null}
             <div className={styles.sectionFooter}>
-              <SaveFooter
-                dirty={dirty}
-                saving={update.isPending}
-                onSave={() => void save()}
-                secondary={
-                  onClose ? (
-                    <Button variant="neutral" onPress={onClose}>
-                      Close
-                    </Button>
-                  ) : undefined
-                }
-              />
+              <SaveFooter dirty={dirty} saving={update.isPending} onSave={() => void save()} />
             </div>
           </Section>
           <SettingsCard title="Danger zone" data-danger-zone>

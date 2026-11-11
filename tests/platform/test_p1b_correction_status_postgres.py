@@ -16,7 +16,6 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -28,8 +27,6 @@ ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SRC = ROOT / "packages" / "platform"
 if str(PLATFORM_SRC) not in sys.path:
     sys.path.insert(0, str(PLATFORM_SRC))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app  # noqa: E402
 from qym_platform.db.base import Base  # noqa: E402
