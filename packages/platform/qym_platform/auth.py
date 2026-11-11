@@ -38,6 +38,7 @@ class Principal:
     provider: Optional[str] = None
     project_id: Optional[str] = None
     key_kind: Optional[str] = None  # api_key only: 'user' | 'experiment'
+    api_key_id: Optional[str] = None
 
 
 def _default_display_name(email: str) -> str:
@@ -213,6 +214,7 @@ def resolve_api_key_principal(db: Session, token: str) -> Principal:
         scopes=scopes,
         project_id=row.project_id,
         key_kind=row.kind,
+        api_key_id=row.id,
     )
 
 

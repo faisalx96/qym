@@ -1332,7 +1332,7 @@ def _current_priority_counts(
     """``{LOW, NORMAL, HIGH}`` of the current jobs per experiment, one grouped query.
 
     The same current-job rule as ``_current_status_counts``; a NULL ``priority`` (a row
-    older than migration 0099 whose stored body named none) is the experiment's.
+    older than migration 0102 whose stored body named none) is the experiment's.
     """
     if not experiments:
         return {}

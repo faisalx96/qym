@@ -219,7 +219,8 @@ export function errorSentence(error: unknown): string {
       ? info.detail
       : 'The server had a problem. Try again.';
   if (info.kind === 'network') return REQUEST_ERROR_COPY.network;
-  if (info.kind === 'forbidden') return REQUEST_ERROR_COPY.forbidden;
+  if (info.kind === 'forbidden')
+    return info.detail && !generic.test(info.detail.trim()) ? info.detail : REQUEST_ERROR_COPY.forbidden;
   if (info.kind === 'auth') return REQUEST_ERROR_COPY.auth;
   if (info.kind === 'not_found') return 'It may have been deleted.';
   const fields = fieldErrorsOf(error);

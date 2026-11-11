@@ -34,8 +34,6 @@ ROOT = Path(__file__).resolve().parents[2]
 for src in (ROOT / "packages" / "platform", ROOT / "packages" / "sdk"):
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
 from qym_platform.auth import clear_api_key_cache
@@ -200,6 +198,13 @@ def _call(client, method, path, kwargs, headers):
 _FILE = {"files": {"file": ("notes.md", b"text", "text/markdown")}}
 
 REFUSED = [
+    # Live worker controls are read-only on archived projects.
+    ("PUT", "/api/projects/{project_slug}/live/worker/state", "/api/projects/pa/live/worker/state", {"json": {"state": "paused"}}, MEMBER),
+    ("PUT", "/api/projects/{project_slug}/live/worker/key", "/api/projects/pa/live/worker/key", {"json": {"api_key_id": None}}, MEMBER),
+    ("POST", "/api/projects/{project_slug}/live/worker/settings", "/api/projects/pa/live/worker/settings", {"json": {"values": {}}}, MEMBER),
+    ("POST", "/api/projects/{project_slug}/live/worker/settings/{version}/restore", "/api/projects/pa/live/worker/settings/1/restore", None, MEMBER),
+    ("POST", "/api/projects/{project_slug}/live/worker/jobs", "/api/projects/pa/live/worker/jobs", {"json": {"kind": "backfill", "since_day": "2026-11-01", "until_day": "2026-11-01", "limit": 10}}, MEMBER),
+    ("POST", "/api/projects/{project_slug}/live/worker/jobs/{job_id}/cancel", "/api/projects/pa/live/worker/jobs/missing/cancel", None, MEMBER),
     # Runs: review workflow, score and diagnosis edits, delete/restore.
     ("POST", "/v1/runs/{run_id}/submit", "/v1/runs/r1/submit", None, MGR),
     ("POST", "/v1/runs/submit", "/v1/runs/submit", {"json": {"run_ids": ["r1"]}}, MGR),
@@ -640,6 +645,27 @@ KEY_ONLY = [
         "/ingestion/v1/runs:upload",
         {"data": {"task": "t", "dataset": "d"}, "files": {"file": ("r.csv", b"input\nq\n", "text/csv")}},
     ),
+    # Live evaluation ingest (project API key; the key resolution refuses an archived project).
+    ("PUT", "/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image", "/v1/projects/pa/live/sources/w1/turns/t/charts/r/image", {"content": b""}),
+    ("PUT", "/v1/projects/{project_id}/live/sources/{key:path}", "/v1/projects/pa/live/sources/w1", {"json": {"name": "w", "environment": "test"}}),
+    ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/heartbeat", "/v1/projects/pa/live/sources/w1/heartbeat", {"json": {"at": "2026-11-01T00:00:00Z"}}),
+    ("GET", "/v1/projects/{project_id}/live/sources/{key:path}/control", "/v1/projects/pa/live/sources/w1/control", {}),
+    ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/jobs/{job_id}/progress", "/v1/projects/pa/live/sources/w1/jobs/job/progress", {"json": {"status": "running"}}),
+    ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/events", "/v1/projects/pa/live/sources/w1/events", {"json": {"events": []}}),
+    ("PUT", "/v1/projects/{project_id}/live/sources/{key:path}/metric-specs", "/v1/projects/pa/live/sources/w1/metric-specs", {"json": {"specs": []}}),
+    ("PUT", "/v1/projects/{project_id}/live/sources/{key:path}/days/{day}", "/v1/projects/pa/live/sources/w1/days/2026-11-01", {"json": {}}),
+    ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/turns", "/v1/projects/pa/live/sources/w1/turns", {"json": {"turns": [{"turn_id": "t", "turn_at": "2026-11-01T00:00:00Z", "status": "completed", "question": "q"}]}}),
+    ("POST", "/v1/projects/{project_id}/live/sources/{key:path}/canaries", "/v1/projects/pa/live/sources/w1/canaries", {"json": {"results": []}}),
+    ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image", "/ingestion/v1/projects/pa/live/sources/w1/turns/t/charts/r/image", {"content": b""}),
+    ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}", "/ingestion/v1/projects/pa/live/sources/w1", {"json": {"name": "w", "environment": "test"}}),
+    ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/heartbeat", "/ingestion/v1/projects/pa/live/sources/w1/heartbeat", {"json": {"at": "2026-11-01T00:00:00Z"}}),
+    ("GET", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/control", "/ingestion/v1/projects/pa/live/sources/w1/control", {}),
+    ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/jobs/{job_id}/progress", "/ingestion/v1/projects/pa/live/sources/w1/jobs/job/progress", {"json": {"status": "running"}}),
+    ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/events", "/ingestion/v1/projects/pa/live/sources/w1/events", {"json": {"events": []}}),
+    ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/metric-specs", "/ingestion/v1/projects/pa/live/sources/w1/metric-specs", {"json": {"specs": []}}),
+    ("PUT", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/days/{day}", "/ingestion/v1/projects/pa/live/sources/w1/days/2026-11-01", {"json": {}}),
+    ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/turns", "/ingestion/v1/projects/pa/live/sources/w1/turns", {"json": {"turns": [{"turn_id": "t", "turn_at": "2026-11-01T00:00:00Z", "status": "completed", "question": "q"}]}}),
+    ("POST", "/ingestion/v1/projects/{project_id}/live/sources/{key:path}/canaries", "/ingestion/v1/projects/pa/live/sources/w1/canaries", {"json": {"results": []}}),
     ("POST", "/v1/product-evals", "/v1/product-evals", {"json": {}}),
     ("POST", "/v1/product-evals/jobs/{job_id}/stop", "/v1/product-evals/jobs/j1/stop", None),
     ("POST", "/v1/product-evals/{identifier}/stop", "/v1/product-evals/r1/stop", None),
@@ -772,7 +798,7 @@ def test_every_write_route_is_classified():
     assert len(routes) > 100, len(routes)
     classified = [
         *((m, t) for m, t, *_ in REFUSED),
-        *((m, t) for m, t, *_ in KEY_ONLY),
+        *((m, t) for m, t, *_ in KEY_ONLY if m != "GET"),
         *ALLOWED,
     ]
     assert len(classified) == len(set(classified)), "a route is listed twice"

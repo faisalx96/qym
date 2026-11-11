@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-import sys
 import threading
 import time
 import types
@@ -18,15 +17,14 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text, update
+from sqlalchemy import create_engine, text, update
 from sqlalchemy.orm import Session, sessionmaker
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform import main, serve
 from qym_platform.api.ingest import router as ingest_router
+from qym_platform.api.live_ingest import live_ingest_router
 from qym_platform.app import create_app, create_ingestion_app, create_workers_app
 from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.background_job_models import BackgroundJob, ServiceHeartbeat
@@ -229,6 +227,7 @@ def _event_body(run_id: str) -> str:
     )
 
 
+@pytest.mark.bundle
 def test_all_mode_keeps_legacy_paths_and_adds_the_service_prefixes(db_factory) -> None:
     app = create_app(_settings(database_url="sqlite://"))
     with _client(app, db_factory) as client:
@@ -260,6 +259,10 @@ def test_all_mode_keeps_legacy_paths_and_adds_the_service_prefixes(db_factory) -
 
 def test_main_service_can_drop_the_ingest_routes(db_factory) -> None:
     app = create_app(_settings(service="main", main_include_ingest=False))
+    assert not any(
+        route.path.startswith("/v1/projects/{project_id}/live")
+        for route in _api_routes(app)
+    )
     with _client(app, db_factory) as client:
         assert client.post(
             "/v1/runs", headers={"Authorization": f"Bearer {TOKEN}"}, json={}
@@ -273,6 +276,9 @@ def test_main_service_can_drop_the_ingest_routes(db_factory) -> None:
 
 def test_ingestion_app_serves_only_the_write_path(db_factory) -> None:
     app = create_ingestion_app(_settings(service="ingestion"))
+    paths = {route.path for route in _api_routes(app)}
+    assert "/v1/projects/{project_id}/live/sources/{key:path}" in paths
+    assert "/ingestion/v1/projects/{project_id}/live/sources/{key:path}" in paths
     with _client(app, db_factory) as client:
         created = _create_run(client, "/ingestion/v1/runs")
         _create_run(client, "/v1/runs")  # legacy path (ingress routes it here)
@@ -306,6 +312,9 @@ def test_ingestion_app_serves_only_the_write_path(db_factory) -> None:
     app = create_ingestion_app(
         _settings(service="ingestion", ingestion_legacy_paths=False)
     )
+    paths = {route.path for route in _api_routes(app)}
+    assert "/v1/projects/{project_id}/live/sources/{key:path}" not in paths
+    assert "/ingestion/v1/projects/{project_id}/live/sources/{key:path}" in paths
     with _client(app, db_factory) as client:
         assert (
             client.post(
@@ -348,6 +357,7 @@ INGRESS_TO_INGESTION = [
     re.compile(r"^/v1/runs$"),
     re.compile(r"^/v1/runs:upload$"),
     re.compile(r"^/v1/runs/[^/]+/events$"),
+    re.compile(r"^/v1/projects/[^/]+/live/"),
     re.compile(r"^/ingestion/"),
 ]
 
@@ -384,7 +394,8 @@ def _api_routes(app):
 
 
 def test_ingress_rules_send_exactly_the_ingest_routes_to_ingestion() -> None:
-    ingest_endpoints = {route.endpoint for route in ingest_router.routes}
+    ingest_routes = list(ingest_router.routes) + list(live_ingest_router.routes)
+    ingest_endpoints = {route.endpoint for route in ingest_routes}
     main_app = create_app(_settings(service="main", main_include_ingest=False))
     matched = [
         (route.path, sorted(route.methods))
@@ -399,7 +410,7 @@ def test_ingress_rules_send_exactly_the_ingest_routes_to_ingestion() -> None:
         for route in _api_routes(ingestion)
         if route.endpoint in ingest_endpoints
     }
-    for route in ingest_router.routes:
+    for route in ingest_routes:
         for path in (route.path, "/ingestion" + route.path):
             assert (path, frozenset(route.methods)) in served
             assert any(
@@ -407,12 +418,13 @@ def test_ingress_rules_send_exactly_the_ingest_routes_to_ingestion() -> None:
             ), path
     # The single server answers every one of those paths as well.
     all_paths = {route.path for route in _api_routes(create_app(_settings()))}
-    assert {route.path for route in ingest_router.routes} <= all_paths
+    assert {route.path for route in ingest_routes} <= all_paths
     nginx = (ROOT / "docker" / "nginx.split.conf").read_text(encoding="utf-8")
     for rule in (
         "location = /v1/runs ",
         "location = /v1/runs:upload ",
         r"location ~ ^/v1/runs/[^/]+/events$ ",
+        r"location ~ ^/v1/projects/[^/]+/live/ ",
         "location /ingestion/ ",
         "location /workers/ ",
         "location / ",

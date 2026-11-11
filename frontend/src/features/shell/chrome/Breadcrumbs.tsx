@@ -37,6 +37,14 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
         { label: route.runId, to: projectPath(project.slug, `runs/${route.runId}`), mono: true },
         { label: 'Auto-analysis' },
       );
+    } else if (route.page === 'live-worker') {
+      crumbs.push({ label: 'Live', to: projectPath(project.slug, 'live') }, { label: 'Worker' });
+    } else if (route.page === 'live-turns' || route.page === 'live-turn') {
+      crumbs.push(
+        { label: 'Live', to: projectPath(project.slug, 'live') },
+        { label: 'Turns', to: projectPath(project.slug, 'live/turns') },
+      );
+      if (route.page === 'live-turn') crumbs.push({ label: route.turnId ?? 'Turn', mono: true });
     } else if (route.page === 'experiments-queue') {
       crumbs.push({ label: 'Experiments', to: projectPath(project.slug, 'experiments') }, { label: 'Queue' });
     } else if (route.page === 'experiments' && /\/experiments\/[^/]+$/.test(pathname)) {
@@ -101,7 +109,7 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
             <li key={`${c.label}-${i}`} className={styles.item}>
               <Icon name="chevron-right" size={12} className={styles.sep} />
               {c.to && !last ? (
-                <Link to={c.to} className={styles.link} data-mono={c.mono ? '' : undefined}>
+                <Link to={c.to} className={styles.link} data-mono={c.mono ? '' : undefined} dir="auto">
                   {c.label}
                 </Link>
               ) : (
@@ -109,6 +117,7 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
                   className={styles.current}
                   aria-current={last ? 'page' : undefined}
                   data-mono={c.mono ? '' : undefined}
+                  dir="auto"
                 >
                   {c.label}
                 </span>

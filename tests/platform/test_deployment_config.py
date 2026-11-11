@@ -37,6 +37,41 @@ def test_dev_override_restores_reload_and_bind_mounts() -> None:
     assert "--reload" in compose
 
 
+def test_compose_offers_the_live_worker_behind_a_profile() -> None:
+    for filename, service in (
+        ("docker-compose.yml", "api"),
+        ("docker-compose.split.yml", "ingestion"),
+    ):
+        compose = (ROOT / "docker" / filename).read_text(encoding="utf-8")
+        assert "  live-worker:" in compose
+        worker = compose.split("  live-worker:\n", 1)[1].split("\n\n", 1)[0]
+        assert 'profiles: ["live"]' in worker
+        assert (
+            "image: ${QYM_LIVE_WORKER_IMAGE:-qym-live-worker:unset}"
+        ) in worker
+        assert "path: ${QYM_LIVE_WORKER_ENV_FILE:-./live-worker.env}" in worker
+        assert "required: false" in worker
+        assert (
+            f"QYM_BASE_URL: ${{QYM_LIVE_WORKER_QYM_URL:-http://{service}:8000}}"
+        ) in worker
+        assert 'QYM_LIVE_ENABLED: "true"' in worker
+        assert f"depends_on: [{service}]" in worker
+        assert "restart: unless-stopped" in worker
+        assert "ports:" not in worker
+        assert "volumes:" not in worker
+
+    operations = (ROOT / "docs" / "internal" / "OPERATIONS.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Live evaluation worker" in operations
+    assert "docker compose --profile live up -d" in operations
+    example = ROOT / "docker" / "live-worker.env.example"
+    assert example.is_file()
+    environment = example.read_text(encoding="utf-8")
+    assert "QYM_API_KEY=" in environment
+    assert "QYM_LIVE_SOURCE_KEY=" in environment
+
+
 def test_entrypoint_defaults_to_non_reload_uvicorn() -> None:
     entrypoint = (ROOT / "docker" / "entrypoint.sh").read_text(encoding="utf-8")
     assert "--reload" not in entrypoint

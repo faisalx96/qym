@@ -22,7 +22,7 @@ import {
   startsOpen,
   tableColumns,
 } from './structured';
-import { KeyTree } from './KeyTree';
+import { KeyTree } from './KeyTree.tsx';
 import { allPaths } from './keyTree';
 import { useJsonView, type JsonView } from './useJsonView';
 import styles from './StructuredValue.module.css';

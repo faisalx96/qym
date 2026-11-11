@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { errorIdentifiers, errorReport } from '@/lib/error-report';
+import { CopyButton } from '../CopyButton';
 import { classifyError, loginUrl } from '@/lib/http';
 import { Button } from '../Button';
 import { LinkButton } from '../LinkButton';
@@ -48,6 +50,9 @@ export function ErrorState({
   ) {
     meta.push(info.detail);
   }
+  const identifiers = errorIdentifiers(error);
+  if (identifiers.code) meta.push(identifiers.code);
+  if (identifiers.request_id) meta.push(`request ${identifiers.request_id}`);
   const retryable = ['server', 'network', 'unknown', 'client'].includes(info.kind);
   return (
     <div
@@ -83,6 +88,9 @@ export function ErrorState({
           </LinkButton>
         ) : null}
         {action}
+        {identifiers.code || identifiers.request_id ? (
+          <CopyButton label="Copy report" text={() => errorReport(error, { title: heading })} />
+        ) : null}
       </div>
     </div>
   );

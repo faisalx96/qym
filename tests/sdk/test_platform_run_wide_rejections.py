@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import threading
 import time
 from email.message import Message
 from urllib.error import HTTPError
@@ -309,8 +310,19 @@ def test_archiving_the_project_mid_run_stops_the_sdk(monkeypatch, capsys, live_p
     with Session(engine) as db:
         db.get(Project, "project").is_active = False
         db.commit()
+    # Hold the next upload until all 300 events are queued. Otherwise a slow
+    # runner sees the 409 mid-loop, and later emit() calls are ignored, not dropped.
+    queued = threading.Event()
+    post = client_module._post_ndjson
+
+    def post_after_queued(*args, **kwargs):
+        queued.wait(10)
+        return post(*args, **kwargs)
+
+    monkeypatch.setattr(client_module, "_post_ndjson", post_after_queued)
     for i in range(300):
         stream.emit("item_started", {"item_id": f"b-{i}", "index": 50 + i, "input": i})
+    queued.set()
     stream.close()
 
     assert requests == [200, 409]

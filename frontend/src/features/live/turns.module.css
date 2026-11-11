@@ -1,0 +1,136 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-inline-size: 0;
+  container-type: inline-size;
+}
+
+.filterBlock {
+  display: flex;
+  align-items: end;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.filters {
+  /* Keep absolutely positioned, visually hidden Select labels inside this scroller. */
+  position: relative;
+  display: flex;
+  align-items: end;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  min-block-size: calc(var(--control-height) + var(--space-lg) + var(--space-xs) + 1px);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.filterControl {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height);
+}
+
+.trigger button {
+  white-space: nowrap;
+}
+
+.filterControl[data-tone] .trigger > :first-child button {
+  color: var(--tone-text);
+}
+
+.search {
+  flex: 1;
+  min-inline-size: min(100%, var(--dropdown-width));
+}
+
+.filterFields {
+  display: grid;
+  gap: var(--space-md);
+  min-inline-size: var(--dropdown-width);
+}
+
+.table {
+  min-inline-size: 0;
+}
+
+/* Multi-line cells (two-line reason, several services) keep clear of the row edges. */
+.table td {
+  padding-block: var(--space-xs);
+}
+
+.loading {
+  min-block-size: calc(var(--row-comfortable) * 6 + var(--space-lg) * 6 + var(--space-xs));
+}
+
+.question {
+  display: -webkit-box;
+  min-inline-size: 0;
+  text-align: start;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.diagnosisCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  white-space: normal;
+}
+
+.reason[dir='auto'] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.number {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.userRef {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.toneText,
+.serviceFault {
+  color: var(--tone-text);
+}
+
+.serviceFault {
+  display: block;
+  white-space: normal;
+}
+
+@container (max-width: 479px) {
+  .filterBlock {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .loading {
+    min-block-size: calc(
+      var(--row-comfortable) * 6 + var(--space-lg) * 6 + var(--space-xs) + var(--space-md) * 2
+    );
+  }
+}

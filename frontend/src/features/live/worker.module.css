@@ -1,0 +1,126 @@
+/* Live worker: composed control blocks, wrapping data and reserved loading frames. */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.grid > *,
+.stack > *,
+.fields > * {
+  min-inline-size: 0;
+}
+
+.settingsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.settingsRow > [data-live-block='worker-settings'] {
+  flex: 3 1 36rem;
+  min-inline-size: 0;
+}
+
+.settingsRow > [data-live-block='worker-history'] {
+  flex: 1 1 18rem;
+  min-inline-size: 0;
+}
+
+.actions,
+.saveRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.saveRow > :first-child {
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+}
+
+.workerKey {
+  flex: 0 1 22rem;
+  min-inline-size: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.settingsSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.settingsSection + .settingsSection {
+  border-block-start: 1px solid var(--border-subtle);
+  padding-block-start: var(--space-sm);
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.wrap {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-inline-size: 0;
+}
+
+.number {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.problems,
+.versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.problem,
+.version {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-block: var(--space-md);
+}
+
+.problem + .problem,
+.version + .version {
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+@container (width < 900px) {
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (width < 480px) {
+  .fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
