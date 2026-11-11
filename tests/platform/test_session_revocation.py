@@ -436,6 +436,7 @@ def _spa_asset_name() -> str:
     return sorted((spa_dir() / "assets").glob("*.js"))[0].name
 
 
+@pytest.mark.bundle
 def test_private_responses_are_not_cached(app):
     with _browser(app) as client:
         _signup(client)
@@ -449,6 +450,7 @@ def test_private_responses_are_not_cached(app):
         assert "no-store" not in asset.headers.get("cache-control", "")
 
 
+@pytest.mark.bundle
 def test_static_assets_stay_cacheable_under_a_root_path(monkeypatch):
     """Behind an ingress prefix the mounted app sees /qym/assets/...; assets must
     still skip no-store or every page view re-downloads them."""

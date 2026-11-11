@@ -227,6 +227,7 @@ def _event_body(run_id: str) -> str:
     )
 
 
+@pytest.mark.bundle
 def test_all_mode_keeps_legacy_paths_and_adds_the_service_prefixes(db_factory) -> None:
     app = create_app(_settings(database_url="sqlite://"))
     with _client(app, db_factory) as client:

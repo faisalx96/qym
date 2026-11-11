@@ -24,6 +24,14 @@ from sqlalchemy.pool import StaticPool
 
 from _helpers import app_client, setup, sqlite_session_factory
 
+_SPA = Path(__file__).resolve().parents[2] / "packages" / "platform" / "qym_platform" / "_static" / "app"
+
+
+def pytest_runtest_setup(item):
+    """Skip ``@pytest.mark.bundle`` tests until the frontend bundle is built."""
+    if item.get_closest_marker("bundle") and not (_SPA / "index.html").is_file():
+        pytest.skip("frontend bundle not built (npm run --prefix frontend build)")
+
 MIGRATIONS = (
     Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/migrations"
 )
