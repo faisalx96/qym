@@ -157,11 +157,11 @@ test.describe('axe', () => {
     }
   });
 
-  test('settings drawer', async ({ page }) => {
+  test('settings entry of an environment', async ({ page }) => {
     const { project } = world.seeded;
     await gotoApp(page, `/projects/${project.slug}/settings?tab=environments&env=${world.staging.id}`);
     await expect(page.locator(`[data-env-body="${world.staging.id}"]`)).toBeVisible();
-    await expectNoSeriousViolations(page, 'environment drawer');
+    await expectNoSeriousViolations(page, 'environment from settings');
   });
 
   test('queue: split cancel dialog and remote section', async ({ page }) => {

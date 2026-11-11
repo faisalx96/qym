@@ -1,9 +1,10 @@
 /** /projects/:slug/environments/:envId (brief 06 §2.9): the environment as a page. */
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvalEnvironment } from '@/api/evalEnvironments';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { useCrumbLabel } from '@/lib/crumb-label';
 import { fullWidth } from '@/features/shell/layout';
+import { projectPath } from '@/app/routes';
 import { Icon, LinkButton, PageHeader, Tag } from '@/ui';
 import { ExperimentsTabs } from '@/features/experiments/ExperimentsTabs';
 import { environmentsPath } from '@/features/experiments/paths';
@@ -13,6 +14,9 @@ import styles from './EnvironmentPage.module.css';
 export function EnvironmentPage({ environmentId }: { environmentId: string }) {
   const { project, slug } = useProjectContext();
   const navigate = useNavigate();
+  // Opened from Project settings -> Environments (`?from=settings`): the back link returns there.
+  const fromSettings = useSearchParams()[0].get('from') === 'settings';
+  const backTo = fromSettings ? `${projectPath(slug, 'settings')}?tab=environments` : environmentsPath(slug);
   const query = useEvalEnvironment(project.id, environmentId);
   const env = query.data;
   useDocumentTitle(`${project.name} · ${env?.name ?? 'Environment'}`);
@@ -33,18 +37,18 @@ export function EnvironmentPage({ environmentId }: { environmentId: string }) {
         }
         actions={
           <LinkButton
-            to={environmentsPath(slug)}
+            to={backTo}
             icon={<Icon name="prev" size={12} />}
             className={styles.pageBack}
           >
-            All environments
+            {fromSettings ? 'Project settings' : 'All environments'}
           </LinkButton>
         }
         tabs={<ExperimentsTabs current="environments" />}
       />
       <EnvironmentPanelBody
         environmentId={environmentId}
-        onDeleted={() => navigate(environmentsPath(slug))}
+        onDeleted={() => navigate(backTo)}
       />
     </div>
   );

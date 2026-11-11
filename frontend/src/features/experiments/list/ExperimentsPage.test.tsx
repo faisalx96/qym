@@ -109,17 +109,19 @@ describe('ExperimentsPage versioning facets', () => {
     const user = userEvent.setup();
     mount('/projects/demo/experiments');
     await waitFor(() => expect(names()).toHaveLength(2));
-    expect(screen.getByRole('button', { name: /Agent version/ })).toHaveTextContent('All values');
-    expect(screen.getByRole('button', { name: /KB version/ })).toHaveTextContent('All values');
+    // R10 C-3-10: the key as reported, "All values"
+    expect(screen.getByRole('button', { name: /agent_version/ })).toHaveTextContent('All values');
+    expect(screen.getByRole('button', { name: /kb_version/ })).toHaveTextContent('All values');
+    expect(screen.queryByText(/KB version/)).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: /KB version/ }));
+    await user.click(screen.getByRole('button', { name: /kb_version/ }));
     await user.click(await screen.findByRole('option', { name: '381' }));
     await waitFor(() => expect(names()).toHaveLength(1));
     expect(names()[0]).toContain('Nightly');
     expect(requests.at(-1)!.searchParams.getAll('versioning')).toEqual(['kb_version=381']);
     expect(screen.getByTestId('where').textContent).toContain('versioning=kb_version%3D381');
 
-    await user.click(screen.getByRole('button', { name: /KB version/ }));
+    await user.click(screen.getByRole('button', { name: /kb_version/ }));
     await user.click(await screen.findByRole('option', { name: 'All values' }));
     await waitFor(() => expect(names()).toHaveLength(2));
     expect(requests.at(-1)!.searchParams.has('versioning')).toBe(false);
@@ -130,7 +132,7 @@ describe('ExperimentsPage versioning facets', () => {
     const requests = stubPlatform();
     mount('/projects/demo/experiments?versioning=kb_version%3D381');
     await waitFor(() => expect(names()).toHaveLength(1));
-    expect(screen.getByRole('button', { name: /KB version/ })).toHaveTextContent('381');
+    expect(screen.getByRole('button', { name: /kb_version/ })).toHaveTextContent('381');
     expect(requests.at(-1)!.searchParams.getAll('versioning')).toEqual(['kb_version=381']);
   });
 });

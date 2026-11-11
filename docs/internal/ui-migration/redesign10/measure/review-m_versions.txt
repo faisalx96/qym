@@ -1,0 +1,16 @@
+1440 three loading {"status":"loading","lineH":61.8,"boxH":124.6,"text":"Versions | Reading… |   |   |  ","labels":[]}
+1440 three loaded  {"status":"ok","lineH":61.8,"boxH":124.6,"text":"Versions | agent_version | agent-1.4.2 | image_version | img-20261001 | kb_version | kb-77","labels":["agent_version","image_version","kb_version"]} shift 0
+1440 two loading {"status":"loading","lineH":61.8,"boxH":124.6,"text":"Versions | Reading… |   |   |  ","labels":[]}
+1440 two loaded  {"status":"ok","lineH":61.8,"boxH":124.6,"text":"Versions | agent_version | agent-1.5.0 | kb_version | kb-81","labels":["agent_version","kb_version"]} shift 0
+1440 five loading {"status":"loading","lineH":61.8,"boxH":124.6,"text":"Versions | Reading… |   |   |  ","labels":[]}
+1440 five loaded  {"status":"ok","lineH":186,"boxH":248.8,"text":"Versions | agent_version | agent-1.5.0 | kb_version | kb-81 | prompt_set | prompts-2026-11-01 | model_routing | {\"primary\":\"gpt-4o\",\"fallback\":\"claude-sonnet\",\"… | build | 4127","labels":["agent_version","kb_version","prompt_set","model_routing","build"]} shift 124.2
+1440 none loading {"status":"loading","lineH":61.8,"boxH":124.6,"text":"Versions | Reading… |   |   |  ","labels":[]}
+1440 none loaded  {"status":"ok","lineH":44.4,"boxH":107.2,"text":"Versions |  | No versioning details reported","labels":[]} shift -17.4
+390 three loading {"status":"loading","lineH":61.8,"boxH":124.6,"text":"Versions | Reading… |   |   |  ","labels":[]}
+390 three loaded  {"status":"ok","lineH":103.2,"boxH":166,"text":"Versions | agent_version | agent-1.4.2 | image_version | img-20261001 | kb_version | kb-77","labels":["agent_version","image_version","kb_version"]} shift 41.4
+390 two loading {"status":"loading","lineH":61.8,"boxH":124.6,"text":"Versions | Reading… |   |   |  ","labels":[]}
+390 two loaded  {"status":"ok","lineH":61.8,"boxH":124.6,"text":"Versions | agent_version | agent-1.5.0 | kb_version | kb-81","labels":["agent_version","kb_version"]} shift 0
+390 five loading {"status":"loading","lineH":61.8,"boxH":124.6,"text":"Versions | Reading… |   |   |  ","labels":[]}
+390 five loaded  {"status":"ok","lineH":226,"boxH":288.8,"text":"Versions | agent_version | agent-1.5.0 | kb_version | kb-81 | prompt_set | prompts-2026-11-01 | model_routing | {\"primary\":\"gpt-4o\",\"fallback\":\"claude-sonnet\",\"… | build | 4127","labels":["agent_version","kb_version","prompt_set","model_routing","build"]} shift 164.2
+390 none loading {"status":"loading","lineH":61.8,"boxH":124.6,"text":"Versions | Reading… |   |   |  ","labels":[]}
+390 none loaded  {"status":"ok","lineH":44.4,"boxH":107.2,"text":"Versions |  | No versioning details reported","labels":[]} shift -17.4

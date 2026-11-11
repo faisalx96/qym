@@ -7,8 +7,10 @@ Spec shape (``eval_experiments.spec.evaluator``, change request v1.4):
   ``config.dataset_alias``), so a one-pair experiment is stored byte for byte as before.
   ``evaluator.dataset`` / ``dataset_version`` / ``config.dataset_alias`` always mirror
   entry 0.
-- ``run_shape``: ``combined`` (default) | ``one_each``. Platform-only: it is never sent to
-  a service and never stored in a job body or ``qym_config``.
+- ``run_shape``: ``one_each`` (default: one run per dataset version) |
+  ``combined`` (one run over the concatenation). Platform-only: it is never sent to a
+  service and never stored in a job body or ``qym_config``. A stored multi-dataset spec
+  always carries it explicitly, so the default only applies to requests that omit it.
 - ``task``: a task id (applies to every selected environment) or an object keyed by
   environment id (``null`` = the worker's default).
 
@@ -31,8 +33,10 @@ from qym_platform.services.eval_service_client import EvalServiceClient
 
 logger = get_logger(__name__)
 
-RUN_SHAPES = ("combined", "one_each")
-DEFAULT_RUN_SHAPE = "combined"
+SHAPE_COMBINED = "combined"
+SHAPE_ONE_EACH = "one_each"
+RUN_SHAPES = (SHAPE_COMBINED, SHAPE_ONE_EACH)
+DEFAULT_RUN_SHAPE = SHAPE_ONE_EACH
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
 ENTRY_KEYS = ("dataset", "version", "alias")
 SWEEP_DATASETS_MESSAGE = (
@@ -437,9 +441,10 @@ def plan_units(
     pairs = entries(evaluator)
     if len(pairs) < 2:
         return MODE_SINGLE, None, [Unit(0, MODE_SINGLE)]
-    if run_shape_of(evaluator) == DEFAULT_RUN_SHAPE and accepts_datasets:
+    shape = run_shape_of(evaluator)
+    if shape == SHAPE_COMBINED and accepts_datasets:
         return MODE_COMBINED, None, [Unit(0, MODE_COMBINED, datasets=pairs)]
-    reason = REASON_RUN_SHAPE if run_shape_of(evaluator) != DEFAULT_RUN_SHAPE else REASON_OLD_SERVICE
+    reason = REASON_RUN_SHAPE if shape == SHAPE_ONE_EACH else REASON_OLD_SERVICE
     return (
         MODE_FAN_OUT,
         reason,
@@ -469,22 +474,38 @@ def unit_document(
     environment_id: str,
     task: Optional[str],
     supports_task: bool,
+    pins: Optional[Mapping[Any, Any]] = None,
 ) -> Dict[str, Any]:
     """The document one job is validated and stored from.
 
     Never carries ``run_shape``. ``task`` is the environment's resolved id; it is left
-    out when the environment does not declare ``task`` (reported separately).
+    out when the environment does not declare ``task`` (reported separately). ``pins``
+    (``eval_dataset_pins.pin_entries``) replace "latest" and alias entries by the version
+    they resolved to at launch, so the service never falls back to its own default version.
     """
+    from qym_platform.services.eval_dataset_pins import pinned_entry, scalar_entry
+
     doc = copy.deepcopy(dict(document))
     evaluator = doc.get("evaluator")
     if not isinstance(evaluator, dict):
         return doc
     evaluator.pop("run_shape", None)
+    pins = pins or {}
     if unit.mode == MODE_FAN_OUT and unit.pair is not None:
         evaluator.pop("datasets", None)
-        mirror(evaluator, unit.pair)
+        mirror(evaluator, pinned_entry(unit.pair, pins))
+    elif unit.mode == MODE_COMBINED and unit.datasets:
+        pinned = [pinned_entry(pair, pins) for pair in unit.datasets]
+        evaluator["datasets"] = pinned
+        mirror(evaluator, pinned[0])
     elif unit.mode == MODE_SINGLE:
         evaluator.pop("datasets", None)
+        entry = scalar_entry(evaluator)
+        if entry is not None and entry["version"] is None:
+            pinned_scalar = pinned_entry(entry, pins)
+            if pinned_scalar.get("version"):
+                # The alias stays for the record; the top-level version wins on the service.
+                evaluator["dataset_version"] = pinned_scalar["version"]
     evaluator.pop("task", None)
     if task is not None and supports_task:
         evaluator["task"] = task

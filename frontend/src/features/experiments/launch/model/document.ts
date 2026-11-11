@@ -31,7 +31,7 @@ export function emptyDataset(): DatasetChoice {
 }
 
 export function emptySelection(): LaunchSelection {
-  return { extraRefs: [], more: [], runShape: 'combined', tasks: {} };
+  return { extraRefs: [], more: [], runShape: 'one_each', task: null, mixedTasks: null };
 }
 
 export function emptyEvaluator(): EvaluatorEdits {
@@ -46,6 +46,7 @@ export function createDocument(init: Partial<LaunchDocument> = {}): LaunchDocume
     name: '',
     description: '',
     priority: '',
+    jobPriorities: {},
     latencySensitive: false,
     base: emptyBaseInfo('scratch'),
     baseline: { values: {}, bindings: {}, dataset: null, selection: emptySelection() },
@@ -72,12 +73,13 @@ export function toggleEnvironment(doc: LaunchDocument, id: string, on: boolean):
   const has = doc.environmentIds.includes(id);
   if (on && !has) return { ...doc, environmentIds: [...doc.environmentIds, id] };
   if (!on && has) {
-    // The environment's task goes with it: a later tick starts at the worker default.
-    const { [id]: _dropped, ...tasks } = doc.selection.tasks;
+    // The task is the experiment's, not the environment's: it stays. A cloned per-environment task goes with its environment.
+    const mixed = doc.selection.mixedTasks;
+    const rest = mixed ? Object.fromEntries(Object.entries(mixed).filter(([e]) => e !== id)) : null;
     return {
       ...doc,
       environmentIds: doc.environmentIds.filter((e) => e !== id),
-      selection: { ...doc.selection, tasks },
+      selection: { ...doc.selection, mixedTasks: rest && Object.keys(rest).length ? rest : null },
     };
   }
   return doc;

@@ -45,8 +45,9 @@ test.describe('clone, rerun and starting points', () => {
     await expect(datasetsCard(page)).toBeVisible();
     await expect(page.getByTestId('pair-count')).toHaveText('4 dataset versions from 2 datasets');
     await expect(page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' })).toBeChecked();
-    const task = page.locator('[data-env-task]');
-    await expect(task.getByRole('button', { name: /Task of production/ })).toContainText('Route a ticket');
+    // An experiment launched with a task on production only is an old per-environment mix: shown read-only (round 9, C-2-8).
+    await expect(page.locator('[data-part=task-section]')).toContainText('Different per environment');
+    await expect(page.locator('[data-part=task-select]').getByRole('button')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Launch as is' })).toBeEnabled({ timeout: 15_000 });
     await expect.poll(() => posts.dryRuns.length, { timeout: 10_000 }).toBeGreaterThan(0);
     const spec = posts.dryRuns.at(-1)!.body.spec;
@@ -78,7 +79,7 @@ test.describe('clone, rerun and starting points', () => {
     await page.goto(cloneUrl(x.id));
     await expect(datasetsCard(page)).toBeVisible();
     await expect(page.getByText('Task for production was not carried (environment not selected)')).toBeVisible();
-    await expect(page.locator('[data-env-task]')).toHaveCount(0);
+    await expect(page.locator('[data-part=task-section]')).toHaveCount(0);
   });
 
   test('QD-66: choosing a starting point never touches the datasets or the shape', async ({ page }) => {
@@ -110,11 +111,11 @@ test.describe('clone, rerun and starting points', () => {
   test('QD-69: the default-preset editor keeps the single Dataset select, no run shape, and offers the task row', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/projects/${f.project.slug}/environments/${f.production.id}/default-preset/edit`);
-    await expect(page.getByTestId('editor-entry')).toBeVisible();
+    await expect(page.getByTestId('editor-where')).toBeVisible();
     await expect(page.getByRole('button', { name: /^Choose a dataset/ })).toBeVisible();
     await expect(page.getByTestId('datasets-fieldset')).toHaveCount(0);
     await expect(page.getByTestId('run-shape')).toHaveCount(0);
-    await expect(page.locator('[data-env-task]')).toHaveCount(1);
+    await expect(page.locator('[data-part=task-section]')).toHaveCount(1);
   });
 
   test('the experiments list is unchanged by dataset lists (QD-D11)', async ({ page, request }) => {

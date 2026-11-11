@@ -65,6 +65,8 @@ export interface Experiment {
   /** Detail only: the list leaves it out (C077). */
   versioning_details?: Record<string, unknown>;
   priority: EvalPriority;
+  /** Jobs per own priority (the experiment's `priority` is only the default of the runs launched with it). */
+  priorities?: Record<EvalPriority, number>;
   /** Asks the Evaluation Service for a quiet gateway; immutable after launch. */
   latency_sensitive: boolean;
   preemption_acknowledged_at: string | null;
@@ -119,6 +121,8 @@ export interface DatasetRef {
   dataset: string;
   version?: string | null;
   alias?: string | null;
+  /** The version a "latest" or alias entry resolved to when the experiment was launched (jobs only). */
+  resolved_version?: string | null;
 }
 
 /** The task a job ran: its id and the name the service listed. */
@@ -133,6 +137,8 @@ export interface ExperimentJob {
   environment_id: string;
   environment_name: string | null;
   combo_index: number;
+  /** This job's own priority (LOW, NORMAL, HIGH); null on a job older than per-run priority. */
+  priority?: EvalPriority | null;
   /** Position of the job's dataset pair when the platform ran the datasets one by one; 0 otherwise. */
   dataset_index?: number;
   /** The one pair a fanned-out job ran. */

@@ -102,7 +102,7 @@ test.describe('the Datasets card', () => {
       const fieldset = datasetsCard(page);
       m['singleFieldset'] = await sized(fieldset);
       m['singleBox'] = await sized(dsBox(page, 'support-tickets'));
-      near((await sized(dsBox(page, 'support-tickets'))).height, 67, 1.6, 'QD-3 box height');
+      near((await sized(dsBox(page, 'support-tickets'))).height, 75, 1.6, 'QD-3 box height (75: the option box padding of round 9, was 67)');
       const trigger = dsBox(page, 'support-tickets').getByRole('button', { name: /^Versions.* of support-tickets$/ });
       const tsize = await sized(trigger);
       m['trigger'] = tsize;
@@ -123,10 +123,15 @@ test.describe('the Datasets card', () => {
       const radios = page.getByTestId('run-shape').getByRole('radiogroup', { name: 'Run shape' });
       m['shapeControl'] = await sized(radios);
       near((await sized(radios)).height, 24, 0.8, 'QD-12 control');
-      await expect(radios.getByRole('radio', { name: 'Combine into one run' })).toBeChecked();
-      // Environment tags (QD-20/21): production takes a list, staging does not.
+      // One run each is the default: both environments fan out, the count is 8.
+      await expect(radios.getByRole('radio', { name: 'One run each' })).toBeChecked();
       const prodTag = page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name: 'production' }) }).getByTestId('env-shape-tag');
       const stagTag = page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name: 'staging' }) }).getByTestId('env-shape-tag');
+      await expect(prodTag).toHaveText('4 runs, one per dataset version');
+      await expect(page.getByText(/^8 runs to launch$/)).toBeAttached();
+      // Combine into one run is the opt-in; the composed state is measured in it.
+      await radios.getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
+      // Environment tags (QD-20/21): production takes a list, staging does not.
       await expect(prodTag).toHaveText('1 combined run');
       await expect(stagTag).toHaveText('4 runs, one per dataset version (older service)');
       m['prodTag'] = await sized(prodTag);
@@ -233,7 +238,7 @@ test.describe('the Datasets card', () => {
     expect(hits.length).toBe(before);
     save('measure-d-step1-1440', {
       fieldset: await sized(datasetsCard(page)),
-      review: await sized(page.getByRole('complementary', { name: 'Review' })),
+      bar: await sized(page.locator('[data-part=launch-bar]')),
     });
     await shot(page, 'after-d-step1-composed-1440');
     // Review rail below the step at 1024 and 390.
@@ -256,7 +261,8 @@ test.describe('the Datasets card', () => {
     expect(base).toBeGreaterThan(0);
     await addDataset(page, 'billing-faq');
     await expect.poll(count).toBe(base); // the list is "Datasets changed" once
-    await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
+    // One run each is the default: the shape counts once it leaves it.
+    await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
     await expect.poll(count).toBe(base + 1);
   });
 });

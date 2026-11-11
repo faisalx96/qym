@@ -37,6 +37,7 @@ class Principal:
     scopes: tuple[str, ...] = ()
     provider: Optional[str] = None
     project_id: Optional[str] = None
+    key_kind: Optional[str] = None  # api_key only: 'user' | 'experiment'
     api_key_id: Optional[str] = None
 
 
@@ -207,7 +208,14 @@ def resolve_api_key_principal(db: Session, token: str) -> Principal:
         )
     _require_api_key_project_access(db, row, user)
     scopes = tuple(str(scope).strip() for scope in (row.scopes or []) if str(scope).strip())
-    return Principal(user=user, auth_type="api_key", scopes=scopes, project_id=row.project_id, api_key_id=row.id)
+    return Principal(
+        user=user,
+        auth_type="api_key",
+        scopes=scopes,
+        project_id=row.project_id,
+        key_kind=row.kind,
+        api_key_id=row.id,
+    )
 
 
 def require_api_key_principal(
@@ -223,13 +231,25 @@ def require_api_key_principal(
 
 
 def require_api_key_scope(principal: Principal, required_scope: str) -> None:
-    # Scope enforcement is intentionally disabled: any valid API key is granted full
-    # access to its project. Authentication (a valid, non-revoked key), the key
-    # owner's current project membership and an active project still gate access
-    # (see resolve_api_key_principal); per-key scopes are no longer checked. The
-    # `required_scope` argument is kept so call sites don't need to change, and so
-    # enforcement can be reinstated here later without touching every endpoint.
-    return
+    # Only the keys the platform mints for Evaluation Service experiments are scoped
+    # (``eval_submitter_keys.SUBMITTER_KEY_SCOPES``): a leaked one can upload runs and
+    # read dataset items, nothing else. Keys users create stay unscoped on purpose:
+    # they were issued before scopes were enforced, carry whatever the client sent,
+    # and SDK and CI jobs rely on them acting with their owner's project access.
+    # Authentication, the owner's membership and an active project still gate every
+    # key (see resolve_api_key_principal).
+    if principal.key_kind != "experiment":
+        return
+    if required_scope in principal.scopes:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "This Evaluation Service key may only upload runs and read dataset items "
+            f"(scope '{required_scope}' required)"
+        ),
+        headers={"X-Qym-Key-State": "scope_denied"},
+    )
 
 
 def secret_matches(sent: Optional[str], expected: str) -> bool:

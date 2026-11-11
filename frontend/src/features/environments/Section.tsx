@@ -1,6 +1,14 @@
 import type { ReactNode } from 'react';
 import styles from './EnvironmentPage.module.css';
 
+/** `env-section-<name>` part names of the environment page (spec C-7-2). */
+const PART: Record<string, string> = {
+  'env-slots': 'groups',
+  'env-default-preset': 'preset',
+  'env-saved-presets': 'saved-presets',
+};
+const partOf = (id?: string) => (id ? `env-section-${PART[id] ?? id.replace(/^env-/, '')}` : undefined);
+
 export function Section({
   title,
   description,
@@ -16,7 +24,7 @@ export function Section({
 }) {
   const headingId = id ? `${id}-title` : undefined;
   return (
-    <section className={styles.section} aria-labelledby={headingId} data-section={id}>
+    <section className={styles.section} aria-labelledby={headingId} data-section={id} data-part={partOf(id)}>
       <div className={styles.sectionHead}>
         <div>
           <h2 className={styles.sectionTitle} id={headingId}>

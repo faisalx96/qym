@@ -1120,9 +1120,29 @@ def _repeat_pass_event_state(
                 }
         for key in outcomes:
             active_attempts.pop(key, None)
-    missing_passes = [p for p in range(1, samples + 1) if p not in passes_seen]
-    if missing_passes or (live and not active_attempts and not had_active_attempts):
+    # A gap is a pass below the highest pass that has rows (a legacy run or a
+    # deleted pass): the whole log is replayed. Passes above it have simply not
+    # started. With no attempt in flight, a live run (the normal state between
+    # an item's last attempt and its metric scores) or a run that ended before
+    # its last pass reads only the lifecycle events of its highest pass (an
+    # older ingest's in-flight or cancelled item has no row), never the metric
+    # events that make up most of the log. A run whose passes all have rows and
+    # that is no longer live reads nothing.
+    highest_seen = max(passes_seen, default=0)
+    missing_passes = [p for p in range(1, highest_seen + 1) if p not in passes_seen]
+    idle = not active_attempts and not had_active_attempts
+    legacy = None
+    if missing_passes:
         legacy = _repeat_pass_event_state_from_events(db, run_id, item_ids=item_ids)
+    elif idle and (live or highest_seen < samples):
+        legacy = _repeat_pass_event_state_from_events(
+            db,
+            run_id,
+            item_ids=item_ids,
+            event_types=LIFECYCLE_EVENT_TYPES,
+            min_pass=max(1, highest_seen),
+        )
+    if legacy is not None:
         for key, value in legacy["outcomes"].items():
             outcomes.setdefault(key, value)
         for key, value in legacy["active_attempts"].items():
@@ -1143,8 +1163,28 @@ def _repeat_pass_event_state(
     return state
 
 
+# The events that start or end an attempt: what a live run reads between
+# attempts. ``metric_scored`` (one per item, pass and metric: most of a run's
+# log) and ``pass_completed`` only add lifecycle timestamps and are left out.
+LIFECYCLE_EVENT_TYPES = frozenset(
+    {
+        "item_started",
+        "item_attempt_started",
+        "item_attempt_finished",
+        "item_completed",
+        "item_failed",
+    }
+)
+REPLAY_EVENT_TYPES = LIFECYCLE_EVENT_TYPES | {"metric_scored", "pass_completed"}
+
+
 def _repeat_pass_event_state_from_events(
-    db: Session, run_id: str, *, item_ids: Optional[List[str]] = None
+    db: Session,
+    run_id: str,
+    *,
+    item_ids: Optional[List[str]] = None,
+    event_types: Optional[frozenset[str]] = None,
+    min_pass: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Recover per-pass lifecycle state that is not represented by final attempts.
 
@@ -1152,28 +1192,29 @@ def _repeat_pass_event_state_from_events(
     older evaluations can emit an item outcome without a matching final-attempt
     row.  Keeping both here prevents live or legacy pass pages from falling back
     to the run-level item's latest state.
+
+    ``event_types`` narrows the read (default: every replayed type) and
+    ``min_pass`` keeps only events of that pass and later (an event without a
+    pass number is pass 1, so the filter applies from pass 2).
     """
 
-    event_types = {
-        "item_started",
-        "item_attempt_started",
-        "item_attempt_finished",
-        "metric_scored",
-        "item_completed",
-        "item_failed",
-        "pass_completed",
-    }
-    rows = (
+    query = (
         db.query(RunEvent)
-        .filter(RunEvent.run_id == run_id, RunEvent.type.in_(event_types))
+        .filter(
+            RunEvent.run_id == run_id,
+            RunEvent.type.in_(sorted(event_types or REPLAY_EVENT_TYPES)),
+        )
         .filter(
             RunEvent.payload["item_id"].as_string().in_(item_ids)
             if item_ids is not None
             else True
         )
-        .order_by(RunEvent.sequence.asc())
-        .all()
     )
+    if min_pass is not None and min_pass > 1:
+        query = query.filter(
+            RunEvent.payload["pass_number"].as_integer() >= int(min_pass)
+        )
+    rows = query.order_by(RunEvent.sequence.asc()).all()
     outcomes: Dict[tuple[str, int], Dict[str, Any]] = {}
     active_attempts: Dict[tuple[str, int], Dict[str, Any]] = {}
     starts_by_pass: Dict[int, List[int]] = defaultdict(list)
@@ -5673,6 +5714,9 @@ def legacy_run_data(
         )
         if live_revision is not None and isinstance(data.get("run"), dict):
             data["run"]["live_revision"] = live_revision
+            data["run"]["live_refresh_seconds"] = (
+                PlatformSettings().run_live_refresh_seconds
+            )
         # Folded in so the first paint needs no further request: the pager's
         # neighbours (default order) and the Reviews badge count.
         data["snapshot"]["rows_total"] = (
@@ -5695,6 +5739,9 @@ def legacy_run_data(
     )
     if live_revision is not None and isinstance(data.get("run"), dict):
         data["run"]["live_revision"] = live_revision
+        data["run"]["live_refresh_seconds"] = (
+            PlatformSettings().run_live_refresh_seconds
+        )
     if pass_number is not None:
         # One sample of a repeat run: the other passes' series are dropped.
         data["snapshot"]["rows"] = [
@@ -5793,6 +5840,7 @@ def run_live_status(
         "ended_at": _iso(run.ended_at) if run.ended_at else None,
         "last_event_at": last_event_at,
         "revision": _live_revision(db, run),
+        "live_refresh_seconds": PlatformSettings().run_live_refresh_seconds,
         "server_time": to_api_timestamp(utc_now_naive()),
     }
 

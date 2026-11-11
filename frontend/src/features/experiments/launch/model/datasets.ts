@@ -23,7 +23,8 @@ export function copySelection(s: LaunchSelection): LaunchSelection {
     extraRefs: s.extraRefs.slice(),
     more: s.more.map((e) => ({ name: e.name, refs: e.refs.slice() })),
     runShape: s.runShape,
-    tasks: { ...s.tasks },
+    task: s.task,
+    mixedTasks: s.mixedTasks ? { ...s.mixedTasks } : null,
   };
 }
 
@@ -138,28 +139,28 @@ export function setRunShape(doc: LaunchDocument, runShape: RunShape): LaunchDocu
     : { ...doc, selection: { ...doc.selection, runShape } };
 }
 
-/** `null` = the worker's default task (the entry is dropped). */
-export function setTask(doc: LaunchDocument, envId: string, taskId: string | null): LaunchDocument {
-  const tasks = { ...doc.selection.tasks };
-  if (taskId) tasks[envId] = taskId;
-  else delete tasks[envId];
-  return { ...doc, selection: { ...doc.selection, tasks } };
+/** The experiment's one task; `null` = the worker's default task. Replaces a cloned per-environment mix. */
+export function setTask(doc: LaunchDocument, taskId: string | null): LaunchDocument {
+  return { ...doc, selection: { ...doc.selection, task: taskId || null, mixedTasks: null } };
 }
 
-/** Tasks of the environments that are still ticked. */
-export function activeTasks(doc: Pick<LaunchDocument, 'environmentIds' | 'selection'>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const id of doc.environmentIds) {
-    const t = doc.selection.tasks[id];
-    if (t) out[id] = t;
+/** The spec's `evaluator.task`: the mix of a cloned experiment (ticked environments only), else the one task. */
+export function specTask(
+  doc: Pick<LaunchDocument, 'environmentIds' | 'selection'>,
+): string | Record<string, string> | null {
+  const mixed = doc.selection.mixedTasks;
+  if (mixed) {
+    const out: Record<string, string> = {};
+    for (const id of doc.environmentIds) if (mixed[id]) out[id] = mixed[id];
+    return Object.keys(out).length ? out : null;
   }
-  return out;
+  return doc.selection.task || null;
 }
 
-/** Unticking an environment drops its task (a later tick starts at the worker default). */
-export function dropTask(doc: LaunchDocument, envId: string): LaunchDocument {
-  if (!(envId in doc.selection.tasks)) return doc;
-  return setTask(doc, envId, null);
+/** The task id one ticked environment receives (`null` = the worker's default). */
+export function taskOfEnv(doc: Pick<LaunchDocument, 'selection'>, envId: string): string | null {
+  const mixed = doc.selection.mixedTasks;
+  return mixed ? mixed[envId] ?? null : doc.selection.task || null;
 }
 
 // ── Units per environment (section 3.3 of the spec) ──────────────────────
@@ -220,14 +221,13 @@ export function selectionEqual(a: LaunchSelection, b: LaunchSelection): boolean 
     a.runShape === b.runShape &&
     JSON.stringify(a.extraRefs) === JSON.stringify(b.extraRefs) &&
     JSON.stringify(a.more) === JSON.stringify(b.more) &&
-    JSON.stringify(cleanTasks(a.tasks)) === JSON.stringify(cleanTasks(b.tasks))
+    (a.task || null) === (b.task || null) &&
+    JSON.stringify(sortedMix(a.mixedTasks)) === JSON.stringify(sortedMix(b.mixedTasks))
   );
 }
 
-function cleanTasks(tasks: Record<string, string | null>): Array<[string, string]> {
-  return Object.entries(tasks)
-    .filter((e): e is [string, string] => Boolean(e[1]))
-    .sort(([x], [y]) => (x < y ? -1 : 1));
+function sortedMix(tasks: Record<string, string> | null): Array<[string, string]> {
+  return Object.entries(tasks ?? {}).sort(([x], [y]) => (x < y ? -1 : 1));
 }
 
 /** Datasets (references and the list) differ from the starting point. */
@@ -246,13 +246,16 @@ export function runShapeChanged(doc: Pick<LaunchDocument, 'selection'>, base: La
   return doc.selection.runShape !== (base ?? emptySelection()).runShape;
 }
 
-/** Environments whose task differs from the starting point. */
-export function changedTasks(
-  doc: Pick<LaunchDocument, 'selection' | 'environmentIds'>,
+/** The experiment's task differs from the starting point. */
+export function taskChanged(
+  doc: Pick<LaunchDocument, 'selection'>,
   base: LaunchSelection | undefined,
-): string[] {
+): boolean {
   const b = base ?? emptySelection();
-  return doc.environmentIds.filter((id) => (doc.selection.tasks[id] ?? null) !== (b.tasks[id] ?? null));
+  return (
+    (doc.selection.task || null) !== (b.task || null) ||
+    JSON.stringify(sortedMix(doc.selection.mixedTasks)) !== JSON.stringify(sortedMix(b.mixedTasks))
+  );
 }
 
 /** The first dataset's name, for the best-run scope and card text (QD-D9). */

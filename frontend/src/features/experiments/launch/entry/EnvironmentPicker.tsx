@@ -2,12 +2,12 @@ import { useState } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDialog';
 import { SlotEditorDialog } from '@/features/environments/SlotEditor';
-import { Button, Checkbox, Icon, LinkButton, Tag } from '@/ui';
+import { Link } from 'react-router-dom';
+import { Button, Checkbox, Icon, Tag } from '@/ui';
 import { environmentPath } from '../../paths';
 import { pairCount, PSEUDO, pointerToFieldName, unitsFor } from '../model';
 import { useLaunch } from '../LaunchContext';
-import { EnvTask } from './TaskRow';
-import { EnvVersions } from './VersionsBlock';
+import { EnvRefresh, EnvVersions } from './VersionsBlock';
 import styles from './entry.module.css';
 
 /** What a ticked environment will receive when the experiment names two or more dataset versions. */
@@ -83,7 +83,13 @@ export function EnvironmentPicker() {
     slug,
     reloadSlots,
     registerField,
+    review,
   } = useLaunch();
+  // Environments the chosen task is not offered by: flagged here, in the Task section and in the review.
+  const flagged = new Map<string, string>();
+  for (const item of review.items)
+    if ((item.rule === 'task_unsupported' || item.rule === 'task_unknown') && item.environmentId)
+      flagged.set(item.environmentId, item.message);
   const pairs = pairCount(doc);
   const [adding, setAdding] = useState(false);
   const [grouping, setGrouping] = useState<EvalEnvironment | null>(null);
@@ -98,8 +104,15 @@ export function EnvironmentPicker() {
         {envRecords.map((env) => {
           const selected = doc.environmentIds.includes(env.id);
           const status = schemaStatus[env.id];
+          const flag = selected ? flagged.get(env.id) : undefined;
           return (
-            <li key={env.id} className={styles.env} data-selected={selected}>
+            <li
+              key={env.id}
+              className={styles.env}
+              data-part="env-box"
+              data-state={flag ? 'flagged' : selected ? 'selected' : 'unselected'}
+              data-selected={selected}
+            >
               <Checkbox isSelected={selected} isDisabled={readOnly} onChange={(on) => toggleEnv(env.id, on)}>
                 {env.name}
               </Checkbox>
@@ -119,18 +132,23 @@ export function EnvironmentPicker() {
                     Group LLM settings
                   </Button>
                 ) : null}
-                <LinkButton
+                {selected ? <EnvRefresh env={env} projectId={projectId} /> : null}
+                <Link
                   to={environmentPath(slug, env.id)}
-                  variant="ghost"
+                  className={styles.detailsLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Details of ${env.name} (opens in a new tab)`}
                 >
                   Details
-                </LinkButton>
+                </Link>
               </span>
               {selected ? <EnvVersions env={env} projectId={projectId} /> : null}
-              {selected ? <EnvTask env={env} projectId={projectId} /> : null}
+              {flag ? (
+                <p className={styles.envFlag} data-part="env-flag" role="alert">
+                  {flag}
+                </p>
+              ) : null}
             </li>
           );
         })}

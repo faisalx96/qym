@@ -124,7 +124,7 @@ export async function setFakeTasks(
 export async function setFakeVersioning(
   request: APIRequestContext,
   port: number,
-  details: Record<string, string>,
+  details: Record<string, unknown>,
 ): Promise<void> {
   await control(request, port, '/versioning', details);
 }

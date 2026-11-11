@@ -435,7 +435,7 @@ describe('bases from server responses', () => {
       metric: 'accuracy',
       warnings: ['careful'],
     });
-    expect(loaded.info.label).toBe('run abcdef12 · accuracy 0.84 · agent v1.12 / kb 381');
+    expect(loaded.info.label).toBe('run abcdef12 · accuracy 0.84 · agent_version v1.12 / kb_version 381');
     expect(baseLabel({ base: loaded.info, clone: null, environmentIds: [PRODUCTION] })).toBe(
       loaded.info.label,
     );

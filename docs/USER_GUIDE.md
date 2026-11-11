@@ -186,36 +186,83 @@ Do this before `pip wheel packages/sdk` so the wheel contains it. For developmen
 `npm run dev:sdk` serves it on port 5808 and proxies `/api` to a local viewer on 8818
 (start one with `qym ui FILE --port 8818` or `qym run create ... --local-ui --ui-port 8818`).
 
-## Experiments: several datasets and a task per environment
+## Experiments: several datasets, one task and a priority per run
 
 ### Datasets and versions
 
 On the launch home view, the **Datasets** card starts as one list: pick a dataset (it runs on its Latest version, as before).
 From then on each dataset is a box with a **Versions** menu: tick Latest version, any version (newest first, drafts are
-tagged) and aliases; the chosen ones show as tags next to it. **Add another dataset** lists the project's other datasets. The
+tagged) and aliases; the chosen ones show as tags next to it. **Latest version** and an alias are resolved when you
+launch: the platform looks up the newest published version (or the version the alias points at) and writes it into every
+job as `dataset_version`, so an Evaluation Service cannot replace it with its own default version
+(`EVAL_DATASET_VERSION`). The experiment keeps your choice, a clone resolves it again, a retry keeps the pinned version,
+and the job history shows both (`latest (v7)`, `production (v2)`). A project dataset the platform cannot resolve (an
+unknown alias, no published version) is sent as chosen, with a review warning; a name that is not a project dataset is
+sent as chosen, silently. **Add another dataset** lists the project's other datasets. The
 card counts what you chose (`4 dataset versions from 2 datasets`). An experiment may name up to 20 dataset versions
 (`QYM_EVAL_MAX_DATASETS`).
 
 From two dataset versions the card shows the **Run shape**:
 
-- **Combine into one run** (default): one run over all dataset versions together. Every item records its dataset and version
+- **One run each** (default): one run per dataset version and environment, grouped under the experiment.
+- **Combine into one run**: one run over all dataset versions together. Every item records its dataset and version
   and scores break down per dataset. It needs an Evaluation Service on integration guide v1.4 (its schema declares
   `datasets`). An older service receives one job per dataset version instead; its environment box says
   `N runs, one per dataset version (older service)`.
-- **One run each**: one run per dataset version and environment, grouped under the experiment.
 
-The run count follows (`1 combination × (production: 1 combined run + staging: 4 runs) = 5 runs`) and the limit of
+An API request that names several dataset versions without `run_shape` gets `one_each`; a stored experiment always
+carries the shape it was launched with.
+
+The run count follows (`1 combination × (2 environments × 4 dataset versions) = 8 runs`, or with **Combine into one run**
+`1 combination × (production: 1 combined run + staging: 4 runs) = 5 runs`) and the limit of
 `QYM_EVAL_SWEEP_MAX_JOBS` applies to it. A one-dataset experiment is stored and sent exactly as before. Sweeps cannot cover the
 dataset list or the shape (use **One run each** to run each one); starting points (presets) hold no dataset list.
 
-### Task per environment
+### One task per experiment
 
-When an environment's service declares `task` and lists tasks (`GET /evals/tasks`), its box gets a **Task** row under
-Versions: **Worker default** first, then the service's tasks with their descriptions. The list is read live when the
-environment is ticked and again on its **Refresh**. A service that cannot list its tasks shows the reason; one that answers
-404, 405 or 422 shows no row. The task is stored on the experiment per environment and shown on the experiment page, where the
-**Datasets and task** card, one matrix row per dataset version and a job history grouped by dataset version replace the plain
-matrix. A preset may hold the task of its own environment.
+When a ticked environment's service declares `task` and lists tasks (`GET /evals/tasks`), a **Task** card appears above
+Environments and Datasets (on the launch home view and on the first Customize step). It holds one select: **Worker default**
+first, then the union of the ticked environments' tasks, each with the environments that offer it. The row under it shows, per
+ticked environment, whether it offers the chosen task. If one does not (or its service has no task selection at all), its box turns red,
+the review lists the problem and Launch stays disabled until you change the task or untick the environment; the platform never
+quietly runs the Worker default there. The task is stored once on the experiment (`evaluator.task`, a task id) and shown on the
+experiment page, where the **Datasets and task** card, one matrix row per dataset version and a job history grouped by dataset
+version replace the plain matrix. Experiments launched before this change keep their per-environment tasks and display unchanged;
+**Duplicate** shows the common task or "Different per environment" (read-only). A preset may hold the task of its own environment.
+
+### The Customize bar and the review's run table
+
+Customize (and the default preset editor) has one bottom bar on every step: **Skip to review** and **Cancel** at the far left, the
+run count with the first problem (a link to its field) or Ready in the centre, and **Back** and **Continue** at the far right. On the
+last step Continue's place holds the launch: **Launch N runs** (**Publish vN** in the editor), disabled while a problem or the High
+acknowledgement blocks it; Skip to review is then disabled in place. No earlier step launches; moving on with Continue is never
+blocked. The home view's bar keeps **Customize →** and **Launch as is**. The bar sits under the last card when the page is short
+and stays at the bottom of the window while the page is longer.
+
+The Review step's **runs to launch** table has one row per run: `#`, the Environment and Dataset when they differ between runs,
+**one column per swept setting** (named as the form names it, a linked pair under "Linked: vary together", the value you picked in
+each cell, such as the model connection's name), the Task when it differs, and the run's Priority. When the columns do not fit the
+card, the table scrolls sideways instead of narrowing a column; on a phone each run is a card with the same facts. The Summary lists
+the **Swept settings** one line per sweep, and Changes names them.
+
+### Priority per run
+
+The experiment has one priority (**Name and priority**, default from the environments) and, on the **Review** step, every run of
+a sweep has its own **Low / Normal / High** select that starts at the experiment's value. **Set every run to** changes all rows
+at once. The rules are the experiment's, applied per run: **High** needs a project manager, is capped by the run's own
+environment (`max_priority`), and any High run needs the preemption acknowledgement (one checkbox above the table, naming only the environments of High runs). The
+platform stores the priority on each job (it is sent to the Evaluation Service per job, as before), **Retry** keeps the job's priority,
+and within one experiment High runs are submitted first. The API takes `job_priorities` (`environment_id`, `combo_index`,
+`dataset_index`, `priority`) next to `priority`; the experiment and each job carry `priority`, and the experiment a
+`priorities` count (`{"LOW": 0, "NORMAL": 5, "HIGH": 1}`).
+
+### Environment pages
+
+Experiments -> Environments and Project settings -> Environments show the same table, and the whole row opens the environment (click
+any cell, press Enter on a focused row, Ctrl/Cmd-click for a new tab); the name is also a normal link and a chevron closes every
+row. Both entries open one page, `/projects/<project>/environments/<id>`, with Status, Schema, Tasks (what the service offers; read-only),
+LLM model groups, Default preset, Saved presets, Ranking, Policies and Connection, and a bar with Delete environment and Save changes.
+Opened from Project settings, its back link reads "Project settings"; otherwise "All environments".
 
 ## Experiments: latency-sensitive runs and credentials
 
@@ -242,9 +289,13 @@ while it runs, and discards and re-queues it if foreign traffic overlaps (up to 
 
 ### Evaluation Service versions (read-only)
 
-The launch form has no versioning box. Under the environments, on the launch home view and on the first Customize step, a
-**Evaluation Service versions** card shows each environment's current `agent`, `image` and `kb`, read from its Evaluation Service
-(**Refresh** reads them again). A run records the versions its service reports; nothing typed by a user is stored on a new
+The launch form has no versioning box. On the launch home view and on the first Customize step, each ticked environment's box has a
+**Versions** line with what its Evaluation Service reports a run started now would record (**Refresh** reads it again): every key of
+its `versioning_details`, in the service's order, the key exactly as the service names it (`agent_version`, `kb_version`,
+`prompt_set`, …) above its value. A key the service does not report is not shown, so a version the service has dropped (such as
+`image_version`) disappears by itself; a service that reports nothing reads "No versioning details reported". Long values and
+objects take the whole line (objects as compact JSON, the whole text in the tooltip). The review's **Versions** row shows the same
+grid per environment. The Experiments list's versioning filters and the best-run scope name each key as reported. A run records the versions its service reports; nothing typed by a user is stored on a new
 experiment, Duplicate and Rerun carry none, and `POST .../experiments` answers 422 when a request still sends `versioning_details`
 (`null` and `{}` are accepted). Experiments and runs created earlier keep their versioning details and still filter by them.
 
@@ -260,8 +311,15 @@ schema declares it, so an Evaluation Service shared by several qym instances ret
 it. Both keys are set by the platform; a configuration or preset that sets them itself fails validation until edited.
 
 The experiment page shows a **Credentials** row (API key and dataset read token: *active*, *revoked*, *not issued*,
-*not sent*); no secret is ever shown. In Project settings, API keys, **Dataset read tokens** also lists experiment tokens
-with an *experiment* tag and a link to the experiment; admins can revoke one by hand (a retry issues a new one).
+*not sent*); no secret is ever shown. Project settings, API keys keeps the keys the platform mints for experiments out of
+the way: your own keys are the table, and the keys issued at launch sit in a closed **Evaluation Service keys** group under
+it (the same for **Experiment tokens** under Dataset read tokens, admins only). Each row there names its experiment and links
+to it; you can revoke one by hand (a retry issues a new one).
+
+The API key minted for an experiment is scoped: it can upload runs (`POST /v1/runs`, `/v1/runs/{id}/events`,
+`/v1/runs:upload`) and read dataset items, and nothing else. Creating, changing or deleting datasets, reading runs back and
+the other routes answer 403 (`X-Qym-Key-State: scope_denied`), so a leaked key is worth little. Keys you create yourself are
+not scoped and keep acting with your project access.
 
 
 ## Live evaluation

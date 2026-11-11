@@ -16,8 +16,6 @@ export const BEST_RUN_REASONS: Record<string, string> = {
     'Every run in this scope errored on more than 20% of its items. Include errored runs to see them.',
 };
 
-export const VERSION_LABELS: Record<string, string> = { agent_version: 'agent', kb_version: 'kb' };
-
 export interface BestRunScope {
   datasetId?: string;
   versionId?: string;
@@ -53,16 +51,32 @@ export function formatAge(seconds: unknown): string {
   return `${Math.round(seconds / 86400)}d ago`;
 }
 
-/** "agent v1.12 / kb 381" (other keys follow as "key value"). */
-export function versionText(versioning: unknown): string {
-  if (!versioning || typeof versioning !== 'object') return '';
-  const v = versioning as Record<string, unknown>;
-  const keys = Object.keys(v).filter((k) => v[k] != null && typeof v[k] !== 'object');
-  keys.sort((a, b) => (VERSION_LABELS[a] ? 0 : 1) - (VERSION_LABELS[b] ? 0 : 1) || (a < b ? -1 : 1));
-  return keys.map((k) => `${VERSION_LABELS[k] ?? k} ${String(v[k])}`).join(' / ');
+/** A versioning value as text: scalars as written, objects and arrays as compact JSON. */
+function valueText(value: unknown): string {
+  if (value !== null && typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
-/** "run abc12345 · accuracy 0.84 · agent v1.12 / kb 381" */
+/**
+ * "release v1.12 / build 381": every reported key as written, in the payload's order, objects as compact JSON
+ * (round 10, C-3-10: no fixed key list, nothing renamed or dropped).
+ */
+export function versionText(versioning: unknown): string {
+  if (!versioning || typeof versioning !== 'object' || Array.isArray(versioning)) return '';
+  const v = versioning as Record<string, unknown>;
+  return Object.keys(v)
+    .filter((k) => v[k] != null)
+    .map((k) => `${k} ${valueText(v[k])}`)
+    .join(' / ');
+}
+
+/** "run abc12345 · accuracy 0.84 · release v1.12 / build 381" */
 export function bestRunHeader(
   info: Pick<BaseInfo, 'runId' | 'metric' | 'score'> & { versioning?: unknown },
 ): string {
@@ -74,13 +88,13 @@ export function bestRunHeader(
   return parts.join(' · ');
 }
 
-/** Drift lines: "agent: v1 in this run, v2 now". */
+/** Drift lines: "release: v1 in this run, v2 now" (the key as reported). */
 export function driftLines(drift: BaseInfo['drift']): string[] {
   if (!drift || drift.status !== 'changed') return [];
-  return (drift.changes ?? []).map((c) => {
-    const label = VERSION_LABELS[c.key] ?? c.key;
-    return `${label}: ${c.run == null ? 'none' : String(c.run)} in this run, ${c.latest == null ? 'none' : String(c.latest)} now`;
-  });
+  return (drift.changes ?? []).map(
+    (c) =>
+      `${c.key}: ${c.run == null ? 'none' : valueText(c.run)} in this run, ${c.latest == null ? 'none' : valueText(c.latest)} now`,
+  );
 }
 
 export function sameScope(a: BestRunScope, b: BestRunScope): boolean {

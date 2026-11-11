@@ -1,0 +1,10 @@
+# D10-8: before = 0c7b4ed4 frontend (Vite), after = this branch's production build; repeat run of seed-run-detail.ts
+before 1440 PASS:189 | CORRECT:189 | AVG LATENCY:189 | MEDIAN:215.8 | ERRORS:189 | ITEMS:189.1
+before 1024 PASS:121.3 | CORRECT:121.3 | AVG LATENCY:121.3 | MEDIAN:138.5 | ERRORS:121.3 | ITEMS:121.3
+after 1440 PASS:189 | CORRECT:189 | AVG LATENCY:189 | MEDIAN:215.8 | ERRORS:189 | ITEMS:189.1
+after 1024 PASS:121.3 | CORRECT:121.3 | AVG LATENCY:121.3 | MEDIAN:138.5 | ERRORS:121.3 | ITEMS:121.3
+# review runs table, two-axis clone, 1440
+before #:102 | ENVIRONMENT:689 | SWEPT SETTING:160 | PRIORITY:240
+after #:48 | ENVIRONMENT:225.8 | Primary model:225.8 | Milvus Search Threshold:225.8 | Timeout:225.8 | PRIORITY:240
+# home bar at 1024, both environments ticked (a problem shown)
+before 74.6 / after 74.6

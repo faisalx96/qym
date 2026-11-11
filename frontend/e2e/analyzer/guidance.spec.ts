@@ -376,7 +376,9 @@ test.describe('read-only view (13)', () => {
       'View only: project managers and the run’s owner can run analysis.',
     );
     await expect(analyzeButton(page)).toBeDisabled();
-    await expect(rail(page).getByRole('button', { name: /^Test (selected|the first target)/ })).toBeDisabled();
+    await expect(
+      rail(page).getByRole('button', { name: /^Test (selected|the first target)/ }),
+    ).toBeDisabled();
   });
 
   test('no LLM connection: the rail says so and disables Test / Analyze; Preview still works', async ({

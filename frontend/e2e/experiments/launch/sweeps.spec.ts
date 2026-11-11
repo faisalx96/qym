@@ -3,13 +3,15 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { resetFakes, test } from '../support';
 import {
   expectReady,
+  goStep,
   launchButton,
   nameBox,
   openGroup,
   openLaunch,
   openSection,
-  review,
+  launchBar,
   seedLaunch,
+  toReview,
   type LaunchFixture,
 } from './launchSupport';
 
@@ -63,16 +65,18 @@ test('a range 0.1 to 0.5 step 0.1 makes 5 chips and "5 runs to launch"', async (
   const chips = sweeps.getByRole('list', { name: `${label} values` }).getByRole('listitem');
   await expect(chips).toHaveCount(5);
   await expect(chips).toHaveText(['0.1', '0.2', '0.3', '0.4', '0.5']);
-  await expect(review(page)).toContainText(/5\s*runs to launch/);
+  await expect(launchBar(page)).toContainText(/5\s*runs to launch/);
   await expect(sweeps.getByTestId('sweep-math')).toContainText('5');
   await expectReady(page);
-  await expect(launchButton(page)).toBeEnabled();
+  // round 10, C-1-6: the launch is on the review step only; Continue moves on
+  await expect(launchButton(page)).toHaveCount(0);
+  await expect(page.locator('[data-part=bar-continue]')).toBeEnabled();
   // Removing a chip updates the count.
   await sweeps.getByRole('button', { name: `Remove 0.5 from ${label}` }).click();
-  await expect(review(page)).toContainText(/4\s*runs to launch/);
+  await expect(launchBar(page)).toContainText(/4\s*runs to launch/);
   // Single value stops the sweep.
   await sweeps.getByRole('button', { name: `Single value for ${label}` }).click();
-  await expect(review(page)).toContainText(/1\s*run to launch/);
+  await expect(launchBar(page)).toContainText(/1\s*run to launch/);
 });
 
 test('linking two axes of different lengths is an error; equal lengths zip', async ({ page }) => {
@@ -84,7 +88,7 @@ test('linking two axes of different lengths is an error; equal lengths zip', asy
   const sweeps = page.getByRole('region', { name: /^Sweeps/ });
   await addRange(page, 'Endpoints › primary › Connect Timeout', '2', '3', '1'); // 1,2,3
   await addRange(page, 'Endpoints › primary › Max Attempts', '2', '3', '1'); // 1,2,3
-  await expect(review(page)).toContainText(/9\s*runs to launch/);
+  await expect(launchBar(page)).toContainText(/9\s*runs to launch/);
   // Make the lengths differ, then try to link.
   await sweeps.getByRole('button', { name: 'Remove 3 from Endpoints › primary › Max Attempts' }).click();
   await tick(
@@ -103,12 +107,12 @@ test('linking two axes of different lengths is an error; equal lengths zip', asy
   await addRange(page, 'Endpoints › primary › Max Attempts', '3', '3', '1');
   await sweeps.getByRole('button', { name: 'Link selected' }).click();
   await expect(sweeps.getByText('linked', { exact: true })).toHaveCount(1);
-  await expect(review(page)).toContainText(/3\s*runs to launch/);
+  await expect(launchBar(page)).toContainText(/3\s*runs to launch/);
   await sweeps
     .getByRole('button', { name: /^Unlink/ })
     .first()
     .click();
-  await expect(review(page)).toContainText(/9\s*runs to launch/);
+  await expect(launchBar(page)).toContainText(/9\s*runs to launch/);
 });
 
 test('exceeding the run cap disables Launch and shows the over-cap callout', async ({ page }) => {
@@ -121,8 +125,11 @@ test('exceeding the run cap disables Launch and shows the over-cap callout', asy
   await addRange(page, 'Endpoints › primary › Max Attempts', '2', '9', '1'); // 9 -> 81
   const sweeps = page.getByRole('region', { name: /^Sweeps/ });
   await expect(sweeps.getByText(/81 runs is over the limit of 64/)).toBeVisible();
-  await expect(review(page)).toContainText(/81\s*runs/);
+  await expect(launchBar(page)).toContainText(/81\s*runs/);
+  // round 10: the launch is the review step's primary slot; it is blocked there
+  await toReview(page);
   await expect(launchButton(page)).toBeDisabled();
+  await goStep(page, 'settings');
   await expect(page.getByRole('region', { name: /^Sweeps/ })).toBeVisible();
   // Linking brings it back under the cap.
   await tick(
@@ -134,7 +141,8 @@ test('exceeding the run cap disables Launch and shows the over-cap callout', asy
     sweeps.getByRole('checkbox', { name: 'Select Endpoints › primary › Max Attempts to link' }),
   );
   await sweeps.getByRole('button', { name: 'Link selected' }).click();
-  await expect(review(page)).toContainText(/9\s*runs to launch/);
+  await expect(launchBar(page)).toContainText(/9\s*runs to launch/);
   await expectReady(page);
+  await toReview(page);
   await expect(launchButton(page)).toBeEnabled();
 });

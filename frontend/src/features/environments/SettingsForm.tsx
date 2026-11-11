@@ -49,12 +49,10 @@ export interface SettingsFormProps {
   projectId: string;
   env: EvalEnvironment;
   canEdit: boolean;
-  /** Show the Close button next to Save (drawer). */
-  onClose?: () => void;
   onDeleted: () => void;
 }
 
-export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: SettingsFormProps) {
+export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFormProps) {
   const update = useUpdateEnvironment(projectId, env.id);
   const remove = useDeleteEnvironment(projectId, env.id);
   const toast = useToast();
@@ -285,18 +283,13 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
         </Section>
       ) : null}
       {canEdit ? (
-        <div className={styles.footer}>
-          <Button variant="danger" size="md" onPress={() => setConfirmDelete(true)}>
+        <div className={styles.footer} data-part="env-footer">
+          <Button variant="danger" size="sm" onPress={() => setConfirmDelete(true)}>
             Delete environment
           </Button>
           <span className={styles.footerSpacer} />
           {dirty ? <Tag tone="warning">Unsaved changes</Tag> : null}
-          {onClose ? (
-            <Button variant="neutral" size="md" onPress={onClose}>
-              Close
-            </Button>
-          ) : null}
-          <Button variant="primary" size="md" loading={update.isPending} onPress={() => void save()}>
+          <Button variant="primary" size="sm" loading={update.isPending} onPress={() => void save()}>
             Save changes
           </Button>
         </div>

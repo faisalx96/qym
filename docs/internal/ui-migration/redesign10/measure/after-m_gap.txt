@@ -1,0 +1,27 @@
+1440 900 home (default, nothing ticked)     gap 11.5 barTop 844 barBottom 900 scrollH 852 clientH 850 sticky 0px
+1440 900 home (production only)             gap -148.4 barTop 844 barBottom 900 scrollH 1012 clientH 850 sticky 0px
+1440 900 home (staging, saved presets)      gap -238.8 barTop 844 barBottom 900 scrollH 1103 clientH 850 sticky 0px
+1440 900 step where                         gap 14 barTop 827.1 barBottom 883.1 scrollH 850 clientH 850 sticky 0px
+1440 900 step start                         gap 14 barTop 627.9 barBottom 683.9 scrollH 850 clientH 850 sticky 0px
+1440 900 step models                        gap -91.3 barTop 844 barBottom 900 scrollH 955 clientH 850 sticky 0px
+1440 900 step settings                      gap 14 barTop 608.7 barBottom 664.7 scrollH 850 clientH 850 sticky 0px
+1440 900 step evaluation                    gap -125.7 barTop 844 barBottom 900 scrollH 990 clientH 850 sticky 0px
+1440 900 step review                        gap -33.6 barTop 844 barBottom 900 scrollH 930 clientH 850 sticky 0px
+1440 1400 home (default, nothing ticked)     gap 14 barTop 846.5 barBottom 902.5 scrollH 1350 clientH 1350 sticky 0px
+1440 1400 home (production only)             gap 14 barTop 1006.4 barBottom 1062.4 scrollH 1350 clientH 1350 sticky 0px
+1440 1400 home (staging, saved presets)      gap 14 barTop 1096.8 barBottom 1152.8 scrollH 1350 clientH 1350 sticky 0px
+1440 1400 step where                         gap 14 barTop 827.1 barBottom 883.1 scrollH 1350 clientH 1350 sticky 0px
+1440 1400 step start                         gap 14 barTop 627.9 barBottom 683.9 scrollH 1350 clientH 1350 sticky 0px
+1440 1400 step models                        gap 14 barTop 949.3 barBottom 1005.3 scrollH 1350 clientH 1350 sticky 0px
+1440 1400 step settings                      gap 14 barTop 608.7 barBottom 664.7 scrollH 1350 clientH 1350 sticky 0px
+1440 1400 step evaluation                    gap 14 barTop 983.7 barBottom 1039.7 scrollH 1350 clientH 1350 sticky 0px
+1440 1400 step review                        gap 14 barTop 923.6 barBottom 979.6 scrollH 1350 clientH 1350 sticky 0px
+390 844 home (default, nothing ticked)     gap -452.6 barTop 753.2 barBottom 844 scrollH 1261 clientH 794 sticky 0px
+390 844 home (production only)             gap -934.9 barTop 753.2 barBottom 844 scrollH 1743 clientH 794 sticky 0px
+390 844 home (staging, saved presets)      gap -1166.6 barTop 753.2 barBottom 844 scrollH 1975 clientH 794 sticky 0px
+390 844 step where                         gap -376.8 barTop 753.2 barBottom 844 scrollH 1324 clientH 794 sticky 0px
+390 844 step start                         gap -379.2 barTop 753.2 barBottom 844 scrollH 1187 clientH 794 sticky 0px
+390 844 step models                        gap -401 barTop 753.2 barBottom 844 scrollH 1209 clientH 794 sticky 0px
+390 844 step settings                      gap 1.2 barTop 753.2 barBottom 844 scrollH 807 clientH 794 sticky 0px
+390 844 step evaluation                    gap -1304.7 barTop 753.2 barBottom 844 scrollH 2113 clientH 794 sticky 0px
+390 844 step review                        gap -406.8 barTop 753.2 barBottom 844 scrollH 1354 clientH 794 sticky 0px

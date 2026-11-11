@@ -133,7 +133,7 @@ describe('BestRunPicker', () => {
     expect(within(table).getByText('0.91')).toBeInTheDocument();
     expect(within(table).getByText('0.86')).toBeInTheDocument(); // pass@3
     expect(within(table).getByText('40 (3 err)')).toBeInTheDocument();
-    expect(within(table).getAllByText('agent 1.4 / kb kb-7')).toHaveLength(3);
+    expect(within(table).getAllByText('agent_version 1.4 / kb_version kb-7')).toHaveLength(3);
     expect(within(table).getAllByText('timeout=25')).toHaveLength(3);
     expect(screen.getByText('PASS@3', { exact: false })).toBeInTheDocument();
     expect(screen.getByText(/2 runs are hidden for erroring/)).toBeInTheDocument();

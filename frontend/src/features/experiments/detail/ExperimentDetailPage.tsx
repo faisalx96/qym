@@ -159,7 +159,12 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
     <span key="age" title={absTime(x.created_at)}>
       {relTime(x.created_at)}
     </span>,
-    `Priority ${titleCase(x.priority)}`,
+    // The experiment's priority is the default of its runs; a run may have its own (shown per job below).
+    `Priority ${titleCase(x.priority)}${
+      x.priorities && x.priorities.HIGH > 0 && x.priority !== 'HIGH'
+        ? ` · ${x.priorities.HIGH} High ${x.priorities.HIGH === 1 ? 'run' : 'runs'}`
+        : ''
+    }`,
     `Base: ${baseSourceLabel(x.base_source)}`,
     envNames.length ? envNames.join(', ') : null,
   ].filter((m): m is NonNullable<typeof m> => m !== null);

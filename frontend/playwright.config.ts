@@ -85,6 +85,8 @@ export default defineConfig({
         `QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT=0`,
         // the feedback specs start far more than 5 drafts a day and 30 messages an hour as one user
         `QYM_FEEDBACK_DRAFTS_PER_DAY=0 QYM_FEEDBACK_MESSAGES_PER_HOUR=0`,
+        // the live-run specs wait for probes and reloads within seconds; deployments default to 15
+        `QYM_RUN_LIVE_REFRESH_SECONDS=3`,
         `QYM_ROLE=all`,
         `${venvPython} -m uvicorn qym_platform.main:app --port ${PLATFORM_PORT} --log-level warning`,
       ].join(' '),

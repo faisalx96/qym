@@ -1,0 +1,393 @@
+/* Round 10 mocks (design stage): visual contract for docs/internal/ui-migration/redesign10/experiments.md.
+   Tokens only. Builds on Round9Mocks.module.css (imported as r9 by the TSX). The CSS marked "recipe" is what moves into the
+   components (launchBar.module.css, LaunchPage.module.css, entry.module.css, reviewStep.module.css). */
+
+/* The page fills the viewport height, so a short page shows what the real one shows below its last element. */
+.fill {
+  min-block-size: 100dvh;
+}
+
+/* recipe (K1, K4): the bottom bar. In flow after the content (the page's 14 px gap above it, no auto margin), sticky at the
+   scroller's bottom edge, so it rides at the viewport bottom only while the content is taller than the viewport. The negative
+   end margin cancels the page's bottom padding, so at the end of a long page the bar still ends at the viewport bottom. */
+.bar {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-block-size: var(--bar-action-h);
+  box-sizing: border-box;
+  margin-block-end: calc(-1 * var(--space-xl));
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+}
+
+.barStart,
+.barEnd {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.barStatus {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--space-xs) var(--space-md);
+  min-inline-size: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.barRuns {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.barProblem {
+  font-size: var(--font-sm);
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+  text-decoration: underline;
+}
+
+.barOk {
+  font-size: var(--font-sm);
+  color: var(--success);
+}
+
+.muted {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* the primary slot keeps one width from "Continue" to "Launch 12 runs", so Back never moves */
+.primary {
+  min-inline-size: 7.5rem;
+}
+
+.barName {
+  flex: 0 1 320px;
+  min-inline-size: 12rem;
+}
+
+.long {
+  display: inline;
+}
+
+/* the home bar keeps its status at the start (unchanged); the steps bar centres it between the two groups */
+.bar[data-bar='home'] .barStatus {
+  justify-content: flex-start;
+}
+
+/* A phone: the status on the first row, Skip and Cancel at the start of the next, Back and the primary at the end of the last. */
+@media (width <= 480px) {
+  .bar {
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    min-block-size: calc(var(--bar-action-h) + var(--space-lg) + var(--space-xs));
+    padding: var(--space-sm);
+  }
+
+  .barStatus {
+    flex: 1 1 100%;
+    order: -1;
+    justify-content: flex-start;
+  }
+
+  .barStart {
+    flex: 1 1 auto;
+  }
+
+  .barEnd {
+    margin-inline-start: auto;
+  }
+
+  .long {
+    display: none;
+  }
+
+  .barName {
+    flex: 1 1 100%;
+  }
+}
+
+.barFrame {
+  display: flex;
+  flex-direction: column;
+  padding-block-end: var(--space-xl);
+}
+
+.boxLinks {
+  display: inline-flex;
+  gap: var(--space-md);
+}
+
+.startOther {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+@media (width <= 760px) {
+  .startOther {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* recipe (K3): the Versions line. The label on its own line, then a grid of key-over-value cells in the service's order.
+   At least three cells are laid out (empty spacers for the missing ones), so the three-placeholder loading frame and 1 to 3
+   keys have one height at every width. */
+.versions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+  padding-block-start: var(--space-xs);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.versionsLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.vGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: var(--space-xs) var(--space-md);
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.vItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.vItem dt {
+  max-inline-size: 100%;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.vItem dd {
+  display: flex;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.vItem[data-wide] {
+  grid-column: 1 / -1;
+}
+
+.vSpacer {
+  visibility: hidden;
+}
+
+.vText {
+  min-block-size: var(--badge-height);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: var(--badge-height);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.vEmpty {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: var(--badge-height);
+  color: var(--text-muted);
+}
+
+.vError {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: var(--badge-height);
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+}
+
+.skelKey {
+  display: inline-block;
+  inline-size: 5rem;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.skelValue {
+  display: block;
+  inline-size: 64px;
+  block-size: var(--badge-height);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+/* the review's Versions row: one line per environment, the name then the same grid */
+.reviewVersions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  inline-size: 100%;
+}
+
+.reviewEnv {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-md);
+  align-items: start;
+}
+
+.reviewEnvName {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+@media (width <= 760px) {
+  .reviewEnv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* recipe (K2): the Summary's Swept settings row, one line per axis */
+.swept {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sweptLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.sweptName {
+  font-weight: 600;
+}
+
+.sweptValues {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.sweptValue {
+  white-space: nowrap;
+}
+
+.sweptJoin {
+  color: var(--text-muted);
+}
+
+.monoValue {
+  font-family: var(--font-mono);
+}
+
+/* recipe (K2): an axis column header, the setting's name and, only when two sections share it, the section on a second line */
+.axisHead {
+  display: inline-flex;
+  flex-direction: column;
+  /* a setting's name is data: shown as written (DESIGN_LANGUAGE section 7), not in the uppercase of the fixed headers */
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+}
+
+.axisSection {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.runTable {
+  min-inline-size: 0;
+}
+
+.runCards {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: var(--space-md);
+  list-style: none;
+}
+
+@media (width <= 760px) {
+  .runTable {
+    display: none;
+  }
+
+  .runCards {
+    display: flex;
+  }
+}
+
+/* appendix frames at the real column widths */
+.col1440 {
+  inline-size: 1193px;
+  max-inline-size: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.col1024 {
+  inline-size: 777px;
+  max-inline-size: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.col390 {
+  inline-size: 279px;
+}
+
+.col390 .runCards {
+  display: flex;
+  padding: 0;
+}
+
+.versionSheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  inline-size: min(100%, 1193px);
+}
+
+.versionRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.versionCols {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-md);
+}

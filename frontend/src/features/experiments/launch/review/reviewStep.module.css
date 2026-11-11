@@ -1,0 +1,338 @@
+/* The Review step (round 9, points 4-6): Summary, Runs, Changes and Checks as framed cards, one fact per cell. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.headTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.count[data-over='true'] {
+  color: var(--error);
+}
+
+.math {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.toolLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.setAll {
+  inline-size: 120px;
+  flex: none;
+}
+
+/* Summary: label | value rows, a hairline between them. */
+.kv {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.kvRow {
+  display: grid;
+  grid-template-columns: 160px minmax(0, var(--field-measure));
+  gap: var(--space-xs) var(--space-lg);
+  align-items: center;
+  min-block-size: var(--row-compact);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.kvRow:last-child {
+  border-block-end: 0;
+}
+
+.kvRow dt {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.kvRow dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+  margin: 0;
+  padding-block: var(--space-xs);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.kvRow dd[data-mono] {
+  font-family: var(--font-mono);
+}
+
+.kvSub {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 760px) {
+  .kvRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-block: var(--space-xs);
+  }
+}
+
+/* Runs: one row per run, one fact per cell (a DataTable on the compact 32 px row). */
+.tableWrap {
+  margin-inline: calc(var(--space-lg) * -1);
+  min-width: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.prioCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
+}
+
+.prio {
+  inline-size: 120px;
+  flex: none;
+}
+
+.changed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.dot {
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--accent-primary);
+}
+
+/* Under 760 px each run is a card: label | value. */
+.runCards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runCard {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  font-size: var(--font-base);
+}
+
+.runCard dt {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.runCard dd {
+  min-width: 0;
+  margin: 0;
+}
+
+/* The acknowledgement for High runs. */
+.ack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--warning);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--warning) var(--tint-soft), transparent);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.ackTitle {
+  font-weight: 600;
+}
+
+/* Changes | Checks side by side from 960 px. */
+.twoCol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .twoCol {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-block-size: var(--row-compact);
+  border-block-end: 1px solid var(--border-subtle);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.row:last-child {
+  border-block-end: 0;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.checkLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.ok {
+  font-size: var(--font-base);
+  color: var(--success);
+}
+
+.envNote {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+/* Round 10, point 2: the Summary's "Swept settings" row, one line per axis. */
+.swept {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sweptLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.sweptName {
+  font-weight: 600;
+}
+
+.sweptValues {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.sweptValue {
+  white-space: nowrap;
+}
+
+.sweptJoin {
+  color: var(--text-muted);
+}
+
+/* A swept setting's column header: its name as the form writes it (data, not the uppercase of the fixed headers) and,
+   only when two columns share the name, the section on a second line. */
+.axisHead {
+  display: inline-flex;
+  flex-direction: column;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+}
+
+.axisSection {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+/* the value the user picked, 12 px primary text (mono comes from the column for numbers) */
+.axisCell {
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}

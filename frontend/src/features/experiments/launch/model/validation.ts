@@ -4,7 +4,15 @@
  * the authority: these only cover the cheap checks.
  */
 import { LATENCY_REVIEW_LABEL, latencyGateMessage } from '../copy';
-import { acceptsTask, DATASETS_MAX, datasetPairs, envUnits, refLabel, unitTotal } from './datasets';
+import {
+  acceptsTask,
+  DATASETS_MAX,
+  datasetPairs,
+  envUnits,
+  refLabel,
+  taskOfEnv,
+  unitTotal,
+} from './datasets';
 import { datasetValue, DESCRIPTION_MAX, PRIORITY_ORDER } from './document';
 import { latencyGate } from './latencyGate';
 import { envsMissing, envName, leafSchema, notInEnvMessage } from './descriptor';
@@ -188,26 +196,31 @@ function datasetErrors(doc: LaunchDocument): LocalIssue[] {
   return out;
 }
 
-/** A task on an environment that does not offer one, or one its service does not list. */
+/**
+ * The experiment's one task on an environment that does not offer one, or one its service does not list.
+ * Each is flagged on its environment (`environmentId`) and points at the single Task select.
+ */
 function taskErrors(doc: LaunchDocument, ctx: FormContext): LocalIssue[] {
   const out: LocalIssue[] = [];
   for (const id of doc.environmentIds) {
-    const task = doc.selection.tasks[id];
+    const task = taskOfEnv(doc, id);
     if (!task) continue;
     const env = ctx.envs.find((e) => e.id === id);
     if (!env) continue;
-    const pointer = `/evaluator/task/${id}`;
+    const pointer = doc.selection.mixedTasks ? `/evaluator/task/${id}` : '/evaluator/task';
+    // The task by its listed name (any ticked environment that lists it knows it), else by its id.
+    const shown = ctx.envs.map((e) => e.taskList?.names?.[task]).find(Boolean) ?? task;
     if (!acceptsTask(env))
       out.push({
         pointer,
-        message: `${env.name}: this Evaluation Service does not offer task selection.`,
+        message: `${env.name} does not offer the task “${shown}”: its Evaluation Service has no task selection.`,
         rule: 'task_unsupported',
         environmentId: id,
       });
     else if (env.taskList?.status === 'ok' && !env.taskList.ids.includes(task))
       out.push({
         pointer,
-        message: `${env.name}: the service does not list the task “${task}”.`,
+        message: `${env.name} does not offer the task “${shown}”.`,
         rule: 'task_unknown',
         environmentId: id,
       });

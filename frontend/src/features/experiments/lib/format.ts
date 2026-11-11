@@ -126,19 +126,7 @@ export function jobsText(t: JobTally): string {
   return parts.join(' · ');
 }
 
-/** "kb_version" -> "KB version": words of two letters or fewer read as acronyms. */
-export function versioningWords(key: string): string {
-  const words = String(key)
-    .replace(/[_-]+/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => (w.length <= 2 ? w.toUpperCase() : w.toLowerCase()));
-  return words.length ? words.join(' ') : String(key);
-}
-
-/** The label of a versioning filter: "KB version". */
+/** The label of a versioning filter: the key exactly as the Evaluation Service reports it (round 10, C-3-10). */
 export function versioningLabel(key: string): string {
-  const words = versioningWords(key);
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  return String(key);
 }

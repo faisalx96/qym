@@ -4,7 +4,7 @@
  * (`?from=v<n>` drafts from an older one, `?promote=saved|run|job&id=` from a saved preset, run or
  * job) and publish a new version with release notes. Nothing changes until Publish.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useBlocker, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEvalEnvironments } from '@/api/evalCommon';
@@ -15,30 +15,29 @@ import {
   fetchPresets,
   type PresetConfig,
 } from '@/api/evalEnvironments';
-import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { useCrumbLabel } from '@/lib/crumb-label';
 import { fullWidth } from '@/features/shell/layout';
-import { Outline } from '@/features/experiments/launch/components/Outline';
-import { useLaunch, type SectionId } from '@/features/experiments/launch/LaunchContext';
+import { useLaunch } from '@/features/experiments/launch/LaunchContext';
 import { LaunchProvider, type EditorSetup } from '@/features/experiments/launch/LaunchProvider';
-import { EvaluationSection } from '@/features/experiments/launch/sections/EvaluationSection';
-import { ModelsSection } from '@/features/experiments/launch/sections/ModelsSection';
-import { RawJsonSection } from '@/features/experiments/launch/sections/RawJsonSection';
-import { SettingsSection } from '@/features/experiments/launch/sections/SettingsSection';
 import styles from '@/features/experiments/launch/LaunchPage.module.css';
+import barStyles from '@/features/experiments/launch/review/launchBar.module.css';
+import { entryKey, locationKey, useStep } from '@/features/experiments/launch/state/useStep';
+import { LaunchWizard } from '@/features/experiments/launch/wizard/LaunchWizard';
+import { EDITOR_STEPS, type RevealStep } from '@/features/experiments/launch/wizard/steps';
 import { environmentPath } from '@/features/experiments/paths';
-import { ConfirmDialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, useToast } from '@/ui';
-import { EditorEntry } from './editor/EditorEntry';
-import { PublishPane, type PublishPaneProps } from './editor/PublishPane';
+import { ConfirmDialog, EmptyState, ErrorState, Icon, LinkButton, PageHeader, Skeleton, useToast } from '@/ui';
+import { changeText, useEditorChangeCount } from './editor/ComparedWithCard';
+import { EditorWhere } from './editor/EditorWhere';
+import { PublishReview, type PublishFailure } from './editor/PublishReview';
 import { runPublish } from './editor/publish';
-import { publishFailure } from '@/features/experiments/launch/model';
+import { publishBlocker, publishFailure } from '@/features/experiments/launch/model';
+import { plural } from '@/features/experiments/lib/format';
 
 const conflictOutcome = (message: string) => ({
   kind: 'conflict' as const,
   message: (publishFailure(409, message, []) as { message: string }).message,
 });
-
-const SECTIONS: SectionId[] = ['models', 'settings', 'evaluation', 'raw'];
 
 /** `?from=v3` / `?from=3`, `?promote=saved|run|job&id=`. */
 export function editorSetupFrom(params: URLSearchParams, environmentId: string): EditorSetup {
@@ -57,20 +56,24 @@ export function editorSetupFrom(params: URLSearchParams, environmentId: string):
 function EditorBody({
   onDone,
   onReload,
+  renderHeader,
 }: {
   onDone: (slug: string, envId: string) => void;
   onReload: () => void;
+  /** The page header once the compared-with version is known ("Compared with: Default preset v3"). */
+  renderHeader: (comparedWith: string | null) => ReactNode;
 }) {
-  const { editor, flags, projectId, slug, confirm } = useLaunch();
+  const { doc, editor, flags, projectId, slug, confirm, review, readOnly, focusIssue } = useLaunch();
   const toast = useToast();
   const qc = useQueryClient();
-  const wide = useMediaQuery('(min-width: 1200px)');
+  const { step, goToStep } = useStep(EDITOR_STEPS, true);
+  const changeCount = useEditorChangeCount();
   const envId = editor?.environmentId ?? '';
   const create = useCreatePreset(projectId, envId);
   const publish = usePublishPresetVersion(projectId, envId, editor?.presetId ?? '');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
-  const [failure, setFailure] = useState<PublishPaneProps['failure']>(null);
+  const [failure, setFailure] = useState<PublishFailure | null>(null);
   const done = useRef(false);
   const skipGuard = useRef(false);
   const navigate = useNavigate();
@@ -91,7 +94,7 @@ function EditorBody({
       dirty &&
       !done.current &&
       !skipGuard.current &&
-      currentLocation.pathname + currentLocation.search !== nextLocation.pathname + nextLocation.search,
+      locationKey(currentLocation) !== locationKey(nextLocation), // moving between steps is not leaving
   );
 
   const cancel = useCallback(() => navigate(environmentPath(slug, envId)), [navigate, slug, envId]);
@@ -166,57 +169,97 @@ function EditorBody({
   }, [onReload]);
 
   if (!editor || flags.initState === 'loading' || editor.state === 'loading')
-    return <Skeleton kind="cards" count={3} label="Loading the default preset" />;
+    return (
+      <>
+        {renderHeader(null)}
+        <Skeleton kind="cards" count={3} label="Loading the default preset" />
+      </>
+    );
   if (flags.initState === 'error' || editor.state === 'error')
     return (
-      <ErrorState
-        error={new Error(editor?.error || 'Couldn’t load the environment')}
-        title="Couldn’t open the editor"
-        onRetry={reload}
-      />
+      <>
+        {renderHeader(null)}
+        <ErrorState
+          error={new Error(editor?.error || 'Couldn’t load the environment')}
+          title="Couldn’t open the editor"
+          onRetry={reload}
+        />
+      </>
     );
   if (!editor.canPublish)
     return (
-      <EmptyState
-        title="Only managers publish the default preset"
-        body="You can read the default preset on the environment page."
-        action={
-          <LinkButton to={environmentPath(slug, envId)} variant="accent">
-            Back to the environment
-          </LinkButton>
-        }
-      />
+      <>
+        {renderHeader(null)}
+        <EmptyState
+          title="Only managers publish the default preset"
+          body="You can read the default preset on the environment page."
+          action={
+            <LinkButton to={environmentPath(slug, envId)} variant="accent">
+              Back to the environment
+            </LinkButton>
+          }
+        />
+      </>
     );
 
-  const pane = (
-    <PublishPane
-      notes={notes}
-      onNotes={setNotes}
-      saving={saving}
-      failure={failure}
-      onPublish={() => void onPublish()}
-      onCancel={cancel}
-      onReload={reload}
-    />
+  const current = editor.currentVersion;
+  const comparedWith = current != null ? `v${current}` : 'Blank';
+  const blockedBy = publishBlocker({
+    loaded: Boolean(editor.state === 'ready' && doc.base.loaded && !flags.envsLoading),
+    problems: review.items.length,
+    requireChange: current != null,
+    unchanged: Boolean(editor.unchanged),
+    baseLabel: doc.base.label || comparedWith,
+    notes,
+  });
+  const first = review.items[0];
+  const status = (
+    <>
+      <span className={barStyles.runs} aria-live="polite">
+        {changeText(changeCount, comparedWith, !editor.unchanged)}
+      </span>
+      {first ? (
+        <button type="button" className={barStyles.problem} onClick={() => focusIssue(first)}>
+          {`Fix ${plural(review.items.length, 'problem')} first`}
+          <span className={barStyles.long}>{`: ${first.label}`}</span>
+        </button>
+      ) : blockedBy ? (
+        // one status line at 390: the explanation is on the Review step; the bar keeps the change count (round 10, C-1-9)
+        <span className={`${barStyles.muted} ${barStyles.long}`}>{blockedBy}</span>
+      ) : (
+        <span className={barStyles.ok}>Ready to publish</span>
+      )}
+    </>
   );
   return (
-    <div className={styles.layout}>
-      <div className={styles.main}>
-        <Outline sections={SECTIONS} />
-        <EditorEntry />
-        {flags.envsLoading ? (
-          <Skeleton kind="cards" count={3} label="Loading the environment’s settings" />
-        ) : (
-          <>
-            <ModelsSection />
-            <SettingsSection />
-            <EvaluationSection />
-            <RawJsonSection />
-          </>
-        )}
-        {wide ? null : pane}
-      </div>
-      {wide ? <div className={styles.aside}>{pane}</div> : null}
+    <>
+      {renderHeader(doc.base.label || comparedWith)}
+      <LaunchWizard
+        mode="editor"
+        steps={EDITOR_STEPS}
+        step={step ?? 'where'}
+        onGo={(target) => goToStep(target)}
+        onBack={cancel}
+        onCancel={cancel}
+        primary={{
+          label: `Publish v${editor.nextVersion}`,
+          disabled: readOnly || Boolean(blockedBy) || saving,
+          loading: saving,
+          onPress: () => void onPublish(),
+        }}
+        status={status}
+        renderStep={(target) => (target === 'where' ? <EditorWhere /> : undefined)}
+        review={
+          <PublishReview
+            notes={notes}
+            onNotes={setNotes}
+            saving={saving}
+            failure={failure}
+            blocker={blockedBy}
+            onReload={reload}
+          />
+        }
+      />
       <ConfirmDialog
         open={blocker.state === 'blocked'}
         onOpenChange={(open) => {
@@ -234,7 +277,7 @@ function EditorBody({
           if (blocker.state === 'blocked') blocker.reset();
         }}
       />
-    </div>
+    </>
   );
 }
 
@@ -250,18 +293,37 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
   useCrumbLabel(envName);
   const setup = useMemo(() => editorSetupFrom(params, environmentId), [params, environmentId]);
   const back = environmentPath(slug, environmentId);
-  const header = (
+  const headerFor = (comparedWith: string | null) => (
     <PageHeader
       title={envName ? `Default preset · ${envName}` : 'Default preset'}
-      description="Edit the environment’s default preset against its current version and publish it as a new version."
+      meta={comparedWith ? [`${project.name} · Compared with: ${comparedWith}`] : undefined}
+      description={
+        comparedWith
+          ? undefined
+          : 'Edit the environment’s default preset against its current version and publish it as a new version.'
+      }
       actions={
-        <LinkButton to={back} variant="ghost">
+        <LinkButton to={back} variant="ghost" icon={<Icon name="chevron-left" size={12} />}>
           Back to the environment
         </LinkButton>
       }
     />
   );
+  const header = headerFor(null);
+  // A problem clicked in the review (or an Edit link) brings its step on screen.
+  const { step: currentStep, goToStep } = useStep(EDITOR_STEPS, true);
+  const stepRef = useRef(currentStep);
+  const goRef = useRef(goToStep);
+  useEffect(() => {
+    stepRef.current = currentStep;
+    goRef.current = goToStep;
+  });
+  const revealStep = useCallback<RevealStep>((target) => {
+    if (stepRef.current === target) return;
+    goRef.current(target, { replace: true });
+  }, []);
   let body;
+  let ownHeader = false;
   if (!canManage)
     body = (
       <EmptyState
@@ -295,10 +357,12 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
         onRetry={() => void envs.refetch()}
       />
     );
-  else
+  else {
+    // The editor draws its own header: it knows the version the draft is compared with.
+    ownHeader = true;
     body = (
       <LaunchProvider
-        key={`${location.search}|${reloadKey}`}
+        key={`${entryKey(location.search)}|${reloadKey}`}
         mode="editor"
         editor={setup}
         slug={slug}
@@ -306,16 +370,19 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
         canManage={canManage}
         readOnly={readOnly}
         initialParams={new URLSearchParams()}
+        revealStep={revealStep}
       >
         <EditorBody
           onDone={(s, id) => navigate(environmentPath(s, id))}
           onReload={() => setReloadKey((n) => n + 1)}
+          renderHeader={headerFor}
         />
       </LaunchProvider>
     );
+  }
   return (
     <div className={`${fullWidth} ${styles.page}`}>
-      {header}
+      {ownHeader ? null : header}
       {body}
     </div>
   );

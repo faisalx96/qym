@@ -1418,6 +1418,16 @@ def list_project_api_keys(
         .order_by(ApiKey.created_at.desc())
         .all()
     )
+    experiment_ids = sorted({key.experiment_id for key, _ in keys if key.experiment_id})
+    experiment_names = (
+        dict(
+            db.query(EvalExperiment.id, EvalExperiment.name).filter(
+                EvalExperiment.id.in_(experiment_ids)
+            )
+        )
+        if experiment_ids
+        else {}
+    )
     return {
         "api_keys": [
             {
@@ -1431,6 +1441,9 @@ def list_project_api_keys(
                     "display_name": user.display_name,
                 },
                 "scopes": key.scopes,
+                "kind": key.kind,
+                "experiment_id": key.experiment_id,
+                "experiment_name": experiment_names.get(key.experiment_id or ""),
                 "created_at": to_api_timestamp(key.created_at),
                 "revoked_at": to_api_timestamp(key.revoked_at),
             }
@@ -1456,6 +1469,7 @@ def create_project_api_key(
         prefix=prefix,
         key_hash=key_hash,
         scopes=req.scopes,
+        kind="user",  # experiment keys are minted by the platform only
     )
     db.add(row)
     db.commit()

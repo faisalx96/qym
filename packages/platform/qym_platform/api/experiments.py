@@ -92,7 +92,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -126,7 +126,7 @@ from qym_platform.api.eval_environments import (
     EvalClientFactory,
     get_eval_client_factory,
 )
-from qym_platform.services import eval_datasets, eval_sweeps
+from qym_platform.services import eval_dataset_pins, eval_datasets, eval_queue, eval_sweeps
 from qym_platform.services.eval_best_run import BestRunError
 from qym_platform.services.eval_best_run_base import official_run_job
 from qym_platform.services.eval_bindings import resolve_slot_bindings
@@ -228,6 +228,15 @@ _MAX_ENVIRONMENTS = 20
 # --------------------------------------------------------------------------- #
 
 
+class JobPriority(BaseModel):
+    """One run's own priority: the three keys the dry-run preview gives each job."""
+
+    environment_id: str = Field(..., max_length=36)
+    combo_index: int = Field(..., ge=0)
+    dataset_index: int = Field(default=0, ge=0)
+    priority: EvalPriority
+
+
 class ExperimentCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="", max_length=5000)
@@ -236,6 +245,8 @@ class ExperimentCreateRequest(BaseModel):
     spec: Dict[str, Any]
     base_source: Optional[Dict[str, Any]] = None
     priority: Optional[EvalPriority] = None
+    # Runs whose priority differs from ``priority`` (round 9, I2); unlisted jobs get it.
+    job_priorities: List[JobPriority] = Field(default_factory=list, max_length=2000)
     acknowledge_preemption: bool = False
     dry_run: bool = False
     # Temporary-model keys ``{ref: key}`` for ``{"$secret": ref}`` in the spec (#12).
@@ -447,6 +458,85 @@ def _resolve_priority(
     return priority
 
 
+JobKey = Tuple[str, int, int]
+
+
+def _job_key(env_id: str, combo_index: int, dataset_index: int) -> JobKey:
+    return (env_id, combo_index, dataset_index)
+
+
+def _resolve_job_priorities(
+    db: Session,
+    principal: Principal,
+    project_id: str,
+    envs: List[EvalEnvironment],
+    planned: Sequence["_PlannedJob"],
+    priority: EvalPriority,
+    per_job: Sequence[JobPriority],
+) -> Dict[JobKey, EvalPriority]:
+    """The priority of every planned job: the experiment's unless ``per_job`` says so.
+
+    Each job must not exceed **its environment's** ``max_priority``; HIGH anywhere
+    needs a project manager. Unknown keys are a 422 (``job_priority_unknown``).
+    """
+    by_env = {env.id: env for env in envs}
+    out: Dict[JobKey, EvalPriority] = {
+        _job_key(item.env.id, item.combo.index, item.unit.index): priority
+        for item in planned
+    }
+    unknown = []
+    for entry in per_job:
+        key = _job_key(entry.environment_id, entry.combo_index, entry.dataset_index)
+        if key not in out:
+            unknown.append(f"{entry.environment_id}:{entry.combo_index}:{entry.dataset_index}")
+        else:
+            out[key] = entry.priority
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "job_priority_unknown",
+                "message": "job_priorities names runs this launch does not have: "
+                + ", ".join(unknown[:5]),
+            },
+        )
+    over = sorted(
+        {
+            by_env[key[0]].name
+            for key, value in out.items()
+            if _PRIORITY_ORDER[value] > _PRIORITY_ORDER[by_env[key[0]].max_priority]
+        }
+    )
+    if over:
+        highest = max(out.values(), key=_PRIORITY_ORDER.__getitem__)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Priority {highest.value} exceeds the maximum allowed on: "
+                f"{', '.join(over)}"
+            ),
+        )
+    if EvalPriority.HIGH in out.values() and not is_project_manager(
+        db, principal, project_id
+    ):
+        raise HTTPException(
+            status_code=403, detail="HIGH priority requires a project manager"
+        )
+    return out
+
+
+def _high_env_names(
+    planned: Sequence["_PlannedJob"], resolved: Mapping[JobKey, EvalPriority]
+) -> List[str]:
+    """Names (launch order, once each) of the environments that have a HIGH job."""
+    names: List[str] = []
+    for item in planned:
+        key = _job_key(item.env.id, item.combo.index, item.unit.index)
+        if resolved.get(key) == EvalPriority.HIGH and item.env.name not in names:
+            names.append(item.env.name)
+    return names
+
+
 def _latency_gate(
     db: Session,
     principal: Principal,
@@ -463,15 +553,19 @@ def _latency_gate(
 
 
 def _require_preemption_ack(
-    priority: EvalPriority, envs: List[EvalEnvironment], acknowledged: bool
+    high: bool, env_names: Iterable[str], acknowledged: bool
 ) -> None:
-    """HIGH preempts every LOW/NORMAL job on the env for all users: make it explicit."""
-    if priority == EvalPriority.HIGH and not acknowledged:
+    """HIGH preempts every LOW/NORMAL job on the env for all users: make it explicit.
+
+    ``high`` is true when any job of the launch (or the retried job) runs at HIGH;
+    ``env_names`` are the environments those jobs run on.
+    """
+    if high and not acknowledged:
         raise HTTPException(
             status_code=422,
             detail={
                 "code": PREEMPTION_ACK_REQUIRED,
-                "message": high_priority_warning(env.name for env in envs)
+                "message": high_priority_warning(env_names)
                 + " Send acknowledge_preemption: true to launch.",
             },
         )
@@ -909,8 +1003,12 @@ def _datasets_plan(
     return out
 
 
-def _task_error(env: EvalEnvironment, rule: str, message: str) -> Dict[str, Any]:
-    pointer = f"/evaluator/task/{env.id}"
+def _task_error(
+    env: EvalEnvironment, rule: str, message: str, *, per_environment: bool = False
+) -> Dict[str, Any]:
+    # One task per experiment is a string (``/evaluator/task``); the older object keyed
+    # by environment id keeps its per-environment pointer.
+    pointer = f"/evaluator/task/{env.id}" if per_environment else "/evaluator/task"
     return {
         "section": "evaluator",
         "pointer": pointer,
@@ -1105,6 +1203,7 @@ def _serialize_job(
         "combo_index": job.combo_index,
         "combo_label": (combo_labels or {}).get(job.combo_index, ""),
         "dataset_index": job.dataset_index or 0,
+        "priority": (job.priority or "").upper() or None,
         "dataset": _job_param(job, "dataset"),
         "datasets": _job_param(job, "datasets"),
         "task": _job_param(job, "task"),
@@ -1154,6 +1253,7 @@ def _serialize_experiment(
     *,
     creator_email: Optional[str],
     job_counts: Optional[Dict[str, int]] = None,
+    priorities: Optional[Dict[str, int]] = None,
     summary: bool = False,
 ) -> Dict[str, Any]:
     """An experiment for the API. Never includes secrets_encrypted.
@@ -1171,6 +1271,8 @@ def _serialize_experiment(
         "spec": strip_secret_refs(experiment.spec or {}),
         "versioning_details": dict(experiment.versioning_details or {}),
         "priority": experiment.priority.value,
+        "priorities": priorities
+        or {"LOW": 0, "NORMAL": 0, "HIGH": 0},
         "latency_sensitive": bool(experiment.latency_sensitive),
         "preemption_acknowledged_at": to_api_timestamp(
             experiment.preemption_acknowledged_at
@@ -1224,10 +1326,54 @@ def _current_status_counts(db: Session, experiment_ids: List[str]) -> Dict[str, 
     return out
 
 
+def _current_priority_counts(
+    db: Session, experiments: List[EvalExperiment]
+) -> Dict[str, Dict[str, int]]:
+    """``{LOW, NORMAL, HIGH}`` of the current jobs per experiment, one grouped query.
+
+    The same current-job rule as ``_current_status_counts``; a NULL ``priority`` (a row
+    older than migration 0102 whose stored body named none) is the experiment's.
+    """
+    if not experiments:
+        return {}
+    by_id = {x.id: x for x in experiments}
+    retry = aliased(EvalExperimentJob)
+    rows = (
+        db.query(EvalExperimentJob.experiment_id, EvalExperimentJob.priority, func.count())
+        .filter(
+            EvalExperimentJob.experiment_id.in_(list(by_id)),
+            ~db.query(retry.id).filter(retry.retry_of_job_id == EvalExperimentJob.id).exists(),
+        )
+        .group_by(EvalExperimentJob.experiment_id, EvalExperimentJob.priority)
+        .all()
+    )
+    out = {x.id: {"LOW": 0, "NORMAL": 0, "HIGH": 0} for x in experiments}
+    for experiment_id, priority, n in rows:
+        value = (
+            priority.upper()
+            if isinstance(priority, str) and priority
+            else by_id[experiment_id].priority.value
+        )
+        counts = out[experiment_id]
+        counts[value] = counts.get(value, 0) + int(n)
+    return out
+
+
 def _status_counts(jobs: List[EvalExperimentJob]) -> Dict[str, int]:
     counts: Dict[str, int] = {}
     for job in current_jobs(jobs):
         counts[job.status.value] = counts.get(job.status.value, 0) + 1
+    return counts
+
+
+def _priority_counts(
+    jobs: List[EvalExperimentJob], experiment: EvalExperiment
+) -> Dict[str, int]:
+    """``{LOW, NORMAL, HIGH}`` over the current attempts (a NULL priority is the experiment's)."""
+    counts = {"LOW": 0, "NORMAL": 0, "HIGH": 0}
+    for job in current_jobs(jobs):
+        value = eval_queue.job_priority(job, experiment)
+        counts[value] = counts.get(value, 0) + 1
     return counts
 
 
@@ -1356,6 +1502,7 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
         experiment,
         creator_email=emails.get(experiment.created_by_user_id or ""),
         job_counts=_status_counts(jobs),
+        priorities=_priority_counts(jobs, experiment),
     )
     # In the order the experiment was launched with (then any environment only seen on jobs).
     launch_order = list(experiment.environment_ids or [])
@@ -1510,15 +1657,30 @@ def create_experiment(
     planned: List[_PlannedJob] = []
     warnings_extra: List[Dict[str, Any]] = []
     unverified: set = set()
+    # "Latest version" and alias entries are pinned to the version they resolve to now
+    # (eval_dataset_pins): one lookup per distinct entry across every combination.
+    pins: Dict[Any, eval_dataset_pins.Pin] = {}
     for combo in sweep.combos:
         combo_evaluator = combo.document.get("evaluator")
         combo_evaluator = combo_evaluator if isinstance(combo_evaluator, dict) else {}
+        combo_entries = eval_datasets.entries(combo_evaluator)
+        if not combo_entries:
+            scalar = eval_dataset_pins.scalar_entry(combo_evaluator)
+            combo_entries = [scalar] if scalar else []
+        pins.update(
+            eval_dataset_pins.pin_entries(
+                db,
+                project_id,
+                [e for e in combo_entries if eval_dataset_pins.pin_key(e) not in pins],
+            )
+        )
         for env in envs:
             caps = capabilities[env.id]
             _mode, _reason, units = eval_datasets.plan_units(
                 combo_evaluator, accepts_datasets=caps["datasets"]
             )
             task_id = eval_datasets.task_for_environment(combo_evaluator, env.id)
+            per_env_task = isinstance(combo_evaluator.get("task"), Mapping)
             task_name: Optional[str] = None
             task_problems: List[Dict[str, Any]] = []
             if task_id is not None and not caps["task"]:
@@ -1528,6 +1690,7 @@ def create_experiment(
                         "task_unsupported",
                         f'Environment "{env.name}" does not offer task selection; '
                         "clear its task or deselect it.",
+                        per_environment=per_env_task,
                     )
                 )
             elif task_id is not None:
@@ -1540,6 +1703,7 @@ def create_experiment(
                                 "task_unknown",
                                 f'Environment "{env.name}" does not list the task '
                                 f'"{task_id}".',
+                                per_environment=per_env_task,
                             )
                         )
                     task_name = listed.names.get(task_id)
@@ -1563,6 +1727,7 @@ def create_experiment(
                     environment_id=env.id,
                     task=task_id,
                     supports_task=caps["task"],
+                    pins=pins,
                 )
                 schema, plan = _environment_plan(db, env, document, contexts[env.id])
                 plan["errors"] = [
@@ -1582,9 +1747,15 @@ def create_experiment(
                 if sweep.swept:
                     params["sweep"] = combo.params
                 if unit.mode == eval_datasets.MODE_FAN_OUT and unit.pair is not None:
-                    params["dataset"] = dict(unit.pair)
+                    params["dataset"] = {
+                        **dict(unit.pair),
+                        "resolved_version": eval_dataset_pins.resolved_version_of(unit.pair, pins),
+                    }
                 elif unit.mode == eval_datasets.MODE_COMBINED:
-                    params["datasets"] = [dict(p) for p in unit.datasets or []]
+                    params["datasets"] = [
+                        {**dict(p), "resolved_version": eval_dataset_pins.resolved_version_of(p, pins)}
+                        for p in unit.datasets or []
+                    ]
                 if task_id is not None and caps["task"]:
                     params["task"] = {"id": task_id, "name": task_name or task_id}
                 run_name = eval_sweeps.run_name(
@@ -1598,8 +1769,16 @@ def create_experiment(
                     _PlannedJob(combo, env, schema, plan, params, run_name, unit, document)
                 )
 
+    warnings_extra += eval_dataset_pins.unresolved_warnings(pins)
+    job_priority = _resolve_job_priorities(
+        db, principal, project_id, envs, planned, priority, req.job_priorities
+    )
+    high_envs = _high_env_names(planned, job_priority)
     preview = [
         {
+            "priority": job_priority[
+                _job_key(item.env.id, item.combo.index, item.unit.index)
+            ].value,
             "environment_id": item.env.id,
             "environment_name": item.env.name,
             "combo_index": item.combo.index,
@@ -1641,14 +1820,12 @@ def create_experiment(
             "datasets_plan": datasets_plan,
             "priority": priority.value,
             "preemption_warning": (
-                high_priority_warning(env.name for env in envs)
-                if priority == EvalPriority.HIGH
-                else None
+                high_priority_warning(high_envs) if high_envs else None
             ),
             "errors": _with_codes(errors),
             "jobs": preview,
         }
-    _require_preemption_ack(priority, envs, req.acknowledge_preemption)
+    _require_preemption_ack(bool(high_envs), high_envs, req.acknowledge_preemption)
     if errors:
         raise HTTPException(
             status_code=422,
@@ -1684,7 +1861,7 @@ def create_experiment(
         versioning_details=None,
         secrets_encrypted=_encrypted_secrets(referenced_secrets(spec, req.secrets)),
         priority=priority,
-        preemption_acknowledged_at=now if priority == EvalPriority.HIGH else None,
+        preemption_acknowledged_at=now if high_envs else None,
         latency_sensitive=req.latency_sensitive,
         status=EvalExperimentStatus.QUEUED,
         job_count=len(planned),
@@ -1708,6 +1885,9 @@ def create_experiment(
                 combo_index=item.combo.index,
                 dataset_index=item.unit.index,
                 attempt=0,
+                priority=job_priority[
+                    _job_key(item.env.id, item.combo.index, item.unit.index)
+                ].value,
                 params=item.params,
                 request_body=_request_body(
                     item.plan["body"],
@@ -1718,7 +1898,9 @@ def create_experiment(
                     dataset_index=_launch_dataset_index(item.params, item.unit.index),
                     attempt=0,
                     user_id=principal.user.id,
-                    priority=priority,
+                    priority=job_priority[
+                        _job_key(item.env.id, item.combo.index, item.unit.index)
+                    ],
                     run_name=item.run_name,
                     qym_config=_qym_config(
                         item.document,
@@ -1746,6 +1928,7 @@ def create_experiment(
             "name": req.name,
             "environment_ids": [env.id for env in envs],
             "priority": priority.value,
+            "high_jobs": sum(1 for v in job_priority.values() if v == EvalPriority.HIGH),
             "latency_sensitive": req.latency_sensitive,
             "combo_count": sweep.combo_count,
             "job_count": len(planned),
@@ -1912,6 +2095,7 @@ def list_experiments(
         .all()
     )
     counts = _current_status_counts(db, [x.id for x in experiments])
+    priority_counts = _current_priority_counts(db, experiments)
     emails = _user_emails(db, [x.created_by_user_id for x in experiments])
     result: Dict[str, Any] = {
         "experiments": [
@@ -1919,6 +2103,7 @@ def list_experiments(
                 x,
                 creator_email=emails.get(x.created_by_user_id or ""),
                 job_counts=counts.get(x.id, {}),
+                priorities=priority_counts.get(x.id),
                 summary=True,
             )
             for x in experiments
@@ -2084,14 +2269,17 @@ def retry_experiment_job(
     creator_problem = creator_can_submit(db, experiment)
     if creator_problem:
         raise HTTPException(status_code=409, detail=creator_problem)
-    _resolve_priority(db, principal, project_id, [env], experiment.priority)
+    retry_priority = EvalPriority(eval_queue.job_priority(job, experiment))
+    _resolve_priority(db, principal, project_id, [env], retry_priority)
     retry_gate = _latency_gate(
         db, principal, project_id, [env], experiment.latency_sensitive
     )
     if retry_gate:
         raise HTTPException(status_code=403, detail=retry_gate)
     acknowledged = bool(req and req.acknowledge_preemption)
-    _require_preemption_ack(experiment.priority, [env], acknowledged)
+    _require_preemption_ack(
+        retry_priority == EvalPriority.HIGH, [env.name], acknowledged
+    )
     secrets, missing = retry_secrets(
         job.params,
         decrypt_secrets(experiment.secrets_encrypted),
@@ -2146,6 +2334,7 @@ def retry_experiment_job(
         combo_index=job.combo_index,
         dataset_index=job.dataset_index or 0,
         attempt=attempt,
+        priority=retry_priority.value,
         retry_of_job_id=job.id,
         params=copy.deepcopy(job.params or {}),
         request_body=body,
@@ -2157,7 +2346,7 @@ def retry_experiment_job(
         updated_at=now,
     )
     db.add(retry)
-    if experiment.priority == EvalPriority.HIGH:
+    if retry_priority == EvalPriority.HIGH:
         experiment.preemption_acknowledged_at = now
     try:
         db.flush()
@@ -2181,7 +2370,7 @@ def retry_experiment_job(
         {
             "retry_of_job_id": job.id,
             "attempt": attempt,
-            "priority": experiment.priority.value,
+            "priority": retry_priority.value,
         },
     )
     db.commit()
