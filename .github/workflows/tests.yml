@@ -16,17 +16,17 @@ env:
   CI: '1'
 
 jobs:
-  # The full SDK + platform suite on the newest supported Python, with PostgreSQL, split into eight
+  # The full SDK + platform suite on the newest supported Python, with PostgreSQL, split into twelve
   # slices of about equal time (tests/conftest.py, QYM_TEST_SHARD, tests/.test_durations.json) that run
   # in parallel. The real-browser tests run in the packages job, which installs Chromium.
   python:
-    name: python (${{ matrix.shard }}/8)
+    name: python (${{ matrix.shard }}/12)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     services:
       postgres:
         image: postgres:16.15
@@ -45,7 +45,7 @@ jobs:
       QYM_DATABASE_URL: 'sqlite:///:memory:'
       QYM_ENVIRONMENT: test
       QYM_TEST_POSTGRES_URL: postgresql+psycopg2://qym_test:qym_test@127.0.0.1:5432/qym_test
-      QYM_TEST_SHARD: ${{ matrix.shard }}/8
+      QYM_TEST_SHARD: ${{ matrix.shard }}/12
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
