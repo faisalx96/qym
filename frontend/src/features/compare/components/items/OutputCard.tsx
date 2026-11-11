@@ -22,7 +22,10 @@ import {
   rootCauseIssues,
 } from '@/features/run-detail/lib/rowMeta';
 import { buildLangfuseTraceUrl } from '@/features/run-detail/lib/traceTree';
+import { wordDiff, diffSide } from '@/features/datasets/lib/wordDiff';
+import { textDirAttrs } from '@/lib/text';
 import { runColor, useCompare } from '../../CompareContext';
+import { chipDelta, deltaKind } from '../../lib/baseline';
 import { useRowPatch } from '../../hooks/useRowPatch';
 import { metricCellFor, pillState, runReadOnly, runScoresLocked } from '../../lib/rowCells';
 import { runShortName } from '../../lib/labels';
@@ -77,12 +80,36 @@ export function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidd
   );
 }
 
+/**
+ * The output with the words that are not in the baseline's output marked (C141 'Diff vs baseline'). Past the diff
+ * budget the text shows without marks.
+ */
+function OutputDiff({ text, base }: { text: string; base: string }) {
+  const ops = wordDiff(base, text);
+  if (!ops) return <Collapsible text={text} />;
+  return (
+    <pre className={styles.diff} data-part="output-diff" {...textDirAttrs(text)}>
+      {diffSide(ops, 'after').map((op, i) =>
+        op.kind === 'same' ? (
+          op.text
+        ) : (
+          <mark key={i} className={styles.added}>
+            {op.text}
+          </mark>
+        ),
+      )}
+    </pre>
+  );
+}
+
 function MetricChips({
   run,
   row,
   itemId,
   open,
   onOpen,
+  baseRun,
+  baseRow,
 }: {
   run: CompareRun;
   row: Row;
@@ -90,6 +117,9 @@ function MetricChips({
   /** The metric whose details are open under every run (shared by the whole item). */
   open: string | null;
   onOpen: (metric: string | null) => void;
+  /** The baseline run and its row on this item; null on the baseline's own card. */
+  baseRun: CompareRun | null;
+  baseRow: Row | null;
 }) {
   const { model, c } = useCompare();
   const patch = useRowPatch();
@@ -104,8 +134,25 @@ function MetricChips({
     <div className={styles.metrics} role="list" aria-label="Metrics" data-part="metric-rows">
       {model.metrics.map((metric) => {
         const idx = run.metricIndex[metric];
-        if (idx === undefined) return null;
-        const cell = metricCellFor(model, run, row, metric);
+        const cell = idx === undefined ? null : metricCellFor(model, run, row, metric);
+        // C141: every card lists every metric in the Averages order; a metric the run did not score is one muted row
+        if (!cell || (cell.value === null && !cell.error))
+          return (
+            <div key={metric} role="listitem" className={styles.chip} data-metric={metric} data-not-scored="">
+              <div className={styles.chipHead}>
+                <span className={styles.metricName}>{metric}</span>
+                <span className={styles.notScored}>not scored</span>
+              </div>
+            </div>
+          );
+        const baseCell =
+          baseRun && baseRow && baseRun.metricIndex[metric] !== undefined
+            ? metricCellFor(model, baseRun, baseRow, metric)
+            : null;
+        const delta =
+          baseCell && baseCell.value !== null && cell.value !== null && !cell.error && !baseCell.error
+            ? cell.value - baseCell.value
+            : null;
         const meta = (row.metric_meta?.[metric] ?? {}) as Record<string, unknown>;
         const isEditing = editing === metric;
         return (
@@ -130,6 +177,16 @@ function MetricChips({
                   text={cell.text}
                 />
               </span>
+              {delta !== null ? (
+                <span
+                  className={styles.metricDelta}
+                  data-part="metric-delta"
+                  data-move={deltaKind(delta, cell.direction)}
+                  title={`Change against the baseline on ${metric}`}
+                >
+                  {chipDelta(delta, cell.type)}
+                </span>
+              ) : null}
               {cell.edited ? (
                 <Tag
                   kind="accent"
@@ -263,6 +320,9 @@ export function OutputCard({
   openMetric,
   onOpenMetric,
   best,
+  baseRun = null,
+  baseRow = null,
+  diffAgainst = null,
 }: {
   run: CompareRun;
   runIndex: number;
@@ -272,6 +332,11 @@ export function OutputCard({
   onOpenMetric: (metric: string | null) => void;
   /** This run has the unique best score on the item. */
   best?: boolean;
+  /** The baseline run and its row on this item (null on the baseline's own card): each metric shows its change. */
+  baseRun?: CompareRun | null;
+  baseRow?: Row | null;
+  /** 'Diff vs baseline' is on: the baseline's output, to mark the words this output adds. */
+  diffAgainst?: string | null;
 }) {
   const { ctx, model } = useCompare();
   const ui = useItemsUi();
@@ -345,7 +410,7 @@ export function OutputCard({
               <Button
                 size="sm"
                 variant="neutral"
-                icon={<Icon name="list" size={12} />}
+                icon={<Icon name="trace" size={12} />}
                 onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}
               >
                 Trace
@@ -378,11 +443,21 @@ export function OutputCard({
               ? 'Hidden: you don’t have access to this dataset’s items.'
               : 'Item bodies are visible to admins only on a private test set.'}
           </p>
+        ) : diffAgainst !== null && !failed ? (
+          <OutputDiff text={output} base={diffAgainst} />
         ) : (
           <Collapsible text={output} />
         )}
       </div>
-      <MetricChips run={run} row={row} itemId={itemId} open={openMetric} onOpen={onOpenMetric} />
+      <MetricChips
+        run={run}
+        row={row}
+        itemId={itemId}
+        open={openMetric}
+        onOpen={onOpenMetric}
+        baseRun={baseRun}
+        baseRow={baseRow}
+      />
       <div className={styles.details} data-part="metric-details" data-open={openMetric ? '' : undefined}>
         {openMetric ? (
           <section

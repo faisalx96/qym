@@ -1,5 +1,5 @@
 /** Trash seeding: ingest runs through the SDK path, then soft-delete them. */
-import type { APIRequestContext } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { createProject, uniqueSlug, type SeededProject } from '../helpers';
 import { createApiKey } from '../shell/support';
 import {
@@ -48,4 +48,19 @@ export async function seedTrash(
   }
   for (const r of runs) await softDeleteRun(request, r.id);
   return { project: p, runs, prefix };
+}
+
+/** Opens a deleted run's row menu (its one '>' handle, as on the runs list, C151) and returns the menu. */
+export async function openTrashRowMenu(page: Page, row: Locator): Promise<Locator> {
+  await row.hover();
+  await row.locator('td[data-col="actions"] button[data-row-menu]').click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Picks one item of a deleted run's row menu: Restore or Delete permanently. */
+export async function pickTrashAction(page: Page, row: Locator, item: string): Promise<void> {
+  const menu = await openTrashRowMenu(page, row);
+  await menu.getByRole('menuitem', { name: item }).click();
 }

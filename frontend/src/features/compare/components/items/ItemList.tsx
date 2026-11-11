@@ -3,10 +3,10 @@ import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { Icon, Pagination } from '@/ui';
 import { metricBand } from '@/lib/metrics';
 import type { Row } from '@/features/run-detail/types';
-import { letterOf, runColor, useCompare } from '../../CompareContext';
+import { runColor, useCompare } from '../../CompareContext';
 import { metricCellFor, pillState } from '../../lib/rowCells';
 import { runShortName } from '../../lib/labels';
-import { deltaKind } from '../../lib/baseline';
+import { chipDelta, deltaKind } from '../../lib/baseline';
 import type { FilteredItem } from '../../lib/filters';
 import { useRunMark } from '../RunTag';
 import { ItemDetail } from './ItemDetail';
@@ -19,20 +19,24 @@ const WORD = { pass: 'Pass', fail: 'Fail', error: 'Task error', none: 'No score'
 
 /** One run's score for one item: swatch, letter and the value in the score band (a task error is its own red shape). */
 function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
-  const { model, ctx, baseline } = useCompare();
+  const { model, ctx, baseline, letter } = useCompare();
   const run = model.runs[runIdx]!;
   const row: Row | null = item.rows[runIdx] ?? null;
   const p = pillState(run, row, ctx);
   const baseScore = item.scores[baseline.runIdxs[0] ?? 0] ?? null;
   const s = item.scores[runIdx] ?? null;
   const isBase = baseline.runIdxs.includes(runIdx);
-  const move = !isBase && s !== null && baseScore !== null ? deltaKind(s - baseScore, ctx.direction) : 'same';
-  const view = row && p.score !== null && p.state !== 'error' ? metricCellFor(model, run, row, ctx.metric) : null;
+  const paired = !isBase && s !== null && baseScore !== null;
+  const move = paired ? deltaKind(s - baseScore, ctx.direction) : 'same';
+  const view =
+    row && p.score !== null && p.state !== 'error' ? metricCellFor(model, run, row, ctx.metric) : null;
   const mark = useRunMark(runIdx);
-  const band = view ? metricBand(view.value, view.type, view.direction) : null;
+  // K3 (C029): a run chip shows its change against the baseline, green or red by the change; the baseline is neutral
+  const delta = paired && view ? chipDelta(s - baseScore, view.type) : null;
+  const band = view && !isBase && !paired ? metricBand(view.value, view.type, view.direction) : null;
   const moveWord =
     move === 'improved' ? ', better than baseline' : move === 'regressed' ? ', worse than baseline' : '';
-  const spoken = `${letterOf(runIdx)} ${view ? `${view.text} ` : ''}${WORD[p.state]}${moveWord}`;
+  const spoken = `${letter(runIdx)} ${view ? `${view.text} ` : ''}${WORD[p.state]}${moveWord}`;
   return (
     <span
       className={styles.chip}
@@ -40,12 +44,14 @@ function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
       data-part="item-score-chip"
       data-state={p.state}
       data-band={band ?? undefined}
+      data-baseline={isBase ? '' : undefined}
+      data-move={delta ? move : undefined}
       title={`${runShortName(run)}: ${spoken.slice(2)}`}
       {...mark}
     >
       <span className={styles.swatch} aria-hidden />
       <span className={styles.letter} aria-hidden>
-        {letterOf(runIdx)}
+        {letter(runIdx)}
       </span>
       {p.state === 'error' ? (
         <>
@@ -55,6 +61,11 @@ function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
       ) : (
         <>
           <span aria-hidden>{view ? view.text : '—'}</span>
+          {delta ? (
+            <span className={styles.delta} aria-hidden data-part="item-chip-delta">
+              {delta}
+            </span>
+          ) : null}
           <span className={styles.srOnly}>{spoken}</span>
         </>
       )}
@@ -63,7 +74,7 @@ function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
 }
 
 export function ItemList() {
-  const { model, items, c, baseline, ctx } = useCompare();
+  const { model, items, c, ctx } = useCompare();
   const ui = useItemsUi();
   const page = c.view.page;
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
@@ -113,7 +124,6 @@ export function ItemList() {
 
   const hasError = (it: FilteredItem) =>
     model.runs.some((run, i) => pillState(run, it.rows[i] ?? null, ctx).state === 'error');
-  void baseline;
 
   return (
     <div className={styles.list} data-testid="item-list" data-part="item-list">

@@ -149,8 +149,8 @@ QYM_API_KEY=AbCdEfGh...the-full-token...</pre>
 <table>
   <thead><tr><th>auth_mode</th><th>Behavior</th></tr></thead>
   <tbody>
-    <tr><td><code>none</code></td><td>Local/dev: no identity required. Every request runs as a stable <code>dev@local</code> admin user. The default.</td></tr>
-    <tr><td><code>proxy_headers</code></td><td>A trusted reverse proxy injects the user's identity via <code>X-User-Email</code> (or <code>X-Email</code>). With <code>auto_provision_users</code> on (the default), an unknown but proxy-asserted email is created on first sight.</td></tr>
+    <tr><td><code>none</code></td><td>Local/dev: no identity required. Every request runs as a stable <code>dev@local</code> admin user. The default. The platform starts with it only when <code>QYM_ENVIRONMENT</code> is <code>dev</code>, <code>development</code>, <code>local</code>, <code>test</code> or <code>testing</code>; the same applies to an empty or unknown mode.</td></tr>
+    <tr><td><code>proxy_headers</code></td><td>A trusted reverse proxy injects the user's identity via <code>X-User-Email</code> (or <code>X-Email</code>), and proves the request came through it with <code>QYM_PROXY_SHARED_SECRET</code> in the <code>X-Qym-Proxy-Secret</code> header. A request without the secret is not accepted as any user. Outside dev, test and local the platform does not start without <code>QYM_PROXY_SHARED_SECRET</code>. With <code>auto_provision_users</code> on (the default), an unknown but proxy-asserted email is created on first sight. Other modes ignore identity headers.</td></tr>
     <tr><td><code>oidc</code></td><td>Native Google, GitHub, and/or self-hosted GitLab sign-in when their client credentials are configured. Unauthenticated dashboard requests get <code>401 Not authenticated</code>. Generic OIDC, SAML, and other SSO providers are not implemented.</td></tr>
   </tbody>
 </table>
@@ -167,7 +167,7 @@ QYM_API_KEY=AbCdEfGh...the-full-token...</pre>
 
 <p>First-admin bootstrap depends on the auth path:</p>
 <ul>
-  <li><strong>Proxy headers:</strong> when no user exists, send <code>X-Admin-Bootstrap: &lt;QYM_ADMIN_BOOTSTRAP_TOKEN&gt;</code> with <code>X-User-Email</code>.</li>
+  <li><strong>Proxy headers:</strong> when no user exists, send <code>X-Admin-Bootstrap: &lt;QYM_ADMIN_BOOTSTRAP_TOKEN&gt;</code> with <code>X-User-Email</code> through the proxy (with its <code>X-Qym-Proxy-Secret</code>).</li>
   <li><strong>OIDC or local password:</strong> sign in first, then call <code>POST /v1/auth/bootstrap-admin</code> with <code>{"bootstrap_token": "..."}</code>. It promotes the current user only while no active admin exists.</li>
 </ul>
 

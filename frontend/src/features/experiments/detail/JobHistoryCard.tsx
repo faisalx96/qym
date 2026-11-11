@@ -1,4 +1,8 @@
-/** Every job, current attempts first; earlier (superseded) attempts on demand. */
+/**
+ * Every job, current attempts first; earlier (superseded) attempts on demand. The card starts as one closed line,
+ * 'Job history · 6 jobs, 1 earlier attempt', because the matrix already lists the current jobs (C206); it opens in
+ * place, and the matrix's '↻ n earlier' link opens it.
+ */
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { ExperimentDetail, ExperimentJob } from '@/api/experiments';
@@ -6,18 +10,19 @@ import { runPath } from '@/app/routes';
 import {
   Checkbox,
   DataTable,
+  Disclosure,
   RelativeTime,
-  SectionHeader,
   TwoLine,
   type Column,
   type RowAction,
   Card,
   Tag,
+  Text,
 } from '@/ui';
 import { JobStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { admissionLine } from '../lib/admission';
-import { sweepSummary } from '../lib/format';
+import { plural, sweepSummary } from '../lib/format';
 import { jobGroup } from '../lib/matrix';
 import type { ExperimentFlows } from './useExperimentFlows';
 import styles from './detail.module.css';
@@ -27,6 +32,8 @@ export interface JobHistoryCardProps {
   detail: ExperimentDetail;
   showEarlier: boolean;
   onShowEarlier: (on: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   flows: ExperimentFlows;
   canControl: boolean;
   live: boolean;
@@ -37,6 +44,8 @@ export function JobHistoryCard({
   detail,
   showEarlier,
   onShowEarlier,
+  open,
+  onOpenChange,
   flows,
   canControl,
   live,
@@ -230,52 +239,54 @@ export function JobHistoryCard({
         ]
       : []),
   ];
+  const currentCount = detail.jobs.length - supersededCount;
+  const summary = `${plural(currentCount, 'job')}${supersededCount ? `, ${plural(supersededCount, 'earlier attempt')}` : ''}`;
   return (
-    <Card as="section" aria-labelledby="history-title" data-exp-jobs>
-      <div className={styles.stack}>
-        <div className={styles.cardHead}>
-          <SectionHeader
-            id="history-title"
-            title="Job history"
-            description={
-              live ? 'Refreshing automatically while jobs are queued or running.' : 'Every job has finished.'
+    <Card as="section" aria-label="Job history" data-exp-jobs>
+      <Disclosure title="Job history" summary={summary} open={open} onOpenChange={onOpenChange}>
+        <div className={styles.stack}>
+          <div className={styles.cardHead}>
+            <Text variant="base" tone="muted" as="p" className={styles.note}>
+              {live
+                ? 'Refreshing automatically while jobs are queued or running.'
+                : 'Every job has finished.'}
+            </Text>
+            {supersededCount ? (
+              <Checkbox isSelected={showEarlier} onChange={onShowEarlier}>
+                Show earlier attempts ({supersededCount})
+              </Checkbox>
+            ) : null}
+          </div>
+          <DataTable<ExperimentJob>
+            aria-label="Jobs"
+            storageKey="experiments.jobs.v1"
+            columns={columns}
+            rows={rows}
+            rowKey={(j) => j.id}
+            minWidth={1000}
+            empty="This experiment has no jobs."
+            rowActions={rowActions}
+            rowState={(j) => (j.status === 'FAILED' || j.status === 'TIMED_OUT' ? 'error' : undefined)}
+            density="regular"
+            refreshing={live}
+            groupBy={
+              grouped
+                ? {
+                    key: (j) => jobGroup(j)?.key ?? 'plain',
+                    label: (key, groupRows) => (
+                      <span data-job-group={key}>
+                        <Tag kind="dataset">{(groupRows[0] && jobGroup(groupRows[0])?.label) || key}</Tag>
+                      </span>
+                    ),
+                    collapsible: true,
+                  }
+                : undefined
             }
-          />
-          {supersededCount ? (
-            <Checkbox isSelected={showEarlier} onChange={onShowEarlier}>
-              Show earlier attempts ({supersededCount})
-            </Checkbox>
-          ) : null}
+          >
+            <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'job' : 'jobs'}`} />
+          </DataTable>
         </div>
-        <DataTable<ExperimentJob>
-          aria-label="Jobs"
-          storageKey="experiments.jobs.v1"
-          columns={columns}
-          rows={rows}
-          rowKey={(j) => j.id}
-          minWidth={1000}
-          empty="This experiment has no jobs."
-          rowActions={rowActions}
-          rowState={(j) => (j.status === 'FAILED' || j.status === 'TIMED_OUT' ? 'error' : undefined)}
-          density="regular"
-          refreshing={live}
-          groupBy={
-            grouped
-              ? {
-                  key: (j) => jobGroup(j)?.key ?? 'plain',
-                  label: (key, groupRows) => (
-                    <span data-job-group={key}>
-                      <Tag kind="dataset">{(groupRows[0] && jobGroup(groupRows[0])?.label) || key}</Tag>
-                    </span>
-                  ),
-                  collapsible: true,
-                }
-              : undefined
-          }
-        >
-          <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'job' : 'jobs'}`} />
-        </DataTable>
-      </div>
+      </Disclosure>
     </Card>
   );
 }

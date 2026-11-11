@@ -27,7 +27,7 @@ test.describe('runs list: UX layout regressions', () => {
       await page.getByRole('button', { name: 'Select', exact: true }).click();
       await clickBox(page.getByRole('checkbox', { name: /^Select / }).nth(1));
       await clickBox(page.getByRole('checkbox', { name: /^Select / }).nth(2));
-      await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
+      await expect(page.getByTestId('selection-bar')).toContainText('2 runs selected');
       const bar = await page.getByTestId('status-bar').boundingBox();
       for (const name of ['Compare', 'Cohort', 'Delete', 'Clear']) {
         const box = await page
@@ -81,25 +81,32 @@ test.describe('runs list: UX layout regressions', () => {
     await expect(dataRows(page).first()).toBeVisible();
   });
 
-  test('the custom date range dialog opens from the bar and nothing paints over it', async ({
+  test('the custom date range opens in place next to the Time control, no dialog and nothing over it', async ({
     page,
     request,
   }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
     await openFilters(page);
-    await page.getByRole('radiogroup', { name: 'Time range' }).getByText('Range…').click();
-    const dlg = page.getByRole('dialog', { name: 'Custom date range' });
-    await expect(dlg).toBeVisible();
-    await expect(page.getByTestId('filters-panel')).toHaveCount(0);
-    const covered = await dlg.getByRole('heading', { name: 'Custom date range' }).evaluate((h) => {
-      const r = h.getBoundingClientRect();
-      const hit = document.elementFromPoint(r.left + 4, r.top + r.height / 2);
+    const time = page.getByRole('radiogroup', { name: 'Time range' });
+    await expect(time.getByText('Range…')).toHaveCount(0);
+    await time.getByText('Range', { exact: true }).click();
+    const range = page.getByTestId('custom-range');
+    await expect(range).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    // in the same row, right after the Time control
+    const t = (await time.boundingBox())!;
+    const r = (await range.boundingBox())!;
+    expect(Math.abs(r.y + r.height / 2 - (t.y + t.height / 2))).toBeLessThanOrEqual(2);
+    expect(r.x).toBeGreaterThanOrEqual(t.x + t.width);
+    const covered = await range.getByLabel('From', { exact: true }).evaluate((h) => {
+      const b = h.getBoundingClientRect();
+      const hit = document.elementFromPoint(b.left + 4, b.top + b.height / 2);
       return !hit || !h.contains(hit);
     });
     expect(covered).toBe(false);
-    await dlg.getByRole('button', { name: 'Cancel' }).click();
-    await expect(dlg).toHaveCount(0);
+    await page.getByRole('button', { name: 'Cancel custom range' }).click();
+    await expect(range).toHaveCount(0);
   });
 
   for (const width of [390, 1280]) {
@@ -110,12 +117,10 @@ test.describe('runs list: UX layout regressions', () => {
       const fig = page.getByTestId('trend-chart');
       await expect(fig).toBeVisible({ timeout: 15_000 });
       await expect(
-        fig
-          .locator('text.recharts-cartesian-axis-tick-value', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ })
-          .first(),
+        fig.locator('text[data-x-label]', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ }).first(),
       ).toBeVisible();
       const boxes = await fig
-        .locator('text.recharts-cartesian-axis-tick-value', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ })
+        .locator('text[data-x-label]', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ })
         .evaluateAll((els) =>
           els.map((e) => {
             const r = e.getBoundingClientRect();

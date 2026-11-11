@@ -71,7 +71,7 @@ test('unsaved category edits ask before they are discarded', async ({ page, requ
   await expect(page).toHaveURL(/\/analysis/);
   await expect(description).toHaveValue('Edited but not saved');
   // switching to another tab unmounts the draft: also asked
-  await page.getByRole('tab', { name: /Production rules/ }).click();
+  await page.getByRole('tab', { name: /^Rules/ }).click();
   await expect(dialog.getByText('Discard unsaved changes?')).toBeVisible();
   await dialog.getByRole('button', { name: 'Discard changes' }).click();
   await expect(page).toHaveURL(/scope=rules/);
@@ -112,7 +112,7 @@ test('the page description follows the tab: run wording on Analyze run, guidance
   await waitWorkspace(page);
   await expect(page.getByText('Diagnose the failed metric targets of one run.')).toBeVisible();
   await viewTabs(page)
-    .getByRole('tab', { name: /^Production rules/ })
+    .getByRole('tab', { name: /^Rules/ })
     .click();
   await expect(page.getByText('Diagnose the failed metric targets of one run.')).toHaveCount(0);
   await expect(page.getByText(/Project guidance the analyzer uses for every run/)).toBeVisible();

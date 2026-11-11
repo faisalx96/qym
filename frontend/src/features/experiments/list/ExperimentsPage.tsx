@@ -2,7 +2,7 @@
  * /projects/:slug/experiments (brief 06 §2.1): filters in the URL, one table, live refresh.
  * `?status=&mine=1&versioning=key=value` (repeatable) and `page`.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useHref, useNavigate, useSearchParams } from 'react-router-dom';
 import { RouterProvider } from 'react-aria-components';
 import {
@@ -14,7 +14,7 @@ import {
 import { useEvalEnvironments, type EvalEnvironment } from '@/api/evalCommon';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { useDelayedPending } from '@/lib/pending';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import {
   Checkbox,
   DataTable,
@@ -22,20 +22,21 @@ import {
   Icon,
   LinkButton,
   PageHeader,
-  ProgressCell,
   RelativeTime,
   Select,
-  Tag,
   Text,
   TwoLine,
   UserCell,
   type Column,
+  SearchField,
 } from '@/ui';
 import { LATENCY_FILTER_LABEL } from '../copy';
 import { ExperimentsTabs } from '../ExperimentsTabs';
+import { ConnectFirst } from '../components/ConnectFirst';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
-import { baseSourceLabel, plural, tallyJobCounts, versioningLabel } from '../lib/format';
+import { baseSourceLabel, jobsText, plural, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
+import { loadLaunchPage } from '../lazy';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
 
@@ -75,8 +76,17 @@ export function ExperimentsPage() {
   const envs = useEvalEnvironments(project.id);
   const showSkeleton = useDelayedPending(query.isPending);
 
+  // C121: with no active environment the empty list offers Add environment in place, then a launch on it
+  const [created, setCreated] = useState<EvalEnvironment | null>(null);
+  const noActiveEnv = Boolean(envs.data) && !(envs.data ?? []).some((e) => e.is_active);
   const envById = useMemo(() => new Map((envs.data ?? []).map((e) => [e.id, e])), [envs.data]);
-  const experiments = query.data?.experiments ?? [];
+  const [search, setSearch] = useState('');
+  const loaded = query.data?.experiments ?? [];
+  // C152: the toolbar starts with a 260px search over the listed experiments
+  const needle = search.trim().toLowerCase();
+  const experiments = needle
+    ? loaded.filter((x) => `${x.name} ${x.id} ${x.description}`.toLowerCase().includes(needle))
+    : loaded;
   const total = query.data?.total ?? 0;
   const live = experiments.some((x) => LIVE_EXPERIMENT_STATUSES.includes(x.status));
   const facets = query.data?.versioning_facets ?? {};
@@ -84,7 +94,7 @@ export function ExperimentsPage() {
   const versioningKeys = [...new Set([...Object.keys(facets), ...Object.keys(versioning)])].sort((a, b) =>
     a.localeCompare(b),
   );
-  const filtered = Boolean(status || mine || latency || Object.keys(versioning).length);
+  const filtered = Boolean(status || mine || latency || needle || Object.keys(versioning).length);
 
   function update(mutate: (next: URLSearchParams) => void) {
     setParams(
@@ -137,16 +147,11 @@ export function ExperimentsPage() {
       cell: (x) => <ExperimentStatusBadge status={x.status} />,
     },
     {
-      id: 'progress',
-      header: 'Progress',
-      width: 150,
+      id: 'jobs',
+      header: 'Jobs',
+      width: 190,
       priority: 2,
-      cell: (x) => {
-        const t = tallyJobCounts(x.job_counts);
-        return (
-          <ProgressCell done={t.ok + t.failed + t.cancelled} total={t.ok + t.failed + t.cancelled + t.live} />
-        );
-      },
+      cell: (x) => <JobsCell counts={x.job_counts} />,
     },
     {
       id: 'environments',
@@ -156,7 +161,6 @@ export function ExperimentsPage() {
       cell: (x) => <EnvironmentNames ids={x.environment_ids} envById={envById} />,
     },
     { id: 'base', header: 'Base', width: 130, priority: 3, cell: (x) => baseSourceLabel(x.base_source) },
-    { id: 'jobs', header: 'Jobs', width: 190, priority: 3, cell: (x) => <JobTags counts={x.job_counts} /> },
     {
       id: 'creator',
       header: 'Created by',
@@ -175,8 +179,17 @@ export function ExperimentsPage() {
     },
   ];
 
+  // C081: the pointer on (or focus of) New experiment starts loading the launch form
+  const prefetchLaunch = () => void loadLaunchPage();
   const launch = readOnly ? undefined : (
-    <LinkButton to={launchPath(slug)} variant="primary" size="md" icon={<Icon name="plus" size={12} />}>
+    <LinkButton
+      to={launchPath(slug)}
+      variant="primary"
+      size="md"
+      icon={<Icon name="plus" size={12} />}
+      onPointerEnter={prefetchLaunch}
+      onFocus={prefetchLaunch}
+    >
       New experiment
     </LinkButton>
   );
@@ -184,11 +197,18 @@ export function ExperimentsPage() {
   const emptyAll = Boolean(query.data) && !filtered && total === 0;
   const filters = (
     <div className={styles.filters} role="group" aria-label="Filter experiments">
+      <SearchField
+        label="Search experiments"
+        placeholder="Search experiments"
+        value={search}
+        onChange={setSearch}
+        width={260}
+      />
       <Select
         label="Status"
         items={[
           { key: ALL, label: 'All statuses' },
-          ...EXPERIMENT_STATUSES.map((s) => ({ key: s, label: s.toLowerCase() })),
+          ...EXPERIMENT_STATUSES.map((s) => ({ key: s, label: titleCase(s) })),
         ]}
         value={status || ALL}
         onChange={(k) =>
@@ -209,10 +229,7 @@ export function ExperimentsPage() {
           <span key={key} title={`Evaluation Service versioning: ${key}`} data-exp-versioning={key}>
             <Select
               label={versioningLabel(key)}
-              items={[
-                { key: ALL, label: 'All values' },
-                ...options.map((v) => ({ key: v, label: v })),
-              ]}
+              items={[{ key: ALL, label: 'All values' }, ...options.map((v) => ({ key: v, label: v }))]}
               value={selected ?? ALL}
               onChange={(k) => setVersioning(key, !k || k === ALL ? null : String(k))}
               width={170}
@@ -253,7 +270,6 @@ export function ExperimentsPage() {
       <PageHeader
         title="Experiments"
         description="Launch one evaluation across settings and environments, then compare the runs."
-        meta={query.data ? [plural(total, 'experiment')] : undefined}
         actions={launch}
         tabs={<ExperimentsTabs current="experiments" />}
       />
@@ -277,8 +293,8 @@ export function ExperimentsPage() {
               ? []
               : [
                   {
-                    id: 'duplicate',
-                    label: 'Duplicate',
+                    id: 'run-again',
+                    label: 'Run again',
                     onPress: () => navigate(launchPath(slug, { clone: x.id })),
                   },
                 ]),
@@ -286,19 +302,37 @@ export function ExperimentsPage() {
           rowState={(x) => (LIVE_EXPERIMENT_STATUSES.includes(x.status) ? 'live' : undefined)}
           minWidth={1000}
           density="regular"
-          loading={showSkeleton}
+          loading={tableLoading(query.isPending, showSkeleton)}
           refreshing={query.isFetching && !showSkeleton && live}
           error={query.isError && !query.data ? query.error : undefined}
           onRetry={() => void query.refetch()}
           isFiltered={filtered}
           empty={
             emptyAll ? (
-              <EmptyState
-                icon={<Icon name="flask" />}
-                title="No experiments yet"
-                body="An experiment launches the same evaluation across settings and environments so you can compare the results."
-                action={launch}
-              />
+              noActiveEnv && !created ? (
+                <ConnectFirst onCreated={setCreated} />
+              ) : (
+                <EmptyState
+                  icon={<Icon name="flask" />}
+                  title="No experiments yet"
+                  guide="/docs/platform-guide/projects-data-review"
+                  body="An experiment launches the same evaluation across settings and environments so you can compare the results."
+                  action={
+                    created && !readOnly ? (
+                      <LinkButton
+                        to={launchPath(slug, { env: created.id })}
+                        variant="primary"
+                        size="md"
+                        icon={<Icon name="plus" size={12} />}
+                      >
+                        {`New experiment on ${created.name}`}
+                      </LinkButton>
+                    ) : (
+                      launch
+                    )
+                  }
+                />
+              )
             ) : undefined
           }
           filteredEmpty={
@@ -364,26 +398,43 @@ function EnvironmentNames({ ids, envById }: { ids: string[]; envById: Map<string
   );
 }
 
-function JobTags({ counts }: { counts: Experiment['job_counts'] }) {
+/**
+ * One Jobs column (C139): a bar split by outcome (succeeded green, failed red, cancelled amber, running blue; queued
+ * jobs leave the track empty) and "5/6 · 1 failed". A failed experiment no longer shows a full green bar.
+ */
+function JobsCell({ counts }: { counts: Experiment['job_counts'] }) {
   const t = tallyJobCounts(counts);
+  const total = t.ok + t.failed + t.cancelled + t.live;
+  const parts = [
+    { key: 'ok', n: t.ok, label: 'succeeded' },
+    { key: 'failed', n: t.failed, label: 'failed or timed out' },
+    { key: 'cancelled', n: t.cancelled, label: 'cancelled' },
+    { key: 'running', n: t.running, label: 'running' },
+  ].filter((p) => p.n > 0);
+  const queued = t.live - t.running;
+  const title = [...parts.map((p) => `${p.n} ${p.label}`), ...(queued ? [`${queued} queued`] : [])].join(
+    ', ',
+  );
   return (
-    <span className={styles.tags}>
-      <Tag kind="count" tone="success" title={`${t.ok} succeeded`}>
-        ✓ {t.ok}
-      </Tag>
-      <Tag kind="count" tone="danger" title={`${t.failed} failed or timed out`}>
-        ✗ {t.failed}
-      </Tag>
-      {t.live ? (
-        <Tag kind="count" tone="info" title={`${t.live} queued or running`}>
-          ● {t.live}
-        </Tag>
-      ) : null}
-      {t.cancelled ? (
-        <Tag kind="count" tone="warning" title={`${t.cancelled} cancelled`}>
-          ⊘ {t.cancelled}
-        </Tag>
-      ) : null}
+    <span className={styles.jobs} title={title || 'No jobs'}>
+      <span
+        className={styles.jobsTrack}
+        role="img"
+        aria-label={title || 'No jobs'}
+        data-testid="exp-jobs-bar"
+      >
+        {total
+          ? parts.map((p) => (
+              <span
+                key={p.key}
+                className={styles.jobsPart}
+                data-part={p.key}
+                style={{ inlineSize: `${(p.n / total) * 100}%` }}
+              />
+            ))
+          : null}
+      </span>
+      <span className={styles.jobsText}>{jobsText(t)}</span>
     </span>
   );
 }

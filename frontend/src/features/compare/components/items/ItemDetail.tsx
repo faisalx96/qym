@@ -31,6 +31,7 @@ export function ItemDetail({ itemId }: { itemId: string }) {
   const ensure = useEnsureBodies(model.runs);
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [all, setAll] = useState(false);
+  const [diff, setDiff] = useState(false);
   useEffect(() => {
     if (!openMetric) return undefined;
     const onKey = (e: KeyboardEvent) => {
@@ -87,6 +88,9 @@ export function ItemDetail({ itemId }: { itemId: string }) {
     ctx.direction,
   );
   const cards = resolved.map((r, i) => ({ r, i })).filter((x) => x.r.row && !hidden.has(x.i));
+  const baseRun = model.runs[baseIdx] ?? null;
+  const baseRow = resolved[baseIdx]?.row ?? null;
+  const baseOutput = baseRow ? bodyText(baseRow.output_full ?? baseRow.output) : '';
   const shown = all ? cards : cards.slice(0, INITIAL_CARDS);
   return (
     <div className={styles.detail} data-testid="item-detail" data-part="item-detail" data-item-id={itemId}>
@@ -171,18 +175,29 @@ export function ItemDetail({ itemId }: { itemId: string }) {
             )}
           </div>
           <span className={styles.toggleAll}>
-          <Button size="sm" variant="ghost" onPress={() => setHidden(new Set())}>
-            All
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onPress={() =>
-              setHidden(new Set(differing.map((keep, i) => (keep ? -1 : i)).filter((i) => i >= 0)))
-            }
-          >
-            Only differing
-          </Button>
+            <Button size="sm" variant="ghost" onPress={() => setHidden(new Set())}>
+              All
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onPress={() =>
+                setHidden(new Set(differing.map((keep, i) => (keep ? -1 : i)).filter((i) => i >= 0)))
+              }
+            >
+              Only differing
+            </Button>
+            {/* C141: mark the words each output adds to the baseline's */}
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-pressed={diff}
+              data-part="diff-vs-baseline"
+              isDisabled={!baseRow}
+              onPress={() => setDiff((d) => !d)}
+            >
+              Diff vs baseline
+            </Button>
           </span>
         </div>
       ) : null}
@@ -198,6 +213,9 @@ export function ItemDetail({ itemId }: { itemId: string }) {
               openMetric={openMetric}
               onOpenMetric={setOpenMetric}
               best={bestIdx === i}
+              baseRun={i === baseIdx ? null : baseRun}
+              baseRow={i === baseIdx ? null : baseRow}
+              diffAgainst={diff && i !== baseIdx && baseRow ? baseOutput : null}
             />
           ))}
         </div>

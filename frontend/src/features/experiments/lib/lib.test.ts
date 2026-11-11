@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '@/lib/http';
 import { buildChart, chartTableRows, metricNames, seriesSlot } from './chart';
 import { classifyActionError, outcomeSummary, planCancelExperiment, stoppedRunIds } from './cancel';
-import { baseSourceLabel, formatMetric, formatParam, relTime, tallyJobCounts } from './format';
+import { baseSourceLabel, formatMetric, formatParam, jobsText, relTime, tallyJobCounts } from './format';
 import {
   buildMatrix,
   buildQueueStrip,
@@ -26,7 +26,14 @@ describe('buildMatrix with dataset versions', () => {
     ...combined.map((d, k) =>
       makeJob({ id: `p${k}`, environment_id: 'e2', dataset_index: k, dataset: d, combo_label: '' }),
     ),
-    makeJob({ id: 'p1r', environment_id: 'e2', dataset_index: 1, dataset: combined[1], attempt: 1, retry_of_job_id: 'p1' }),
+    makeJob({
+      id: 'p1r',
+      environment_id: 'e2',
+      dataset_index: 1,
+      dataset: combined[1],
+      attempt: 1,
+      retry_of_job_id: 'p1',
+    }),
   ];
   jobs[2] = { ...jobs[2]!, superseded: true };
   const matrix = buildMatrix(makeDetail(jobs));
@@ -52,7 +59,11 @@ describe('buildMatrix with dataset versions', () => {
 
   it('QD-57 groups: the combined job first, then each dataset version', () => {
     const groups = jobs.map((j) => jobGroup(j));
-    expect(groups[0]).toEqual({ key: 'combined', order: -1, label: 'All 4 dataset versions · one combined run' });
+    expect(groups[0]).toEqual({
+      key: 'combined',
+      order: -1,
+      label: 'All 4 dataset versions · one combined run',
+    });
     expect(groups[3]).toEqual({ key: 'pair-2', order: 2, label: 'b · v1' });
     expect(jobGroup(makeJob())).toBeNull();
   });
@@ -122,7 +133,7 @@ describe('buildMatrix', () => {
     expect(jobStats(detail)).toEqual({ jobs: 3, succeeded: 2, failed: 0, inProgress: 1, cancelled: 0 });
   });
   it('builds the compare link with each run id encoded', () => {
-    expect(compareHref(['a/b', 'c'])).toBe('/compare?runs=a%2Fb&runs=c');
+    expect(compareHref('p', ['a/b', 'c'])).toBe('/projects/p/compare?runs=a%2Fb&runs=c');
   });
 });
 
@@ -338,7 +349,8 @@ describe('buildChart', () => {
 
 describe('format helpers', () => {
   it('formats metrics, params, base sources and job tallies', () => {
-    expect(formatMetric(0.12345)).toBe('0.123');
+    expect(formatMetric(0.12345)).toBe('12.3%');
+    expect(formatMetric(12.345)).toBe('12.345');
     expect(formatMetric(1234.5)).toBe('1235');
     expect(formatMetric(undefined)).toBe('—');
     expect(formatParam({ temporary: { model: 'jais' } })).toBe('jais');
@@ -347,13 +359,21 @@ describe('format helpers', () => {
     expect(baseSourceLabel({ kind: 'weird_kind' })).toBe('Weird kind');
     expect(
       tallyJobCounts({ SUCCEEDED: 2, FAILED: 1, TIMED_OUT: 1, RUNNING: 3, QUEUED: 1, CANCELLED: 2 }),
-    ).toEqual({ ok: 2, failed: 2, live: 4, cancelled: 2 });
+    ).toEqual({ ok: 2, failed: 2, live: 4, cancelled: 2, running: 3 });
+  });
+  it('writes the Jobs text: succeeded of all, failed and cancelled only when not zero (C139)', () => {
+    expect(jobsText(tallyJobCounts({ SUCCEEDED: 5, FAILED: 1 }))).toBe('5/6 · 1 failed');
+    expect(jobsText(tallyJobCounts({ FAILED: 3 }))).toBe('0/3 · 3 failed');
+    expect(jobsText(tallyJobCounts({ SUCCEEDED: 2, RUNNING: 1 }))).toBe('2/3');
+    expect(jobsText(tallyJobCounts({ SUCCEEDED: 1, CANCELLED: 1, FAILED: 1 }))).toBe(
+      '1/3 · 1 failed · 1 cancelled',
+    );
   });
   it('writes relative times', () => {
     const now = Date.parse('2026-01-02T00:00:00Z');
     expect(relTime('2026-01-01T23:59:40Z', now)).toBe('just now');
-    expect(relTime('2026-01-01T23:30:00Z', now)).toBe('30 min ago');
-    expect(relTime('2026-01-01T20:00:00Z', now)).toBe('4 hr ago');
+    expect(relTime('2026-01-01T23:30:00Z', now)).toBe('30m ago');
+    expect(relTime('2026-01-01T20:00:00Z', now)).toBe('4h ago');
     expect(relTime(null, now)).toBe('—');
   });
 });
@@ -390,6 +410,8 @@ describe('dataset labels with the version pinned at launch', () => {
     expect(refText({ version: null, alias: null, resolved_version: 'v7' })).toBe('latest (v7)');
     expect(refText({ version: null, alias: 'production', resolved_version: 'v2' })).toBe('production (v2)');
     expect(refText({ version: 'v3', alias: null, resolved_version: 'v3' })).toBe('v3');
-    expect(datasetText({ dataset: 'support-tickets', version: null, alias: null, resolved_version: 'v7' })).toBe('support-tickets · latest (v7)');
+    expect(
+      datasetText({ dataset: 'support-tickets', version: null, alias: null, resolved_version: 'v7' }),
+    ).toBe('support-tickets · latest (v7)');
   });
 });

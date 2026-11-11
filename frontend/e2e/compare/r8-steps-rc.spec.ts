@@ -12,7 +12,9 @@ test.beforeAll(async () => {
   traced = await seedTracedRun(client, await createApiKey(client, s.seed.projectId), 'r8-step-traced');
 });
 
-test('C-step-1: no Steps section without spans; with a traced run one table in the averages recipe', async ({ page }) => {
+test('C-step-1: no Steps section without spans; with a traced run one table in the averages recipe', async ({
+  page,
+}) => {
   await openCompare(page, s.four, 1440);
   await expect(part(page, 'section-steps')).toHaveCount(0);
   await expect(part(page, 'section-nav').getByRole('link', { name: 'Steps' })).toHaveCount(0);
@@ -27,7 +29,9 @@ test('C-step-1: no Steps section without spans; with a traced run one table in t
   const cell = table.locator('tbody td').first();
   within((await box(cell)).h, 44, 2, 'step cell');
   // order: Averages, Overview, Categories, Steps, Errors
-  const order = await page.locator('[data-report-section]').evaluateAll((els) => els.map((e) => e.getAttribute('data-part')));
+  const order = await page
+    .locator('[data-report-section]')
+    .evaluateAll((els) => els.map((e) => e.getAttribute('data-part')));
   expect(order.indexOf('section-steps')).toBeGreaterThan(order.indexOf('section-categories'));
   expect(order.indexOf('section-steps')).toBeLessThan(order.indexOf('section-errors'));
 });
@@ -39,10 +43,13 @@ test('C-rc-1: no Root cause section without analyses; an issue adds one card per
   await openCompare(page, [base, a], 1440);
   await expect(part(page, 'section-root-cause')).toHaveCount(0);
   await itemHead(page, 'cmp-004').click();
-  await page.locator(`[data-testid="output-card"][data-run="${base}"]`).getByRole('button', { name: 'Add issue' }).click();
+  await page
+    .locator(`[data-testid="output-card"][data-run="${base}"]`)
+    .getByRole('button', { name: 'Add issue' })
+    .click();
   const dialog = page.getByTestId('issue-dialog');
   await dialog.getByRole('button', { name: /Category/ }).click();
-  await page.getByRole('option', { name: 'New category…' }).click();
+  await page.getByRole('option', { name: 'New category' }).click();
   await dialog.getByRole('textbox', { name: 'New category' }).fill('Hallucination');
   await dialog.getByRole('textbox', { name: 'Finding' }).fill('Invented a clause number');
   await page.getByTestId('issue-save').click();

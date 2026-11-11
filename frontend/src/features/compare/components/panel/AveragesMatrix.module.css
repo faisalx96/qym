@@ -210,3 +210,10 @@
   gap: var(--space-xs) var(--space-sm);
   max-inline-size: 60%;
 }
+
+/* C201: a metric the run did not score */
+.notScored {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-style: italic;
+}

@@ -469,7 +469,7 @@ export function modelItemFromBinding(b: SlotBinding | null | undefined): SweepMo
   return null;
 }
 
-/** "+ models": a sweep starting from the slot's current binding. */
+/** "Add models": a sweep starting from the slot's current binding. */
 export function startModelSweep(b: SlotBinding | null | undefined): SlotBinding {
   const first = modelItemFromBinding(b);
   return { kind: 'sweep', items: first ? [first] : [] };

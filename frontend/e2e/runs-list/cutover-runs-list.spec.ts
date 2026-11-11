@@ -12,6 +12,8 @@ import {
   freshProject,
   openFacet,
   openRuns,
+  openRowMenu,
+  pickRowAction,
   rowOf,
   sharedProject,
   table,
@@ -113,14 +115,13 @@ test('a failed submit says why and leaves the row as it was', async ({ page, req
     }),
   );
   await openRuns(page, s.project.slug);
-  await rowOf(page, NAME)
-    .getByRole('button', { name: `Submit ${NAME} for review` })
-    .click();
-  const dlg = page.getByRole('dialog', { name: `Submit ${NAME} for review` });
+  await pickRowAction(page, rowOf(page, NAME), 'Submit');
+  const dlg = page.getByRole('dialog', { name: `Submit ${NAME} for review?` });
   await dlg.getByRole('button', { name: 'Submit', exact: true }).click();
   await expect(dlg).toContainText('Only a completed, failed or rejected run can be submitted');
   await dlg.getByRole('button', { name: 'Cancel' }).click();
-  await expect(rowOf(page, NAME).getByRole('button', { name: `Submit ${NAME} for review` })).toBeVisible();
+  const menu = await openRowMenu(page, rowOf(page, NAME));
+  await expect(menu.getByRole('menuitem', { name: 'Submit', exact: true })).toBeVisible();
 });
 
 test('a delete dialog starts on Cancel, Enter cancels without deleting, Tab stays inside, Escape gives focus back', async ({
@@ -139,9 +140,15 @@ test('a delete dialog starts on Cancel, Enter cancels without deleting, Tab stay
       deletes.push(r.url());
   });
   await openRuns(page, s.project.slug);
-  const trigger = rowOf(page, NAME).getByRole('button', { name: `Delete ${NAME}` });
-  await trigger.focus();
-  await page.keyboard.press('Enter');
+  // Delete is the last item of the row menu; the dialog gives focus back to the row's handle
+  const trigger = rowOf(page, NAME).getByRole('button', { name: `Actions for ${NAME}` });
+  const openDelete = async () => {
+    await rowOf(page, NAME).hover();
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menu').getByRole('menuitem', { name: 'Delete', exact: true }).click();
+  };
+  await openDelete();
   const dlg = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: `Delete ${NAME}?` }));
   await expect(dlg).toBeVisible();
   await expect(dlg.getByRole('button', { name: 'Cancel' })).toBeFocused();
@@ -156,9 +163,8 @@ test('a delete dialog starts on Cancel, Enter cancels without deleting, Tab stay
   await expect(dlg).toHaveCount(0);
   expect(deletes).toEqual([]);
   await expect(rowOf(page, NAME)).toBeVisible();
-  // Reopen and leave with Escape: nothing deleted, focus back on the Delete button.
-  await trigger.focus();
-  await page.keyboard.press('Enter');
+  // Reopen and leave with Escape: nothing deleted, focus back on the row's handle.
+  await openDelete();
   await expect(dlg).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dlg).toHaveCount(0);

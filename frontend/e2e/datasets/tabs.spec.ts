@@ -37,14 +37,11 @@ async function twoVersions(request: Parameters<typeof createProject>[0], prefix:
 }
 
 test.describe('compare', () => {
-  test('summary, kind tabs in the URL, swap, download diff', async ({ page, request }) => {
+  test('kind tabs with their counts in the URL, swap, download diff', async ({ page, request }) => {
     const { p, d } = await twoVersions(request, 'cmp');
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}/compare?base=v1&head=v2`);
-    const summary = page.getByLabel('Comparison summary');
-    await expect(summary).toContainText('Added');
-    await expect(summary).toContainText('Removed');
-    await expect(summary).toContainText('Changed');
-    await expect(summary).toContainText('Unchanged');
+    // the tabs carry the counts; the summary strip that repeated them is gone (C240)
+    await expect(page.getByLabel('Comparison summary')).toHaveCount(0);
     await expect(page.getByRole('tab', { name: /Changed/ })).toContainText('1');
     await expect(page.getByRole('tab', { name: /Added/ })).toContainText('1');
     await expect(page.getByRole('tab', { name: /Removed/ })).toContainText('1');
@@ -57,7 +54,8 @@ test.describe('compare', () => {
     await page.reload();
     await expect(page.getByRole('tab', { name: /Added/ })).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('tab', { name: /Removed/ }).click();
-    await expect(page.locator('[data-compare-row=q-002]')).toBeVisible();
+    // a removed item shows as "before" and says where it went (C064)
+    await expect(page.locator('[data-compare-row=q-002]')).toContainText('removed in v2');
     await page.getByRole('tab', { name: /Changed/ }).click();
     await expect.poll(() => query(page).get('tab')).toBeNull();
 
@@ -105,7 +103,7 @@ test.describe('compare', () => {
 
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?v=v2`);
     await page.getByTestId('hero-more').click();
-    await page.getByRole('menuitem', { name: 'Compare…' }).click();
+    await page.getByRole('menuitem', { name: 'Compare versions' }).click();
     await expect(page).toHaveURL(/compare\?base=v1&head=v2/);
 
     const solo = await createDataset(request, p.slug, 'Solo');
@@ -249,7 +247,7 @@ test.describe('settings', () => {
     await page.getByRole('link', { name: 'Deleted datasets' }).click();
     await expect(page).toHaveURL(/view=deleted/);
     await expect(page.getByText('No deleted datasets')).toBeVisible();
-    await page.getByRole('link', { name: '← All datasets' }).click();
+    await page.getByRole('link', { name: 'All datasets' }).click();
     await expect(page.getByTestId('new-dataset')).toBeVisible();
   });
 

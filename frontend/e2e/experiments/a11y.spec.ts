@@ -110,7 +110,6 @@ const pages = (w: World) => [
     path: `/projects/${w.seeded.project.slug}/environments/${w.staging.id}`,
     ready: '[data-environment-page]',
   },
-  { name: 'models', path: `/projects/${w.seeded.project.slug}/models`, ready: '[data-models-page]' },
   {
     name: 'settings environments tab',
     path: `/projects/${w.seeded.project.slug}/settings?tab=environments`,
@@ -152,27 +151,17 @@ test.describe('axe', () => {
   test('every page', async ({ page }) => {
     for (const p of pages(world)) {
       await open(page, p);
-      if (p.name === 'models') await expect(page.locator('[data-model^="model-a|"]')).toBeVisible();
       if (p.name === 'environment')
         await expect(page.locator('[data-section="env-default-preset"]')).toBeVisible();
       await expectNoSeriousViolations(page, p.name);
     }
   });
 
-  test('settings entry of an environment and the models run-selection dialog', async ({ page }) => {
+  test('settings entry of an environment', async ({ page }) => {
     const { project } = world.seeded;
     await gotoApp(page, `/projects/${project.slug}/settings?tab=environments&env=${world.staging.id}`);
     await expect(page.locator(`[data-env-body="${world.staging.id}"]`)).toBeVisible();
     await expectNoSeriousViolations(page, 'environment from settings');
-
-    await gotoApp(page, `/projects/${project.slug}/models`);
-    await page
-      .locator('[data-model^="model-a|"]')
-      .getByRole('button', { name: /Edit run selection/ })
-      .click();
-    await expect(page.getByRole('dialog', { name: /Select runs/ })).toBeVisible();
-    await expect(page.getByRole('dialog').getByRole('checkbox').first()).toBeVisible();
-    await expectNoSeriousViolations(page, 'run selection dialog');
   });
 
   test('queue: split cancel dialog and remote section', async ({ page }) => {
@@ -189,11 +178,13 @@ test.describe('axe', () => {
 
   test('detail: cancel confirm, save-as-preset form', async ({ page }) => {
     await open(page, pages(world)[2]!);
-    await page.getByRole('button', { name: 'Cancel experiment' }).click();
+    await page.getByTestId('exp-actions').click();
+    await page.getByRole('menuitem', { name: 'Cancel experiment' }).click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await expectNoSeriousViolations(page, 'cancel experiment confirm');
     await page.keyboard.press('Escape');
-    await page.locator(`[data-exp-save-preset]`).first().click();
+    await page.locator('[data-exp-cell]').first().locator('[data-row-menu]').click();
+    await page.getByRole('menuitem', { name: 'Save as preset' }).click();
     await expect(page.getByRole('dialog', { name: 'Save as preset' })).toBeVisible();
     await expectNoSeriousViolations(page, 'save as preset');
   });
@@ -201,7 +192,7 @@ test.describe('axe', () => {
   test('environments: add dialog steps, slot editor, delete confirm', async ({ page }) => {
     const { project } = world.seeded;
     await gotoApp(page, `/projects/${project.slug}/environments`);
-    await page.getByRole('button', { name: '+ Add environment' }).first().click();
+    await page.getByRole('button', { name: 'Add environment' }).first().click();
     await expect(page.getByRole('dialog', { name: 'Add environment' })).toBeVisible();
     await expectNoSeriousViolations(page, 'add environment: connect');
     await page.keyboard.press('Escape');
@@ -284,8 +275,11 @@ test.describe('keyboard', () => {
     page,
   }) => {
     await open(page, pages(world)[2]!);
-    const trigger = page.getByRole('button', { name: 'Cancel experiment' });
+    // Cancel experiment is an item of the header's Actions menu (E1)
+    const trigger = page.getByTestId('exp-actions');
     await trigger.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Cancel experiment' }).focus();
     await page.keyboard.press('Enter');
     const dialog = page.getByRole('alertdialog');
     await expect(dialog.getByRole('button', { name: 'Keep running' })).toBeFocused();
@@ -296,7 +290,7 @@ test.describe('keyboard', () => {
 
   test('environments: add dialog is fully operable by keyboard and traps focus', async ({ page }) => {
     await open(page, pages(world)[4]!);
-    const add = page.getByRole('button', { name: '+ Add environment' }).first();
+    const add = page.getByRole('button', { name: 'Add environment' }).first();
     await add.focus();
     await page.keyboard.press('Enter');
     const dialog = page.getByRole('dialog', { name: 'Add environment' });
@@ -308,18 +302,6 @@ test.describe('keyboard', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(add).toBeFocused();
-  });
-
-  test('models: Edit opens the run selection and Escape closes it', async ({ page }) => {
-    await open(page, pages(world)[6]!);
-    const edit = page.locator('[data-model^="model-a|"]').getByRole('button', { name: /Edit run selection/ });
-    await edit.focus();
-    await page.keyboard.press('Enter');
-    const dialog = page.getByRole('dialog', { name: /Select runs/ });
-    await expect(dialog).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
-    await expect(edit).toBeFocused();
   });
 });
 

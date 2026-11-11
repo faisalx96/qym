@@ -756,6 +756,57 @@ def test_editing_an_approved_correction_returns_it_to_pending(client, session_fa
         assert (old.reviewed_by_user_id, old.review_comment) == ("manager-1", "Checked the trace, correct")
 
 
+def test_a_link_to_an_edited_correction_opens_its_current_revision(client, session_factory):
+    """C213: every edit stores a new id; an old ?id= link follows it."""
+    with session_factory() as db:
+        _run(db, "r1")
+        old = _correction(db, author="member-1")
+    edited = _ok(client.put(f"/api/corrections/{old}", json={"human_root_cause": "Metric bug"}, headers=_ui(MEMBER)))
+    assert edited["id"] != old
+    opened = _ok(client.get(f"/api/corrections/{old}", headers=_ui(MEMBER)))
+    assert opened["id"] == edited["id"]
+
+
+def test_editing_a_decided_diagnosis_needs_the_decision_right(client, session_factory):
+    """C054: an edit withdraws the decision, so the managers-only rule covers it too (Reviews and run page)."""
+    with session_factory() as db:
+        _run(db, "r1")
+        approved = _correction(db, author="owner-1", status=CorrectionStatus.APPROVED, reviewer="manager-1")
+    _ok(_rules(client, correction_approvers="managers"))
+    response = client.put(
+        f"/api/corrections/{approved}", json={"human_root_cause": "Metric bug"}, headers=_ui(MEMBER)
+    )
+    assert response.status_code == 403, response.text
+    assert "Only project managers and admins" in response.json()["detail"]
+    assert _correction_status(session_factory, approved) == CorrectionStatus.APPROVED
+    # A manager may still send the decided one back to review.
+    edited = _ok(
+        client.put(f"/api/corrections/{approved}", json={"human_root_cause": "Metric bug"}, headers=_ui(MANAGER))
+    )
+    assert edited["status"] == "pending"
+
+    # The run page's issue edit follows the same rule for an approved issue.
+    with session_factory() as db:
+        item = db.query(RunItem).filter_by(run_id="r1").one()
+        item.item_metadata = {
+            "metric_analyses": {
+                "accuracy": {
+                    "root_cause_issues": [
+                        {"issue_id": "i1", "category": "Retrieval miss", "finding": "x", "review_status": "approved"}
+                    ]
+                }
+            }
+        }
+        db.commit()
+    body = {
+        "run_id": "r1", "item_id": "item-1", "metric_name": "accuracy", "action": "edit", "issue_id": "i1",
+        "issue": {"category": "Metric bug", "finding": "y"},
+    }
+    response = client.post("/api/runs/update_root_cause_issue", json=body, headers=_ui(OWNER))
+    assert response.status_code == 403, response.text
+    assert "Only project managers and admins" in response.json()["detail"]
+
+
 def test_review_rules_migration_is_quick_ddl_and_reversible(monkeypatch):
     import importlib.util
 
@@ -1106,3 +1157,36 @@ def test_reset_of_an_edit_made_before_numbers_were_saved(client, session_factory
     response = _reset(client, "r1")
     assert response.status_code == 409, response.text
     assert _score(session_factory, "r1") == (pytest.approx(0.3), {"modified": "true", "original_score": "pass"})
+
+
+def test_only_managers_save_a_metric_direction_and_every_project_payload_carries_it(client, session_factory):
+    """C129: a metric that declares no direction gets one per project and metric (platform_settings, no migration)."""
+    assert _ok(client.get("/v1/projects/by-slug/project", headers=_ui(MEMBER)))["metric_directions"] == {}
+
+    def _set(email, **body):
+        return client.patch("/v1/projects/project-1/metric-directions", json=body, headers=_ui(email))
+
+    assert _set(MEMBER, metric="correctness", direction="minimize").status_code == 403
+    assert _set(MANAGER, metric="correctness", direction="sideways").status_code == 422
+    assert _set(MANAGER, metric="  ", direction="minimize").status_code == 422
+    body = _ok(_set(MANAGER, metric="correctness", direction="minimize"))
+    assert body == {"project_id": "project-1", "metric_directions": {"correctness": "minimize"}}
+    _ok(_set(ADMIN, metric="tone", direction="maximize"))
+    project = _ok(client.get("/v1/projects/by-slug/project", headers=_ui(MEMBER)))
+    assert project["metric_directions"] == {"correctness": "minimize", "tone": "maximize"}
+    me = _ok(client.get("/v1/me", headers=_ui(MEMBER)))
+    assert next(p for p in me["projects"] if p["id"] == "project-1")["metric_directions"] == project["metric_directions"]
+    with session_factory() as db:
+        audit = db.query(AuditLog).filter_by(action="project.metric_direction_updated").order_by(AuditLog.id).first()
+        assert audit.before == {"metric_directions": {}}
+        assert audit.after == {"metric_directions": {"correctness": "minimize"}}
+    assert _ok(_set(MANAGER, metric="correctness", direction=None))["metric_directions"] == {"tone": "maximize"}
+
+
+def test_metric_direction_storage_ignores_bad_values():
+    from qym_platform.services.metric_directions import _parse
+
+    assert _parse(None) == {}
+    assert _parse("not json") == {}
+    assert _parse("[1, 2]") == {}
+    assert _parse('{"a": "minimize", "b": "up", "c": null}') == {"a": "minimize"}

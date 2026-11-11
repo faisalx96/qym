@@ -1,25 +1,15 @@
 /** Small admin formatters (relative time, bytes, owner/project labels). */
 import type { AdminRunSummary } from '@/api/admin';
+import { APP_LOCALE, formatAgo, formatHeaderDate } from '@/lib/dates';
 
+/** Freshness, then the day (lib/dates, C048). */
 export function relativeTime(iso: string | null | undefined, now = Date.now()): string {
-  if (!iso) return '—';
-  const t = new Date(iso.endsWith('Z') || /[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`).getTime();
-  if (Number.isNaN(t)) return '—';
-  const s = Math.max(0, Math.round((now - t) / 1000));
-  if (s < 45) return 'just now';
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 48) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 30) return `${d}d ago`;
-  return new Date(t).toLocaleDateString();
+  return formatAgo(iso, now);
 }
 
+/** Header form 'Sep 14, 2026, 19:05' (lib/dates, C048). */
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso.endsWith('Z') || /[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  return iso ? formatHeaderDate(iso) : '—';
 }
 
 export function formatBytes(n: number | null | undefined): string {
@@ -35,7 +25,7 @@ export function formatBytes(n: number | null | undefined): string {
 }
 
 export function formatCount(n: number | null | undefined): string {
-  return n === null || n === undefined ? '—' : n.toLocaleString();
+  return n === null || n === undefined ? '—' : n.toLocaleString(APP_LOCALE);
 }
 
 export function runName(run: AdminRunSummary): string {

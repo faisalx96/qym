@@ -2,28 +2,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDatasetCatalog, useRestoreDataset, type Dataset } from '@/api/datasets';
-import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
-import { useDocumentTitle, useProjectContext } from '@/features/shell';
+import { actionErrorMessage } from '@/lib/http';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
+import { readOnlyReason, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import {
-  Button,
-  DataTable,
-  EmptyState,
-  LinkButton,
-  PageHeader,
-  RelativeTime,
-  Tag,
-  Text,
-  Tooltip,
-  useToast,
-} from '@/ui';
+import { Button, DataTable, EmptyState, PageHeader, RelativeTime, Tag, Text, Tooltip, useToast } from '@/ui';
 import { UserPill } from '../components/UserPill';
-import { catalogPath, datasetPath } from '../lib/route';
+import { datasetPath } from '../lib/route';
 import { RESTORE_RULE } from '../lib/versions';
 
 export function DeletedDatasetsPage() {
-  const { slug, project, readOnly } = useProjectContext();
+  const projectContext = useProjectContext();
+  const { slug, project, readOnly } = projectContext;
   useDocumentTitle(`${project.name} · Deleted datasets`);
   const query = useDatasetCatalog(slug, true);
   const showSkeleton = useDelayedPending(query.isPending);
@@ -40,7 +30,7 @@ export function DeletedDatasetsPage() {
       toast.show(`"${r.dataset.name}" restored`, { tone: 'success' });
       navigate(datasetPath(slug, r.dataset.slug));
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Restore failed', { tone: 'error' });
+      toast.show(actionErrorMessage('restore the dataset', e), { tone: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -52,11 +42,6 @@ export function DeletedDatasetsPage() {
       <PageHeader
         title="Deleted datasets"
         description="Deleted datasets keep their versions, items and history until a project manager restores them."
-        actions={
-          <LinkButton to={catalogPath(slug)} variant="ghost">
-            ← All datasets
-          </LinkButton>
-        }
       />
       <DataTable<Dataset>
         aria-label="Deleted datasets"
@@ -64,7 +49,7 @@ export function DeletedDatasetsPage() {
         density="regular"
         rows={rows}
         rowKey={(d) => d.id}
-        loading={showSkeleton}
+        loading={tableLoading(query.isPending, showSkeleton)}
         error={query.isError ? query.error : undefined}
         onRetry={() => void query.refetch()}
         empty={
@@ -135,14 +120,14 @@ export function DeletedDatasetsPage() {
                   Restore
                 </Button>
               ) : (
-                <Tooltip content={readOnly ? 'This project is archived.' : RESTORE_RULE}>
+                <Tooltip content={readOnly ? readOnlyReason(projectContext) : RESTORE_RULE}>
                   <Button
                     variant="neutral"
                     size="sm"
                     aria-disabled="true"
                     data-disabled-reason=""
                     onPress={() =>
-                      toast.show(readOnly ? 'This project is archived.' : RESTORE_RULE, { tone: 'info' })
+                      toast.show(readOnly ? readOnlyReason(projectContext) : RESTORE_RULE, { tone: 'info' })
                     }
                   >
                     Restore

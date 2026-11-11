@@ -64,11 +64,24 @@ export interface Column<R> {
   /** A filter targets this column: dot in the header. */
   filtered?: boolean;
   /** Overrides the alignment derived from `type`. */
-  align?: 'start' | 'end';
+  align?: 'start' | 'center' | 'end';
   /** Overrides the mono default derived from `type`. */
   mono?: boolean;
   /** Icon/actions column: header text is visually hidden. */
   hideLabel?: boolean;
+  /**
+   * Fold a pinned-end column (an actions column) while the scroller still has columns past its end edge: each row
+   * shows one small button with this accessible name that opens the cell in place, and the rest of the cell is
+   * see-through. Scrolled to the end, or with no overflow, the column renders as usual. Return '' for a row with
+   * nothing to act on (see-through, no handle).
+   */
+  foldLabel?: (row: R) => string;
+  /**
+   * A pinned-end column whose cell holds only the row's `RowMenu` handle (the runs Actions column, owner decision
+   * Nov 1): like a fold column it is see-through while columns remain past the end (no line, no shade, clicks pass,
+   * the title hidden), and it renders as usual at the end. The handle shows on the hovered or focused row.
+   */
+  menuColumn?: boolean;
 }
 
 export interface RowAction<R> {

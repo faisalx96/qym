@@ -1292,6 +1292,71 @@ def test_retention_requires_watermark_and_preserves_sequence(database):
     assert projected(database)["total_items"] == 1
 
 
+
+def test_retention_prunes_published_events_of_a_deleted_run_at_any_age(database):
+    """C074: a deleted run's published events go at the next prune, without the
+    30-day wait; a restore rebuilds from source, so nothing reads them again."""
+    with Session(database) as db:
+        run(db)
+        item(db)
+        run(db, run_id="kept")
+        item(db, "k", run_id="kept")
+        db.commit()
+    drain(database)
+    with Session(database) as db:
+        deleted_events = db.scalar(
+            select(func.count()).select_from(Change).where(Change.partition_key == "r")
+        )
+        assert deleted_events > 0
+        db.get(Partition, "r").queue_state = "deleted"
+        db.execute(
+            update(Change)
+            .where(Change.partition_key == "r")
+            .values(published_at=datetime.utcnow())
+        )
+        db.commit()
+        assert service.prune_dashboard_events(db) == deleted_events
+        db.commit()
+        left = {
+            key: n
+            for key, n in db.execute(
+                select(Change.partition_key, func.count()).group_by(Change.partition_key)
+            )
+        }
+        # The deleted run's events are gone; a ready run's recent events stay.
+        assert "r" not in left
+        assert left.get("kept", 0) > 0
+
+
+def test_retention_keeps_unpublished_and_leased_events_of_a_deleted_run(database):
+    with Session(database) as db:
+        run(db)
+        item(db)
+        db.commit()
+    drain(database)
+    with Session(database) as db:
+        part = db.get(Partition, "r")
+        part.queue_state = "deleted"
+        db.execute(update(Change).values(published_at=None))
+        db.commit()
+        assert service.prune_dashboard_events(db) == 0
+        db.execute(update(Change).values(published_at=datetime.utcnow()))
+        part.lease_until = datetime.utcnow() + timedelta(seconds=30)
+        db.commit()
+        assert service.prune_dashboard_events(db) == 0
+
+
+def test_worker_prunes_the_outbox_at_most_once_a_minute(database, monkeypatch):
+    calls = []
+    monkeypatch.setattr(service, "prune_dashboard_events", lambda db, **kw: calls.append(kw) or 0)
+    worker = service.DashboardSummaryWorker(sessionmaker(bind=database), interval=0)
+    worker.tick()
+    worker.tick()
+    assert len(calls) == 1
+    worker._next_event_prune = 0.0
+    worker.tick()
+    assert len(calls) == 2
+
 def test_normal_worker_batches_numerical_sql(database):
     with Session(database) as db:
         run(db)

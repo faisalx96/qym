@@ -469,7 +469,9 @@ def test_token_scope_and_revocation_against_item_reads(world):
         items, headers={**bearer, "X-Qym-Dataset-Read-Token": "qym_dr_nope"}
     )
     assert denied.status_code == unknown.status_code == 403
-    assert denied.json() == unknown.json()
+    # Same answer, so a token's existence does not leak; only the per-request id differs (C159).
+    assert denied.json()["detail"] == unknown.json()["detail"]
+    assert denied.json()["error"]["code"] == unknown.json()["error"]["code"]
     with SessionLocal() as db:
         manual = [
             a for a in db.query(AuditLog) if a.action == "eval.dataset_token_revoked"

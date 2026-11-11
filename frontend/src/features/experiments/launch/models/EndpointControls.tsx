@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, TextField } from '@/ui';
+import { Button, TextField, Icon } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import { endpointsCollection, pointerToFieldName, slotPointer, validateEndpointName } from '../model';
 import { useGroupsDialog } from './useGroupsDialog';
@@ -63,12 +63,13 @@ export function EndpointControls() {
               }}
             />
             <Button
+              icon={<Icon name="plus" size={12} />}
               variant="neutral"
               isDisabled={!collection || busy}
               onPress={() => void add()}
               loading={busy}
             >
-              + Add LLM endpoint
+              Add LLM endpoint
             </Button>
           </>
         ) : null}

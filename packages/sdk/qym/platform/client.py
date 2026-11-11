@@ -8,6 +8,7 @@ import random
 import sys
 import threading
 import time
+import socket
 import uuid
 from dataclasses import asdict, is_dataclass
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ from datetime import date, datetime, time as dt_time, timezone
 from queue import Empty, Full
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib import request
+from urllib import error, request
 
 from .tls import urlopen
 from ._backlog import EventBacklog
@@ -144,7 +145,12 @@ def _sanitize_for_json(obj: Any, _cap: Optional[_Truncator] = None) -> Any:
 
 
 def _post_json(
-    url: str, payload: Dict[str, Any], api_key: str, *, timeout: float = 30
+    url: str,
+    payload: Dict[str, Any],
+    api_key: str,
+    *,
+    timeout: float = 30,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
     req = request.Request(
@@ -153,6 +159,7 @@ def _post_json(
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            **(headers or {}),
         },
         method="POST",
     )
@@ -1165,12 +1172,30 @@ class PlatformClient:
             payload["versioning_details"] = versioning_details
         if datasets and len(datasets) >= 2:
             payload["datasets"] = datasets
-        data = _post_json(
-            f"{self.platform_url}/v1/runs",
-            payload,
-            self.api_key,
-            timeout=timeout if timeout is not None else self.CREATE_RUN_TIMEOUT,
-        )
+        # One key per create call, sent again on the retry: a platform that
+        # already made the run returns it instead of a second one (C190).
+        # Platforms before the key ignore the header.
+        key_header = {"Idempotency-Key": str(uuid.uuid4())}
+        create_timeout = timeout if timeout is not None else self.CREATE_RUN_TIMEOUT
+        try:
+            data = _post_json(
+                f"{self.platform_url}/v1/runs",
+                payload,
+                self.api_key,
+                timeout=create_timeout,
+                headers=key_header,
+            )
+        except (TimeoutError, socket.timeout, error.URLError) as exc:
+            reason = getattr(exc, "reason", exc)
+            if not isinstance(reason, (TimeoutError, socket.timeout)):
+                raise
+            data = _post_json(
+                f"{self.platform_url}/v1/runs",
+                payload,
+                self.api_key,
+                timeout=create_timeout,
+                headers=key_header,
+            )
         run_id = str(data.get("run_id") or "")
         live_url = str(data.get("live_url") or "")
         if not run_id or not live_url:

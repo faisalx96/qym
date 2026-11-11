@@ -22,7 +22,6 @@ import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
   EmptyState,
-  Badge,
   ErrorState,
   Icon,
   IconButton,
@@ -30,19 +29,20 @@ import {
   PageHeader,
   Select,
   Skeleton,
-  StatStrip,
   TabPanel,
   Tabs,
   Tag,
   Text,
   useToast,
+  StatusMark,
 } from '@/ui';
 import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
-import { formatDate, itemIdentity } from '../lib/itemValue';
+import { fieldLabel, formatDate, itemIdentity } from '../lib/itemValue';
 import { comparePath, datasetPath, parseDatasetRoute } from '../lib/route';
-import { resolveActiveVersion } from '../lib/versions';
+import { resolveActiveVersion, versionStatusLabel } from '../lib/versions';
 import styles from './DatasetComparePage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 const KINDS: { id: CompareKind; label: string }[] = [
   { id: 'changed', label: 'Changed' },
@@ -129,8 +129,12 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
           title="Nothing to compare yet"
           body="Create a second version to compare items between versions."
           action={
-            <LinkButton to={datasetPath(slug, dataset.slug)} variant="neutral">
-              ← Back to the dataset
+            <LinkButton
+              to={datasetPath(slug, dataset.slug)}
+              variant="neutral"
+              icon={<Icon name="chevron-left" size={12} />}
+            >
+              Back to the dataset
             </LinkButton>
           }
         />
@@ -171,7 +175,8 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
 
   const items = versions.map((v) => ({
     key: v.version,
-    label: `${v.version}${v.name ? ` — ${v.name}` : ''} (${v.status})`,
+    // the status in words, Production in full (C168); a select option cannot hold a status mark
+    label: `${v.version}${v.name ? ` — ${v.name}` : ''} · ${versionStatusLabel(v)}`,
   }));
   const go = (next: { base?: string; head?: string; tab?: CompareKind }) =>
     navigate(
@@ -274,7 +279,7 @@ function DownloadDiff({
           a.remove();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch {
-          toast.show('Could not download the diff', { tone: 'error' });
+          toast.show('Couldn’t download the diff', { tone: 'error' });
         } finally {
           setBusy(false);
         }
@@ -331,24 +336,14 @@ function CompareBody({
       for (const item of list)
         rows.push({
           id: item.item_id,
-          node: <ItemRow item={item} kind={kind} defaultOpen={rows.length < 3} />,
+          node: <ItemRow item={item} kind={kind} head={head.version} defaultOpen={rows.length < 3} />,
         });
     }
   }
 
   return (
     <div className={styles.body} data-compare-kind={kind}>
-      <StatStrip
-        aria-label="Comparison summary"
-        items={[
-          { label: 'Added', value: summary.added, tone: summary.added ? 'success' : undefined },
-          { label: 'Removed', value: summary.removed, tone: summary.removed ? 'danger' : undefined },
-          { label: 'Changed', value: summary.changed, tone: summary.changed ? 'warning' : undefined },
-          { label: 'Unchanged', value: summary.unchanged },
-          ...(summary.disabled ? [{ label: 'Disabled', value: summary.disabled }] : []),
-          ...(summary.enabled ? [{ label: 'Enabled', value: summary.enabled }] : []),
-        ]}
-      />
+      {/* The tabs carry the counts; the strip that repeated them is gone (C240). */}
       <Tabs
         label="Comparison kinds"
         items={KINDS.map((k) => ({ id: k.id, label: k.label, count: summary[k.id] }))}
@@ -356,6 +351,16 @@ function CompareBody({
         onSelect={(id) => onKind(id as CompareKind)}
       >
         <TabPanel id={kind}>
+          {summary.disabled || summary.enabled ? (
+            <Text variant="sm" tone="secondary" data-testid="compare-state-line">
+              {[
+                summary.disabled ? `${plural(summary.disabled)} disabled in ${head.version}` : '',
+                summary.enabled ? `${plural(summary.enabled)} enabled in ${head.version}` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          ) : null}
           {kind === 'changed' && rows.length ? (
             <Text variant="sm" tone="muted">
               Listed in the order the changes happened, oldest first.
@@ -372,7 +377,7 @@ function CompareBody({
           )}
           <div className={styles.footer}>
             <Text variant="sm" tone="muted">
-              Showing {rows.length.toLocaleString()} of {total.toLocaleString()}
+              Showing {rows.length.toLocaleString(APP_LOCALE)} of {total.toLocaleString(APP_LOCALE)}
             </Text>
             {query.hasNextPage ? (
               <Button
@@ -391,18 +396,21 @@ function CompareBody({
   );
 }
 
-const FIELD_LABELS: Record<string, string> = {
-  input: 'input',
-  expected_output: 'expected_output',
-  metadata: 'metadata',
-  labels: 'labels',
-  state: 'state',
-};
+const FIELDS = ['input', 'expected_output', 'metadata', 'labels', 'state'] as const;
+
+function plural(n: number) {
+  return `${n} item${n === 1 ? '' : 's'}`;
+}
 
 /** An item whose state differs between the two versions: Active → Disabled (spec A2-46). */
 function StateDiff({ before, after }: { before?: 'active' | 'disabled'; after?: 'active' | 'disabled' }) {
   const name = (v?: string) => (v === 'disabled' ? 'Disabled' : 'Active');
-  const badge = (v?: string) => <Badge tone={v === 'disabled' ? 'neutral' : 'success'}>{name(v)}</Badge>;
+  const badge = (v?: string) =>
+    v === 'disabled' ? (
+      <StatusMark tone="warning" shape="pause" label={name(v)} data-status="disabled" />
+    ) : (
+      <StatusMark tone="success" shape="full" label={name(v)} />
+    );
   return (
     <div
       className={styles.stateDiff}
@@ -410,7 +418,7 @@ function StateDiff({ before, after }: { before?: 'active' | 'disabled'; after?: 
       aria-label={`state changed from ${name(before)} to ${name(after)}`}
     >
       <Text as="span" variant="sm" weight={650} tone="muted">
-        state
+        {fieldLabel('state')}
       </Text>
       {badge(before)}
       <Icon name="next" size={12} />
@@ -424,7 +432,7 @@ function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaul
   const fields =
     entry.fields ??
     (entry.before && entry.after
-      ? (Object.keys(FIELD_LABELS) as (keyof typeof FIELD_LABELS)[]).filter(
+      ? FIELDS.filter(
           (f) =>
             JSON.stringify(entry.before?.[f as keyof typeof entry.before]) !==
             JSON.stringify(entry.after?.[f as keyof typeof entry.after]),
@@ -447,7 +455,7 @@ function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaul
           {entry.changed_at
             ? `${entry.changed_at_source === 'version' ? 'version created' : 'changed'} ${formatDate(entry.changed_at)}`
             : ''}
-          {fields.length ? ` · fields: ${fields.join(', ')}` : ''}
+          {fields.length ? ` · fields: ${fields.map(fieldLabel).join(', ')}` : ''}
         </span>
         <span className={styles.rowSide}>
           <UserPill user={entry.edited_by} label="Edited By:" />
@@ -462,7 +470,7 @@ function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaul
               ) : (
                 <FieldDiff
                   key={f}
-                  field={f}
+                  field={fieldLabel(f)}
                   before={entry.before?.[f as keyof typeof entry.before]}
                   after={entry.after?.[f as keyof typeof entry.after]}
                 />
@@ -482,13 +490,18 @@ function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaul
 function ItemRow({
   item,
   kind,
+  head,
   defaultOpen,
 }: {
   item: CompareItemEntry;
   kind: CompareKind;
+  /** The head version's name: a removed item says where it went (C064). */
+  head: string;
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // A removed item exists only in the base: it shows as "before" with the red rail, not as an added "after" (C064).
+  const removed = kind === 'removed';
   return (
     <article className={styles.row} data-compare-row={item.item_id}>
       <button
@@ -501,9 +514,11 @@ function ItemRow({
         <span className={styles.rowId}>{itemIdentity(item.item_id, item.index)}</span>
         <Tag tone={kind === 'added' ? 'success' : kind === 'removed' ? 'danger' : undefined}>{kind}</Tag>
         <span className={styles.rowMeta}>
-          {item.changed_at
-            ? `${item.changed_at_source === 'version' ? 'version created' : 'changed'} ${formatDate(item.changed_at)}`
-            : ''}
+          {removed
+            ? `removed in ${head}`
+            : item.changed_at
+              ? `${item.changed_at_source === 'version' ? 'version created' : 'changed'} ${formatDate(item.changed_at)}`
+              : ''}
         </span>
         <span className={styles.rowSide}>
           <UserPill user={item.edited_by} label="Edited By:" />
@@ -511,14 +526,16 @@ function ItemRow({
       </button>
       {open ? (
         <div className={styles.rowBody}>
-          <FieldDiff field="input" before={item.input} after={item.input} onlyAfter />
-          <FieldDiff
-            field="expected_output"
-            before={item.expected_output}
-            after={item.expected_output}
-            onlyAfter
-          />
-          <FieldDiff field="metadata" before={item.metadata} after={item.metadata} onlyAfter />
+          {(['input', 'expected_output', 'metadata'] as const).map((f) => (
+            <FieldDiff
+              key={f}
+              field={fieldLabel(f)}
+              before={item[f]}
+              after={item[f]}
+              onlyAfter={!removed}
+              onlyBefore={removed}
+            />
+          ))}
         </div>
       ) : null}
     </article>

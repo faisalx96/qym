@@ -1,12 +1,13 @@
 /** The Items section: header, filter bar, filter banner, virtualized table or heatmap, deep link to ?item=. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
-import { Button, HelpMarker, Icon, LinkButton, ReportSection } from '@/ui';
+import { Button, HelpMarker, ReportSection } from '@/ui';
 import { useItemDetails } from '../hooks/useItemDetails';
 import { REASON_ORDER } from '../lib/itemReasons';
 import { emptyFilters, type SortBy } from '../lib/filterRules';
 import { useRunPage } from '../RunContext';
 import { CsvExport } from './items/CsvExport';
+import { DirectionNote } from './items/DirectionNote';
 import { FilterBar } from './items/FilterBar';
 import { Heatmap } from './items/Heatmap';
 import { defaultPageSize } from '../lib/itemsPaging';
@@ -18,7 +19,7 @@ const HIGHLIGHT_MS = 2600;
 void PAGE_SIZES;
 
 export function ItemsSection() {
-  const { runId, model, api, items, payload, basePath, readOnly } = useRunPage();
+  const { runId, model, api, items, payload } = useRunPage();
   const { view } = api;
   const sectionRef = useRef<HTMLDivElement>(null);
   const details = useItemDetails(runId);
@@ -48,6 +49,12 @@ export function ItemsSection() {
     },
     [expanded, itemParam, setItemParam],
   );
+
+  // A pass switch (the 'Pass N' links of a repeat item, C127) keeps ?item: treat it as a deep link again, so the item
+  // opens on the right page of the new pass and scrolls into view.
+  useEffect(() => {
+    handled.current = null;
+  }, [model.viewPass]);
 
   // Deep link: ?item=ID opens that item on the right page and scrolls it into view with a highlight.
   useEffect(() => {
@@ -125,17 +132,8 @@ export function ItemsSection() {
         title="Items"
         description="Every input, outcome and metric. Filters apply to the table and to every section above."
         aside={
+          // RF3 (C113): auto-analysis starts from the Root cause section and the header's Actions menu
           <span className={styles.aside}>
-            {readOnly ? null : (
-              <LinkButton
-                size="sm"
-                variant="neutral"
-                to={`${basePath}/analyzer`}
-                icon={<Icon name="sparkles" size={12} />}
-              >
-                Auto-analyze
-              </LinkButton>
-            )}
             <CsvExport />
           </span>
         }
@@ -144,6 +142,7 @@ export function ItemsSection() {
           <div className={styles.sticky} data-run-filters="">
             <FilterBar display={{ textMode, onTextMode: setTextMode }} />
           </div>
+          <DirectionNote metric={metric} />
           {showBanner && metric ? (
             <div className={styles.banner} role="status" data-testid="filter-banner">
               Filtered to {items.length.toLocaleString('en-US')} items that {bannerKinds[view.show]} {metric}

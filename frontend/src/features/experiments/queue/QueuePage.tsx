@@ -6,6 +6,7 @@
  */
 import { LATENCY_FILTER_LABEL, queueLatencyNote } from '../copy';
 import { LatencyTag } from '../components/LatencyTag';
+import { JobStatusBadge } from '../components/StatusBadges';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Key } from 'react-aria-components';
@@ -27,10 +28,9 @@ import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
 import { errorMessage } from '@/api/evalCommon';
 import { runPath } from '@/app/routes';
-import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
-  Badge,
   Button,
   Checkbox,
   EmptyState,
@@ -46,14 +46,15 @@ import {
   TwoLine,
   UserCell,
   useToast,
-  type BadgeTone,
   type Column,
   Card,
+  Flag,
+  StatusMark,
+  SearchField,
 } from '@/ui';
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { experimentPath } from '../paths';
-import { relTime } from '../lib/format';
 import { CancelSplitDialog, type CancelSplitDialogProps } from './CancelSplitDialog';
 import { RemoteQueueSection } from './RemoteQueueSection';
 import {
@@ -70,15 +71,6 @@ import {
   titleCase,
 } from './lib';
 import styles from './QueuePage.module.css';
-
-const STATUS_TONE: Record<string, BadgeTone> = {
-  QUEUED: 'neutral',
-  SUBMITTING: 'info',
-  SUBMITTED: 'info',
-  RUNNING: 'success',
-  BLOCKED: 'warning',
-  CANCELLING: 'warning',
-};
 
 type DialogState = Pick<
   CancelSplitDialogProps,
@@ -126,17 +118,22 @@ export function QueuePage() {
     return () => clearInterval(t);
   }, []);
 
-  const jobs = useMemo(() => query.data?.jobs ?? [], [query.data]);
+  const [search, setSearch] = useState('');
+  // C152: the toolbar starts with a 260px search over the listed jobs
+  const jobs = useMemo(() => {
+    const all = query.data?.jobs ?? [];
+    const needle = search.trim().toLowerCase();
+    return needle
+      ? all.filter((j) =>
+          `${j.experiment_name} ${j.environment_name ?? ''} ${j.id}`.toLowerCase().includes(needle),
+        )
+      : all;
+  }, [query.data, search]);
   // Selections of jobs that left the queue drop out here instead of in an effect.
   const selected = useMemo(
     () => new Set([...selectedRaw].filter((k) => jobs.some((j) => j.id === k))),
     [selectedRaw, jobs],
   );
-  const stats = useMemo(
-    () => (query.data ? [{ value: query.data.total, label: 'jobs' }] : null),
-    [query.data],
-  );
-  useTopbarStats(stats);
 
   const experimentItems = useMemo(() => {
     const byId = new Map<string, string>();
@@ -266,7 +263,9 @@ export function QueuePage() {
           <span className={styles.envCell}>
             {j.environment_name}
             {env && env.health_status && env.health_status !== 'ok' ? (
-              <Badge tone="warning">{env.health_status}</Badge>
+              <Flag tone="warning" icon="warning">
+                {env.health_status}
+              </Flag>
             ) : null}
           </span>
         );
@@ -285,11 +284,7 @@ export function QueuePage() {
       type: 'status',
       width: 130,
       priority: 1,
-      cell: (j) => (
-        <Badge tone={STATUS_TONE[j.status] ?? 'neutral'} dot>
-          {j.status}
-        </Badge>
-      ),
+      cell: (j) => <JobStatusBadge status={j.status} />,
     },
     {
       id: 'creator',
@@ -354,6 +349,13 @@ export function QueuePage() {
 
   const filterControls = (
     <div className={styles.filters} role="group" aria-label="Queue filters">
+      <SearchField
+        label="Search jobs"
+        placeholder="Search experiment or environment"
+        value={search}
+        onChange={setSearch}
+        width={260}
+      />
       <Select
         label="Environment"
         items={envItems}
@@ -387,11 +389,7 @@ export function QueuePage() {
   );
 
   const filtered = Boolean(
-    filters.environment ||
-      filters.statuses?.length ||
-      filters.mine ||
-      filters.latency ||
-      filters.experiment,
+    filters.environment || filters.statuses?.length || filters.mine || filters.latency || filters.experiment,
   );
   const environments = query.data?.environments ?? [];
 
@@ -400,14 +398,6 @@ export function QueuePage() {
       <PageHeader
         title="Queue"
         description="Jobs waiting for or running on this project’s Evaluation Service environments, in dispatch order."
-        meta={[
-          query.data ? `${plural(query.data.total, 'job')}` : '',
-          query.dataUpdatedAt ? (
-            <span key="r">refreshed {relTime(new Date(query.dataUpdatedAt).toISOString(), now)}</span>
-          ) : (
-            ''
-          ),
-        ].filter(Boolean)}
         tabs={<ExperimentsTabs current="queue" />}
       />
       {query.data ? null : filterControls}
@@ -577,10 +567,16 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
           <Text variant="lg" as="span">
             {env.name}
           </Text>
-          {!env.is_active ? <Tag>Disabled</Tag> : null}
-          <Badge tone={healthy ? 'success' : env.health_status === 'unknown' ? 'neutral' : 'warning'} dot>
-            {healthy ? 'Healthy' : (env.health_status ?? 'Unknown')}
-          </Badge>
+          {!env.is_active ? (
+            <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+          ) : null}
+          {healthy ? (
+            <StatusMark tone="success" shape="full" label="Healthy" />
+          ) : env.health_status === 'unknown' || !env.health_status ? (
+            <StatusMark tone="neutral" shape="ring" label="Unknown" />
+          ) : (
+            <StatusMark tone="warning" shape="cross" label={env.health_status} />
+          )}
         </div>
         <div className={styles.counts}>
           <Stat label="In flight" value={env.inflight} />

@@ -3,6 +3,7 @@ import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Skeleton, Tag, Tex
 import { fieldsSent } from '../model/settings';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import s from './blocks.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 /**
  * Role-labelled messages, copy, char count and fields sent (the context switches live in the
@@ -25,7 +26,7 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
         <span className={s.charsSlot}>
           {preview.characters != null ? (
             <Tag kind="count" aria-label={`${preview.characters} characters`}>
-              {`${preview.characters.toLocaleString()} chars`}
+              {`${preview.characters.toLocaleString(APP_LOCALE)} chars`}
             </Tag>
           ) : null}
         </span>

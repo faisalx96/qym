@@ -127,3 +127,56 @@ export function jsonUpserts(rows: Record<string, unknown>[]): ItemBody[] {
     return entry;
   });
 }
+
+/**
+ * JSON / JSONL records through the column mapping (C013): the keys mapped to Input, Expected output, Item ID and
+ * Metadata, with their values as they are (no string conversion). A record's own `metadata` object and `labels` are
+ * kept as such.
+ */
+export function jsonMappedUpserts(rows: Record<string, unknown>[], mapping: ColumnMapping): ItemBody[] {
+  // a key of an alias pair reads like the server: item_id or id, expected_output or expected
+  const read = (r: Record<string, unknown>, key: string): unknown => {
+    const pair = JSON_ALIASES.find((p) => p.includes(key));
+    return pair ? (r[pair[0]!] ?? r[pair[1]!]) : r[key];
+  };
+  const combine = (r: Record<string, unknown>, keys: string[]): unknown => {
+    if (!keys.length) return undefined;
+    if (keys.length === 1) return read(r, keys[0] ?? '');
+    const o: Record<string, unknown> = {};
+    for (const k of keys) o[k] = r[k];
+    return o;
+  };
+  return rows.map((r) => {
+    const entry: ItemBody = {};
+    // `||` like the server: an id of 0 or "" means generated
+    const id = mapping.id ? String(read(r, mapping.id) || '').trim() : '';
+    if (id) entry.item_id = id;
+    entry.input = combine(r, mapping.input) ?? null;
+    if (mapping.expected.length) entry.expected_output = combine(r, mapping.expected);
+    const own = r.metadata && typeof r.metadata === 'object' ? (r.metadata as Record<string, unknown>) : {};
+    const meta: Record<string, unknown> = { ...own };
+    for (const k of mapping.metadata) if (r[k] !== undefined) meta[k] = r[k];
+    if (Object.keys(meta).length) entry.metadata = meta;
+    const labels = importLabels(r.labels);
+    if (labels.length) entry.labels = labels;
+    return entry;
+  });
+}
+
+const JSON_ALIASES: [string, string][] = [
+  ['item_id', 'id'],
+  ['expected_output', 'expected'],
+];
+
+/** Auto-detection for JSON keys: as for CSV columns, and the other key of an alias pair is not kept as metadata. */
+export function autoMapJson(keys: string[]): ColumnMapping {
+  const m = autoMap(keys);
+  const used = JSON_ALIASES.filter((pair) => pair.includes(m.id) || m.expected.some((k) => pair.includes(k)));
+  return { ...m, metadata: m.metadata.filter((k) => !used.some((pair) => pair.includes(k))) };
+}
+
+/** How many records have an input: a missing, null or blank input imports an empty item (C013). */
+export function recordsWithInput(upserts: ItemBody[]): number {
+  return upserts.filter((u) => u.input !== undefined && u.input !== null && String(u.input).trim() !== '')
+    .length;
+}

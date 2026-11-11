@@ -5,7 +5,16 @@
  */
 import { expect, type Locator, type Page } from '@playwright/test';
 import { expectNoPageOverflow, getExperiment, resetFakes, test, waitForExperiment } from '../support';
-import { captureExperimentPosts, goStep, openHome, openLaunch, settled, STEP_LABELS, toReview, type StepId } from './launchSupport';
+import {
+  captureExperimentPosts,
+  goStep,
+  openHome,
+  openLaunch,
+  settled,
+  STEP_LABELS,
+  toReview,
+  type StepId,
+} from './launchSupport';
 import { pickSelect } from '../ui';
 import { chooseDataset } from './multiSupport';
 import {
@@ -52,11 +61,16 @@ async function resolved(page: Page, css: string): Promise<string> {
 
 test.describe('point 1: option boxes', () => {
   for (const width of [1440, 1024, 390]) {
-    test(`C-1-1, C-1-2, C-1-7 boxes are --bg-elevated on the card, 1px --border-default, padded 8 14 (${width}px)`, async ({ page }) => {
+    test(`C-1-1, C-1-2, C-1-7 boxes are --bg-elevated on the card, 1px --border-default, padded 8 14 (${width}px)`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width, height: 1000 });
       await openHome(page, f.project.slug, `?env=${f.production.id}`);
       await chooseDataset(page, 'support-tickets');
-      await expect(envBox(page, 'production').locator('[data-env-version]')).toHaveAttribute('data-status', 'ok');
+      await expect(envBox(page, 'production').locator('[data-env-version]')).toHaveAttribute(
+        'data-status',
+        'ok',
+      );
       const elevated = await tokenColor(page, '--bg-elevated');
       const surface = await tokenColor(page, '--bg-surface');
       const borderDefault = await tokenColor(page, '--border-default');
@@ -65,7 +79,14 @@ test.describe('point 1: option boxes', () => {
         ['env-box', unselected],
         ['dataset-box', part(page, 'dataset-box').first()],
       ] as const) {
-        const s = await computed(el, ['background-color', 'border-top-width', 'border-top-color', 'border-top-left-radius', 'padding-top', 'padding-left']);
+        const s = await computed(el, [
+          'background-color',
+          'border-top-width',
+          'border-top-color',
+          'border-top-left-radius',
+          'padding-top',
+          'padding-left',
+        ]);
         expect(s['background-color'], `${name} fill`).toBe(elevated);
         expect(s['border-top-width']).toBe('1px');
         expect(s['border-top-color']).toBe(borderDefault);
@@ -84,15 +105,27 @@ test.describe('point 1: option boxes', () => {
     });
   }
 
-  test('C-1-3 selected = accent border, 3px rail, accent tint; the Start-from card uses the same border and rail', async ({ page }) => {
+  test('C-1-3 selected = accent border, 3px rail, accent tint; the Start-from card uses the same border and rail', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await openHome(page, f.project.slug, `?env=${f.production.id}`);
     const accent = await tokenColor(page, '--accent-primary');
     const selected = envBox(page, 'production');
     await expect(selected).toHaveAttribute('data-state', 'selected');
     await settled(page);
-    await expect.poll(async () => (await computed(selected, ['border-inline-start-color']))['border-inline-start-color']).toBe(accent);
-    const s = await computed(selected, ['border-top-color', 'border-top-width', 'border-inline-start-width', 'border-inline-start-color', 'background-color']);
+    await expect
+      .poll(
+        async () => (await computed(selected, ['border-inline-start-color']))['border-inline-start-color'],
+      )
+      .toBe(accent);
+    const s = await computed(selected, [
+      'border-top-color',
+      'border-top-width',
+      'border-inline-start-width',
+      'border-inline-start-color',
+      'background-color',
+    ]);
     expect(s['border-top-color']).toBe(accent);
     expect(s['border-top-width']).toBe('1px');
     expect(s['border-inline-start-width']).toBe('3px');
@@ -127,29 +160,46 @@ test.describe('point 1: option boxes', () => {
     await expect(flagged).toHaveAttribute('data-state', 'flagged');
     await settled(page);
     const error = await tokenColor(page, '--error');
-    await expect.poll(async () => (await computed(flagged, ['border-top-color']))['border-top-color']).toBe(error);
-    const s = await computed(flagged, ['border-top-color', 'border-inline-start-width', 'border-inline-start-color', 'background-color']);
+    await expect
+      .poll(async () => (await computed(flagged, ['border-top-color']))['border-top-color'])
+      .toBe(error);
+    const s = await computed(flagged, [
+      'border-top-color',
+      'border-inline-start-width',
+      'border-inline-start-color',
+      'background-color',
+    ]);
     expect(s['border-top-color']).toBe(error);
     expect(s['border-inline-start-width']).toBe('3px');
     expect(s['border-inline-start-color']).toBe(error);
     const line = flagged.locator('[data-part=env-flag]');
     const l = await computed(line, ['color']);
-    expect(contrast(await resolved(page, l['color']!), await resolved(page, s['background-color']!))).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrast(await resolved(page, l['color']!), await resolved(page, s['background-color']!)),
+    ).toBeGreaterThanOrEqual(4.5);
     await expect(flagged.getByRole('checkbox', { name: 'staging' })).toBeChecked();
   });
 
   for (const width of [1440, 390]) {
-    test(`C-1-6 nothing inside the Environments and Datasets cards is darker than what holds it, and text reads (${width}px)`, async ({ page }) => {
+    test(`C-1-6 nothing inside the Environments and Datasets cards is darker than what holds it, and text reads (${width}px)`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width, height: 1000 });
       await openHome(page, f.project.slug, `?env=${f.production.id},${f.staging.id}`);
       await chooseDataset(page, 'support-tickets');
-      await expect(envBox(page, 'production').locator('[data-env-version]')).toHaveAttribute('data-status', 'ok');
+      await expect(envBox(page, 'production').locator('[data-env-version]')).toHaveAttribute(
+        'data-status',
+        'ok',
+      );
       const findings = await page.evaluate(() => {
         const lum = (rgb: number[]) => {
           const f = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
           return 0.2126 * f(rgb[0]!) + 0.7152 * f(rgb[1]!) + 0.0722 * f(rgb[2]!);
         };
-        const ctx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true })!;
+        const ctx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext(
+          '2d',
+          { willReadFrequently: true },
+        )!;
         const rgba = (css: string): number[] => {
           ctx.clearRect(0, 0, 1, 1);
           ctx.fillStyle = '#000';
@@ -171,21 +221,29 @@ test.describe('point 1: option boxes', () => {
         };
         const darker: string[] = [];
         const lowText: string[] = [];
-        const roots = Array.from(document.querySelectorAll('[data-part=env-section], [data-part=dataset-section]'));
+        const roots = Array.from(
+          document.querySelectorAll('[data-part=env-section], [data-part=dataset-section]'),
+        );
         for (const root of roots) {
           for (const el of Array.from(root.querySelectorAll('*'))) {
             if (el instanceof SVGElement) continue;
             const mine = solid(el);
             // Tags carry their own tone surface (amended C-1-6: a tone tint is not a hole in the box)
-            if (mine && !el.closest('[class*=_tag_]') && lum(mine) + 0.002 < lum(behind(el))) darker.push(`${el.tagName}.${el.className}`.slice(0, 80));
-            const own = Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? '').trim());
+            if (mine && !el.closest('[class*=_tag_]') && lum(mine) + 0.002 < lum(behind(el)))
+              darker.push(`${el.tagName}.${el.className}`.slice(0, 80));
+            const own = Array.from(el.childNodes).some(
+              (n) => n.nodeType === 3 && (n.textContent ?? '').trim(),
+            );
             if (own) {
               const cs = getComputedStyle(el);
               const fg = rgba(cs.color);
               const bg = mine ?? behind(el);
               const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
               const ratio = (a! + 0.05) / (b! + 0.05);
-              if (ratio < 4.5 && cs.opacity === '1') lowText.push(`${ratio.toFixed(2)} ${el.tagName}.${el.className} "${(el.textContent ?? '').slice(0, 20)}"`);
+              if (ratio < 4.5 && cs.opacity === '1')
+                lowText.push(
+                  `${ratio.toFixed(2)} ${el.tagName}.${el.className} "${(el.textContent ?? '').slice(0, 20)}"`,
+                );
             }
           }
         }
@@ -204,7 +262,14 @@ const PARTS = ['bar-skip', 'bar-cancel', 'bar-status', 'bar-back', 'bar-continue
 
 async function barFacts(page: Page) {
   const el = bar(page);
-  const style = await computed(el, ['position', 'background-color', 'border-top-color', 'border-top-width', 'border-top-left-radius', 'box-shadow']);
+  const style = await computed(el, [
+    'position',
+    'background-color',
+    'border-top-color',
+    'border-top-width',
+    'border-top-left-radius',
+    'box-shadow',
+  ]);
   const b = await box(el);
   const parts: Record<string, number> = {};
   for (const p of PARTS) {
@@ -213,8 +278,12 @@ async function barFacts(page: Page) {
   }
   const barButtons = bar(page).locator('button[data-part^=bar-]:not([data-part=bar-ack])');
   const buttons = await barButtons.count();
-  const heights = await barButtons.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height * 10) / 10));
-  const partNames = await el.evaluate((n) => Array.from(n.querySelectorAll('[data-part]')).map((e) => e.getAttribute('data-part')));
+  const heights = await barButtons.evaluateAll((els) =>
+    els.map((e) => Math.round(e.getBoundingClientRect().height * 10) / 10),
+  );
+  const partNames = await el.evaluate((n) =>
+    Array.from(n.querySelectorAll('[data-part]')).map((e) => e.getAttribute('data-part')),
+  );
   return { style, height: b.height, parts, buttons, heights, partNames };
 }
 
@@ -224,7 +293,8 @@ async function barGap(page: Page) {
     let prev = b.previousElementSibling;
     while (prev && prev.getBoundingClientRect().height === 0) prev = prev.previousElementSibling;
     let scroller: HTMLElement | null = b.parentElement;
-    while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY))
+      scroller = scroller.parentElement;
     const s = scroller ?? (document.scrollingElement as HTMLElement);
     const r = b.getBoundingClientRect();
     return {
@@ -237,7 +307,9 @@ async function barGap(page: Page) {
 
 test.describe('point 3: one launch bar', () => {
   for (const width of [1440, 1024]) {
-    test(`C-3-1, C-3-2, C-3-3, C-3-6 / R10 C-1-1, C-1-2, C-1-11 the same bar on all six steps (${width}px)`, async ({ page }) => {
+    test(`C-3-1, C-3-2, C-3-3, C-3-6 / R10 C-1-1, C-1-2, C-1-11 the same bar on all six steps (${width}px)`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width, height: 900 });
       const facts = [];
       for (const step of STEPS) {
@@ -260,8 +332,15 @@ test.describe('point 3: one launch bar', () => {
     });
   }
 
-  for (const [width, height] of [[1440, 900], [1024, 768], [390, 844], [1440, 1400]] as const) {
-    test(`R10 C-4-2, C-4-3 (amends C-3-1) the bar follows the content: 14 px under it when short, at the viewport bottom while it overflows (${width}x${height})`, async ({ page }) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [1024, 768],
+    [390, 844],
+    [1440, 1400],
+  ] as const) {
+    test(`R10 C-4-2, C-4-3 (amends C-3-1) the bar follows the content: 14 px under it when short, at the viewport bottom while it overflows (${width}x${height})`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width, height });
       const q = `?env=${f.production.id},${f.staging.id}`;
       const views: Array<{ where: string; open: () => Promise<void> }> = [
@@ -273,13 +352,16 @@ test.describe('point 3: one launch bar', () => {
         await expect(bar(page)).toBeVisible();
         await settled(page);
         const m = await barGap(page);
-        if (m.overflows) near(m.barBottom, height, 0.5, `${v.where}: overflowing, the bar rides at the viewport bottom`);
+        if (m.overflows)
+          near(m.barBottom, height, 0.5, `${v.where}: overflowing, the bar rides at the viewport bottom`);
         else near(m.gap, 14, 0.5, `${v.where}: short, the bar is 14 px under the content`);
       }
     });
   }
 
-  test('C-3-4 / R10 C-1-3, C-1-4 Skip is disabled on the review step, where the primary slot is the launch', async ({ page }) => {
+  test('C-3-4 / R10 C-1-3, C-1-4 Skip is disabled on the review step, where the primary slot is the launch', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'models');
     for (const p of ['bar-skip', 'bar-continue']) await expect(part(page, p)).toBeEnabled();
@@ -291,7 +373,10 @@ test.describe('point 3: one launch bar', () => {
     await expect(part(page, 'bar-continue')).toHaveText(/^Launch/);
   });
 
-  test('C-3-5 / R10 C-1-3 the launch label counts runs and Back does not move between "Continue" and "Launch 6 runs"', async ({ page, request }) => {
+  test('C-3-5 / R10 C-1-3 the launch label counts runs and Back does not move between "Continue" and "Launch 6 runs"', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const x = await launchSweep(request, f);
     await page.goto(cloneUrl(f.project.slug, x.id, 'models'));
@@ -308,7 +393,9 @@ test.describe('point 3: one launch bar', () => {
     near((await box(part(page, 'bar-continue'))).width, 120, 0.5, 'the primary slot keeps 120 px');
   });
 
-  test('C-3-7 / R10 C-1-9 at 390 the bar has three rows, fits, and shows all four buttons without a menu', async ({ page }) => {
+  test('C-3-7 / R10 C-1-9 at 390 the bar has three rows, fits, and shows all four buttons without a menu', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const step of ['where', 'models', 'review'] as StepId[]) {
       await openLaunch(page, f.project.slug, `?env=${f.production.id},${f.staging.id}`, step);
@@ -317,8 +404,13 @@ test.describe('point 3: one launch bar', () => {
       const overflow = await bar(page).evaluate((n) => n.scrollWidth <= n.clientWidth + 0.5);
       expect(overflow).toBe(true);
       await expect(bar(page).locator('button[data-part^=bar-]:not([data-part=bar-ack])')).toHaveCount(4);
-      for (const p of ['bar-skip', 'bar-cancel', 'bar-status', 'bar-back', 'bar-continue']) await expect(part(page, p)).toBeVisible();
-      const [status, skip, back] = [await box(part(page, 'bar-status')), await box(part(page, 'bar-skip')), await box(part(page, 'bar-back'))];
+      for (const p of ['bar-skip', 'bar-cancel', 'bar-status', 'bar-back', 'bar-continue'])
+        await expect(part(page, p)).toBeVisible();
+      const [status, skip, back] = [
+        await box(part(page, 'bar-status')),
+        await box(part(page, 'bar-skip')),
+        await box(part(page, 'bar-back')),
+      ];
       expect(skip.y, 'Skip under the status').toBeGreaterThan(status.y + status.height - 1);
       expect(back.y, 'Back on the third row').toBeGreaterThan(skip.y + skip.height - 1);
       await expect(page.getByRole('button', { name: 'More launch options' })).toHaveCount(0);
@@ -329,22 +421,37 @@ test.describe('point 3: one launch bar', () => {
   test('C-3-8 the home view uses the same chrome with its own parts', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openHome(page, f.project.slug, `?env=${f.production.id}`);
-    const home = await computed(bar(page), ['position', 'background-color', 'border-top-color', 'border-top-left-radius', 'box-shadow']);
+    const home = await computed(bar(page), [
+      'position',
+      'background-color',
+      'border-top-color',
+      'border-top-left-radius',
+      'box-shadow',
+    ]);
     near((await box(bar(page))).height, 56, 1, 'home bar height');
-    for (const p of ['bar-name', 'bar-status', 'bar-customize', 'bar-launch']) await expect(part(page, p)).toHaveCount(1);
-    await page.getByRole('button', { name: 'Customize →' }).click();
+    for (const p of ['bar-name', 'bar-status', 'bar-customize', 'bar-launch'])
+      await expect(part(page, p)).toHaveCount(1);
+    await page.getByRole('button', { name: 'Customize' }).click();
     await expect(part(page, 'bar-back')).toBeVisible();
     await settled(page);
-    const wizard = await computed(bar(page), ['position', 'background-color', 'border-top-color', 'border-top-left-radius', 'box-shadow']);
+    const wizard = await computed(bar(page), [
+      'position',
+      'background-color',
+      'border-top-color',
+      'border-top-left-radius',
+      'box-shadow',
+    ]);
     expect(home).toEqual(wizard);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole('button', { name: /← Start/ }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expect(page.getByTestId('launch-home')).toBeVisible();
     // amended C-3-8: at 390 the home bar is three rows (status, name, buttons) of one height, 90.8 px, in every state
     near((await box(bar(page))).height, 90.8, 1, 'home bar at 390');
   });
 
-  test('C-3-8 at 390 the home bar keeps one height (90.8 px): ready, a missing name, a flagged task', async ({ page }) => {
+  test('C-3-8 at 390 the home bar keeps one height (90.8 px): ready, a missing name, a flagged task', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openHome(page, f.project.slug, `?env=${f.production.id},${f.staging.id}`);
     await expect(part(page, 'bar-status')).toContainText('runs to launch');
@@ -355,10 +462,17 @@ test.describe('point 3: one launch bar', () => {
         await page.getByRole('option', { name: /Route a ticket/ }).click();
         await expect(envBox(page, 'staging')).toHaveAttribute('data-state', 'flagged');
       }
-      await expect.poll(async () => Math.round((await box(bar(page))).height * 10) / 10, { message: state }).toBeGreaterThanOrEqual(90);
+      await expect
+        .poll(async () => Math.round((await box(bar(page))).height * 10) / 10, { message: state })
+        .toBeGreaterThanOrEqual(90);
       near((await box(bar(page))).height, 90.8, 1, `home bar, ${state}`);
       const vh = 844;
-      near((await box(bar(page))).y + (await box(bar(page))).height, vh, 0.5, `${state}: at the viewport bottom`);
+      near(
+        (await box(bar(page))).y + (await box(bar(page))).height,
+        vh,
+        0.5,
+        `${state}: at the viewport bottom`,
+      );
       await expectNoPageOverflow(page);
     }
   });
@@ -371,7 +485,9 @@ test.describe('point 3: one launch bar', () => {
 });
 
 test.describe('point 4: the review is on its own step', () => {
-  test('C-4-1, C-4-2 the Review card exists on the Review step only and the other steps use the full column', async ({ page }) => {
+  test('C-4-1, C-4-2 the Review card exists on the Review step only and the other steps use the full column', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     for (const step of STEPS) {
       await openLaunch(page, f.project.slug, `?env=${f.production.id},${f.staging.id}`, step);
@@ -388,7 +504,9 @@ test.describe('point 4: the review is on its own step', () => {
     near((await box(wrap)).width, 1193, 2, 'settings section');
   });
 
-  test('C-4-3 / C-4-4 the bar carries the run count and the first problem; the link opens its step; ?step=review still works', async ({ page }) => {
+  test('C-4-3 / C-4-4 the bar carries the run count and the first problem; the link opens its step; ?step=review still works', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'models');
     // 25 s: the first load of a worker compiles the lazy step chunks in Vite (the race behind the one flaky run in the full folder)
@@ -396,20 +514,30 @@ test.describe('point 4: the review is on its own step', () => {
     await settled(page);
     // the seeded default preset holds no dataset: two problems (the dataset first, then the name)
     await expect(part(page, 'bar-status')).toContainText(/Fix 2 problems first/);
-    await part(page, 'bar-status').getByRole('button', { name: /Fix 2 problems first/ }).click();
-    await expect(page.getByRole('heading', { name: STEP_LABELS.where, level: 2 })).toBeVisible({ timeout: 25_000 });
+    await part(page, 'bar-status')
+      .getByRole('button', { name: /Fix 2 problems first/ })
+      .click();
+    await expect(page.getByRole('heading', { name: STEP_LABELS.where, level: 2 })).toBeVisible({
+      timeout: 25_000,
+    });
     await page.goto(page.url().replace('step=where', 'step=review'));
-    await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible({
+      timeout: 25_000,
+    });
   });
 });
 
 // ───────────────────────────── points 5 and 6: the review and the priority per run ─────────────────────────────
 
 const runRow = (page: Page, n: number): Locator => page.locator(`[data-part=runs-table] [data-run="${n}"]`);
-const prio = (page: Page, n: number): Locator => page.getByRole('button', { name: new RegExp(`Priority of run ${n}`) });
+const prio = (page: Page, n: number): Locator =>
+  page.getByRole('button', { name: new RegExp(`Priority of run ${n}`) });
 
 test.describe('points 5 and 6: the review and a priority per run', () => {
-  test('C-5-1, C-5-3, C-5-4, C-5-5, C-5-7, C-5-8 Summary rows, one row per run, the varying columns, the cards (1440)', async ({ page, request }) => {
+  test('C-5-1, C-5-3, C-5-4, C-5-5, C-5-7, C-5-8 Summary rows, one row per run, the varying columns, the cards (1440)', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const x = await launchSweep(request, f);
     await page.goto(cloneUrl(f.project.slug, x.id, 'review'));
@@ -437,14 +565,17 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     // C-5-4: columns = #, only those that vary, Priority
     const headers = await page.locator('[data-part=runs-table] [role=columnheader]').allInnerTexts();
     // R10 C-2-1: one column per swept setting, named as the form names it
-    expect(headers.map((h) => h.replace(/\s+/g, ' ').trim().split(' ')[0]!.toLowerCase()).filter(Boolean)).toEqual(['#', 'environment', 'timeout', 'priority']);
+    expect(
+      headers.map((h) => h.replace(/\s+/g, ' ').trim().split(' ')[0]!.toLowerCase()).filter(Boolean),
+    ).toEqual(['#', 'environment', 'timeout', 'priority']);
     // C-5-5: 18 px / 700 mono next to "runs to launch"
     const count = await computed(part(page, 'run-count'), ['font-size', 'font-weight', 'font-family']);
     expect(count['font-size']).toBe('18px');
     expect(count['font-weight']).toBe('700');
     expect(count['font-family']).toMatch(/mono/i);
     // C-5-7: Summary, Runs, Changes, Checks are cards; Changes and Checks share a row with a 14 px gap
-    for (const name of ['Summary', 'Runs to launch', 'Changes', 'Checks']) await expect(page.getByRole('region', { name, exact: true })).toBeVisible();
+    for (const name of ['Summary', 'Runs to launch', 'Changes', 'Checks'])
+      await expect(page.getByRole('region', { name, exact: true })).toBeVisible();
     const changes = await box(part(page, 'review-changes'));
     const checks = await box(part(page, 'review-checks'));
     near(changes.y, checks.y, 1, 'Changes and Checks share a row');
@@ -469,7 +600,10 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await expectNoPageOverflow(page);
   });
 
-  test('C-5-9 / R10 C-2-12 the Summary and the first two runs are on the first screen at 1440 x 1000', async ({ page, request }) => {
+  test('C-5-9 / R10 C-2-12 the Summary and the first two runs are on the first screen at 1440 x 1000', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const x = await launchSweep(request, f);
     await page.goto(cloneUrl(f.project.slug, x.id, 'review'));
@@ -483,7 +617,10 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     expect(second.y + second.height).toBeLessThanOrEqual(top);
   });
 
-  test('C-5-2, C-5-6 at 390 the summary stacks and every run is a card with a 96 px label column', async ({ page, request }) => {
+  test('C-5-2, C-5-6 at 390 the summary stacks and every run is a card with a 96 px label column', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const x = await launchSweep(request, f);
     await page.goto(cloneUrl(f.project.slug, x.id, 'review'));
@@ -500,13 +637,24 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     expect(checks.y, 'Checks under Changes').toBeGreaterThan(changes.y + changes.height - 1);
     near(checks.x, changes.x, 1, 'one column');
     near(checks.y - (changes.y + changes.height), 14, 1, 'gap');
-    const labelWidth = await card.locator('dt').first().evaluate((e) => e.getBoundingClientRect().width);
+    const labelWidth = await card
+      .locator('dt')
+      .first()
+      .evaluate((e) => e.getBoundingClientRect().width);
     near(labelWidth, 96, 1, 'card label column');
-    near((await box(card.getByRole('button', { name: /Priority of run 1/ }))).height, 24, 0, 'select height in the card');
+    near(
+      (await box(card.getByRole('button', { name: /Priority of run 1/ }))).height,
+      24,
+      0,
+      'select height in the card',
+    );
     await expectNoPageOverflow(page);
   });
 
-  test('C-6-1, C-6-2, C-6-9 one select per run, 120 x 24, Low / Normal / High, Normal on load, 32 px rows with the marker', async ({ page, request }) => {
+  test('C-6-1, C-6-2, C-6-9 one select per run, 120 x 24, Low / Normal / High, Normal on load, 32 px rows with the marker', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const x = await launchSweep(request, f);
     await page.goto(cloneUrl(f.project.slug, x.id, 'review'));
@@ -521,7 +669,11 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     }
     await expect(page.locator('[data-part=run-changed]')).toHaveCount(0);
     await prio(page, 1).click();
-    expect((await page.getByRole('option').allInnerTexts()).map((t) => t.split('\n')[0])).toEqual(['Low', 'Normal', 'High']);
+    expect((await page.getByRole('option').allInnerTexts()).map((t) => t.split('\n')[0])).toEqual([
+      'Low',
+      'Normal',
+      'High',
+    ]);
     await page.keyboard.press('Escape');
     await prio(page, 1).click();
     await page.getByRole('option', { name: /^Low/ }).click();
@@ -529,7 +681,10 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     near((await box(runRow(page, 1))).height, 32, 1, 'row with the marker');
   });
 
-  test('C-6-3, C-6-6 High on run 1: only run 1 changes, the dry run names it, the acknowledgement gates Launch, the job stores it', async ({ page, request }) => {
+  test('C-6-3, C-6-6 High on run 1: only run 1 changes, the dry run names it, the acknowledgement gates Launch, the job stores it', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const x = await launchSweep(request, f);
     const posts = captureExperimentPosts(page);
@@ -542,7 +697,14 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await expect(runRow(page, 1).locator('[data-part=run-changed]')).toHaveCount(1);
     await expect
       .poll(() => posts.dryRuns.at(-1)?.body.job_priorities, { timeout: 10_000 })
-      .toEqual([{ environment_id: expect.any(String), combo_index: expect.any(Number), dataset_index: 0, priority: 'HIGH' }]);
+      .toEqual([
+        {
+          environment_id: expect.any(String),
+          combo_index: expect.any(Number),
+          dataset_index: 0,
+          priority: 'HIGH',
+        },
+      ]);
     const ack = page.locator('[data-part=review-ack]');
     await expect(ack).toContainText('1 run is High.');
     const border = (await computed(ack, ['border-top-color']))['border-top-color'];
@@ -565,12 +727,19 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     const byPriority = (stored.jobs as any[]).map((j) => j.priority).sort();
     expect(byPriority).toEqual(['HIGH', 'NORMAL', 'NORMAL', 'NORMAL', 'NORMAL', 'NORMAL']);
     expect(stored.priorities).toEqual({ LOW: 0, NORMAL: 5, HIGH: 1 });
-    // C-6-11: the job table shows each job's own priority, High in the danger tone
+    // C-6-11: the job table shows each job's own priority, High in the danger tone (Job history starts closed, C206)
+    await page
+      .locator('[data-exp-jobs]')
+      .getByRole('button', { name: /Job history/ })
+      .click();
     await expect(page.locator('[data-job-priority=HIGH]')).toHaveCount(1);
     await expect(page.locator('[data-job-priority=NORMAL]').first()).toBeVisible();
   });
 
-  test('C-6-5 an environment capped at Normal cannot take High; one capped at High can', async ({ page, request }) => {
+  test('C-6-5 an environment capped at Normal cannot take High; one capped at High can', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const x = await launchSweep(request, f);
     await page.goto(cloneUrl(f.project.slug, x.id, 'review'));

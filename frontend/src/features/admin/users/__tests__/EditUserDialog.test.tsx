@@ -28,7 +28,7 @@ describe('EditUserDialog password reset', () => {
   it('warns that the user is signed out of every browser before resetting', async () => {
     open(true);
     await userEvent.click(screen.getByRole('button', { name: 'Reset password' }));
-    const confirm = await screen.findByRole('alertdialog', { name: 'Reset password' });
+    const confirm = await screen.findByRole('alertdialog', { name: 'Reset this user’s password?' });
     expect(confirm).toHaveTextContent('They are signed out of every browser.');
     expect(confirm).toHaveTextContent('reset@example.test');
     expect(screen.getByText(/Signs them out everywhere/)).toBeInTheDocument();
@@ -37,5 +37,12 @@ describe('EditUserDialog password reset', () => {
   it('offers no reset without local password auth', () => {
     open(false);
     expect(screen.queryByRole('button', { name: 'Reset password' })).not.toBeInTheDocument();
+  });
+});
+
+describe('EditUserDialog status (C158)', () => {
+  it('has no Active checkbox: status changes only through the row action', () => {
+    open(false);
+    expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
   });
 });

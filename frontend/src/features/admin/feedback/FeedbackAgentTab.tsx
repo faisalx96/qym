@@ -9,8 +9,27 @@ import {
   type AgentTestResult,
 } from '@/api/feedback';
 import feedbackStyles from '@/features/feedback/feedback.module.css';
+import {
+  ConnectionFields,
+  httpsError,
+  placeConnectionError,
+  type ConnectionErrors,
+} from '@/features/shell/settings/ConnectionFields';
 import { ApiError } from '@/lib/http';
-import { Badge, Button, Card, ConfirmDialog, ErrorState, Icon, NumberField, Skeleton, Text, TextField, useToast } from '@/ui';
+import { keyHostChanged } from '@/lib/keyHost';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  ErrorState,
+  Icon,
+  NumberField,
+  Section,
+  Skeleton,
+  StatusMark,
+  Text,
+  useToast,
+} from '@/ui';
 
 function ConnectionCard({ data }: { data: AgentAdmin }) {
   const toast = useToast();
@@ -22,9 +41,27 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
   const [key, setKey] = useState('');
   const [result, setResult] = useState<AgentTestResult | null>(null);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<ConnectionErrors>({});
   const [removing, setRemoving] = useState(false);
-  const complete = Boolean(url.trim() && model.trim() && (key || data.connection.llm_api_key_set));
-  const canTest = data.configured || Boolean(url.trim() && model.trim() && key);
+  /** The https rule before any request (C157). */
+  function checked(): boolean {
+    const https = httpsError(url, true);
+    setFieldErrors(https ? { baseUrl: https } : {});
+    return !https;
+  }
+  /** A server error goes under its field; anything else stays in the callout. */
+  function place(e: unknown, fallback: string) {
+    const placed = placeConnectionError(e instanceof ApiError && e.detail ? e.detail : fallback);
+    setFieldErrors(placed.errors);
+    setError(placed.formError);
+  }
+  const stored = data.connection;
+  // The stored key stays with its host: another host needs the key again (C004).
+  // A blank URL tests the saved one, as the server does.
+  const needsKey =
+    stored.llm_api_key_set && keyHostChanged(stored.llm_base_url, url.trim() || stored.llm_base_url);
+  const complete = Boolean(url.trim() && model.trim() && (key || (stored.llm_api_key_set && !needsKey)));
+  const canTest = (data.configured && !needsKey) || Boolean(url.trim() && model.trim() && key);
   const blocked = !data.encryption_ready;
   const values = () => ({
     llm_base_url: url.trim(),
@@ -39,45 +76,52 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
       header={
         <div className={feedbackStyles.railHead}>
           <Text variant="md">Connection</Text>
-          {data.configured ? <Badge tone="success">Configured</Badge> : <Badge tone="warning">Not configured</Badge>}
+          {data.configured ? (
+            <StatusMark tone="success" shape="full" label="Configured" />
+          ) : (
+            <StatusMark tone="warning" shape="ring" label="Not configured" />
+          )}
         </div>
       }
       footer={
         <div className={feedbackStyles.footActions}>
           {data.configured ? (
-            <Button variant="ghost" onPress={() => setRemoving(true)}>
+            <Button variant="danger" onPress={() => setRemoving(true)}>
               Remove connection
             </Button>
           ) : null}
+          {/* the button rule (round 11): Test runs something without saving (accent), Save commits (primary) */}
           <Button
-            variant="neutral"
+            variant="accent"
             icon={<Icon name="play" size={14} />}
             isDisabled={!canTest}
             loading={test.isPending}
             onPress={async () => {
               setError('');
               setResult(null);
+              if (!checked()) return;
               try {
                 setResult(await test.mutateAsync(values()));
               } catch (e) {
-                setError(e instanceof ApiError && e.detail ? e.detail : 'The test could not run.');
+                place(e, 'The test could not run.');
               }
             }}
           >
             Test connection
           </Button>
           <Button
-            variant="accent"
+            variant="primary"
             isDisabled={blocked || !complete}
             loading={save.isPending}
             onPress={async () => {
               setError('');
+              if (!checked()) return;
               try {
                 await save.mutateAsync({ ...values(), ...(key ? {} : { llm_api_key: '__KEEP__' }) });
                 setKey('');
                 toast.show('Connection saved', { tone: 'success' });
               } catch (e) {
-                setError(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save the connection.');
+                place(e, 'Couldn’t save the connection.');
               }
             }}
           >
@@ -89,28 +133,33 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
       <div className={feedbackStyles.triageBody}>
         {blocked ? (
           <Callout tone="error" title="Saving is blocked: the platform has no encryption key" live>
-            Set QYM_LLM_CONFIG_ENCRYPTION_KEY on the server and restart it. The API key is never stored in clear text.
+            Set QYM_LLM_CONFIG_ENCRYPTION_KEY on the server and restart it. The API key is never stored in
+            clear text.
           </Callout>
         ) : null}
         <div className={feedbackStyles.connGrid}>
-          <TextField
-            label="Base URL"
-            mono
-            isRequired
-            value={url}
-            onChange={setUrl}
-            placeholder="https://api.openai.com/v1"
-            help="Any OpenAI-compatible endpoint. An https:// URL is required."
-          />
-          <TextField label="Model" mono isRequired value={model} onChange={setModel} placeholder="gpt-4.1" help="Must support tool calls." />
-          <TextField
-            label="API key"
-            type="password"
-            mono
-            value={key}
-            onChange={setKey}
-            placeholder={data.connection.llm_api_key_set ? `Keep current (${data.connection.llm_api_key_hint})` : 'sk-…'}
-            autoComplete="new-password"
+          {/* One connection recipe with Project settings, errors under their field (C157). */}
+          <ConnectionFields
+            baseUrl={url}
+            onBaseUrl={(v) => {
+              setUrl(v);
+              if (fieldErrors.baseUrl) setFieldErrors((e) => ({ ...e, baseUrl: undefined }));
+            }}
+            model={model}
+            onModel={(v) => {
+              setModel(v);
+              if (fieldErrors.model) setFieldErrors((e) => ({ ...e, model: undefined }));
+            }}
+            apiKey={key}
+            onApiKey={(v) => {
+              setKey(v);
+              if (fieldErrors.key) setFieldErrors((e) => ({ ...e, key: undefined }));
+            }}
+            needsKey={needsKey}
+            storedKeyHint={stored.llm_api_key_set ? stored.llm_api_key_hint : null}
+            baseUrlHelp="Any OpenAI-compatible endpoint. An https:// URL is required."
+            modelHelp="Must support tool calls."
+            errors={fieldErrors}
           />
         </div>
         {result?.ok ? (
@@ -161,14 +210,16 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
       footer={
         <div className={feedbackStyles.footActions}>
           <Button
-            variant="neutral"
+            variant="primary"
             loading={save.isPending}
             onPress={async () => {
               try {
                 await save.mutateAsync({ draft_retention_days: days, max_user_messages: max });
                 toast.show('Behaviour saved', { tone: 'success' });
               } catch (e) {
-                toast.show(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save.', { tone: 'error' });
+                toast.show(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save.', {
+                  tone: 'error',
+                });
               }
             }}
           >
@@ -199,16 +250,31 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
   );
 }
 
-/** Admin, Feedback agent (QE-109 to QE-122): the platform-level connection and the two numbers. */
+/** Admin, Feedback assistant (QE-109 to QE-122, C244): the platform-level connection and the two numbers. */
 export function FeedbackAgentTab() {
   const q = useAgentAdmin();
-  if (q.isError) return <ErrorState error={q.error} title="Couldn’t load the feedback assistant" onRetry={() => void q.refetch()} />;
+  if (q.isError)
+    return (
+      <ErrorState
+        error={q.error}
+        title="Couldn’t load the feedback assistant"
+        onRetry={() => void q.refetch()}
+      />
+    );
   if (!q.data) return <Skeleton kind="rows" rows={3} rowHeight={80} label="Loading the feedback assistant" />;
   const key = String(q.data.configured);
+  const d = q.data;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  // One titled Section, its totals in the description: no second stat strip under the admin tiles (C244).
+  const totals = [
+    `${plural(d.counts.requests, 'request')}, ${d.counts.new} new`,
+    `${plural(d.counts.open_drafts, 'open draft')}, deleted after ${d.behaviour.draft_retention_days} days`,
+    `${plural(d.counts.assistant_calls_7d, 'assistant call')} in 7 days`,
+  ].join(' · ');
   return (
-    <div className={feedbackStyles.stackCol}>
+    <Section title="Feedback assistant" description={totals} bodyClassName={feedbackStyles.stackCol}>
       <ConnectionCard key={key} data={q.data} />
       <BehaviourCard key={`b-${key}`} data={q.data} />
-    </div>
+    </Section>
   );
 }

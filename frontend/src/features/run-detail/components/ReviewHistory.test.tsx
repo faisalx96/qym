@@ -1,7 +1,8 @@
 /**
  * Ported from tests/platform/test_review_workflow_browser.py (review history
  * widget): every transition renders as text, comments are never parsed as
- * HTML, and nothing renders for a run that was never submitted.
+ * HTML, and nothing renders for a run that was never submitted. Since C027 the
+ * log opens from the hero's History button; C055 marks a self-approval.
  */
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,9 +11,12 @@ import type { ReviewHistoryEvent } from '../types';
 let events: ReviewHistoryEvent[] = [];
 vi.mock('@/api/runs', () => ({
   useReviewHistoryQuery: () => ({ data: { run_id: 'r', status: 'APPROVED', events } }),
+  exportHtmlUrl: (id: string) => `/runs/${id}/export`,
+  runKeys: { all: (id: string) => ['run', id] },
 }));
 
-import { ReviewHistory } from './RunPanels';
+import { ReviewLogList, selfApprovals } from './RunPanels';
+import { ReviewLog } from './RunActions';
 
 describe('ReviewHistory', () => {
   beforeEach(() => {
@@ -46,8 +50,8 @@ describe('ReviewHistory', () => {
         recorded: true,
       },
     ];
-    const { container } = render(<ReviewHistory runId="r" status="APPROVED" />);
-    const entries = within(screen.getByTestId('review-history')).getAllByRole('listitem');
+    const { container } = render(<ReviewLogList events={events} />);
+    const entries = within(screen.getByTestId('review-log')).getAllByRole('listitem');
     expect(entries).toHaveLength(3);
     expect(entries.map((e) => e.querySelector('[class*="entryHead"] > :first-child')?.textContent)).toEqual([
       'Submitted',
@@ -65,13 +69,27 @@ describe('ReviewHistory', () => {
 
   it('names an unknown actor and flags a reconstructed entry', () => {
     events = [{ action: 'submit', actor: null, comment: '', recorded: false }];
-    render(<ReviewHistory runId="r" status="COMPLETED" />);
-    expect(screen.getByTestId('review-history').textContent).toContain('Unknown user');
+    render(<ReviewLogList events={events} />);
+    expect(screen.getByTestId('review-log').textContent).toContain('Unknown user');
     expect(screen.getByText(/Reconstructed from the approval record/)).toBeTruthy();
   });
 
   it('renders nothing for a run that was never submitted', () => {
-    const { container } = render(<ReviewHistory runId="r" status="COMPLETED" />);
+    const { container } = render(<ReviewLog runId="r" enabled />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('C055: marks an approval by the person who submitted the run', () => {
+    events = [
+      { action: 'submit', actor: { id: 'u1', display_name: 'Dev' } as never, comment: '' },
+      { action: 'approve', actor: { id: 'u1', display_name: 'Dev' } as never, comment: 'ok' },
+      { action: 'unapprove', actor: { id: 'u2', display_name: 'Lead' } as never, comment: '' },
+      { action: 'approve', actor: { id: 'u2', display_name: 'Lead' } as never, comment: '' },
+    ];
+    expect([...selfApprovals(events)]).toEqual([1]);
+    render(<ReviewLogList events={events} />);
+    const entries = within(screen.getByTestId('review-log')).getAllByRole('listitem');
+    expect(entries[1]!.textContent).toContain('Self-approved');
+    expect(entries[3]!.textContent).not.toContain('Self-approved');
   });
 });

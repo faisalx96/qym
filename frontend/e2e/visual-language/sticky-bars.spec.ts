@@ -17,7 +17,9 @@ test.use({ viewport: { width: 1440, height: 900 } });
 const token = (page: Page, name: string) =>
   page.evaluate((n) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(n)), name);
 
-test('run section nav is --bar-nav-h; the compare jump nav is --bar-link-h (round 8, H5)', async ({ page }) => {
+test('run section nav is --bar-nav-h; the compare jump nav is --bar-link-h (round 8, H5)', async ({
+  page,
+}) => {
   await gotoApp(page, runUrl(tour.slug, tour.runId));
   const nav = page.getByRole('navigation', { name: 'Run sections' });
   await expect(nav).toBeVisible();
@@ -52,7 +54,7 @@ test('the items toolbar stays one row with active filters and keeps Clear reacha
   const toolbar = page.locator('[data-run-filters]');
   await expect(toolbar).toBeVisible();
   await page.locator('button[data-bucket]').nth(5).click();
-  const clear = page.getByTestId('clear-filters');
+  const clear = page.getByTestId('nav-clear-filters');
   await expect(clear).toBeVisible();
   expect((await toolbar.boundingBox())!.height).toBeLessThanOrEqual(
     (await token(page, '--bar-action-h')) + 1,

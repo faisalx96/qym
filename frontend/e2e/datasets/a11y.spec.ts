@@ -82,7 +82,7 @@ test.describe('axe: datasets', () => {
     const { p, d } = await seedTwoVersions(request, 'axecmp');
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}/compare?base=v1&head=v2`);
     await expect(page.locator('[data-compare-page]')).toBeVisible();
-    await expect(page.getByLabel('Comparison summary')).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Changed/ })).toBeVisible();
     await clean(page, 'compare');
   });
 

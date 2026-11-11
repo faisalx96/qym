@@ -7,6 +7,8 @@ import { useRunPage } from '../RunContext';
 
 export interface RunScope {
   active: boolean;
+  /** The scope is only a search (C154: a search does not open the quick-filter sidebar). */
+  searchOnly: boolean;
   chips: ScopeChip[];
   shown: number;
   total: number;
@@ -27,6 +29,7 @@ export function useScope(): RunScope {
   );
   return {
     active: entries.length > 0,
+    searchOnly: entries.length > 0 && entries.every((e) => e.key === 'q'),
     chips,
     shown: items.length,
     total: payload.snapshot.rows.length,

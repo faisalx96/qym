@@ -11,7 +11,6 @@ import {
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   EmptyState,
@@ -22,8 +21,10 @@ import {
   Switch,
   Text,
   useToast,
+  Tag,
 } from '@/ui';
 import s from './guidance.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 interface Confirm {
   file: File;
@@ -125,7 +126,7 @@ export function DocumentsPanel({
         description="Documents the analyzer can use as context, and the rule writer as a source."
         aside={
           documents.length ? (
-            <Badge tone="info">{`${enabled.length} of ${documents.length} enabled`}</Badge>
+            <Tag kind="count">{`${enabled.length} of ${documents.length} enabled`}</Tag>
           ) : null
         }
       />
@@ -202,7 +203,7 @@ export function DocumentsPanel({
                     {d.name}
                   </Text>
                   <Text variant="sm" tone="muted">
-                    {`${(d.characters ?? 0).toLocaleString()} characters`}
+                    {`${(d.characters ?? 0).toLocaleString(APP_LOCALE)} characters`}
                     {d.content_over_limit ? ' · over the provider limit' : ''}
                   </Text>
                 </div>
@@ -213,7 +214,7 @@ export function DocumentsPanel({
                   onChange={(selected) =>
                     toggle.mutate(
                       { id: d.id, selected },
-                      { onError: () => toast.show(`Could not update ${d.name}`, { tone: 'error' }) },
+                      { onError: () => toast.show(`Couldn’t update ${d.name}`, { tone: 'error' }) },
                     )
                   }
                 >
@@ -233,7 +234,7 @@ export function DocumentsPanel({
             ))}
           </ul>
           <Text variant="sm" tone="muted" as="p">
-            {`Selected document content: ${characters.toLocaleString()} characters across ${enabled.length} ${enabled.length === 1 ? 'document' : 'documents'}. The analyzer sends all retained content without shortening.`}
+            {`Selected document content: ${characters.toLocaleString(APP_LOCALE)} characters across ${enabled.length} ${enabled.length === 1 ? 'document' : 'documents'}. The analyzer sends all retained content without shortening.`}
           </Text>
         </>
       )}
@@ -250,7 +251,7 @@ export function DocumentsPanel({
         description={
           confirm
             ? [
-                `${confirm.file.name} has ${confirm.characters.toLocaleString()} characters.`,
+                `${confirm.file.name} has ${confirm.characters.toLocaleString(APP_LOCALE)} characters.`,
                 'Large documents make every analysis prompt longer. If the selected provider cannot accept the whole prompt it reports context_limit_exceeded.',
               ]
             : undefined
@@ -281,8 +282,8 @@ export function DocumentsPanel({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not delete the document'
-                : 'Could not delete the document',
+                ? e.detail || 'Couldn’t delete the document'
+                : 'Couldn’t delete the document',
               {
                 tone: 'error',
               },

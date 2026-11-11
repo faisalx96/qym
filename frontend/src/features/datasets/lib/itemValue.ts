@@ -2,6 +2,8 @@
  * Item field values: the stored type tag, the Text/JSON editing contract
  * (strings are never coerced; JSON mode parses explicitly), previews.
  */
+import { APP_LOCALE, formatAgo, formatDay, formatHeaderDate, toDate } from '@/lib/dates';
+
 export type StoredType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null';
 
 export function storedType(value: unknown): StoredType {
@@ -104,37 +106,20 @@ export function formatLatency(ms: number | null | undefined): string {
 }
 
 export function pluralize(n: number, noun: string, plural = `${noun}s`): string {
-  return `${n.toLocaleString()} ${n === 1 ? noun : plural}`;
+  return `${n.toLocaleString(APP_LOCALE)} ${n === 1 ? noun : plural}`;
 }
 
+/** A day ('Sep 14, 2026') or the header form ('Sep 14, 2026, 19:05'): lib/dates, C048. */
 export function formatDate(iso: string | null | undefined, opts: 'date' | 'datetime' = 'datetime'): string {
   if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return opts === 'date'
-    ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-    : d.toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+  if (!toDate(iso)) return String(iso);
+  return opts === 'date' ? formatDay(iso) : formatHeaderDate(iso);
 }
 
+/** Freshness, then the day (lib/dates). */
 export function relativeTime(iso: string | null | undefined, now = Date.now()): string {
   if (!iso) return '—';
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return String(iso);
-  const s = Math.max(0, Math.round((now - t) / 1000));
-  if (s < 60) return 'just now';
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 30) return `${d}d ago`;
-  return formatDate(iso, 'date');
+  return toDate(iso) ? formatAgo(iso, now) : String(iso);
 }
 
 /** UUID-like item ids read as `Item #n` in compare lists. */
@@ -142,4 +127,18 @@ export function itemIdentity(itemId: string, index: number | null | undefined): 
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(itemId) && index != null)
     return `Item #${index}`;
   return itemId;
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  input: 'Input',
+  expected_output: 'Expected output',
+  metadata: 'Metadata',
+  labels: 'Labels',
+  state: 'State',
+};
+
+/** A field's name in words ('Expected output'), never its key ('expected_output' or 'EXPECTED_OUTPUT') (C246). */
+export function fieldLabel(key: string): string {
+  const k = key.toLowerCase();
+  return FIELD_LABELS[k] ?? k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }

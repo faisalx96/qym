@@ -1,8 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { AdminRunSummary } from '@/api/admin';
 import { runPath } from '@/app/routes';
 import {
-  Badge,
   DataTable,
   RunName,
   RunStatusBadge,
@@ -10,6 +9,7 @@ import {
   type Column,
   type PaginationProps,
   type RunStatus,
+  UserName,
 } from '@/ui';
 import { ownerLabel, progressLabel, projectLabel, relativeTime, runName } from '../format';
 import styles from './runs.module.css';
@@ -37,6 +37,8 @@ export interface RunTableProps {
   'aria-label': string;
   footerSummary?: string;
   pagination?: PaginationProps;
+  /** A toolbar over the table (the recent runs search and Project filter, C093). */
+  toolbar?: ReactNode;
   /** Live table: pulsing status + progress; recent: status badge + items. */
   variant: 'live' | 'recent';
 }
@@ -50,6 +52,7 @@ export function RunTable({
   variant,
   footerSummary,
   pagination,
+  toolbar,
   'aria-label': label,
 }: RunTableProps) {
   const columns = useMemo<Column<AdminRunSummary>[]>(
@@ -71,21 +74,23 @@ export function RunTable({
         priority: 1,
         cell: (r) => <RunCell run={r} />,
       },
-      { id: 'owner', header: 'Owner', width: 140, priority: 3, cell: (r) => ownerLabel(r) },
+      {
+        id: 'owner',
+        header: 'Owner',
+        width: 140,
+        priority: 3,
+        cell: (r) =>
+          r.owner ? <UserName id={r.owner.id} name={ownerLabel(r)} email={r.owner.email} /> : '—',
+      },
       {
         id: 'status',
         header: 'Status',
         type: 'status',
         width: 130,
         priority: 1,
-        cell: (r) =>
-          variant === 'live' ? (
-            <Badge tone="info" dot>
-              {r.status || 'RUNNING'}
-            </Badge>
-          ) : (
-            <RunStatusBadge status={r.status as RunStatus} />
-          ),
+        cell: (r) => (
+          <RunStatusBadge status={(variant === 'live' ? r.status || 'RUNNING' : r.status) as RunStatus} />
+        ),
       },
       {
         id: 'progress',
@@ -120,6 +125,7 @@ export function RunTable({
       rowKey={(r) => r.run_id}
       storageKey={storageKey}
       density="comfortable"
+      densityLocked
       empty={emptyState}
       rowActions={(r) =>
         !r.can_force_stop || !onForceStop || /^(STOPPED|COMPLETED|FAILED)$/i.test(r.status)
@@ -138,6 +144,7 @@ export function RunTable({
       }
       rowState={(r) => (variant === 'live' ? 'live' : /^FAILED$/i.test(r.status) ? 'error' : undefined)}
     >
+      {toolbar}
       <DataTable.Footer summary={footerSummary} pagination={pagination} />
     </DataTable>
   );

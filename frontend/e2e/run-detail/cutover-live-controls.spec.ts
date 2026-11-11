@@ -39,7 +39,7 @@ test.describe('live follow', () => {
   test('a stop request shows STOPPING and probes every 1.5 s instead of 3 s', async ({ page }) => {
     const { runId, probes } = await liveRun(page, () => ({ stop_requested: true, revision: 'r1' }));
     await openRun(page, s.slug, runId);
-    await expect(page.getByRole('region', { name: 'Run summary' })).toContainText('STOPPING…', {
+    await expect(page.getByRole('region', { name: 'Run summary' })).toContainText(/Stopping…/i, {
       timeout: 15_000,
     });
     await expect.poll(() => probes.length, { timeout: 25_000, intervals: [250] }).toBeGreaterThanOrEqual(5);

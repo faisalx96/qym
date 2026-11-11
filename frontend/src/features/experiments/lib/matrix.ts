@@ -2,6 +2,7 @@
 import type { DatasetRef, ExperimentDetail, ExperimentJob, JobQymConfig } from '@/api/experiments';
 import { isTerminalJob } from '@/api/experiments';
 import { formatParam } from './format';
+import { projectPath } from '@/app/routes';
 
 export interface MatrixEnv {
   id: string;
@@ -47,7 +48,11 @@ export interface Matrix {
 }
 
 export const rowKey = (comboIndex: number, kind: MatrixRow['kind'], pairIndex = 0) =>
-  kind === 'plain' ? String(comboIndex) : kind === 'combined' ? `${comboIndex}.c` : `${comboIndex}.${pairIndex}`;
+  kind === 'plain'
+    ? String(comboIndex)
+    : kind === 'combined'
+      ? `${comboIndex}.c`
+      : `${comboIndex}.${pairIndex}`;
 
 export const cellKey = (row: number | string, envId: string) => `${row}|${envId}`;
 
@@ -55,7 +60,9 @@ export const cellKey = (row: number | string, envId: string) => `${row}|${envId}
 export function refText(ref: Pick<DatasetRef, 'version' | 'alias' | 'resolved_version'>): string {
   const chosen = ref.version || ref.alias || 'latest';
   // A job pins "latest" and aliases to the version resolved at launch: `latest (v7)`, `production (v2)`.
-  return ref.resolved_version && ref.resolved_version !== chosen ? `${chosen} (${ref.resolved_version})` : chosen;
+  return ref.resolved_version && ref.resolved_version !== chosen
+    ? `${chosen} (${ref.resolved_version})`
+    : chosen;
 }
 
 /** `support-tickets · v3`. */
@@ -80,7 +87,12 @@ export function jobGroup(job: Pick<ExperimentJob, 'dataset' | 'datasets' | 'data
       order: -1,
       label: `All ${job.datasets.length} dataset versions · one combined run`,
     };
-  if (job.dataset) return { key: `pair-${job.dataset_index ?? 0}`, order: job.dataset_index ?? 0, label: datasetText(job.dataset) };
+  if (job.dataset)
+    return {
+      key: `pair-${job.dataset_index ?? 0}`,
+      order: job.dataset_index ?? 0,
+      label: datasetText(job.dataset),
+    };
   return null;
 }
 
@@ -180,9 +192,9 @@ export function jobStats(detail: Pick<ExperimentDetail, 'jobs'>): JobStats {
   return stats;
 }
 
-/** `/compare?runs=a&runs=b` (the page also reads sessionStorage `compareRuns`). */
-export function compareHref(runIds: readonly string[]): string {
-  return `/compare?${runIds.map((id) => `runs=${encodeURIComponent(id)}`).join('&')}`;
+/** `/projects/<slug>/compare?runs=a&runs=b` (C044: compare lives under its project). */
+export function compareHref(slug: string, runIds: readonly string[]): string {
+  return `${projectPath(slug, 'compare')}?${runIds.map((id) => `runs=${encodeURIComponent(id)}`).join('&')}`;
 }
 
 const PRESET_KEYS = ['schema_hash', 'evaluator', 'slot_bindings', 'env_overrides'] as const;

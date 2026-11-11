@@ -1,8 +1,10 @@
 /**
- * Import wizard (brief 07 §2.3): Source → Map columns (CSV only) → Review.
+ * Import wizard (brief 07 §2.3): Source → Map columns (CSV, JSON and JSONL, C013) → Review.
  * Modes: `new` (catalog), `new-version` (existing dataset), `add-to-draft`.
  * Files are parsed in a Web Worker; `:upload` streams byte progress;
- * add-to-draft upserts in chunks of 1000 with "batch n of m".
+ * add-to-draft upserts in chunks of 1000 with "batch n of m". Before its Review
+ * step, add-to-draft counts the records whose item_id is already in the draft
+ * (a dry run); matching items are skipped unless the user chooses Replace (C006).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,10 +12,12 @@ import {
   BULK_CHUNK,
   bulkItems,
   invalidateItems,
+  previewBulkItems,
   uploadDataset,
   type Dataset,
   type DatasetVersion,
   type ItemBody,
+  type OnExisting,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import {
@@ -21,31 +25,45 @@ import {
   Checkbox,
   ConfirmDialog,
   Dialog,
+  RadioGroup,
   Select,
   Tag,
   Text,
   TextField,
   Textarea,
   useToast,
+  Icon,
 } from '@/ui';
 import { CSV_ENCODINGS, encodingLabel } from '../lib/encoding';
 import {
   COLUMN_ROLES,
   autoMap,
+  autoMapJson,
   columnRole,
   csvUpserts,
   ignoredColumns,
-  jsonUpserts,
+  jsonMappedUpserts,
   mappingSummary,
+  recordsWithInput,
   setColumnRole,
   type ColumnMapping,
   type ColumnRole,
 } from '../lib/mapping';
+import { jsonErrorText, jsonMappableKeys } from '../lib/jsonRecords';
 import { parseFile } from '../lib/parseClient';
 import type { CsvParseResult, JsonParseResult } from '../lib/parse.worker';
 import { nextVersionAfter, slugifyDatasetName } from '../lib/slugify';
 import { PRODUCTION_RULE } from '../lib/versions';
 import { pluralize } from '../lib/itemValue';
+import {
+  NO_COUNTS,
+  addCounts,
+  countMatches,
+  importResultText,
+  matchLine,
+  recordIds,
+  type ImportCounts,
+} from '../lib/reimport';
 import styles from './UploadWizard.module.css';
 
 export type WizardMode = 'new' | 'new-version' | 'add-to-draft';
@@ -69,6 +87,12 @@ export interface UploadWizardProps {
 
 const ACCEPT = '.csv,.tsv,.txt,.jsonl,.ndjson,.json';
 type Parsed = CsvParseResult | JsonParseResult;
+/** Add-to-draft records whose item_id is already in the draft; `error` when the dry run failed. */
+type MatchCheck = { matched: number; error: null } | { matched: null; error: string };
+
+function errorText(e: unknown, fallback: string): string {
+  return e instanceof ApiError ? e.detail || e.message : (e as Error).message || fallback;
+}
 
 export function UploadWizard(props: UploadWizardProps) {
   // Remount per open so state resets without effects.
@@ -104,8 +128,13 @@ function WizardInner({
   const [setAlias, setSetAlias] = useState(initialMode === 'new' && canSetProduction);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [matchCheck, setMatchCheck] = useState<MatchCheck | null>(null);
+  const [onExisting, setOnExisting] = useState<OnExisting>('skip');
   const [progress, setProgress] = useState<{ label: string; fraction: number | null } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  /** JSONL: leave the invalid lines out and import the rest (off by default, C120). */
+  const [skipBad, setSkipBad] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const parseTicket = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null!);
@@ -128,16 +157,17 @@ function WizardInner({
     } catch {
       if (ticket !== parseTicket.current) return;
       setParsed(null);
-      setErrors({ file: 'Could not read the file.' });
+      setErrors({ file: 'Couldn’t read the file.' });
       setParsing(false);
       return;
     }
     if (ticket !== parseTicket.current) return; // a newer file / encoding superseded this read
     setParsed(result);
+    setSkipBad(false);
     if (result.kind === 'csv') {
       setEncoding(result.encoding);
       if (!enc || result.headers.length) setMapping(autoMap(result.headers));
-    }
+    } else setMapping(autoMapJson(jsonMappableKeys(result.rows)));
     setParsing(false);
   }, []);
 
@@ -159,13 +189,18 @@ function WizardInner({
   }
 
   const isCsv = parsed?.kind === 'csv';
+  // the keys or columns the Map columns step places (every format has the step, C013)
+  const mapKeys = useMemo(
+    () => (parsed?.kind === 'csv' ? parsed.headers : parsed ? jsonMappableKeys(parsed.rows) : []),
+    [parsed],
+  );
+  const jsonErrors = parsed?.kind === 'json' ? parsed.errors : [];
+  // A JSONL file can leave its invalid lines out; a JSON array cannot.
+  const canSkip =
+    parsed?.kind === 'json' && parsed.format === 'jsonl' && jsonErrors.length > 0 && parsed.rows.length > 0;
   const sourceErrors = useMemo(() => {
     const list: string[] = [];
     if (parsed?.error) list.push(parsed.error);
-    if (parsed?.kind === 'json' && parsed.errors.length) {
-      for (const e of parsed.errors.slice(0, 8)) list.push(`${e.where} ${e.message}.`);
-      if (parsed.errors.length > 8) list.push(`…and ${parsed.errors.length - 8} more.`);
-    }
     if (parsed?.kind === 'csv' && !parsed.error && !parsed.rows.length)
       list.push('The CSV file has no data rows.');
     return list;
@@ -176,7 +211,9 @@ function WizardInner({
     if (mode === 'new' && !name.trim()) e.name = 'Name is required.';
     if (!file) e.file = 'Choose a file.';
     else if (parsing) e.file = 'Still reading the file…';
-    else if (!parsed || sourceErrors.length) e.file = sourceErrors[0] ?? 'Choose a valid file.';
+    else if (!parsed || sourceErrors.length) e.source = sourceErrors[0] ?? 'Choose a valid file.';
+    // shown once, under the file (not in the drop zone): only a skip lets the rest through
+    else if (jsonErrors.length && !(canSkip && skipBad)) e.source = jsonErrorText(jsonErrors[0]!);
     if (clash && mode === 'new') e.name = `A dataset named "${clash.name}" already exists.`;
     setErrors(e);
     return !Object.keys(e).length;
@@ -194,16 +231,57 @@ function WizardInner({
   function next() {
     if (step === 1) {
       if (!validateStep1()) return;
-      setStep(isCsv ? 2 : 3);
+      setStep(2);
     } else if (step === 2) {
       if (!validateStep2()) return;
-      setStep(3);
+      void toReview();
     } else void submit();
+  }
+
+  function draftUpserts(): ItemBody[] {
+    if (!parsed) return [];
+    return parsed.kind === 'csv'
+      ? csvUpserts(parsed.headers, parsed.rows, mapping)
+      : jsonMappedUpserts(parsed.rows, mapping);
+  }
+
+  /** Add-to-draft counts the records that match draft items first, so Review opens with the count. */
+  async function toReview() {
+    const ids = mode === 'add-to-draft' && effectiveTarget && draft ? recordIds(draftUpserts()) : [];
+    if (!ids.length || !effectiveTarget || !draft) {
+      setMatchCheck(null);
+      setStep(3);
+      return;
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setChecking(true);
+    let check: MatchCheck;
+    try {
+      const matched = await countMatches(ids, (upserts) =>
+        previewBulkItems(
+          slug,
+          effectiveTarget.slug,
+          draft.version,
+          { upserts, on_existing: 'skip' },
+          controller.signal,
+        ),
+      );
+      check = { matched, error: null };
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      check = { matched: null, error: errorText(e, 'The check failed') };
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setChecking(false);
+    }
+    setMatchCheck(check.error || check.matched ? check : null);
+    setStep(3);
   }
 
   function back() {
     setErrors({});
-    if (step === 3) setStep(isCsv ? 2 : 1);
+    if (step === 3) setStep(2);
     else if (step === 2) setStep(1);
   }
 
@@ -226,10 +304,9 @@ function WizardInner({
     try {
       if (mode === 'add-to-draft') {
         if (!effectiveTarget || !draft) throw new Error('No draft selected.');
-        const upserts: ItemBody[] =
-          parsed.kind === 'csv' ? csvUpserts(parsed.headers, parsed.rows, mapping) : jsonUpserts(parsed.rows);
+        const upserts = draftUpserts();
         const batches = Math.max(1, Math.ceil(upserts.length / BULK_CHUNK));
-        let added = 0;
+        let counts: ImportCounts = NO_COUNTS;
         try {
           for (let i = 0; i < batches; i++) {
             if (controller.signal.aborted)
@@ -237,30 +314,44 @@ function WizardInner({
             setProgress({ label: `Importing batch ${i + 1} of ${batches}…`, fraction: i / batches });
             const resp = await bulkItems(slug, effectiveTarget.slug, draft.version, {
               upserts: upserts.slice(i * BULK_CHUNK, (i + 1) * BULK_CHUNK),
+              on_existing: onExisting,
             });
-            added += resp.summary.created + resp.summary.updated;
+            counts = addCounts(counts, resp.summary);
           }
         } catch (e) {
           // Earlier batches are already saved: say so and refresh the list.
-          if (added > 0) {
+          if (counts.created + counts.updated > 0) {
             invalidateItems(qc, slug, effectiveTarget.slug);
-            const why =
-              e instanceof ApiError ? e.detail || e.message : (e as Error).message || 'Import failed';
             if ((e as Error).name === 'AbortError') throw e;
-            throw new Error(`${why} ${pluralize(added, 'item')} were already added before the failure.`);
+            throw new Error(
+              `${errorText(e, 'Import failed')} Saved before the failure: ${importResultText(counts)}.`,
+            );
           }
           throw e;
         }
         invalidateItems(qc, slug, effectiveTarget.slug);
-        toast.show(`${pluralize(added, 'item')} added`, { tone: 'success' });
+        toast.show(importResultText(counts), { tone: 'success' });
         onOpenChange(false);
-        onDone({ mode, added, dataset: effectiveTarget, version: draft });
+        onDone({ mode, added: counts.created, dataset: effectiveTarget, version: draft });
         return;
       }
       setProgress({ label: 'Uploading…', fraction: 0 });
+      // JSON and JSONL go up as the mapped records (keys renamed, invalid lines left out when skipped), one per line.
+      const body =
+        parsed.kind === 'json'
+          ? new File(
+              [
+                draftUpserts()
+                  .map((u) => JSON.stringify(u))
+                  .join('\n'),
+              ],
+              file.name.replace(/\.[^.]+$/, '') + '.jsonl',
+              { type: 'application/x-ndjson' },
+            )
+          : file;
       const created = await uploadDataset(
         slug,
-        file,
+        body,
         {
           name: mode === 'new' ? name.trim() : (effectiveTarget?.name ?? name.trim()),
           create_only: mode === 'new',
@@ -269,7 +360,7 @@ function WizardInner({
           version_name: versionName || undefined,
           publish,
           set_alias: publish && setAlias && canSetProduction,
-          format: parsed.kind === 'csv' ? 'csv' : parsed.format,
+          format: parsed.kind === 'csv' ? 'csv' : 'jsonl',
           encoding: parsed.kind === 'csv' ? (encoding ?? undefined) : undefined,
           input_cols: mapping.input,
           expected_cols: mapping.expected,
@@ -294,7 +385,7 @@ function WizardInner({
       onDone({ mode, dataset: created.dataset, version: created.version });
     } catch (e) {
       if ((e as Error).name === 'AbortError') return;
-      const message = e instanceof ApiError ? e.detail || e.message : (e as Error).message || 'Upload failed';
+      const message = errorText(e, 'Upload failed');
       setErrors({ submit: message });
       toast.show(message, { tone: 'error' });
     } finally {
@@ -322,8 +413,16 @@ function WizardInner({
         : 'Upload dataset';
   const submitLabel =
     mode === 'new' ? 'Create dataset' : mode === 'new-version' ? 'Create version' : 'Add items';
-  const steps = isCsv || !parsed ? ['Source', 'Map columns', 'Review'] : ['Source', 'Review'];
-  const visualStep = step === 3 && !isCsv ? 2 : step;
+  const steps = ['Source', 'Map columns', 'Review'];
+  const noun = isCsv ? 'row' : 'record';
+  const visualStep = step;
+  // The Review step refuses a file whose records would all import with no input (C013).
+  const withInput = useMemo(
+    () => (step === 3 && parsed ? recordsWithInput(draftUpserts()) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [step, parsed, mapping],
+  );
+  const noInput = withInput === 0;
 
   return (
     <>
@@ -342,12 +441,23 @@ function WizardInner({
             </Button>
             <div className={styles.footerEnd}>
               {step > 1 ? (
-                <Button variant="neutral" onPress={back} isDisabled={submitting}>
-                  ← Back
+                <Button
+                  variant="neutral"
+                  icon={<Icon name="chevron-left" size={12} />}
+                  onPress={back}
+                  isDisabled={submitting || checking}
+                >
+                  Back
                 </Button>
               ) : null}
-              <Button variant="primary" onPress={next} loading={submitting} data-testid="wizard-next">
-                {step === 3 ? submitLabel : 'Continue →'}
+              <Button
+                variant="primary"
+                onPress={next}
+                loading={submitting || checking}
+                isDisabled={step === 3 && noInput}
+                data-testid="wizard-next"
+              >
+                {step === 3 ? submitLabel : 'Continue'}
               </Button>
             </div>
           </div>
@@ -466,45 +576,64 @@ function WizardInner({
                 ) : null}
               </div>
             ) : null}
-            {sourceErrors.length && (errors.file || parsed?.kind === 'json' || parsed?.error) ? (
+            {sourceErrors.length && (errors.source || parsed?.error) ? (
               <ul className={styles.errorList} role="alert">
                 {sourceErrors.map((e) => (
                   <li key={e}>{e}</li>
                 ))}
               </ul>
             ) : null}
+            {jsonErrors.length ? (
+              <div className={styles.parseError} role="alert" data-testid="wizard-parse-error">
+                <Text variant="sm" tone="danger" as="p">
+                  {jsonErrorText(jsonErrors[0]!)}
+                  {jsonErrors.length > 1 ? ` (and ${pluralize(jsonErrors.length - 1, 'more line')})` : ''}
+                </Text>
+                {jsonErrors[0]!.snippet ? (
+                  <code className={styles.parseSnippet}>{jsonErrors[0]!.snippet}</code>
+                ) : null}
+                {canSkip && parsed?.kind === 'json' ? (
+                  <Checkbox isSelected={skipBad} onChange={setSkipBad} data-testid="wizard-skip-invalid">
+                    {`Skip ${pluralize(jsonErrors.length, 'invalid line')} and import ${pluralize(parsed.rows.length, 'record')}`}
+                  </Checkbox>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {step === 2 && parsed?.kind === 'csv' ? (
+        {step === 2 && parsed ? (
           <div className={styles.body}>
             <Text variant="base" tone="muted">
-              Choose what each column becomes. Columns you do not recognise default to Metadata so they are
-              kept; choose Ignore to leave a column out. Several Input (or Expected) columns are combined into
-              one JSON object keyed by column name.
+              {isCsv
+                ? 'Choose what each column becomes. Columns you do not recognise default to Metadata so they are kept; choose Ignore to leave a column out. Several Input (or Expected) columns are combined into one JSON object keyed by column name.'
+                : 'Choose what each key of the records becomes. Keys you do not recognise default to Metadata so they are kept; choose Ignore to leave a key out. A record’s own metadata object and labels are kept as they are.'}
             </Text>
             <div className={styles.mapHeader}>
               <Text variant="lg" as="h3">
                 Column mapping
               </Text>
-              <Button variant="neutral" onPress={() => setMapping(autoMap(parsed.headers))}>
+              <Button
+                variant="neutral"
+                onPress={() => setMapping(isCsv ? autoMap(mapKeys) : autoMapJson(mapKeys))}
+              >
                 Auto-detect columns
               </Button>
             </div>
             <table className={styles.mapTable}>
               <thead>
                 <tr>
-                  <th scope="col">Column</th>
+                  <th scope="col">{isCsv ? 'Column' : 'Key'}</th>
                   <th scope="col">Sample value</th>
                   <th scope="col">Import as</th>
                 </tr>
               </thead>
               <tbody>
-                {parsed.headers.map((col, i) => (
+                {mapKeys.map((col, i) => (
                   <tr key={`${col}-${i}`}>
                     <td className={styles.mono}>{col || <em>(blank)</em>}</td>
                     <td className={styles.sample} dir="auto">
-                      {parsed.rows[0]?.[i] ?? ''}
+                      {parsed.kind === 'csv' ? (parsed.rows[0]?.[i] ?? '') : sampleValue(parsed.rows, col)}
                     </td>
                     <td>
                       <Select
@@ -547,7 +676,7 @@ function WizardInner({
                 <Text variant="base" tone="muted">
                   {mode === 'new'
                     ? `Creates a new dataset "${name.trim()}" (slug ${slugPreview || 'generated'}) with this file as version v1.`
-                    : `Creates version ${nextVersionAfter(latestVersion ?? effectiveTarget?.latest_version?.version) ?? 'vN'} of "${effectiveTarget?.name}" from this file.`}
+                    : `Creates version ${nextVersionAfter(latestVersion ?? effectiveTarget?.latest_version?.version) ?? 'v1'} of "${effectiveTarget?.name}" from this file.`}
                 </Text>
                 <Checkbox isSelected={publish} onChange={setPublish}>
                   Publish immediately
@@ -585,7 +714,43 @@ function WizardInner({
               {pluralize(parsed.rows.length, parsed.kind === 'csv' ? 'row' : 'record')} · preview shows first{' '}
               {Math.min(10, parsed.rows.length)}
             </Text>
-            <NotImported parsed={parsed} mapping={mapping} />
+            {mode === 'add-to-draft' && matchCheck ? (
+              <div className={styles.matches} data-testid="wizard-matches">
+                <Text variant="base" tone="warning" role="status">
+                  {matchCheck.matched === null
+                    ? `Couldn’t check which ${noun}s match items already in ${draft?.version ?? 'the draft'} (${matchCheck.error}). Matching items are skipped unless you choose Replace.`
+                    : matchLine(matchCheck.matched, parsed.rows.length, noun, draft?.version ?? 'the draft')}
+                </Text>
+                <RadioGroup<OnExisting>
+                  label="Matching items"
+                  value={onExisting}
+                  onChange={setOnExisting}
+                  isDisabled={submitting}
+                  options={[
+                    {
+                      value: 'skip',
+                      title: 'Skip matching items',
+                      help: `Items already in the draft keep their content. Only the new ${noun}s are added.`,
+                      testId: 'wizard-skip-matching',
+                    },
+                    {
+                      value: 'replace',
+                      title: 'Replace matching items',
+                      help: 'The file overwrites their input, expected output, metadata and labels. Each item keeps the old content in its History.',
+                      testId: 'wizard-replace-matching',
+                    },
+                  ]}
+                />
+              </div>
+            ) : null}
+            {noInput ? (
+              <Text variant="sm" tone="danger" role="alert" data-testid="wizard-no-input">
+                {isCsv
+                  ? 'No row has an input. Map a column to Input.'
+                  : 'No record has an input. Map a key to Input.'}
+              </Text>
+            ) : null}
+            <NotImported keys={mapKeys} mapping={mapping} />
             <PreviewTable parsed={parsed} />
             {progress ? (
               <div className={styles.progress} role="status" aria-live="polite">
@@ -703,17 +868,20 @@ function FileDrop({
   );
 }
 
-function NotImported({ parsed, mapping }: { parsed: Parsed; mapping: ColumnMapping }) {
-  const ignored = parsed.kind === 'csv' ? ignoredColumns(parsed.headers, mapping) : parsed.unknownKeys;
+function NotImported({ keys, mapping }: { keys: string[]; mapping: ColumnMapping }) {
+  const ignored = ignoredColumns(keys, mapping);
   if (!ignored.length) return null;
   return (
     <Text variant="sm" tone="warning" role="status" as="div">
       Not imported: {ignored.join(', ')}
-      {parsed.kind === 'json'
-        ? ' (unknown keys; only item_id/id, input, expected_output/expected, metadata, labels are read)'
-        : ''}
     </Text>
   );
+}
+
+/** The first value a key has in the records, as text, for the Map columns step. */
+function sampleValue(rows: Record<string, unknown>[], key: string): string {
+  const v = rows.find((r) => r[key] !== undefined)?.[key];
+  return v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v);
 }
 
 function PreviewTable({ parsed }: { parsed: Parsed }) {

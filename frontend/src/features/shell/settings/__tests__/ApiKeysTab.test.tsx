@@ -60,7 +60,15 @@ function renderTab() {
         <MemoryRouter>
           <AuthContext.Provider value={{ me, isAdmin: true, refetch: () => undefined }}>
             <ProjectContext.Provider
-              value={{ project, slug: 'demo', readOnly: false, canManage: true, isAdmin: true }}
+              value={{
+                project,
+                slug: 'demo',
+                readOnly: false,
+                archived: false,
+                viewer: false,
+                canManage: true,
+                isAdmin: true,
+              }}
             >
               <ApiKeysTab />
             </ProjectContext.Provider>

@@ -1,7 +1,6 @@
 /** Right pane: per-span tabs (Messages, Input/Output, Documents, Metrics, Scores, Raw). */
 import { useMemo, useState } from 'react';
 import {
-  Badge,
   ClampedText,
   CopyButton,
   Dialog,
@@ -15,6 +14,7 @@ import {
   TextBlock,
   parseStructured,
   type TabItem,
+  StatusMark,
 } from '@/ui';
 import {
   formatDuration,
@@ -341,7 +341,7 @@ export function SpanDetail({ node }: { node: SpanNode }) {
               .join(' · ')}
           </div>
         </div>
-        <Badge
+        <StatusMark
           tone={
             statusClass(node.status) === 'error'
               ? 'danger'
@@ -349,9 +349,15 @@ export function SpanDetail({ node }: { node: SpanNode }) {
                 ? 'success'
                 : 'neutral'
           }
-        >
-          {statusClass(node.status) === 'ok' ? 'OK' : (node.status ?? 'UNSET')}
-        </Badge>
+          shape={
+            statusClass(node.status) === 'error'
+              ? 'cross'
+              : statusClass(node.status) === 'ok'
+                ? 'full'
+                : 'ring'
+          }
+          label={statusClass(node.status) === 'ok' ? 'OK' : (node.status ?? 'unset').toLowerCase()}
+        />
       </header>
       {errorEvents.map((e, i) => (
         <div key={i} className={styles.exception} role="alert">

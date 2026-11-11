@@ -45,7 +45,7 @@ export function useMemberCandidates(projectId: string | undefined, q: string, en
 export function useAddMember(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { user_id: string; role: 'MEMBER' | 'MANAGER' }) =>
+    mutationFn: (body: { user_id: string; role: 'VIEWER' | 'MEMBER' | 'MANAGER' }) =>
       api.post<Member>(`/v1/projects/${projectId}/members`, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: k.members(projectId) });
@@ -58,7 +58,7 @@ export function useAddMember(projectId: string) {
 export function useUpdateMemberRole(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: 'MEMBER' | 'MANAGER' }) =>
+    mutationFn: ({ userId, role }: { userId: string; role: 'VIEWER' | 'MEMBER' | 'MANAGER' }) =>
       api.patch<Member>(`/v1/projects/${projectId}/members/${userId}`, { role }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: k.members(projectId) }),
   });
@@ -177,6 +177,23 @@ export function useLlmConnectionAction(projectId: string) {
     onSuccess: (_r, { action }) => {
       if (action !== 'test') void qc.invalidateQueries({ queryKey: k.llm(projectId) });
     },
+  });
+}
+
+/** Test the values in the connection form before they are saved (C157). */
+export function useTestLlmDraft(projectId: string) {
+  return useMutation({
+    mutationFn: (body: {
+      llm_base_url: string;
+      llm_model: string;
+      llm_api_key: string;
+      connection_id?: string;
+      available_for_experiments?: boolean;
+    }) =>
+      api.post<{ ok: boolean; model: string; response?: string }>(
+        `/v1/projects/${projectId}/llm-connections/test`,
+        body,
+      ),
   });
 }
 

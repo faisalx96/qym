@@ -11,7 +11,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from qym_platform.auth import Principal, require_ui_principal
+from qym_platform.auth import Principal, require_ui_principal, secret_matches
 from qym_platform.auth_oidc import (
     auth_mode_is_oidc,
     begin_provider_login,
@@ -355,7 +355,7 @@ def bootstrap_admin(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     settings = PlatformSettings()
-    if not settings.admin_bootstrap_token or req.bootstrap_token != settings.admin_bootstrap_token:
+    if not secret_matches(req.bootstrap_token, settings.admin_bootstrap_token):
         logger.warning("admin bootstrap refused: invalid bootstrap token")
         raise HTTPException(status_code=403, detail="Invalid bootstrap token")
 

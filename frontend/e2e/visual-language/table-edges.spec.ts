@@ -8,7 +8,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { compareUrl } from '../compare/support';
-import { coveredText, edgeReport, LINE_END, LINE_START } from '../edges';
+import { ANY_LINE, coveredText, edgeReport, expectedShade } from '../edges';
 import { gotoApp } from '../helpers';
 import { runUrl } from '../run-detail/support';
 import { seedTrash } from '../trash/support';
@@ -82,8 +82,8 @@ async function sweepPage(
         const rep = await edgeReport(page, sel);
         expect(rep.overlays, `${where}: overlay elements`).toBe(0);
         for (const c of rep.cells) {
-          const want = c.edge === 'start' ? LINE_START : LINE_END;
-          expect(c.shadow, `${where}: ${c.tag} ${c.edge}`).toContain(want);
+          expect(c.shadow, `${where}: ${c.tag} ${c.edge}`).not.toMatch(ANY_LINE);
+          expect(c.shade, `${where}: ${c.tag} ${c.edge} shade`).toBe(expectedShade(c, rep.scrolled));
         }
         expect(await coveredText(page, sel), `${where}: covered text`).toEqual([]);
         if (state === 'rest' && rep.cells.length) pinned++;

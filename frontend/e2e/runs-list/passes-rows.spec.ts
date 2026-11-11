@@ -10,9 +10,11 @@ import {
   describeViolations,
   freshProject,
   openRuns,
+  openRowMenu,
+  pickRowAction,
+  revealActions,
   rowOf,
   table,
-  withoutPrefetch,
 } from './support';
 
 const NAME = 'rag-answer-v7';
@@ -48,8 +50,7 @@ const settle = (page: Page) =>
 
 async function open(page: Page, request: APIRequestContext, opts: Parameters<typeof seedRepeat>[1] = {}) {
   const s = await seedRepeat(request, opts);
-  // the loading and request-count cases below are the click-before-prefetch path; the prefetch has its own spec (e2e/perf)
-  await withoutPrefetch(page);
+  // a finished run opens on its published summary (C023)
   await openRuns(page, s.project.slug);
   return s;
 }
@@ -283,7 +284,8 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
       await expect(
         r.locator('td[data-col="status"] [data-tone], td[data-col="status"] span').first(),
       ).toBeVisible();
-      expect(((await r.locator('td[data-col="status"]').innerText()) ?? '').trim()).toMatch(/^[A-Z ]+$/);
+      // a status mark: the word in sentence case (round 8, no uppercase pill)
+      expect(((await r.locator('td[data-col="status"]').innerText()) ?? '').trim()).toMatch(/^[A-Z][a-z ]+$/);
       await expect(r.locator('td[data-col="time"] time')).toBeVisible();
     }
     const leftOf = (el: Locator, sel: string) =>
@@ -294,25 +296,34 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
           (await leftOf(rowOf(page, NAME), 'td[data-col="run"] a')),
       ),
     ).toBeLessThanOrEqual(1); // "Pass n" starts where the run name starts
-    await expect(rows.nth(1).getByRole('img', { name: '1 task error in this pass' })).toBeVisible();
-    await expect(rows.nth(1).locator('td[data-col="signals"]')).toContainText('!1');
-    await expect(rows.first().locator('td[data-col="signals"]')).toHaveText('–');
+    // the pass's signals sit in its Status cell, drawn as the run's, linking to the pass's Errors section
+    const signal = rows.nth(1).getByRole('link', { name: '1 task error in this pass' });
+    await expect(signal).toBeVisible();
+    await expect(signal).toHaveAttribute('href', /pass=2#errors$/);
+    await expect(rows.first().locator('td[data-col="status"]').getByRole('link')).toHaveCount(0);
     // inherited facts stay empty, own values are shown
     for (let n = 0; n < 3; n++)
       for (const id of ['task', 'model', 'dataset', 'owner', 'experiment', 'version']) {
         const c = rows.nth(n).locator(`td[data-col="${id}"]`);
         if (await c.count()) expect((await c.textContent())?.trim()).toBe('');
       }
-    await expect(rows.first().getByRole('link', { name: /^Analyze pass 1/ })).toBeVisible();
+    // no idle Analyze button in the row: auto-analysis is the first item of the pass's row menu
+    await expect(rows.first().getByRole('link', { name: /^Analyze pass 1/ })).toHaveCount(0);
     for (const id of ['latency', 'duration', 'metric-quality', 'metric-accuracy']) {
       const c = rows.first().locator(`td[data-col="${id}"]`);
       if (await c.count()) expect((await c.textContent())?.trim()).not.toBe('');
     }
-    // actions: delete per pass, no submit, no run-level delete
-    for (let n = 1; n <= 3; n++)
-      await expect(rows.nth(n - 1).getByRole('button', { name: `Delete pass ${n}` })).toBeVisible();
-    await expect(rows.first().getByRole('button', { name: /^Submit / })).toHaveCount(0);
-    await rows.nth(1).getByRole('button', { name: 'Delete pass 2' }).click();
+    // actions: one row menu per pass: auto-analysis, open, delete; no submit, no run-level delete
+    for (let n = 1; n <= 3; n++) {
+      const menu = await openRowMenu(page, rows.nth(n - 1));
+      await expect(menu.getByRole('menuitem')).toHaveText([
+        'Open auto-analysis',
+        `Open pass ${n}`,
+        `Delete pass ${n}`,
+      ]);
+      await page.keyboard.press('Escape');
+    }
+    await pickRowAction(page, rows.nth(1), 'Delete pass 2');
     await expect(
       page.getByRole('alertdialog').or(page.getByRole('dialog', { name: 'Delete pass 2?' })),
     ).toBeVisible();
@@ -351,7 +362,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
       .evaluate((el) => getComputedStyle(el).boxShadow);
     expect(runCss).toContain('3px');
     const stripShadow = await table(page)
-      .locator('tr[data-strip-row] [role="group"]')
+      .locator('tr[data-strip-row] [role="group"][aria-label="Group metrics"]')
       .evaluate((el) => getComputedStyle(el).boxShadow);
     expect(stripShadow).toContain(accent);
     const other = await table(page)
@@ -371,7 +382,6 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
       if (r.method() === 'GET' && u.pathname.endsWith('/group-metrics')) reqs.push(u);
     });
     await expand(page);
-    await expect.poll(() => reqs.length).toBeGreaterThan(0);
     await expect(table(page).locator('tr[data-strip-row]')).toHaveCount(1);
     const order = await table(page)
       .locator('tbody')
@@ -407,7 +417,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     const tops = await st.evaluate((el) => {
       const pick = [
         el.querySelector('button'),
-        el.querySelector('[data-testid="pass-threshold-chip"]'),
+        el.querySelector('[data-testid="pass-threshold"]'),
         el.querySelector('dl'),
         el.querySelector('button[aria-label^="Explain"]'),
       ];
@@ -418,7 +428,9 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(2); // amended Q15: centres, not tops
     await expect(st).toContainText('Passes');
     await expect(st).toContainText(/3 · \d+ items/);
-    await expect(st.getByTestId('pass-threshold-chip')).toHaveText(/^Pass if [≥≤] \d+%$/);
+    // one inline slider: the value is written once, beside the track (no chip, no popover)
+    await expect(st.getByTestId('pass-threshold')).toHaveText(/^Pass if [≥≤]\s*\d+%$/);
+    await expect(st.getByRole('slider', { name: /^Pass if [≥≤]/ })).toBeVisible();
     for (const label of ['Pass@3', 'Pass^3', 'Avg@3', 'Consistency', 'Reliability'])
       await expect(st).toContainText(label);
     const stats = st.locator('dl').first().locator('dd');
@@ -432,10 +444,12 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     await page.getByRole('option', { name: 'quality' }).click();
     await expect.poll(() => reqs.length).toBeGreaterThan(n0);
     const n1 = reqs.length;
-    await st.getByTestId('pass-threshold-chip').click();
-    await page.getByRole('dialog', { name: 'Pass threshold' }).getByRole('button', { name: '90%' }).click();
+    const thumb = st.getByRole('slider', { name: /^Pass if [≥≤]/ });
+    const t0 = Number(await thumb.inputValue());
+    await thumb.focus();
+    await page.keyboard.press('ArrowRight');
     await expect.poll(() => reqs.length).toBeGreaterThan(n1);
-    expect(reqs.at(-1)!.searchParams.get('threshold')).toBe('0.9');
+    expect(Number(reqs.at(-1)!.searchParams.get('threshold'))).toBeCloseTo(Math.min(1, t0 + 0.05), 5);
   });
 
   test('Q18 sort keeps the passes under their run', async ({ page, request }) => {
@@ -506,20 +520,20 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     ).toBe(runBoxLeft);
     await clickBox(box(1));
     await clickBox(box(3));
-    await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('2 runs selected');
     // the native checkbox is `indeterminate`, which assistive technology reads as mixed
     await expect.poll(() => parent.evaluate((el) => (el as HTMLInputElement).indeterminate)).toBe(true);
     await clickBox(box(2));
-    await expect(page.getByTestId('selection-bar')).toContainText('3 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('3 runs selected');
     await expect(parent).toBeChecked();
     await clickBox(parent);
-    await expect(page.getByTestId('selection-bar')).toContainText('0 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('0 runs selected');
     // shift range from pass 1 to pass 3
     await clickBox(box(1));
     await page.keyboard.down('Shift');
     await clickBox(box(3));
     await page.keyboard.up('Shift');
-    await expect(page.getByTestId('selection-bar')).toContainText('3 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('3 runs selected');
     for (const n of [1, 2, 3]) await expect(box(n)).toBeChecked();
   });
 
@@ -535,7 +549,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     await expect(rowOf(page, NAME)).toHaveAttribute('aria-busy', 'true');
     for (let n = 0; n < 3; n++)
       expect((await table(page).locator('tr[data-loading-row]').nth(n).boundingBox())!.height).toBeCloseTo(
-        32,
+        40,
         0,
       );
     await expect(table(page).locator('tr[data-loading-row]').first()).toContainText('Loading passes');
@@ -555,9 +569,10 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     await chevron(page).click();
     const err = table(page).locator('tr[data-error-row]');
     await expect(err).toHaveCount(1, { timeout: 20_000 });
-    await expect(err).toContainText('Could not load passes');
+    await expect(err).toContainText('Couldn’t load passes');
     await page.unroute(/\/api\/runs\/[^/]+\/passes$/);
-    await err.getByRole('button', { name: 'Retry' }).click();
+    await revealActions(err);
+    await err.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect(passRows(page)).toHaveCount(3);
   });
 
@@ -576,8 +591,8 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     const q = table(page).locator('tr[data-queued-row]');
     await expect(q).toHaveCount(1);
     await expect(q).toContainText(/Passes 3[–-]5 waiting to start/);
-    await expect(q).toContainText('QUEUED');
-    expect((await q.boundingBox())!.height).toBeCloseTo(32, 0);
+    await expect(q).toContainText('Queued');
+    expect((await q.boundingBox())!.height).toBeCloseTo(40, 0); // the regular density (round 8 default)
     for (const id of ['metric-quality', 'duration'])
       expect(((await q.locator(`td[data-col="${id}"]`).textContent()) ?? '').trim()).toBe('');
     await mockPasses(page, (b) => b);
@@ -681,15 +696,16 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
         }, name);
     await expand(page, 3, NAME);
     const a = await groupHeight(NAME);
-    expect(a.run).toBe(32);
+    // the regular density is the default (round 8): 40 px rows, so each pass row adds 8 px to the round-4 budgets
+    expect(a.run).toBe(40);
     expect(a.strip).toBeLessThanOrEqual(56);
-    expect(a.sum).toBeLessThanOrEqual(150);
+    expect(a.sum).toBeLessThanOrEqual(150 + 3 * 8);
     await chevron(page, 3, NAME, true).click();
     await chevron(page, 10, 'ten-passes').click();
     await expect(passRows(page)).toHaveCount(10);
     await settle(page);
     const b = await groupHeight('ten-passes');
-    expect(b.sum).toBeLessThanOrEqual(380);
+    expect(b.sum).toBeLessThanOrEqual(380 + 10 * 8);
   });
 
   test('Q31 motion', async ({ page, request }) => {
@@ -837,7 +853,7 @@ test.describe('runs table: card mode (390)', () => {
       expect(b.height).toBeLessThanOrEqual(56);
       await expect(lines.nth(n)).toContainText(`Pass ${n + 1}`);
       await expect(
-        lines.nth(n).getByRole('button', { name: new RegExp(`More actions for pass ${n + 1}`) }),
+        lines.nth(n).getByRole('button', { name: new RegExp(`Actions for pass ${n + 1}`) }),
       ).toBeVisible();
     }
     expect(await card(page).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -884,7 +900,7 @@ test.describe('runs table: card mode (390)', () => {
           .evaluate((el) => (el as HTMLInputElement).indeterminate),
       )
       .toBe(true);
-    await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('2 runs selected');
   });
 
   test('Q32 no embedded panel at 390', async ({ page, request }) => {

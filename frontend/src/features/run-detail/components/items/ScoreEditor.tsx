@@ -29,7 +29,7 @@ export function messageFor(error: unknown): string {
       return error.detail || 'The scores changed elsewhere. Reload the page and try again.';
     return error.detail || error.message;
   }
-  return error instanceof Error ? error.message : 'Could not save the score.';
+  return error instanceof Error ? error.message : 'Couldn’t save the score.';
 }
 
 /**

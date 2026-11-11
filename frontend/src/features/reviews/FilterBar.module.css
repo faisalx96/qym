@@ -1,0 +1,36 @@
+/* Reviews filter bar (C152): the facet row and its Clear, on the runs filter bar's pattern. */
+.facetRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-bottom: var(--space-sm);
+}
+
+.band {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 240px;
+  padding: var(--space-md);
+}
+
+.clear {
+  flex: none;
+}
+
+/* The count sits on its own red disc, as on Runs: it reads as "n filters", not as part of the word. */
+.clearCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--error) 32%, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}

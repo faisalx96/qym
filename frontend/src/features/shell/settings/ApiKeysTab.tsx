@@ -13,7 +13,6 @@ import type { ApiKey, DatasetReadToken } from '@/api/types';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   DataTable,
@@ -22,6 +21,7 @@ import {
   RelativeTime,
   Skeleton,
   Stack,
+  StatusMark,
   Tag,
   Text,
   TextField,
@@ -29,6 +29,7 @@ import {
   type Column,
   Card,
   TwoLine,
+  UserName,
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
@@ -45,24 +46,18 @@ function splitRows<T>(rows: T[] | undefined, isGrouped: (row: T) => boolean) {
 }
 
 /** The closed group of platform-issued credentials; nothing when the project has none. */
-function IssuedGroup({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count: number;
-  children: ReactNode;
-}) {
+function IssuedGroup({ title, count, children }: { title: string; count: number; children: ReactNode }) {
   if (count === 0) return null;
   return (
-    <Disclosure
-      title={title}
-      summary={`${count} · issued at launch, revoked when the experiment settles`}
-    >
+    <Disclosure title={title} summary={`${count} · issued at launch, revoked when the experiment settles`}>
       {children}
     </Disclosure>
   );
+}
+
+/** On/off state of a key or token: only the exception shows, after the name (no Status column). */
+function RevokedMark({ at }: { at: string | null | undefined }) {
+  return at ? <StatusMark tone="warning" shape="pause" label="Revoked" data-status="revoked" /> : null;
 }
 
 export function ApiKeysTab() {
@@ -95,10 +90,7 @@ function KeysCard({
   const [secret, setSecret] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<ApiKey | null>(null);
   const { slug } = useProjectContext();
-  const { own, grouped } = useMemo(
-    () => splitRows(keys.data, (k) => k.kind === 'experiment'),
-    [keys.data],
-  );
+  const { own, grouped } = useMemo(() => splitRows(keys.data, (k) => k.kind === 'experiment'), [keys.data]);
   const columns: Column<ApiKey>[] = [
     {
       id: 'name',
@@ -108,7 +100,12 @@ function KeysCard({
       pin: 'start',
       hideable: false,
       priority: 1,
-      cell: (k) => k.name || 'Unnamed key',
+      cell: (k) => (
+        <span className={styles.tokenName}>
+          {k.name || 'Unnamed key'}
+          <RevokedMark at={k.revoked_at} />
+        </span>
+      ),
     },
     { id: 'prefix', header: 'Prefix', type: 'id', width: 140, priority: 3, cell: (k) => `${k.prefix}…` },
     {
@@ -116,7 +113,12 @@ function KeysCard({
       header: 'Created by',
       width: 180,
       priority: 2,
-      cell: (k) => k.creator?.display_name || k.creator?.email || '—',
+      cell: (k) =>
+        k.creator ? (
+          <UserName id={k.creator.id} name={k.creator.display_name} email={k.creator.email} />
+        ) : (
+          '—'
+        ),
     },
     {
       id: 'created',
@@ -125,15 +127,6 @@ function KeysCard({
       width: 130,
       priority: 2,
       cell: (k) => <RelativeTime iso={k.created_at} />,
-    },
-    {
-      id: 'status',
-      header: 'Status',
-      type: 'status',
-      width: 100,
-      priority: 1,
-      cell: (k) =>
-        k.revoked_at ? <Badge tone="neutral">revoked</Badge> : <Badge tone="success">active</Badge>,
     },
   ];
   const experimentColumns: Column<ApiKey>[] = [
@@ -165,7 +158,7 @@ function KeysCard({
           {
             id: 'revoke',
             label: `Revoke ${k.name || 'key'}`,
-            icon: 'close' as const,
+            icon: 'ban' as const,
             primary: true,
             danger: true,
             onPress: setRevoking,
@@ -183,7 +176,10 @@ function KeysCard({
             <Text variant="md" id="keys-title">
               API keys
             </Text>
-            <Text variant="sm">Used by the SDK (QYM_API_KEY) to push runs into this project.</Text>
+            <Text variant="sm">
+              Used by the SDK (QYM_API_KEY) to push runs into this project.{' '}
+              <Link to="/docs/get-started/api-keys">Read the guide</Link>
+            </Text>
           </div>
         </div>
       }
@@ -201,7 +197,7 @@ function KeysCard({
                   setName('');
                 } catch (err) {
                   toast.show(
-                    err instanceof ApiError ? err.detail || 'Could not create key' : 'Could not create key',
+                    err instanceof ApiError ? err.detail || 'Couldn’t create key' : 'Couldn’t create key',
                     { tone: 'error' },
                   );
                 }
@@ -282,7 +278,7 @@ function KeysCard({
               await revoke.mutateAsync(revoking.id);
               toast.show('Key revoked', { tone: 'info' });
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not revoke' : String(e));
+              throw new Error(e instanceof ApiError ? e.detail || 'Couldn’t revoke' : String(e));
             }
           }}
         />
@@ -321,6 +317,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
               <span className={styles.tokenName}>
                 {t.name || 'Unnamed token'}
                 <Tag data-testid="token-kind-chip">experiment</Tag>
+                <RevokedMark at={t.revoked_at} />
               </span>
             }
             secondary={
@@ -338,7 +335,10 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
             }
           />
         ) : (
-          t.name || 'Unnamed token'
+          <span className={styles.tokenName}>
+            {t.name || 'Unnamed token'}
+            <RevokedMark at={t.revoked_at} />
+          </span>
         ),
     },
     {
@@ -354,7 +354,12 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
       header: 'Created by',
       width: 180,
       priority: 2,
-      cell: (t) => t.creator?.display_name || t.creator?.email || '—',
+      cell: (t) =>
+        t.creator ? (
+          <UserName id={t.creator.id} name={t.creator.display_name} email={t.creator.email} />
+        ) : (
+          '—'
+        ),
     },
     {
       id: 'created',
@@ -364,15 +369,6 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
       priority: 2,
       cell: (t) => <RelativeTime iso={t.created_at} />,
     },
-    {
-      id: 'status',
-      header: 'Status',
-      type: 'status',
-      width: 100,
-      priority: 1,
-      cell: (t) =>
-        t.revoked_at ? <Badge tone="neutral">revoked</Badge> : <Badge tone="success">active</Badge>,
-    },
   ];
   const rowActions = (t: DatasetReadToken) =>
     !t.revoked_at
@@ -380,7 +376,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
           {
             id: 'revoke',
             label: `Revoke ${t.name || 'token'}`,
-            icon: 'close' as const,
+            icon: 'ban' as const,
             primary: true,
             danger: true,
             onPress: setRevoking,
@@ -419,9 +415,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
                   setName('');
                 } catch (err) {
                   toast.show(
-                    err instanceof ApiError
-                      ? err.detail || 'Could not create token'
-                      : 'Could not create token',
+                    err instanceof ApiError ? err.detail || 'Couldn’t create token' : 'Couldn’t create token',
                     { tone: 'error' },
                   );
                 }
@@ -497,7 +491,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
               await revoke.mutateAsync(revoking.id);
               toast.show('Token revoked', { tone: 'info' });
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not revoke' : String(e));
+              throw new Error(e instanceof ApiError ? e.detail || 'Couldn’t revoke' : String(e));
             }
           }}
         />

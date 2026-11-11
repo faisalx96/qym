@@ -5,7 +5,7 @@
  */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { BOOL, LOWER, SCORE, seedRun } from './seed';
-import { clickBox, freshProject, openRuns, rowOf, deletePassFromMenu } from './support';
+import { clickBox, deletePassFromMenu, freshProject, openRuns, pickRowAction, rowOf } from './support';
 
 const NAME = 'summarize-repeat-done';
 
@@ -105,7 +105,7 @@ test("deleting a pass clears the picks of that run's passes", async ({ page, req
   const { panel } = await seedRepeat(page, request);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   await clickBox(panel.getByRole('checkbox', { name: new RegExp(`^Select pass 3 of 3 of run ${NAME}$`) }));
-  await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+  await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
   await deletePassFromMenu(panel, page, 2);
   await page
     .getByRole('alertdialog')
@@ -114,7 +114,7 @@ test("deleting a pass clears the picks of that run's passes", async ({ page, req
     .click();
   await expect(passRows(panel)).toHaveCount(2, { timeout: 15_000 });
   await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(0);
-  await expect(page.getByTestId('selection-bar')).toContainText('0 executions selected');
+  await expect(page.getByTestId('selection-bar')).toContainText('0 runs selected');
 });
 
 test('the delete dialogs say a run can be restored and a pass cannot', async ({ page, request }) => {
@@ -126,9 +126,7 @@ test('the delete dialogs say a run can be restored and a pass cannot', async ({ 
   await passDialog.getByRole('button', { name: 'Cancel' }).click();
   const other = (await rowOf(page, 'text2sql-gpt-4o-000').count()) ? 'text2sql-gpt-4o-000' : null;
   expect(other).toBeTruthy();
-  await rowOf(page, other!)
-    .getByRole('button', { name: `Delete ${other}` })
-    .click();
+  await pickRowAction(page, rowOf(page, other!), 'Delete');
   const runDialog = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: `Delete ${other}?` }));
   await expect(runDialog).toContainText(/restore/i);
   await expect(runDialog).not.toContainText('cannot be undone');

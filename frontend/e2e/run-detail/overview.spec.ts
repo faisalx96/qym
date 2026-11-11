@@ -28,7 +28,7 @@ test.describe('open a run (J1, scenario 1)', () => {
     await openRun(page, s.slug, classic);
     const hero = page.getByRole('region', { name: 'Run summary' });
     await expect(hero.getByRole('heading', { level: 1 })).toHaveText(classic);
-    await expect(hero).toContainText('COMPLETED');
+    await expect(hero).toContainText(/completed/i);
     await expect(page).toHaveTitle(new RegExp(classic));
     await expect(hero.getByRole('navigation', { name: 'Previous and next run' })).toBeVisible();
     // items count + stat strip
@@ -81,12 +81,20 @@ test.describe('open a run (J1, scenario 1)', () => {
     expect(overview.y).toBeLessThan(1100);
   });
 
-  test('J10: Export HTML points at the legacy export endpoint', async ({ page }) => {
+  test('J10, R4, C173: Export HTML sits in the Actions menu and builds the file from the React export page', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic);
-    await expect(page.getByRole('link', { name: 'Export HTML' })).toHaveAttribute(
-      'href',
-      `/api/runs/${classic}/export-html`,
-    );
+    await page.getByTestId('run-actions').click();
+    // The file is built in the browser from the built export page; the frozen template is not asked for.
+    const template = page.waitForRequest((r) => r.url().endsWith('/api/export/run-template'));
+    const legacy: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/export-html')) legacy.push(r.url());
+    });
+    await page.getByRole('menuitem', { name: 'Export HTML' }).click();
+    await template;
+    expect(legacy).toEqual([]);
   });
 
   test('metric cards: boolean split, score histogram, numeric range, error notes', async ({ page }) => {

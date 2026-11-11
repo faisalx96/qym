@@ -9,6 +9,7 @@ import { SKIPPED_METADATA } from './skipMetadata';
 import { runShortName } from './labels';
 import type { metricDirection } from '@/lib/metrics';
 import { isErrorRow } from '@/lib/metrics';
+import { foldSearchText } from '@/lib/text';
 import type { Row } from '@/features/run-detail/types';
 import {
   errorFilterUrlValue,
@@ -211,6 +212,13 @@ export interface DecodeContext {
   metadataKeys: string[];
   runCount: number;
   rows: Row[];
+  /** Distinct base runs; with fewer than two the page opens on each pass (C037). */
+  baseCount?: number;
+}
+
+/** The columns a comparison opens on: one per pass when fewer than two base runs are compared (C037), else per run. */
+export function defaultColumns(baseCount: number): PassColumns {
+  return baseCount < 2 ? 'each' : 'run';
 }
 
 /** Invalid or unknown parts are dropped silently (a stale link must still open). */
@@ -307,7 +315,8 @@ export function readView(params: URLSearchParams, ctx: DecodeContext): CompareVi
   v.tab = params.get('tab') === 'sweep' ? 'sweep' : 'compare';
   v.item = params.get('item') || null;
   v.baseline = params.get('baseline') || null;
-  v.columns = params.get('columns') === 'passes' ? 'each' : 'run';
+  const columns = params.get('columns');
+  v.columns = columns === 'passes' ? 'each' : columns === 'run' ? 'run' : defaultColumns(ctx.baseCount ?? 2);
   v.thresholds = parseThresholds(params.getAll('thr'));
   v.catView = params.get('catView') === 'table' ? 'table' : 'cards';
   v.filters = decodeFiltersParam(params.get('filters'), ctx);
@@ -318,6 +327,7 @@ export function readView(params: URLSearchParams, ctx: DecodeContext): CompareVi
 export function writeView(
   v: CompareView,
   defaultMetric: string | null,
+  defaultCols: PassColumns = 'run',
 ): Record<string, string | string[] | null> {
   return {
     metric: v.metric && v.metric !== defaultMetric ? v.metric : null,
@@ -330,7 +340,7 @@ export function writeView(
     item: v.item,
     filters: encodeFiltersParam(v.filters),
     baseline: v.baseline,
-    columns: v.columns === 'each' ? 'passes' : null,
+    columns: v.columns === defaultCols ? null : v.columns === 'each' ? 'passes' : 'run',
     thr: Object.entries(v.thresholds).map(([m, t]) => `${m}:${t}`),
     catView: v.catView === 'table' ? 'table' : null,
   };
@@ -575,9 +585,7 @@ export function evalFilterNode(
   const hit =
     f.id === 'output' && match
       ? match('output', needle, c)
-      : String(value ?? '')
-          .toLowerCase()
-          .includes(needle.toLowerCase());
+      : foldSearchText(String(value ?? '')).includes(foldSearchText(needle));
   return node.oper === 'notcontains' ? !hit : hit;
 }
 
@@ -636,9 +644,10 @@ export function rowText(row: Row | null): string {
 
 /** Default matcher: item ids, previews and whatever bodies are loaded. */
 export const localMatcher: TextMatcher = (field, needle, c) => {
-  const q = needle.toLowerCase();
-  if (field === 'output') return c.outputText.toLowerCase().includes(q);
-  return c.itemId.toLowerCase().includes(q) || c.rows.some((r) => rowText(r).toLowerCase().includes(q));
+  // C066: the same Arabic and digit fold as run and dataset search
+  const q = foldSearchText(needle);
+  if (field === 'output') return foldSearchText(c.outputText).includes(q);
+  return foldSearchText(c.itemId).includes(q) || c.rows.some((r) => foldSearchText(rowText(r)).includes(q));
 };
 
 export function buildItemContext(
@@ -703,7 +712,8 @@ export function buildItemContext(
 export function applyFilters(input: ApplyInput): ApplyResult {
   const { model, view, groups } = input;
   const metric = input.metric;
-  if (!metric || model.alignment.status !== 'aligned') return { items: [], stats: null, defs: [] };
+  if (!metric || model.alignment.status !== 'aligned' || model.unpaired)
+    return { items: [], stats: null, defs: [] };
   const ctx = metricCtx(model, metric, input.thresholds);
   const stats = fullStatsFor(model, ctx);
   const defs = fieldDefsFor(model, metric);
@@ -819,7 +829,7 @@ export function applyFilters(input: ApplyInput): ApplyResult {
   }
   if (view.sort === 'change_desc') {
     const columns = metricColumns(model, view.columns);
-    const base = resolveBaseline(columns, view.baseline);
+    const base = resolveBaseline(columns, view.baseline, model);
     const baseIdxs = base ? base.runIdxs : [0];
     const keyed = out.map((item) => [changeMagnitude(item.scores, baseIdxs), item] as const);
     keyed.sort((a, b) => b[0] - a[0]);

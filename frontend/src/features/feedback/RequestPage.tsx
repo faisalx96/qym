@@ -84,7 +84,7 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
   const r = detail.request;
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const { get, replaceUrlQuery } = useSearchParamsState();
+  const { get, pushUrlQuery } = useSearchParamsState();
   const tab = get('tab') === 'conversation' ? 'conversation' : 'request';
   useDocumentTitle(`${r.ref} · ${r.title}`);
   useCrumbLabel(r.ref);
@@ -161,7 +161,7 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
           { id: 'conversation', label: 'Conversation', count: messages.data?.messages.length },
         ]}
         selected={tab}
-        onSelect={(id) => replaceUrlQuery({ tab: id === 'conversation' ? 'conversation' : null })}
+        onSelect={(id) => pushUrlQuery({ tab: id === 'conversation' ? 'conversation' : null })}
       >
         <TabPanel id="request">
           {tab === 'request' ? (

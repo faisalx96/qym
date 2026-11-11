@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
     AuditLog, CorrectionStatus, ReviewCorrection, Run, RunItem, RunItemScore,
-    RunItemAttempt, RunItemPassScore,
+    RunItemAttempt, RunItemPassScore, User,
 )
 from qym_platform.services.approved_categories import publish_approved_categories
 from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
@@ -25,13 +25,39 @@ from qym_platform.services.root_cause_categories import (
     normalize_root_cause_issues, project_root_cause_issues,
 )
 
-ISSUE_FIELDS = ("category", "subcategory", "finding", "solution", "solution_note")
-REVIEW_FIELDS = ("review_status", "reviewed_at", "reviewed_by_user_id")
+ISSUE_FIELDS = (
+    "category", "subcategory", "finding", "category_reason", "solution", "solution_note",
+)
+# The content fields without the category reason. Legacy grouped reviews and
+# review snapshots made before the reason was editable do not hold the
+# reason, so an issue is matched to them on these fields only.
+BASE_ISSUE_FIELDS = tuple(key for key in ISSUE_FIELDS if key != "category_reason")
+# The decision as the run page prints it: who, when and the comment (C125).
+REVIEW_FIELDS = ("review_status", "reviewed_at", "reviewed_by_user_id", "reviewed_by_name", "review_comment")
 
 
 def issue_content(issue: dict[str, Any]) -> dict[str, str]:
     """Only user-editable content; never accept approval metadata from a form."""
     return {key: str(issue.get(key) or "").strip() for key in ISSUE_FIELDS}
+
+
+def same_base_content(issue: dict[str, Any], other: dict[str, Any]) -> bool:
+    first, second = issue_content(issue), issue_content(other)
+    return all(first[key] == second[key] for key in BASE_ISSUE_FIELDS)
+
+
+def fill_first_issue_reason(analysis: dict[str, Any], issues: list[dict[str, Any]]) -> None:
+    """Give the first issue the analysis's ``root_cause_reason`` before it has an ID.
+
+    Analyzer output keeps one category reason for the whole analysis. It
+    belongs to the first issue, so it is copied there once, when that issue
+    first gets an ID. After that the issue owns its reason: a reviewer can
+    clear it, and a sibling that moves up after a delete does not get it.
+    The run page reads issues by the same rule (``rootCauseIssues``).
+    """
+    reason = str(analysis.get("root_cause_reason") or "").strip()
+    if issues and reason and not issues[0].get("issue_id") and not issues[0].get("category_reason"):
+        issues[0]["category_reason"] = reason
 
 
 def issue_snapshot(issue: dict[str, Any]) -> dict[str, Any]:
@@ -305,7 +331,7 @@ def issue_review_statuses(
         content = issue_content(issue)
         if candidate is not None and issue_content(candidate[1][0]) == content:
             status = candidate[0].status
-        elif legacy is not None and index < len(legacy_issues) and issue_content(legacy_issues[index]) == content:
+        elif legacy is not None and index < len(legacy_issues) and same_base_content(legacy_issues[index], issue):
             status = legacy.status
         else:
             status = CorrectionStatus.PENDING
@@ -333,7 +359,15 @@ def issue_json_says_decided(analysis: Any) -> bool:
     )
 
 
-def apply_issue_review(issue: dict[str, Any], correction: ReviewCorrection) -> None:
+def reviewer_name(db: Session, user_id: str | None) -> str:
+    """The reviewer's display name (else email) for the run page's decision line; '' when unknown."""
+    if not user_id:
+        return ""
+    user = db.get(User, user_id)
+    return str((user.display_name or user.email) if user else "")
+
+
+def apply_issue_review(issue: dict[str, Any], correction: ReviewCorrection, reviewer: str = "") -> None:
     issue["review_status"] = correction.status.value
     for key in REVIEW_FIELDS[1:]:
         issue.pop(key, None)
@@ -341,6 +375,10 @@ def apply_issue_review(issue: dict[str, Any], correction: ReviewCorrection) -> N
         issue["reviewed_at"] = to_api_timestamp(correction.reviewed_at)
     if correction.reviewed_by_user_id:
         issue["reviewed_by_user_id"] = correction.reviewed_by_user_id
+    if correction.reviewed_at and reviewer:
+        issue["reviewed_by_name"] = reviewer
+    if correction.reviewed_at and correction.review_comment:
+        issue["review_comment"] = correction.review_comment
 
 
 def refresh_issue_summary(analysis: dict[str, Any]) -> None:
@@ -424,8 +462,7 @@ def sync_issue_candidates(
     if issues:
         if issues[0].get("confidence") is None and isinstance(analysis.get("confidence"), (int, float)):
             issues[0]["confidence"] = analysis["confidence"]
-        if not issues[0].get("category_reason") and analysis.get("root_cause_reason"):
-            issues[0]["category_reason"] = analysis["root_cause_reason"]
+        fill_first_issue_reason(analysis, issues)
     score_model = RunItemScore if pass_number is None else RunItemPassScore
     score_query = db.query(score_model).filter(
         score_model.run_id == run.id, score_model.item_id == item.item_id)
@@ -458,7 +495,7 @@ def sync_issue_candidates(
             baseline = candidate
             unchanged_legacy = bool(
                 legacy and index < len(legacy_issues)
-                and issue_content(legacy_issues[index]) == issue_content(issue)
+                and same_base_content(legacy_issues[index], issue)
             )
             projection = project_root_cause_issues([issue])
             is_ai = (issue.get("source") or actor_source) == "ai"
@@ -501,7 +538,7 @@ def sync_issue_candidates(
                 created_at=legacy.created_at if unchanged_legacy else utc_now_naive(),
             )
             db.add(candidate)
-        apply_issue_review(issue, candidate)
+        apply_issue_review(issue, candidate, reviewer_name(db, candidate.reviewed_by_user_id))
         candidates.append(candidate)
     for candidate in active:
         if candidate.id not in retained:
@@ -517,12 +554,14 @@ def change_metric_issue(
     analysis: dict[str, Any], request: dict[str, Any], actor_user_id: str | None,
     pass_number: int | None = None,
 ) -> dict[str, Any]:
-    """Apply one add/edit/approve/delete under the caller's item/pass lock."""
+    """Apply one add/edit/approve/reject/delete under the caller's item/pass lock."""
     action = request.get("action")
-    if action not in {"add", "edit", "approve", "delete"}:
+    if action not in {"add", "edit", "approve", "reject", "delete"}:
         raise HTTPException(400, "Invalid issue action")
     before = deepcopy(analysis)
     issues = analysis_root_cause_issues(analysis)
+    # As the run page shows it, and before the issues get IDs below.
+    fill_first_issue_reason(analysis, issues)
     new_issue_id = None
     if action == "add" and request.get("client_issue_id"):
         try:
@@ -546,7 +585,9 @@ def change_metric_issue(
         if index is None:
             raise HTTPException(409, "This issue changed or was removed. Reload before trying again.")
         expected = request.get("expected_issue")
-        if not isinstance(expected, dict) or issue_content(expected) != issue_content(issues[index]):
+        # Not the reason: a Reviews edit sends the review's snapshot, and an
+        # older snapshot can lack a reason that the issue holds.
+        if not isinstance(expected, dict) or not same_base_content(expected, issues[index]):
             raise HTTPException(409, "This issue was edited elsewhere. Reload before trying again.")
     for issue in issues:
         issue.setdefault("issue_id", str(uuid4()))
@@ -586,22 +627,28 @@ def change_metric_issue(
         db, run=run, item=item, metric_name=metric_name, analysis=analysis,
         actor_user_id=actor_user_id, actor_source="human", pass_number=pass_number,
     )
-    if action == "approve":
+    if action in {"approve", "reject"}:
         candidate = candidates[index]
         if candidate.id is not None:
             # The caller holds the item (and pass) lock; lock this review row
             # too and judge the status it has now, not the one first read.
             db.refresh(candidate, with_for_update=True)
-        require_decision_status("approve", [candidate], noun="issue")
-        if not candidate.human_root_cause_issues and candidate.ai_root_cause_issues:
-            candidate.human_root_cause_issues = deepcopy(candidate.ai_root_cause_issues)
-            for suffix in ("root_cause", "root_causes", "root_cause_detail", "root_cause_note", "category_taxonomy", "solution", "solution_note"):
-                setattr(candidate, "human_" + suffix, deepcopy(getattr(candidate, "ai_" + suffix)))
-        candidate.status = CorrectionStatus.APPROVED
+        require_decision_status(action, [candidate], noun="issue")
+        if action == "approve":
+            if not candidate.human_root_cause_issues and candidate.ai_root_cause_issues:
+                candidate.human_root_cause_issues = deepcopy(candidate.ai_root_cause_issues)
+                for suffix in ("root_cause", "root_causes", "root_cause_detail", "root_cause_note", "category_taxonomy", "solution", "solution_note"):
+                    setattr(candidate, "human_" + suffix, deepcopy(getattr(candidate, "ai_" + suffix)))
+            candidate.status = CorrectionStatus.APPROVED
+        else:
+            # As a Reviews rejection: the issue leaves the analysis-rule evidence and the category counts.
+            candidate.status = CorrectionStatus.REJECTED
+            candidate.review_comment = str(request.get("comment") or "").strip()[:2000]
         candidate.reviewed_by_user_id = actor_user_id
         candidate.reviewed_at = utc_now_naive()
-        apply_issue_review(analysis["root_cause_issues"][index], candidate)
-        publish_approved_categories(db, run.project_id, [candidate], actor_user_id)
+        apply_issue_review(analysis["root_cause_issues"][index], candidate, reviewer_name(db, actor_user_id))
+        if action == "approve":
+            publish_approved_categories(db, run.project_id, [candidate], actor_user_id)
     refresh_issue_summary(analysis)
     if before != analysis:
         db.add(AuditLog(
@@ -637,7 +684,7 @@ def sync_correction_issue_metadata(db: Session, correction: ReviewCorrection, *,
     else:
         for issue in issues:
             if issue.get("issue_id") == issue_id:
-                apply_issue_review(issue, correction)
+                apply_issue_review(issue, correction, reviewer_name(db, correction.reviewed_by_user_id))
     analysis["root_cause_issues"] = issues
     refresh_issue_summary(analysis)
     if pass_score is not None:

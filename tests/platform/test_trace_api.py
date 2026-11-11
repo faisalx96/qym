@@ -330,5 +330,17 @@ def test_legacy_span_endpoints_enforce_run_visibility(client, session_factory) -
         "/api/runs/run-1/items/item-1/spans", headers=_headers("other@example.com")
     )
 
-    assert run_response.status_code == 403
-    assert item_response.status_code == 403
+    # Hidden runs answer like missing ones, so a run id's existence does not leak (C057).
+    assert run_response.status_code == 404
+    assert item_response.status_code == 404
+
+
+def test_run_read_routes_answer_404_for_missing_and_hidden_runs(client, session_factory) -> None:
+    """C057: no 200 {error} bodies; a hidden run answers exactly like a missing one."""
+    with session_factory() as session:
+        _seed_trace_data(session)
+    for path in ("/api/runs/{id}", "/api/runs/{id}/passes", "/api/runs/{id}/group-metrics"):
+        missing = client.get(path.format(id="no-such-run"), headers=_headers("other@example.com"))
+        hidden = client.get(path.format(id="run-1"), headers=_headers("other@example.com"))
+        assert missing.status_code == hidden.status_code == 404, path
+        assert missing.json()["detail"] == hidden.json()["detail"] == "Run not found"

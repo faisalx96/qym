@@ -3,8 +3,8 @@
  * ever reaches the browser. Visible to every project member.
  */
 import type { ReactNode } from 'react';
-import type { CredentialState, ExperimentDetail } from '@/api/experiments';
-import { Badge, Eyebrow, Text } from '@/ui';
+import { isTerminalJob, type CredentialState, type ExperimentDetail } from '@/api/experiments';
+import { Eyebrow, Text, StatusMark } from '@/ui';
 import { Callout } from '../launch/components/Callout';
 import {
   CREDENTIALS_TITLE,
@@ -50,25 +50,57 @@ export function tokenFacts(detail: ExperimentDetail): TokenFacts {
   );
   return {
     notDeclared: names,
-    neverSent: token.state === 'active' && flagged.length > 0 && flagged.every((j) => j.dataset_token === 'not_declared'),
+    neverSent:
+      token.state === 'active' &&
+      flagged.length > 0 &&
+      flagged.every((j) => j.dataset_token === 'not_declared'),
     revokedStillNeeded: token.state === 'revoked' && blocked,
   };
 }
 
-function CredBadge({ state, label, sent = true }: { state: CredentialState; label?: string; sent?: boolean }) {
-  if (state.state === 'none') return <Badge tone="neutral">not issued</Badge>;
+function CredBadge({
+  state,
+  label,
+  sent = true,
+}: {
+  state: CredentialState;
+  label?: string;
+  sent?: boolean;
+}) {
+  if (state.state === 'none') return <StatusMark tone="neutral" shape="ring" label="not issued" />;
   if (state.state === 'revoked')
     return (
-      <Badge tone="neutral" title={state.revoked_at ?? undefined}>
-        revoked {label}
-      </Badge>
+      <>
+        <StatusMark tone="warning" shape="pause" label="revoked" title={state.revoked_at ?? undefined} />
+        {label ? <Text as="span" variant="sm" tone="muted">{` ${label}`}</Text> : null}
+      </>
     );
-  return sent ? <Badge tone="success">active</Badge> : <Badge tone="warning">not sent</Badge>;
+  return sent ? (
+    <StatusMark tone="success" shape="full" label="active" />
+  ) : (
+    <StatusMark tone="warning" shape="hourglass" label="not sent" />
+  );
+}
+
+/**
+ * The row shows only when a credential needs attention (C137): the token is not sent, or a credential is revoked
+ * while a job still waits (not terminal, or BLOCKED). The platform revokes both when the experiment settles, so a
+ * revoked key on a settled experiment is normal and shows nothing.
+ */
+export function credentialsNeedAttention(detail: ExperimentDetail): boolean {
+  const { api_key: apiKey, dataset_read_token: token } = detail.credentials;
+  const facts = tokenFacts(detail);
+  if (facts.neverSent || facts.notDeclared.length) return true;
+  const waiting = detail.jobs.some(
+    (j) => !j.superseded && (!isTerminalJob(j.status) || j.status === 'BLOCKED'),
+  );
+  return waiting && (apiKey.state === 'revoked' || token.state === 'revoked');
 }
 
 export function Credentials({ detail }: { detail: ExperimentDetail }) {
   const { api_key: apiKey, dataset_read_token: token } = detail.credentials;
   const facts = tokenFacts(detail);
+  if (!credentialsNeedAttention(detail)) return null;
   const at = (c: CredentialState) => (c.revoked_at ? revokedLabel(c.revoked_at) : '');
   let notice: ReactNode = null;
   if (facts.revokedStillNeeded) {

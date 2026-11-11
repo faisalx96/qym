@@ -84,6 +84,41 @@ export interface DbTableStats {
   dead_rows: number;
 }
 
+export type DbStats =
+  | { error: string }
+  | {
+      database?: { size_bytes?: number; [k: string]: unknown };
+      tables?: DbTableStats[];
+      run_events_by_type?: { type: string; rows: number; payload_bytes: number }[];
+      /** The dashboard outbox (C074): absent on SQLite. */
+      outbox?: { total_bytes: number; rows: number; oldest_age_seconds: number | null };
+    };
+
+/** GET /api/admin/maintenance/db-stats: collected at most once a minute (they scan run_events, so they are slow). */
+export interface DbStatsResponse {
+  db_stats: DbStats;
+  db_stats_age_seconds: number;
+}
+
+/** One declared param of a maintenance job kind (services/maintenance.py `Param`). */
+export interface MaintenanceJobParam {
+  type: 'integer' | 'number' | 'tables' | 'indexes' | 'constraints';
+  /** What the job uses when the key is left out. */
+  default: unknown;
+  description: string;
+  minimum?: number;
+  maximum?: number;
+  /** The only names the server accepts, when the list is fixed in code. */
+  choices?: string[];
+}
+
+export interface MaintenanceJobKind {
+  irreversible: boolean;
+  description: string;
+  /** Every key the job takes. The server answers 400 for any other key. */
+  params: Record<string, MaintenanceJobParam>;
+}
+
 export interface MaintenanceOverview {
   settings: {
     role: string;
@@ -102,15 +137,10 @@ export interface MaintenanceOverview {
     workers_service?: { alive: boolean; processes: { alive: boolean }[] } | null;
   };
   pool?: string | null;
-  db_stats:
-    | { error: string }
-    | {
-        database?: { size_bytes?: number; [k: string]: unknown };
-        tables?: DbTableStats[];
-        run_events_by_type?: { type: string; rows: number; payload_bytes: number }[];
-      };
-  db_stats_age_seconds: number;
-  job_kinds: Record<string, { irreversible: boolean; description: string }>;
+  /** Null when the overview is read with `stats=false` (the UI reads them from `useDbStats`). */
+  db_stats: DbStats | null;
+  db_stats_age_seconds: number | null;
+  job_kinds: Record<string, MaintenanceJobKind>;
   jobs: MaintenanceJob[];
 }
 
@@ -118,15 +148,18 @@ export const adminKeys = {
   users: ['admin', 'users'] as const,
   projects: ['admin', 'projects'] as const,
   live: ['admin', 'runs', 'live'] as const,
-  recent: (page: number, size: number) => ['admin', 'runs', 'recent', page, size] as const,
+  recent: (page: number, size: number, q = '', projectId = '') =>
+    ['admin', 'runs', 'recent', page, size, q, projectId] as const,
   recentAll: ['admin', 'runs', 'recent'] as const,
   maintenance: ['admin', 'maintenance'] as const,
+  dbStats: ['admin', 'maintenance', 'db-stats'] as const,
 };
 
 export const ACTIVE_JOB_STATUSES: JobStatus[] = ['queued', 'running', 'cancel_requested'];
 export const LIVE_POLL_MS = 10_000;
 export const JOB_POLL_MS = 3_000;
-export const RECENT_PAGE_SIZE = 6;
+/** Admin landing: 25 recent runs per page (C093). */
+export const RECENT_PAGE_SIZE = 25;
 
 // ── Users ────────────────────────────────────────────────────────────────
 
@@ -144,7 +177,11 @@ export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateUserBody) =>
-      api.post<{ id: string; email: string; existing?: boolean }>('/v1/admin/users', body),
+      // temporary_password: only with email/password sign-in on, shown once (C131).
+      api.post<{ id: string; email: string; existing?: boolean; temporary_password?: string }>(
+        '/v1/admin/users',
+        body,
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: adminKeys.users }),
   });
 }
@@ -205,13 +242,25 @@ export function useLiveRuns(enabled = true) {
   });
 }
 
-export function useRecentRuns(page: number, pageSize = RECENT_PAGE_SIZE, enabled = true) {
+/** Recent finished runs across projects; `q` searches run names and ids, `projectId` narrows to one project (C093). */
+export function useRecentRuns(
+  page: number,
+  pageSize = RECENT_PAGE_SIZE,
+  enabled = true,
+  filters: { q?: string; projectId?: string | null } = {},
+) {
   const offset = Math.max(0, page - 1) * pageSize;
+  const q = (filters.q ?? '').trim();
+  const projectId = filters.projectId ?? '';
+  const extra = new URLSearchParams();
+  if (q) extra.set('q', q);
+  if (projectId) extra.set('project_id', projectId);
+  const suffix = extra.toString() ? `&${extra.toString()}` : '';
   return useQuery({
-    queryKey: adminKeys.recent(page, pageSize),
+    queryKey: adminKeys.recent(page, pageSize, q, projectId),
     queryFn: () =>
       api.get<RunsPage>(
-        `/api/runs/recent?all_projects=true&include_projects=false&global_limit=${pageSize}&global_offset=${offset}`,
+        `/api/runs/recent?all_projects=true&include_projects=false&global_limit=${pageSize}&global_offset=${offset}${suffix}`,
       ),
     enabled,
     placeholderData: keepPreviousData,
@@ -254,11 +303,12 @@ export function useForceStop() {
 
 // ── Maintenance ──────────────────────────────────────────────────────────
 
+/** Settings, workers and jobs, without the slow database statistics (those are `useDbStats`), so the tab paints at once. */
 export function useMaintenance(enabled = true) {
   const interval = usePollingInterval(JOB_POLL_MS);
   return useQuery({
     queryKey: adminKeys.maintenance,
-    queryFn: () => api.get<MaintenanceOverview>('/api/admin/maintenance'),
+    queryFn: () => api.get<MaintenanceOverview>('/api/admin/maintenance?stats=false'),
     enabled,
     refetchInterval: (q) => {
       const jobs = q.state.data?.jobs ?? [];
@@ -269,11 +319,21 @@ export function useMaintenance(enabled = true) {
   });
 }
 
+/** Table sizes and run events by type. The server caches them for a minute; a cold read can take seconds. */
+export function useDbStats(enabled = true) {
+  return useQuery({
+    queryKey: adminKeys.dbStats,
+    queryFn: () => api.get<DbStatsResponse>('/api/admin/maintenance/db-stats'),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 export function useRefreshMaintenance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.get<MaintenanceOverview>('/api/admin/maintenance?refresh=1'),
-    onSuccess: (data) => qc.setQueryData(adminKeys.maintenance, data),
+    mutationFn: () => api.get<DbStatsResponse>('/api/admin/maintenance/db-stats?refresh=1'),
+    onSuccess: (data) => qc.setQueryData(adminKeys.dbStats, data),
   });
 }
 

@@ -72,7 +72,10 @@ test('QE-28, QE-51: counter from 3,600 characters; text is kept per tab (QE-32)'
 test('QE-30: Start conversation creates one draft and moves to it', async ({ page }) => {
   await setViewport(page, 1440);
   const posts: string[] = [];
-  page.on('request', (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/v1/feedback' && posts.push(r.url()));
+  page.on(
+    'request',
+    (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/v1/feedback' && posts.push(r.url()),
+  );
   await gotoApp(page, '/feedback/new');
   await page.getByLabel('What do you need?').fill('We need a PDF export of the compare page.');
   await page.getByRole('button', { name: 'Start conversation' }).dblclick();
@@ -81,20 +84,26 @@ test('QE-30: Start conversation creates one draft and moves to it', async ({ pag
   await expect(page.getByTestId('chat')).toBeVisible();
 });
 
-test('QE-34, QE-123: not configured replaces the form with the not-set-up page', async ({ page, request }) => {
+test('QE-34, QE-123: not configured replaces the form with the not-set-up page', async ({
+  page,
+  request,
+}) => {
   await request.delete('/v1/admin/feedback-agent');
   try {
     await setViewport(page, 1440);
     await gotoApp(page, '/feedback/new');
     await expect(page.getByTestId('feedback-unconfigured-page')).toBeVisible();
     await expect(page.getByText('The feedback assistant is not set up yet')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open Feedback agent settings' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open Feedback assistant settings' })).toBeVisible();
     const empty = await box(page.locator('[data-empty-state]'));
     record('unconfigured-1440', { emptyState: empty });
     await shot(page, 'unconfigured', 1440);
     await gotoApp(page, '/feedback');
     await expect(page.getByText('The feedback assistant is not set up')).toBeVisible();
-    await expect(page.getByTestId('new-feedback-disabled').first()).toHaveAttribute('title', 'An administrator has to connect a model first');
+    await expect(page.getByTestId('new-feedback-disabled').first()).toHaveAttribute(
+      'title',
+      'An administrator has to connect a model first',
+    );
   } finally {
     await configureAgent(request);
   }

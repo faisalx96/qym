@@ -1,6 +1,6 @@
 /** A text input + button that adds a key; Enter adds too. `onAdd` returns an error message or ''. */
 import { useState } from 'react';
-import { Button } from '@/ui';
+import { Button, Icon } from '@/ui';
 import styles from './settings.module.css';
 
 export function AddRow({
@@ -37,7 +37,7 @@ export function AddRow({
           }
         }}
       />
-      <Button size="sm" onPress={add}>
+      <Button size="sm" icon={<Icon name="plus" size={12} />} onPress={add}>
         {buttonText}
       </Button>
       {error ? (

@@ -17,6 +17,7 @@ import {
   ScoreValue,
   SeriesHighlightRoot,
   StatStrip,
+  StatusMark,
   Tag,
   useSeriesHighlight,
 } from '@/ui';
@@ -135,7 +136,7 @@ describe('Card', () => {
 });
 
 describe('tone primitives', () => {
-  it('Badge exposes tone and an aria-hidden glyph; RunStatusBadge marks Approved with a check', () => {
+  it('Badge exposes tone and an aria-hidden glyph; RunStatusBadge is a StatusMark (pixel figure + word)', () => {
     render(
       <>
         <Badge tone="meta" glyph="✓">
@@ -146,8 +147,27 @@ describe('tone primitives', () => {
       </>,
     );
     expect(screen.getByText('x').closest('[data-tone]')).toHaveAttribute('data-tone', 'meta');
-    expect(document.querySelector('[data-status="APPROVED"] [aria-hidden]')?.textContent).toBe('✓');
-    expect(document.querySelector('[data-status="COMPLETED"] [aria-hidden]')).toBeNull();
+    const approved = document.querySelector('[data-status="APPROVED"]')!;
+    const completed = document.querySelector('[data-status="COMPLETED"]')!;
+    // no pill: a decorative 3 x 3 figure whose shape is the non-colour cue, then the word in sentence case
+    expect(approved).toHaveAttribute('data-shape', 'check');
+    expect(completed).toHaveAttribute('data-shape', 'full');
+    expect(approved).toHaveAttribute('data-tone', 'success');
+    expect(approved.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(approved.querySelectorAll('svg rect')).toHaveLength(9);
+    expect(approved).toHaveTextContent(/^Approved$/);
+    expect(completed).toHaveTextContent(/^Completed$/);
+  });
+
+  it('StatusMark upper-cases only the first letter; RunStatusBadge lower-cases a run status first', () => {
+    render(
+      <>
+        <StatusMark tone="success" shape="full" label="OK" />
+        <RunStatusBadge status="FAILED" label="FAILED" />
+      </>,
+    );
+    expect(screen.getByText('OK')).toBeInTheDocument();
+    expect(document.querySelector('[data-status="FAILED"]')).toHaveTextContent(/^Failed$/);
   });
 
   it('Tag kinds map to tones (task/version/config are meta) and model draws the series dot', () => {
@@ -165,6 +185,23 @@ describe('tone primitives', () => {
     for (const t of ['t', 'v', 'c']) expect(screen.getByText(t)).toHaveAttribute('data-tone', 'meta');
     expect(screen.getByText('d')).not.toHaveAttribute('data-tone');
     expect(screen.getByText('m').querySelector('[data-series="4"]')).not.toBeNull();
+  });
+
+  it('a role Tag takes its tone from the role: admin blue, manager green, member neutral (round 10)', () => {
+    render(
+      <>
+        <Tag kind="role">admin</Tag>
+        <Tag kind="role">MANAGER</Tag>
+        <Tag kind="role">member</Tag>
+        <Tag kind="role" tone="warning">
+          x
+        </Tag>
+      </>,
+    );
+    expect(screen.getByText('admin')).toHaveAttribute('data-tone', 'info');
+    expect(screen.getByText('MANAGER')).toHaveAttribute('data-tone', 'accent');
+    expect(screen.getByText('member')).not.toHaveAttribute('data-tone');
+    expect(screen.getByText('x')).toHaveAttribute('data-tone', 'warning');
   });
 
   it('Chip takes a tone or a series for its selected colour', () => {
@@ -189,6 +226,20 @@ describe('tone primitives', () => {
     const el = screen.getByTitle('Band 5 of 5');
     expect(el).toHaveAttribute('data-variant', 'pill');
     expect(el).toHaveAttribute('data-band', '5');
+  });
+
+  it('ScoreValue verdict (C220): plain green or red against the pass threshold, no band, a title cue', () => {
+    const { rerender } = render(
+      <ScoreValue value={0.95} direction="higher" variant="plain" verdict="pass" />,
+    );
+    let el = screen.getByTitle('Passes the pass threshold');
+    expect(el).toHaveAttribute('data-tone', 'success');
+    expect(el).not.toHaveAttribute('data-band');
+    rerender(<ScoreValue value={0.95} direction="higher" variant="plain" verdict="fail" />);
+    el = screen.getByTitle('Fails the pass threshold');
+    expect(el).toHaveAttribute('data-tone', 'danger');
+    rerender(<ScoreValue value={null} error="task" verdict="fail" />);
+    expect(screen.queryByTitle('Fails the pass threshold')).toBeNull();
   });
 
   it('DeltaCell pill only outside the noise band and only with a verdict', () => {

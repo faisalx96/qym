@@ -9,12 +9,14 @@ import {
   loadRepeatTab,
   loadRootCauseTab,
 } from '../chunks';
-import { useReviewHistoryQuery } from '@/api/runs';
+import { AnalysisSpark } from '@/features/runs-list/AnalyzeAction';
 import { metricDirectionLabel } from '@/lib/metrics';
-import { ReportSection, StatStrip } from '@/ui';
+import { Icon, LinkButton, ReportSection, SectionBoundary, Stack, StatStrip, Text } from '@/ui';
+import { plannedItems } from '../lib/heroModel';
 import { runCounts } from '../lib/overviewModel';
-import { errorBucketCount } from '../lib/panelCounts';
+import { navErrorCount } from '../lib/panelCounts';
 import { getRowRootCauseAnalyses } from '../lib/rowMeta';
+import { analyzerHref } from '../lib/runActions';
 import { useRunPage } from '../RunContext';
 import { BlockSkeleton, ErrorsSkeleton, OverviewSkeleton } from './StageSkeletons';
 import { DatasetsSection } from './panels/DatasetsSection';
@@ -30,17 +32,26 @@ const CategoriesTab = panel(loadCategoriesTab, 'CategoriesTab');
 const ErrorsTab = panel(loadErrorsTab, 'ErrorsTab');
 const RootCauseTab = panel(loadRootCauseTab, 'RootCauseTab');
 
-/** A panel's body: its skeleton while the rows (or the panel's chunk) are on the way. */
+/** A panel's body: its skeleton while the rows (or the panel's chunk) are on the way; a render error stays inside it. */
 function Staged({
   pending,
   skeleton,
+  name,
   children,
 }: {
   pending: boolean;
   skeleton: React.ReactNode;
+  /** The section's title, for its error message. */
+  name: string;
   children: React.ReactNode;
 }) {
-  return pending ? skeleton : <Suspense fallback={skeleton}>{children}</Suspense>;
+  return pending ? (
+    skeleton
+  ) : (
+    <SectionBoundary name={name}>
+      <Suspense fallback={skeleton}>{children}</Suspense>
+    </SectionBoundary>
+  );
 }
 
 export type SectionKey =
@@ -83,44 +94,75 @@ export interface SectionEntry {
   label: string;
   count?: number;
   danger?: boolean;
+  /** Tooltip of the nav link (the Errors badge says what it counts). */
+  tip?: string;
 }
 
-/** Root cause shows only once the run has analyses (or an aggregation record). */
-export function useHasRootCause(): boolean {
-  const { model, payload } = useRunPage();
+/** Items with at least one root-cause analysis: the nav's Root cause count. */
+export function useRootCauseCount(): number {
+  const { model } = useRunPage();
   const repeatAggregate = model.isRepeat && !model.viewPass;
   return useMemo(
-    () =>
-      !!payload.run.metadata?.analysis_aggregation ||
-      model.rows.some((row) => getRowRootCauseAnalyses(row, 'all', repeatAggregate).length > 0),
-    [model.rows, payload.run.metadata, repeatAggregate],
+    () => model.rows.filter((row) => getRowRootCauseAnalyses(row, 'all', repeatAggregate).length > 0).length,
+    [model.rows, repeatAggregate],
+  );
+}
+
+/** The run has analyses (or an aggregation record): the Root cause section shows its categories. */
+export function useHasRootCause(): boolean {
+  const { payload } = useRunPage();
+  const count = useRootCauseCount();
+  return count > 0 || !!payload.run.metadata?.analysis_aggregation;
+}
+
+/** RF3 (C113): with no analyses the Root cause section is one line and the purple 'Analyze failures'. */
+function RootCauseEmpty() {
+  const { model, api, basePath, readOnly } = useRunPage();
+  return (
+    <Stack direction="row" gap="md" align="center" data-testid="root-cause-empty">
+      <Text variant="md" tone="muted" weight={400} as="span">
+        No analysis yet.
+      </Text>
+      {readOnly ? null : (
+        <LinkButton
+          size="sm"
+          variant="meta"
+          to={analyzerHref(basePath, model.viewPass, api.selectedMetric)}
+          icon={<AnalysisSpark filled={false} />}
+        >
+          Analyze failures
+        </LinkButton>
+      )}
+    </Stack>
   );
 }
 
 /** The sections this run shows, in page order, with the counts the nav displays. */
 export function useSectionEntries(): SectionEntry[] {
-  const { runId, model, items, payload, rowsPending, reviewEventCount, summaryPending } = useRunPage();
-  const reviews = useReviewHistoryQuery(
-    runId,
-    reviewEventCount === undefined ? !summaryPending : reviewEventCount !== 0,
-  );
-  const reviewCount = reviews.data?.events.length ?? 0;
+  const { model, items, payload, rowsPending } = useRunPage();
   // Until the rows arrive the nav shows the sections the summary knows about, without counts.
-  const errorCount = rowsPending ? 0 : errorBucketCount(model.rows, model.isRepeat && !model.viewPass);
-  const hasRootCause = useHasRootCause();
+  const errors = useMemo(() => (rowsPending ? null : navErrorCount(model.rows)), [rowsPending, model.rows]);
+  const rootCauseCount = useRootCauseCount();
   const total = payload.snapshot.rows_total ?? payload.snapshot.rows.length;
   return [
-    ...(reviewCount ? [{ id: 'reviews' as const, label: 'Reviews', count: reviewCount }] : []),
+    // C027: the review log opens from the hero's History button, so the nav has no Reviews link
     { id: 'overview', label: 'Overview' },
     ...((payload.run.dataset_count ?? 1) > 1
       ? [{ id: 'datasets' as const, label: 'Datasets', count: payload.run.dataset_count }]
       : []),
     ...(model.isRepeat && !model.viewPass ? [{ id: 'repeat' as const, label: 'Repeat' }] : []),
+    // RF1 (C132): the short label; the section keeps its title
     { id: 'latency', label: 'Latency' },
-    { id: 'deep', label: 'Deep' },
+    { id: 'deep', label: 'Deep analysis' },
     { id: 'categories', label: 'Categories' },
-    { id: 'errors', label: 'Errors', ...(rowsPending ? {} : { count: errorCount, danger: errorCount > 0 }) },
-    ...(hasRootCause ? [{ id: 'root-cause' as const, label: 'Root cause' }] : []),
+    // C175: items with a task or metric error, the number the Overview strip and the Errors filter show
+    {
+      id: 'errors',
+      label: 'Errors',
+      ...(errors ? { count: errors.items, danger: errors.items > 0, tip: errors.tip } : {}),
+    },
+    // RF3 (C113): Root cause is always in the nav, before Items, so the first analysis shifts no link
+    { id: 'root-cause', label: 'Root cause', ...(rowsPending ? {} : { count: rootCauseCount }) },
     {
       id: 'items',
       label: 'Items',
@@ -148,6 +190,11 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
       ),
     [items, model.isRepeat, model.viewPass],
   );
+  // RF2 (C097): a failed run's items were scored, not completed; a stopped run shows what it planned, muted
+  const status = String(payload.run.status ?? '').toUpperCase();
+  const planned = status === 'STOPPED' && !model.viewPass ? plannedItems(payload.run) : null;
+  // coverage counts every received item, not the filtered ones
+  const received = rowsPending ? (payload.snapshot.rows_total ?? null) : model.rows.length;
   return (
     <>
       <ReportSection
@@ -163,12 +210,34 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
               {
                 key: 'items',
                 label: 'Items',
-                value: rowsPending ? (payload.snapshot.rows_total ?? '—') : counts.total,
+                icon: <Icon name="list" size={12} />,
+                tone: 'info',
+                value:
+                  planned && received != null && received < planned ? (
+                    <>
+                      {received}
+                      <Text as="span" tone="muted" weight={400}>
+                        {' '}
+                        of {planned}
+                      </Text>
+                    </>
+                  ) : rowsPending ? (
+                    (payload.snapshot.rows_total ?? '—')
+                  ) : (
+                    counts.total
+                  ),
               },
-              { key: 'completed', label: 'Completed', value: rowsPending ? '—' : counts.completed },
+              {
+                key: 'completed',
+                label: status === 'FAILED' && !model.viewPass ? 'Scored' : 'Completed',
+                icon: <Icon name="check" size={12} />,
+                tone: 'success',
+                value: rowsPending ? '—' : counts.completed,
+              },
               {
                 key: 'errors',
                 label: 'Errors',
+                icon: <Icon name="close" size={12} />,
                 value: rowsPending ? '—' : counts.errors,
                 tone: !rowsPending && counts.errors ? 'danger' : undefined,
               },
@@ -179,7 +248,7 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
           />
         }
       >
-        <Staged pending={rowsPending} skeleton={<OverviewSkeleton />}>
+        <Staged pending={rowsPending} skeleton={<OverviewSkeleton />} name="Overview">
           <OverviewTab />
         </Staged>
       </ReportSection>
@@ -195,6 +264,7 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         <Staged
           pending={rowsPending}
           skeleton={<BlockSkeleton height={320} label="Loading repeat analysis" />}
+          name="Repeat run analysis"
         >
           <RepeatTab />
         </Staged>
@@ -207,7 +277,11 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         lazy
         minHeight={360}
       >
-        <Staged pending={rowsPending} skeleton={<BlockSkeleton height={360} label="Loading latency" />}>
+        <Staged
+          pending={rowsPending}
+          skeleton={<BlockSkeleton height={360} label="Loading latency" />}
+          name="Latency and traces"
+        >
           <LatencyTab />
         </Staged>
       </ReportSection>
@@ -219,7 +293,11 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         lazy
         minHeight={280}
       >
-        <Staged pending={rowsPending} skeleton={<BlockSkeleton height={280} label="Loading deep analysis" />}>
+        <Staged
+          pending={rowsPending}
+          skeleton={<BlockSkeleton height={280} label="Loading deep analysis" />}
+          name="Deep analysis"
+        >
           <DeepTab />
         </Staged>
       </ReportSection>
@@ -229,31 +307,40 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
         description="Performance by item metadata. Click a value to filter the items."
         scopeNote={scopeNote}
       >
-        <Staged pending={rowsPending} skeleton={<BlockSkeleton height={274} label="Loading categories" />}>
+        <Staged
+          pending={rowsPending}
+          skeleton={<BlockSkeleton height={274} label="Loading categories" />}
+          name="Categories"
+        >
           <CategoriesTab />
         </Staged>
       </ReportSection>
       <ReportSection
         id={sectionDomId('errors')}
         title="Errors"
-        description="Task, metric, trace and analysis errors grouped by message. Click a row to filter."
+        description="Task, metric, trace and analysis errors grouped by message. Click a card to filter the items."
         scopeNote={scopeNote}
       >
-        <Staged pending={rowsPending} skeleton={<ErrorsSkeleton />}>
+        <Staged pending={rowsPending} skeleton={<ErrorsSkeleton />} name="Errors">
           <ErrorsTab />
         </Staged>
       </ReportSection>
       <ReportSection
         id={sectionDomId('root-cause')}
         title="Root cause analysis"
-        description="Why items failed. Click a category to filter the items."
+        description={
+          hasRootCause ? 'Why items failed. Click a category to filter the items.' : 'Why items failed.'
+        }
         scopeNote={scopeNote}
-        hidden={!hasRootCause}
-        lazy
-        minHeight={200}
+        lazy={hasRootCause}
+        minHeight={hasRootCause ? 200 : undefined}
       >
-        <Staged pending={rowsPending} skeleton={<BlockSkeleton height={200} label="Loading root cause" />}>
-          <RootCauseTab />
+        <Staged
+          pending={rowsPending}
+          skeleton={<BlockSkeleton height={200} label="Loading root cause" />}
+          name="Root cause analysis"
+        >
+          {hasRootCause ? <RootCauseTab /> : <RootCauseEmpty />}
         </Staged>
       </ReportSection>
     </>

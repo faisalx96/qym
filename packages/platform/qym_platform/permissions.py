@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import false, select
 from sqlalchemy.orm import Query, Session
 
-from qym_platform.auth import Principal
+from qym_platform.auth import PRINCIPAL_INFO_KEY, Principal
 from qym_platform.db.models import (
     Dataset,
     DatasetGrant,
@@ -31,6 +31,31 @@ def is_project_archived(db: Session, project_id: Optional[str]) -> bool:
     return active is False
 
 
+VIEWER_DETAIL = "Viewers cannot change this project"
+
+
+def is_project_viewer(db: Session, principal: Optional[Principal], project_id: Optional[str]) -> bool:
+    """A Viewer of ``project_id`` (C033): reads every page, changes nothing."""
+    if principal is None or not project_id or principal.auth_type == "none":
+        return False
+    if principal.user.role == UserRole.ADMIN:
+        return False
+    membership = get_project_membership(db, principal.user.id, project_id)
+    return bool(membership and membership.role == ProjectRole.VIEWER)
+
+
+def require_project_writer(db: Session, project_id: Optional[str]) -> None:
+    """Refuse a Viewer's change with 403 (C033).
+
+    The caller is the principal the auth dependency keeps on ``db.info``.
+    ``require_project_writable`` calls this, so every write route that checks the
+    archive rule refuses a viewer too; the few writes that stay allowed on an
+    archived project (cancelling a job, a dry run) call it directly.
+    """
+    if is_project_viewer(db, db.info.get(PRINCIPAL_INFO_KEY), project_id):
+        raise HTTPException(status_code=403, detail=VIEWER_DETAIL)
+
+
 def require_project_writable(db: Session, project_id: Optional[str]) -> None:
     """Refuse a change to an archived project: it is read-only until unarchived.
 
@@ -41,7 +66,9 @@ def require_project_writable(db: Session, project_id: Optional[str]) -> None:
     unarchive and delete endpoints, and actions that only take access or work
     away (revoking a key, removing a member, cancelling a running analysis job).
     tests/platform/test_archived_project_read_only.py lists every write route.
+    A Viewer of the project is refused first, with 403 (C033).
     """
+    require_project_writer(db, project_id)
     if is_project_archived(db, project_id):
         raise HTTPException(
             status_code=409,
@@ -96,6 +123,28 @@ def is_project_manager(db: Session, principal: Principal, project_id: str) -> bo
         return True
     membership = get_project_membership(db, principal.user.id, project_id)
     return bool(membership and membership.role == ProjectRole.MANAGER)
+
+
+def project_access(
+    db: Session, principal: Principal, project_ids: Iterable[str]
+) -> dict[str, bool]:
+    """``{project_id: is_manager}`` for the ones of ``project_ids`` that
+    ``principal`` can access, in one query: :func:`has_project_access` and
+    :func:`is_project_manager` for many projects (a compare of several runs)."""
+    ids = {project_id for project_id in project_ids if project_id}
+    if not ids:
+        return {}
+    if principal.auth_type == "none" or principal.user.role == UserRole.ADMIN:
+        return {project_id: True for project_id in ids}
+    return {
+        project_id: role == ProjectRole.MANAGER
+        for project_id, role in db.query(
+            ProjectMembership.project_id, ProjectMembership.role
+        ).filter(
+            ProjectMembership.user_id == principal.user.id,
+            ProjectMembership.project_id.in_(ids),
+        )
+    }
 
 
 def can_manage_project_members(db: Session, principal: Principal, project_id: str) -> bool:

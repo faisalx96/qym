@@ -15,33 +15,10 @@
   gap: var(--space-sm);
 }
 
-.descButton {
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-muted);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.descButton:not(:disabled):hover {
-  color: var(--text-secondary);
-  text-decoration: underline dotted;
-}
-
-.descButton:disabled {
-  cursor: default;
-}
-
-.descButton:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
-  border-radius: 2px;
+/* No description yet: a link to Settings › General, the one place to edit it (C169) */
+.addDescription {
+  color: var(--accent-secondary);
+  text-decoration: underline; /* a link inside running text must not rely on colour alone */
 }
 
 .inlineLink {
@@ -63,8 +40,4 @@
   display: flex;
   gap: var(--space-sm);
   margin-top: var(--space-sm);
-}
-
-.disabledCount {
-  color: var(--text-secondary);
 }

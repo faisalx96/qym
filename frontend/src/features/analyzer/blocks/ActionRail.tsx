@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { projectPath } from '@/app/routes';
 import type { AnalysisConfig } from '@/api/analysis';
 import { Button, DropdownMenu, IconButton, LinkButton, Select, Text } from '@/ui';
 import type { PhaseView } from '../useAnalysisPhase';
@@ -5,6 +7,7 @@ import type { RunnerState } from '../useAnalysisRunner';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import { ProgressBar, shortOutcome, summarize, viewRunTo } from './JobStatus';
 import s from './blocks.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 /** Why Test / Analyze are unavailable, in words, next to the disabled buttons. */
 function notice(config: AnalysisConfig, ws: RunWorkspace): string | null {
@@ -40,7 +43,8 @@ export function ActionRail({
   const job = runner.job;
   const noTargets = ws.targetCount === 0;
   const locked = phase.live || test.testing;
-  const testCount = ws.testKeys.length || 1;
+  // C213: with nothing ticked the test takes the first target, and the label says so
+  const testLabel = ws.testKeys.length ? `Test selected (${ws.testKeys.length})` : 'Test the first target';
   const sum = job && phase.finished ? summarize(job) : null;
   const blocked = notice(config, ws);
 
@@ -78,7 +82,7 @@ export function ActionRail({
       isDisabled={locked || !ws.llmReady || noTargets}
       className={s.railSecondary}
     >
-      {`Test selected (${testCount})`}
+      {testLabel}
     </Button>
   );
 
@@ -163,7 +167,7 @@ export function ActionRail({
         />
         <Button size="sm" onPress={onPreview} isDisabled={!preview.hasTarget} className={s.railPreview}>
           {preview.characters != null
-            ? `Prompt preview · ${preview.characters.toLocaleString()} chars`
+            ? `Prompt preview · ${preview.characters.toLocaleString(APP_LOCALE)} chars`
             : 'Prompt preview'}
         </Button>
       </div>
@@ -186,6 +190,12 @@ export function ActionRail({
           title={status}
         >
           {status}
+          {status && !config.llm_connections.length && config.can_operate_analyzer ? (
+            <>
+              {' '}
+              <Link to={`${projectPath(slug, 'settings')}?tab=llm`}>Open LLM connections</Link>
+            </>
+          ) : null}
         </Text>
       </div>
       <div className={s.railActions}>
@@ -199,7 +209,7 @@ export function ActionRail({
               items={[
                 {
                   id: 'test',
-                  label: test.testing ? 'Cancel test' : `Test selected (${testCount})`,
+                  label: test.testing ? 'Cancel test' : testLabel,
                   disabled: test.testing ? false : locked || !ws.llmReady || noTargets,
                 },
                 { id: 'preview', label: 'Prompt preview', disabled: !preview.hasTarget },

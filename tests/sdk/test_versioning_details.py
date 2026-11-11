@@ -52,7 +52,7 @@ def test_config_refuses_invalid_details(bad):
 def _capture_post(monkeypatch) -> List[Dict[str, Any]]:
     payloads: List[Dict[str, Any]] = []
 
-    def fake_post_json(url, payload, api_key, *, timeout=30):
+    def fake_post_json(url, payload, api_key, *, timeout=30, headers=None):
         payloads.append(payload)
         return {"run_id": "run-1", "live_url": "https://p.example/runs/run-1"}
 

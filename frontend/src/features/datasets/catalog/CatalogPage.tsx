@@ -7,10 +7,9 @@ import { useNavigate } from 'react-router-dom';
 import { useDatasetCatalog, type Dataset } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
-  Badge,
   Button,
   DropdownMenu,
   EmptyState,
@@ -24,8 +23,11 @@ import {
   Skeleton,
   Text,
   Card,
+  Flag,
 } from '@/ui';
 import { NewDatasetDialog } from '../components/dialogs';
+import { VersionBadge } from '../components/VersionSwitcher';
+import { UnregisteredNames } from './UnregisteredNames';
 import { UserPill } from '../components/UserPill';
 import { formatDate, pluralize, relativeTime } from '../lib/itemValue';
 import { catalogPath, datasetPath } from '../lib/route';
@@ -33,6 +35,7 @@ import {
   CATALOG_SORTS,
   catalogItemCount,
   catalogStateLine,
+  catalogStateVersions,
   catalogVersionCount,
   filterCatalog,
   sortCatalog,
@@ -40,6 +43,7 @@ import {
 } from '../lib/versions';
 import { UploadWizard } from '../wizard/UploadWizard';
 import styles from './CatalogPage.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export function CatalogPage() {
   const { slug, project, readOnly } = useProjectContext();
@@ -52,6 +56,7 @@ export function CatalogPage() {
   const sort = (CATALOG_SORTS.some((s) => s.key === sortRaw) ? sortRaw : 'updated_desc') as CatalogSort;
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [registering, setRegistering] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
   // Debounced mirror of the search box into ?q= (replaceState).
@@ -63,18 +68,6 @@ export function CatalogPage() {
   const datasets = useMemo(() => query.data?.datasets ?? [], [query.data]);
   const visible = useMemo(() => sortCatalog(filterCatalog(datasets, search), sort), [datasets, search, sort]);
   const runTotal = datasets.reduce((n, d) => n + d.run_count, 0);
-  const hasData = Boolean(query.data);
-  const stats = useMemo(
-    () =>
-      hasData
-        ? [
-            { value: datasets.length, label: 'datasets' },
-            { value: runTotal, label: 'runs' },
-          ]
-        : null,
-    [hasData, datasets.length, runTotal],
-  );
-  useTopbarStats(stats);
 
   const canCreate = !readOnly;
   const header = (
@@ -91,7 +84,7 @@ export function CatalogPage() {
             <>
               <SearchField
                 label="Search datasets"
-                placeholder="Search datasets…"
+                placeholder="Search datasets"
                 value={search}
                 onChange={setSearch}
                 width={240}
@@ -150,6 +143,7 @@ export function CatalogPage() {
         <EmptyState
           icon={<Icon name="folder" />}
           title="No datasets yet"
+          guide="/docs/get-started/datasets"
           body={
             canCreate
               ? 'Create a dataset to version your test items and track which runs used them.'
@@ -158,8 +152,12 @@ export function CatalogPage() {
           action={
             canCreate ? (
               <div className={styles.emptyActions}>
-                <Button variant="primary" onPress={() => setCreating(true)}>
-                  + Create your first dataset
+                <Button
+                  icon={<Icon name="plus" size={12} />}
+                  variant="primary"
+                  onPress={() => setCreating(true)}
+                >
+                  Create your first dataset
                 </Button>
                 <Button variant="neutral" onPress={() => setImporting(true)}>
                   Import a file
@@ -188,7 +186,18 @@ export function CatalogPage() {
           ))}
         </ul>
       ) : null}
+      {query.data ? (
+        <UnregisteredNames slug={slug} canRegister={canCreate} onRegister={(name) => setRegistering(name)} />
+      ) : null}
       <NewDatasetDialog open={creating} onOpenChange={setCreating} slug={slug} />
+      <NewDatasetDialog
+        open={registering !== null}
+        onOpenChange={(o) => {
+          if (!o) setRegistering(null);
+        }}
+        slug={slug}
+        initialName={registering ?? undefined}
+      />
       <UploadWizard
         open={importing}
         onOpenChange={setImporting}
@@ -217,34 +226,35 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
               <Text variant="lg" as="span" className={styles.cardName} data-testid="da-card-name">
                 {d.name}
               </Text>
-              <span className={styles.state}>
-                {catalogStateLine(d)
-                  .split(' · ')
-                  .map((part, i) => (
-                    <span
-                      key={part}
-                      data-kind={
-                        part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined
-                      }
-                    >
-                      {i ? ' · ' : ''}
-                      {part}
-                    </span>
-                  ))}
+              {/* each version with its own status mark, Production in full (C168) */}
+              <span className={styles.state} aria-label={catalogStateLine(d)}>
+                {catalogStateVersions(d).map((v, i) => (
+                  <span key={v.id} className={styles.stateVersion}>
+                    {i ? <span aria-hidden="true">·</span> : null}
+                    <span className={styles.stateLabel}>{v.version}</span>
+                    <VersionBadge version={v} />
+                  </span>
+                ))}
+                {!catalogStateVersions(d).length ? <span>empty</span> : null}
+                {!d.production_version && d.latest_version?.status === 'draft' ? (
+                  <span>· never published</span>
+                ) : null}
               </span>
             </div>
             {d.private_test_set || d.access_mode === 'restricted' ? (
               <div className={styles.badges} data-testid="da-card-badges">
-                {d.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
+                {d.private_test_set ? (
+                  <Flag tone="warning" icon="eye-off">
+                    Private test set
+                  </Flag>
+                ) : null}
                 {d.access_mode === 'restricted' ? (
-                  <Badge tone="neutral" glyph={<Icon name="lock" size={12} />} data-testid="restricted-badge">
+                  <Flag icon="lock" data-testid="restricted-badge">
                     Restricted
-                  </Badge>
+                  </Flag>
                 ) : null}
                 {d.access_mode === 'restricted' && d.permissions.access_level === 'view' ? (
-                  <Badge tone="neutral" glyph={<Icon name="eye" size={12} />}>
-                    View only
-                  </Badge>
+                  <Flag icon="eye">View only</Flag>
                 ) : null}
               </div>
             ) : null}
@@ -255,13 +265,13 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
         </p>
         <div className={styles.stats}>
           <span>
-            <strong>{catalogItemCount(d).toLocaleString()}</strong> items
+            <strong>{catalogItemCount(d).toLocaleString(APP_LOCALE)}</strong> items
           </span>
           <span>
             <strong>{catalogVersionCount(d)}</strong> {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
           </span>
           <span>
-            <strong>{d.run_count.toLocaleString()}</strong> {d.run_count === 1 ? 'run' : 'runs'}
+            <strong>{d.run_count.toLocaleString(APP_LOCALE)}</strong> {d.run_count === 1 ? 'run' : 'runs'}
           </span>
         </div>
         <div className={styles.cardFoot}>

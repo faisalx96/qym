@@ -616,7 +616,7 @@ def test_summary_shape_bump_refreshes_means_without_reading_source_rows(database
     finally:
         event.remove(database, "before_cursor_execute", capture)
     published = projected(database)
-    assert published["summary_shape"] == summaries_service.SUMMARY_SHAPE == 5
+    assert published["summary_shape"] == summaries_service.SUMMARY_SHAPE == 6
     assert published["metric_averages"] == _approx(CLASSIC)
     assert not any(
         table in sql

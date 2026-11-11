@@ -127,7 +127,7 @@
 
 .rowButton:hover {
   color: var(--accent-primary);
-  text-decoration: underline;
+  text-decoration: none; /* the colour step is the hover cue: no underline */
 }
 
 .rowButton:focus-visible {
@@ -401,4 +401,9 @@
   color: var(--text-primary);
   font-size: var(--font-md);
   font-weight: 600;
+}
+
+/* C217: trace stats are numbers, centred like every number column */
+.table td.traceValue {
+  text-align: center;
 }

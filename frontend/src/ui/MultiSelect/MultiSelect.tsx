@@ -38,6 +38,13 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
   /** `data-testid` of the popover panel (e2e hook). */
   panelTestId?: string;
   /**
+   * Filter semantics: an empty `value` means "every value" and shows every box ticked; ticking them all again goes
+   * back to the empty set, and unticking the last one (or None) gives `new Set([noneKey])`.
+   */
+  emptyMeansAll?: boolean;
+  /** The "match nothing" key for `emptyMeansAll` (shown with no box ticked). */
+  noneKey?: Key;
+  /**
    * Appended to the visible trigger text in the accessible name ("Versions · 2 of support-tickets"): it names what
    * the list belongs to and keeps the visible text inside the name. Replaces the 'bar' trigger's "<label> filter" name.
    */
@@ -66,6 +73,8 @@ export function MultiSelect<T extends MultiSelectItem>({
   summary: summaryOf,
   panelTestId,
   nameSuffix,
+  emptyMeansAll = false,
+  noneKey,
 }: MultiSelectProps<T>) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -78,7 +87,18 @@ export function MultiSelect<T extends MultiSelectItem>({
     if (!q) return all;
     return all.filter((i) => (i.searchText ?? i.label).toLowerCase().includes(q));
   }, [all, query]);
+  const isNone = noneKey !== undefined && value.has(noneKey);
   const selectedCount = value.size;
+  /** Ticked on screen: with `emptyMeansAll` the empty set ticks every box and the none key ticks none. */
+  const isTicked = (key: Key) =>
+    emptyMeansAll ? !isNone && (value.size === 0 || value.has(key)) : value.has(key);
+  /** Back to the stored form: every value ticked is the empty set, nothing ticked is the none key. */
+  function emit(ticked: Set<Key>) {
+    if (!emptyMeansAll) return onChange(ticked);
+    if (ticked.size === 0) return onChange(noneKey === undefined ? new Set() : new Set([noneKey]));
+    if (all.every((i) => ticked.has(i.key))) return onChange(new Set());
+    onChange(ticked);
+  }
   const summary =
     selectedCount === 0
       ? placeholder
@@ -87,6 +107,12 @@ export function MultiSelect<T extends MultiSelectItem>({
         : `${selectedCount} selected`;
 
   function toggle(key: Key) {
+    if (emptyMeansAll) {
+      const ticked = new Set(all.filter((i) => isTicked(i.key)).map((i) => i.key));
+      if (ticked.has(key)) ticked.delete(key);
+      else ticked.add(key);
+      return emit(ticked);
+    }
     const next = new Set(value);
     if (next.has(key)) next.delete(key);
     else next.add(key);
@@ -128,7 +154,7 @@ export function MultiSelect<T extends MultiSelectItem>({
           <Icon name="search" size={12} />
           <input
             className={styles.search}
-            placeholder="Search…"
+            placeholder="Search"
             aria-label={`Search ${label}`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -141,17 +167,27 @@ export function MultiSelect<T extends MultiSelectItem>({
           <button
             type="button"
             className={styles.action}
-            onClick={() => onChange(new Set(visible.map((i) => i.key)))}
+            onClick={() =>
+              emptyMeansAll
+                ? emit(
+                    new Set([
+                      ...all.filter((i) => isTicked(i.key)).map((i) => i.key),
+                      ...visible.map((i) => i.key),
+                    ]),
+                  )
+                : onChange(new Set(visible.map((i) => i.key)))
+            }
           >
             Select all
           </button>
-          <button type="button" className={styles.action} onClick={() => onChange(new Set())}>
+          <button
+            type="button"
+            className={styles.action}
+            onClick={() => (emptyMeansAll ? emit(new Set()) : onChange(new Set()))}
+          >
             None
           </button>
         </div>
-      ) : null}
-      {triggerVariant === 'bar' && selectedCount === 0 ? (
-        <div className={styles.hint}>Nothing ticked: every value is included.</div>
       ) : null}
       <div className={styles.list} ref={listRef}>
         {visible.length === 0 ? <div className={styles.empty}>No matches</div> : null}
@@ -164,7 +200,7 @@ export function MultiSelect<T extends MultiSelectItem>({
             role="presentation"
           >
             <Checkbox
-              isSelected={value.has(item.key)}
+              isSelected={isTicked(item.key)}
               onChange={() => toggle(item.key)}
               className={styles.checkbox}
             >
@@ -176,7 +212,7 @@ export function MultiSelect<T extends MultiSelectItem>({
                 type="button"
                 className={styles.only}
                 aria-label={`Only ${item.label}`}
-                onClick={() => onChange(new Set([item.key]))}
+                onClick={() => emit(new Set([item.key]))}
               >
                 Only
               </button>

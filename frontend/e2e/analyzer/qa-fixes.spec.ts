@@ -71,10 +71,10 @@ test.describe('project and run errors (7, 8)', () => {
     await waitWorkspace(page);
   });
 
-  test('unknown run: "Unable to load auto-analysis" with an Open Runs link', async ({ page, request }) => {
+  test('unknown run: "Couldn’t load auto-analysis" with an Open Runs link', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, 'nope'));
-    await expect(page.getByRole('heading', { name: 'Unable to load auto-analysis' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Couldn’t load auto-analysis' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute(
       'href',
       `/projects/${seed.slug}`,
@@ -117,7 +117,9 @@ test.describe('settings (4, 15, 16, 21)', () => {
     await issues.blur();
     await expect(issues).toHaveValue(beforeIssues);
     const body = page.waitForRequest((r) => r.url().includes('/analyze-test'));
-    await rail(page).getByRole('button', { name: 'Test selected (1)' }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })
+      .click();
     expect(((await body).postDataJSON() as { timeout_seconds: number }).timeout_seconds).toBe(Number(before));
   });
 
@@ -150,7 +152,7 @@ test.describe('guidance (2, 3, 9)', () => {
     const saved = page.waitForRequest(isRuleSave);
     await page.getByRole('tab', { name: /^Documents/ }).click();
     expect(JSON.stringify((await saved).postDataJSON())).toContain('Flush me');
-    await page.getByRole('tab', { name: /^Production rules/ }).click();
+    await page.getByRole('tab', { name: /^Rules/ }).click();
     await expect(page.getByRole('button', { name: 'Flush me', exact: true })).toBeVisible();
   });
 
@@ -216,7 +218,9 @@ test.describe('connection without a key (11)', () => {
     await expect(option).toHaveAttribute('aria-disabled', 'true');
     await option.click({ force: true });
     await page.keyboard.press('Escape');
-    await expect(rail(page).getByRole('button', { name: 'Test selected (1)' })).toBeEnabled();
+    await expect(
+      rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }),
+    ).toBeEnabled();
     await expect(rail(page).getByRole('button', { name: /LLM connection/ })).not.toContainText('nokey');
   });
 });

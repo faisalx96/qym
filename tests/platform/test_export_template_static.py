@@ -549,10 +549,8 @@ def test_run_header_status_and_actions_share_one_height() -> None:
     run = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
     components = (DASHBOARD_DIR / "ui_components.css").read_text(encoding="utf-8")
 
-    assert (
-        'class="qym-inline-action qym-inline-action--neutral" '
-        'id="export-download-btn"'
-    ) in run
+    # C173: an exported file is a read-only snapshot, so "Download with Changes" is gone.
+    assert 'id="export-download-btn"' not in run
     # The page URL is the run's link and the HTML file an export (C059), the
     # header's accent action like the items' CSV export; there is no Copy
     # link or Compare with previous button.

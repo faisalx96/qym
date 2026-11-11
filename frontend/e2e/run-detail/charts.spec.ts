@@ -1,6 +1,6 @@
 /** Charts are drawn at the measured column width: axis text and dots keep their size on wide screens. */
 import { test, expect } from '@playwright/test';
-import { openRun, seedClassic, seedProject, type Seeded } from './support';
+import { goToSection, openRun, seedClassic, seedProject, type Seeded } from './support';
 
 let s: Seeded;
 let classic: string;
@@ -16,10 +16,7 @@ for (const width of [1440, 1920]) {
   }) => {
     await page.setViewportSize({ width, height: 1000 });
     await openRun(page, s.slug, classic);
-    await page
-      .getByRole('navigation', { name: 'Run sections' })
-      .getByRole('link', { name: 'Latency' })
-      .click();
+    await goToSection(page, 'Latency');
     const scatter = page.getByRole('img', { name: /versus latency/ });
     await expect(scatter).toBeVisible();
     const sizes = await scatter.evaluate((svg) => {

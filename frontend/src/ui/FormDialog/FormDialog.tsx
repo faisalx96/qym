@@ -7,6 +7,7 @@ import { Select } from '../Select';
 import { TextField } from '../TextField';
 import { Textarea } from '../Textarea';
 import styles from './FormDialog.module.css';
+import { errorSentence, fieldErrorsOf } from '@/lib/http';
 
 export type FormValue = string | boolean;
 
@@ -74,6 +75,7 @@ function FormDialogInner({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inflight = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   function set(name: string, value: FormValue) {
     setValues((prev) => {
@@ -95,7 +97,13 @@ function FormDialogInner({
       if (custom) nextErrors[f.name] = custom;
     }
     setErrors(nextErrors);
-    if (Object.values(nextErrors).some(Boolean)) return;
+    if (Object.values(nextErrors).some(Boolean)) {
+      // C231: focus the first invalid field, so a screen reader announces its error (focus stayed on the button)
+      requestAnimationFrame(() =>
+        formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid] input')?.focus(),
+      );
+      return;
+    }
     inflight.current = true;
     setBusy(true);
     setFormError(null);
@@ -107,7 +115,13 @@ function FormDialogInner({
       }
       onOpenChange(false);
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : String(e));
+      // C181: a 422 lands on the field it concerns; anything else is one plain sentence
+      const byField = fieldErrorsOf(e);
+      const known = Object.fromEntries(
+        Object.entries(byField).filter(([k]) => fields.some((f) => f.name === k)),
+      );
+      if (Object.keys(known).length) setErrors(known);
+      else setFormError(errorSentence(e));
     } finally {
       inflight.current = false;
       setBusy(false);
@@ -133,6 +147,7 @@ function FormDialogInner({
       }
     >
       <form
+        ref={formRef}
         className={styles.form}
         onSubmit={(e) => {
           e.preventDefault();

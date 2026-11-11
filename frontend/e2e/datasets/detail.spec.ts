@@ -176,7 +176,7 @@ test.describe('detail: draft lifecycle', () => {
     await expect(add.getByText('Metadata is not valid JSON.')).toBeVisible();
   });
 
-  test('rename version from the overflow menu and rename dataset via the pencil', async ({
+  test('rename version from the overflow menu; the header has no rename pencil (C169)', async ({
     page,
     request,
   }) => {
@@ -184,11 +184,27 @@ test.describe('detail: draft lifecycle', () => {
     await draftWithItems(request, p.slug, d, 2);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
     await page.getByTestId('hero-more').click();
-    await page.getByRole('menuitem', { name: 'Name version…' }).click();
+    await page.getByRole('menuitem', { name: 'Name version' }).click();
     const dlg = page.getByRole('dialog', { name: 'Name v1' });
     await dlg.getByRole('textbox', { name: 'Name' }).fill('Q3 refresh');
     await dlg.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByTestId('version-switcher')).toContainText('Q3 refresh');
+    // Settings › General is the one place to rename the dataset
+    await expect(page.getByRole('button', { name: 'Rename dataset' })).toHaveCount(0);
+  });
+
+  test('the header holds the name, description, versions and actions only (C042, C116)', async ({
+    page,
+    request,
+  }) => {
+    const { p, d } = await seed(request, 'hdr');
+    await draftWithItems(request, p.slug, d, 2);
+    await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
+    await expect(page.getByTestId('meta-items')).toHaveCount(0);
+    await expect(page.getByText(/^source: /)).toHaveCount(0);
+    // one Add item and one Import, in the header
+    await expect(page.getByRole('button', { name: 'Add item' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Add new item' })).toHaveCount(0);
   });
 });
 
@@ -289,8 +305,8 @@ test.describe('detail: items table', () => {
     await expect(pane).toContainText('Unsaved changes');
     await box.press('Escape');
     const guard = page
-      .getByRole('dialog', { name: 'Unsaved changes' })
-      .or(page.getByRole('alertdialog', { name: 'Unsaved changes' }));
+      .getByRole('dialog', { name: 'Discard the unsaved changes?' })
+      .or(page.getByRole('alertdialog', { name: 'Discard the unsaved changes?' }));
     await expect(guard).toBeVisible();
     await guard.getByRole('button', { name: 'Keep editing' }).click();
     await expect(pane).toBeVisible();
@@ -435,7 +451,9 @@ test.describe('detail: items table', () => {
     await expect(pane).toHaveCount(0);
     await expect(page.getByRole('checkbox')).toHaveCount(0); // no bulk selection on published
 
+    // the row opens the pane (C142); the pane's Open page leads to the item page
     await page.locator('[data-item-link]').first().click();
+    await page.locator('[data-item-pane]').getByTestId('pane-open-page').click();
     await expect(page.locator('[data-item-page]')).toBeVisible();
     await expect(page.getByTestId('save-item')).toHaveCount(0);
     await expect(page.getByTestId('delete-item')).toHaveCount(0);

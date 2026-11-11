@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Chip, Tag } from '@/ui';
+import { Button, Chip, Tag, Icon } from '@/ui';
 import { TemporaryModelForm } from '@/features/environments/TemporaryModelForm';
 import { useLaunch } from '../LaunchContext';
 import {
@@ -117,8 +117,8 @@ export function SweepChips({ label, items, connections, onChange, onSingle }: Sw
           {items.length} model{items.length === 1 ? '' : 's'}
         </span>
         {!formOpen ? (
-          <Button variant="neutral" onPress={() => setFormOpen(true)}>
-            + Temporary model
+          <Button icon={<Icon name="plus" size={12} />} variant="neutral" onPress={() => setFormOpen(true)}>
+            Add temporary model
           </Button>
         ) : null}
         <span className={styles.spacer} />

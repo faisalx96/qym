@@ -1,7 +1,7 @@
 /** Cutover of test_root_cause_issue_javascript.py::test_item_level_chart_preserves_all_issues (run and compare share rowMeta). */
 import { describe, expect, it } from 'vitest';
 import { scopeRowToPass } from '../passScope';
-import { getRowRootCauseAnalyses, rootCauseIssues } from '../rowMeta';
+import { getRowRootCauseAnalyses, isRejectedIssue, rootCauseCategories, rootCauseIssues } from '../rowMeta';
 import type { Row } from '../../types';
 
 describe('the item-level root-cause chart keeps every issue', () => {
@@ -108,5 +108,58 @@ describe('pass diagnosis scoping', () => {
         }
       ).metric_analyses.accuracy.root_cause_issues[0]!.solution,
     ).toBe('Parent');
+  });
+});
+
+/** C007: the analysis-level reason belongs to the first issue only until the server gives it an ID. */
+describe('the analysis-level category reason', () => {
+  const top = 'Both issues come from the agent.';
+  const reasons = (issues: Record<string, unknown>[]) =>
+    rootCauseIssues({ root_cause_reason: top, root_cause_issues: issues }).map((i) => i.category_reason);
+
+  it('shows on a first issue that has no ID yet, as the server copies it', () => {
+    expect(reasons([{ category: 'A' }, { category: 'B' }])).toEqual([top, '']);
+  });
+
+  it('never replaces the reason of an issue that has an ID', () => {
+    // a sibling that moved up after a delete, a reason a reviewer cleared, and a saved reason
+    expect(reasons([{ issue_id: 'b', category: 'B' }])).toEqual(['']);
+    expect(reasons([{ issue_id: 'a', category: 'A', category_reason: '' }])).toEqual(['']);
+    expect(reasons([{ issue_id: 'a', category: 'A', category_reason: 'Own reason' }])).toEqual([
+      'Own reason',
+    ]);
+  });
+});
+
+describe('rejected issues are not root causes (C067)', () => {
+  const analysis = {
+    root_cause_issues: [
+      {
+        issue_id: 'a',
+        category: 'Knowledge Gap',
+        subcategory: 'Old refund policy',
+        review_status: 'rejected',
+      },
+      { issue_id: 'b', category: 'Knowledge Gap', subcategory: 'Missing doc', review_status: 'pending' },
+      { issue_id: 'c', category: 'Hallucination', review_status: 'rejected' },
+    ],
+  };
+
+  it('leave the categories (counts and filter), while the issue list keeps them', () => {
+    expect(rootCauseCategories(analysis)).toEqual(['Knowledge Gap']);
+    expect(rootCauseIssues(analysis, false).map((i) => i.issue_id)).toEqual(['a', 'b', 'c']);
+    expect(
+      isRejectedIssue({
+        category: 'x',
+        subcategory: '',
+        finding: '',
+        category_reason: '',
+        review_status: 'REJECTED',
+      }),
+    ).toBe(true);
+  });
+
+  it('an analysis whose issues are all rejected has no category', () => {
+    expect(rootCauseCategories({ root_cause_issues: [analysis.root_cause_issues[2]] })).toEqual([]);
   });
 });

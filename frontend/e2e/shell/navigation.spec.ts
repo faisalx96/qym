@@ -283,7 +283,7 @@ test.describe('archived project (§8.7 scenario 7)', () => {
     ).toBeVisible();
     await expect(page.locator('[data-topbar]').getByText('Read-only')).toHaveCount(0);
     await expect(
-      page.locator('[data-project-switcher]').getByText('archived', { exact: true }),
+      page.locator('[data-project-switcher]').getByText('Archived', { exact: true }),
     ).toBeVisible();
     await expect(page.locator('[data-nav="analysis"]')).toHaveCount(0);
     await expect(page.locator('[data-nav="reviews"]')).toHaveCount(0);
@@ -300,7 +300,7 @@ test.describe('archived project (§8.7 scenario 7)', () => {
     // the archived project is reachable from the switcher (with its tag) while on it
     await page.locator('[data-project-switcher]').click();
     await expect(
-      page.locator(`[data-switch-to="${p.slug}"]`).getByText('archived', { exact: true }),
+      page.locator(`[data-switch-to="${p.slug}"]`).getByText('Archived', { exact: true }),
     ).toBeVisible();
   });
 
@@ -372,7 +372,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: `/projects/${p.slug}`, expect: 'runs' },
       { path: `/projects/${p.slug}/overview`, expect: 'overview' },
       { path: `/projects/${p.slug}/charts`, expect: 'charts' },
-      { path: `/projects/${p.slug}/models`, expect: 'page' },
+      { path: `/projects/${p.slug}/models`, expect: 'charts' },
       { path: `/projects/${p.slug}/experiments`, expect: 'page' },
       { path: `/projects/${p.slug}/experiments/queue`, expect: 'page' },
       { path: `/projects/${p.slug}/experiments/exp-1`, expect: 'page' },

@@ -10,9 +10,16 @@
   border-inline-start: 2px solid transparent;
 }
 
-.score[data-band] {
+.score[data-band],
+.score[data-verdict] {
   color: var(--tone-text);
   border-color: var(--tone);
+}
+
+/* Plain: the number alone in its band colour (table cells); the number and the title are the non-colour cue. */
+.score[data-variant='plain'] {
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }
 
 /* Pill: the band as a tinted fill (12%), no bar; the number and the title stay the non-colour cue. */
@@ -25,7 +32,8 @@
   font-weight: 650;
 }
 
-.score[data-variant='pill'][data-band] {
+.score[data-variant='pill'][data-band],
+.score[data-variant='pill'][data-verdict] {
   background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
 }
 

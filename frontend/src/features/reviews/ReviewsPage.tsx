@@ -22,7 +22,8 @@ import {
   type ReviewFilters,
   type ReviewSort,
 } from '@/api/reviews';
-import { ApiError } from '@/lib/http';
+import { projectPath, ROUTES } from '@/app/routes';
+import { ApiError, actionErrorMessage } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useDocumentTitle } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
@@ -33,6 +34,7 @@ import {
   EmptyState,
   ErrorState,
   IconButton,
+  LinkButton,
   PageHeader,
   SearchField,
   Select,
@@ -44,7 +46,7 @@ import {
 } from '@/ui';
 import { ConflictDialog, CommentDialog, ShortcutsDialog } from './dialogs';
 import { DetailPane } from './DetailPane';
-import { FilterChips, FiltersPanel, FiltersToggle } from './FiltersPopover';
+import { FacetRow, SourceControl } from './FilterBar';
 import {
   applyFilterParams,
   bulkSelection,
@@ -109,10 +111,20 @@ export function ReviewsPage() {
     fetchCorrection(linkedId)
       .then((row) => {
         if (cancelled) return;
+        // an edited diagnosis has a new id: the link follows it to its current revision (C213)
+        if (row.id !== linkedId)
+          setParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.set('id', String(row.id));
+              return next;
+            },
+            { replace: true },
+          );
         setLinked(row);
         if (filters.status !== 'all' && filters.status !== row.status) setFilters({ status: row.status });
       })
-      .catch(() => toast.show(`Correction #${linkedId} could not be opened`, { tone: 'error' }));
+      .catch(() => toast.show(`Diagnosis #${linkedId} could not be opened`, { tone: 'error' }));
     return () => {
       cancelled = true;
     };
@@ -146,7 +158,6 @@ export function ReviewsPage() {
     | { kind: 'bulk-delete' }
   >(null);
   const [help, setHelp] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const decideMut = useDecide();
@@ -247,7 +258,7 @@ export function ReviewsPage() {
           { tone: 'success' },
         );
       } catch (e) {
-        toast.show(e instanceof ApiError ? e.detail || e.message : 'Action failed', { tone: 'error' });
+        toast.show(actionErrorMessage('update the review', e), { tone: 'error' });
         if (e instanceof ApiError && e.status === 409) invalidateCorrections(qc);
       } finally {
         inflight.current.delete(row.id);
@@ -262,20 +273,14 @@ export function ReviewsPage() {
     try {
       const updated = await editMut.mutateAsync({
         id: current.id,
-        body: {
-          human_root_cause_issues: issues,
-          human_root_causes: issues.map((i) => i.category),
-          human_root_cause: issues[0]?.category ?? '',
-          human_root_cause_detail: issues[0]?.finding ?? '',
-          human_root_cause_note: current.human_root_cause_note ?? '',
-        },
+        body: { human_root_cause_issues: issues },
       });
       applyUpdate(current, updated); // may carry a new id (new revision)
       setCurrentId(updated.id);
       setEditing(false);
       toast.show('Diagnosis saved', { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
+      toast.show(actionErrorMessage('save the diagnosis', e), { tone: 'error' });
     }
   }
 
@@ -285,9 +290,11 @@ export function ReviewsPage() {
       await deleteMut.mutateAsync(row.id);
       applyUpdate(row, { ...row, status: 'rejected' });
       if (currentId === row.id) moveTo(next);
-      toast.show(`Correction #${row.id} deleted (marked rejected)`, { tone: 'success' });
+      toast.show(`Diagnosis #${row.id} deleted: it left the run’s root causes and Reviews`, {
+        tone: 'success',
+      });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
+      toast.show(actionErrorMessage('delete the diagnosis', e), { tone: 'error' });
       throw e;
     }
   }
@@ -298,7 +305,9 @@ export function ReviewsPage() {
       toast.show(BULK_FITS[action].rule, { tone: 'error' });
       return;
     }
-    setDialog({ kind: 'bulk', action });
+    // C213: approve applies at once, as a single approve does; reject asks for its comment
+    if (action === 'approve') void runBulk('approve');
+    else setDialog({ kind: 'bulk', action });
   }
 
   async function runBulk(action: BulkAction, comment = '') {
@@ -326,15 +335,15 @@ export function ReviewsPage() {
       } else invalidateCorrections(qc);
       setSelected(new Set());
       toast.show(
-        `${r.affected ?? ids.length} correction${(r.affected ?? ids.length) === 1 ? '' : 's'} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reset' ? 'reset' : 'deleted'}`,
+        `${r.affected ?? ids.length} ${(r.affected ?? ids.length) === 1 ? 'diagnosis' : 'diagnoses'} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reset' ? 'reset' : 'deleted'}`,
         { tone: 'success' },
       );
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        setConflict(e.detail || 'The selected corrections changed.');
+        setConflict(e.detail || 'The selected diagnoses changed.');
         return;
       }
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Bulk action failed', { tone: 'error' });
+      toast.show(actionErrorMessage('update the selected diagnoses', e), { tone: 'error' });
       throw e;
     }
   }
@@ -372,7 +381,7 @@ export function ReviewsPage() {
       });
     },
     bulkApprove: () => {
-      if (!selected.size) toast.show('Select corrections with x first.', { tone: 'info' });
+      if (!selected.size) toast.show('Select diagnoses with x first.', { tone: 'info' });
       else openBulk('approve');
     },
     focusSearch: () => searchRef.current?.focus(),
@@ -402,16 +411,18 @@ export function ReviewsPage() {
   }, [loaded.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // ---- render --------------------------------------------------------------
-  const stats = first?.stats ?? { total: 0, pending: 0, approved: 0, rejected: 0 };
+  // C059: unknown counts (loading or failed) are not zero: the tabs show no count and the queue line shows '–'
+  const known = first?.stats ?? null;
+  const stats = known ?? { total: 0, pending: 0, approved: 0, rejected: 0 };
   const reviewed = stats.approved + stats.rejected;
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const approveFit = bulkSelection(rows, selected, 'approve');
   const resetFit = bulkSelection(rows, selected, 'reset');
   const statusItems = [
-    { id: 'pending', label: 'To review', count: stats.pending },
-    { id: 'approved', label: 'Approved', count: stats.approved },
-    { id: 'rejected', label: 'Rejected', count: stats.rejected },
-    { id: 'all', label: 'All', count: stats.total },
+    { id: 'pending', label: 'To review', count: known ? stats.pending : undefined },
+    { id: 'approved', label: 'Approved', count: known ? stats.approved : undefined },
+    { id: 'rejected', label: 'Rejected', count: known ? stats.rejected : undefined },
+    { id: 'all', label: 'All', count: known ? stats.total : undefined },
   ];
   const filtered = hasActiveFilters(filters);
 
@@ -419,13 +430,13 @@ export function ReviewsPage() {
     <div className={fullWidth} data-reviews-page>
       <PageHeader
         title="Reviews"
-        description="Validate corrections before they become examples for future auto-analysis."
+        description="Approve or reject root-cause diagnoses. Approved ones become examples for auto-analysis."
         meta={[
           <span key="q">
-            Queue: <strong>{stats.pending}</strong> to review
+            Queue: <strong>{known ? stats.pending : '–'}</strong> to review
           </span>,
           <span key="p" className={styles.progress}>
-            {reviewed} of {stats.total} reviewed
+            {known ? `${reviewed} of ${stats.total}` : '–'} reviewed
             <span
               className={styles.bar}
               role="progressbar"
@@ -454,17 +465,20 @@ export function ReviewsPage() {
               isSelected={allSelected}
               isIndeterminate={!allSelected && selected.size > 0}
               onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.id)) : new Set())}
-              aria-label="Select all visible corrections"
+              aria-label="Select all visible diagnoses"
               hideLabel
             />
             <SearchField
               ref={searchRef}
-              label="Search corrections"
-              placeholder="Search task, item, root cause…"
+              label="Search diagnoses"
+              placeholder="Search diagnoses"
+              hint="/"
               value={search}
               onChange={setSearch}
               width={260}
             />
+            <SourceControl filters={filters} onChange={setFilters} />
+            <span className={styles.grow} />
             <Select
               label="Sort"
               hideLabel
@@ -474,28 +488,20 @@ export function ReviewsPage() {
               searchable={false}
               width={170}
             />
-            <FiltersToggle filters={filters} open={filtersOpen} onToggle={() => setFiltersOpen((v) => !v)} />
-            <FilterChips filters={filters} onChange={setFilters} />
-            {filtered || filters.status !== 'pending' ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onPress={() => {
-                  setSearch('');
-                  setFilters(clearedFilters(filters));
-                }}
-                data-testid="clear-filters"
-              >
-                Clear filters
-              </Button>
-            ) : null}
-            <span className={styles.grow} />
             <Text as="span" variant="sm" tone="muted" aria-live="polite" data-testid="result-count">
-              {first ? `${first.total} correction${first.total === 1 ? '' : 's'}` : ''}
+              {first ? `${first.total} ${first.total === 1 ? 'diagnosis' : 'diagnoses'}` : ''}
             </Text>
             <IconButton label="Keyboard shortcuts" icon="info" onPress={() => setHelp(true)} />
           </div>
-          {filtersOpen ? <FiltersPanel filters={filters} facets={first} onChange={setFilters} /> : null}
+          <FacetRow
+            filters={filters}
+            facets={first}
+            onChange={setFilters}
+            onClear={() => {
+              setSearch('');
+              setFilters({ ...clearedFilters(filters), status: filters.status });
+            }}
+          />
           <div
             className={styles.bulk}
             role="region"
@@ -525,17 +531,18 @@ export function ReviewsPage() {
                 >
                   Reject{approveFit.skipped ? ` (${approveFit.ids.length} of ${approveFit.selected})` : ''}
                 </Button>
+                {resetFit.ids.length ? (
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onPress={() => void runBulk('reset')}
+                    data-testid="bulk-reset"
+                  >
+                    Reset{resetFit.skipped ? ` (${resetFit.ids.length} of ${resetFit.selected})` : ''}
+                  </Button>
+                ) : null}
                 <Button
-                  variant="neutral"
-                  size="sm"
-                  onPress={() => void runBulk('reset')}
-                  isDisabled={!resetFit.ids.length}
-                  data-testid="bulk-reset"
-                >
-                  Reset{resetFit.skipped ? ` (${resetFit.ids.length} of ${resetFit.selected})` : ''}
-                </Button>
-                <Button
-                  variant="ghost"
+                  variant="danger"
                   size="sm"
                   onPress={() => setDialog({ kind: 'bulk-delete' })}
                   data-testid="bulk-delete"
@@ -554,7 +561,7 @@ export function ReviewsPage() {
           </div>
 
           {showSkeleton ? (
-            <Skeleton kind="table" rows={7} label="Loading corrections" />
+            <Skeleton kind="table" rows={7} label="Loading diagnoses" />
           ) : list.isError ? (
             <ErrorState
               error={list.error}
@@ -565,29 +572,37 @@ export function ReviewsPage() {
             <EmptyState
               title={
                 filtered || filters.search
-                  ? 'No corrections match these filters'
+                  ? 'No diagnoses match these filters'
                   : filters.status === 'pending'
-                    ? 'Queue is empty'
+                    ? 'Nothing to review'
                     : 'Nothing here yet'
               }
-              body={filtered ? undefined : 'Corrections appear when reviewers change an AI diagnosis.'}
+              body={
+                filtered
+                  ? undefined
+                  : 'Diagnoses arrive when auto-analysis runs, or when someone adds a root cause on a run.'
+              }
               action={
                 filtered ? (
                   <Button
                     variant="neutral"
                     onPress={() => {
                       setSearch('');
-                      setFilters(clearedFilters(filters));
+                      setFilters({ ...clearedFilters(filters), status: filters.status });
                     }}
                   >
                     Clear filters
                   </Button>
-                ) : undefined
+                ) : (
+                  <LinkButton to={projectSlug ? projectPath(projectSlug) : ROUTES.projects} variant="neutral">
+                    Open runs
+                  </LinkButton>
+                )
               }
             />
           ) : first ? (
             <div className={styles.layout} data-has-pane={current ? '' : undefined}>
-              <ul className={styles.rows} aria-label="Corrections" aria-busy={list.isFetching || undefined}>
+              <ul className={styles.rows} aria-label="Diagnoses" aria-busy={list.isFetching || undefined}>
                 {rows.map((r) => (
                   <ReviewRow
                     key={r.id}
@@ -666,14 +681,15 @@ export function ReviewsPage() {
             focusRow(id);
           }
         }}
-        title="Reject correction"
+        title="Reject diagnosis"
         description={
           dialog?.kind === 'reject'
-            ? `Reject #${dialog.row.id} (${dialog.row.item_id}). A comment helps the author.`
+            ? `Reject #${dialog.row.id} (${dialog.row.item_id}). It stays on the run, marked wrong. Say why.`
             : ''
         }
         confirmLabel="Reject"
         tone="danger"
+        requireComment
         onConfirm={async (comment) => {
           if (dialog?.kind === 'reject') await decide(dialog.row, 'reject', comment);
         }}
@@ -683,10 +699,11 @@ export function ReviewsPage() {
         onOpenChange={(o) => !o && setDialog(null)}
         title={
           dialog?.kind === 'bulk'
-            ? `${dialog.action === 'approve' ? 'Approve' : 'Reject'} ${bulkSelection(rows, selected, dialog.action).ids.length} corrections`
+            ? `${dialog.action === 'approve' ? 'Approve' : 'Reject'} ${bulkSelection(rows, selected, dialog.action).ids.length} diagnoses`
             : ''
         }
-        description={`Applies to the selected corrections in ${describeView(filters)}.`}
+        description={`Applies to the selected diagnoses in ${describeView(filters)}.`}
+        requireComment={dialog?.kind === 'bulk' && dialog.action === 'reject'}
         confirmLabel={dialog?.kind === 'bulk' && dialog.action === 'reject' ? 'Reject' : 'Approve'}
         tone={dialog?.kind === 'bulk' && dialog.action === 'reject' ? 'danger' : 'primary'}
         onConfirm={async (comment) => {
@@ -696,8 +713,8 @@ export function ReviewsPage() {
       <ConfirmDialog
         open={dialog?.kind === 'delete'}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={dialog?.kind === 'delete' ? `Delete correction #${dialog.row.id}?` : ''}
-        description="It is marked rejected and its history is kept."
+        title={dialog?.kind === 'delete' ? `Delete diagnosis #${dialog.row.id}?` : ''}
+        description="It leaves the run’s root causes and Reviews; an audit record is kept. To keep it on the run as wrong, use Reject instead."
         confirmLabel="Delete"
         tone="danger"
         onConfirm={async () => {
@@ -707,8 +724,8 @@ export function ReviewsPage() {
       <ConfirmDialog
         open={dialog?.kind === 'bulk-delete'}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={`Delete ${selected.size} correction${selected.size === 1 ? '' : 's'}?`}
-        description="They are marked rejected and their history is kept."
+        title={`Delete ${selected.size} ${selected.size === 1 ? 'diagnosis' : 'diagnoses'}?`}
+        description="They leave the runs’ root causes and Reviews; an audit record is kept. To keep them on the runs as wrong, use Reject instead."
         confirmLabel="Delete"
         tone="danger"
         onConfirm={() => runBulk('delete')}

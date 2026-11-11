@@ -110,7 +110,7 @@ export function SettingsTab({
         tone: 'success',
       });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Could not change visibility', {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t change visibility', {
         tone: 'error',
       });
     }

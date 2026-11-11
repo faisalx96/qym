@@ -10,7 +10,7 @@ test.beforeAll(async () => {
 });
 test.use({ viewport: { width: 1440, height: 900 } });
 
-test('overview, models, settings and projects are as wide as the runs page at 1440px', async ({ page }) => {
+test('overview, settings and projects are as wide as the runs page at 1440px', async ({ page }) => {
   const width = async (path: string, selector: string) => {
     await gotoApp(page, path);
     const el = page.locator(selector).first();
@@ -22,7 +22,6 @@ test('overview, models, settings and projects are as wide as the runs page at 14
   expect(runs).toBeGreaterThan(1100);
   for (const [name, path, selector] of [
     ['overview', `/projects/${tour.slug}/overview`, '[data-testid="overview-page"]'],
-    ['models', `/projects/${tour.slug}/models`, '[data-models-page]'],
     ['settings', `/projects/${tour.slug}/settings`, '[data-settings-page]'],
     ['projects', '/', '[data-projects-page]'],
   ] as const) {

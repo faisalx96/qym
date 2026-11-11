@@ -121,7 +121,16 @@ export function rootCauseIssues(value: unknown, legacyFallback = true): RootCaus
           category_reason: String(issue.category_reason ?? issue.root_cause_reason ?? '').trim(),
         };
         (
-          ['issue_id', 'solution', 'solution_note', 'review_status', 'source', 'reviewed_at'] as const
+          [
+            'issue_id',
+            'solution',
+            'solution_note',
+            'review_status',
+            'source',
+            'reviewed_at',
+            'reviewed_by_name',
+            'review_comment',
+          ] as const
         ).forEach((key) => {
           if (Object.prototype.hasOwnProperty.call(issue, key)) normalized[key] = String(issue[key] ?? '');
         });
@@ -130,8 +139,11 @@ export function rootCauseIssues(value: unknown, legacyFallback = true): RootCaus
       })
       .filter((x): x is RootCauseIssue => !!x);
     if (issues.length) {
+      // The analysis-level reason belongs to the first issue until that issue has an ID: the
+      // server copies it then (fill_first_issue_reason), and after that the issue owns its reason.
       const topReason = String(v.root_cause_reason ?? '').trim();
-      if (!issues[0]!.category_reason && topReason) issues[0]!.category_reason = topReason;
+      if (!issues[0]!.category_reason && !issues[0]!.issue_id && topReason)
+        issues[0]!.category_reason = topReason;
       const rawTop = v.confidence ?? v.root_cause_confidence;
       const topConfidence = rawTop == null || rawTop === '' ? NaN : Number(rawTop);
       if (issues[0]!.confidence == null && Number.isFinite(topConfidence))
@@ -162,13 +174,18 @@ export function rootCauseIssues(value: unknown, legacyFallback = true): RootCaus
   }));
 }
 
+/** A rejected issue is not a root cause: it leaves the category counts and the filter (C067). */
+export function isRejectedIssue(issue: RootCauseIssue): boolean {
+  return String(issue.review_status ?? '').toLowerCase() === 'rejected';
+}
+
 export function rootCauseCategories(value: unknown): string[] {
   const hasCanonical =
     !!value &&
     typeof value === 'object' &&
     !Array.isArray(value) &&
     Array.isArray((value as MetricAnalysis).root_cause_issues);
-  const issues = rootCauseIssues(value, false);
+  const issues = rootCauseIssues(value, false).filter((issue) => !isRejectedIssue(issue));
   if (hasCanonical || issues.length) {
     const out: string[] = [];
     const seen = new Set<string>();

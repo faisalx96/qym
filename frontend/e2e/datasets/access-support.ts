@@ -127,6 +127,15 @@ export async function size(locator: Locator): Promise<{ w: number; h: number }> 
   return { w: box!.width, h: box!.height };
 }
 
+/** A Flag is an icon and a word: no pill, so no border and no fill. */
+export async function expectNoPill(locator: Locator): Promise<void> {
+  const look = await locator.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { border: cs.borderTopWidth, fill: cs.backgroundColor };
+  });
+  expect(look).toEqual({ border: '0px', fill: 'rgba(0, 0, 0, 0)' });
+}
+
 /** Whole-pixel-tenth comparison: a measured number is within 0.5 px of the spec's. */
 export function near(actual: number, expected: number, tolerance = 0.6): void {
   expect(Math.abs(actual - expected), `${actual} vs ${expected}`).toBeLessThanOrEqual(tolerance);

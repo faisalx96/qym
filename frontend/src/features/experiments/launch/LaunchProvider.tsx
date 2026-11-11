@@ -253,10 +253,7 @@ export function LaunchProvider({
   // member may launch on any dataset; the experiment's own token does the reading).
   const datasetsQuery = useLaunchDatasets(projectId);
   const datasets = datasetsQuery.data ?? null;
-  const datasetNames = useMemo(
-    () => (datasets ? datasets.map((d) => d.name) : null),
-    [datasets],
-  );
+  const datasetNames = useMemo(() => (datasets ? datasets.map((d) => d.name) : null), [datasets]);
   const envNames = useMemo(() => Object.fromEntries(envRecords.map((e) => [e.id, e.name])), [envRecords]);
   const taskLists = useEnvTaskLists(projectId, selectedEnvs);
   const taskListsKey = JSON.stringify(
@@ -409,7 +406,7 @@ export function LaunchProvider({
         try {
           return { type: 'best', res: await fetchBestRunBase(projectId, sel.envId, sel.runId, sel.metric) };
         } catch (error) {
-          return { type: 'failed', error: errorMessage(error) || 'Failed to load that run' };
+          return { type: 'failed', error: errorMessage(error) || 'Couldn’t load that run' };
         }
       }
       let list: Preset[];
@@ -420,7 +417,7 @@ export function LaunchProvider({
         });
         list = presets.presets;
       } catch (error) {
-        return { type: 'failed', error: errorMessage(error) || 'Failed to load the presets' };
+        return { type: 'failed', error: errorMessage(error) || 'Couldn’t load the presets' };
       }
       const name = envRecordsRef.current.find((e) => e.id === sel.envId)?.name ?? 'this environment';
       const preset =
@@ -439,10 +436,10 @@ export function LaunchProvider({
       }
       try {
         const res = await fetchPresetVersion(projectId, sel.envId, preset.id, preset.current_version.version);
-        if (!res.remap) return { type: 'failed', error: 'Failed to load the preset' };
+        if (!res.remap) return { type: 'failed', error: 'Couldn’t load the preset' };
         return { type: 'preset', preset, res };
       } catch (error) {
-        return { type: 'failed', error: errorMessage(error) || 'Failed to load the preset' };
+        return { type: 'failed', error: errorMessage(error) || 'Couldn’t load the preset' };
       }
     },
     [qc, projectId],
@@ -511,7 +508,7 @@ export function LaunchProvider({
             ...emptyBaseInfo(kind),
             loaded: false,
             envId: sel.envId ?? null,
-            error: errorMessage(error) || 'Failed to load the starting point',
+            error: errorMessage(error) || 'Couldn’t load the starting point',
           },
         }));
       }
@@ -587,7 +584,7 @@ export function LaunchProvider({
       await syncBase(gen);
     } catch (error) {
       if (alive.current)
-        toast.show(errorMessage(error) || 'Could not load the environments', { tone: 'error' });
+        toast.show(errorMessage(error) || 'Couldn’t load the environments', { tone: 'error' });
     }
   }, [buildCtxNow, setDoc, secrets, syncBase, toast]);
 
@@ -617,8 +614,8 @@ export function LaunchProvider({
           setup.promote ? fetchPromotePrefill(projectId, envId, setup.promote.kind, setup.promote.id) : null,
         ]);
         if (!alive.current) return;
-        if (curRes && !curRes.remap) throw new Error('Failed to load the current version');
-        if (fromRes && !fromRes.remap) throw new Error(`Failed to load v${setup.from}`);
+        if (curRes && !curRes.remap) throw new Error('Couldn’t load the current version');
+        if (fromRes && !fromRes.remap) throw new Error(`Couldn’t load v${setup.from}`);
         const draft = promoted?.config ?? fromRes?.remap?.config ?? null;
         const extras = Array.from(
           new Set([
@@ -668,7 +665,7 @@ export function LaunchProvider({
           baseKey,
         });
       } catch (error) {
-        fail(errorMessage(error) || 'Failed to load the default preset');
+        fail(errorMessage(error) || 'Couldn’t load the default preset');
       }
     },
     [qc, projectId, buildCtxNow, secrets],
@@ -708,7 +705,7 @@ export function LaunchProvider({
             };
             touchedRef.current = true;
           } catch (error) {
-            toast.show(errorMessage(error) || 'Could not load the experiment to clone', { tone: 'error' });
+            toast.show(errorMessage(error) || 'Couldn’t load the experiment to clone', { tone: 'error' });
           }
         }
         if (!patch.environmentIds) {
@@ -728,6 +725,18 @@ export function LaunchProvider({
               presetId: kind === 'saved' ? (params.get('preset') ?? undefined) : undefined,
             };
           }
+        }
+        // C130: 'Run experiment on v2' on a dataset page opens the form with that dataset and version chosen. It is the
+        // reader's choice, so a starting point loaded later keeps it (layering's dataset edit).
+        const datasetParam = params.get('dataset');
+        if (datasetParam && mode === 'launch' && !patch.dataset) {
+          const version = params.get('version');
+          patch.dataset = {
+            mode: 'project',
+            name: datasetParam,
+            ref: version ? `v:${version}` : '',
+            custom: '',
+          };
         }
         if (!alive.current) return;
         setDoc((d) => ({ ...d, ...patch }));
@@ -943,7 +952,7 @@ export function LaunchProvider({
         }
       }
     } catch (error) {
-      toast.show(errorMessage(error) || 'Failed to launch the experiment', { tone: 'error' });
+      toast.show(errorMessage(error) || 'Couldn’t launch the experiment', { tone: 'error' });
     } finally {
       launchingRef.current = false;
       if (alive.current) setLaunching(false);
@@ -973,12 +982,7 @@ export function LaunchProvider({
   const changeCount = diffCount(doc).total + evaluatorChangedCount(doc, ctx.evaluatorPanel);
   const hasChanges =
     changeCount > 0 ||
-    Boolean(
-      doc.name.trim() ||
-        doc.description.trim() ||
-        doc.priority ||
-        doc.latencySensitive,
-    );
+    Boolean(doc.name.trim() || doc.description.trim() || doc.priority || doc.latencySensitive);
   const hasChangesRef = useRef(hasChanges);
   useEffect(() => {
     hasChangesRef.current = hasChanges;

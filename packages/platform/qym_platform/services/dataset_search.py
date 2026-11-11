@@ -17,7 +17,6 @@ backfilled.
 from __future__ import annotations
 
 import json
-import unicodedata
 from typing import Any, Optional
 
 from sqlalchemy import String, and_, case, cast, func, literal, literal_column, or_
@@ -25,23 +24,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Query, Session
 
 from qym_platform.db.models import DatasetItem
+from qym_platform.services.text_search import LETTERS_FROM, LETTERS_TO, REMOVED, fold_arabic_letters
 
-# Fold alef variants and alef maqsura, and remove tatweel and Arabic marks.
-# Keep distinct letters such as ta marbuta and ha distinct.
-_ARABIC_MARKS = "".join(
-    chr(code)
-    for start, stop in ((0x0610, 0x0700), (0x08D3, 0x0900))
-    for code in range(start, stop)
-    if unicodedata.category(chr(code)).startswith("M")
-)
-_TRANSLATE_FROM = "أإآٱىـ" + _ARABIC_MARKS
-_TRANSLATE_TO = "ااااي"
-_TRANSLATION = str.maketrans(
-    {
-        char: _TRANSLATE_TO[i] if i < len(_TRANSLATE_TO) else None
-        for i, char in enumerate(_TRANSLATE_FROM)
-    }
-)
+# The Arabic fold (services/text_search.py): alef variants and alef maqsura
+# fold, tatweel and marks go, distinct letters such as ta marbuta stay. The SQL
+# translate() of the legacy predicate below uses the same two strings.
+_TRANSLATE_FROM = LETTERS_FROM + REMOVED
+_TRANSLATE_TO = LETTERS_TO
 # Searched columns, in the order their text is joined in ``search_text``.
 # Kinds: "text" (a plain column), "json" (a JSON value; null reads as ''),
 # "metadata" (JSON; a missing value reads as {} as in dataset_item_search_text).
@@ -54,7 +43,7 @@ _SEARCHED_COLUMNS = (
 
 
 def normalize_dataset_search(value: str) -> str:
-    return unicodedata.normalize("NFKC", value).translate(_TRANSLATION).lower()
+    return fold_arabic_letters(value)
 
 
 def _field_text(value: Any) -> str:

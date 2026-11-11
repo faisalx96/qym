@@ -8,7 +8,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { compareUrl, waitLoaded as waitCompareLoaded } from '../compare/support';
 import { PERCENT, seedCustomRun, type CustomItem } from './cutover-support';
-import { itemsCount, openRun, seedProject, type Seeded } from './support';
+import { goToSection, itemsCount, openRun, seedProject, type Seeded } from './support';
 
 let s: Seeded;
 
@@ -51,10 +51,7 @@ async function goCompare(page: Page, name: string) {
 
 /** Jump to a section of the run report through the sticky nav (sections are stacked, not tabs). */
 async function tab(page: Page, name: string) {
-  await page
-    .getByRole('navigation', { name: 'Run sections' })
-    .getByRole('link', { name: new RegExp(`^${name}`) })
-    .click();
+  await goToSection(page, new RegExp(`^${name}`));
 }
 
 test('run page: errors, root causes and categories vanish with the filtered data and return', async ({

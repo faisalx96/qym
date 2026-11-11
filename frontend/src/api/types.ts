@@ -1,6 +1,6 @@
 /** API payload types for the shell area (brief 01 §4). */
 export type GlobalRole = 'ADMIN' | 'MEMBER';
-export type ProjectRole = '' | 'MEMBER' | 'MANAGER';
+export type ProjectRole = '' | 'VIEWER' | 'MEMBER' | 'MANAGER';
 export type AuthType = 'api_key' | 'proxy_headers' | 'oidc' | 'local_password' | 'none' | string;
 
 export interface Project {
@@ -15,6 +15,8 @@ export interface Project {
   updated_at: string;
   correction_approvers: 'members' | 'managers';
   correction_require_different_reviewer: boolean;
+  /** Which way is better for metrics that declare no direction, saved per project and metric (C129). */
+  metric_directions?: Record<string, 'maximize' | 'minimize'>;
 }
 
 export interface Me {
@@ -49,7 +51,7 @@ export interface Member {
   user_id: string;
   email: string;
   display_name: string;
-  role: 'MEMBER' | 'MANAGER';
+  role: 'VIEWER' | 'MEMBER' | 'MANAGER';
   is_active: boolean;
   created_at: string;
   updated_at: string;

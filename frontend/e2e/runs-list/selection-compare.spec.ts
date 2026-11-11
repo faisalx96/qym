@@ -30,14 +30,14 @@ test.describe('runs list: selection and compare (J4)', () => {
     await page.keyboard.press('j');
     await page.keyboard.press('x');
     await expect(dataRows(page).first()).toHaveAttribute('data-selected', '');
-    await expect(selected(page)).toHaveText('1 execution selected');
+    await expect(selected(page)).toHaveText('1 run selected');
     await expect(page.getByRole('button', { name: 'Done selecting' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
     await page.keyboard.press('x');
     await expect(dataRows(page).first()).not.toHaveAttribute('data-selected', '');
-    await expect(selected(page)).toHaveText('0 executions selected');
+    await expect(selected(page)).toHaveText('0 runs selected');
     // Select button: leave select mode; checkboxes go away
     await page.getByRole('button', { name: 'Done selecting' }).click();
     await expect(page.getByRole('checkbox', { name: /^Select / })).toHaveCount(0);
@@ -54,7 +54,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await tick(page, (await first.innerText()).trim());
     await tick(page, (await second.innerText()).trim());
     const bar = page.getByTestId('selection-bar');
-    await expect(bar).toContainText('2 executions selected');
+    await expect(bar).toContainText('2 runs selected');
     expect((await bar.innerText()).match(/executions? selected/g)?.length).toBe(1);
     await expect(page.getByText(/executions? selected/)).toHaveCount(1);
     const boxes = await bar.locator('button, span').evaluateAll((els) =>
@@ -81,13 +81,13 @@ test.describe('runs list: selection and compare (J4)', () => {
     await expect(
       dataRows(page).evaluateAll((rows) => rows.filter((r) => r.hasAttribute('data-selected')).length),
     ).resolves.toBe(13);
-    await expect(selected(page)).toHaveText('15 executions selected'); // 13 rows, one of them x3
+    await expect(selected(page)).toHaveText('15 runs selected'); // 13 rows, one of them x3
     await clickBox(page.getByRole('checkbox', { name: 'Select all runs on this page' }));
-    await expect(selected(page)).toHaveText('0 executions selected');
+    await expect(selected(page)).toHaveText('0 runs selected');
     await tick(page, REPEAT);
-    await expect(selected(page)).toHaveText('3 executions selected');
+    await expect(selected(page)).toHaveText('3 runs selected');
     await tick(page, 'text2sql-gpt-4o-000');
-    await expect(selected(page)).toHaveText('4 executions selected');
+    await expect(selected(page)).toHaveText('4 runs selected');
   });
 
   test('c compares: /compare?runs=... and sessionStorage.compareRuns; repeat runs expand to pass refs', async ({
@@ -140,7 +140,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await expect(page).toHaveURL(/\/runs\//);
     await page.goBack();
     await expect(dataRows(page).first()).toBeVisible();
-    await expect(selected(page)).toHaveText('2 executions selected');
+    await expect(selected(page)).toHaveText('2 runs selected');
     await expect(rowOf(page, 'text2sql-gpt-4o-000')).toHaveAttribute('data-selected', '');
     await expect(rowOf(page, 'summarize-gpt-4o-001')).toHaveAttribute('data-selected', '');
     // another page and back (in-app link) keeps it as well
@@ -148,11 +148,11 @@ test.describe('runs list: selection and compare (J4)', () => {
     await expect(page).toHaveURL(/\/overview/);
     expect((await storedSelection(page, s.project.slug)).selected).toHaveLength(2);
     await page.getByRole('link', { name: 'Runs', exact: true }).first().click();
-    await expect(selected(page)).toHaveText('2 executions selected');
+    await expect(selected(page)).toHaveText('2 runs selected');
     // Escape clears the selection (and the stored copy) then leaves select mode
     await page.locator('body').click({ position: { x: 3, y: 3 } });
     await page.keyboard.press('Escape');
-    await expect(selected(page)).toHaveText('0 executions selected');
+    await expect(selected(page)).toHaveText('0 runs selected');
     expect(await storedSelection(page, s.project.slug)).toBeNull();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('selection-bar')).toHaveCount(0);
@@ -173,8 +173,8 @@ test.describe('runs list: selection and compare (J4)', () => {
       page.getByRole('status').filter({ hasText: 'Cohort A locked. Pick 2 executions for cohort B.' }),
     ).toBeVisible();
     // cohort mode: B counter, no Compare / Submit / Delete, Clear reads Cancel Cohort
-    await expect(bar).toContainText('Cohort B 0/2 executions');
-    await expect(bar).toContainText('Cohort A locked (2)');
+    await expect(bar).toContainText('Cohort A · 2 locked');
+    await expect(bar).toContainText('Cohort B · 0/2');
     await expect(bar.getByRole('button', { name: 'Compare' })).toHaveCount(0);
     await expect(bar.getByRole('button', { name: 'Submit' })).toHaveCount(0);
     await expect(bar.getByRole('button', { name: 'Delete' })).toHaveCount(0);
@@ -187,7 +187,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await expect(cohortBtn).toBeDisabled();
     // balanced but overlapping: add a run that is already in A
     await tick(page, 'text2sql-gpt-4o-000');
-    await expect(bar).toContainText('Cohort B 2/2 executions');
+    await expect(bar).toContainText('Cohort B · 2/2');
     await expect(bar).toContainText('cannot include runs already in Cohort A');
     await expect(cohortBtn).toBeDisabled();
     // too many on side B
@@ -214,7 +214,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await tick(page, 'text2sql-gpt-4o-000');
     await tick(page, 'summarize-gpt-4o-001');
     await page.getByTestId('selection-bar').getByRole('button', { name: 'Submit', exact: true }).click();
-    const dlg = page.getByRole('dialog', { name: 'Submit 2 runs for review' });
+    const dlg = page.getByRole('dialog', { name: 'Submit 2 runs for review?' });
     await expect(dlg).toBeVisible();
     const post = page.waitForRequest(
       (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/v1/runs/submit',
@@ -225,7 +225,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     expect(req.postDataJSON()).toMatchObject({ comment: 'please review' });
     expect(req.postDataJSON().run_ids).toHaveLength(2);
     await expect(page.getByRole('status').filter({ hasText: '2 runs submitted for review' })).toBeVisible();
-    await expect(selected(page)).toHaveText('0 executions selected');
+    await expect(selected(page)).toHaveText('0 runs selected');
     await expect
       .poll(async () => statusText(rowOf(page, 'text2sql-gpt-4o-000')), { timeout: 15_000 })
       .toMatch(/submitted/i);

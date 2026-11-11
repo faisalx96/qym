@@ -272,9 +272,9 @@ test.describe('hover audit', () => {
     await hoverChanges(full, 'Full value');
   });
 
-  test('the Export HTML link answers hover and press', async ({ page }) => {
+  test('the run header Actions button answers hover and press', async ({ page }) => {
     await gotoApp(page, runUrl(tour.slug, tour.runId));
-    const link = page.getByRole('link', { name: /Export HTML/ });
+    const link = page.getByTestId('run-actions');
     await expect(link).toBeVisible();
     const bg = () => link.evaluate((el) => getComputedStyle(el).backgroundColor);
     const rest = await bg();

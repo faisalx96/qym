@@ -1,0 +1,15 @@
+/* C129: one muted line under the Items bar, with the two direction buttons */
+.note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.buttons {
+  display: inline-flex;
+  gap: var(--space-xs);
+}

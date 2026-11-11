@@ -91,6 +91,43 @@ def test_keep_leaves_the_key_and_a_blank_key_is_refused(env):
     assert r.status_code == 422
 
 
+def test_a_new_host_needs_the_key_again_and_a_new_path_keeps_it(env):
+    """C004: the stored key stays bound to the host it was entered for."""
+    from qym_platform.db.feedback_models import FeedbackAgentConnection
+
+    env.client.put(
+        "/v1/admin/feedback-agent",
+        json={"llm_base_url": env.url, "llm_model": "m", "llm_api_key": SECRET},
+    )
+    with env.db() as db:
+        before = db.get(FeedbackAgentConnection, 1)
+        before = (before.llm_base_url, before.llm_api_key_encrypted)
+    moved = "https://attacker.example.com/v1"
+    for extra in ({"llm_api_key": "__KEEP__"}, {}):
+        r = env.client.put(
+            "/v1/admin/feedback-agent",
+            json={"llm_base_url": moved, "llm_model": "m", **extra},
+        )
+        assert r.status_code == 422 and r.json()["field"] == "llm_api_key", r.text
+        assert r.json()["detail"] == "Enter the API key again for the new host."
+    # The test route does not send the stored key to an unsaved host either.
+    t = env.client.post(
+        "/v1/admin/feedback-agent/test", json={"llm_base_url": moved, "llm_model": "m"}
+    )
+    assert t.status_code == 422 and t.json()["field"] == "llm_api_key"
+    with env.db() as db:
+        row = db.get(FeedbackAgentConnection, 1)
+        assert (row.llm_base_url, row.llm_api_key_encrypted) == before
+
+    same_host = env.url.rstrip("/") + "/other"
+    r = env.client.put(
+        "/v1/admin/feedback-agent",
+        json={"llm_base_url": same_host, "llm_model": "m", "llm_api_key": "__KEEP__"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["connection"]["llm_api_key_hint"] == "••••1234"
+
+
 def test_without_the_encryption_key_saving_a_key_is_400(env, monkeypatch):
     monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", "")
     r = env.client.put(

@@ -48,8 +48,14 @@ import {
   sortKeyOf,
   sortRows,
   suspendedPins,
+  fitColumnWidths,
+  DECLARED_WIDTH_TYPES,
+  DEFAULT_MIN_WIDTH,
+  FIT_MAX_WIDTH,
+  FIT_PAD,
   FLEX_MIN_WIDTH,
 } from './model';
+import { FoldCell } from './FoldCell';
 import { Footer, SelectionBar, Toolbar } from './parts';
 import { ScoreBar } from './cells';
 import { RelativeTime, DurationCell, NumberCell } from './cells';
@@ -93,6 +99,8 @@ export interface DataTableProps<R> {
   /** The page fixes the density; hides the density menu. */
   densityLocked?: boolean;
   zebra?: boolean | 'auto';
+  /** The row under the pointer lights its edge in the accent (round 10: the first qym's By pass table). */
+  hoverEdge?: boolean;
   variant?: 'card' | 'embedded';
   stickyHeader?: boolean;
   /**
@@ -105,6 +113,11 @@ export interface DataTableProps<R> {
   minWidth?: number;
   /** Header kebab menu (sort, pin, hide, autosize). Default on, off for embedded. */
   columnMenu?: boolean;
+  /**
+   * Draw the column `group` band above the header (default true). Off: the groups still label and order the
+   * Columns menu, but the header is one line.
+   */
+  groupBand?: boolean;
 
   /** true = skeleton rows; 'quiet' = empty body while a delayed skeleton has not appeared yet. */
   loading?: boolean | 'quiet';
@@ -131,6 +144,9 @@ export interface DataTableProps<R> {
   rowClassName?: (row: R) => string | undefined;
 
   selection?: SelectionConfig<R>;
+  /** Keep the select column in the table, 0px wide, while `selection` is off: turning select mode on then changes no
+   *  column set, so the table measures nothing (C020). */
+  reserveSelection?: boolean;
   bulkActions?: ReactNode;
   /** `bulkActions` already show their own count and Clear (the runs list counts executions). */
   bulkOwnSummary?: boolean;
@@ -177,6 +193,13 @@ export interface DataTableProps<R> {
   groupBy?: GroupByConfig<R>;
 
   responsive?: 'scroll' | 'cards';
+  /**
+   * Column widths. `content` (default): while the columns fit the scroller, each column is as wide as its content and
+   * the spare width is shared in proportion to it, so no single column takes all of it; when they do not fit (or the
+   * rows are windowed) the declared widths apply. `declared`: always the declared widths, the flex column takes the
+   * spare width. A width the user set by dragging always wins.
+   */
+  fit?: 'content' | 'declared';
 
   /**
    * Window the rows (spacer rows above and below). `true` or an object turns it on; by default it is on
@@ -204,12 +227,19 @@ export interface DataTableProps<R> {
   focusedKey?: Key | null;
   onFocusedKeyChange?: (key: Key | null) => void;
 
+  /**
+   * One Tab stop for the body (the grid pattern, runs list C089): the controls inside rows leave the Tab order; arrows
+   * and j/k move between rows, Enter opens, F2 moves focus into the focused row's controls (Tab then walks them) and
+   * Escape returns to the row. A 'Skip to pagination' button opens the body for keyboard users.
+   */
+  singleTabStop?: boolean;
+
   children?: ReactNode;
 }
 
 type TableEntry<R> = Extract<DisplayRow<R>, { kind: 'row' | 'child' }>;
 
-type PseudoColumn = Column<never> & { pseudo: 'select' | 'expand' | 'actions' };
+type PseudoColumn = Column<never> & { pseudo: 'select' | 'expand' | 'actions'; collapsed?: boolean };
 
 const OpenHref = createContext<(href: string) => void>((href) => window.location.assign(href));
 
@@ -235,6 +265,8 @@ function useMedia(query: string): boolean {
 }
 
 const VIRTUAL_AFTER = 200;
+/** Rows read for the content fit of a column set (C020): enough for a fair width, few enough for one cheap layout. */
+const FIT_SAMPLE_ROWS = 20;
 const ROW_PX: Record<Density, number> = { compact: 32, regular: 40, comfortable: 52 };
 /** First-guess height of a display row before it is measured: the density height, 45 for a full-width block. */
 const estimateHeight = (kind: DisplayRow<unknown>['kind'] | undefined, density: Density): number =>
@@ -243,6 +275,30 @@ const VIRTUAL_FALLBACK = 30;
 
 const INTERACTIVE =
   'a, button, input, label, select, textarea, [role="button"], [role="checkbox"], [role="menuitem"]';
+
+const TABBABLE = 'a[href], button, input, select, textarea, [tabindex]';
+
+/** singleTabStop: take a row's controls out of the Tab order (their own tabindex is kept to restore). */
+function lockRow(tr: HTMLElement): void {
+  for (const el of tr.querySelectorAll<HTMLElement>(TABBABLE)) {
+    if (el.hasAttribute('data-dt-locked') || el.getAttribute('tabindex') === '-1') continue;
+    el.setAttribute('data-dt-prev-tabindex', el.getAttribute('tabindex') ?? '');
+    el.setAttribute('data-dt-locked', '');
+    el.setAttribute('tabindex', '-1');
+  }
+}
+
+/** Put a locked row's controls back in the Tab order; returns the first of them. */
+function unlockRow(tr: HTMLElement): HTMLElement | null {
+  for (const el of tr.querySelectorAll<HTMLElement>('[data-dt-locked]')) {
+    const prev = el.getAttribute('data-dt-prev-tabindex');
+    if (prev) el.setAttribute('tabindex', prev);
+    else el.removeAttribute('tabindex');
+    el.removeAttribute('data-dt-locked');
+    el.removeAttribute('data-dt-prev-tabindex');
+  }
+  return tr.querySelector<HTMLElement>(`:is(${TABBABLE}):not([tabindex="-1"]):not([disabled])`);
+}
 
 interface DataCellProps<R> {
   col: Column<R>;
@@ -272,12 +328,16 @@ const DataCell = memo(function DataCell<R>({
   header,
 }: DataCellProps<R>) {
   const ctx: CellCtx = { index, density, card: false };
-  const content = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
+  const cellContent = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
+  const fold = pin === 'end' && col.foldLabel ? col.foldLabel(row) : null;
+  const content = fold !== null ? <FoldCell label={fold}>{cellContent}</FoldCell> : cellContent;
+  const menuFold = pin === 'end' && col.menuColumn === true;
   const sec = col.secondary?.(row);
   return (
     <td
       className={styles.td}
       data-col={col.id}
+      data-fold={fold !== null || menuFold ? '' : undefined}
       data-pin={pin ?? undefined}
       data-pin-edge={edge}
       style={{
@@ -356,6 +416,7 @@ function DataTableInner<R>({
   density: densityProp,
   densityLocked,
   zebra = 'auto',
+  hoverEdge = false,
   variant = 'card',
   stickyHeader = true,
   stickyParent,
@@ -363,6 +424,7 @@ function DataTableInner<R>({
   scrollCues = true,
   minWidth,
   columnMenu,
+  groupBand = true,
   loading,
   refreshing,
   error,
@@ -381,6 +443,7 @@ function DataTableInner<R>({
   rowProps,
   rowClassName,
   selection,
+  reserveSelection,
   bulkActions,
   bulkOwnSummary,
   bulkAlways,
@@ -402,6 +465,7 @@ function DataTableInner<R>({
   cardChildColumns,
   groupBy,
   responsive = 'cards',
+  fit = 'content',
   virtualize,
   scrollToKey,
   onScrolledToKey,
@@ -409,6 +473,7 @@ function DataTableInner<R>({
   onGroupCollapsedChange,
   focusedKey: focusedProp,
   onFocusedKeyChange,
+  singleTabStop = false,
   children,
   ...rest
 }: DataTableProps<R>) {
@@ -524,14 +589,17 @@ function DataTableInner<R>({
   /* columns incl. pseudo columns */
   const multi = Boolean(selection) && (selection?.mode ?? 'multiple') === 'multiple';
   const actionsOf = rowActions;
+  // reserved: the column stays (0px, empty) while selection is off, so select mode keeps the column set (C020)
+  const selectCol = multi || Boolean(reserveSelection && !selection);
   const leading: PseudoColumn[] = [];
-  if (multi)
+  if (selectCol)
     leading.push({
       id: '__select',
       pseudo: 'select',
-      width: 40,
+      width: multi ? 40 : 0,
       pin: 'start',
       resizable: false,
+      collapsed: !multi,
     } as PseudoColumn);
   if (renderExpanded && expandColumn)
     leading.push({
@@ -572,13 +640,19 @@ function DataTableInner<R>({
   const renderCols = useMemo(
     () => [...(leading as unknown as Column<R>[]), ...visible, ...(trailing as unknown as Column<R>[])],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visible, multi, hasExpander, hasActions],
+    [visible, multi, selectCol, hasExpander, hasActions],
   );
   const pseudoOf = (c: Column<R>) => (c as unknown as PseudoColumn).pseudo;
-  const hasBands = visible.some((c) => c.group);
+  const hasBands = groupBand && visible.some((c) => c.group);
   const tall = visible.some((c) => c.secondary || c.wrap);
   const cardMode =
     useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
+
+  /* content fit (the `fit` prop): natural width per column, measured below; widths are derived in render */
+  const fitAllowed = fit === 'content' && !virtual && !cardMode;
+  const [measuredFit, setNatural] = useState<Record<string, number> | null>(null);
+  // a table without the content fit (fit off, virtual rows, cards) ignores what was measured
+  const natural = fitAllowed ? measuredFit : null;
 
   /* pin offsets from measured header widths */
   const [measured, setMeasured] = useState<Record<string, number>>({});
@@ -600,7 +674,12 @@ function DataTableInner<R>({
       table.querySelectorAll<HTMLElement>('thead th[data-col]').forEach((th) => {
         next[th.dataset.col!] = th.getBoundingClientRect().width;
       });
-      const sw = scrollerRef.current?.clientWidth ?? 0;
+      // clientWidth rounds; at a fractional zoom (125%) columns fitted to the rounded width overflowed by a fraction of a
+      // pixel and showed a horizontal scrollbar (round 10), so fit to the floor of the real width.
+      const el = scrollerRef.current;
+      const sw = el
+        ? Math.max(0, Math.floor(el.getBoundingClientRect().width) - (el.offsetWidth - el.clientWidth))
+        : 0;
       setScrollerWidth((p) => (p === sw ? p : sw));
       setMeasured((prev) => {
         const keys = Object.keys(next);
@@ -616,8 +695,57 @@ function DataTableInner<R>({
     if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(measure);
     ro.observe(table);
+    // Fitted columns set the table's width, so a narrower scroller does not resize the table: watch the scroller too.
+    if (scrollerRef.current) ro.observe(scrollerRef.current);
     return () => ro.disconnect();
-  }, [colSig, model.widths, model.density]);
+    // `natural`: a content fit changes the column widths but not the table's, so the observer would not see it
+  }, [colSig, model.widths, model.density, natural]);
+
+  // Content widths in one pass: the cells go to max-content under `data-measure`, every width is read in one layout,
+  // the attribute is removed. Runs when the rows, the column set or the density change (not on scroll, not on
+  // resize: the widths scale from the stored content widths), and once more when the web fonts have loaded.
+  const [fontsTick, setFontsTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void document.fonts?.ready.then(() => live && setFontsTick((t) => t + 1));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const shown = scrollerWidth > 0;
+  // Measured once per column set and density, from the first FIT_SAMPLE_ROWS rows, and kept: search, sort, page and
+  // poll change the rows but never toggle `data-measure` (a full-table layout) or move a column (C020). A new column
+  // set or density measures afresh; the same set measured again (fonts loaded, first rows after an empty list) only
+  // widens.
+  const fitKey = `${colSig}\u0002${model.density}`;
+  const fitCache = useRef<{ key: string; fonts: number; widths: Record<string, number> } | null>(null);
+  const hasRows = rows.length > 0;
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    if (!fitAllowed) return;
+    const cached = fitCache.current?.key === fitKey ? fitCache.current : null;
+    if (cached && cached.fonts === fontsTick) {
+      setNatural((p) => (p === cached.widths ? p : cached.widths));
+      return;
+    }
+    if (loading || !shown || !table || !hasRows) {
+      setNatural((p) => (p === (cached?.widths ?? null) ? p : (cached?.widths ?? null)));
+      return;
+    }
+    table.setAttribute('data-measure', '');
+    const next: Record<string, number> = { ...(cached?.widths ?? {}) };
+    table
+      .querySelectorAll<HTMLElement>(
+        `tbody tr:nth-child(-n+${FIT_SAMPLE_ROWS}) td[data-col] > [data-cell], thead th[data-col] [data-th-label]:not([data-hidden])`,
+      )
+      .forEach((el) => {
+        const id = el.closest<HTMLElement>('[data-col]')?.dataset.col;
+        if (id) next[id] = Math.max(next[id] ?? 0, Math.ceil(el.scrollWidth));
+      });
+    table.removeAttribute('data-measure');
+    fitCache.current = { key: fitKey, fonts: fontsTick, widths: next };
+    setNatural(next);
+  }, [fitAllowed, loading, shown, fitKey, fontsTick, hasRows]);
   // Freeze cap: trailing frozen columns that would take more than `maxPinShare` of the scroller scroll instead.
   // Computed from the measured widths in the same render as the pin change (no second pass).
   const suspended = useMemo(() => {
@@ -694,7 +822,8 @@ function DataTableInner<R>({
       el.removeEventListener('scroll', flags);
       ro.disconnect();
     };
-  }, [renderCols, rows.length, cardMode]);
+    // The observer sees the table grow or shrink with its rows; only a new column set needs a fresh read (C020).
+  }, [colSig, cardMode]);
 
   /* mirrored horizontal scrollbar rail */
   const railRef = useRef<HTMLDivElement>(null);
@@ -850,6 +979,8 @@ function DataTableInner<R>({
 
   /* keyboard */
   const pendingNav = useRef<number | null>(null);
+  // singleTabStop: the row whose controls are in the Tab order after F2 (null: every row is locked)
+  const enteredRow = useRef<HTMLElement | null>(null);
   const rowEls = () => Array.from(bodyRef.current?.querySelectorAll<HTMLElement>('tr[data-row-id]') ?? []);
   const onBodyKeyDown = (e: ReactKeyboardEvent<HTMLTableSectionElement>) => {
     const tr = (e.target as HTMLElement).closest<HTMLElement>('tr[data-row-id]');
@@ -858,7 +989,18 @@ function DataTableInner<R>({
     if (inside) {
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (singleTabStop) lockRow(tr);
         tr.focus();
+      }
+      return;
+    }
+    if (singleTabStop && e.key === 'F2') {
+      // into the row: its controls join the Tab order until focus leaves the row (see the lock effect)
+      const first = unlockRow(tr);
+      if (first) {
+        e.preventDefault();
+        enteredRow.current = tr;
+        first.focus();
       }
       return;
     }
@@ -1213,7 +1355,31 @@ function DataTableInner<R>({
     const extra = Math.max(0, tableW - pinnedW - others);
     return { pinnedW, share: others > 0 ? extra / others : 0 };
   })();
+  /* content fit: the content width of every column the user has not sized, plus a proportional share of the spare
+     width; the frame columns (select, expand, actions) and dragged widths stay as they are */
+  const fitWidths = (() => {
+    if (!natural || !(scrollerWidth > 0) || (minWidth ?? 0) > scrollerWidth) return null;
+    let fixed = 0;
+    const want: { id: string; w: number; min?: number }[] = [];
+    for (const c of renderCols) {
+      const user = model.widths[c.id];
+      if (pseudoOf(c)) fixed += fixedWidth(c) ?? floorWidth(c);
+      else if (user !== undefined) fixed += Math.max(user, headMin(c));
+      else {
+        const content =
+          c.type && DECLARED_WIDTH_TYPES.has(c.type)
+            ? (c.width ?? FLEX_MIN_WIDTH)
+            : (natural[c.id] ?? 0) + FIT_PAD;
+        const floor = Math.max(c.minWidth ?? 0, headMin(c), DEFAULT_MIN_WIDTH);
+        const w = Math.max(floor, Math.min(content, c.maxWidth ?? FIT_MAX_WIDTH));
+        // a flex column may give width back (down to its floor) so the rest still fit their content
+        want.push(c.flex ? { id: c.id, w, min: floor } : { id: c.id, w });
+      }
+    }
+    return fitColumnWidths(want, scrollerWidth - fixed);
+  })();
   const widthStyle = (c: Column<R>) => {
+    if (fitWidths) return fitWidths[c.id] ?? fixedWidth(c);
     if (!capped) return fixedWidth(c);
     if (c.id === frozenFlex!.id) return capped.pinnedW;
     const w = floorWidth(c);
@@ -1283,6 +1449,7 @@ function DataTableInner<R>({
 
   const thFor = (col: Column<R>) => {
     const pseudo = (col as unknown as PseudoColumn).pseudo;
+    const collapsed = Boolean((col as unknown as PseudoColumn).collapsed);
     const pin = effectivePin(col, pins);
     const key = sortKeyOf(col);
     const canSort = !pseudo && key && sortable(col);
@@ -1310,10 +1477,13 @@ function DataTableInner<R>({
         data-col={col.id}
         data-align={align}
         data-pin={pin ?? undefined}
+        data-fold={pin === 'end' && (col.foldLabel || col.menuColumn) ? '' : undefined}
         data-pin-edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}
         data-sorted={active ? sort!.direction : undefined}
         data-sortable={canSort ? '' : undefined}
         data-pseudo={pseudo ?? undefined}
+        data-collapsed={collapsed ? '' : undefined}
+        aria-hidden={collapsed || undefined}
         data-band={hasBands ? '' : undefined}
         aria-sort={ariaSort}
         aria-label={pseudo === 'select' ? undefined : text}
@@ -1333,13 +1503,15 @@ function DataTableInner<R>({
         }
       >
         {pseudo === 'select' ? (
-          <Checkbox
-            aria-label={selectAllLabel}
-            hideLabel
-            isSelected={allSelected}
-            isIndeterminate={someSelected}
-            onChange={toggleAll}
-          />
+          collapsed ? null : (
+            <Checkbox
+              aria-label={selectAllLabel}
+              hideLabel
+              isSelected={allSelected}
+              isIndeterminate={someSelected}
+              onChange={toggleAll}
+            />
+          )
         ) : pseudo === 'expand' ? (
           <span className={styles.srOnly}>Expand</span>
         ) : (
@@ -1418,6 +1590,18 @@ function DataTableInner<R>({
       'data-pin-edge': col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined,
       style,
     } as const;
+    if (pseudo === 'select' && (col as unknown as PseudoColumn).collapsed) {
+      return (
+        <td
+          key={col.id}
+          {...common}
+          role="gridcell"
+          data-pseudo="select"
+          data-collapsed=""
+          aria-hidden="true"
+        />
+      );
+    }
     if (pseudo === 'select') {
       return (
         <td
@@ -1456,8 +1640,13 @@ function DataTableInner<R>({
     }
     if (pseudo === 'actions') {
       const acts = actionsOf?.(r) ?? [];
-      const primary = acts.filter((a) => a.primary).slice(0, 2);
-      const more = acts.filter((a) => !primary.includes(a));
+      const shown = acts.filter((a) => a.primary).slice(0, 2);
+      const rest = acts.filter((a) => !shown.includes(a));
+      // A ⋯ menu that would hold one action with a glyph (or a delete) hides it behind a click: show it as an icon
+      // (round 10). A lone action with no glyph stays in the menu, so an icon never stands for an unnamed action.
+      const lone = rest.length === 1 && (rest[0]!.icon || rest[0]!.danger) ? rest[0]! : null;
+      const primary = lone ? [...shown, lone] : shown;
+      const more = lone ? [] : rest;
       return (
         <td key={col.id} {...common} role="gridcell" data-pseudo="actions">
           <span className={styles.rowActions}>
@@ -1465,7 +1654,7 @@ function DataTableInner<R>({
               <Tooltip key={a.id} content={a.hint ?? a.label}>
                 <IconButton
                   label={a.label}
-                  icon={a.icon ?? 'more'}
+                  icon={a.icon ?? (a.danger ? 'trash' : 'more')}
                   tone={a.danger ? 'danger' : 'default'}
                   isDisabled={a.disabled}
                   onPress={() => a.onPress(r)}
@@ -1656,6 +1845,43 @@ function DataTableInner<R>({
 
   const progress = refreshing;
 
+  // singleTabStop: keep every control inside a body row out of the Tab order, except in the row entered with F2. A
+  // MutationObserver re-locks rows that mount or re-render (virtual windows, child rows, live updates).
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!singleTabStop || cardMode || !body) return undefined;
+    const lockAll = () => {
+      for (const tr of body.querySelectorAll<HTMLElement>('tr[data-row-id]'))
+        if (tr !== enteredRow.current) lockRow(tr);
+    };
+    lockAll();
+    let frame = 0;
+    const mo = new MutationObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(lockAll);
+    });
+    mo.observe(body, { childList: true, subtree: true });
+    const onOut = (e: FocusEvent) => {
+      const row = enteredRow.current;
+      if (row && !row.contains(e.relatedTarget as Node | null)) {
+        lockRow(row);
+        enteredRow.current = null;
+      }
+    };
+    body.addEventListener('focusout', onOut);
+    return () => {
+      mo.disconnect();
+      cancelAnimationFrame(frame);
+      body.removeEventListener('focusout', onOut);
+    };
+  });
+  const skipToPagination = () => {
+    const target = cardRef.current?.querySelector<HTMLElement>(
+      '[data-dt-footer] nav :is(input, select, button:not([disabled]))',
+    );
+    target?.focus();
+  };
+
   const spacer = (key: string, height: number) => (
     <tr key={`spacer-${key}`} className={styles.spacer} aria-hidden="true" data-spacer={key}>
       <td colSpan={colCount} style={{ height }} />
@@ -1673,7 +1899,8 @@ function DataTableInner<R>({
       data-sticky={stickyHeader && !embedded && !headParent ? '' : undefined}
       data-shift={stickyHeader && !embedded && headParent ? '' : undefined}
       data-tall={tall ? '' : undefined}
-      style={{ minWidth: Math.max(minWidth ?? 0, minTotal) || undefined }}
+      data-fit={fitWidths ? '' : undefined}
+      style={{ minWidth: fitWidths ? undefined : Math.max(minWidth ?? 0, minTotal) || undefined }}
     >
       <colgroup>
         {renderCols.map((c) => (
@@ -1748,6 +1975,7 @@ function DataTableInner<R>({
         data-variant={variant}
         data-density={model.density}
         data-zebra={zebraOn ? '' : undefined}
+        data-hover-edge={hoverEdge ? '' : undefined}
         data-testid="data-table"
       >
         <span className={styles.srOnly} aria-live="polite" data-dt-announce="">
@@ -1758,6 +1986,11 @@ function DataTableInner<R>({
         {otherKids}
         {banner}
         <div ref={hostRef} className={styles.bodyHost} data-cues={scrollCues ? '' : undefined}>
+          {singleTabStop && !cardMode && footerNode ? (
+            <button type="button" className={styles.skipLink} onClick={skipToPagination}>
+              Skip to pagination
+            </button>
+          ) : null}
           {progress ? <div className={styles.progress} role="progressbar" aria-label="Refreshing" /> : null}
           {cardMode ? (
             <CardList

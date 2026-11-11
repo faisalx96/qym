@@ -37,7 +37,7 @@ test.describe('queue header and paging', () => {
     expect(asked[0]!.get('sort')).toBe('oldest');
     expect(asked[0]!.get('limit')).toBe('25');
     await expect(rows(page).first()).toHaveAttribute('data-correction-row', String(s.corrections[4]!.id));
-    await expect(page.getByTestId('result-count')).toHaveText('26 corrections');
+    await expect(page.getByTestId('result-count')).toHaveText('26 diagnoses');
   });
 });
 
@@ -55,14 +55,14 @@ test.describe('racing and failing loads', () => {
     });
     await gotoApp(page, `/projects/${a.project.slug}/reviews`);
     await expect(rows(page)).toHaveCount(5);
-    const search = page.getByRole('searchbox', { name: 'Search corrections' });
+    const search = page.getByRole('searchbox', { name: 'Search diagnoses' });
     await search.fill('text2sql');
     await page.waitForTimeout(600); // past the debounce: the slow request is in flight
     await search.fill('router');
     await expect(rows(page)).toHaveCount(2);
     await page.waitForTimeout(2000); // the slow response has now landed
     await expect(rows(page)).toHaveCount(2);
-    await expect(page.getByTestId('result-count')).toHaveText('2 corrections');
+    await expect(page.getByTestId('result-count')).toHaveText('2 diagnoses');
     for (const text of await rows(page).allInnerTexts()) expect(text).toContain('router');
   });
 
@@ -75,12 +75,12 @@ test.describe('racing and failing loads', () => {
       if (failing) await route.fulfill({ status: 500, json: { detail: 'boom' } });
       else await route.continue();
     });
-    await page.getByRole('searchbox', { name: 'Search corrections' }).fill('nothing');
+    await page.getByRole('searchbox', { name: 'Search diagnoses' }).fill('nothing');
     await expect(page.getByText('Couldn’t load the review queue')).toBeVisible({ timeout: 20_000 }); // react-query retries first
     await expect(rows(page)).toHaveCount(0);
     failing = false;
     await page.getByRole('button', { name: 'Retry' }).click();
-    await expect(page.getByText('No corrections match these filters')).toBeVisible();
+    await expect(page.getByText('No diagnoses match these filters')).toBeVisible();
     await expect(page.getByText('Couldn’t load the review queue')).toHaveCount(0);
   });
 
@@ -98,11 +98,11 @@ test.describe('racing and failing loads', () => {
     await expect(rows(page)).toHaveCount(4);
     const gone = rows(page).filter({ hasText: 'text2sql' }).first();
     const goneId = Number(await gone.getAttribute('data-correction-row'));
-    await page.getByRole('checkbox', { name: `Select correction ${goneId}` }).check({ force: true });
+    await page.getByRole('checkbox', { name: `Select diagnosis ${goneId}` }).check({ force: true });
     await expect(bulk(page)).toContainText('1 selected');
-    await page.getByRole('searchbox', { name: 'Search corrections' }).fill('router');
+    await page.getByRole('searchbox', { name: 'Search diagnoses' }).fill('router');
     // while the new filter loads, the old list is not offered for ticking
-    await expect(page.getByRole('checkbox', { name: `Select correction ${goneId}` })).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: `Select diagnosis ${goneId}` })).toHaveCount(0);
     await expect(rows(page)).toHaveCount(2);
     await expect(row(page, goneId)).toHaveCount(0);
     await expect(bulk(page)).not.toContainText('selected');
@@ -141,7 +141,7 @@ test.describe('keyboard and focus', () => {
     const [c0, c1] = s.corrections;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
     await expect(rows(page)).toHaveCount(4);
-    await page.getByRole('button', { name: `Approve correction ${c0!.id}` }).click();
+    await page.getByRole('button', { name: `Approve diagnosis ${c0!.id}` }).click();
     await expect(row(page, c0!.id)).toHaveCount(0);
     await expect(row(page, c1!.id)).toHaveAttribute('data-current', '');
     await expect(row(page, c1!.id).locator('[data-review-card]')).toBeFocused();
@@ -200,7 +200,7 @@ test.describe('All-tab bulk actions act only on the rows they fit', () => {
     await allTab(page, s.project.slug);
     await expect(rows(page)).toHaveCount(5);
     for (const c of s.corrections)
-      await page.getByRole('checkbox', { name: `Select correction ${c.id}` }).check({ force: true });
+      await page.getByRole('checkbox', { name: `Select diagnosis ${c.id}` }).check({ force: true });
     await expect(bulk(page)).toContainText('5 selected');
     await expect(page.getByTestId('bulk-approve')).toContainText('Approve (2 of 5)');
     await expect(page.getByTestId('bulk-reset')).toContainText('Reset (3 of 5)');
@@ -210,11 +210,9 @@ test.describe('All-tab bulk actions act only on the rows they fit', () => {
       if (r.method() === 'POST' && new URL(r.url()).pathname === '/api/corrections/bulk')
         sent.push(r.postDataJSON());
     });
+    // bulk approve applies at once, as a single approve does (C213)
     await page.getByTestId('bulk-approve').click();
-    const dialog = page.getByRole('dialog', { name: 'Approve 2 corrections' });
-    await expect(dialog).toBeVisible();
-    await dialog.getByTestId('comment-confirm').click();
-    await expect(page.getByText('2 corrections approved')).toBeVisible();
+    await expect(page.getByText('2 diagnoses approved')).toBeVisible();
     expect(sent).toHaveLength(1);
     expect([...sent[0]!.ids].sort()).toEqual(pending.map((c) => c.id).sort());
     expect(sent[0]!.action).toBe('approve');
@@ -234,7 +232,7 @@ test.describe('All-tab bulk actions act only on the rows they fit', () => {
     await allTab(page, s.project.slug);
     await expect(rows(page)).toHaveCount(3);
     for (const c of approved)
-      await page.getByRole('checkbox', { name: `Select correction ${c.id}` }).check({ force: true });
+      await page.getByRole('checkbox', { name: `Select diagnosis ${c.id}` }).check({ force: true });
     await expect(page.getByTestId('bulk-approve')).toBeDisabled();
     await expect(page.getByTestId('bulk-reject')).toBeDisabled();
     const sent: string[] = [];

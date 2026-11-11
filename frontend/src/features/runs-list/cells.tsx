@@ -1,21 +1,24 @@
 /** Cell renderers for the runs table (brief 03 §3 "Runs table"). */
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button as AriaButton } from 'react-aria-components';
-import type { RunRow } from '@/api/dashboardTypes';
+import type { RunPass, RunRow } from '@/api/dashboardTypes';
 import {
-  Badge,
-  DropdownMenu,
+  ActionTile,
   HelpMarker,
   Icon,
   IconButton,
+  RowMenu,
   RunStatusBadge,
-  ScoreBar,
+  ScoreValue,
   DatasetTag,
   ModelTag,
   RunName,
   Tag,
   Tooltip,
+  UserName,
+  useRowArmed,
+  type MenuItemSpec,
 } from '@/ui';
 import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
 import { errorsLeftOut, formatPercent, metricDirection } from '@/lib/metrics';
@@ -24,7 +27,7 @@ import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
 import { DatasetCountTag } from '@/features/run-detail/components/DatasetChip';
-import { AnalyzeAction } from './AnalyzeAction';
+import { AnalysisSpark, AnalyzeAction, analyzeState } from './AnalyzeAction';
 import { useRunsCtx } from './context';
 import { modelKeyOf, modelShape, modelSlot, plainModelName, smartDigits, STATUS_LABEL } from './model';
 import { isActiveRun, isStoppingRun } from './polling';
@@ -63,30 +66,9 @@ export function ModelCell({ row }: { row: RunRow }) {
   );
 }
 
-/** Series hue 1..8 from the owner id: the same person is the same colour on every row. */
-export function ownerSeries(id: string | undefined): number | undefined {
-  if (!id) return undefined;
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return (h % 8) + 1;
-}
-
+/** The run owner: the shared person recipe (initials disc in the person's colour, then the name). */
 export function OwnerCell({ row }: { row: RunRow }) {
-  const name = row.owner?.display_name || row.owner?.email || '—';
-  const initials = name
-    .split(/\s+/)
-    .map((p) => p[0] ?? '')
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-  return (
-    <span className={styles.owner} title={row.owner?.email}>
-      <span className={styles.avatar} data-series={ownerSeries(row.owner?.id)} aria-hidden="true">
-        {initials}
-      </span>
-      <span className={styles.ownerName}>{name}</span>
-    </span>
-  );
+  return <UserName id={row.owner?.id} name={row.owner?.display_name} email={row.owner?.email} />;
 }
 
 export function DatasetCell({ row }: { row: RunRow }) {
@@ -112,10 +94,11 @@ export function VersionCell({ row }: { row: RunRow }) {
   );
 }
 
+/** Sans with tabular figures (round 10, as the first qym list): the mono face spread the date and time apart. */
 export function DateCell({ row }: { row: RunRow }) {
   const d = formatDateParts(row.timestamp);
   return (
-    <time className={styles.mono} dateTime={row.timestamp} title={d.full}>
+    <time className={styles.date} dateTime={row.timestamp} title={d.full}>
       {d.date} · {d.time}
     </time>
   );
@@ -131,8 +114,21 @@ function statusTitle(row: RunRow, stopping: boolean): string {
   return row.status;
 }
 
-/** Status badge with live suffixes (pass j/k, percent, done/total). */
+/** Status badge with live suffixes (pass j/k, percent, done/total), then the run's signals (C028). */
 export function StatusCell({ row }: { row: RunRow }) {
+  const items = signalItems(row);
+  const { slug, listContext } = useRunsCtx();
+  return (
+    <span className={styles.statusRow}>
+      <StatusBadge row={row} />
+      {items.length ? (
+        <SignalMarkers items={items} href={`${runHref(runPath(slug, row.run_id), listContext)}#errors`} />
+      ) : null}
+    </span>
+  );
+}
+
+function StatusBadge({ row }: { row: RunRow }) {
   const stopping = isStoppingRun(row);
   const status = stopping ? 'STOPPING' : row.status;
   const live = isActiveRun(row);
@@ -220,25 +216,66 @@ export function signalItems(row: RunRow): SignalItem[] {
   return items;
 }
 
-/** ⚠ task errors, ⚠ metric errors, ↻ retries, ingest marker; each is a focusable button with a tooltip and opens the details dialog. */
-export function Signals({ row, onDetails }: { row: RunRow; onDetails?: (row: RunRow) => void }) {
-  const items = signalItems(row);
-  if (!items.length) return <span className={styles.empty}>—</span>;
+/** The signals of a pass, drawn by the same markers as a run's (one Signals component for run and pass rows, C115). */
+export function passSignalItems(
+  p: Pick<RunPass, 'task_error_count' | 'metric_error_count' | 'retry_count' | 'error_count'>,
+): SignalItem[] {
+  const metric = p.metric_error_count ?? 0;
+  const task = p.task_error_count || (p.error_count && !metric ? p.error_count : 0);
+  const retries = p.retry_count ?? 0;
+  const items: SignalItem[] = [];
+  if (task)
+    items.push({
+      key: 'task',
+      glyph: '⚠',
+      tone: 'error',
+      count: task,
+      text: `${task} task error${task > 1 ? 's' : ''} in this pass`,
+    });
+  if (metric)
+    items.push({
+      key: 'metric',
+      glyph: '⚠',
+      tone: 'metric',
+      count: metric,
+      text: `${metric} metric error${metric > 1 ? 's' : ''} in this pass`,
+    });
+  if (retries)
+    items.push({
+      key: 'retry',
+      glyph: '↻',
+      tone: 'info',
+      count: retries,
+      text: `${retries} retr${retries === 1 ? 'y' : 'ies'} in this pass`,
+    });
+  return items;
+}
+
+/**
+ * ⚠ task errors (red), ⚠ metric errors (yellow), ↻ retries (blue), ◌ incomplete data (amber), each with its count and
+ * today's colour, no threshold (owner, Nov 1). Each marker links to the run's (or pass's) Errors section, with no
+ * dialog (C115).
+ */
+export function SignalMarkers({ items, href }: { items: SignalItem[]; href: string }) {
+  // Lean rows (C020): the tooltips mount when the row is first hovered or focused; the links are there from the start.
+  const { armed, ref } = useRowArmed<HTMLSpanElement>();
   return (
-    <span className={styles.signals}>
-      {items.map((it) => (
-        <Tooltip key={it.key} content={it.text}>
-          <AriaButton
-            className={styles.signal}
-            data-tone={it.tone}
-            aria-label={it.text}
-            onPress={() => onDetails?.(row)}
-          >
+    <span className={styles.signals} ref={ref}>
+      {items.map((it) => {
+        const link = (
+          <Link className={styles.signal} data-tone={it.tone} aria-label={it.text} to={href}>
             {it.count ? <span className={styles.mono}>{it.count}</span> : null}
             <span aria-hidden="true">{it.glyph}</span>
-          </AriaButton>
-        </Tooltip>
-      ))}
+          </Link>
+        );
+        return armed ? (
+          <Tooltip key={it.key} content={it.text}>
+            {link}
+          </Tooltip>
+        ) : (
+          <Fragment key={it.key}>{link}</Fragment>
+        );
+      })}
     </span>
   );
 }
@@ -331,7 +368,8 @@ export function MetricCell({
           : undefined
       }
     >
-      <ScoreBar
+      <ScoreValue
+        variant="plain"
         value={v}
         type={type}
         direction={dir}
@@ -416,9 +454,11 @@ export function RunNameCell({
   );
 }
 
+/** 'N causes' or 'Analyzing' only (C133): starting an analysis is the first item of the row menu. */
 export function AnalysisCell({ row }: { row: RunRow }) {
   const { slug, analyzing } = useRunsCtx();
-  if (isActiveRun(row)) return <span className={styles.empty}>—</span>;
+  const state = analyzeState(row.analysis_cause_count ?? 0, analyzing?.has(row.run_id) ?? false);
+  if (isActiveRun(row) || state === 'idle') return <span className={styles.empty}>—</span>;
   return (
     <AnalyzeAction
       to={`${runPath(slug, row.run_id)}/analyzer`}
@@ -450,6 +490,54 @@ export interface RowPermissions {
   meId: string;
 }
 
+/**
+ * Every action of a run row, in one menu behind the row's handle (owner decision, Nov 1). Each item carries its tile, so
+ * the menu keeps the row's iconography: Open auto-analysis (purple sparkle) first, Submit (send), the review items
+ * (Approve, Reject, Unapprove, Unreject, Transfer ownership on the review menu's file tile), then Delete (red trash).
+ */
+export function rowMenuItems(row: RunRow, perm: RowPermissions): MenuItemSpec[] {
+  const items: MenuItemSpec[] = [];
+  // a live run has nothing to analyse yet
+  if (!isActiveRun(row))
+    items.push({
+      id: 'analyze',
+      label: 'Open auto-analysis',
+      icon: <ActionTile tone="meta" icon={<AnalysisSpark filled={false} />} />,
+      tone: 'meta',
+    });
+  if (perm.readOnly) return items;
+  const isOwner = row.owner?.id === perm.meId;
+  if ((isOwner || perm.canManage) && ['COMPLETED', 'FAILED', 'REJECTED'].includes(row.status))
+    items.push({
+      id: 'submit',
+      label: 'Submit',
+      icon: <ActionTile icon="send" />,
+      description:
+        !isOwner && row.owner ? `On behalf of ${row.owner.display_name || row.owner.email}` : undefined,
+    });
+  if (perm.canManage) {
+    if (row.status === 'SUBMITTED')
+      items.push(
+        { id: 'approve', label: 'Approve', icon: <ActionTile icon="check" /> },
+        { id: 'reject', label: 'Reject', icon: <ActionTile tone="danger" icon="close" />, tone: 'danger' },
+      );
+    if (row.status === 'APPROVED')
+      items.push({ id: 'unapprove', label: 'Unapprove', icon: <ActionTile icon="retry" /> });
+    if (row.status === 'REJECTED')
+      items.push({ id: 'unreject', label: 'Unreject', icon: <ActionTile icon="retry" /> });
+    items.push({ id: 'transfer', label: 'Transfer ownership', icon: <ActionTile icon="file" /> });
+  }
+  if (perm.isAdmin || perm.canManage || isOwner)
+    items.push({
+      id: 'delete',
+      label: 'Delete',
+      icon: <ActionTile tone="danger" icon="trash" />,
+      tone: 'danger',
+      separatorBefore: items.length > 0,
+    });
+  return items;
+}
+
 export function RowActions({
   row,
   perm,
@@ -459,49 +547,13 @@ export function RowActions({
   perm: RowPermissions;
   onAction: (id: string, row: RunRow) => void;
 }) {
-  if (perm.readOnly) return <span className={styles.empty}>—</span>;
-  const isOwner = row.owner?.id === perm.meId;
-  const items = [];
-  if (perm.canManage) {
-    if (row.status === 'SUBMITTED')
-      items.push(
-        { id: 'approve', label: 'Approve' },
-        { id: 'reject', label: 'Reject', tone: 'danger' as const },
-      );
-    if (row.status === 'APPROVED') items.push({ id: 'unapprove', label: 'Unapprove' });
-    if (row.status === 'REJECTED') items.push({ id: 'unreject', label: 'Unreject' });
-    items.push({ id: 'transfer', label: 'Transfer ownership…', separatorBefore: items.length > 0 });
-  }
-  const canSubmit = (isOwner || perm.canManage) && ['COMPLETED', 'FAILED', 'REJECTED'].includes(row.status);
-  const canDelete = perm.isAdmin || perm.canManage || isOwner;
-  const name = row.external_run_id || row.run_name;
+  const name = row.external_run_id || row.run_name || row.run_id.slice(0, 8);
   return (
-    <span className={styles.actions}>
-      {canSubmit ? (
-        <IconButton
-          label={`Submit ${name} for review${!isOwner && row.owner ? ` on behalf of ${row.owner.display_name || row.owner.email}` : ''}`}
-          icon="check"
-          tone="approve"
-          onPress={() => onAction('submit', row)}
-        />
-      ) : null}
-      {canDelete ? (
-        <IconButton
-          label={`Delete ${name}`}
-          icon="trash"
-          tone="danger"
-          onPress={() => onAction('delete', row)}
-        />
-      ) : null}
-      {items.length ? (
-        <DropdownMenu
-          label={`More actions for ${name}`}
-          trigger={<IconButton label={`More actions for ${name}`} icon="more" />}
-          items={items}
-          onAction={(id) => onAction(id, row)}
-        />
-      ) : null}
-    </span>
+    <RowMenu
+      label={`Actions for ${name}`}
+      items={rowMenuItems(row, perm)}
+      onAction={(id) => onAction(id, row)}
+    />
   );
 }
 
@@ -514,5 +566,12 @@ export function DurationCell({ ms }: { ms: number | null | undefined }) {
 }
 
 export function OriginBadge({ origin }: { origin: string }) {
-  return origin === 'official' ? <Badge tone="info">official</Badge> : <Badge tone="neutral">local</Badge>;
+  // a category, not a status: a Tag (official in the info tone)
+  return origin === 'official' ? (
+    <Tag kind="origin" tone="info">
+      official
+    </Tag>
+  ) : (
+    <Tag kind="origin">local</Tag>
+  );
 }

@@ -1,15 +1,16 @@
 /**
- * Project settings -> Environments tab: the list with "+ Add environment". A row opens the one environment
- * page (`/projects/:slug/environments/:id?from=settings`, whose back link returns here). The legacy deep link
- * `?tab=environments&env=<id>[&promote=run|job&id=<id>]` redirects there; with `promote` it goes straight to the
- * default-preset editor.
+ * Project settings -> Environments tab: the list with "Add environment" on the card's title row. A row opens the
+ * one environment page (`/projects/:slug/environments/:id?from=settings`, whose back link returns here). The legacy
+ * deep link `?tab=environments&env=<id>[&promote=run|job&id=<id>]` redirects there; with `promote` it goes straight
+ * to the default-preset editor.
  */
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/features/shell';
 import { defaultPresetEditPath, environmentPath } from '@/features/experiments/paths';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Button, Text } from '@/ui';
+import { Button, Icon } from '@/ui';
+import { SettingsCard } from '@/features/shell/settings/SettingsCard';
 import { projectPath } from '@/app/routes';
 import { AddEnvironmentDialog } from './AddEnvironmentDialog';
 import { EnvironmentsList } from './EnvironmentsList';
@@ -38,36 +39,38 @@ export function EnvironmentsPanel() {
   if (envId && !handingOff) return <Navigate replace to={fromSettings(envId)} />;
 
   return (
-    <div className={styles.body} data-environments-panel>
-      <div className={styles.sectionHead}>
-        <Text variant="base" tone="muted">
-          {canManage
-            ? 'Register Evaluation Service deployments; experiments launch jobs on them.'
-            : 'Only project managers and admins can add or change environments.'}
-        </Text>
-        {canAdd ? (
-          <Button variant="primary" size="md" onPress={() => setAdding(true)}>
-            + Add environment
-          </Button>
-        ) : null}
-      </div>
-      <EnvironmentsList
-        projectId={project.id}
-        slug={slug}
-        canManage={canManage}
-        readOnly={readOnly}
-        rowHref={(env) => fromSettings(env.id)}
-        onAdd={() => setAdding(true)}
-      />
+    <div className={styles.body}>
+      {/* One Add button, on the card's title row; the empty list does not repeat it. */}
+      <SettingsCard
+        title="Environments"
+        description={
+          canManage
+            ? 'Evaluation Service deployments that experiments launch jobs on.'
+            : 'Evaluation Service deployments that experiments launch jobs on. Only project managers and admins can add or change them.'
+        }
+        action={
+          canAdd ? (
+            <Button variant="primary" icon={<Icon name="plus" size={12} />} onPress={() => setAdding(true)}>
+              Add environment
+            </Button>
+          ) : undefined
+        }
+        data-environments-panel
+      >
+        <EnvironmentsList
+          projectId={project.id}
+          slug={slug}
+          canManage={canManage}
+          readOnly={readOnly}
+          rowHref={(env) => fromSettings(env.id)}
+        />
+      </SettingsCard>
       {canAdd ? (
         <AddEnvironmentDialog
           projectId={project.id}
           open={adding}
           onOpenChange={setAdding}
-          onGotoApiKeys={() => {
-            setAdding(false);
-            navigate(`${projectPath(slug, 'settings')}?tab=apikeys`);
-          }}
+          apiKeysTo={`${projectPath(slug, 'settings')}?tab=apikeys`}
         />
       ) : null}
     </div>

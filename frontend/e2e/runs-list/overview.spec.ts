@@ -45,9 +45,7 @@ test.describe('overview (J8)', () => {
       .getByRole('link', { name: /View all/ })
       .click();
     await expect(page.getByTestId('runs-table')).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
-      'status: Approved',
-    );
+    await expect(page.getByTestId('status-bar')).toContainText('status: Approved');
   });
 
   test('trend range writes ?range= (7d is the default and writes none)', async ({ page, request }) => {

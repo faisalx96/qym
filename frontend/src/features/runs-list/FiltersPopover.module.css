@@ -145,7 +145,18 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+/* The custom range opens in place after the Time control: From – To, Apply, Cancel; it wraps under on a narrow row. */
+.row[data-range-open] {
+  flex-wrap: wrap;
+}
+
 .rangeFields {
   display: flex;
-  gap: var(--space-md);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.rangeDash {
+  color: var(--text-muted);
 }

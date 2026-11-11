@@ -55,7 +55,12 @@ export const trashKeys = {
 };
 
 async function fetchTrash(p: TrashParams): Promise<TrashPage> {
-  const q = new URLSearchParams({ limit: String(TRASH_PAGE), offset: String((p.page - 1) * TRASH_PAGE) });
+  // format=page: the list contract, {data, has_more, next_cursor, total} (C160).
+  const q = new URLSearchParams({
+    limit: String(TRASH_PAGE),
+    offset: String((p.page - 1) * TRASH_PAGE),
+    format: 'page',
+  });
   if (p.projectId) q.set('project_id', p.projectId);
   if (p.q) q.set('q', p.q);
   const response = await fetch(platformUrl(`/api/runs/trash?${q.toString()}`), {
@@ -72,8 +77,12 @@ async function fetchTrash(p: TrashParams): Promise<TrashPage> {
     }
     throw new ApiError(response.status, detail, { headers: response.headers });
   }
-  const runs = (text ? JSON.parse(text) : []) as TrashRun[];
-  const total = Number(response.headers.get('X-Qym-Total-Count') ?? runs.length);
+  // An older server answers the bare list; the page body carries its own total.
+  const body = (text ? JSON.parse(text) : []) as TrashRun[] | { data: TrashRun[]; total: number | null };
+  const runs = Array.isArray(body) ? body : body.data;
+  const total = Array.isArray(body)
+    ? Number(response.headers.get('X-Qym-Total-Count') ?? runs.length)
+    : (body.total ?? runs.length);
   const graceRaw = response.headers.get('X-Qym-Deleted-Run-Grace-Days');
   const grace = graceRaw === null || graceRaw === '' ? null : Number(graceRaw);
   return { runs, total, graceDays: grace !== null && Number.isFinite(grace) && grace > 0 ? grace : null };
@@ -113,6 +122,28 @@ export function useRestoreRuns() {
       runIds.length === 1
         ? apiFetch<RestoreResult>('/api/runs/restore', { method: 'POST', body: { run_id: runIds[0] } })
         : apiFetch<RestoreResult>('/api/runs/restore', { method: 'POST', body: { run_ids: runIds } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['trash'] });
+      void qc.invalidateQueries({ queryKey: trashKeys.projects });
+    },
+  });
+}
+
+export interface PurgeResult {
+  ok: boolean;
+  purged: string[];
+  skipped: { run_id: string; reason: string }[];
+}
+
+/** Delete permanently takes at most this many runs per request (the server's PURGE_NOW_MAX). */
+export const PURGE_MAX = 50;
+
+/** Admin Delete permanently (C118): ignores retention, also for runs of an archived project. */
+export function usePurgeRuns() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runIds: string[]) =>
+      apiFetch<PurgeResult>('/api/runs/purge', { method: 'POST', body: { run_ids: runIds } }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['trash'] });
       void qc.invalidateQueries({ queryKey: trashKeys.projects });

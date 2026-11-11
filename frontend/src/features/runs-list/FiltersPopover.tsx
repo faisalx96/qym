@@ -4,24 +4,27 @@
  * action (UX_DECISION: inline lists, not nested portalled selects, which closed
  * the popover). One disclosure is open at a time so the Tab order stays short.
  */
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
 import type { Facets } from '@/api/dashboardTypes';
 import {
   Button,
   Checkbox,
-  Dialog,
   Icon,
+  IconButton,
   Popover,
   SearchField,
   SegmentedControl,
   Text,
-  TextField,
+  Skeleton,
 } from '@/ui';
 import { parseLocalDate, type QuickRange } from '@/lib/runs-order';
+
+// C080: the date and time fields (react-aria date pickers and their calendar) load when the custom range opens, not with
+// every page.
+const DateTimeField = lazy(() => import('@/ui/DateTimeField').then((m) => ({ default: m.DateTimeField })));
 import {
   countActiveFilters,
-  customRangeLabel,
   DEFAULT_VIEW,
   EMPTY,
   modelOptionLabel,
@@ -49,6 +52,14 @@ export const datasetLabel = (v: string) => {
   const [name, version] = v.split(SEP);
   return version ? `${name} (${version})` : (name ?? v);
 };
+
+function withSubmitted(statuses: string[] | undefined): string[] | undefined {
+  if (!statuses || statuses.includes('SUBMITTED')) return statuses;
+  const at = statuses.indexOf('COMPLETED');
+  return at < 0
+    ? [...statuses, 'SUBMITTED']
+    : [...statuses.slice(0, at + 1), 'SUBMITTED', ...statuses.slice(at + 1)];
+}
 
 export function buildFacetDefs(
   view: RunsView,
@@ -80,7 +91,8 @@ export function buildFacetDefs(
     list('datasets', 'Datasets', f?.datasets, datasetLabel),
     list('models', 'Models', f?.models, modelOptionLabel),
     list('versions', 'Versions', f?.versions, (v) => v),
-    list('statuses', 'Status', f?.statuses, statusLabel),
+    // C034: 'Submitted' is always a Status value, so reviewers can find the runs that wait for them
+    list('statuses', 'Status', withSubmitted(f?.statuses), statusLabel),
     list('owners', 'Users', f?.users, (v) => owners[v] ?? v),
   ];
   const keys = new Set([...Object.keys(f?.versioning ?? {}), ...Object.keys(view.versioning)]);
@@ -112,22 +124,27 @@ export interface FiltersPopoverProps {
   trigger?: ReactNode;
 }
 
-/** Time and Origin segmented controls; `Range…` hands over to the custom range dialog. */
+/**
+ * Time and Origin segmented controls. `Range` expands two date fields in place, next to the control (no dialog);
+ * they stay open while a custom range is applied, so its dates can be changed, and fold when another range is picked.
+ */
 export function TimeOriginControls({
   view,
   onChange,
-  onCustomRange,
   labels = true,
+  showOrigin = true,
 }: {
   view: RunsView;
   onChange: (patch: ViewPatch) => void;
-  /** Opens the custom range dialog (a popover must close first: it paints above modals). */
-  onCustomRange: () => void;
   labels?: boolean;
+  /** C208: false hides Origin in a project with no official run. */
+  showOrigin?: boolean;
 }) {
+  const [editing, setEditing] = useState(false);
+  const open = editing || view.range === 'custom';
   return (
     <>
-      <div className={styles.row}>
+      <div className={styles.row} data-range-open={open ? '' : undefined}>
         {labels ? (
           <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
             Time
@@ -135,37 +152,54 @@ export function TimeOriginControls({
         ) : null}
         <SegmentedControl<QuickRange>
           label="Time range"
-          value={view.range}
-          onChange={(range) => (range === 'custom' ? onCustomRange() : onChange({ range, from: '', to: '' }))}
+          value={open ? 'custom' : view.range}
+          onChange={(range) => {
+            if (range === 'custom') return setEditing(true);
+            setEditing(false);
+            onChange({ range, from: '', to: '' });
+          }}
           options={[
             { value: 'all', label: 'All', title: 'Shortcut 1' },
             { value: 'today', label: 'Today', title: 'Shortcut 2' },
             { value: 'week', label: '7d', title: 'Shortcut 3' },
             { value: 'month', label: '30d', title: 'Shortcut 4' },
-            {
-              value: 'custom',
-              label: view.range === 'custom' ? customRangeLabel(view.from, view.to) : 'Range…',
-            },
+            { value: 'custom', label: 'Range' },
           ]}
         />
-      </div>
-      <div className={styles.row}>
-        {labels ? (
-          <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
-            Origin
-          </Text>
+        {open ? (
+          <RangeFields
+            key={`${view.from}|${view.to}`}
+            from={view.from}
+            to={view.to}
+            applied={view.range === 'custom'}
+            autoFocus={editing && view.range !== 'custom'}
+            onApply={(from, to) => {
+              setEditing(false);
+              onChange({ range: 'custom', from, to });
+            }}
+            onCancel={() => setEditing(false)}
+          />
         ) : null}
-        <SegmentedControl<OriginFilter>
-          label="Origin"
-          value={view.origin}
-          onChange={(origin) => onChange({ origin })}
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'official', label: 'Official' },
-            { value: 'local', label: 'Local' },
-          ]}
-        />
       </div>
+      {showOrigin ? (
+        <div className={styles.row}>
+          {labels ? (
+            <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
+              Origin
+            </Text>
+          ) : null}
+          <SegmentedControl<OriginFilter>
+            label="Origin"
+            value={view.origin}
+            onChange={(origin) => onChange({ origin })}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'official', label: 'Official' },
+              { value: 'local', label: 'Local' },
+            ]}
+          />
+        </div>
+      ) : null}
     </>
   );
 }
@@ -176,7 +210,6 @@ export function FiltersPanel({
   facets,
   owners,
   onChange,
-  onCustomRange,
   onDone,
   doneLabel = 'Done',
   className,
@@ -185,7 +218,6 @@ export function FiltersPanel({
   facets: Facets | undefined;
   owners: Record<string, string>;
   onChange: (patch: ViewPatch) => void;
-  onCustomRange: () => void;
   onDone: () => void;
   doneLabel?: string;
   className?: string;
@@ -196,7 +228,11 @@ export function FiltersPanel({
   const footRef = useRef<HTMLDivElement>(null);
   return (
     <div className={[styles.panel, className].filter(Boolean).join(' ')} data-testid="filters-panel">
-      <TimeOriginControls view={view} onChange={onChange} onCustomRange={onCustomRange} />
+      <TimeOriginControls
+        view={view}
+        onChange={onChange}
+        showOrigin={view.origin !== 'all' || (facets?.origins ?? []).includes('official')}
+      />
       <div className={styles.facets}>
         {defs.map((def) => (
           <FacetSection
@@ -230,7 +266,6 @@ export function FiltersPanel({
 
 export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopoverProps) {
   const count = countActiveFilters(view) - (view.q ? 1 : 0);
-  const [rangeOpen, setRangeOpen] = useState(false);
   return (
     <>
       <Popover
@@ -248,23 +283,9 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
         }
       >
         {({ close }) => (
-          <FiltersPanel
-            view={view}
-            facets={facets}
-            owners={owners}
-            onChange={onChange}
-            onCustomRange={() => (close(), setRangeOpen(true))}
-            onDone={close}
-          />
+          <FiltersPanel view={view} facets={facets} owners={owners} onChange={onChange} onDone={close} />
         )}
       </Popover>
-      <CustomRangeDialog
-        open={rangeOpen}
-        onOpenChange={setRangeOpen}
-        from={view.from}
-        to={view.to}
-        onApply={(from, to) => onChange({ range: 'custom', from, to })}
-      />
     </>
   );
 }
@@ -282,15 +303,21 @@ function FacetSection({
 }) {
   const panelId = useId();
   const [query, setQuery] = useState('');
-  const selected = new Set(def.selected);
   const q = query.trim().toLowerCase();
   const options = q ? def.options.filter((o) => o.label.toLowerCase().includes(q)) : def.options;
+  // No filter ticks every box (as the bar's lists do); NONE ticks none.
+  const none = def.selected.includes(NONE);
+  const ticked = (value: string) => !none && (def.selected.length === 0 || def.selected.includes(value));
+  const emit = (next: Set<string>) => {
+    if (next.size === 0) return onChange([NONE]);
+    if (def.options.every((o) => next.has(o.value))) return onChange([]);
+    onChange([...next]);
+  };
   const toggle = (value: string) => {
-    const next = new Set(selected);
-    next.delete(NONE);
+    const next = new Set(def.options.map((o) => o.value).filter(ticked));
     if (next.has(value)) next.delete(value);
     else next.add(value);
-    onChange([...next]);
+    emit(next);
   };
   return (
     <section className={styles.facet} data-open={open ? '' : undefined} aria-label={def.label}>
@@ -308,7 +335,7 @@ function FacetSection({
       </AriaButton>
       {open ? (
         <div id={panelId} className={styles.facetBody}>
-          {def.options.length > 8 ? (
+          {def.options.length > 1 ? (
             <SearchField
               label={`Search ${def.label}`}
               hideLabel
@@ -319,11 +346,8 @@ function FacetSection({
             />
           ) : null}
           <div className={styles.facetActions}>
-            <Button variant="ghost" onPress={() => onChange(def.options.map((o) => o.value))}>
-              Select all
-            </Button>
             <Button variant="ghost" onPress={() => onChange([])}>
-              Clear
+              Select all
             </Button>
             <Button variant="ghost" onPress={() => onChange([NONE])}>
               None
@@ -332,12 +356,12 @@ function FacetSection({
           <ul className={styles.options} aria-label={`${def.label} values`}>
             {options.map((o) => (
               <li key={o.value} className={styles.option}>
-                <Checkbox isSelected={selected.has(o.value)} onChange={() => toggle(o.value)}>
+                <Checkbox isSelected={ticked(o.value)} onChange={() => toggle(o.value)}>
                   {o.label}
                 </Checkbox>
                 <AriaButton
                   className={styles.only}
-                  onPress={() => onChange([o.value])}
+                  onPress={() => emit(new Set([o.value]))}
                   aria-label={`Only ${o.label}`}
                 >
                   Only
@@ -358,43 +382,24 @@ function FacetSection({
   );
 }
 
-export function CustomRangeDialog({
-  open,
-  onOpenChange,
+/**
+ * The custom range, in place: From and To (a local day and time each, round 10; either side may stay open), Apply, and
+ * a red Cancel while unapplied. A day picked without a time covers the whole day (From 00:00, To 23:59).
+ */
+function RangeFields({
   from,
   to,
+  applied,
+  autoFocus,
   onApply,
+  onCancel,
 }: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
   from: string;
   to: string;
+  applied: boolean;
+  autoFocus: boolean;
   onApply: (from: string, to: string) => void;
-}) {
-  return (
-    <RangeBody
-      key={open ? 'open' : 'closed'}
-      open={open}
-      onOpenChange={onOpenChange}
-      from={from}
-      to={to}
-      onApply={onApply}
-    />
-  );
-}
-
-function RangeBody({
-  open,
-  onOpenChange,
-  from,
-  to,
-  onApply,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  from: string;
-  to: string;
-  onApply: (from: string, to: string) => void;
+  onCancel: () => void;
 }) {
   const [a, setA] = useState(from);
   const [b, setB] = useState(to);
@@ -402,38 +407,46 @@ function RangeBody({
   function apply() {
     const da = parseLocalDate(a);
     const db = parseLocalDate(b);
-    if (!da && !db) return setError('Choose a start date, an end date or both.');
-    if (da && db && da > db) return setError('The start date must be on or before the end date.');
+    if (!da && !db) return setError('Choose a start, an end or both.');
+    if (da && db && da > db) return setError('The start must be on or before the end.');
+    setError('');
     onApply(da ? a : '', db ? b : '');
-    onOpenChange(false);
   }
+  const changed = a !== from || b !== to;
+  // Enter applies, Escape folds an unapplied range (on the date fields; buttons keep their own keys)
+  const onKey = (e: { key: string; preventDefault: () => void }) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      apply();
+    } else if (e.key === 'Escape' && !applied) onCancel();
+  };
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Custom date range"
-      description="Local days; either side may stay open."
-      size="sm"
-      footer={
-        <>
-          <Button variant="neutral" onPress={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onPress={apply}>
-            Apply
-          </Button>
-        </>
-      }
+    <div
+      className={styles.rangeFields}
+      role="group"
+      aria-label="Custom date range"
+      data-testid="custom-range"
     >
-      <div className={styles.rangeFields}>
-        <TextField label="From" type="date" value={a} onChange={setA} />
-        <TextField label="To" type="date" value={b} onChange={setB} />
-      </div>
+      <Suspense fallback={<Skeleton kind="value" width={320} label="Loading the date fields" />}>
+        <DateTimeField label="From" value={a} onChange={setA} onKeyDown={onKey} autoFocus={autoFocus} />
+        <span className={styles.rangeDash} aria-hidden="true">
+          –
+        </span>
+        <DateTimeField label="To" value={b} onChange={setB} onKeyDown={onKey} dayTime="end" />
+      </Suspense>
+      {!applied || changed ? (
+        <Button variant="accent" onPress={apply}>
+          Apply
+        </Button>
+      ) : null}
+      {!applied ? (
+        <IconButton label="Cancel custom range" icon="close" tone="reject" onPress={onCancel} />
+      ) : null}
       {error ? (
-        <Text variant="base" tone="danger" as="p" role="alert">
+        <Text variant="sm" tone="danger" as="span" role="alert">
           {error}
         </Text>
       ) : null}
-    </Dialog>
+    </div>
   );
 }

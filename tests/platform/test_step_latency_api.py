@@ -491,3 +491,181 @@ def test_call_site_rollup_names_models_and_keeps_them_in_csv(client, session_fac
     # The default rollup's CSV is unchanged.
     plain = client.get("/api/runs/run-1/step-latency?format=csv", headers=headers).text
     assert plain.splitlines()[0].startswith("phase,step_type,kind,n,error_count")
+
+
+# C022: the run page's summary is stored on first read and served from the stored row while the span set holds.
+
+
+def _stored(session_factory, run_id="run-1"):
+    from qym_platform.db.models import RunStepLatencySummary
+
+    with session_factory() as session:
+        return session.query(RunStepLatencySummary).filter_by(run_id=run_id).all()
+
+
+def test_run_page_summary_is_stored_and_served_without_the_spans(client, session_factory, monkeypatch):
+    import qym_platform.api.step_latency as step_latency
+
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=site"
+    first = client.get(url, headers=headers)
+    assert first.status_code == 200
+    (row,) = _stored(session_factory)
+    assert (row.pass_number, row.rollup) == (0, "site")
+
+    def no_scan(*args, **kwargs):
+        raise AssertionError("the stored summary must be served without loading spans")
+
+    monkeypatch.setattr(step_latency, "_load_spans", no_scan)
+    second = client.get(url, headers=headers)
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+
+def test_a_late_span_rebuilds_the_stored_summary(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=name"
+    before = client.get(url, headers=headers).json()
+    with session_factory() as session:
+        session.add(
+            _span("run-1", "trace-1-late", "sql_execute", parent="trace-1-task", dur=700.0,
+                  attrs=_tool_attrs("sql_execute"))
+        )
+        session.commit()
+    after = client.get(url, headers=headers).json()
+    task_sql = lambda body: next(  # noqa: E731
+        g for g in body["groups"] if (g["phase"], g["step_type"]) == ("task", "sql_execute")
+    )
+    assert task_sql(before)["n"] == 2
+    assert task_sql(after)["n"] == 3
+
+
+def test_stored_summary_keeps_access_checks(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=site"
+    assert client.get(url, headers=_headers("owner@example.com")).status_code == 200
+    assert client.get(url, headers=_headers("other@example.com")).status_code == 403
+    assert client.get("/api/runs/step-latency?run_ids=nope", headers=_headers("owner@example.com")).status_code == 404
+
+
+def test_a_running_run_reuses_its_summary_for_a_few_seconds(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+        session.get(Run, "run-1").status = RunWorkflowStatus.RUNNING
+        session.commit()
+    headers = _headers("owner@example.com")
+    url = "/api/runs/step-latency?run_ids=run-1&rollup=name"
+    before = client.get(url, headers=headers).json()
+    with session_factory() as session:
+        session.add(
+            _span("run-1", "trace-1-late", "sql_execute", parent="trace-1-task", dur=700.0,
+                  attrs=_tool_attrs("sql_execute"))
+        )
+        session.commit()
+    # within LIVE_SUMMARY_REUSE the stored summary answers; the next build picks the new span up
+    assert client.get(url, headers=headers).json() == before
+
+
+def test_the_summary_writer_hook_builds_once_for_a_finished_run(session_factory):
+    """C022 (owner: use the existing summary writers): the dashboard worker stores the summary after it publishes a run."""
+    from qym_platform.api.step_latency import refresh_stored_summary
+
+    with session_factory() as session:
+        _seed(session)
+        run = session.get(Run, "run-1")
+        assert refresh_stored_summary(session, run) is True
+        assert refresh_stored_summary(session, run) is False  # the fingerprint holds: nothing to rebuild
+        session.add(_span("run-1", "trace-1-late", "sql_execute", parent="trace-1-task", dur=5.0,
+                          attrs=_tool_attrs("sql_execute")))
+        session.commit()
+        assert refresh_stored_summary(session, run) is True  # a late span rebuilds it
+    (row,) = _stored(session_factory)
+    assert (row.pass_number, row.rollup) == (0, "site")
+
+
+def test_the_summary_writer_rebuilds_a_live_run_at_most_every_interval(session_factory):
+    from qym_platform.api.step_latency import refresh_stored_summary
+
+    with session_factory() as session:
+        _seed(session)
+        run = session.get(Run, "run-1")
+        run.status = RunWorkflowStatus.RUNNING
+        session.commit()
+        assert refresh_stored_summary(session, run) is True
+        session.add(_span("run-1", "trace-1-late", "sql_execute", parent="trace-1-task", dur=5.0,
+                          attrs=_tool_attrs("sql_execute")))
+        session.commit()
+        # a large running run is not rebuilt on every new span: once per LIVE_SUMMARY_REBUILD
+        assert refresh_stored_summary(session, run) is False
+
+
+def test_the_worker_stores_the_summary_after_publishing(session_factory):
+    from qym_platform.db.models import RunStepLatencySummary
+    from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
+
+    with session_factory() as session:
+        _seed(session)
+    worker = DashboardSummaryWorker.__new__(DashboardSummaryWorker)
+    worker.session_factory = session_factory
+    import logging
+
+    worker._logger = logging.getLogger("test")
+    worker._store_step_latency("run-1")
+    with session_factory() as session:
+        assert session.query(RunStepLatencySummary).count() == 1
+
+
+# C072: a finished run's reads carry an ETag; a revisit with the same body is a 304 with no body.
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/runs/run-1",
+        "/api/runs/run-1?view=summary",
+        "/api/runs/run-1/passes",
+        "/api/runs/step-latency?run_ids=run-1&rollup=site",
+        "/api/runs/run-1/step-latency",
+        "/api/compare?files=run-1",
+    ],
+)
+def test_finished_run_reads_answer_304_on_revisit(client, session_factory, path):
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    first = client.get(path, headers=headers)
+    assert first.status_code == 200
+    etag = first.headers["etag"]
+    assert first.headers["cache-control"] == "private, no-cache"
+    assert "x-qym-cacheable" not in first.headers
+    again = client.get(path, headers={**headers, "If-None-Match": etag})
+    assert again.status_code == 304
+    assert again.content == b""
+    assert again.headers["etag"] == etag
+
+
+def test_a_live_run_keeps_no_store(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+        session.get(Run, "run-1").status = RunWorkflowStatus.RUNNING
+        session.commit()
+    response = client.get("/api/runs/run-1", headers=_headers("owner@example.com"))
+    assert response.status_code == 200
+    assert "etag" not in response.headers
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_an_outsider_gets_no_cached_body(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+    first = client.get("/api/runs/run-1/step-latency", headers=_headers("owner@example.com"))
+    denied = client.get(
+        "/api/runs/run-1/step-latency",
+        headers={**_headers("other@example.com"), "If-None-Match": first.headers["etag"]},
+    )
+    assert denied.status_code == 403

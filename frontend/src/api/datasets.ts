@@ -399,6 +399,21 @@ export interface NeighborParams {
 
 // ---------------------------------------------------------------- queries
 
+export interface UnregisteredName {
+  name: string;
+  runs: number;
+}
+
+/** Dataset names the project's runs used that no dataset registers, with run counts (C030). */
+export function useUnregisteredDatasetNames(slug: string) {
+  return useQuery({
+    queryKey: ['datasets', slug, 'unregistered'] as const,
+    queryFn: () =>
+      api.get<{ names: UnregisteredName[]; total: number }>(withSlug('/v1/datasets:unregistered', slug)),
+    staleTime: 30_000,
+  });
+}
+
 export function useDatasetCatalog(slug: string, deleted = false) {
   return useQuery({
     queryKey: dsKeys.catalog(slug, deleted),
@@ -836,6 +851,8 @@ export interface ItemBody {
   expected_output?: unknown;
   metadata?: Record<string, unknown>;
   labels?: string[];
+  /** The item's updated_at as the editor loaded it: the save answers 409 when someone saved since (C015). */
+  expected_updated_at?: string;
 }
 
 export function useCreateItem(slug: string, ref: string, version: string) {
@@ -880,25 +897,56 @@ export function useDeleteItem(slug: string, ref: string, version: string) {
   });
 }
 
+/** What an upsert does when its item_id names an existing item (server default: replace). */
+export type OnExisting = 'replace' | 'skip';
+
 export interface BulkItemsBody {
   upserts?: (ItemBody & { op?: 'create' })[];
   deletes?: string[];
+  on_existing?: OnExisting;
+}
+
+export interface BulkSummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  deleted: number;
 }
 
 export interface BulkItemsResponse {
-  summary: { created: number; updated: number; deleted: number };
+  summary: BulkSummary;
   created: DatasetItem[];
   updated: DatasetItem[];
+  skipped: string[];
   deleted: string[];
+}
+
+/** `dry_run`: the counts an apply would give, and `matched` = upserts that name an item already in the version. */
+export interface BulkPreviewResponse {
+  dry_run: true;
+  matched: number;
+  summary: BulkSummary;
 }
 
 export const BULK_CHUNK = 1000;
 
+function bulkPath(slug: string, ref: string, version: string) {
+  return withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items:bulk`, slug);
+}
+
 export function bulkItems(slug: string, ref: string, version: string, body: BulkItemsBody) {
-  return api.post<BulkItemsResponse>(
-    withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items:bulk`, slug),
-    body,
-  );
+  return api.post<BulkItemsResponse>(bulkPath(slug, ref, version), body);
+}
+
+/** The same request as `bulkItems` with `dry_run`: the server writes nothing. */
+export function previewBulkItems(
+  slug: string,
+  ref: string,
+  version: string,
+  body: BulkItemsBody,
+  signal?: AbortSignal,
+) {
+  return api.post<BulkPreviewResponse>(bulkPath(slug, ref, version), { ...body, dry_run: true }, { signal });
 }
 
 export function useBulkItems(slug: string, ref: string, version: string) {

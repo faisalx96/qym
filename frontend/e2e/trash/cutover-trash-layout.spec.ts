@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 /**
  * Cutover of test_access_admin_browser.py::test_deleted_runs_pages_filters_and_keeps_restore_in_view:
- * with long run, dataset and model names the Restore button stays inside the table at laptop widths
+ * with long run, dataset and model names the row menu handle stays inside the table at laptop widths
  * and the rows stay one line high. (Paging, the project facet and restore-selection are in trash.spec.ts.)
  */
 import { test, expect } from '@playwright/test';
@@ -9,8 +9,8 @@ import { gotoApp } from '../helpers';
 import { seedTrash } from './support';
 
 for (const width of [1280, 1440]) {
-  test(`Restore stays in view and rows stay compact at ${width}px`, async ({ page, request }) => {
-    // The Restore column is pinned to the end of the table (TrashPage.module.css), so it stays in view.
+  test(`The row menu handle stays in view and rows stay compact at ${width}px`, async ({ page, request }) => {
+    // The actions column (one '>' handle, C151) is pinned to the end of the table, so it stays in view.
     const prefix = `qwen2.5-72b_insightor_arabic_subset_${Date.now().toString(36)}`;
     await seedTrash(request, prefix, 3);
     await page.setViewportSize({ width, height: 900 });
@@ -19,7 +19,7 @@ for (const width of [1280, 1440]) {
     await expect(grid.locator('[role=row]:has([role=gridcell])')).toHaveCount(3);
     const layout = await page.evaluate(() => {
       const g = document.querySelector('[role=grid][aria-label="Deleted runs"]') as HTMLElement;
-      const buttons = Array.from(g.querySelectorAll<HTMLElement>('[data-testid^="restore-"]'));
+      const buttons = Array.from(g.querySelectorAll<HTMLElement>('button[data-row-menu]'));
       const rows = Array.from(g.querySelectorAll<HTMLElement>('[role=row]')).filter((r) =>
         r.querySelector('[role=gridcell]'),
       );

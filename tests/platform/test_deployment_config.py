@@ -12,9 +12,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_base_compose_is_production_safe() -> None:
     compose = (ROOT / "docker" / "docker-compose.yml").read_text(encoding="utf-8")
-    # auth mode is env-driven — never hardcoded off
-    assert "QYM_AUTH_MODE: ${QYM_AUTH_MODE}" in compose
+    # auth mode is env-driven, never hardcoded off; unset gives proxy_headers,
+    # which needs the proxy's shared secret outside dev/test/local (C003)
+    assert "QYM_AUTH_MODE: ${QYM_AUTH_MODE:-proxy_headers}" in compose
     assert "QYM_AUTH_MODE: none" not in compose
+    assert "QYM_PROXY_SHARED_SECRET: ${QYM_PROXY_SHARED_SECRET:-}" in compose
     assert "QYM_LLM_CONFIG_ENCRYPTION_KEY" in compose
     # production image must not bind-mount source
     assert "../packages/platform" not in compose
@@ -28,6 +30,8 @@ def test_base_compose_is_production_safe() -> None:
 def test_dev_override_restores_reload_and_bind_mounts() -> None:
     compose = (ROOT / "docker" / "docker-compose.dev.yml").read_text(encoding="utf-8")
     assert "QYM_AUTH_MODE: ${QYM_AUTH_MODE}" in compose
+    # Development only: unset means dev, so QYM_AUTH_MODE=none still starts.
+    assert "QYM_ENVIRONMENT: ${QYM_ENVIRONMENT:-dev}" in compose
     assert "../packages/platform:/app/packages/platform" in compose
     assert "../packages/sdk:/app/packages/sdk" in compose
     assert "--reload" in compose

@@ -49,17 +49,6 @@ export const dataRows = (page: Page) =>
     '[data-testid="runs-table"] tbody tr[data-run-id], [data-testid="runs-table"] li[data-run-id]',
   );
 
-/**
- * Turn the runs page's background prefetch of passes off (`navigator.connection.saveData`, the reader's own switch), so a
- * click on a chevron is the first request for that run: the path of a run whose prefetch has not started (round 7, Q2).
- * Call it before `openRuns` / `page.goto`.
- */
-export async function withoutPrefetch(page: Page): Promise<void> {
-  await page.addInitScript(() =>
-    Object.defineProperty(navigator, 'connection', { configurable: true, value: { saveData: true } }),
-  );
-}
-
 export async function openRuns(page: Page, slug: string, qs = ''): Promise<void> {
   await page.goto(runsUrl(slug, qs));
   await expect(table(page)).toBeVisible();
@@ -98,6 +87,12 @@ export function capture(
 export const listRequests = (cap: ReturnType<typeof capture>) => cap.all().filter((c) => !c.body.ids?.length);
 
 /** The filter bar is always on screen (desktop); this only asserts it, kept so specs read the same. */
+/** The status-bar sentence names every active filter ("8 of 43 runs — task: rag-qa, status: Completed"). */
+export const filterSummary = (page: Page): Locator => page.getByTestId('status-bar');
+
+/** The bar's red `× Clear n` (absent while no filter is active). */
+export const clearButton = (page: Page): Locator => page.getByTestId('filters-clear');
+
 export async function openFilters(page: Page): Promise<void> {
   await expect(page.getByTestId('filter-bar')).toBeVisible();
 }
@@ -176,18 +171,34 @@ export function failOnNativeDialogs(page: Page): { seen: () => string[] } {
   return { seen: () => seen };
 }
 
-/** Opens the overflow menu of pass row `n` (its own row of the runs table; Open pass is in it). */
-export async function openPassMenu(panel: Locator, page: Page, n: number): Promise<void> {
-  await panel
-    .locator(`tr[data-pass-row="${n}"]`)
-    .getByRole('button', { name: new RegExp(`^More actions for pass ${n}`) })
-    .click();
-  await expect(page.getByRole('menu')).toBeVisible();
+/**
+ * Shows a row's menu handle (owner decision, Nov 1: every row action sits in one menu behind the row's '>' handle,
+ * which shows on the hovered or focused row).
+ */
+export async function revealActions(row: Locator): Promise<void> {
+  await row.hover();
 }
-/** Pass rows carry a Delete pass icon button (redesign 4: no menu step). */
-export async function deletePassFromMenu(panel: Locator, _page: Page, n: number): Promise<void> {
-  await panel
-    .locator(`tr[data-pass-row="${n}"]`)
-    .getByRole('button', { name: `Delete pass ${n}` })
-    .click();
+
+/** Opens a row's menu (its one '>' handle, named "Actions for <row>") and returns the menu. */
+export async function openRowMenu(page: Page, row: Locator): Promise<Locator> {
+  await row.hover();
+  await row.locator('td[data-col="actions"] button[data-row-menu]').click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Opens a row's menu and picks one of its items. */
+export async function pickRowAction(page: Page, row: Locator, item: string): Promise<void> {
+  const menu = await openRowMenu(page, row);
+  await menu.getByRole('menuitem', { name: item, exact: true }).click();
+}
+
+/** Opens the menu of pass row `n` (its own row of the runs table; Open pass is in it). */
+export async function openPassMenu(panel: Locator, page: Page, n: number): Promise<void> {
+  await openRowMenu(page, panel.locator(`tr[data-pass-row="${n}"]`));
+}
+/** Pass rows: Delete pass is the last item of the pass's row menu. */
+export async function deletePassFromMenu(panel: Locator, page: Page, n: number): Promise<void> {
+  await pickRowAction(page, panel.locator(`tr[data-pass-row="${n}"]`), `Delete pass ${n}`);
 }

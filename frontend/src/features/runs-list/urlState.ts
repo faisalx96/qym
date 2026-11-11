@@ -238,9 +238,11 @@ export function versioningKeyWords(key: string): string {
 }
 
 export function customRangeLabel(from: string, to: string): string {
-  if (from && to) return `${from} → ${to}`;
-  if (from) return `from ${from}`;
-  if (to) return `until ${to}`;
+  // a bound with a time reads `2026-09-01 14:30`
+  const [a, b] = [from.replace('T', ' '), to.replace('T', ' ')];
+  if (a && b) return `${a} → ${b}`;
+  if (a) return `from ${a}`;
+  if (b) return `until ${b}`;
   return 'custom range';
 }
 
@@ -270,7 +272,9 @@ export function filterSummary(
   if (has(view.owners)) parts.push(`user: ${summarize(view.owners, labels.owner)}`);
   else if (view.owners.includes(NONE)) parts.push('user: none');
   for (const [key, values] of activeVersioningFilters(view))
-    parts.push(`${versioningKeyWords(key)}: ${summarize(values)}`);
+    parts.push(
+      `${versioningKeyWords(key)}: ${summarize(values, (v) => (isEmptyFilterValue(v) ? 'empty' : v))}`,
+    );
   if (view.origin === 'official') parts.push('official runs');
   if (view.origin === 'local') parts.push('local runs');
   if (view.q) parts.push(`search: "${view.q}"`);

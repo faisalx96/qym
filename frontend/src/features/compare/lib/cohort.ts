@@ -93,7 +93,21 @@ export function resolveCohorts(
   if (byModel.size !== 2) return null;
   const [[lm, left], [rm, right]] = Array.from(byModel.entries()) as [[string, string[]], [string, string[]]];
   if (!left.length || left.length !== right.length) return null;
-  return { left, right, leftLabel: lm, rightLabel: rm, explicit: false, k: left.length };
+  // A side that holds one run goes by that run's name, not its model (K1, C162)
+  const sideName = (refs: string[], fallback: string) => {
+    const runs = refs.map((ref) => byRef.get(ref)).filter((r): r is CompareRun => !!r);
+    const bases = new Set(runs.map((r) => r.base));
+    const run = runs[0];
+    return bases.size === 1 && run ? String(run.run.base_run_name || run.run.run_name || fallback) : fallback;
+  };
+  return {
+    left,
+    right,
+    leftLabel: sideName(left, lm),
+    rightLabel: sideName(right, rm),
+    explicit: false,
+    k: left.length,
+  };
 }
 
 /** `Cohorts` as the URL carries them, with the expanded refs. */

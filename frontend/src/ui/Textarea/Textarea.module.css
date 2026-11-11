@@ -3,7 +3,7 @@
   width: 100%;
   min-height: 72px;
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
   color: var(--text-primary);
@@ -21,12 +21,17 @@
 }
 
 .textarea[data-hovered] {
-  border-color: var(--border-strong);
+  border-color: var(--control-edge-hover);
 }
 
 .textarea[data-focused] {
   border-color: var(--accent-primary);
   box-shadow: var(--focus-ring);
+}
+
+.textarea[data-quiet-focus][data-focused]:not([data-focus-visible]) {
+  border-color: var(--border-strong);
+  box-shadow: none;
 }
 
 .textarea[data-invalid] {

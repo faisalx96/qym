@@ -26,6 +26,13 @@
   display: inline-flex;
 }
 
+/* RF1 (C132): below 1600 px the stuck nav does not repeat the run name and status, so the links get the room. */
+@media (max-width: 1599px) {
+  .nav[data-compact] .identity {
+    display: none;
+  }
+}
+
 .name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -38,44 +45,88 @@
 .links {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-self: stretch;
+  align-items: stretch;
   gap: var(--space-xs);
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
+/* A copy of every link and of the More trigger, for their widths only (RF1): no size, no paint, no pointer. */
+.measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: var(--space-xs);
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Underline tabs, as in the first qym (round 10): 13px / 600, the section in view in the accent with a 2px line on
+   the bar's bottom edge. The pill tabs read as small grey text. */
 .link {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: 6px;
   flex: none;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--control-radius);
-  font-size: var(--font-base);
+  align-self: stretch;
+  padding: 0 6px;
+  font-size: var(--font-md);
+  font-weight: 600;
   color: var(--text-secondary);
   text-decoration: none;
+  transition: color var(--transition-fast);
 }
 
-.link:hover {
+.link:hover,
+.link[data-hovered],
+.link[data-pressed] {
   color: var(--text-primary);
-  background: var(--bg-elevated);
 }
 
-.link:focus-visible {
+/* The More trigger is a link-styled button (RF1). */
+button.link {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.link:focus-visible,
+.link[data-focus-visible] {
   outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
+  border-radius: var(--control-radius);
 }
 
 .link[aria-current='location'] {
-  color: var(--text-primary);
-  background: var(--bg-elevated);
-  font-weight: 650;
+  color: var(--accent-primary);
+}
+
+.link[aria-current='location']::after {
+  content: '';
+  position: absolute;
+  inset-inline: 6px;
+  bottom: calc(-1 * var(--space-xs) - 1px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent-primary);
 }
 
 .count {
+  padding: 0 5px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
   font-size: var(--font-sm);
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .link[data-tone='danger'] .count {
@@ -99,6 +150,26 @@
   flex: none;
   align-items: center;
   gap: var(--space-xs);
+}
+
+/* The page-wide metric: a label, then chips (or one select when the metrics are many or the bar is narrow). */
+.metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.metricLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* The page-wide Pass if threshold (C039): one inline slider beside the metric. The controls keep only the bar's
+   gap between them, so every section link fits at 1440 px (RF1). */
+.threshold {
+  flex: none;
+  margin-inline: var(--space-xs);
 }
 
 @media (max-width: 767px) {

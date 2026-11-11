@@ -44,7 +44,7 @@ test('a count button in the averages filters the list; the banner and Clear rest
   expect((filtersJson(page).baseline as { metric: string }).metric).toBe('quality');
   await expect(page.getByRole('button', { name: /^Filters/ })).toContainText('1');
   // removing the chip restores the list
-  await banner(page).getByRole('button', { name: 'Clear' }).click();
+  await page.locator('[data-part="items-clear-btn"]').click(); // K6: the one Clear is in the sticky nav
   await expectShown(page, 40);
   await expect(up).toHaveAttribute('aria-pressed', 'false');
   expect(urlParams(page).get('filters')).toBeNull();
@@ -130,7 +130,7 @@ test('rule builder: "+ Condition" adds an editable condition row', async ({ page
   await page.getByRole('button', { name: /^Filters/ }).click();
   const builder = page.getByTestId('filter-builder');
   await expect(builder).toContainText(/no rules yet/i);
-  await builder.getByRole('button', { name: '+ Condition' }).click();
+  await builder.getByRole('button', { name: 'Add condition' }).click();
   await expect(builder.getByTestId('filter-condition')).toHaveCount(1);
   const cond = builder.getByTestId('filter-condition').first();
   await cond
@@ -217,7 +217,7 @@ test('rule builder: "+ Group" adds a nested group', async ({ page }) => {
     }),
   });
   const builder = page.getByTestId('filter-builder');
-  await builder.getByRole('button', { name: '+ Group' }).click();
+  await builder.getByRole('button', { name: 'Add group' }).click();
   await expect(builder.getByRole('group', { name: 'Rule group' })).toBeVisible();
   await builder.getByRole('button', { name: 'Delete group' }).click();
   await expect(builder.getByRole('group', { name: 'Rule group' })).toHaveCount(0);
@@ -289,6 +289,6 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
   expect(shown).toBeGreaterThan(0);
   expect(shown).toBeLessThan(40);
   expect(((filtersJson(page).errors ?? {}) as Record<string, unknown>).task).toBeTruthy();
-  await banner(page).getByRole('button', { name: 'Clear' }).click();
+  await page.locator('[data-part="items-clear-btn"]').click(); // K6: the one Clear is in the sticky nav
   await expectShown(page, 40);
 });

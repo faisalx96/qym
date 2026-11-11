@@ -76,7 +76,7 @@ test.describe('axe', () => {
           }),
         ),
     );
-    await page.getByTestId('open-filters').click();
+    await page.getByTestId('nav-open-filters').click();
     await expect(page.getByRole('dialog', { name: 'Filter rules' })).toBeVisible();
     await audit(page, 'rule builder', '[role=dialog]');
   });
@@ -94,13 +94,13 @@ test.describe('axe', () => {
     await audit(page, 'retried trace drawer', '[role=dialog]');
   });
 
-  test('issue dialog', async ({ page }) => {
+  test('issue form', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0003');
     const card = page.locator('[data-testid=item-card][data-item-id="item-0003"]');
     await openRootCause(card);
-    await card.getByRole('button', { name: '+ Add issue' }).first().click();
-    await expect(page.getByTestId('issue-dialog')).toBeVisible();
-    await audit(page, 'issue dialog', '[role=dialog]');
+    await card.getByRole('button', { name: 'Add issue' }).first().click();
+    await expect(page.getByTestId('issue-form')).toBeVisible();
+    await audit(page, 'issue form', '[data-testid=issue-form]');
   });
 
   test('repeat run: Repeat tab and heatmap', async ({ page }) => {

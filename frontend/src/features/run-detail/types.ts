@@ -169,6 +169,9 @@ export interface RootCauseIssue {
   review_status?: string;
   source?: string;
   reviewed_at?: string;
+  /** The decision line (C125): who decided, and the reject comment. */
+  reviewed_by_name?: string;
+  review_comment?: string;
   confidence?: number;
 }
 

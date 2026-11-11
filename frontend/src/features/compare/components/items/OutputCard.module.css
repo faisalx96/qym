@@ -259,3 +259,43 @@
   overflow: hidden;
   clip-path: inset(50%);
 }
+
+/* C141: a metric the run did not score, and each metric's change against the baseline */
+.notScored {
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-style: italic;
+}
+
+.metricDelta {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.metricDelta[data-move='improved'] {
+  color: var(--success);
+}
+
+.metricDelta[data-move='regressed'] {
+  color: var(--error-text);
+}
+
+/* C141 'Diff vs baseline': the words this output adds */
+.diff {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.added {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--success) 22%, transparent);
+  color: inherit;
+}

@@ -1,6 +1,8 @@
 /** Draft editor state for one item (shared by the item page and the docked pane): touched-only PATCH, Text/JSON contract. */
 import { useCallback, useMemo, useState } from 'react';
-import { usePatchItem, type DatasetItem, type ItemBody } from '@/api/datasets';
+import { useQueryClient } from '@tanstack/react-query';
+import { dsKeys, usePatchItem, type DatasetItem, type DsUser, type ItemBody } from '@/api/datasets';
+import { ApiError } from '@/lib/http';
 import { fieldStatus, initialFieldState, type FieldState } from '../components/FieldEditor';
 
 interface EditState {
@@ -10,9 +12,30 @@ interface EditState {
   metadata: FieldState;
 }
 
+/** Someone saved the item after the editor loaded it (C015): their version, who and when, and my unsaved body. */
+export interface ItemConflict {
+  theirs: DatasetItem;
+  by: DsUser | null;
+  at: string;
+  mine: ItemBody;
+}
+
+function conflictOf(e: unknown): Omit<ItemConflict, 'mine'> | null {
+  if (!(e instanceof ApiError) || e.status !== 409) return null;
+  const d = (
+    e.body as {
+      detail?: { code?: string; item?: DatasetItem; changed_by?: DsUser | null; changed_at?: string };
+    }
+  )?.detail;
+  if (d?.code !== 'item_changed' || !d.item) return null;
+  return { theirs: d.item, by: d.changed_by ?? null, at: d.changed_at ?? d.item.updated_at };
+}
+
 export function useItemEditor(slug: string, ref: string, version: string, item: DatasetItem | undefined) {
   const patch = usePatchItem(slug, ref, version);
+  const qc = useQueryClient();
   const [edit, setEdit] = useState<EditState | null>(null);
+  const [conflict, setConflict] = useState<ItemConflict | null>(null);
   const editKey = item ? `${item.item_id}:${item.updated_at}` : '';
   const state = useMemo<EditState | null>(
     () =>
@@ -57,17 +80,64 @@ export function useItemEditor(slug: string, ref: string, version: string, item: 
   );
   const reset = useCallback(() => setEdit(null), []);
 
-  /** Sends only touched fields; resolves to the saved item. */
+  /**
+   * Sends only touched fields with the loaded updated_at; resolves to the saved item, or to null when someone saved
+   * the item since (the edits stay, and `conflict` says who and when).
+   */
   const save = useCallback(async () => {
     if (!item || !statuses || !valid) return null;
     const body: ItemBody = {};
     if (statuses.input.touched) body.input = statuses.input.value;
     if (statuses.expected.touched) body.expected_output = statuses.expected.value;
     if (statuses.metadata.touched) body.metadata = (statuses.metadata.value ?? {}) as Record<string, unknown>;
-    const r = await patch.mutateAsync({ itemId: item.item_id, body });
-    setEdit(null);
-    return r.item;
+    try {
+      const r = await patch.mutateAsync({
+        itemId: item.item_id,
+        body: { ...body, expected_updated_at: item.updated_at },
+      });
+      setEdit(null);
+      setConflict(null);
+      return r.item;
+    } catch (e) {
+      const c = conflictOf(e);
+      if (!c) throw e;
+      setConflict({ ...c, mine: body });
+      return null;
+    }
   }, [item, statuses, valid, patch]);
 
-  return { state, statuses, dirty, valid, typeChanges, set, reset, save, saving: patch.isPending };
+  /** Keep mine: save my edits over their version. */
+  const keepMine = useCallback(async () => {
+    if (!item || !conflict) return null;
+    const r = await patch.mutateAsync({
+      itemId: item.item_id,
+      body: { ...conflict.mine, expected_updated_at: conflict.at },
+    });
+    setEdit(null);
+    setConflict(null);
+    return r.item;
+  }, [item, conflict, patch]);
+
+  /** Review their version: drop my edits and show the saved item. */
+  const reviewTheirs = useCallback(() => {
+    if (!conflict) return;
+    qc.setQueryData(dsKeys.item(slug, ref, version, conflict.theirs.item_id), { item: conflict.theirs });
+    setEdit(null);
+    setConflict(null);
+  }, [conflict, qc, slug, ref, version]);
+
+  return {
+    state,
+    statuses,
+    dirty,
+    valid,
+    typeChanges,
+    set,
+    reset,
+    save,
+    saving: patch.isPending,
+    conflict,
+    keepMine,
+    reviewTheirs,
+  };
 }

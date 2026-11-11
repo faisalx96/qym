@@ -5,7 +5,7 @@ import { adminKeys } from '@/api/admin';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
 import { ArchiveProjectDialog, UnarchiveProjectDialog } from '@/features/shell/dialogs';
-import { Badge, DataTable, Identicon, SearchField, Text, type Column } from '@/ui';
+import { DataTable, Identicon, RelativeTime, SearchField, StatusMark, Text, type Column } from '@/ui';
 import styles from './projects.module.css';
 
 export interface ProjectsTableProps {
@@ -42,19 +42,14 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
           <span className={styles.nameCell}>
             <Identicon seed={p.slug} cell={5} gap={2} chip />
             <Link to={projectPath(p.slug)}>{p.name}</Link>
+            {/* on/off state: only the exception shows, after the name (no Status column) */}
+            {p.is_active ? null : (
+              <StatusMark tone="warning" shape="pause" label="Archived" data-status="archived" />
+            )}
           </span>
         ),
       },
       { id: 'slug', header: 'Slug', type: 'id', width: 160, priority: 2, cell: (p) => p.slug },
-      {
-        id: 'status',
-        header: 'Status',
-        type: 'status',
-        width: 110,
-        priority: 1,
-        cell: (p) =>
-          p.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="warning">Archived</Badge>,
-      },
       {
         id: 'members',
         header: 'Members',
@@ -75,6 +70,25 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         priority: 2,
         cell: (p) => p.run_count,
       },
+      // round 11: the gap between slug and counts holds when the project started and when it last changed
+      {
+        id: 'created',
+        header: 'Created',
+        type: 'date',
+        sort: { key: 'created', compare: (a, b) => a.created_at.localeCompare(b.created_at) },
+        width: 120,
+        priority: 3,
+        cell: (p) => <RelativeTime iso={p.created_at} />,
+      },
+      {
+        id: 'updated',
+        header: 'Last change',
+        type: 'date',
+        sort: { key: 'updated', compare: (a, b) => a.updated_at.localeCompare(b.updated_at) },
+        width: 120,
+        priority: 3,
+        cell: (p) => <RelativeTime iso={p.updated_at} />,
+      },
     ],
     [],
   );
@@ -87,7 +101,8 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         rows={shown}
         rowKey={(p) => p.id}
         storageKey="admin-projects"
-        density="regular"
+        density="comfortable"
+        densityLocked
         empty="No projects yet."
         isFiltered={q !== ''}
         filteredEmpty={<Text variant="sm">No projects match “{query.trim()}”.</Text>}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Badge } from '@/ui/Badge';
+import { StatusMark } from '@/ui/StatusMark';
 import { useViewerData, type ViewerData } from './lib/use-viewer-data';
 import {
   DEFAULT_VIEW,
@@ -63,23 +63,20 @@ function Header({ data }: { data: ViewerData }) {
     [data.snapshot],
   );
   const file = run.file_path?.split(/[\\/]/).pop();
-  let badge = <Badge tone="neutral">Waiting</Badge>;
-  if (data.error) badge = <Badge tone="danger">Unavailable</Badge>;
-  else if (source.mode === 'file') badge = <Badge tone="success">Saved file</Badge>;
+  let badge = <StatusMark tone="neutral" shape="ring" label="Waiting" />;
+  if (data.error) badge = <StatusMark tone="danger" shape="cross" label="Unavailable" />;
+  else if (source.mode === 'file') badge = <StatusMark tone="success" shape="full" label="Saved file" />;
   else if (data.finished)
-    badge = (
-      <Badge tone={run.status === 'STOPPED' ? 'warning' : 'success'}>
-        {run.status === 'STOPPED' ? 'Stopped' : 'Completed'}
-      </Badge>
-    );
+    badge =
+      run.status === 'STOPPED' ? (
+        <StatusMark tone="warning" shape="pause" label="Stopped" />
+      ) : (
+        <StatusMark tone="success" shape="full" label="Completed" />
+      );
   else if (data.noLiveRun) badge = <></>;
-  else if (data.connection === 'reconnecting') badge = <Badge tone="warning">Reconnecting</Badge>;
-  else if (data.connection === 'live')
-    badge = (
-      <Badge tone="info" dot>
-        Live
-      </Badge>
-    );
+  else if (data.connection === 'reconnecting')
+    badge = <StatusMark tone="warning" shape="orbit" label="Reconnecting" />;
+  else if (data.connection === 'live') badge = <StatusMark tone="info" shape="orbit" label="Live" />;
   return (
     <header className={s.header}>
       <span className={s.wordmark} lang="ar" dir="rtl">

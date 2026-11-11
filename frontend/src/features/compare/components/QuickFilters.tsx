@@ -7,7 +7,6 @@ import {
   QuickFilterGroup,
   ScopeChips,
   SearchField,
-  Select,
   Text,
   type QuickFilterOption,
 } from '@/ui';
@@ -18,7 +17,6 @@ import { useColumnStats, useColumns } from '../hooks/useColumnStats';
 import { useScope } from '../hooks/useScope';
 import type { DeltaKind } from '../lib/baseline';
 import { AUTO_CATEGORIES, categoryGroups, categoryKeys, errorDistribution } from '../lib/breakdown';
-import { SORT_VALUES, type SortBy } from '../lib/filters';
 import { categoryIsOn, toggleCategory } from '../lib/scope';
 import styles from './QuickFilters.module.css';
 
@@ -31,14 +29,6 @@ const SHOW: QuickFilterOption[] = [
   { id: 'rarely_solved', label: 'Rarely solved' },
   { id: 'unique_solve', label: 'Uniquely solved' },
 ];
-const SORT: Record<SortBy, string> = {
-  index: 'Item order',
-  score_asc: 'Score, low to high',
-  score_desc: 'Score, high to low',
-  latency_asc: 'Latency, fast to slow',
-  latency_desc: 'Latency, slow to fast',
-  change_desc: 'Biggest change vs baseline',
-};
 const SLOT: Record<string, ErrorSlot> = {
   'Task error': 'task',
   'Metric error': 'metric',
@@ -82,7 +72,11 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
   const winnerOptions: QuickFilterOption[] = dir
     ? [
         ...model.runs.map((r, i) => ({ id: `win_${i}`, label: `${runShortName(r)} won`, title: r.label })),
-        ...model.runs.map((r, i) => ({ id: `only_${i}`, label: `Only ${runShortName(r)} solved`, title: r.label })),
+        ...model.runs.map((r, i) => ({
+          id: `only_${i}`,
+          label: `Only ${runShortName(r)} solved`,
+          title: r.label,
+        })),
         { id: 'tie', label: 'Ties' },
       ].map(({ id, label }) => ({ id, label }))
     : [];
@@ -136,9 +130,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
         {scope.shown.toLocaleString('en-US')} of {scope.total.toLocaleString('en-US')} items
       </Text>
       <div className={styles.actions}>
-        <Button size="sm" variant="ghost" onPress={scope.clearAll}>
-          Clear all
-        </Button>
+        {/* K6 (C154): one Clear, in the sticky nav */}
         <Button size="sm" variant="neutral" onPress={onViewItems}>
           View {scope.shown.toLocaleString('en-US')} items
         </Button>
@@ -161,7 +153,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
       <SearchField
         label="Filter by text"
         hideLabel
-        placeholder="Search id, input, outputs…"
+        placeholder="Search id, input, outputs"
         value={c.view.q}
         onChange={(q) => c.setView({ q })}
         onClear={() => c.setView({ q: '' })}
@@ -203,12 +195,6 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
         options={errorOptions}
         selected={activeErrors}
         onToggle={toggleError}
-      />
-      <Select
-        label="Order by"
-        value={c.view.sort}
-        onChange={(k) => k && c.setView({ sort: String(k) as SortBy })}
-        items={(['index', ...SORT_VALUES] as SortBy[]).map((s) => ({ key: s, label: SORT[s] }))}
       />
     </div>
   );

@@ -47,7 +47,7 @@ export function ReenterKeyRow({ slotKey, label }: ReenterKeyRowProps) {
           type="password"
           mono
           autoComplete="off"
-          placeholder="sk-…"
+          placeholder="API key"
           onChange={(v) => {
             typed.current = v;
           }}

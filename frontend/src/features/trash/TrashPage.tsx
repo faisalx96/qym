@@ -1,13 +1,19 @@
 /**
  * /trash — deleted runs (admins only; brief 07 §2.18). URL state: ?q=&project=&page= (1-based).
  * Single and bulk restore (≤200) with skipped reasons; archived-project rows cannot be restored.
+ * Row actions sit in one menu behind the row's '>' handle, as on the runs list (C151): Restore and Delete permanently.
+ * Delete permanently (C118) asks for a typed count and also works on runs of an archived project, so that project's
+ * Deleted runs can be emptied before it is deleted.
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { Key } from 'react-aria-components';
 import { useSearchParams } from 'react-router-dom';
+import { useAllProjects } from '@/api/admin';
 import {
+  PURGE_MAX,
   RESTORE_MAX,
   TRASH_PAGE,
+  usePurgeRuns,
   useRestoreRuns,
   useTrash,
   useTrashProjects,
@@ -18,8 +24,9 @@ import { useDelayedPending } from '@/lib/pending';
 import { useAuth, useDocumentTitle } from '@/features/shell';
 import { constrained, fullWidth } from '@/features/shell/layout';
 import {
-  Badge,
+  ActionTile,
   Button,
+  ConfirmDialog,
   DataTable,
   EmptyState,
   ErrorState,
@@ -29,14 +36,21 @@ import {
   SearchField,
   Select,
   Skeleton,
-  Tag,
+  RowMenu,
   Text,
-  Tooltip,
   useToast,
   type RunStatus,
   type Column,
+  Flag,
+  StatusMark,
+  ModelTag,
+  TaskTag,
+  DatasetTag,
+  UserName,
 } from '@/ui';
 import styles from './TrashPage.module.css';
+import { retentionLabel } from '@/lib/retention';
+import { APP_LOCALE, formatDay } from '@/lib/dates';
 
 const DAY = 86_400_000;
 
@@ -55,12 +69,16 @@ export function purgeInfo(
     text: `in ${n} day${n === 1 ? '' : 's'}`,
     tone: n < 3 ? 'warning' : undefined,
     soon: n < 3,
-    sub: new Date(row.purge_at).toLocaleDateString(),
+    sub: formatDay(row.purge_at),
   };
 }
 
+function plural(n: number) {
+  return `${n} run${n === 1 ? '' : 's'}`;
+}
+
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return formatDay(iso);
 }
 
 export function TrashPage() {
@@ -68,12 +86,20 @@ export function TrashPage() {
   useDocumentTitle('Deleted runs');
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
-  const projectId = params.get('project') || null;
+  const projectParam = params.get('project') || null;
   const page = Math.max(1, parseInt(params.get('page') ?? '1', 10) || 1);
   const [search, setSearch] = useState(q);
   const [selected, setSelected] = useState<Set<Key>>(new Set());
   const toast = useToast();
   const restore = useRestoreRuns();
+  const purge = usePurgeRuns();
+  const [purgeIds, setPurgeIds] = useState<string[] | null>(null);
+  const allProjects = useAllProjects();
+  // ?project= takes the id; an old link may still carry the slug (C060).
+  const chosen = projectParam
+    ? (allProjects.data ?? []).find((p) => p.id === projectParam || p.slug === projectParam)
+    : undefined;
+  const projectId = chosen?.id ?? projectParam;
   const list = useTrash({ q, projectId, page }, isAdmin);
   const projects = useTrashProjects(isAdmin);
   const showSkeleton = useDelayedPending(list.isPending && isAdmin);
@@ -118,6 +144,20 @@ export function TrashPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.data, list.isPlaceholderData, page]);
 
+  async function doPurge(ids: string[]) {
+    try {
+      const r = await purge.mutateAsync(ids);
+      setSelected(new Set());
+      const reasons = [...new Set(r.skipped.map((s) => s.reason))].join('; ');
+      toast.show(
+        `${plural(r.purged.length)} deleted permanently${r.skipped.length ? ` · ${r.skipped.length} skipped: ${reasons}` : ''}`,
+        { tone: r.purged.length ? 'success' : 'error' },
+      );
+    } catch (e) {
+      throw new Error(e instanceof ApiError ? e.detail || e.message : 'Delete failed');
+    }
+  }
+
   async function doRestore(ids: string[]) {
     try {
       const r = await restore.mutateAsync(ids);
@@ -161,6 +201,29 @@ export function TrashPage() {
   const total = list.data?.total ?? 0;
   const grace = list.data?.graceDays;
   const filtered = Boolean(q || projectId);
+  const purgeOn = Boolean(grace);
+  const selectedIds = [...selected].map(String).filter((id) => byId.has(id));
+  const purgesColumn: Column<TrashRun> = {
+    id: 'purges',
+    priority: 1,
+    header: 'Purges',
+    width: 120,
+    cell: (r) => {
+      const p = purgeInfo(r);
+      return (
+        <span className={styles.stack} data-soon={p.soon ? '' : undefined}>
+          {p.tone ? (
+            <Flag tone={p.tone} icon="clock">
+              {p.text}
+            </Flag>
+          ) : (
+            <span>{p.text}</span>
+          )}
+          {p.sub ? <span className={styles.sub}>{p.sub}</span> : null}
+        </span>
+      );
+    },
+  };
   const columns: Column<TrashRun>[] = [
     {
       id: 'run',
@@ -175,7 +238,10 @@ export function TrashPage() {
           <Text as="span" variant="md" weight={600} truncate>
             {r.run_name}
           </Text>
-          <span className={styles.runId} title={`Created ${new Date(r.created_at).toLocaleString()}`}>
+          <span
+            className={styles.runId}
+            title={`Created ${new Date(r.created_at).toLocaleString(APP_LOCALE)}`}
+          >
             {r.id}
           </span>
         </span>
@@ -189,25 +255,14 @@ export function TrashPage() {
       cell: (r) => (
         <span className={styles.stack}>
           <span>{r.project_name}</span>
-          {r.project_archived ? <Tag tone="warning">Project archived</Tag> : null}
+          {r.project_archived ? (
+            <StatusMark tone="warning" shape="pause" label="Project archived" data-status="archived" />
+          ) : null}
         </span>
       ),
     },
-    {
-      id: 'purges',
-      priority: 1,
-      header: 'Purges',
-      width: 120,
-      cell: (r) => {
-        const p = purgeInfo(r);
-        return (
-          <span className={styles.stack} data-soon={p.soon ? '' : undefined}>
-            {p.tone ? <Badge tone={p.tone}>{p.text}</Badge> : <span>{p.text}</span>}
-            {p.sub ? <span className={styles.sub}>{p.sub}</span> : null}
-          </span>
-        );
-      },
-    },
+    // With retention Off nothing is ever purged, so the column would say "Not scheduled" on every row (C151).
+    ...(purgeOn ? [purgesColumn] : []),
     {
       id: 'deleted',
       type: 'date',
@@ -217,7 +272,7 @@ export function TrashPage() {
       cell: (r) => (
         <span className={styles.stack}>
           <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
-          {r.deleted_by_name ? <span className={styles.sub}>by {r.deleted_by_name}</span> : null}
+          {r.deleted_by_name ? <UserName name={r.deleted_by_name} /> : null}
         </span>
       ),
     },
@@ -234,46 +289,51 @@ export function TrashPage() {
       priority: 3,
       header: 'Model',
       width: 130,
-      cell: (r) => (
-        <span className={styles.stack}>
-          <span>{r.model ?? '—'}</span>
-          {r.trace_stats?.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
-        </span>
-      ),
+      cell: (r) => (r.model ? <ModelTag name={r.model} reasoning={!!r.trace_stats?.has_reasoning} /> : '—'),
     },
-    { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => r.task ?? '—' },
-    { id: 'dataset', header: 'Dataset', priority: 3, width: 120, cell: (r) => r.dataset ?? '—' },
+    { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => <TaskTag name={r.task} /> },
+    {
+      id: 'dataset',
+      header: 'Dataset',
+      priority: 3,
+      width: 120,
+      cell: (r) => <DatasetTag name={r.dataset} />,
+    },
     {
       id: 'actions',
-      header: 'Restore',
+      header: 'Actions',
       type: 'actions',
       hideLabel: true,
-      width: 96,
+      // one 20px handle and the cell padding, as on the runs list
+      width: 44,
       pin: 'end',
       hideable: false,
-      cell: (r) =>
-        r.project_archived ? (
-          <Tooltip content="Unarchive the project to restore this run.">
-            <Button
-              variant="neutral"
-              size="sm"
-              aria-disabled="true"
-              onPress={() => toast.show('Unarchive the project to restore this run.', { tone: 'info' })}
-            >
-              Restore
-            </Button>
-          </Tooltip>
-        ) : (
-          <Button
-            variant="accent"
-            size="sm"
-            onPress={() => void doRestore([r.id])}
-            isDisabled={restore.isPending}
-            data-testid={`restore-${r.id}`}
-          >
-            Restore
-          </Button>
-        ),
+      menuColumn: true,
+      cell: (r) => (
+        <RowMenu
+          label={`Actions for ${r.run_name}`}
+          items={[
+            {
+              id: 'restore',
+              label: 'Restore',
+              icon: <ActionTile icon="retry" />,
+              disabled: r.project_archived || restore.isPending,
+              description: r.project_archived ? 'Unarchive the project to restore this run.' : undefined,
+            },
+            {
+              id: 'purge',
+              label: 'Delete permanently',
+              icon: <ActionTile tone="danger" icon="trash" />,
+              tone: 'danger',
+              separatorBefore: true,
+            },
+          ]}
+          onAction={(id) => {
+            if (id === 'restore') void doRestore([r.id]);
+            else if (id === 'purge') setPurgeIds([r.id]);
+          }}
+        />
+      ),
     },
   ];
 
@@ -284,12 +344,16 @@ export function TrashPage() {
         description={
           grace
             ? `Deleted runs are permanently removed ${grace} days after deletion, not counting time their project spends archived. Restore a run before its purge date to keep it.`
-            : 'Automatic purge is off: deleted runs are kept until removed by an operator.'
+            : 'Retention is off: deleted runs are kept until an admin restores them or deletes them permanently.'
         }
         meta={[
-          <span key="r">Retention {grace ? `${grace} days` : 'Off'}</span>,
+          <span key="r">Retention {retentionLabel(grace)}</span>,
           <span key="n">
-            {filtered ? `${total} matching` : `${total} deleted run${total === 1 ? '' : 's'}`}
+            {list.data
+              ? filtered
+                ? `${total} matching`
+                : `${total} deleted run${total === 1 ? '' : 's'}`
+              : '–'}
           </span>,
           <span key="a">Only admins can restore runs</span>,
         ]}
@@ -300,7 +364,7 @@ export function TrashPage() {
           placeholder="Search run name or ID"
           value={search}
           onChange={setSearch}
-          width={280}
+          width={260}
         />
         <Select
           label="Project"
@@ -312,6 +376,10 @@ export function TrashPage() {
               key: p.id,
               label: `${p.name}${p.archived ? ' (archived)' : ''} · ${p.deleted_runs}`,
             })),
+            // The chosen project always shows, also with no deleted runs (C060); All projects clears it.
+            ...(projectId && projects.data && !projects.data.some((p) => p.id === projectId)
+              ? [{ key: projectId, label: chosen ? `${chosen.name} · 0` : 'Unknown project' }]
+              : []),
           ]}
           value={projectId ?? ''}
           onChange={(k) => {
@@ -333,7 +401,7 @@ export function TrashPage() {
         />
       ) : list.data && rows.length === 0 ? (
         <EmptyState
-          title={filtered ? 'No deleted runs match' : 'Nothing in the trash'}
+          title={filtered ? 'No deleted runs match' : 'No deleted runs'}
           body={
             filtered ? 'Try another search or project.' : 'Runs you delete appear here until they are purged.'
           }
@@ -349,7 +417,7 @@ export function TrashPage() {
               (e.target as HTMLElement).closest('tr')
             ) {
               e.preventDefault();
-              setSelected(new Set(rows.filter((r) => !r.project_archived).map((r) => r.id)));
+              setSelected(new Set(rows.map((r) => r.id)));
             }
           }}
         >
@@ -361,27 +429,33 @@ export function TrashPage() {
             rowKey={(r) => r.id}
             selection={{
               selected,
-              onChange: (keys) =>
-                setSelected(
-                  new Set(
-                    [...keys].filter((k) => byId.get(String(k)) && !byId.get(String(k))!.project_archived),
-                  ),
-                ),
+              // Runs of an archived project can be selected for Delete permanently; Restore skips them.
+              onChange: (keys) => setSelected(new Set([...keys].filter((k) => byId.has(String(k))))),
             }}
             refreshing={list.isFetching && list.isPlaceholderData}
             columns={columns}
             density="regular"
             selectOnRowClick
             bulkActions={
-              <Button
-                variant="accent"
-                isDisabled={restorableSelected.length > RESTORE_MAX}
-                loading={restore.isPending}
-                onPress={() => void doRestore(restorableSelected)}
-                data-testid="restore-selected"
-              >
-                Restore {restorableSelected.length} selected
-              </Button>
+              <>
+                <Button
+                  variant="accent"
+                  isDisabled={!restorableSelected.length || restorableSelected.length > RESTORE_MAX}
+                  loading={restore.isPending}
+                  onPress={() => void doRestore(restorableSelected)}
+                  data-testid="restore-selected"
+                >
+                  Restore {restorableSelected.length} selected
+                </Button>
+                <Button
+                  variant="danger"
+                  isDisabled={selectedIds.length > PURGE_MAX}
+                  onPress={() => setPurgeIds(selectedIds)}
+                  data-testid="purge-selected"
+                >
+                  Delete {selectedIds.length} permanently
+                </Button>
+              </>
             }
             rowState={(r) => (purgeInfo(r).soon ? 'warn' : undefined)}
           >
@@ -401,6 +475,22 @@ export function TrashPage() {
           </DataTable>
         </div>
       ) : null}
+      <ConfirmDialog
+        open={purgeIds !== null}
+        onOpenChange={(o) => {
+          if (!o) setPurgeIds(null);
+        }}
+        tone="danger"
+        title={`Delete ${plural(purgeIds?.length ?? 0)} permanently?`}
+        description="This removes the runs with their items, scores and traces. They cannot be restored."
+        requireText={`delete ${plural(purgeIds?.length ?? 0)}`}
+        inputLabel={`Type “delete ${plural(purgeIds?.length ?? 0)}” to confirm`}
+        confirmLabel={`Delete ${plural(purgeIds?.length ?? 0)} permanently`}
+        onConfirm={async () => {
+          if (purgeIds) await doPurge(purgeIds);
+          setPurgeIds(null);
+        }}
+      />
     </div>
   );
 }

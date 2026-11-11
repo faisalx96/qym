@@ -2,10 +2,11 @@
 import { Link } from 'react-router-dom';
 import { useDatasetLineage, type DatasetVersion, type LineageChange } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
-import { EmptyState, ErrorState, LinkButton, SectionHeader, Skeleton, Tag, Text, Card } from '@/ui';
+import { EmptyState, ErrorState, LinkButton, Section, Skeleton, Tag, Text, Card } from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
 import { formatDate, pluralize } from '../lib/itemValue';
+import { versionSourceText } from '../lib/versions';
 import { comparePath, datasetPath } from '../lib/route';
 import styles from './LineageTab.module.css';
 
@@ -80,6 +81,10 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
             ) : null}
           </div>
           <div className={styles.dates}>
+            {/* the version's origin, which the dataset header no longer lists (C042) */}
+            {versionSourceText(v, v.parent_version_id ? byId.get(v.parent_version_id) : null)
+              ? `${versionSourceText(v, v.parent_version_id ? byId.get(v.parent_version_id) : null)} · `
+              : ''}
             created {formatDate(v.created_at)}
             {v.published_at ? ` · published ${formatDate(v.published_at)}` : ''}
             {orphans.includes(v) ? ' · parent version no longer exists' : ''}
@@ -94,30 +99,29 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
 
   return (
     <div className={styles.wrap} data-dataset-lineage>
-      <SectionHeader
+      <Section
         title="Version history"
         description="How each version descends from its parent, and what changed along the way. Open a version from its name."
-      />
-      <ul className={styles.tree}>{roots.map((v) => renderNode(v, 0))}</ul>
-      <SectionHeader
-        title="Change log"
-        description="Every change to this dataset’s versions, oldest first."
-      />
-      {changes.length ? (
-        <ol className={styles.log}>
-          {changes.map((c) => (
-            <li key={c.id} className={styles.logRow}>
-              <span className={styles.logTime}>{formatDate(c.created_at)}</span>
-              <span className={styles.logText}>{describeChange(c, byId)}</span>
-              <UserPill user={c.actor} />
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <Text variant="sm" tone="muted">
-          No changes recorded.
-        </Text>
-      )}
+      >
+        <ul className={styles.tree}>{roots.map((v) => renderNode(v, 0))}</ul>
+      </Section>
+      <Section title="Change log" description="Every change to this dataset’s versions, oldest first.">
+        {changes.length ? (
+          <ol className={styles.log}>
+            {changes.map((c) => (
+              <li key={c.id} className={styles.logRow}>
+                <span className={styles.logTime}>{formatDate(c.created_at)}</span>
+                <span className={styles.logText}>{describeChange(c, byId)}</span>
+                <UserPill user={c.actor} />
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <Text variant="sm" tone="muted">
+            No changes recorded.
+          </Text>
+        )}
+      </Section>
     </div>
   );
 }
@@ -133,7 +137,7 @@ export function describeChange(c: LineageChange, byId: Map<string, DatasetVersio
     case 'published':
       return `${v} published${s.item_count != null ? ` (${pluralize(s.item_count, 'item')})` : ''}`;
     case 'uploaded':
-      return `${pluralize(s.item_count ?? 0, 'item')} uploaded into ${v}${s.source_type ? ` from ${s.source_type}` : ''}`;
+      return `${pluralize(s.item_count ?? 0, 'item')} uploaded into ${v}${s.source_type ? ` from a ${String(s.source_type).toUpperCase()} file` : ''}`;
     case 'alias_set':
       return `alias “${s.alias ?? 'production'}” set to ${v}`;
     default:

@@ -39,9 +39,12 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.llm_endpoint_security import (
+    DEFAULT_LLM_BASE_URL,
+    KEY_FOR_NEW_HOST_MESSAGE,
     LlmEndpointValidationError,
     create_llm_http_client,
     experiment_base_url_needs_https,
+    key_host_changed,
     validate_llm_base_url,
 )
 from qym_platform.openai_compat import create_chat_completion_compat
@@ -68,6 +71,12 @@ from qym_platform.services.analysis_prompts import (
     serialize_analysis_prompt_settings,
 )
 from qym_platform.services.llm_connections import project_connections_query
+from qym_platform.services.metric_directions import (
+    DIRECTIONS as METRIC_DIRECTIONS,
+    metric_directions,
+    metric_directions_for,
+    set_metric_direction,
+)
 from qym_platform.services.retention import resume_purge_clocks
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
 from sqlalchemy import and_, func, or_, select
@@ -264,6 +273,7 @@ def _project_payload(
     member_counts: Optional[Dict[str, int]] = None,
     run_counts: Optional[Dict[str, int]] = None,
     role: Optional[str] = None,
+    directions: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     member_count = (
         int(member_counts[project.id])
@@ -293,6 +303,12 @@ def _project_payload(
         "updated_at": to_api_timestamp(project.updated_at),
         # Who may decide diagnosis corrections (C074).
         **correction_rules(project),
+        # The direction saved for metrics that declare none (C129).
+        "metric_directions": (
+            directions.get(project.id, {})
+            if directions is not None
+            else metric_directions(db, project.id)
+        ),
     }
 
 
@@ -306,6 +322,7 @@ def serialize_project_payloads(
     project_ids = [project.id for project in project_list]
     member_counts = _project_member_counts(db, project_ids)
     run_counts = _project_run_counts(db, project_ids)
+    directions = metric_directions_for(db, project_ids)
 
     if principal.user.role == UserRole.ADMIN:
         role_map = {project.id: ProjectRole.MANAGER.value for project in project_list}
@@ -331,6 +348,7 @@ def serialize_project_payloads(
             member_counts=member_counts,
             run_counts=run_counts,
             role=role_map.get(project.id, ""),
+            directions=directions,
         )
         for project in project_list
     ]
@@ -435,6 +453,7 @@ class LlmConnectionRequest(BaseModel):
     llm_base_url: str = Field(default="https://api.openai.com/v1")
     llm_model: str = Field(default="gpt-4o-mini")
     # New key, or the sentinel "__KEEP__" on edit to preserve the stored key, or "" to clear.
+    # A new scheme, host or port refuses "__KEEP__" and "": the key must be sent again.
     llm_api_key: str = Field(default="")
     # Offered in the experiments model picker. Omitted on create means true; omitted on
     # edit keeps the stored value.
@@ -510,9 +529,22 @@ def _apply_connection_key(
     is_new: bool,
     settings: PlatformSettings,
 ) -> None:
-    """Set name/base_url/model/availability and resolve the key (new / keep / clear)."""
+    """Set name/base_url/model/availability and resolve the key (new / keep / clear).
+
+    A stored key stays bound to the host it was entered for: an edit that moves the
+    base URL to another scheme, host or port must send the key again (C004).
+    """
+    base_url = _validate_llm_base_url(req.llm_base_url, settings)
+    api_key = req.llm_api_key.strip()
+    if (
+        not is_new
+        and conn.llm_api_key_encrypted
+        and (api_key == "__KEEP__" or not api_key)
+        and key_host_changed(conn.llm_base_url or DEFAULT_LLM_BASE_URL, base_url)
+    ):
+        raise HTTPException(status_code=400, detail=KEY_FOR_NEW_HOST_MESSAGE)
     conn.name = req.name.strip()
-    conn.llm_base_url = _validate_llm_base_url(req.llm_base_url, settings)
+    conn.llm_base_url = base_url
     conn.llm_model = req.llm_model.strip()
     # Experiments need HTTPS (analyzer use keeps accepting public http://).
     plain_http = experiment_base_url_needs_https(
@@ -532,7 +564,6 @@ def _apply_connection_key(
         # Omitted on create: an http:// connection is analysis-only.
         conn.available_for_experiments = not plain_http
 
-    api_key = req.llm_api_key.strip()
     if api_key == "__KEEP__":
         return  # leave the stored encrypted key untouched
     if not api_key:
@@ -673,6 +704,80 @@ def set_default_llm_connection(
     db.refresh(conn)
     logger.info("LLM connection %s saved in project %s", conn.id, project_id)
     return _serialize_connection(conn)
+
+
+class LlmConnectionDraftTest(BaseModel):
+    """An unsaved connection to test (C157). ``connection_id`` with no key tests the stored key, on its own host."""
+
+    llm_base_url: str = Field(default="https://api.openai.com/v1")
+    llm_model: str = Field(default="gpt-4o-mini")
+    llm_api_key: str = Field(default="")
+    connection_id: Optional[str] = None
+    available_for_experiments: Optional[bool] = None
+
+
+@router.post("/v1/projects/{project_id}/llm-connections/test")
+async def test_llm_connection_draft(
+    project_id: str,
+    req: LlmConnectionDraftTest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Test the values in the form before they are saved, with the same rules a save applies (C157)."""
+    _require_project_manager(db, principal, project_id)
+    settings = PlatformSettings()
+    base_url = _validate_llm_base_url(req.llm_base_url, settings)
+    if req.available_for_experiments and experiment_base_url_needs_https(
+        base_url, allow_private=settings.allow_private_llm_base_urls
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only https:// connections can be available for experiments. Use an "
+                'https:// base URL or turn off "Available for experiments".'
+            ),
+        )
+    api_key = req.llm_api_key.strip()
+    if (not api_key or api_key == "__KEEP__") and req.connection_id:
+        conn = _get_connection(db, project_id, req.connection_id)
+        if conn.llm_api_key_encrypted and key_host_changed(
+            conn.llm_base_url or DEFAULT_LLM_BASE_URL, base_url
+        ):
+            raise HTTPException(status_code=400, detail=KEY_FOR_NEW_HOST_MESSAGE)
+        try:
+            api_key = resolve_llm_api_key(
+                {
+                    "llm_api_key_encrypted": conn.llm_api_key_encrypted,
+                    "llm_api_key_last4": conn.llm_api_key_last4,
+                },
+                settings,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    if not api_key or api_key == "__KEEP__":
+        raise HTTPException(status_code=400, detail="Enter an API key to test this connection")
+    model = req.llm_model.strip() or "gpt-4o-mini"
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        http_client=create_llm_http_client(allow_private=settings.allow_private_llm_base_urls),
+    )
+    db.close()
+    try:
+        resp = await create_chat_completion_compat(
+            client,
+            model=model,
+            messages=[{"role": "user", "content": "Reply with: ok"}],
+            max_tokens=4,
+        )
+        return {"ok": True, "model": model, "response": resp.choices[0].message.content}
+    except Exception as e:  # noqa: BLE001 - surface provider error to the user
+        logger.warning(
+            "LLM connection draft test failed (project=%s, model=%s)", project_id, model, exc_info=True
+        )
+        raise HTTPException(status_code=400, detail=f"LLM connection failed: {e}")
 
 
 @router.post("/v1/projects/{project_id}/llm-connections/{connection_id}/test")
@@ -1007,6 +1112,50 @@ def add_project_member(
     db.refresh(member)
     logger.info("User %s added to project %s as %s", user.id, project.id, getattr(req.role, "value", req.role))
     return _serialize_member(member, user)
+
+
+class MetricDirectionRequest(BaseModel):
+    metric: str
+    direction: Optional[str] = None
+
+
+@router.patch("/v1/projects/{project_id}/metric-directions")
+def update_project_metric_direction(
+    project_id: str,
+    req: MetricDirectionRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Save which way is better for a metric that declares no direction, for this project (C129).
+
+    Project managers and admins. ``direction`` null clears the choice, and the
+    run page then assumes higher is better again for 0-1 scores.
+    """
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Only project managers can set a metric's direction")
+    require_project_writable(db, project_id)
+    project = _get_project(db, project_id)
+    metric = req.metric.strip()
+    if not metric or len(metric) > 200:
+        raise HTTPException(status_code=422, detail="metric is required (at most 200 characters)")
+    if req.direction is not None and req.direction not in METRIC_DIRECTIONS:
+        raise HTTPException(status_code=422, detail="direction must be maximize, minimize or null")
+    before = metric_directions(db, project.id)
+    after = set_metric_direction(db, project.id, metric, req.direction)
+    if after != before:
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="project.metric_direction_updated",
+                entity_type="project",
+                entity_id=project.id,
+                before={"metric_directions": before},
+                after={"metric_directions": after},
+            )
+        )
+    db.commit()
+    return {"project_id": project.id, "metric_directions": after}
 
 
 class ReviewRulesRequest(BaseModel):
@@ -1667,7 +1816,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
     if runs:
         parts.append(f"{runs} run{'s' if runs != 1 else ''}")
     if trashed:
-        parts.append(f"{trashed} run{'s' if trashed != 1 else ''} in Trash")
+        parts.append(f"{trashed} deleted run{'s' if trashed != 1 else ''}")
     # Deleted runs keep blocking until retention purges them, so say when.
     grace_days = PlatformSettings().deleted_run_grace_days
     if grace_days > 0:
@@ -1675,7 +1824,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
         if archived:
             purge += ", and purging is paused while the project is archived"
     else:
-        purge = "automatic Trash purging is turned off on this platform"
+        purge = "Retention is Off on this platform, so deleted runs are kept until restored"
     advice = (
         "It stays archived and keeps its data."
         if archived
@@ -1684,7 +1833,7 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
     return (
         f"This project still has {' and '.join(parts)}. Runs are never deleted with "
         "a project: it can be deleted only once all its runs are deleted and purged "
-        f"from Trash ({purge}). {advice}"
+        f"from Deleted runs ({purge}). {advice}"
     )
 
 

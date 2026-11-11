@@ -1,4 +1,4 @@
-/* Filter bar: facet triggers row and chip line under the search / time / origin row. */
+/* Filter bar: the facet triggers row under the search / time / origin row, ending in `× Clear n`. */
 .facetRow {
   display: flex;
   flex-wrap: wrap;
@@ -16,15 +16,22 @@
   flex: none;
 }
 .clear {
-  margin-inline-start: auto;
+  flex: none;
 }
-.chips {
-  display: flex;
-  flex-wrap: wrap;
+/* The count sits on its own red disc (round 10, as in the first qym bar): it reads as "n filters", not as part of the word. */
+.clearCount {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
-  width: 100%;
-  animation: chipsIn var(--transition-fast);
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--error) 32%, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 .morePanel {
   display: flex;
@@ -40,19 +47,4 @@
   width: auto;
   max-width: none;
   max-height: none;
-}
-
-@keyframes chipsIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chips {
-    animation: none;
-  }
 }

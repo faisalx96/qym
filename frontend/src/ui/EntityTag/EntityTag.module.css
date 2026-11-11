@@ -1,16 +1,12 @@
-/* Task, dataset and model tags: one-line, truncating, with the full name as a tooltip. */
+/* Task, dataset and model tags: the whole name, wrapping inside its column (C218: no ellipsis), the name as a tooltip. */
 .entity {
   max-width: 100%;
   min-width: 0;
-  white-space: nowrap;
-  overflow-wrap: normal;
 }
 
 .text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .group {
@@ -58,7 +54,7 @@
 
 a.runName:hover {
   color: var(--accent-primary);
-  text-decoration: underline;
+  text-decoration: none; /* the colour step is the hover cue: no underline */
 }
 
 a.runName:focus-visible {

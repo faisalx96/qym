@@ -34,7 +34,9 @@ from qym_platform.feedback_agent.store import (FeedbackError, add_message,
                                                load_own_draft, load_visible,
                                                lookup_maps, order_clauses,
                                                user_name)
-from qym_platform.llm_endpoint_security import (LlmEndpointValidationError,
+from qym_platform.llm_endpoint_security import (KEY_FOR_NEW_HOST_MESSAGE,
+                                                LlmEndpointValidationError,
+                                                key_host_changed,
                                                 validate_llm_base_url)
 from qym_platform.log import get_logger
 from qym_platform.secrets import build_llm_config_storage, encryption_available
@@ -753,6 +755,14 @@ def put_agent_connection(
                 raise error(
                     422, "validation", "An API key is required.", field="llm_api_key"
                 )
+            # The stored key stays bound to its host (C004).
+            if key_host_changed(conn.llm_base_url, url):
+                raise error(
+                    422,
+                    "validation",
+                    KEY_FOR_NEW_HOST_MESSAGE + ".",
+                    field="llm_api_key",
+                )
         elif not key:
             raise error(
                 422, "validation", "An API key is required.", field="llm_api_key"
@@ -841,6 +851,14 @@ async def test_agent_connection(
         if conn is None or not conn.llm_api_key_encrypted:
             raise error(
                 422, "validation", "An API key is required.", field="llm_api_key"
+            )
+        # Test an unsaved URL with the stored key only on the key's own host (C004).
+        if key_host_changed(conn.llm_base_url, url):
+            raise error(
+                422,
+                "validation",
+                KEY_FOR_NEW_HOST_MESSAGE + ".",
+                field="llm_api_key",
             )
         try:
             key = conn_mod.read_api_key(conn, settings)

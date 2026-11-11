@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useExamples, type AnalysisScope, type ExampleQuery } from '@/api/analysis';
 import {
-  Badge,
   Button,
   Checkbox,
   Dialog,
@@ -14,9 +13,11 @@ import {
   SegmentedControl,
   Skeleton,
   Text,
+  Flag,
 } from '@/ui';
 import { useDebounced } from '../useDebounced';
 import s from './examples.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export const EXAMPLE_FIELDS = [
   { key: 'input', label: 'Input' },
@@ -152,7 +153,7 @@ function PickerBody({
           <Button
             size="md"
             variant="primary"
-            isDisabled={over}
+            isDisabled={over || selected.size === 0}
             onPress={() => {
               onUse({ ids: [...selected], fields });
               onOpenChange(false);
@@ -254,9 +255,13 @@ function PickerBody({
       <div className={s.budget}>
         <div className={s.budgetHead}>
           <Text variant="sm" tone="muted" role="status">
-            {`${selected.size} selected · ${budgetUsed.toLocaleString()} characters${characterLimit ? ` of ${characterLimit.toLocaleString()}` : ''}`}
+            {`${selected.size} selected · ${budgetUsed.toLocaleString(APP_LOCALE)} characters${characterLimit ? ` of ${characterLimit.toLocaleString(APP_LOCALE)}` : ''}`}
           </Text>
-          {over ? <Badge tone="danger">Over the rule-writer budget</Badge> : null}
+          {over ? (
+            <Flag tone="danger" icon="warning">
+              Over the rule-writer budget
+            </Flag>
+          ) : null}
           <span className={s.spacer} />
           <Checkbox
             isSelected={allFilteredSelected}

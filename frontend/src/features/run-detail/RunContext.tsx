@@ -27,6 +27,10 @@ export interface RunPageValue {
   summaryNeighbors: NeighborsPayload | null | undefined;
   /** Stage 2 has not answered yet: the payload is the run header (summary or list row) with no rows. */
   rowsPending: boolean;
+  /** Stage 2 failed (R9, C019): the report shows one error panel in place of the sections and Items. */
+  rowsError?: unknown;
+  /** Ask for the rows again. */
+  retryRows?: () => void;
   /** Whether the rows carry a group (always true for a payload loaded without `fields`). */
   hasGroup: (group: RowGroup) => boolean;
   /** Ask for a late group; idempotent. The rows gain the group when it arrives (`hasGroup` turns true). */

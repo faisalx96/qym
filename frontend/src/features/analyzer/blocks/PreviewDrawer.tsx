@@ -46,7 +46,7 @@ export function PreviewDrawer({
             Context
           </Text>
           <Switch isSelected={settings.useRules} onChange={(v) => update({ useRules: v })}>
-            Production rules
+            Rules
           </Switch>
           <Switch isSelected={settings.useDocuments} onChange={(v) => update({ useDocuments: v })}>
             Project documents

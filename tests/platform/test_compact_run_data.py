@@ -18,6 +18,7 @@ from qym_platform.api.runs import (
     search_run_items,
 )
 from qym_platform.auth import Principal
+from qym_platform.services.text_search import fold_search_text
 from qym_platform.db.base import Base
 from qym_platform.db.models import (
     Project,
@@ -234,11 +235,39 @@ def test_server_text_search_matches_full_response_for_all_items(data, term):
             row["expected"],
             row["output"],
         ]
-        if any(term.lower() in value.lower() for value in fields):
+        # C066: the server folds case, Arabic letter forms, marks and digits
+        if any(fold_search_text(term) in fold_search_text(value) for value in fields):
             expected_all.append(row["item_id"])
-        if term.lower() in row["output"].lower():
+        if fold_search_text(term) in fold_search_text(row["output"]):
             expected_output.append(row["item_id"])
     assert result["matches"] == {"all": expected_all, "output": expected_output}
+
+
+@pytest.mark.parametrize(
+    "term", ["احمد", "أحمد", "أَحْمَد", "الي", "30", "٣٠", "۳۰", "مدرسة"]
+)
+def test_server_text_search_folds_arabic_like_dataset_search(data, term):
+    """C066: hamza, alef maqsura, diacritics, tatweel and Arabic-Indic digits do not hide a match."""
+    db, run, principal = data
+    for index, output in enumerate(["أحمد ذهب إلى المدرسـة ٣٠ مرة", "no arabic here"]):
+        db.add(
+            RunItem(
+                run_id=run.id,
+                item_id=f"ar-{index}",
+                index=index,
+                input="q",
+                expected="e",
+                output=output,
+            )
+        )
+    db.commit()
+    result = search_run_items(
+        run.id,
+        {"conditions": [{"id": "q", "field": "output", "value": term}]},
+        db,
+        principal,
+    )
+    assert result["matches"] == {"q": ["ar-0"]}
 
 
 def test_repeat_pass_bodies_and_search_keep_pass_identity(data):
@@ -545,17 +574,18 @@ def test_compare_builds_each_requested_run_once(data, monkeypatch):
     db, run, principal = data
     add_rows(db, run, count=2)
     built = []
-    original = runs_api.legacy_run_data
+    original = runs_api._build_runs_data
 
-    def counted(run_id, *args, **kwargs):
-        built.append(run_id)
-        return original(run_id, *args, **kwargs)
+    def counted(db, runs, *args, **kwargs):
+        # The compared runs are built together, in one call (C008).
+        built.append([item.id for item in runs])
+        return original(db, runs, *args, **kwargs)
 
-    monkeypatch.setattr(runs_api, "legacy_run_data", counted)
+    monkeypatch.setattr(runs_api, "_build_runs_data", counted)
     compared = runs_api.legacy_compare(
         files=[run.id, f"{run.id},{run.id}"], db=db, principal=principal, view="compact"
     )
-    assert built == [run.id]
+    assert built == [[run.id]]
     assert [item["run"]["run_id"] for item in compared["runs"]] == [run.id]
 
 
@@ -617,3 +647,31 @@ def test_multi_pass_search_matches_each_pass_searched_alone(data, monkeypatch):
                 run.id, {"conditions": conditions, **invalid}, db, principal
             )
         assert error.value.status_code == 422
+
+
+def test_finished_index_rows_drop_digests_and_zero_attempt_stats():
+    """C084: lean attempt trace stats and no output digests on a finished run's index rows."""
+    from qym_platform.services.run_payloads import lean_finished_index_rows
+
+    rows = [
+        {
+            "item_id": "a",
+            "output_digest": "abc",
+            "pass_attempts": [
+                {
+                    "output_digest": "d1",
+                    "trace_stats": {
+                        "tokens": 12,
+                        "cost": 0.0,
+                        "tool_errors": 0,
+                        "has_reasoning": False,
+                        "outer": {},
+                    },
+                },
+                None,
+            ],
+        }
+    ]
+    lean_finished_index_rows(rows)
+    assert "output_digest" not in rows[0]
+    assert rows[0]["pass_attempts"][0] == {"trace_stats": {"tokens": 12}}

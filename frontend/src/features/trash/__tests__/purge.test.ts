@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TrashRun } from '@/api/trash';
+import { retentionLabel } from '@/lib/retention';
 import { purgeInfo } from '../TrashPage';
 
 const NOW = Date.parse('2026-10-11T12:00:00Z');
@@ -28,5 +29,14 @@ describe('purgeInfo', () => {
   it('pauses for archived projects and handles unscheduled runs', () => {
     expect(purgeInfo(run({ project_archived: true, purge_at: inDays(5) }), NOW).text).toBe('Paused');
     expect(purgeInfo(run({}), NOW).text).toBe('Not scheduled');
+  });
+});
+
+describe('retentionLabel', () => {
+  it('says Off with what that means at 0, never "0 days" (C178)', () => {
+    expect(retentionLabel(null)).toBe('Off (kept until restored)');
+    expect(retentionLabel(0)).toBe('Off (kept until restored)');
+    expect(retentionLabel(30)).toBe('30 days');
+    expect(retentionLabel(1)).toBe('1 day');
   });
 });

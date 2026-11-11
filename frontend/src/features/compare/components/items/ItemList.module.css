@@ -127,6 +127,31 @@
   --score: var(--score-5);
 }
 
+/* K3 (C029): the baseline chip is neutral; a run chip takes the colour of its change against the baseline */
+.chip[data-baseline] {
+  --score: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.chip[data-move='improved'] {
+  --score: var(--success);
+}
+
+.chip[data-move='regressed'] {
+  --score: var(--error);
+  color: var(--error-text);
+}
+
+.chip[data-move='same'] {
+  --score: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.delta {
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
 .chip[data-state='error'] {
   justify-content: flex-start;
   border: 1px solid var(--error);

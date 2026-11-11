@@ -57,8 +57,12 @@ test('CSV export with a filter active: column dialog, group toggle, header and r
   const exportBtn = dialog.getByRole('button', { name: /^Export/ });
   await expect(exportBtn).toBeEnabled(); // bodies loaded
   const countOf = async () => Number(/Export (\d+) columns/.exec(await exportBtn.innerText())![1]);
+  // K8 (C210): 'Scores and change' is the default preset; 'Everything' ticks every column
+  await expect(dialog.getByRole('radio', { name: 'Scores and change' })).toBeChecked();
+  const scoresOnly = await countOf();
+  await dialog.getByText('Everything', { exact: true }).click();
   const all = await countOf();
-  expect(all).toBeGreaterThan(4);
+  expect(all).toBeGreaterThan(scoresOnly);
 
   // uncheck the last column group
   const groups = dialog.locator('fieldset');

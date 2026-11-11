@@ -32,7 +32,6 @@ import {
   OwnerCell,
   RowActions,
   RunNameCell,
-  Signals,
   StatusCell,
   VersionCell,
   type RowPermissions,
@@ -41,10 +40,9 @@ import type { ColumnDef } from './columns';
 import { useRunsCtx } from './context';
 import { isActiveRun } from './polling';
 import { PassGroupStrip } from './passes/PassGroupStrip';
-import { usePassesPrefetch } from './passes/usePassesPrefetch';
+import { summaryPasses } from './passes/groupQuery';
 import {
   ErrorRetry,
-  IssuesCell,
   PassActions,
   PassAnalysis,
   PassDate,
@@ -55,8 +53,15 @@ import {
   QueuedStatus,
 } from './passes/PassCells';
 import { passHref } from './passes/links';
-import { passIssues, readStoredMetric, writeStoredMetric } from './passes/model';
-import { childRowsOf, resolveMetric, runKeyOf, type ChildOf, type TableRow } from './passes/rows';
+import { readStoredMetric, writeStoredMetric } from './passes/model';
+import {
+  childRowsOf,
+  resolveMetric,
+  runKeyOf,
+  type ChildOf,
+  type PassesState,
+  type TableRow,
+} from './passes/rows';
 import { defaultMetricName } from './chartModel';
 import { isPassRef, passRef, passRefBase, PASS_REF_SEP } from './selection';
 import { defaultDirection, type SortSpec } from './urlState';
@@ -134,8 +139,6 @@ function runCell(col: ColumnDef, row: RunRow, p: RunsTableProps, h: CellHandlers
       );
     case 'status':
       return <StatusCell row={row} />;
-    case 'signals':
-      return <Signals row={row} onDetails={(r) => p.onSignalDetails(r)} />;
     case 'task':
       return <TaskTag name={row.task_name} />;
     case 'model':
@@ -174,8 +177,13 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
   if (tr.kind === 'loading')
     return id === 'status' ? <span className={styles.childNote}>Loading passes…</span> : null;
   if (tr.kind === 'error') {
-    if (id === 'status') return <span className={styles.childError}>Could not load passes</span>;
-    if (id === 'actions') return <ErrorRetry onRetry={tr.retry} />;
+    // Retry sits with the message: the Actions column holds only row menus (and lets clicks pass while folded)
+    if (id === 'status')
+      return (
+        <span className={styles.childError}>
+          Couldn’t load passes <ErrorRetry onRetry={tr.retry} />
+        </span>
+      );
     return null;
   }
   if (tr.kind === 'queued') {
@@ -196,9 +204,7 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
     case 'run':
       return <PassNameCell run={run} pass={pass} status={status} />;
     case 'status':
-      return <PassStatus status={status} />;
-    case 'signals':
-      return <IssuesCell issues={passIssues(pass)} />;
+      return <PassStatus run={run} pass={pass} status={status} />;
     case 'time':
       return <PassDate pass={pass} />;
     case 'analysis':
@@ -214,6 +220,7 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
         <PassActions
           run={run}
           pass={pass}
+          status={status}
           canDelete={h.canDeletePass(run)}
           onDelete={(n) => h.onDeletePass(run, n)}
           onOpen={(n) => h.onOpenPass(run, n)}
@@ -235,11 +242,11 @@ const GROUP_LABEL: Record<string, string> = {
   group: 'Repeat runs',
 };
 
-/** Header bands: Overview (Run, Status, Signals), Scores, Context (Date, Task, ...), System, Trace. */
+/** Header bands: Overview (Run, Status), Scores, Context (Date, Task, ...), System, Trace. */
 function bandOf(def: ColumnDef): string | undefined {
   if (def.group !== 'run') return GROUP_LABEL[def.group];
   if (def.id === 'actions') return undefined;
-  return ['run', 'status', 'signals'].includes(def.id) ? 'Overview' : 'Context';
+  return ['run', 'status'].includes(def.id) ? 'Overview' : 'Context';
 }
 
 /** Card layout (< 640 px): Run + Status + actions up top, model/date/first scores below, the rest behind More. */
@@ -262,7 +269,7 @@ const runName = (r: RunRow) => r.external_run_id || r.run_name || r.run_id.slice
 
 export function RunsTable(p: RunsTableProps) {
   const wide = useWideDefault();
-  const { slug: ctxSlug, listContext, metricTypes: prefetchMetricTypes } = useRunsCtx();
+  const { slug: ctxSlug, listContext } = useRunsCtx();
   const navigate = useNavigate();
   const toast = useToast();
   const del = useDeletePasses(p.slug);
@@ -274,22 +281,40 @@ export function RunsTable(p: RunsTableProps) {
     setChoice(m);
     writeStoredMetric(memSlug, m);
   };
-  // Warm the passes and the strip statistics of the page's finished repeat runs once the list has settled (round 7, Q2)
-  usePassesPrefetch(p.rows, choice, prefetchMetricTypes);
 
   const runRows = useMemo<TableRow[]>(
     () => p.rows.map((row) => ({ kind: 'run' as const, key: row.run_id, row })),
     [p.rows],
   );
-  // The open groups: one passes query each (cached, shared with the strip); live runs refetch every 15 s.
+  // The open groups. A finished run's passes come with its summary (C023: no request, no background prefetch); the
+  // others get one passes query each (cached, shared with the strip), and live runs refetch every 15 s.
   const openRuns = useMemo(
     () => p.rows.filter((r) => r.samples > 1 && p.expanded.has(r.run_id)),
     [p.rows, p.expanded],
   );
-  const passQs = useRunPassesMany(
-    openRuns.map((r) => ({ runId: r.run_id, refetchInterval: isActiveRun(r) ? 15_000 : false })),
+  const storedPasses = useMemo(
+    () =>
+      new Map(
+        openRuns.flatMap((r) => {
+          const stored = summaryPasses(r);
+          return stored ? [[r.run_id, stored] as const] : [];
+        }),
+      ),
+    [openRuns],
   );
-  const passesOf = (runId: string) => passQs[openRuns.findIndex((r) => r.run_id === runId)];
+  const fetchedRuns = useMemo(
+    () => openRuns.filter((r) => !storedPasses.has(r.run_id)),
+    [openRuns, storedPasses],
+  );
+  const passQs = useRunPassesMany(
+    fetchedRuns.map((r) => ({ runId: r.run_id, refetchInterval: isActiveRun(r) ? 15_000 : false })),
+  );
+  const passesOf = (runId: string): PassesState | undefined => {
+    const stored = storedPasses.get(runId);
+    if (stored)
+      return { data: stored, isPending: false, isError: false, error: null, refetch: () => undefined };
+    return passQs[fetchedRuns.findIndex((r) => r.run_id === runId)];
+  };
   const openIds = useMemo(() => new Set<string>(openRuns.map((r) => r.run_id)), [openRuns]);
   const openKey = openRuns.map((r) => `${r.run_id}:${r.pass_revision ?? 0}`).join(',');
   const notePassRevision = p.onNotePassRevision;
@@ -317,6 +342,15 @@ export function RunsTable(p: RunsTableProps) {
   const openPass = (run: RunRow, n: number) =>
     navigate(passHref(ctxSlug || p.slug, listContext, run.run_id, n));
 
+  // C133: the Analysis column shows only 'N causes' and 'Analyzing', so it is not drawn when no row on the page has one.
+  const { analyzing } = useRunsCtx();
+  const anyAnalysis = p.rows.some(
+    (r) => (r.analysis_cause_count ?? 0) > 0 || (analyzing?.has(r.run_id) ?? false),
+  );
+  const tableColumns = useMemo(
+    () => (anyAnalysis ? p.columns : p.columns.filter((c) => c.id !== 'analysis')),
+    [p.columns, anyAnalysis],
+  );
   const columns = useMemo<Column<TableRow>[]>(() => {
     let metricRank = 0;
     const h: CellHandlers = {
@@ -326,7 +360,7 @@ export function RunsTable(p: RunsTableProps) {
       onOpenPass: openPass,
       canDeletePass,
     };
-    return p.columns.map((def) => {
+    return tableColumns.map((def) => {
       const rank = def.id.startsWith('metric-') ? metricRank++ : 0;
       return {
         id: def.id,
@@ -343,16 +377,27 @@ export function RunsTable(p: RunsTableProps) {
               ? 'end'
               : undefined,
         lockOrder: def.id === 'actions',
+        // one row menu handle per row (owner decision, Nov 1); see-through while columns remain past the end
+        menuColumn: def.id === 'actions',
+        hideLabel: def.id === 'actions',
         hideable: def.visKey !== null && def.id !== 'run',
         defaultHidden: p.defaultHidden?.has(def.id),
         resizable: def.id !== 'actions',
-        hideLabel: def.id === 'actions',
         priority: priorityOf(def, rank),
         cell: (tr: TableRow) => cellFor(def, tr, p, h),
       } satisfies Column<TableRow>;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cells read the live props through `p`
-  }, [p.columns, p.defaultHidden, wide, p.expanded, p.perm, p.onAction, p.onSignalDetails, p.onToggleExpand]);
+  }, [
+    tableColumns,
+    p.defaultHidden,
+    wide,
+    p.expanded,
+    p.perm,
+    p.onAction,
+    p.onSignalDetails,
+    p.onToggleExpand,
+  ]);
 
   // The DataTable's selection: checked runs, plus every picked pass (and the passes of a run picked whole).
   const selected = useMemo(() => {
@@ -411,7 +456,10 @@ export function RunsTable(p: RunsTableProps) {
         storageScope={p.storageScope}
         reorderable
         onHiddenChange={p.onHiddenChange}
-        density="compact"
+        density="regular"
+        groupBand={false}
+        // C089: one Tab stop for the rows (arrows and j/k move, Enter opens, F2 reaches a row's controls)
+        singleTabStop
         columns={columns}
         rows={runRows}
         rowKey={(r) => r.key}
@@ -431,7 +479,7 @@ export function RunsTable(p: RunsTableProps) {
         onSortChange={(s) => (s ? p.onSort(s.key, s.direction) : p.onSort(null))}
         error={p.error}
         onRetry={p.onRetry}
-        errorTitle="Could not load runs"
+        errorTitle="Couldn’t load runs"
         bulkActions={p.selectMode ? p.bulk : undefined}
         bulkOwnSummary
         bulkAlways={p.selectMode}
@@ -483,6 +531,8 @@ export function RunsTable(p: RunsTableProps) {
               : 'Select row'
         }
         selectAllLabel="Select all runs on this page"
+        // C020: the select column stays (0px) out of select mode, so Select changes no column set
+        reserveSelection
         selectOnRowClick={p.selectMode}
         expandColumn={false}
         canExpand={(tr) => tr.kind === 'run' && tr.row.samples > 1}
@@ -505,7 +555,7 @@ export function RunsTable(p: RunsTableProps) {
         }
         detailLabel={(tr) => `Group metrics of ${runName(tr.kind === 'run' ? tr.row : tr.run)}`}
         childGroupLabel={(tr) => `Passes of ${runName(tr.kind === 'run' ? tr.row : tr.run)}`}
-        cardChildColumns={cardMetric ? [`metric-${cardMetric}`, 'signals'] : ['signals']}
+        cardChildColumns={cardMetric ? [`metric-${cardMetric}`] : []}
         renderExpanded={(tr) =>
           tr.kind === 'run' ? (
             <PassGroupStrip row={tr.row} remembered={choice} onMetric={chooseMetric} />

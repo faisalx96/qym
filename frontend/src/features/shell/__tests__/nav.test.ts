@@ -7,7 +7,10 @@ import { wordDiff } from '../settings/PromptsTab';
 describe('parseRoute', () => {
   it('reads project pages and run ids with slashes', () => {
     expect(parseRoute('/projects/demo')).toMatchObject({ page: 'runs', projectSlug: 'demo' });
-    expect(parseRoute('/projects/demo/settings')).toMatchObject({ page: 'settings', label: 'Settings' });
+    expect(parseRoute('/projects/demo/settings')).toMatchObject({
+      page: 'settings',
+      label: 'Project settings',
+    });
     expect(parseRoute('/projects/demo/runs/a/b/c')).toMatchObject({ page: 'run-detail', runId: 'a/b/c' });
     expect(parseRoute('/projects/demo/runs/a%2Fb/analyzer')).toMatchObject({
       page: 'analyzer',
@@ -50,5 +53,11 @@ describe('helpers', () => {
     const d = wordDiff('a b c', 'a x c');
     expect(d.filter((p) => p.kind === 'del').map((p) => p.text)).toEqual(['b']);
     expect(d.filter((p) => p.kind === 'add').map((p) => p.text)).toEqual(['x']);
+  });
+  it('word diff marks one changed word in a long prompt, not the whole prompt (round 11)', () => {
+    const base = Array.from({ length: 1800 }, (_, i) => `word${i}`).join(' ');
+    const d = wordDiff(base, base.replace('word900', 'changed'));
+    expect(d.filter((p) => p.kind === 'del').map((p) => p.text)).toEqual(['word900']);
+    expect(d.filter((p) => p.kind === 'add').map((p) => p.text)).toEqual(['changed']);
   });
 });

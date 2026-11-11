@@ -9,13 +9,15 @@ import {
   useUpdateMemberRole,
 } from '@/api/projectSettings';
 import type { Member, MemberCandidate, RemovalPreview } from '@/api/types';
-import { ApiError } from '@/lib/http';
+import { ApiError, actionErrorMessage } from '@/lib/http';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
+  Icon,
   ConfirmDialog,
   DataTable,
   ErrorState,
+  SearchField,
   Select,
   Skeleton,
   Stack,
@@ -23,6 +25,7 @@ import {
   Text,
   useToast,
   RelativeTime,
+  UserName,
   type Column,
   type RowAction,
 } from '@/ui';
@@ -31,12 +34,17 @@ import { useProjectContext } from '../ProjectContext';
 import { plural } from '../plural';
 import styles from './settings.module.css';
 import { transferCandidates } from './transferCandidates';
+import { SettingsCard } from './SettingsCard';
 
-type Role = 'MEMBER' | 'MANAGER';
+type Role = 'VIEWER' | 'MEMBER' | 'MANAGER';
 const ROLE_ITEMS = [
+  { key: 'VIEWER', label: 'Viewer' },
   { key: 'MEMBER', label: 'Member' },
   { key: 'MANAGER', label: 'Manager' },
 ];
+/** What each role can do (C033), under the role select. */
+const ROLE_HELP =
+  'Viewer: opens, compares and exports. Member: also runs, reviews and edits. Manager: also manages members and settings.';
 
 export function MembersTab() {
   const { project, readOnly, canManage } = useProjectContext();
@@ -46,7 +54,7 @@ export function MembersTab() {
   const toast = useToast();
   const updateRole = useUpdateMemberRole(project.id);
   const removeMember = useRemoveMember(project.id);
-  const [pendingRoles, setPendingRoles] = useState<Record<string, Role>>({});
+  const [inlineRole, setInlineRole] = useState<string | null>(null);
   const [removing, setRemoving] = useState<{ member: Member; preview: RemovalPreview | null } | null>(null);
   const [transferTo, setTransferTo] = useState<string | null>(null);
 
@@ -59,7 +67,7 @@ export function MembersTab() {
       pin: 'start',
       hideable: false,
       priority: 1,
-      cell: (m) => m.display_name || m.email,
+      cell: (m) => <UserName id={m.user_id} name={m.display_name} email={m.email} />,
     },
     { id: 'email', header: 'Email', type: 'id', width: 220, priority: 2, cell: (m) => m.email },
     {
@@ -73,52 +81,57 @@ export function MembersTab() {
     {
       id: 'role',
       header: 'Role',
-      width: 200,
+      width: 110,
       priority: 1,
+      // the role is a tag, as in admin users; the pencil turns it into a Select that saves on pick and
+      // Escape cancels (C186: no one-field modal per person)
       cell: (m) =>
-        canManage && !readOnly ? (
-          <span className={styles.inlineActions}>
-            <Select
-              label={`Role for ${m.email}`}
-              hideLabel
-              items={ROLE_ITEMS}
-              value={pendingRoles[m.user_id] ?? m.role}
-              onChange={(k) => setPendingRoles((p) => ({ ...p, [m.user_id]: k as Role }))}
-              width={120}
-            />
-            {pendingRoles[m.user_id] && pendingRoles[m.user_id] !== m.role ? (
-              <Button
-                variant="accent"
-                loading={updateRole.isPending && updateRole.variables?.userId === m.user_id}
-                onPress={async () => {
-                  try {
-                    await updateRole.mutateAsync({ userId: m.user_id, role: pendingRoles[m.user_id]! });
-                    setPendingRoles((p) => {
-                      const next = { ...p };
-                      delete next[m.user_id];
-                      return next;
-                    });
-                    toast.show('Role saved', { tone: 'success' });
-                  } catch (e) {
-                    toast.show(
-                      e instanceof ApiError ? e.detail || 'Could not save role' : 'Could not save role',
-                      { tone: 'error' },
-                    );
-                  }
-                }}
-              >
-                Save
-              </Button>
-            ) : null}
-          </span>
+        inlineRole === m.user_id ? (
+          <Select
+            label={`Role of ${m.display_name || m.email}`}
+            hideLabel
+            items={ROLE_ITEMS}
+            value={m.role}
+            defaultOpen
+            autoFocus
+            width={110}
+            onOpenChange={(open) => {
+              if (!open) setInlineRole(null);
+            }}
+            onChange={(k) => {
+              setInlineRole(null);
+              const role = k as Role;
+              if (!role || role === m.role) return;
+              updateRole
+                .mutateAsync({ userId: m.user_id, role })
+                .then(() => toast.show('Role saved', { tone: 'success' }))
+                .catch((e: unknown) =>
+                  toast.show(
+                    e instanceof ApiError ? e.detail || 'Couldn’t save the role' : 'Couldn’t save the role',
+                    { tone: 'error' },
+                  ),
+                );
+            }}
+          />
         ) : (
-          <Tag kind="role">{m.role}</Tag>
+          <Tag kind="role">{m.role.toLowerCase()}</Tag>
         ),
     },
   ];
 
-  const rowActions = (m: Member): RowAction<Member>[] =>
-    canManage && m.user_id !== me.id
+  const rowActions = (m: Member): RowAction<Member>[] => [
+    ...(canManage && !readOnly
+      ? [
+          {
+            id: 'edit',
+            label: `Change the role of ${m.display_name || m.email}`,
+            icon: 'edit',
+            primary: true,
+            onPress: () => setInlineRole(m.user_id),
+          },
+        ]
+      : []),
+    ...(canManage && m.user_id !== me.id
       ? [
           {
             id: 'remove',
@@ -145,7 +158,8 @@ export function MembersTab() {
             },
           },
         ]
-      : [];
+      : []),
+  ];
 
   const others = transferCandidates(members.data ?? [], removing?.member.user_id);
   const keys = useApiKeys(project.id);
@@ -160,8 +174,21 @@ export function MembersTab() {
   const canTransfer = ownedTotal > 0 && !readOnly && others.length > 0;
 
   return (
-    <Stack gap="lg">
-      {canManage && !readOnly ? <AddMemberBar projectId={project.id} existing={members.data ?? []} /> : null}
+    <SettingsCard
+      title="Members"
+      description={
+        canManage
+          ? 'People who can open this project. Managers add and remove members and change their roles.'
+          : 'People who can open this project. Only project managers can change members.'
+      }
+      data-members
+    >
+      {canManage && !readOnly ? (
+        <>
+          <AddMemberBar projectId={project.id} existing={members.data ?? []} />
+          <p className={styles.roleHelp}>{ROLE_HELP}</p>
+        </>
+      ) : null}
       {members.isError ? (
         <ErrorState
           error={members.error}
@@ -246,12 +273,12 @@ export function MembersTab() {
                 { tone: 'info' },
               );
             } catch (e) {
-              throw new Error(e instanceof ApiError ? e.detail || 'Could not remove' : String(e));
+              throw new Error(actionErrorMessage('remove the member', e));
             }
           }}
         />
       ) : null}
-    </Stack>
+    </SettingsCard>
   );
 }
 
@@ -296,58 +323,56 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
             setPicked(null);
             setQuery('');
           } catch (err) {
-            toast.show(
-              err instanceof ApiError ? err.detail || 'Could not add member' : 'Could not add member',
-              { tone: 'error' },
-            );
+            toast.show(actionErrorMessage('add the member', err), { tone: 'error' });
           }
         });
       }}
     >
       <div className={styles.combo}>
-        <Text variant="sm" as="label" htmlFor={`${listId}-input`}>
-          Add member
-        </Text>
-        <input
-          id={`${listId}-input`}
+        {/* the same search field as every other user search (round 11), carrying the combobox semantics */}
+        <SearchField
           ref={inputRef}
-          role="combobox"
-          aria-expanded={open && options.length > 0}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={open && options[active] ? `${listId}-${options[active].id}` : undefined}
-          className={styles.comboInput}
+          label="Add member"
+          hideLabel={false}
           placeholder="Search by name or email"
-          autoComplete="off"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
+          onChange={(v) => {
+            setQuery(v);
             setPicked(null);
             setActive(0);
             setOpen(true);
           }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 120)}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') {
-              e.preventDefault();
-              setOpen(true);
-              setActive((a) => Math.min(a + 1, Math.max(0, options.length - 1)));
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault();
-              setActive((a) => Math.max(0, a - 1));
-            } else if (e.key === 'Enter' && open && options[active]) {
-              e.preventDefault();
-              choose(options[active]);
-            } else if (e.key === 'Escape') {
-              setOpen(false);
-            }
+          onClear={() => setPicked(null)}
+          inputProps={{
+            role: 'combobox',
+            'aria-expanded': open && options.length > 0,
+            'aria-controls': listId,
+            'aria-autocomplete': 'list',
+            'aria-activedescendant': open && options[active] ? `${listId}-${options[active].id}` : undefined,
+            autoComplete: 'off',
+            onFocus: () => setOpen(true),
+            onBlur: () => setTimeout(() => setOpen(false), 120),
+            onKeyDown: (e) => {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setOpen(true);
+                setActive((a) => Math.min(a + 1, Math.max(0, options.length - 1)));
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setActive((a) => Math.max(0, a - 1));
+              } else if (e.key === 'Enter' && open && options[active]) {
+                e.preventDefault();
+                choose(options[active]);
+              } else if (e.key === 'Escape') {
+                setOpen(false);
+              }
+            },
           }}
         />
         {open && options.length === 0 && !candidates.isFetching ? (
           <div className={styles.comboHint} role="status">
             {candidates.isError
-              ? `Could not search people: ${candidates.error instanceof ApiError ? candidates.error.detail || candidates.error.message : 'try again'}`
+              ? `Couldn’t search people: ${candidates.error instanceof ApiError ? candidates.error.detail || candidates.error.message : 'try again'}`
               : debounced
                 ? `No one outside the project matches “${debounced}”.`
                 : 'Everyone is already a member.'}
@@ -366,8 +391,7 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => choose(c)}
               >
-                <span>{c.display_name || c.email}</span>
-                <small>{c.email}</small>
+                <UserName id={c.id} name={c.display_name} email={c.email} showEmail />
               </li>
             ))}
             {candidates.data?.has_more ? (
@@ -385,8 +409,15 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
         onChange={(k) => setRole((k as Role) ?? 'MEMBER')}
         width={130}
       />
-      <Button type="submit" variant="primary" isDisabled={!picked} loading={add.isPending}>
-        Add
+      <Button
+        type="submit"
+        variant="primary"
+        icon={<Icon name="plus" size={12} />}
+        isDisabled={!picked}
+        disabledReason="Pick a user first"
+        loading={add.isPending}
+      >
+        Add member
       </Button>
     </form>
   );

@@ -1,0 +1,39 @@
+/* Latency and traces tooltip body (legacy .lt-tip): title, a label/value grid (labels sans, values mono), a green hint. */
+.tip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.title {
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 14px;
+}
+
+.pair {
+  display: contents;
+}
+
+.key {
+  color: var(--text-muted);
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--accent-primary);
+}

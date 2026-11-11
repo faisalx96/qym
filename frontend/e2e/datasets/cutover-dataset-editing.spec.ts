@@ -5,9 +5,16 @@
  * word diff) live in lib/__tests__/cutover-dataset-editing.test.ts; this file
  * drives the real pages and checks the requests they send.
  */
-import { test, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+  type Request,
+} from '@playwright/test';
 import { createProject, gotoApp, uniqueSlug } from '../helpers';
-import { bulkItems, createDataset, createVersion, publishVersion, type SeedItem } from './support';
+import { bulkItems, createDataset, createVersion, patchItem, publishVersion, type SeedItem } from './support';
 import { pickSelect, tmpFile } from './ui';
 
 type Api = APIRequestContext;
@@ -78,6 +85,11 @@ async function openCatalogWizard(page: Page, slug: string) {
   return dialog;
 }
 const next = (dialog: Locator) => dialog.getByTestId('wizard-next');
+/** The import itself, not the dry run that counts matching items before Review (C006). */
+const isBulkApply = (r: Request) =>
+  r.method() === 'POST' &&
+  r.url().includes('/items:bulk') &&
+  !(r.postDataJSON() as { dry_run?: boolean } | null)?.dry_run;
 
 test.describe('items table and item page editing (C003, C017)', () => {
   test('a draft items table has no inline cell editor', async ({ page, request }) => {
@@ -120,7 +132,9 @@ test.describe('items table and item page editing (C003, C017)', () => {
     const req = await patch;
     expect(new URL(req.url()).pathname).toBe(`/v1/datasets/${d.slug}/versions/v1/items/case-1`);
     // the untouched expected_output ("51" string), metadata and labels are not sent at all
-    expect(req.postDataJSON()).toEqual({ input: 'What is 50+2?' });
+    expect(req.postDataJSON()).toMatchObject({ input: 'What is 50+2?' });
+    // plus the loaded updated_at, so a save after someone else's answers 409 (C015)
+    expect(Object.keys(req.postDataJSON() as object).sort()).toEqual(['expected_updated_at', 'input']);
 
     // a textarea reads "\r\n" back as "\n": an untouched multiline value is still unchanged
     await gotoApp(page, dsUrl(p, d, '?v=v1&item=case-2'));
@@ -129,7 +143,7 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await page.getByRole('textbox', { name: 'Expected output', exact: true }).fill('52');
     const patch2 = page.waitForRequest((r) => r.method() === 'PATCH' && r.url().includes('/items/case-2'));
     await save.click();
-    expect((await patch2).postDataJSON()).toEqual({ expected_output: '52' });
+    expect((await patch2).postDataJSON()).toMatchObject({ expected_output: '52' });
   });
 
   test('a string stays a string unless the field is switched to JSON', async ({ page, request }) => {
@@ -141,7 +155,7 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await page.getByRole('textbox', { name: 'Expected output', exact: true }).fill('52');
     const first = page.waitForRequest((r) => r.method() === 'PATCH');
     await page.getByTestId('save-item').click();
-    expect((await first).postDataJSON()).toEqual({ expected_output: '52' });
+    expect((await first).postDataJSON()).toMatchObject({ expected_output: '52' });
 
     await gotoApp(page, dsUrl(p, d, '?v=v1&item=case-1'));
     await expected.getByRole('radiogroup').getByText('JSON').click();
@@ -149,7 +163,7 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await expect(expected).toContainText('will be saved as number');
     const second = page.waitForRequest((r) => r.method() === 'PATCH');
     await page.getByTestId('save-item').click();
-    expect((await second).postDataJSON()).toEqual({ expected_output: 52 });
+    expect((await second).postDataJSON()).toMatchObject({ expected_output: 52 });
   });
 
   test('JSON values stay JSON; invalid JSON cannot be saved', async ({ page, request }) => {
@@ -168,7 +182,7 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await box.fill('8');
     const patch = page.waitForRequest((r) => r.method() === 'PATCH');
     await page.getByTestId('save-item').click();
-    expect((await patch).postDataJSON()).toEqual({ expected_output: 8 });
+    expect((await patch).postDataJSON()).toMatchObject({ expected_output: 8 });
   });
 });
 
@@ -199,10 +213,10 @@ test.describe('draft import (C016, C017)', () => {
           format === 'jsonl' ? `${count} records` : `${count} rows`,
         );
         await next(dialog).click();
-        if (format !== 'jsonl') await next(dialog).click(); // column mapping
+        await next(dialog).click(); // column mapping (every format, C013)
         await expect(dialog.locator('table').last().locator('tbody tr')).toHaveCount(Math.min(count, 10));
         await expect(dialog).toContainText(`preview shows first ${Math.min(count, 10)}`);
-        const bulk = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('/items:bulk'));
+        const bulk = page.waitForRequest(isBulkApply);
         await next(dialog).click();
         const req = await bulk;
         expect(new URL(req.url()).pathname).toBe(`/v1/datasets/${d.slug}/versions/v1/items:bulk`);
@@ -229,13 +243,14 @@ test.describe('draft import (C016, C017)', () => {
     await next(dialog).click();
     await expect(dialog).toContainText('2 records');
     await expect(dialog.getByText(/Not imported: extra/)).toBeVisible();
-    const bulk = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('/items:bulk'));
+    const bulk = page.waitForRequest(isBulkApply);
     await next(dialog).click();
     expect((await bulk).postDataJSON()).toEqual({
       upserts: [
         { item_id: '1', input: 'q1', expected_output: 'a1' },
         { item_id: 'b', input: { q: 2 } },
       ],
+      on_existing: 'skip',
     });
     await expect(page.getByText('2 items added')).toBeVisible();
   });
@@ -254,18 +269,54 @@ test.describe('draft import (C016, C017)', () => {
       .locator('#wizard-file')
       .setInputFiles({ name: 'rows.jsonl', mimeType: 'text/plain', buffer: Buffer.from(body) });
     await next(dialog).click();
-    const bulk = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('/items:bulk'));
+    await next(dialog).click(); // column mapping (C013)
+    const bulk = page.waitForRequest(isBulkApply);
     await next(dialog).click();
     expect((await bulk).postDataJSON()).toEqual({
       upserts: [
         { item_id: 'a', input: 'q1', labels: ['gold', 'hard'] },
         { input: 'q2', labels: ['x', '3'] },
       ],
+      on_existing: 'skip',
     });
     await expect(page.getByText('2 items added')).toBeVisible();
   });
 
-  test('invalid JSONL lines block Continue and are named with their line numbers', async ({
+  test('a re-import counts the matching items on Review and skips them by default (C006)', async ({
+    page,
+    request,
+  }) => {
+    const items: SeedItem[] = [1, 2, 3, 4].map((n) => ({
+      item_id: `faq-10${n}`,
+      input: `q${n}`,
+      expected_output: `a${n}`,
+    }));
+    const { p, d } = await seedDraft(request, 'reimport', items);
+    const reviewed = 'a1. Reviewed by support lead.';
+    await patchItem(request, p.slug, d.slug, 'v1', 'faq-101', { expected_output: reviewed });
+    await gotoApp(page, dsUrl(p, d));
+    await page.getByTestId('import-draft').click();
+    const dialog = page.getByRole('dialog', { name: /Import into v1/ });
+    const body = items.map((i) => JSON.stringify(i)).join('\n');
+    await dialog
+      .locator('#wizard-file')
+      .setInputFiles({ name: 'faq-import-fixed.jsonl', mimeType: 'text/plain', buffer: Buffer.from(body) });
+    await expect(dialog.getByText('Detected format:')).toContainText('4 records');
+    await next(dialog).click();
+    await next(dialog).click(); // column mapping (C013)
+    await expect(dialog.getByText('4 of 4 records match items already in v1.')).toBeVisible();
+    await expect(dialog.getByRole('radio', { name: /Skip matching items/ })).toBeChecked();
+    const bulk = page.waitForRequest(isBulkApply);
+    await next(dialog).click();
+    expect((await bulk).postDataJSON()).toMatchObject({ on_existing: 'skip' });
+    await expect(page.getByText('0 added, 4 skipped')).toBeVisible();
+    const item = await request.get(
+      `/v1/datasets/${d.slug}/versions/v1/items/faq-101?project_slug=${encodeURIComponent(p.slug)}`,
+    );
+    expect(((await item.json()) as { item: SeedItem }).item.expected_output).toBe(reviewed);
+  });
+
+  test('invalid JSONL lines block Continue; the first is named with its line and character once (C120)', async ({
     page,
     request,
   }) => {
@@ -279,9 +330,11 @@ test.describe('draft import (C016, C017)', () => {
     await dialog
       .locator('#wizard-file')
       .setInputFiles({ name: 'rows.jsonl', mimeType: 'text/plain', buffer: Buffer.from(body) });
-    const alert = dialog.getByRole('alert');
-    await expect(alert).toContainText('Line 2 is not valid JSON');
-    await expect(alert).toContainText('Line 4 must be a JSON object');
+    const alert = dialog.getByTestId('wizard-parse-error');
+    await expect(alert).toContainText('Not valid JSON at line 2');
+    await expect(alert).toContainText('and 1 more line');
+    await expect(dialog.getByText('Not valid JSON at line 2', { exact: false })).toHaveCount(1);
+    await expect(dialog.getByTestId('wizard-skip-invalid')).not.toBeChecked();
     await next(dialog).click();
     await expect(dialog.locator('table')).toHaveCount(0); // still on the source step, no preview
     expect(bulkCalls).toBe(0);

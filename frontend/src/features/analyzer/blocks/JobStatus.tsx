@@ -1,6 +1,6 @@
 import type { AnalysisJob } from '@/api/analysis';
 import { runPath } from '@/app/routes';
-import { Badge, Tag, Text } from '@/ui';
+import { Tag, Text, StatusMark, type StatusShape, type StatusTone } from '@/ui';
 import type { PhaseView } from '../useAnalysisPhase';
 import s from './blocks.module.css';
 
@@ -95,24 +95,22 @@ export function shortOutcome(sum: ReturnType<typeof summarize>): string {
   return sum.failed ? `${base}, ${sum.failed} failed` : base;
 }
 
-export function statusLabel(job: AnalysisJob): {
-  text: string;
-  tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info';
-} {
+export function statusLabel(job: AnalysisJob): { text: string; tone: StatusTone; shape: StatusShape } {
   const sum = summarize(job);
   if (job.status === 'completed') {
     return sum.allFailed
-      ? { text: 'Analysis failed', tone: 'danger' }
+      ? { text: 'Analysis failed', tone: 'danger', shape: 'cross' }
       : sum.failed
-        ? { text: 'Completed with errors', tone: 'warning' }
-        : { text: 'Completed', tone: 'success' };
+        ? { text: 'Completed with errors', tone: 'warning', shape: 'full' }
+        : { text: 'Completed', tone: 'success', shape: 'full' };
   }
-  if (job.status === 'cancelling') return { text: 'Cancelling', tone: 'info' };
-  if (job.status === 'cancelled') return { text: 'Cancelled', tone: 'neutral' };
-  if (job.status === 'failed') return { text: 'Failed', tone: 'danger' };
+  if (job.status === 'cancelling') return { text: 'Cancelling', tone: 'info', shape: 'orbit' };
+  if (job.status === 'cancelled') return { text: 'Cancelled', tone: 'neutral', shape: 'pause' };
+  if (job.status === 'failed') return { text: 'Failed', tone: 'danger', shape: 'cross' };
   return {
     text: PHASE[job.progress.phase] ?? 'Running',
     tone: job.progress.phase === 'retrying' ? 'warning' : 'info',
+    shape: 'orbit',
   };
 }
 
@@ -132,9 +130,7 @@ export function JobCard({ job, phase }: { job: AnalysisJob; phase: PhaseView }) 
     <div className={s.jobCard} data-status={job.status} role="region" aria-label="Analysis job">
       <div className={s.jobHead}>
         <span className={s.jobBadge}>
-          <Badge tone={label.tone} dot>
-            {label.text}
-          </Badge>
+          <StatusMark tone={label.tone} shape={label.shape} label={label.text} />
         </span>
         <Text variant="md" weight={600} as="span" className={s.jobTitle}>
           {live

@@ -43,7 +43,7 @@ describe('formatters', () => {
     expect(formatCost(0.0012)).toBe('$0.0012');
     expect(formatCost(0.5)).toBe('$0.500');
     expect(formatCost(12.5)).toBe('$12.50');
-    expect(boxFormatter('latency')(1800)).toBe('1.8 s');
+    expect(boxFormatter('latency')(1800)).toBe('1.8s');
   });
 });
 

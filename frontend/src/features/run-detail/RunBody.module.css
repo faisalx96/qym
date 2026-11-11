@@ -5,11 +5,9 @@
   gap: var(--space-md);
 }
 
-/* Review history is a card under the notices; when the run was never submitted it renders nothing. */
-.reviews:empty {
-  display: none;
-}
-
-.reviews {
-  scroll-margin-top: calc(var(--report-nav-h, 0px) + var(--space-sm));
+/* R9 (C019): the one panel in place of the report when the rows request fails; framed like a report section. */
+.rowsError {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }

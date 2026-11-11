@@ -3,6 +3,7 @@
  * and start date; when every run uses one model the label is the part of the
  * run name the runs do not share. Full names go in the title.
  */
+import { formatShortDay, formatTableDate, toDate } from '@/lib/dates';
 export interface LabelInput {
   base: string;
   name: string;
@@ -20,15 +21,10 @@ export function modelShortName(raw: unknown): string {
   return text ? (text.split('/').filter(Boolean).pop() ?? '') : '';
 }
 
+/** 'Sep 14' or the table form 'Sep 14 · 19:05' (lib/dates, C048). */
 export function dateLabel(value: string, withTime = false, now: Date = new Date()): string {
-  const d = new Date(value);
-  if (!value || Number.isNaN(d.getTime())) return '';
-  const sameYear = d.getFullYear() === now.getFullYear();
-  const date = d.toLocaleDateString(
-    'en-US',
-    sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' },
-  );
-  return withTime ? `${date} ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}` : date;
+  if (!value || !toDate(value)) return '';
+  return withTime ? formatTableDate(value, now) : formatShortDay(value, now);
 }
 
 /** The distinct part of each name after the prefix they all share; null when none is worth stripping. */
@@ -86,12 +82,15 @@ export function computeRunLabels(inputs: LabelInput[], now?: Date): Record<strin
 export function runShortName(run: {
   label: string;
   pass?: number | null;
-  run?: { run_name?: string | null } | null;
+  run?: { run_name?: string | null; pass_count?: number; pass_only?: boolean } | null;
 }): string {
+  if (run.pass && run.run?.pass_only) return `Pass ${run.pass}`;
   const own = (run.run?.run_name ?? '').trim().replace(/ · pass \d+$/, '');
   const label = run.label.replace(/ · pass \d+$/, '');
   const base = own && own !== label ? own : label;
-  return run.pass ? `${base} · pass ${run.pass}` : base;
+  // C162: '· pass N' only on the columns of a run with more than one pass
+  const multi = (run.run?.pass_count ?? 2) > 1;
+  return run.pass && multi ? `${base} · pass ${run.pass}` : base;
 }
 
 /**

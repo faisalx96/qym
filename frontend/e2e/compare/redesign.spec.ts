@@ -167,7 +167,9 @@ test.describe('expanded item', () => {
     expect(new Set(rails).size).toBeGreaterThan(1);
   });
 
-  test('a metric click opens its details under every run, at the same top; Escape closes', async ({ page }) => {
+  test('a metric click opens its details under every run, at the same top; Escape closes', async ({
+    page,
+  }) => {
     const detail = await open(page);
     await detail.getByRole('button', { name: 'Show quality details' }).first().click();
     const cells = detail.getByTestId('metric-panel-cell');
@@ -287,16 +289,20 @@ test.describe('polish', () => {
     await expect(cards.filter({ hasText: 'Side B' })).toHaveCount(2);
   });
 
-  test('390px: the sticky bar is the 36px nav only; the Baseline select sits in the Averages head', async ({
+  test('390px: the sticky bar holds the links, then the page controls on a second row; the Baseline select sits by the page title', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(compareUrl(four()));
     await waitLoaded(page);
     const bar = page.locator('[data-compare-sticky]');
-    await expect(bar.getByRole('button')).toHaveCount(0);
     await expect(bar.getByRole('link')).toHaveCount(6);
-    await expect(page.locator('[data-part="section-averages"] [data-part="baseline-control"]')).toBeVisible();
+    // K6 (C154): Metric, the slider and Filters wrap under the links
+    const controls = bar.locator('[data-part="page-controls"]');
+    expect((await controls.boundingBox())!.y).toBeGreaterThan(
+      (await bar.getByRole('link').first().boundingBox())!.y,
+    );
+    await expect(page.locator('[data-part="title-block"] [data-part="baseline-control"]')).toBeVisible();
   });
 });
 

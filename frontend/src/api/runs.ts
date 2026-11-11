@@ -55,6 +55,8 @@ export const runKeys = {
   itemTrace: (runId: string, itemId: string, pass: number | null) =>
     ['run', runId, 'item-trace', itemId, pass] as const,
   catalog: (slug: string) => ['project', slug, 'category-catalog'] as const,
+  issueBlocks: (runId: string, itemId: string, pass: number | null) =>
+    ['run', runId, 'issue-blocks', itemId, pass] as const,
 };
 
 /** 200 `{error}` → ApiError with the status the message implies. */
@@ -209,6 +211,12 @@ export function runSummaryOptions(runId: string) {
   };
 }
 
+/** C198: a finished run's rows do not change on their own (edits invalidate them), so they never go stale. */
+function rowsStaleTime(query: { state: { data?: RunPayload } }): number {
+  const status = String(query.state.data?.run?.status ?? '').toUpperCase();
+  return status && status !== 'RUNNING' && status !== 'PENDING' ? Infinity : 10_000;
+}
+
 /** Stage 2. A refetch (a live run) asks for the core groups and every late group already in the store. */
 export function runRowsOptions(
   qc: QueryClient,
@@ -223,7 +231,7 @@ export function runRowsOptions(
       const next = await fetchRunRows(runId, [...CORE_GROUPS, ...late], signal);
       return reuseRows(prev, mergeRowGroups(prev, next));
     },
-    staleTime: 10_000,
+    staleTime: rowsStaleTime,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
     structuralSharing: false,
@@ -266,18 +274,24 @@ export function useRunSummaryQuery(runId: string, slug: string, project?: RunPay
   });
 }
 
+/** Fetch one late group and merge it into the rows store. */
+export async function loadLateGroup(
+  qc: QueryClient,
+  runId: string,
+  group: RowGroup,
+  signal?: AbortSignal,
+): Promise<true> {
+  const data = await fetchRunRows(runId, [group], signal);
+  qc.setQueryData<RunPayload>(runKeys.compact(runId), (prev) => (prev ? mergeLateGroup(prev, data) : prev));
+  return true;
+}
+
 /** One late group on its way into the rows store (stage 3). Aborted when its section leaves the page. */
 export function useRowGroupQuery(runId: string, group: RowGroup, enabled: boolean) {
   const qc = useQueryClient();
   return useQuery({
     queryKey: runKeys.rows(runId, group),
-    queryFn: async ({ signal }) => {
-      const data = await fetchRunRows(runId, [group], signal);
-      qc.setQueryData<RunPayload>(runKeys.compact(runId), (prev) =>
-        prev ? mergeLateGroup(prev, data) : prev,
-      );
-      return true;
-    },
+    queryFn: ({ signal }) => loadLateGroup(qc, runId, group, signal),
     enabled,
     staleTime: Infinity,
     gcTime: 60_000,
@@ -504,7 +518,9 @@ export interface IssueActionBody {
   run_id: string;
   item_id: string;
   metric_name: string;
-  action: 'add' | 'edit' | 'delete' | 'approve';
+  action: 'add' | 'edit' | 'delete' | 'approve' | 'reject';
+  /** reject: the reviewer's comment, printed under the issue. */
+  comment?: string;
   issue?: Record<string, unknown>;
   issue_id?: string;
   issue_index?: number;
@@ -512,6 +528,25 @@ export interface IssueActionBody {
   client_issue_id?: string;
   pass_number?: number;
   expected_pass_version?: number;
+}
+
+/** Why this viewer may not approve or reject an item's issues (C125): the role rule, and the rule per issue. */
+export interface IssueBlocks {
+  role_block: string | null;
+  blocks: Record<string, Record<string, string>>;
+}
+
+export function useIssueBlocksQuery(runId: string, itemId: string, pass: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: runKeys.issueBlocks(runId, itemId, pass),
+    queryFn: () =>
+      api.get<IssueBlocks>(
+        runUrl(runId, `/items/${encodeURIComponent(itemId)}/issue-blocks`) +
+          (pass ? `?pass_number=${pass}` : ''),
+      ),
+    enabled,
+    staleTime: 60_000,
+  });
 }
 
 export function useIssueAction(runId: string) {
@@ -522,6 +557,7 @@ export function useIssueAction(runId: string) {
     onSuccess: (res) => {
       if (res?.row) applyRowToCache(qc, runId, res.row);
       void qc.invalidateQueries({ queryKey: runKeys.reviewHistory(runId) });
+      void qc.invalidateQueries({ queryKey: ['run', runId, 'issue-blocks'] });
     },
   });
 }
@@ -545,6 +581,9 @@ export function useApproveLegacyCorrection(runId: string) {
     onSuccess: () => void qc.invalidateQueries({ queryKey: runKeys.compact(runId) }),
   });
 }
+
+/** The built export page (C173): the React run page with every script and style inlined, and no run in it yet. */
+export const RUN_EXPORT_TEMPLATE_URL = '/api/export/run-template';
 
 export function exportHtmlUrl(runId: string): string {
   return runUrl(runId, '/export-html');

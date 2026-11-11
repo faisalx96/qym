@@ -106,7 +106,7 @@ test.describe('unreachable server', () => {
     await page.goto(LIVE);
     const alert = page.getByRole('alert');
     await expect(alert.getByRole('heading', { name: 'Cannot load this evaluation' })).toBeVisible();
-    await expect(alert).toContainText('Could not reach the qym server');
+    await expect(alert).toContainText('Couldn’t reach the qym server');
     await expect(page.getByText('Unavailable', { exact: true })).toBeVisible();
 
     await page.unroute('**/api/**');

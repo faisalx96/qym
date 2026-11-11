@@ -272,3 +272,31 @@
     width: 100%;
   }
 }
+
+.matches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* A JSON / JSONL parse error, shown once under the file: the place, the line's start and the skip choice (C120) */
+.parseError {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  background: var(--error-dim);
+}
+
+.parseError p {
+  margin: 0;
+}
+
+.parseSnippet {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}

@@ -26,7 +26,7 @@ import { entryKey, locationKey, useStep } from '@/features/experiments/launch/st
 import { LaunchWizard } from '@/features/experiments/launch/wizard/LaunchWizard';
 import { EDITOR_STEPS, type RevealStep } from '@/features/experiments/launch/wizard/steps';
 import { environmentPath } from '@/features/experiments/paths';
-import { ConfirmDialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, useToast } from '@/ui';
+import { ConfirmDialog, EmptyState, ErrorState, Icon, LinkButton, PageHeader, Skeleton, useToast } from '@/ui';
 import { changeText, useEditorChangeCount } from './editor/ComparedWithCard';
 import { EditorWhere } from './editor/EditorWhere';
 import { PublishReview, type PublishFailure } from './editor/PublishReview';
@@ -180,8 +180,8 @@ function EditorBody({
       <>
         {renderHeader(null)}
         <ErrorState
-          error={new Error(editor?.error || 'Could not load the environment')}
-          title="Could not open the editor"
+          error={new Error(editor?.error || 'Couldn’t load the environment')}
+          title="Couldn’t open the editor"
           onRetry={reload}
         />
       </>
@@ -303,8 +303,8 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
           : 'Edit the environment’s default preset against its current version and publish it as a new version.'
       }
       actions={
-        <LinkButton to={back} variant="ghost">
-          ← Back to the environment
+        <LinkButton to={back} variant="ghost" icon={<Icon name="chevron-left" size={12} />}>
+          Back to the environment
         </LinkButton>
       }
     />
@@ -353,7 +353,7 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
     body = (
       <ErrorState
         error={envs.error}
-        title="Could not load the environment"
+        title="Couldn’t load the environment"
         onRetry={() => void envs.refetch()}
       />
     );

@@ -110,6 +110,23 @@
   gap: var(--space-sm);
 }
 
+/* A section head's counts (round 10, as in the first qym): the number at the label's size, not a hero figure, and a
+   20px icon tile before the label. */
+.strip[data-variant='compact-header'] .value {
+  font-size: var(--font-md);
+  font-weight: 700;
+}
+
+.strip[data-variant='compact-header'] .icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* the tile carries the tone; the number stays primary unless it is a problem (errors) */
+.strip[data-variant='compact-header'] .item:not([data-tone='danger'], [data-tone='warning']) .value {
+  color: var(--text-primary);
+}
+
 .label {
   display: inline-flex;
   align-items: center;

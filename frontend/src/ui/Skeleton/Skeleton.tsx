@@ -9,6 +9,11 @@ export interface SkeletonProps {
   rowHeight?: number;
   count?: number;
   label?: string;
+  /**
+   * C070: hold the loaded height from the first frame and show the shimmer only after 300 ms, so a quick load neither
+   * flashes nor pushes the page down. Use it in place of `useDelayedPending(...) ? <Skeleton/> : null`.
+   */
+  reserve?: boolean;
   className?: string;
 }
 
@@ -21,10 +26,11 @@ export function Skeleton({
   rowHeight = 40,
   count = 3,
   label = 'Loading',
+  reserve,
   className,
 }: SkeletonProps) {
   const style = { width, height };
-  const cls = [styles.skeleton, className].filter(Boolean).join(' ');
+  const cls = [styles.skeleton, reserve ? styles.reserve : null, className].filter(Boolean).join(' ');
   const common = {
     role: 'status' as const,
     'aria-label': label,

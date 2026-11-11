@@ -1,6 +1,15 @@
 /** Report sections: stacked order, nav jumps, hash and ?panel= anchors, lazy mounting, error / category / deep / root-cause sections. */
 import { test, expect, type Page } from '@playwright/test';
-import { itemsCount, openRun, params, runUrl, seedClassic, seedProject, type Seeded } from './support';
+import {
+  goToSection,
+  itemsCount,
+  openRun,
+  params,
+  runUrl,
+  seedClassic,
+  seedProject,
+  type Seeded,
+} from './support';
 
 let s: Seeded;
 let classic: string;
@@ -22,23 +31,22 @@ test.describe('report sections', () => {
         e.id.replace('run-section-', '').replace('run-items', 'items'),
       ),
     );
-    expect(order).toEqual(['overview', 'latency', 'deep', 'categories', 'errors', 'items']);
+    expect(order).toEqual(['overview', 'latency', 'deep', 'categories', 'errors', 'root-cause', 'items']);
     await expect(page.getByRole('heading', { level: 2, name: 'Overview' })).toBeVisible();
     // no side panel and no tabs any more
     await expect(page.locator('#analysis-panel')).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveCount(0);
-    // sections for data the run does not have are absent
+    // sections for data the run does not have are absent; Root cause always shows (RF3)
     await expect(section(page, 'repeat')).toHaveCount(0);
-    await expect(section(page, 'root-cause')).toHaveCount(0);
     await expect(navLink(page, 'Repeat')).toHaveCount(0);
   });
 
   test('nav links jump to the section and ?panel= is not written', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await navLink(page, /^Errors/).click();
+    await goToSection(page, /^Errors/);
     await expect(section(page, 'errors')).toBeInViewport();
     await expect(section(page, 'errors')).toContainText('Task errors');
-    await navLink(page, 'Categories').click();
+    await goToSection(page, 'Categories');
     await expect(section(page, 'categories')).toBeInViewport();
     expect(params(page).get('panel')).toBeNull();
     await expect(navLink(page, 'Categories')).toHaveAttribute('aria-current', 'location');
@@ -63,7 +71,7 @@ test.describe('report sections', () => {
   test('lazy sections mount once they near the viewport', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await expect(section(page, 'deep')).not.toHaveAttribute('data-mounted', '');
-    await navLink(page, 'Deep').click();
+    await goToSection(page, 'Deep');
     await expect(section(page, 'deep')).toHaveAttribute('data-mounted', '');
     await expect(page.getByRole('grid', { name: 'Pearson correlation matrix' })).toBeVisible();
   });
@@ -97,7 +105,7 @@ test.describe('errors section', () => {
     await openRun(page, s.slug, classic, 'panel=errors');
     await page.getByTestId('error-card').filter({ hasText: 'JudgeError' }).click();
     await expect.poll(async () => (await itemsCount(page))[0]).toBe(8);
-    await page.getByTestId('clear-filters').click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);
   });
 });
@@ -114,7 +122,7 @@ test.describe('categories section', () => {
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(240);
     await expect(page.getByRole('button', { name: /Remove filter Complexity: easy/ })).toBeVisible();
     await expect.poll(() => params(page).get('filters') ?? '').toContain('complexity');
-    await page.getByTestId('clear-filters').click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);
   });
 
@@ -160,10 +168,12 @@ test.describe('deep and root cause sections', () => {
     await expect(rel).toContainText('hallucination');
   });
 
-  test('Root cause: hidden while the run has no analyses', async ({ page }) => {
+  test('Root cause: a run with no analyses keeps the section, one line and Analyze failures (RF3)', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic, 'panel=root-cause');
-    await expect(section(page, 'root-cause')).toHaveCount(0);
-    await expect(navLink(page, 'Root cause')).toHaveCount(0);
+    await expect(section(page, 'root-cause')).toContainText('No analysis yet.');
+    await expect(section(page, 'root-cause').getByRole('link', { name: 'Analyze failures' })).toBeVisible();
   });
 });
 

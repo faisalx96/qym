@@ -28,7 +28,7 @@ function getWorker(): Worker | null {
           headers: [],
           rows: [],
           warnings: [],
-          error: 'Could not read the file.',
+          error: 'Couldn’t read the file.',
         });
       pending.clear();
       worker = null;

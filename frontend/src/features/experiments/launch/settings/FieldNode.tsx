@@ -126,7 +126,7 @@ function ExtraKeys({ extra, ...tree }: { extra: ExtraKeysView } & TreeProps) {
       )}
       <AddRow
         placeholder="New key"
-        buttonText="+ Add key"
+        buttonText="Add key"
         onAdd={(raw) => {
           const key = raw.trim();
           if (!key) return 'Enter a key.';
@@ -225,7 +225,7 @@ function StackedCollection({ node, ...tree }: { node: CollectionNode } & TreePro
       })}
       <AddRow
         placeholder={`New ${node.keyParam} name`}
-        buttonText={`+ Add ${node.keyParam}`}
+        buttonText={`Add ${node.keyParam}`}
         onAdd={(raw) => {
           const key = raw.trim();
           if (!key) return `Enter a ${node.keyParam} name.`;

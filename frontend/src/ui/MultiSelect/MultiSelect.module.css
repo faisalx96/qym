@@ -6,7 +6,7 @@
   height: var(--control-height);
   max-width: 260px;
   padding: 0 var(--space-sm);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
   color: var(--text-primary);
@@ -20,8 +20,12 @@
   color: var(--text-muted);
   flex: none;
 }
+/* the chevron sits at the end of the box, not after the word (round 10) */
+.trigger > svg:last-child {
+  margin-inline-start: auto;
+}
 .trigger[data-hovered] {
-  border-color: var(--border-strong);
+  border-color: var(--control-edge-hover);
 }
 .trigger[aria-expanded='true'] {
   border-color: var(--accent-primary);
@@ -104,20 +108,28 @@
   background: var(--card-bg);
 }
 
+/* Select all / None are buttons at rest (round 10): the neutral button recipe at 20px, brighter on hover. */
 .action {
   border: 0;
-  background: transparent;
-  color: var(--accent-primary);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
-  padding: 0 var(--space-xs);
+  padding: 0 var(--space-sm);
   height: 20px;
-  border-radius: 3px;
+  border-radius: var(--control-radius);
+  transition: background var(--transition-fast);
 }
 
 .action:hover {
-  text-decoration: underline;
+  background: var(--bg-active);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 .list {
@@ -216,11 +228,12 @@
   overflow: hidden;
 }
 
-/* Filter-bar trigger: 24px, label then `· value`; a selection tints it with the accent. */
+/* Filter-bar trigger: 24px, label then `· value`; a selection tints it with the accent. The fill is the buttons' and
+   the search field's `--bg-elevated` (round 10: one fill for every control in the bar), brighter on hover. */
 .trigger[data-variant='bar'] {
   min-width: 96px;
   max-width: 168px;
-  background: transparent;
+  background: var(--bg-elevated);
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast);
@@ -237,7 +250,7 @@
   font-weight: 600;
 }
 .trigger[data-variant='bar'][data-hovered] {
-  background: var(--bg-hover);
+  background: var(--bg-active);
 }
 .trigger[data-variant='bar'][data-active][data-hovered] {
   background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
@@ -250,10 +263,4 @@
   .trigger[data-variant='bar'] {
     transition: none;
   }
-}
-
-.hint {
-  padding: 0 var(--space-sm) var(--space-xs);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
 }

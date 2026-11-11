@@ -460,7 +460,7 @@ submitted first within one experiment).
   accent rail when selected and a red rail with a line of text when flagged; one `TaskCard` above the environments
   (union of the services' task lists, who offers each); one `LaunchBar` with six fixed slots (Back, Skip, Continue,
   status, Cancel, Launch) on the home view and all six steps, disabled slots never removed; the review on its own step
-  with summary rows and one row per run carrying a Low / Normal / High select; per-job priority stored by migration 0093
+  with summary rows and one row per run carrying a Low / Normal / High select; per-job priority stored by migration 0099
   (`eval_experiment_jobs.priority`, backfilled), validated per run against the environment cap and the manager rule, the
   acknowledgement required when any run is High, retry keeps the job's priority, High runs claimed first within an
   experiment (`priority_rank()` in the claim order); the default preset editor is `LaunchWizard mode="editor"`. Four

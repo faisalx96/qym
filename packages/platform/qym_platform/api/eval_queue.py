@@ -124,7 +124,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.llm_endpoint_security import LlmEndpointValidationError
-from qym_platform.permissions import is_project_manager
+from qym_platform.permissions import is_project_manager, require_project_writer
 from qym_platform.services import eval_queue
 from qym_platform.services.eval_experiments import can_control_experiment, cancel_jobs
 from qym_platform.services.eval_remote_queue import refresh_snapshot_on_view
@@ -379,6 +379,7 @@ def cancel_queue_jobs(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    require_project_writer(db, project_id)  # a Viewer cannot cancel (C033)
     if req.experiment_id is not None:
         experiment = (
             db.query(EvalExperiment)

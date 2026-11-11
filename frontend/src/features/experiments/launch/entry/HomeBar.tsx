@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { TextField } from '@/ui';
+import { Icon, TextField } from '@/ui';
 import { plural } from '../../lib/format';
 import { NAME_MAX, PSEUDO, pointerToFieldName } from '../model';
 import { useLaunch } from '../LaunchContext';
@@ -27,7 +27,7 @@ export function homeStatus(args: {
 
 /**
  * The home view's sticky bar: the experiment name, a status line and the two ways forward,
- * "Launch as is" and "Customize →".
+ * "Launch as is" and "Customize".
  */
 export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => void }) {
   const {
@@ -111,9 +111,10 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
         <BarButton
           part="bar-customize"
           variant="neutral"
+          iconEnd={<Icon name="chevron-right" size={12} />}
           onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}
         >
-          Customize →
+          Customize
         </BarButton>
         <BarButton
           part="bar-launch"

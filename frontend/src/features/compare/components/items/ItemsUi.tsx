@@ -23,6 +23,9 @@ export interface ItemsUiValue {
   expanded: Set<string>;
   toggleExpanded: (itemId: string, open?: boolean) => void;
   openTrace: (target: TraceTarget) => void;
+  /** The inline Filters panel: its button is in the sticky nav (K6), the panel in the Items section. */
+  filtersOpen: boolean;
+  setFiltersOpen: (open: boolean) => void;
 }
 
 const Ctx = createContext<ItemsUiValue | null>(null);
@@ -39,6 +42,7 @@ export function ItemsUiHost({ children }: { children: ReactNode }) {
   const [textMode, setTextMode] = useState<TextMode>(() => getTextMode());
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(c.view.item ? [c.view.item] : []));
+  const [filtersOpen, setFiltersOpen] = useState(() => c.view.filters.rules.children.length > 0);
 
   // The item ?item= currently names. A ref, not c.view.item: the URL lags a fast open-then-close.
   const named = useRef<string | null>(c.view.item);
@@ -98,8 +102,10 @@ export function ItemsUiHost({ children }: { children: ReactNode }) {
       expanded,
       toggleExpanded,
       openTrace,
+      filtersOpen,
+      setFiltersOpen,
     }),
-    [textMode, hidden, expanded, toggleExpanded, openTrace],
+    [textMode, hidden, expanded, toggleExpanded, openTrace, filtersOpen],
   );
   return (
     <Ctx.Provider value={value}>

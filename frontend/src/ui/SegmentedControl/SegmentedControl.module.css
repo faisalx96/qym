@@ -1,29 +1,15 @@
-/* Segmented control: 24px inset box; the selected option is filled accent. */
+/* Segmented control: 24px inset box; the selected option is an accent wash with accent text at 600 (C136). A solid
+   accent fill is for primary buttons only. The wash is the option's own background, so nothing is measured (C020). */
 .segmented {
   position: relative;
   display: inline-flex;
   align-items: stretch;
   height: var(--control-height);
   padding: 2px;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
   isolation: isolate;
-}
-
-.segmented[data-ready]::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: var(--qym-segment-x, 0);
-  width: var(--qym-segment-width, 0);
-  border-radius: 3px;
-  background: var(--accent-primary);
-  transition:
-    left var(--transition-fast),
-    width var(--transition-fast);
-  z-index: 0;
 }
 
 .option {
@@ -42,7 +28,9 @@
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
   outline: none;
 }
 
@@ -51,12 +39,9 @@
 }
 
 .option[data-selected] {
-  color: var(--bg-void);
-  background: transparent;
-}
-
-.segmented:not([data-ready]) .option[data-selected] {
-  background: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
 }
 
 .option[data-focus-visible] {
@@ -67,12 +52,6 @@
 .option[data-disabled] {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .segmented[data-ready]::before {
-    transition: none;
-  }
 }
 
 /* Inside a narrow report column (the phone, after the 30px of the section panel) the options give up half their padding so a four-option control still fits a card. */

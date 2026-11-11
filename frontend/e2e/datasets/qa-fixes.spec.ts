@@ -56,7 +56,7 @@ test.describe('catalog', () => {
     await expect(stats).not.toContainText('1 runs');
   });
 
-  test('state line colours production and draft parts', async ({ page, request }) => {
+  test('state line marks production and draft with their status marks (C168)', async ({ page, request }) => {
     const p = await createProject(request, 'QA State', uniqueSlug('qastate'));
     const d = await createDataset(request, p.slug, 'State DS');
     const v1 = await createVersion(request, p.slug, d.slug);
@@ -65,9 +65,13 @@ test.describe('catalog', () => {
     await createVersion(request, p.slug, d.slug, { from_version: v1.version });
     await gotoApp(page, `/projects/${p.slug}/datasets`);
     const card = page.locator(`[data-dataset-card=${d.slug}]`);
-    const color = (kind: string) =>
-      card.locator(`[data-kind=${kind}]`).evaluate((el) => getComputedStyle(el).color);
-    const [prod, draft] = [await color('prod'), await color('draft')];
+    // 'Production' in full (no 'prod'), and no 'current'
+    await expect(card).toContainText('Production');
+    await expect(card).toContainText('Draft');
+    await expect(card).not.toContainText(' prod');
+    const color = (label: string) =>
+      card.getByText(label, { exact: true }).evaluate((el) => getComputedStyle(el).color);
+    const [prod, draft] = [await color('Production'), await color('Draft')];
     expect(prod).not.toBe(draft);
   });
 });

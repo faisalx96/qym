@@ -12,8 +12,7 @@ import {
   Identicon,
   KeyValueGrid,
   PageHeader,
-  SectionHeader,
-  Stack,
+  Section,
   Tag,
   Text,
   TextField,
@@ -58,65 +57,61 @@ export function ProfilePage() {
   return (
     <div className={narrow} data-profile-page>
       <PageHeader title="Profile" description="Your account and the projects you belong to." />
-      <Stack gap="xl">
-        <section>
-          <SectionHeader title="Account" />
-          <Card>
-            <KeyValueGrid
-              aria-label="Account"
-              columns={2}
-              items={[
-                { key: 'display_name', label: 'Display name', value: me.display_name || '—' },
-                { key: 'email', label: 'Email', value: me.email, mono: true },
-                { key: 'role', label: 'Global role', value: <Tag kind="role">{me.role}</Tag> },
-                {
-                  key: 'default',
-                  label: 'Default project',
-                  value: me.default_project ? (
-                    <Link to={projectPath(me.default_project.slug)}>{me.default_project.name}</Link>
-                  ) : (
-                    '—'
-                  ),
-                },
-                { key: 'auth', label: 'Sign-in method', value: me.auth_type?.replace(/_/g, ' ') ?? '—' },
-              ]}
-            />
-          </Card>
-        </section>
-        {me.can_bootstrap_admin && !isAdmin ? <BootstrapAdminPanel onGranted={refetch} /> : null}
-        <section>
-          <SectionHeader
-            title="Projects"
-            description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'}`}
-          />
-          <DataTable<Project>
-            density="regular"
-            onRowOpen={(p) => navigate(projectPath(p.slug))}
-            rowActions={(p) => [
+      <Section title="Account">
+        <Card>
+          <KeyValueGrid
+            aria-label="Account"
+            columns={2}
+            items={[
+              { key: 'display_name', label: 'Display name', value: me.display_name || '—' },
+              { key: 'email', label: 'Email', value: me.email, mono: true },
+              { key: 'role', label: 'Global role', value: <Tag kind="role">{me.role}</Tag> },
               {
-                id: 'open',
-                label: `Open ${p.name}`,
-                icon: 'external',
-                primary: true,
-                onPress: () => navigate(projectPath(p.slug)),
+                key: 'default',
+                label: 'Default project',
+                value: me.default_project ? (
+                  <Link to={projectPath(me.default_project.slug)}>{me.default_project.name}</Link>
+                ) : (
+                  '—'
+                ),
               },
-              {
-                id: 'settings',
-                label: `Settings for ${p.name}`,
-                icon: 'settings',
-                primary: true,
-                onPress: () => navigate(projectPath(p.slug, 'settings')),
-              },
+              { key: 'auth', label: 'Sign-in method', value: me.auth_type?.replace(/_/g, ' ') ?? '—' },
             ]}
-            aria-label="Your projects"
-            columns={COLUMNS}
-            rows={me.projects}
-            rowKey={(p) => p.id}
-            storageKey="profile-projects"
-            empty="You are not a member of any project yet."
           />
-        </section>
-      </Stack>
+        </Card>
+      </Section>
+      {me.can_bootstrap_admin && !isAdmin ? <BootstrapAdminPanel onGranted={refetch} /> : null}
+      <Section
+        title="Projects"
+        description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'}`}
+      >
+        <DataTable<Project>
+          density="regular"
+          onRowOpen={(p) => navigate(projectPath(p.slug))}
+          rowActions={(p) => [
+            {
+              id: 'open',
+              label: `Open ${p.name}`,
+              icon: 'external',
+              primary: true,
+              onPress: () => navigate(projectPath(p.slug)),
+            },
+            {
+              id: 'settings',
+              label: `Settings for ${p.name}`,
+              icon: 'settings',
+              primary: true,
+              onPress: () => navigate(projectPath(p.slug, 'settings')),
+            },
+          ]}
+          aria-label="Your projects"
+          columns={COLUMNS}
+          rows={me.projects}
+          rowKey={(p) => p.id}
+          storageKey="profile-projects"
+          empty="You are not a member of any project yet."
+        />
+      </Section>
     </div>
   );
 }
@@ -141,11 +136,11 @@ function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
       ),
   });
   return (
-    <section data-bootstrap-admin>
-      <SectionHeader
-        title="Grant admin access"
-        description="Enter the bootstrap token from QYM_ADMIN_BOOTSTRAP_TOKEN to become the first administrator."
-      />
+    <Section
+      data-bootstrap-admin
+      title="Grant admin access"
+      description="Enter the bootstrap token from QYM_ADMIN_BOOTSTRAP_TOKEN to become the first administrator."
+    >
       <form
         className={styles.bootstrapForm}
         onSubmit={(e) => {
@@ -168,7 +163,13 @@ function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
           mono
           width={320}
         />
-        <Button type="submit" variant="primary" isDisabled={!token.trim()} loading={grant.isPending}>
+        <Button
+          type="submit"
+          variant="primary"
+          isDisabled={!token.trim()}
+          disabledReason="Enter the admin token first"
+          loading={grant.isPending}
+        >
           Grant admin
         </Button>
       </form>
@@ -177,6 +178,6 @@ function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
           {error}
         </Text>
       ) : null}
-    </section>
+    </Section>
   );
 }

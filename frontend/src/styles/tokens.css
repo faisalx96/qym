@@ -75,11 +75,18 @@
   --space-md: 14px;
   --space-lg: 20px;
   --space-xl: 32px;
+  /* Space on each side of the hairline between two sections (ui/Section). */
+  --section-gap: var(--space-xl);
 
   /* Canonical interactive component geometry.
      One aligned density is used across forms and analysis toolbars. */
   --control-height: 24px;
   --control-radius: 5px;
+  /* A field-like control's edge (text field, select, filter trigger, segmented control): a soft hairline at rest over
+     the --bg-elevated fill, one step stronger on hover; focus and an active filter use the accent (round 10: the
+     --border-default outlines read as too bold next to the borderless buttons). */
+  --control-edge: var(--border-subtle);
+  --control-edge-hover: var(--border-default);
   --analysis-action-gap: 5px;
   --analysis-icon-optical-offset: 0.25px;
   --analysis-action-padding-start: 9px;
@@ -306,6 +313,7 @@
   --card-bg: var(--bg-surface); /* a card's fill; ReportSection bodies make it --bg-elevated (inset cards) */
   --card-edge: var(--border-subtle); /* a card's outline; ReportSection bodies make it transparent (inset cards, owner decision H6) */
   --shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.28);
+  --pin-shade: rgba(0, 0, 0, 0.4); /* inner edge of a frozen column while content is under it (DataTable) */
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-fill: 360ms; /* bars/rings/fills growing in or updating */

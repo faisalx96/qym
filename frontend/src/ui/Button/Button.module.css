@@ -16,14 +16,16 @@
   white-space: nowrap;
   cursor: pointer;
   color: var(--text-primary);
-  background: var(--bg-active);
+  /* quiet at rest (no border), brighter on hover and press: a resting fill brighter than its hover read as already active */
+  background: var(--bg-elevated);
   transition:
     background var(--transition-fast),
     color var(--transition-fast);
   text-decoration: none;
 }
 
-.button[data-size='md'] {
+/* One size per role (C049): every button is 24px; 32px only in a dialog footer, even when a page asks for size md. */
+:global([data-dialog-footer]) .button[data-size='md'] {
   height: 32px;
   min-height: 32px;
   padding: 0 var(--space-md);
@@ -35,17 +37,44 @@
   width: var(--control-height);
 }
 
-.button[data-icon-only][data-size='md'] {
+:global([data-dialog-footer]) .button[data-icon-only][data-size='md'] {
   width: 32px;
+}
+
+/* C166: a disabled button with a reason shows it on hover, in the tooltip look. */
+.reasonWrap {
+  position: relative;
+  display: inline-flex;
+}
+.reasonWrap[data-reason]:hover::after {
+  content: attr(data-reason);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: var(--z-tooltip);
+  width: max-content;
+  max-width: 280px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+  pointer-events: none;
 }
 
 .button[data-hovered],
 a.button:hover:not([data-disabled]) {
-  background: var(--bg-hover);
+  background: var(--bg-active);
 }
 .button[data-pressed],
 a.button:active:not([data-disabled]) {
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
 }
 
 .button[data-variant='accent'] {
@@ -98,13 +127,34 @@ a.button[data-variant='ghost']:hover:not([data-disabled]) {
   background: var(--bg-hover);
 }
 
-/* Disabled reads as inert but stays legible: a flat elevated fill with muted text (6:1) in every variant, instead of
-   fading the variant's own fill (a faded accent fill with void text fell below 3:1 against the ground). */
+/* Disabled reads as inert but stays legible: muted text (6:1) in every variant, instead of fading the variant's own fill
+   (a faded accent fill with void text fell below 3:1 against the ground). Round 10: the same flat shape as a resting
+   button at half its fill and no outline, so a locked button reads as the button switched off; an outline made it look
+   like another, louder style. */
 .button[data-disabled] {
   color: var(--text-muted);
-  background: var(--bg-elevated);
-  box-shadow: inset 0 0 0 1px var(--border-default);
+  background: color-mix(in srgb, var(--bg-elevated) 50%, transparent);
   cursor: not-allowed;
+}
+
+/* One rule for every coloured button (round 11): disabled keeps the button's own colour, faded, so a locked Save is
+   still the green Save and a locked Restore default is still red. A green tint for a locked primary read as a
+   different, accent button. Neutral and ghost buttons keep the muted flat look above. */
+.button:is([data-variant='primary'], [data-variant='accent'], [data-variant='danger'])[data-disabled] {
+  opacity: 0.45;
+  box-shadow: none;
+}
+.button[data-variant='primary'][data-disabled] {
+  color: var(--bg-void);
+  background: var(--accent-primary);
+}
+.button[data-variant='accent'][data-disabled] {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+}
+.button[data-variant='danger'][data-disabled] {
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+  background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
 }
 
 .button[data-focus-visible],

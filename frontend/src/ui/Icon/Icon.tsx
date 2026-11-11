@@ -18,7 +18,10 @@ export type IconName =
   | 'collapse'
   | 'external'
   | 'trash'
+  | 'send'
+  | 'file'
   | 'warning'
+  | 'trace'
   | 'retry'
   | 'search'
   | 'plus'
@@ -45,7 +48,12 @@ export type IconName =
   | 'archive'
   | 'play'
   | 'stop'
+  | 'ban'
+  | 'diff'
+  | 'star'
   | 'clock'
+  | 'calendar'
+  | 'split'
   | 'eye'
   | 'eye-off'
   | 'grid'
@@ -82,12 +90,16 @@ const PATHS: Record<IconName, string> = {
   collapse: 'M10 4v6H4M14 20v-6h6M10 10L4 4M14 14l6 6',
   external: 'M14 4h6v6M20 4l-9 9M19 14v6H5V6h6',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
+  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8',
   warning: 'M12 3L2 21h20L12 3zM12 10v5M12 18v.5',
+  // a three-bar waterfall: the open-trace action (C230); the list glyph is for filters only
+  trace: 'M3 6h8M7 12h9M12 18h9',
   retry: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',
   search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zM20 20l-4-4',
   plus: 'M12 5v14M5 12h14',
   minus: 'M5 12h14',
-  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  more: 'M5 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM19 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z',
   edit: 'M4 20h4l10-10-4-4L4 16v4zM13 7l4 4',
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 11v5M12 8v.5',
   menu: 'M4 7h16M4 12h16M4 17h16',
@@ -111,7 +123,15 @@ const PATHS: Record<IconName, string> = {
   archive: 'M3 5h18v4H3zM5 9v11h14V9M10 13h4',
   play: 'M7 5v14l12-7z',
   stop: 'M6 6h12v12H6z',
+  /* Revoke a key or token, disable a user: a circle with a slash ("no access"), not a bare square or a cross. */
+  ban: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM5.6 5.6l12.8 12.8',
+  /* A page with a plus over a minus: compare a draft with its default (round 11). */
+  diff: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 10v5M9.5 12.5h5M9.5 17.5h5',
+  star: 'M12 3l2.8 5.6 6.2.9-4.5 4.4 1.1 6.1L12 17.1 6.4 20l1.1-6.1L3 9.5l6.2-.9z',
   clock: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7v5l3 2',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  /* two cohorts side by side (A | B) */
+  split: 'M3 5h7v14H3zM14 5h7v14h-7z',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   'eye-off':
     'M3 3l18 18M10 6a10 10 0 0 1 12 6 13 13 0 0 1-3 4M6 8a13 13 0 0 0-4 4s4 7 10 7a9 9 0 0 0 4-1M10 10a3 3 0 0 0 4 4',
@@ -140,7 +160,7 @@ const PATHS: Record<IconName, string> = {
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName;
-  size?: 12 | 14 | 16 | 20;
+  size?: 12 | 14 | 16 | 18 | 20;
   /** Decorative by default; pass a title for standalone meaning. */
   title?: string;
 }

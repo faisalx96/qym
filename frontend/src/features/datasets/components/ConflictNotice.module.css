@@ -1,0 +1,12 @@
+/* Save conflict (C015): the notice, the field diffs and the two choices, above the item's fields */
+.conflict {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}

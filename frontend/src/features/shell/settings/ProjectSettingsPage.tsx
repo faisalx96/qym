@@ -4,31 +4,23 @@ import { useDocumentTitle } from '../hooks';
 import { constrained } from '../layout';
 import { plural } from '../plural';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Badge, Identicon, PageHeader, TabPanel, Tabs, Tag, Text } from '@/ui';
+import { Identicon, PageHeader, StatusMark, TabPanel, Tabs, Tag, Text } from '@/ui';
 import { GeneralTab } from './GeneralTab';
 import { MembersTab } from './MembersTab';
 import { ApiKeysTab } from './ApiKeysTab';
 import { LlmConnectionsTab } from './LlmConnectionsTab';
 import { EnvironmentsTab } from './EnvironmentsTab';
 import { PromptsTab } from './PromptsTab';
-import { DangerZoneTab } from './DangerZoneTab';
+import { formatDay } from '@/lib/dates';
 
-export const SETTINGS_TABS = [
-  'general',
-  'members',
-  'apikeys',
-  'llm',
-  'environments',
-  'prompts',
-  'danger',
-] as const;
+export const SETTINGS_TABS = ['general', 'members', 'apikeys', 'llm', 'environments', 'prompts'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 /** /projects/:slug/settings?tab=… — the tab is persistent URL state (brief 01 §9.6). */
 export function ProjectSettingsPage() {
   const { project, readOnly, canManage, isAdmin } = useProjectContext();
-  const { params, replaceUrlQuery } = useSearchParamsState();
-  useDocumentTitle(`${project.name} · Settings`);
+  const { params, replaceUrlQuery, pushUrlQuery } = useSearchParamsState();
+  useDocumentTitle('Project settings');
 
   const items = useMemo(
     () =>
@@ -39,14 +31,17 @@ export function ProjectSettingsPage() {
         { id: 'llm', label: 'LLM connections' },
         { id: 'environments', label: 'Environments' },
         ...(canManage ? [{ id: 'prompts', label: 'AI prompts' }] : []),
-        ...(isAdmin ? [{ id: 'danger', label: 'Danger zone', tone: 'danger' as const }] : []),
-      ] as { id: SettingsTab; label: string; count?: number; tone?: 'danger' }[],
-    [project.member_count, canManage, isAdmin],
+      ] as { id: SettingsTab; label: string; count?: number }[],
+    [project.member_count, canManage],
   );
   const requested = params.get('tab') as SettingsTab | null;
   const selected: SettingsTab = requested && items.some((i) => i.id === requested) ? requested : 'general';
   useEffect(() => {
-    if (requested && requested !== selected) replaceUrlQuery({ tab: null });
+    if (!requested || requested === selected) return;
+    replaceUrlQuery({ tab: null });
+    // The Danger zone is a section of General now (round 11): an old ?tab=danger link lands on it.
+    if ((requested as string) === 'danger')
+      requestAnimationFrame(() => document.getElementById('danger-zone')?.scrollIntoView({ block: 'start' }));
   }, [requested, selected, replaceUrlQuery]);
 
   return (
@@ -63,15 +58,20 @@ export function ProjectSettingsPage() {
             {isAdmin ? 'admin' : project.role || 'member'}
           </Tag>,
           plural(project.member_count, 'member'),
-          readOnly ? (
-            <Badge key="status" tone="warning">
-              archived
-            </Badge>
-          ) : (
-            <Badge key="status" tone="success">
-              active
-            </Badge>
-          ),
+          plural(project.run_count, 'run'),
+          `Created ${formatDay(project.created_at)}`,
+          // on/off state: only the exception shows
+          ...(readOnly
+            ? [
+                <StatusMark
+                  key="status"
+                  tone="warning"
+                  shape="pause"
+                  label="Archived"
+                  data-status="archived"
+                />,
+              ]
+            : []),
         ]}
       />
       {readOnly ? (
@@ -87,7 +87,8 @@ export function ProjectSettingsPage() {
         label="Settings sections"
         items={items}
         selected={selected}
-        onSelect={(id) => replaceUrlQuery({ tab: id === 'general' ? null : id })}
+        // C117: a view tab is a place, so Back returns to the previous tab
+        onSelect={(id) => pushUrlQuery({ tab: id === 'general' ? null : id })}
       >
         <TabPanel id="general">
           <GeneralTab />
@@ -107,11 +108,6 @@ export function ProjectSettingsPage() {
         {canManage ? (
           <TabPanel id="prompts">
             <PromptsTab />
-          </TabPanel>
-        ) : null}
-        {isAdmin ? (
-          <TabPanel id="danger">
-            <DangerZoneTab />
           </TabPanel>
         ) : null}
       </Tabs>

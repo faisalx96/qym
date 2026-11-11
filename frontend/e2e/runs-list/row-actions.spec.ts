@@ -2,7 +2,17 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { APP } from '../helpers';
 import { addMember, createUser } from '../shell/support';
-import { dataRows, failOnNativeDialogs, freshProject, openRuns, rowOf, statusText } from './support';
+import {
+  dataRows,
+  failOnNativeDialogs,
+  freshProject,
+  openRowMenu,
+  openRuns,
+  pickRowAction,
+  revealActions,
+  rowOf,
+  statusText,
+} from './support';
 
 const NAME = 'text2sql-gpt-4o-000'; // COMPLETED
 const kpis = async (request: APIRequestContext, slug: string) =>
@@ -12,8 +22,10 @@ const kpis = async (request: APIRequestContext, slug: string) =>
     ).json()) as { kpis: Record<string, number> }
   ).kpis;
 
+/** Every row action sits in one menu behind the row's '>' handle (owner decision, Nov 1). */
 async function openMore(page: Page, name: string, how: 'mouse' | 'keyboard' = 'mouse') {
-  const trigger = rowOf(page, name).getByRole('button', { name: `More actions for ${name}` });
+  await revealActions(rowOf(page, name));
+  const trigger = rowOf(page, name).getByRole('button', { name: `Actions for ${name}` });
   if (how === 'mouse') await trigger.click();
   else {
     await trigger.focus();
@@ -24,11 +36,10 @@ async function openMore(page: Page, name: string, how: 'mouse' | 'keyboard' = 'm
   return menu;
 }
 
+/** Submit is an item of the row menu, on its paper-plane tile (no check icon). */
 async function submitRow(page: Page, name: string) {
-  await rowOf(page, name)
-    .getByRole('button', { name: `Submit ${name} for review` })
-    .click();
-  const dlg = page.getByRole('dialog', { name: `Submit ${name} for review` });
+  await pickRowAction(page, rowOf(page, name), 'Submit');
+  const dlg = page.getByRole('dialog', { name: `Submit ${name} for review?` });
   await dlg.getByRole('button', { name: 'Submit', exact: true }).click();
   await expect(dlg).toHaveCount(0);
 }
@@ -45,8 +56,9 @@ test.describe('runs list: row actions (J5)', () => {
     await post;
     await expect(page.getByRole('status').filter({ hasText: 'Submitted for review' })).toBeVisible();
     await expect.poll(async () => statusText(rowOf(page, NAME)), { timeout: 5000 }).toMatch(/submitted/i);
-    // a SUBMITTED row has no Submit icon any more
-    await expect(rowOf(page, NAME).getByRole('button', { name: /^Submit / })).toHaveCount(0);
+    // a SUBMITTED row has no Submit item any more
+    const after = await openRowMenu(page, rowOf(page, NAME));
+    await expect(after.getByRole('menuitem', { name: 'Submit', exact: true })).toHaveCount(0);
   });
 
   test('Approve, Unapprove, Reject (comment required), Unreject through the More menu; Overview Approved gains the run; error KPI is stable', async ({
@@ -61,19 +73,25 @@ test.describe('runs list: row actions (J5)', () => {
 
     // keyboard: open the menu with Enter, ArrowDown to move, Enter to pick
     let menu = await openMore(page, NAME, 'keyboard');
-    await expect(menu.getByRole('menuitem')).toHaveText(['Approve', 'Reject', 'Transfer ownership…']);
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      'Open auto-analysis',
+      'Approve',
+      'Reject',
+      'Transfer ownership',
+      'Delete',
+    ]);
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.getByRole('menuitem', { name: 'Approve' })).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(menu.getByRole('menuitem', { name: 'Reject' })).toBeFocused();
-    await page.keyboard.press('ArrowUp');
-    await expect(menu.getByRole('menuitem', { name: 'Approve' })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
-    await expect(rowOf(page, NAME).getByRole('button', { name: `More actions for ${NAME}` })).toBeFocused();
+    await expect(rowOf(page, NAME).getByRole('button', { name: `Actions for ${NAME}` })).toBeFocused();
 
     // Approve
     menu = await openMore(page, NAME);
     await menu.getByRole('menuitem', { name: 'Approve' }).click();
-    let dlg = page.getByRole('dialog', { name: `Approve run: ${NAME}` });
+    let dlg = page.getByRole('dialog', { name: `Approve ${NAME}?` });
     await dlg.getByRole('button', { name: 'Approve', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: `${NAME} approved` })).toBeVisible();
     await expect.poll(async () => statusText(rowOf(page, NAME))).toMatch(/approved/i);
@@ -89,10 +107,10 @@ test.describe('runs list: row actions (J5)', () => {
 
     // Unapprove -> SUBMITTED
     menu = await openMore(page, NAME);
-    await expect(menu.getByRole('menuitem').first()).toHaveText('Unapprove');
+    await expect(menu.getByRole('menuitem').nth(1)).toHaveText('Unapprove');
     await menu.getByRole('menuitem', { name: 'Unapprove' }).click();
     await page
-      .getByRole('dialog', { name: `Withdraw approval: ${NAME}` })
+      .getByRole('dialog', { name: `Withdraw the approval of ${NAME}?` })
       .getByRole('button', { name: 'Unapprove' })
       .click();
     // the platform returns a withdrawn run to its execution result
@@ -103,7 +121,7 @@ test.describe('runs list: row actions (J5)', () => {
     // Reject needs a comment
     menu = await openMore(page, NAME);
     await menu.getByRole('menuitem', { name: 'Reject' }).click();
-    dlg = page.getByRole('dialog', { name: `Reject run: ${NAME}` });
+    dlg = page.getByRole('dialog', { name: `Reject ${NAME}?` });
     await dlg.getByRole('button', { name: 'Reject', exact: true }).click();
     await expect(dlg).toBeVisible(); // not accepted without a comment
     expect(await statusText(rowOf(page, NAME))).toMatch(/submitted/i);
@@ -116,7 +134,7 @@ test.describe('runs list: row actions (J5)', () => {
     menu = await openMore(page, NAME);
     await menu.getByRole('menuitem', { name: 'Unreject' }).click();
     await page
-      .getByRole('dialog', { name: `Withdraw rejection: ${NAME}` })
+      .getByRole('dialog', { name: `Withdraw the rejection of ${NAME}?` })
       .getByRole('button', { name: 'Unreject' })
       .click();
     await expect.poll(async () => statusText(rowOf(page, NAME))).toMatch(/completed/i);
@@ -131,7 +149,7 @@ test.describe('runs list: row actions (J5)', () => {
     await openRuns(page, s.project.slug);
     const menu = await openMore(page, 'text2sql-claude-sonnet-4-006'); // APPROVED
     await menu.getByRole('menuitem', { name: 'Unapprove' }).click();
-    const dlg = page.getByRole('dialog', { name: /Withdraw approval/ });
+    const dlg = page.getByRole('dialog', { name: /Withdraw the approval of/ });
     await expect(dlg).toBeVisible();
     expect(await dlg.innerText()).not.toMatch(/returns to Submitted/i);
   });
@@ -143,7 +161,7 @@ test.describe('runs list: row actions (J5)', () => {
     await addMember(request, s.project.id, user.id, 'MEMBER');
     await openRuns(page, s.project.slug);
     const menu = await openMore(page, NAME);
-    await menu.getByRole('menuitem', { name: 'Transfer ownership…' }).click();
+    await menu.getByRole('menuitem', { name: 'Transfer ownership' }).click();
     const dlg = page.getByRole('dialog', { name: `Transfer ${NAME}` });
     await expect(dlg).toBeVisible();
     await dlg.getByRole('button', { name: /New owner/ }).click();
@@ -162,9 +180,7 @@ test.describe('runs list: row actions (J5)', () => {
     const dialogs = failOnNativeDialogs(page);
     await openRuns(page, s.project.slug);
     const before = await dataRows(page).count();
-    await rowOf(page, NAME)
-      .getByRole('button', { name: `Delete ${NAME}` })
-      .click();
+    await pickRowAction(page, rowOf(page, NAME), 'Delete');
     const dlg = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: `Delete ${NAME}?` }));
     await expect(dlg).toBeVisible();
     await expect(dlg.getByRole('button', { name: 'Cancel' })).toBeFocused();
@@ -184,7 +200,7 @@ test.describe('runs list: row actions (J5)', () => {
     const s = await freshProject(request, 2);
     await openRuns(page, s.project.slug);
     const live = rowOf(page, 'live');
-    await expect(live.getByRole('button', { name: /^Delete / })).toHaveCount(1);
-    await expect(live.getByRole('button', { name: /^Submit / })).toHaveCount(0);
+    const menu = await openRowMenu(page, live);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Delete']);
   });
 });

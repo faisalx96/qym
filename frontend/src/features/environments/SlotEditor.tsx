@@ -16,7 +16,19 @@ import {
 } from '@/api/evalEnvironments';
 import { errorCode, errorList, errorMessage, type EvalEnvironment } from '@/api/evalCommon';
 import { ApiError, api } from '@/lib/http';
-import { Button, Dialog, ErrorState, Select, Skeleton, Tag, TextField, useToast, Card } from '@/ui';
+import {
+  Button,
+  Dialog,
+  ErrorState,
+  Select,
+  Skeleton,
+  Tag,
+  TextField,
+  useToast,
+  Card,
+  Icon,
+  Flag,
+} from '@/ui';
 import styles from './SlotEditor.module.css';
 import {
   candidatesFor,
@@ -113,7 +125,7 @@ export function useSlotEditor(
         dispatch({
           type: 'setErrors',
           errors: {},
-          general: errorMessage(error) || 'Could not confirm the slots.',
+          general: errorMessage(error) || 'Couldn’t confirm the slots.',
           reload:
             error instanceof ApiError && (error.status === 409 || errorCode(error) === 'schema_changed'),
         });
@@ -133,7 +145,7 @@ export function useSlotEditor(
       setDescriptor(form.descriptor);
       dispatch({ type: 'reset', slots: slots.slots, notice: 'Reloaded the slots of the current schema.' });
     } catch (error) {
-      dispatch({ type: 'general', message: errorMessage(error) || 'Could not reload the slots.' });
+      dispatch({ type: 'general', message: errorMessage(error) || 'Couldn’t reload the slots.' });
     }
   }, [projectId, envId]);
 
@@ -160,7 +172,7 @@ export function useSlotEditor(
           dispatch({ type: 'addSlot', slot: normalizeSlot({ ...res.proposal, status: 'new' }) });
         }
       } catch (error) {
-        dispatch({ type: 'general', message: errorMessage(error) || 'Could not propose the endpoint slot.' });
+        dispatch({ type: 'general', message: errorMessage(error) || 'Couldn’t propose the endpoint slot.' });
       } finally {
         setAdding(false);
       }
@@ -316,7 +328,7 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
               {status.label}
             </Tag>
           ) : null}
-          {slot.required ? <Tag title="Required by the service">Required</Tag> : null}
+          {slot.required ? <Flag title="Required by the service">Required</Flag> : null}
         </header>
         <div className={styles.keysets}>
           {sets.map((_, setIdx) => (
@@ -345,10 +357,11 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
           {editor ? (
             <div>
               <Button
+                icon={<Icon name="plus" size={12} />}
                 variant="neutral"
                 onPress={() => editor.dispatch({ type: 'addSet', slotKey: slot.slot_key })}
               >
-                + Add another set of keys
+                Add another set of keys
               </Button>
             </div>
           ) : null}
@@ -380,7 +393,7 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
               <Select
                 label={`Merge ${slot.label || slot.slot_key} into another group`}
                 hideLabel
-                placeholder="Move keys into group…"
+                placeholder="Move keys into group"
                 value={null}
                 items={mergeTargets.map((s) => ({ key: s.slot_key, label: s.label || s.slot_key }))}
                 onChange={(key) =>
@@ -583,7 +596,7 @@ export function SlotEditorDialog(props: SlotEditorDialogProps) {
       {source.isError ? (
         <ErrorState
           error={source.error}
-          title="Could not load the LLM settings"
+          title="Couldn’t load the LLM settings"
           onRetry={() => void source.refetch()}
           compact
         />

@@ -55,7 +55,7 @@ function KeysForm({ slots, onSubmit, onCancel, onClone }: Omit<TemporaryKeysDial
           </Button>
           {onClone ? (
             <Button variant="neutral" size="md" onPress={() => leave(onClone)}>
-              Clone instead
+              Run again instead
             </Button>
           ) : null}
           <Button variant="primary" size="md" isDisabled={!complete} onPress={submit}>

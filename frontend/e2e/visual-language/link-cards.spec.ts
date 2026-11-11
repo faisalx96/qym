@@ -193,7 +193,7 @@ test.describe('experiments surfaces (QG1-6, QG1-10)', () => {
     test(`the "copy an experiment" start card is a block link at ${width}px (QG1-6)`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}&step=start`);
-      const card = page.locator('a[data-link="block"]').filter({ hasText: 'Copy an experiment' }).first();
+      const card = page.locator('a[data-link="block"]').filter({ hasText: 'Run again' }).first();
       await expect(card).toBeVisible();
       const before = await style(card);
       await hovered(page, card);

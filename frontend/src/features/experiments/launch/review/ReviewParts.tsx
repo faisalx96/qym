@@ -1,14 +1,9 @@
 import { Fragment, type ReactNode } from 'react';
-import { Badge, Button, Card, Text } from '@/ui';
+import { Button, Card, StatusMark, Text } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
 import { ProblemList } from '../components/ProblemList';
-import {
-  CEILING_POINTER,
-  CEILING_WARNING_ACTION,
-  CEILING_WARNING_TITLE,
-  TOKEN_WARNING_TITLE,
-} from '../copy';
+import { CEILING_POINTER, CEILING_WARNING_ACTION, CEILING_WARNING_TITLE, TOKEN_WARNING_TITLE } from '../copy';
 import { useLaunch } from '../LaunchContext';
 import { validationItem, type LaunchWarning } from '../model';
 import styles from './reviewStep.module.css';
@@ -180,11 +175,13 @@ export function ChecksCard({
             Checks
           </Text>
           {review.items.length ? (
-            <Badge tone="danger">{plural(review.items.length, 'problem')}</Badge>
+            <StatusMark tone="danger" shape="cross" label={plural(review.items.length, 'problem')} />
           ) : ready ? (
-            <Badge tone="success">Ready</Badge>
+            <StatusMark tone="success" shape="check" label="Ready" />
+          ) : preview.loading ? (
+            <StatusMark tone="info" shape="orbit" label="Checking" />
           ) : (
-            <Badge tone="neutral">{preview.loading ? 'Checking' : 'Review'}</Badge>
+            <StatusMark tone="neutral" shape="ring" label="Review" />
           )}
         </div>
       }

@@ -132,9 +132,9 @@ def test_legacy_experiment_stays_readable_and_retry_resends_the_stored_body(
         if isinstance(listed, list)
         else next(v for v in listed.values() if isinstance(v, list))
     )
-    assert [r["versioning_details"] for r in rows if r["id"] == experiment_id] == [
-        legacy
-    ]
+    # C077: the list leaves out versioning_details and spec; the detail keeps them.
+    assert [r.get("versioning_details") for r in rows if r["id"] == experiment_id] == [None]
+    assert [r.get("spec") for r in rows if r["id"] == experiment_id] == [None]
     with session_factory() as db:
         job = db.query(EvalExperimentJob).filter_by(experiment_id=experiment_id).one()
         job.status = EvalJobStatus.FAILED

@@ -241,3 +241,70 @@ def test_ai_output_cannot_supply_review_authority():
                             root_cause_issues=[{**ISSUES[0], "review_status": "approved", "reviewed_by_user_id": "fake", "source": "human"}])
     issue = _result_root_cause_issues(result)[0]
     assert all(key not in issue for key in ("review_status", "reviewed_by_user_id", "source"))
+
+
+def test_run_page_reject_records_the_decision_and_leaves_the_evidence(db_session):
+    _, run, item, principal = setup(db_session)
+    current = deepcopy(item.item_metadata["metric_analyses"]["accuracy"]["root_cause_issues"][0])
+    runs_api.update_root_cause_issue(
+        {"run_id": run.id, "item_id": item.item_id, "metric_name": "accuracy", "action": "reject",
+         "issue_index": 0, "issue_id": current.get("issue_id"), "expected_issue": current,
+         "comment": "  The source text is right; this is a dataset issue.  "},
+        db=db_session, principal=principal,
+    )
+    db_session.expire_all()
+    one, two = item.item_metadata["metric_analyses"]["accuracy"]["root_cause_issues"]
+    assert one["review_status"] == "rejected"
+    assert one["review_comment"] == "The source text is right; this is a dataset issue."
+    assert one["reviewed_at"]
+    assert two["review_status"] == "pending" and "review_comment" not in two
+    rejected = [c for c in candidates(db_session, run) if c.status == CorrectionStatus.REJECTED]
+    assert len(rejected) == 1 and rejected[0].review_comment == one["review_comment"]
+    assert (run.id, item.item_id) not in load_approved_diagnoses(db_session, [run.id])
+    with pytest.raises(HTTPException) as error:
+        act(db_session, run, item, principal, "reject", 0)
+    assert error.value.status_code == 409
+
+
+def test_reject_requires_review_permission(db_session, monkeypatch):
+    _, run, item, principal = setup(db_session)
+    monkeypatch.setattr(runs_api, "can_review_run", lambda *args: False)
+    with pytest.raises(HTTPException) as error:
+        act(db_session, run, item, principal, "reject", 0)
+    assert error.value.status_code == 403
+    assert not candidates(db_session, run)
+
+
+def test_decision_line_carries_the_reviewer_name(db_session):
+    from qym_platform.services.issue_reviews import apply_issue_review, reviewer_name
+
+    actor, run, item, principal = setup(db_session)
+    act(db_session, run, item, principal, "reject", 0)
+    candidate = next(c for c in candidates(db_session, run) if c.status == CorrectionStatus.REJECTED)
+    candidate.reviewed_by_user_id = actor.id
+    issue = {}
+    apply_issue_review(issue, candidate, reviewer_name(db_session, actor.id))
+    assert issue["reviewed_by_name"] == (actor.display_name or actor.email)
+    assert reviewer_name(db_session, None) == "" and reviewer_name(db_session, "no-such-user") == ""
+    candidate.reviewed_at = None
+    apply_issue_review(issue, candidate, "Someone")
+    assert "reviewed_by_name" not in issue and "review_comment" not in issue
+
+
+def test_issue_blocks_name_the_rule_for_the_viewer(db_session, monkeypatch):
+    _, run, item, principal = setup(db_session)
+    open_view = runs_api.get_issue_decision_blocks(run.id, item.item_id, db=db_session, principal=principal)
+    assert open_view == {"role_block": None, "blocks": {}}
+
+    monkeypatch.setattr(runs_api, "correction_decision_block", lambda db, p, project, row=None: None if row is None else "Ask another reviewer.")
+    act(db_session, run, item, principal, "approve", 0)
+    view = runs_api.get_issue_decision_blocks(run.id, item.item_id, db=db_session, principal=principal)
+    ids = [i["issue_id"] for i in item.item_metadata["metric_analyses"]["accuracy"]["root_cause_issues"]]
+    assert view["role_block"] is None
+    assert view["blocks"] == {"accuracy": {ids[0]: "Ask another reviewer.", ids[1]: "Ask another reviewer."}}
+
+    monkeypatch.setattr(runs_api, "correction_decision_block", lambda db, p, project, row=None: "Only managers decide reviews.")
+    assert runs_api.get_issue_decision_blocks(run.id, item.item_id, db=db_session, principal=principal) == {
+        "role_block": "Only managers decide reviews.", "blocks": {}}
+    monkeypatch.setattr(runs_api, "can_review_run", lambda *args: False)
+    assert runs_api.get_issue_decision_blocks(run.id, item.item_id, db=db_session, principal=principal)["role_block"]

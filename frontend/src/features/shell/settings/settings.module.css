@@ -1,9 +1,16 @@
 /* Project settings: cards, add bars, tables (project_settings.html recipes). */
 .cardHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
+}
+
+.cardAction {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .cardBody {
@@ -32,10 +39,11 @@
   gap: var(--space-md);
 }
 
+/* A name and its tags (an LLM connection and its default tag): room between them (round 11). */
 .inlineActions {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
 }
 
 .dangerRow {
@@ -50,9 +58,26 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.dangerAction {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Why Delete is off, next to the button: a lock and the counts in the warning colour (C118). */
+.blocker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--warning);
+}
+
 .promptLayout {
   display: grid;
-  grid-template-columns: var(--settings-prompt-rail-width) minmax(0, 1fr);
+  grid-template-columns: var(--settings-prompt-tab-width) minmax(0, 1fr);
   gap: var(--space-lg);
 }
 
@@ -62,13 +87,18 @@
   gap: 2px;
 }
 
+/* A prompt type: icon tile, name and default/custom on one line, what it does under them (the old list, round 10). */
 .promptTab {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon label state'
+    'icon desc .';
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
+  column-gap: var(--space-md);
+  row-gap: 2px;
   min-height: var(--tab-height);
-  padding: 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
   border: 0;
   border-inline-start: 2px solid transparent;
   border-radius: 0 var(--control-radius) var(--control-radius) 0;
@@ -80,10 +110,55 @@
   cursor: pointer;
 }
 
+.promptTab:hover {
+  background: var(--bg-hover);
+}
+
 .promptTab[aria-selected='true'] {
   color: var(--text-primary);
   border-color: var(--accent-primary);
   background: var(--bg-elevated);
+}
+
+.promptIcon {
+  grid-area: icon;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--badge-height);
+  height: var(--badge-height);
+  border-radius: var(--control-radius);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+
+.promptTab[aria-selected='true'] .promptIcon {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+}
+
+.promptLabel {
+  grid-area: label;
+  min-width: 0;
+}
+
+.promptState {
+  grid-area: state;
+}
+
+.promptDesc {
+  grid-area: desc;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 400;
+}
+
+.promptPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
 }
 
 .promptEditor {
@@ -91,7 +166,15 @@
   font-family: var(--font-mono);
 }
 
-.promptMeta {
+.saveFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.saveState {
   display: flex;
   align-items: center;
   gap: var(--space-md);
@@ -99,7 +182,7 @@
   color: var(--text-muted);
 }
 
-.unsaved {
+.saveState [data-dirty] {
   color: var(--warning);
 }
 
@@ -129,23 +212,6 @@
   min-width: 240px;
 }
 
-.comboInput {
-  width: 100%;
-  height: 24px;
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: var(--font-sm);
-  outline: none;
-}
-
-.comboInput:focus-visible {
-  border-color: var(--accent-primary);
-  box-shadow: var(--focus-ring);
-}
-
 .comboList {
   position: absolute;
   top: calc(100% + 4px);
@@ -163,27 +229,21 @@
   z-index: var(--z-dropdown);
 }
 
+/* A candidate: the person (disc and name) with the email after it, one per roomy row (round 11). */
 .comboOption {
   display: flex;
-  flex-direction: column;
-  min-height: var(--dropdown-option-height);
-  justify-content: center;
+  align-items: center;
+  min-height: var(--row-regular);
   padding: 0 var(--space-sm);
   border-radius: var(--control-radius);
   color: var(--text-primary);
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
   cursor: pointer;
 }
 
 .comboOption[aria-selected='true'],
 .comboOption:hover {
   background: var(--bg-hover);
-}
-
-.comboOption small {
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  font-family: var(--font-mono);
 }
 
 @media (max-width: 800px) {
@@ -209,6 +269,13 @@
 
 .comboHintRow {
   padding: var(--space-xs) var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+/* What each project role can do (C033), under the add-member bar. */
+.roleHelp {
+  margin: 0;
   color: var(--text-muted);
   font-size: var(--font-sm);
 }

@@ -53,7 +53,7 @@ export function StatusSection({ projectId, env, canEdit }: BaseProps) {
       await update.mutateAsync({ is_active: true });
       toast.show(`“${env.name}” re-enabled`, { tone: 'success' });
     } catch (e) {
-      toast.show(errorMessage(e) || 'Could not re-enable the environment.', { tone: 'error' });
+      toast.show(errorMessage(e) || 'Couldn’t re-enable the environment.', { tone: 'error' });
     }
   }
 
@@ -241,7 +241,7 @@ export function SlotsSection({
       {slots.isError ? (
         <ErrorState
           error={slots.error}
-          title="Could not load the LLM groups"
+          title="Couldn’t load the LLM groups"
           onRetry={() => void slots.refetch()}
           compact
         />
@@ -292,17 +292,18 @@ export function TasksSection({ projectId, env }: Omit<BaseProps, 'canEdit'>) {
       description="What this service offers for an experiment's task."
       actions={
         declared ? (
-          <Button
-            variant="neutral"
-            loading={query.isFetching}
-            onPress={() => void query.refetch()}
-          >
+          <Button variant="neutral" loading={query.isFetching} onPress={() => void query.refetch()}>
             Refresh
           </Button>
         ) : null
       }
     >
-      <div className={styles.taskLine} data-tasks-status={loading ? 'loading' : declared ? (query.isError ? 'error' : data?.status) : 'unsupported'}>
+      <div
+        className={styles.taskLine}
+        data-tasks-status={
+          loading ? 'loading' : declared ? (query.isError ? 'error' : data?.status) : 'unsupported'
+        }
+      >
         {loading ? (
           <>
             <span className={styles.srOnly} role="status">
@@ -314,7 +315,8 @@ export function TasksSection({ projectId, env }: Omit<BaseProps, 'canEdit'>) {
           <span className={styles.help}>{NO_TASKS}</span>
         ) : query.isError || data?.status === 'error' ? (
           <span className={styles.help} role="alert">
-            Could not read tasks: {data?.error || (query.error instanceof Error ? query.error.message : 'unknown error')}
+            Could not read tasks:{' '}
+            {data?.error || (query.error instanceof Error ? query.error.message : 'unknown error')}
           </span>
         ) : !listed.length ? (
           <span className={styles.help}>The service lists no tasks.</span>

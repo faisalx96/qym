@@ -219,7 +219,7 @@ describe('BestRunPicker', () => {
   it('shows a failed scope load as an error with Retry', () => {
     state.scopeError = new Error('boom');
     setup();
-    expect(screen.getByText('Could not load what can be ranked')).toBeInTheDocument();
+    expect(screen.getByText('Couldn’t load what can be ranked')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 

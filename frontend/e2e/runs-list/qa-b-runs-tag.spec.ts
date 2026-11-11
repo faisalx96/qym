@@ -121,9 +121,10 @@ test.describe('Runs page latency tag', () => {
       });
       console.log('QA3-27', width, JSON.stringify(geometry));
       expect(geometry.run).toBe(260);
-      expect(geometry.row).toBe(32);
+      // round 8: the regular density is the default (40 px rows); score columns are 120 px numbers and Actions 96 px
+      expect(geometry.row).toBe(40);
       expect(geometry.page).toBe(0);
-      if (width === 1440) expect(geometry.scroll).toBe(2640);
+      if (width === 1440) expect(geometry.scroll).toBe(2609);
       // Local runs carry none.
       await expect(tag(dataRows(page).filter({ hasText: 'local run' }))).toHaveCount(0);
       expect(describeViolations(await axeSeriousViolations(page))).toBe('');

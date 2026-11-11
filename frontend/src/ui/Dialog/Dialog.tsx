@@ -78,7 +78,11 @@ export function Dialog({
               </header>
               {description ? <p className={styles.description}>{description}</p> : null}
               <div className={styles.body}>{children}</div>
-              {footer ? <footer className={styles.footer}>{footer}</footer> : null}
+              {footer ? (
+                <footer className={styles.footer} data-dialog-footer>
+                  {footer}
+                </footer>
+              ) : null}
             </>
           )}
         </AriaDialog>

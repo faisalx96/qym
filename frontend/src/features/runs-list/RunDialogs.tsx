@@ -11,9 +11,11 @@ import type { RunRow } from '@/api/dashboardTypes';
 import { useAuth } from '@/features/shell';
 import { announceRunStatus } from '@/lib/run-status';
 import { ApiError } from '@/lib/http';
+import { bootstrap } from '@/lib/runtime';
 import { errorsLeftOut, metricDirection } from '@/lib/metrics';
 import { ConfirmDialog, Dialog, FormDialog, KeyValueGrid, Text, Button, useToast } from '@/ui';
 import { passNumber, passRefBase } from './selection';
+import { retentionLabel } from '@/lib/retention';
 
 export type DialogState =
   | { kind: 'workflow'; action: 'approve' | 'reject' | 'unapprove' | 'unreject'; row: RunRow }
@@ -26,20 +28,23 @@ export type DialogState =
 const WORKFLOW_COPY = {
   approve: {
     title: 'Approve run',
+    question: 'Approve',
     confirm: 'Approve',
     tone: 'primary' as const,
     done: 'approved',
-    help: 'Approved runs are locked and count as reference results.',
+    help: 'Its scores lock and it counts as a reference result. Root causes stay editable.',
   },
   reject: {
     title: 'Reject run',
+    question: 'Reject',
     confirm: 'Reject',
     tone: 'danger' as const,
     done: 'rejected',
-    help: 'The owner is told why; the run can be unrejected later.',
+    help: 'The run can be unrejected later.',
   },
   unapprove: {
     title: 'Withdraw approval',
+    question: 'Withdraw the approval of',
     confirm: 'Unapprove',
     tone: 'primary' as const,
     done: 'unapproved',
@@ -47,12 +52,21 @@ const WORKFLOW_COPY = {
   },
   unreject: {
     title: 'Withdraw rejection',
+    question: 'Withdraw the rejection of',
     confirm: 'Unreject',
     tone: 'primary' as const,
     done: 'unrejected',
     help: 'The run returns to its execution result (Completed or Failed).',
   },
 };
+
+/** C251 (with C178's words): the place is Deleted runs, and the dialog names its Retention. */
+export { retentionLabel };
+
+export function deleteDescription(graceDays: number | null): string {
+  const retention = graceDays === null ? '' : ` Retention: ${retentionLabel(graceDays)}.`;
+  return `Whole runs move to Deleted runs, where an admin can restore them.${retention} Deleting a single pass is permanent.`;
+}
 
 function message(e: unknown): string {
   if (e instanceof ApiError) return e.detail || e.message;
@@ -97,7 +111,7 @@ export function RunDialogs({
       <FormDialog
         open={Boolean(wf)}
         onOpenChange={close}
-        title={wf ? `${copy.title}: ${name(wf.row)}` : copy.title}
+        title={wf ? `${copy.question} ${name(wf.row)}?` : `${copy.title}?`}
         description={copy.help}
         confirmLabel={copy.confirm}
         submittingLabel="Saving…"
@@ -108,7 +122,8 @@ export function RunDialogs({
             label: 'Comment',
             type: 'textarea',
             rows: 3,
-            placeholder: 'Optional note for the history',
+            placeholder:
+              wf?.action === 'reject' ? 'Why the run is rejected' : 'Optional note for the history',
             required: wf?.action === 'reject',
           },
         ]}
@@ -132,8 +147,8 @@ export function RunDialogs({
         onOpenChange={close}
         title={
           sub && sub.rows.length === 1
-            ? `Submit ${name(sub.rows[0]!)} for review`
-            : `Submit ${sub?.rows.length ?? 0} runs for review`
+            ? `Submit ${name(sub.rows[0]!)} for review?`
+            : `Submit ${sub?.rows.length ?? 0} runs for review?`
         }
         description={[
           'Reviewers are asked to approve or reject. Runs stay read-only while submitted.',
@@ -179,7 +194,7 @@ export function RunDialogs({
         title={
           rm && rm.refs.length === 1 ? `Delete ${rm.names[0]}?` : `Delete ${rm?.refs.length ?? 0} selections?`
         }
-        description="Whole runs move to Deleted Runs and can be restored by an admin within the retention window. Deleting a single pass is permanent."
+        description={deleteDescription(bootstrap().deletedRunGraceDays)}
         warning={
           rm
             ? {
@@ -218,7 +233,7 @@ export function RunDialogs({
       <FormDialog
         open={Boolean(tr)}
         onOpenChange={close}
-        title={tr ? `Transfer ${name(tr.row)}` : 'Transfer ownership'}
+        title={tr ? `Transfer ${name(tr.row)}?` : 'Transfer ownership?'}
         description="The new owner can submit and delete this run."
         confirmLabel="Transfer"
         fields={[

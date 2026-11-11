@@ -29,6 +29,7 @@ x-qym-shared-env: &qym-shared-env
   QYM_DATABASE_URL: ${QYM_DATABASE_URL}
   QYM_BASE_URL: ${QYM_BASE_URL:-http://localhost:8080}
   QYM_AUTH_MODE: ${QYM_AUTH_MODE}
+  QYM_PROXY_SHARED_SECRET: ${QYM_PROXY_SHARED_SECRET:-}
   QYM_LLM_CONFIG_ENCRYPTION_KEY: ${QYM_LLM_CONFIG_ENCRYPTION_KEY:?set QYM_LLM_CONFIG_ENCRYPTION_KEY for the service split}
   QYM_MAINTENANCE_MODE: ${QYM_MAINTENANCE_MODE:-false}
   # One migration job below; every service skips the step.

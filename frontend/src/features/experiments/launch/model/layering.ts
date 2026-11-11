@@ -12,13 +12,7 @@ import {
   stripBoundFields,
   unconfirmedEndpoints,
 } from './bindings';
-import {
-  taskChanged,
-  copySelection,
-  datasetsListChanged,
-  pairCount,
-  runShapeChanged,
-} from './datasets';
+import { taskChanged, copySelection, datasetsListChanged, pairCount, runShapeChanged } from './datasets';
 import { datasetValue, emptyBaseInfo, emptySelection } from './document';
 import { evaluatorChangedCount, resetInputs, syncMetaSeed } from './evaluator';
 import { bestRunHeader } from './bestRun';
@@ -263,7 +257,9 @@ export function resetRoles(doc: LaunchDocument, rowPointers: readonly string[]):
 function restoreSelection(doc: LaunchDocument): LaunchDocument['selection'] {
   const base = copySelection(doc.baseline.selection ?? emptySelection());
   if (base.mixedTasks) {
-    const kept = Object.fromEntries(Object.entries(base.mixedTasks).filter(([id]) => doc.environmentIds.includes(id)));
+    const kept = Object.fromEntries(
+      Object.entries(base.mixedTasks).filter(([id]) => doc.environmentIds.includes(id)),
+    );
     base.mixedTasks = Object.keys(kept).length ? kept : null;
   }
   return base;
@@ -358,7 +354,9 @@ function selectionFrom(
       if (typeof value !== 'string' || !value) continue;
       const env = ctx.envs.find((e) => e.id === envId);
       if (!env) {
-        notes.push(`Task for ${ctx.envNames?.[envId] ?? 'an environment'} was not carried (environment not selected)`);
+        notes.push(
+          `Task for ${ctx.envNames?.[envId] ?? 'an environment'} was not carried (environment not selected)`,
+        );
       } else if (!env.capabilities?.task) {
         notes.push(`Task for ${env.name} was not carried (it does not offer task selection)`);
       } else if (!listed(env, value)) {
@@ -366,7 +364,8 @@ function selectionFrom(
       } else mixed[envId] = value;
     }
     const values = Array.from(new Set(Object.values(mixed)));
-    if (values.length === 1 && Object.keys(mixed).length === ctx.envs.length) selection.task = values[0] as string;
+    if (values.length === 1 && Object.keys(mixed).length === ctx.envs.length)
+      selection.task = values[0] as string;
     else if (values.length === 1 && ctx.envs.length === 1) selection.task = values[0] as string;
     else if (values.length) selection.mixedTasks = mixed;
   }
@@ -448,7 +447,14 @@ export function baselineFrom(
   delete evaluator['dataset'];
   if (isPlainObject(evaluator['config']) && !Object.keys(evaluator['config']).length)
     delete evaluator['config'];
-  return { values: stripped, bindings, dataset, selection: multi.selection, evaluatorExtra: evaluator, notes };
+  return {
+    values: stripped,
+    bindings,
+    dataset,
+    selection: multi.selection,
+    evaluatorExtra: evaluator,
+    notes,
+  };
 }
 
 export interface LoadedBase {
@@ -569,9 +575,14 @@ export function replayEdits(
     bindings,
   };
   if (edits.dataset) next = { ...next, dataset: { ...edits.dataset } };
-  if (edits.list) next = { ...next, selection: { ...next.selection, ...copySelection({ ...next.selection, ...edits.list }) } };
+  if (edits.list)
+    next = {
+      ...next,
+      selection: { ...next.selection, ...copySelection({ ...next.selection, ...edits.list }) },
+    };
   if (edits.runShape) next = { ...next, selection: { ...next.selection, runShape: edits.runShape } };
-  if (edits.task) next = { ...next, selection: { ...next.selection, task: edits.task.value, mixedTasks: null } };
+  if (edits.task)
+    next = { ...next, selection: { ...next.selection, task: edits.task.value, mixedTasks: null } };
   return { doc: next, kept, dropped: droppedItems.length, droppedItems };
 }
 
@@ -654,7 +665,7 @@ export function loadedBaseFromPreset(
   if (!res.remap) {
     return {
       base: baselineFrom({}, ctx),
-      info: { ...info, loaded: false, error: 'Failed to load the preset' },
+      info: { ...info, loaded: false, error: 'Couldn’t load the preset' },
     };
   }
   const version = res.version;
@@ -751,13 +762,7 @@ export interface ClonePrefill {
   /** Merge into the document with Object.assign / spread. */
   patch: Pick<
     LaunchDocument,
-    | 'name'
-    | 'description'
-    | 'environmentIds'
-    | 'priority'
-    | 'latencySensitive'
-    | 'clone'
-    | 'base'
+    'name' | 'description' | 'environmentIds' | 'priority' | 'latencySensitive' | 'clone' | 'base'
   >;
   notes: string[];
   /** Slot keys of temporary models that lose their key (re-enter under Models). */
@@ -909,11 +914,11 @@ export const BASE_LABELS: Record<BaseKind, string> = {
   best_run: 'Best past run',
   saved: 'Saved preset',
   scratch: 'From scratch',
-  clone: 'Copy of experiment',
+  clone: 'Run again',
   'official-edit': 'Blank',
 };
 
-/** "Default preset v3 · production", "Saved preset “x” v2", "Clone of …", best-run header. */
+/** "Default preset v3 · production", "Saved preset “x” v2", "Run again of …", best-run header. */
 export function baseLabel(
   doc: Pick<LaunchDocument, 'base' | 'clone' | 'environmentIds'>,
   envName?: (id: string) => string,
@@ -931,7 +936,7 @@ export function baseLabel(
       return 'Saved preset' + (info.presetName ? ` “${info.presetName}”` : '') + version;
     case 'clone': {
       const c = doc.clone;
-      return 'Clone' + (c?.sourceName ? ` of ${c.sourceName}` : '') + (c?.jobId ? ' (one job)' : '');
+      return 'Run again' + (c?.sourceName ? ` of ${c.sourceName}` : '') + (c?.jobId ? ' (one job)' : '');
     }
     case 'best_run':
       return (info.loaded && info.label) || 'Best run';

@@ -1,28 +1,31 @@
-/** Number/time formatting ported from metrics.js and dashboard.js. */
+/** Number/time formatting ported from metrics.js and dashboard.js. Dates come from lib/dates (C048). */
+import { formatAgo, formatHeaderDate, formatShortDay, formatTime, toDate } from './dates';
 
-export function formatLatency(ms: number | null | undefined): string {
-  if (!ms || ms <= 0) return '—';
-  if (ms >= 60_000) {
-    const totalSeconds = Math.round(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  }
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${ms.toFixed(0)}ms`;
-}
-
-export function formatDurationMs(ms: number | null | undefined): string {
+/**
+ * The one duration format (C164): '850ms', '27.2s', '4m 5s', '2h 3m'. No space before a unit; one decimal under a
+ * minute. Every duration on every page goes through here.
+ */
+export function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined || !Number.isFinite(Number(ms)) || Number(ms) < 0) return '—';
   const total = Number(ms);
   if (total < 1000) return `${Math.round(total)}ms`;
-  if (total < 60_000) return `${(total / 1000).toFixed(total >= 10_000 ? 0 : 1)}s`;
+  if (total < 60_000) return `${(total / 1000).toFixed(1)}s`;
   const totalSeconds = Math.round(total / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+/** A latency: formatDuration, with '—' for no time at all. */
+export function formatLatency(ms: number | null | undefined): string {
+  return !ms || ms <= 0 ? '—' : formatDuration(ms);
+}
+
+/** Alias of formatDuration, kept for its call sites. */
+export function formatDurationMs(ms: number | null | undefined): string {
+  return formatDuration(ms);
 }
 
 export function formatNumericValue(value: number | null | undefined, decimals = 1): string {
@@ -81,44 +84,36 @@ export function formatMetricValueSmart(
   return formatPercentValue(value, d);
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** "Oct 11" + "19:16" split for the Date cell. */
+/** "Oct 11" + "19:16" split for the Date cell; `full` is the header form (lib/dates, C048). */
 export function formatDateParts(iso: string | null | undefined): {
   date: string;
   time: string;
   full: string;
 } {
-  if (!iso) return { date: '—', time: '', full: '' };
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { date: '—', time: '', full: '' };
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const now = new Date();
-  const date = `${MONTHS[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== now.getFullYear() ? `, ${d.getFullYear()}` : ''}`;
-  return {
-    date,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-    full: d.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
-  };
+  const d = toDate(iso);
+  if (!d) return { date: '—', time: '', full: '' };
+  return { date: formatShortDay(d), time: formatTime(d), full: formatHeaderDate(d) };
 }
 
+/** Freshness ('5m ago'): lib/dates formatAgo. */
 export function formatRelative(iso: string | null | undefined, now: Date = new Date()): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  const s = Math.max(0, Math.round((now.getTime() - d.getTime()) / 1000));
-  if (s < 45) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  if (s < 86_400) return `${Math.round(s / 3600)}h ago`;
-  return `${Math.round(s / 86_400)}d ago`;
+  return formatAgo(iso, now);
 }
 
+/** '10:36:16', 24-hour. */
 export function formatClock(d: Date): string {
-  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${formatTime(d)}:${pad(d.getSeconds())}`;
 }
 
 /** "YYYY-MM-DD" of a local date. */
 export function localDateString(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** A dataset version as the runs list writes it: 'v1' for 'v1', 'V1' or 1; '' when there is none (C248). */
+export function datasetVersionLabel(version: string | number | null | undefined): string {
+  const v = version === null || version === undefined ? '' : String(version).trim();
+  return v ? `v${v.replace(/^v/i, '')}` : '';
 }

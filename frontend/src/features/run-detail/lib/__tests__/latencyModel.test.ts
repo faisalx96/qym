@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { StepLatencyGroup, StepLatencyPayload } from '../../types';
-import { buildStepsTree, flattenSteps, normalizeLatency, stepsAxis, type StepSortKey } from '../latencyModel';
+import {
+  budgetBrackets,
+  budgetSegments,
+  buildStepsTree,
+  flattenSteps,
+  fmtMs,
+  latencyPins,
+  normalizeLatency,
+  pinChips,
+  stepsAxis,
+  stepsOfFamily,
+  type LatencySummary,
+  type StepSortKey,
+} from '../latencyModel';
 
 /** One distribution; every percentile equals `ms` so a test can read it back. */
 function group(over: Partial<StepLatencyGroup> = {}, ms = 222): StepLatencyGroup {
@@ -123,5 +136,75 @@ describe('stepsAxis', () => {
         30000 * (scale === 'linear' ? 1 : 0.99),
       );
     }
+  });
+});
+
+describe('latency spectrum pins', () => {
+  const L = (p50: number, p90: number, p95: number): LatencySummary => ({
+    min: 4300,
+    max: 32900,
+    p50,
+    p90,
+    p95,
+    mean: 18200,
+    count: 70,
+  });
+
+  it('pins less than 14% apart share one chip before the spectrum is measured', () => {
+    const chips = pinChips(latencyPins(L(18300, 29400, 31900)));
+    expect(chips.map((c) => c.pins.map((p) => p.key))).toEqual([['p50'], ['p90', 'p95']]);
+    expect(chips.every((c) => c.left === null)).toBe(true);
+  });
+
+  it('keeps the chips inside the spectrum and clear of each other, over their pins', () => {
+    const width = 380;
+    const chips = pinChips(latencyPins(L(18300, 29400, 31900)), width);
+    expect(chips).toHaveLength(2);
+    const [a, b] = chips;
+    expect(a!.left!).toBeGreaterThanOrEqual(0);
+    expect(b!.left!).toBeGreaterThan(a!.left! + 70);
+    expect(b!.left! + 150).toBeLessThanOrEqual(width);
+  });
+
+  it('merges chips that cannot stay over their pins in a narrow spectrum', () => {
+    const chips = pinChips(latencyPins(L(18300, 29400, 31900)), 300);
+    expect(chips.map((c) => c.pins.map((p) => p.key))).toEqual([['p50', 'p90', 'p95']]);
+    expect(chips[0]!.join).toBeGreaterThanOrEqual(chips[0]!.pins[0]!.x);
+    expect(chips[0]!.join).toBeLessThanOrEqual(chips[0]!.pins[2]!.x);
+  });
+});
+
+describe('time budget brackets and kinds', () => {
+  const D = normalizeLatency(
+    payload({
+      trace_count: 2,
+      groups: [group({ kind: 'LLM', n: 2 }, 1000), group({ phase: 'eval', step_type: 'judge', n: 2 }, 500)],
+      phases: [group({ phase: 'task', n: 2 }, 1000), group({ phase: 'eval', n: 2 }, 500)],
+    }),
+  );
+
+  it('brackets each phase with its own span time', () => {
+    const brackets = budgetBrackets(D, budgetSegments(D), 'phase');
+    expect(brackets.map((b) => [b.label, b.ms])).toEqual([
+      ['Agent', 1000],
+      ['Eval', 500],
+    ]);
+    expect(brackets[0]!.x).toBe(0);
+    expect(brackets[1]!.x).toBeCloseTo(brackets[0]!.w);
+  });
+
+  it('opens the phase that holds a kind and points at its steps', () => {
+    expect(stepsOfFamily(D, 'EVAL')).toEqual({ open: ['p:eval'], ids: ['s:eval::LLM:judge:'] });
+    expect(stepsOfFamily(D, 'LLM').open).toEqual(['p:task']);
+  });
+});
+
+describe('fmtMs', () => {
+  it('writes table durations in the one duration format (C164)', () => {
+    expect(fmtMs(627.4)).toBe('627ms');
+    expect(fmtMs(1940)).toBe('1.9s');
+    expect(fmtMs(75_000)).toBe('1m 15s');
+    expect(fmtMs(18500)).toBe('18.5s');
+    expect(fmtMs(NaN)).toBe('—');
   });
 });

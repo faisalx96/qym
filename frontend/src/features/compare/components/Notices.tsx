@@ -1,12 +1,12 @@
 /** Read-only, different-data and alignment notices (brief 05 §3 "Page load / selection"). */
 import { useMemo } from 'react';
 import { Icon, Stack, Text } from '@/ui';
-import { letterOf, useCompare } from '../CompareContext';
+import { useCompare } from '../CompareContext';
 import { datasetSetsDiffer, runDatasetCount } from '../lib/datasetSets';
 import styles from './Notices.module.css';
 
 export function Notices() {
-  const { model } = useCompare();
+  const { model, letter } = useCompare();
   const readOnlyRuns = useMemo(
     () =>
       Array.from(
@@ -44,15 +44,28 @@ export function Notices() {
     if (!datasetSetsDiffer(runs)) return null;
     const sentences = runs.map((run, i) => {
       const n = runDatasetCount(run);
-      return `${i === 0 ? 'Run' : 'run'} ${letterOf(i)} evaluated ${n}${i === 0 ? ` dataset${n === 1 ? '' : 's'}` : ''}`;
+      return `${i === 0 ? 'Run' : 'run'} ${letter(model.runs.findIndex((r) => r.run === run))} evaluated ${n}${i === 0 ? ` dataset${n === 1 ? '' : 's'}` : ''}`;
     });
     const shared = model.itemIds.filter((id) => model.runs.every((r) => r.byItem.has(id))).length;
     return { sentences, shared };
-  }, [model]);
+  }, [model, letter]);
   // Nothing to say: render nothing, so the page's flex gap does not reserve an empty slot.
-  if (!readOnlyRuns.length && !data && !datasetsNote && model.alignment.status === 'aligned') return null;
+  const unpaired = model.unpaired;
+  if (!readOnlyRuns.length && !data && !datasetsNote && !unpaired && model.alignment.status === 'aligned')
+    return null;
+  const differentTasks = !!unpaired && new Set(unpaired.map((u) => u.task)).size > 1;
   return (
     <Stack gap="sm">
+      {unpaired ? (
+        // C058: runs of different tasks (or datasets) are not paired item by item
+        <div className={styles.note} role="note" data-notice="unpaired" data-testid="compare-unpaired-notice">
+          <strong>{differentTasks ? 'Different tasks' : 'Different datasets'}: items are not paired.</strong>{' '}
+          {unpaired
+            .map((u) => `${u.name}: ${[u.task, u.dataset].filter(Boolean).join(' on ') || 'no task'}`)
+            .join('; ')}
+          . The averages compare the runs as a whole.
+        </div>
+      ) : null}
       {readOnlyRuns.length ? (
         <div className={styles.note} role="note" data-notice="read-only">
           <strong>Read-only.</strong>{' '}
@@ -83,7 +96,7 @@ export function Notices() {
           </div>
         </div>
       ) : null}
-      {data && !datasetsNote ? (
+      {data && !datasetsNote && !unpaired ? (
         <div className={styles.note} role="note" data-notice="different-data">
           <strong>Different data.</strong> These runs used{' '}
           {data.multipleDatasets ? 'different datasets' : `different versions of ${data.entries[0]?.dataset}`}

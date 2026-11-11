@@ -114,10 +114,29 @@
   gap: var(--space-sm);
 }
 
+.barStart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .barRows {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  flex: 1 0 100%;
   min-width: 0;
+}
+
+.barRows:empty {
+  display: none;
+}
+
+/* C069: Clear filters, then the model filter a search that found nothing may have meant */
+.emptyActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
 }

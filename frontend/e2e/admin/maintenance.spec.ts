@@ -87,7 +87,7 @@ test('irreversible job needs the typed name; the button stays disabled until it 
   const submit = form.getByRole('button', { name: 'Queue irreversible job' });
   const field = form.getByLabel(/^Type .*to confirm/);
   await expect(field).toBeVisible();
-  await expect(form.locator('[data-kind-help]')).toContainText('irreversible');
+  await expect(form.locator('[data-kind-help]')).toContainText('Irreversible');
   await expect(submit).toBeDisabled();
   await field.fill('drop_legacy');
   await expect(submit).toBeDisabled();
@@ -110,10 +110,34 @@ test('irreversible job needs the typed name; the button stays disabled until it 
   await row.getByRole('button', { name: 'Cancel' }).click();
 });
 
+test('no job is picked at first; picking one prefills its defaults and lists its keys', async ({ page }) => {
+  await gotoApp(page, '/admin/maintenance');
+  const form = page.locator('[data-enqueue-form]');
+  await expect(form.getByRole('button', { name: /Job/ })).toContainText('Pick a job');
+  await expect(form.getByRole('button', { name: 'Queue job' })).toBeDisabled();
+  await pickJob(page, 'vacuum_analyze');
+  await expect(form.getByLabel('Params (JSON)')).toHaveValue('{"tables":["run_events","spans","run_items"]}');
+  await expect(form.locator('[data-param-key="tables"]')).toContainText('default');
+  await expect(form.getByRole('button', { name: 'Queue job' })).toBeEnabled();
+});
+
+test('server refuses an undeclared param key and an unsafe name (direct API 400)', async ({ request }) => {
+  const unknown = await request.post('/api/admin/maintenance/jobs', {
+    data: { kind: 'vacuum_analyze', params: { batch: 5 } },
+  });
+  expect(unknown.status()).toBe(400);
+  expect(await unknown.text()).toContain('does not take batch');
+  const unsafe = await request.post('/api/admin/maintenance/jobs', {
+    data: { kind: 'create_deferred_indexes', params: { indexes: ["x; UPDATE users SET role='ADMIN'"] } },
+  });
+  expect(unsafe.status()).toBe(400);
+});
+
 test('invalid params JSON blocks submit', async ({ page }) => {
   await gotoApp(page, '/admin/maintenance');
   const form = page.locator('[data-enqueue-form]');
   await expect(form).toBeVisible();
+  await pickJob(page, 'vacuum_analyze');
   await form.getByLabel('Params (JSON)').fill('{oops');
   await expect(form.getByRole('button', { name: /^Queue/ })).toBeDisabled();
   await form.getByLabel('Params (JSON)').fill('[1]');
@@ -141,5 +165,5 @@ test('workers service liveness shows in the header (mocked separate workers)', a
     await route.fulfill({ response: res, json: body });
   });
   await gotoApp(page, '/admin/maintenance');
-  await expect(page.locator('[data-workers-service]')).toContainText('NOT RESPONDING (0/2 processes)');
+  await expect(page.locator('[data-workers-service]')).toContainText('not responding (0/2 processes)');
 });

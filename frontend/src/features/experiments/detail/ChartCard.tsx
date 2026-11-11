@@ -5,6 +5,7 @@ import { Select, SectionHeader, Card } from '@/ui';
 import { buildChart, chartTableRows, metricNames, CHART } from '../lib/chart';
 import { currentJobs, usableRun, type MatrixEnv } from '../lib/matrix';
 import styles from './detail.module.css';
+import { formatMetric } from '../lib/format';
 
 export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: MatrixEnv[] }) {
   const pointers = Object.keys(detail.sweep_keys ?? {});
@@ -90,7 +91,7 @@ export function ChartCard({ detail, envs }: { detail: ExperimentDetail; envs: Ma
                   ) : null}
                   {s.points.map((p) => (
                     <circle key={p.jobId} className={styles.dot} cx={p.px} cy={p.py} r={4}>
-                      <title>{`${s.name} · ${settingLabel}=${p.xLabel} · ${metric} ${p.y.toFixed(3)}${p.comboLabel ? ` · ${p.comboLabel}` : ''}`}</title>
+                      <title>{`${s.name} · ${settingLabel}=${p.xLabel} · ${metric} ${formatMetric(p.y)}${p.comboLabel ? ` · ${p.comboLabel}` : ''}`}</title>
                     </circle>
                   ))}
                 </g>

@@ -1,22 +1,17 @@
-/* Section header / run section head recipes (DESIGN_LANGUAGE §3). */
+/* Section header recipe (DESIGN_LANGUAGE §3 "Section"): title, description, controls. It draws no divider and no lead-in:
+   the spacing and the hairline between sections belong to ui/Section. */
 .head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-lg);
   margin-bottom: var(--space-md);
 }
 
-.head[data-level='xl'] {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: var(--space-lg);
-  margin-top: calc(var(--space-xl) * 1.5);
-}
-
 .text {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 2px;
   min-width: 0;
 }
 

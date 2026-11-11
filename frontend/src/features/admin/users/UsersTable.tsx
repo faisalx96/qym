@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUpdateUser, type AdminUser } from '@/api/admin';
 import { ApiError } from '@/lib/http';
-import { Badge, ConfirmDialog, DataTable, SearchField, Tag, Text, useToast, type Column } from '@/ui';
+import {
+  ConfirmDialog,
+  DataTable,
+  SearchField,
+  StatusMark,
+  Tag,
+  Text,
+  UserName,
+  useToast,
+  type Column,
+} from '@/ui';
 import styles from './users.module.css';
 
 export interface UsersTableProps {
@@ -76,13 +86,27 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         priority: 1,
         sort: { key: 'user', compare: (a, b) => label(a).localeCompare(label(b)) },
         cell: (u) => (
-          <span data-user-row={u.id} data-highlight={highlightId === u.id || undefined}>
-            {label(u)}
+          <span
+            className={styles.userCell}
+            data-user-row={u.id}
+            data-highlight={highlightId === u.id || undefined}
+          >
+            <UserName id={u.id} name={u.display_name} email={u.email} />
             {u.id === meId ? (
               <Tag kind="data" className={styles.youTag}>
                 you
               </Tag>
             ) : null}
+            {/* on/off state: only the exception shows, after the name (no Status column) */}
+            {u.is_active ? null : (
+              <StatusMark
+                tone="warning"
+                shape="pause"
+                label="Disabled"
+                data-status="disabled"
+                className={styles.offMark}
+              />
+            )}
           </span>
         ),
       },
@@ -100,20 +124,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         header: 'Role',
         width: 110,
         priority: 2,
-        cell: (u) => (
-          <Tag kind="role" tone={u.role === 'ADMIN' ? 'success' : undefined}>
-            {u.role === 'ADMIN' ? 'admin' : 'member'}
-          </Tag>
-        ),
-      },
-      {
-        id: 'status',
-        header: 'Status',
-        type: 'status',
-        width: 110,
-        priority: 1,
-        cell: (u) =>
-          u.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="neutral">Disabled</Badge>,
+        cell: (u) => <Tag kind="role">{u.role === 'ADMIN' ? 'admin' : 'member'}</Tag>,
       },
     ],
     [meId, highlightId],
@@ -127,7 +138,8 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         rows={shown}
         rowKey={(u) => u.id}
         storageKey="admin-users"
-        density="regular"
+        density="comfortable"
+        densityLocked
         empty="No users yet."
         isFiltered={q !== ''}
         filteredEmpty={<Text variant="sm">No users match “{query.trim()}”.</Text>}
@@ -140,7 +152,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
               ? {
                   id: 'disable',
                   label: 'You cannot disable your own account',
-                  icon: 'stop',
+                  icon: 'ban',
                   primary: true,
                   danger: true,
                   disabled: true,
@@ -150,7 +162,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
                 ? {
                     id: 'disable',
                     label: `Disable ${label(u)}`,
-                    icon: 'stop',
+                    icon: 'ban',
                     primary: true,
                     danger: true,
                     disabled: busy,
@@ -187,10 +199,10 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
       <ConfirmDialog
         open={disabling !== null}
         onOpenChange={(o) => !o && setDisabling(null)}
-        title="Disable user"
+        title={`Disable ${disabling?.email ?? 'this user'}?`}
         tone="danger"
         description={[
-          `Disable ${disabling?.email ?? 'this user'}? They are signed out everywhere at once and cannot sign in until an admin enables them again.`,
+          'They are signed out everywhere at once and cannot sign in until an admin enables them again.',
           'Their API keys stop working while they are disabled.',
         ]}
         confirmLabel="Disable user"

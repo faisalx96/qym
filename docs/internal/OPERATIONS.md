@@ -15,7 +15,7 @@ The Evaluation Service runbook (dispatcher, environments, queue triage) is in
 | Worker pod (optional) | Runs the background loops in a separate process | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker`; set `QYM_ROLE=api` on the API |
 | Web processes (optional) | Several uvicorn processes serve HTTP in one API pod; with `QYM_ROLE=all` one extra process in the same pod runs the background loops | `QYM_WEB_WORKERS=N` (default `1`) |
 | Service split (optional) | main (UI + API), ingestion (SDK write path) and workers (loops + queued jobs) as three services behind ingress rules | `QYM_SERVICE=main\|ingestion\|workers`; see [Service split deployment](#service-split-deployment) |
-| Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
+| Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction. Each job declares its params (key, type, default; `job_kinds` in `GET /api/admin/maintenance`, listed under the form). The API answers 400 for an undeclared key, a wrong type or range, or a table, index or constraint name that does not match `^[a-z_][a-z0-9_]*$` or does not exist. `create_deferred_indexes` takes only the index names that migrations defer: their columns and `WHERE` come from code | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
 The default deployment is unchanged: `QYM_ROLE=all` runs the API and both loops in
@@ -36,6 +36,7 @@ sure one process runs a given job.
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
 | `QYM_SPAN_PARTITION_DAYS_AHEAD` | `14` | Daily `spans` partitions kept created this many days ahead (hourly retention pass) |
 | `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this; time their project spends archived does not count |
+| `QYM_PROXY_SHARED_SECRET` | empty | `proxy_headers` only: the value the authentication proxy sends in `X-Qym-Proxy-Secret`. Required outside dev/test/local. See "UI authentication at startup" |
 | `QYM_AUTH_LOCAL_SIGNUP` | `false` | Email/password self sign-up; off means admins add people (open only while no active admin exists) |
 | `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`. `..._PER_EMAIL` counts one email from one client address and refuses only that client, so the right password from another client still works; `..._PER_CLIENT` counts one address over all emails. "Account already exists" answers at sign-up count only against the client. An attempt counts as a failure from the moment it passes the check until its password proves right, so concurrent attempts cannot get past a limit. All limits are counted per API process (with `QYM_WEB_WORKERS=N` each process counts on its own, so a pod allows up to N times the limit). uvicorn trusts `X-Forwarded-For` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`): set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips=...` in `QYM_UVICORN_ARGS`) to the ingress/pod CIDR, otherwise every client shares the ingress address and the per-client limit applies to all of them together. The API logs a warning at startup when password sign-in is on outside dev/test and neither is set |
 | `QYM_AUTH_LOGIN_EMAIL_CEILING` / `QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS` | `50` / `900` | Failed password sign-ins for one email from all clients together; past it, password sign-in for that email answers `429` from every client, even with the right password, until failures age out. Counted per API process |
@@ -59,6 +60,41 @@ sure one process runs a given job.
 | `QYM_PLATFORM_FLUSH_INTERVAL` | `1.0` | SDK cadence (s) for flushing a partly filled batch. It stretches up to 5 s while POSTs take over 1 s; full batches (200 events / 2 MB) still go at once |
 | `QYM_PLATFORM_MAX_FIELD_BYTES` | `262144` (256 KB) | Largest string (task output, input, span attribute) the SDK uploads in a run event; longer ones are cut and marked `…[truncated by qym: N bytes omitted]`, and the event payload carries `_qym_truncated`. `0` disables the cap. Local results keep full values |
 | `INSIGHTOR_TIMINGS_FILE` | unset | Opt-in JSONL file for `insightor_eval.py` timings. Unset, timings are DEBUG log lines; point it at a mounted volume if you need the file |
+
+## UI authentication at startup
+
+The UI app (`QYM_SERVICE` `all` or `main`) does not start when `QYM_ENVIRONMENT`
+is not `dev`, `development`, `local`, `test` or `testing` and one of these is true:
+
+- `QYM_AUTH_MODE` is `none` (every visitor is an admin), empty, or not one of
+  `none`, `proxy_headers`, `oidc`.
+- `QYM_AUTH_MODE` is `proxy_headers` and `QYM_PROXY_SHARED_SECRET` is empty.
+
+The startup error names the variable. Ingestion and workers do not check it:
+they serve no UI identity.
+
+In `proxy_headers` mode the platform reads `X-User-Email` / `X-Email` only from a
+request that carries `QYM_PROXY_SHARED_SECRET` in the `X-Qym-Proxy-Secret` header
+(compared in constant time). A request without it gets 401, and no user is
+created for it. Configure the authentication proxy to set the header on every
+request it forwards, so it replaces any value a client sends (nginx:
+`proxy_set_header X-Qym-Proxy-Secret "<secret>";`). Keep the secret in a
+Kubernetes Secret, not in the values file. Identity headers count only in
+`proxy_headers` mode. With `oidc` and with an unknown mode they are ignored.
+
+Before you deploy this release, check the values of every UI Deployment:
+
+1. Set `QYM_ENVIRONMENT` to a deployment value such as `production`. The default
+   `dev` turns these checks off.
+2. Set `QYM_AUTH_MODE` to `oidc` or `proxy_headers`. For password sign-in only,
+   use `oidc` with `QYM_AUTH_LOCAL_ENABLED=true` and no provider.
+3. With `proxy_headers`, add `QYM_PROXY_SHARED_SECRET` and configure the proxy to
+   send it.
+
+The base `docker/docker-compose.yml` now defaults `QYM_AUTH_MODE` to
+`proxy_headers` and passes `QYM_PROXY_SHARED_SECRET`. The dev override
+(`docker-compose.dev.yml`) defaults `QYM_ENVIRONMENT` to `dev`, so a local
+`QYM_AUTH_MODE=none` setup still starts.
 
 ## Feedback assistant
 
@@ -88,8 +124,8 @@ connection** button). It is independent of project LLM connections.
   count, never the rows) and `feedback.agent_connection_updated`, `_tested`, `_removed`.
 - **Export.** `GET /v1/feedback/export?format=csv|xlsx|json|jsonl` (administrators) uses `openpyxl` for `.xlsx`.
 - **Migration `0091`** adds four empty tables (instant DDL); it follows `0090`.
-- **Migration `0093`** adds `eval_experiment_jobs.priority` (nullable `VARCHAR(10)`, quick DDL) and backfills it from each job's stored request body (else the experiment's priority). Every new job stores its resolved priority; a launch may carry `job_priorities` (one entry per run that differs), validated per job against its environment's `max_priority`, the manager rule and the preemption acknowledgement.
-- **Migration `0092`** adds `api_keys.kind` and `api_keys.experiment_id` (quick DDL) and marks the keys minted for experiments (referenced by `eval_experiments.qym_api_key_id` and named `Evaluation Service · …`) as `kind = 'experiment'` with scopes `runs:write` + `datasets:read`. Only those keys have their scopes enforced; user keys stay unscoped.
+- **Migration `0099`** adds `eval_experiment_jobs.priority` (nullable `VARCHAR(10)`, quick DDL) and backfills it from each job's stored request body (else the experiment's priority). Every new job stores its resolved priority; a launch may carry `job_priorities` (one entry per run that differs), validated per job against its environment's `max_priority`, the manager rule and the preemption acknowledgement.
+- **Migration `0098`** adds `api_keys.kind` and `api_keys.experiment_id` (quick DDL) and marks the keys minted for experiments (referenced by `eval_experiments.qym_api_key_id` and named `Evaluation Service · …`) as `kind = 'experiment'` with scopes `runs:write` + `datasets:read`. Only those keys have their scopes enforced; user keys stay unscoped.
 
 ## Logging
 
@@ -174,12 +210,17 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0093`, following `0050` through
+The combined migration chain has one head, `0099`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084` and `0086`–`0093` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084`, `0086`–`0092`, `0094`, `0095` and `0097`–`0099` are quick DDL or small job/queue inserts.
+`0093` builds one partial index on `dashboard_change_events`; when that table is over
+256 MB it queues the build (`create_deferred_indexes`, CONCURRENTLY) instead.
+`0096` builds two covering indexes (`run_item_pass_scores`, and `spans` on every partition);
+for a table over 256 MB it queues `create_deferred_indexes` instead, which also vacuums
+the finished span partitions.
 `0085` switches `spans` to daily partitions; it locks `spans` for an instant only
 to drop still-empty monthly partitions that start after today.
 
@@ -216,9 +257,15 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
-| 0092 | `api_keys.kind` (constant default `user`), `api_keys.experiment_id` (nullable FK `ON DELETE SET NULL`, indexed) | Keys referenced by an experiment and named `Evaluation Service · …` become `experiment` keys with scopes `runs:write`, `datasets:read` (a handful of rows). |
-| 0093 | `eval_experiment_jobs.priority` (nullable, no default) | One pass over the existing jobs copies each job's priority from its stored body (one small update per job). |
-| 0091 | Four empty tables: `feedback_requests`, `feedback_messages`, `feedback_request_events` and the singleton `feedback_agent_connection` (checks, indexes) | None: Feedback shows "not configured" until an administrator saves the connection in Admin → Feedback agent. |
+| 0099 | `eval_experiment_jobs.priority` (nullable, no default) | One pass over the existing jobs copies each job's priority from its stored body (one small update per job). |
+| 0098 | `api_keys.kind` (constant default `user`), `api_keys.experiment_id` (nullable FK `ON DELETE SET NULL`, indexed) | Keys referenced by an experiment and named `Evaluation Service · …` become `experiment` keys with scopes `runs:write`, `datasets:read` (a handful of rows). |
+| 0097 | `projectrole` gains `VIEWER` (Postgres `ALTER TYPE ... ADD VALUE`, outside the transaction; no rewrite) | None. Managers can now give a member the Viewer role (C033) |
+| 0096 | Covering indexes `ix_run_item_pass_scores_cover` (`run_id, metric_name, item_id, pass_number` INCLUDE `score_numeric`) and `ix_span_run_start_cover` on every span partition (`run_id, start_time_ns` INCLUDE the columns step latency reads), so these reads are index-only (C073) | `create_deferred_indexes` — **queued, runs by itself** only for a table over 256 MB: builds each index CONCURRENTLY (span partitions one by one, attached to the parent index), then runs `VACUUM (ANALYZE)` on `run_item_pass_scores` and on the finished span partitions. About 0.6–0.7 GB of index for 3 M spans |
+| 0095 | Empty `run_create_keys` (an `Idempotency-Key` of `POST /v1/runs` and the run it created, kept 24 hours; FK to the run `ON DELETE CASCADE`) | None: clients that send no key create runs as before |
+| 0094 | Empty `run_step_latency_summaries` (the run page's step-latency summary of a run or a pass, keyed by run, pass and rollup, FK to the run `ON DELETE CASCADE`) | None: a summary is built and stored the first time it is read; a late span or a removed pass changes its fingerprint, and the next read builds it again |
+| 0093 | Partial index `ix_dashboard_event_published` on `dashboard_change_events (source_version) WHERE published_at IS NOT NULL` (outbox retention, C074) | `create_deferred_indexes` — **queued, runs by itself** only when the table is over 256 MB: builds the index CONCURRENTLY. Smaller tables get it in the migration |
+| 0092 | — (data only): one `production` row in `project_analysis_rule_aliases` for each project that has published analysis rule versions and no alias, pointing at the newest published version (the one that was live) | None. From now on a project's first publish sets its production version, and later publishes move it only with "Set as production" on (C016) |
+| 0091 | Four empty tables: `feedback_requests`, `feedback_messages`, `feedback_request_events` and the singleton `feedback_agent_connection` (checks, indexes) | None: Feedback shows "not configured" until an administrator saves the connection in Admin → Feedback assistant. |
 | 0090 | `eval_experiment_jobs.dataset_index` (constant default 0, `CHECK >= 0`); the unique key `uq_eval_experiment_job_attempt` widens to `(experiment_id, environment_id, combo_index, dataset_index, attempt)` (PostgreSQL alters in place; SQLite rebuilds the table and restores the run links) | None: existing jobs get `dataset_index = 0`. The downgrade refuses while any job has `dataset_index > 0` (a per-dataset fan-out) |
 | 0089 | Empty `run_datasets` table (the dataset versions of a run over several datasets: one row per entry, FK to the run `ON DELETE CASCADE`, FKs to the dataset and version `ON DELETE SET NULL`); `runs.dataset_count` (constant default 1); `run_items.dataset_position` (nullable `SMALLINT`) | None: no backfill, every existing run reads as a single-dataset run; no index on `run_items` |
 | 0088 | `eval_experiments.dataset_read_token_id` (nullable FK) / `dataset_read_token_encrypted` (nullable) / `latency_sensitive` (constant default false); `eval_environments.latency_sensitive_min_role` (constant default `member`); `dataset_read_tokens.kind` (constant default `admin`) / `experiment_id` (nullable FK); `eval_experiment_jobs.admitted_at` / `deferral_reason` (nullable), `deferrals` / `contaminated_attempts` (constant default 0) | None: existing experiments keep using the worker's own dataset read token until retried, nothing is latency-sensitive, every environment allows latency-sensitive runs to any member |
@@ -310,7 +357,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0093` and a healthy API. The API process then runs every queued job itself.
+   `0099` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -331,8 +378,8 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
    and use the same retention policy for the drop.
 6. After copy succeeds, queue `drop_legacy_spans` with its typed confirmation.
    It requires maintenance mode and verifies every eligible legacy key against
-   `(run_id, span_id, run_created_at)` in the destination. Unrelated row counts and
-   `force=true` cannot bypass missing data. Verification and DROP hold database
+   `(run_id, span_id, run_created_at)` in the destination. Unrelated row counts
+   cannot bypass missing data, and the job has no `force` param (the API answers 400). Verification and DROP hold database
    locks in one transaction, so concurrent writes and retention cannot invalidate
    the check. Run mutations can wait during this step. An uncopied key or failed
    DROP leaves the legacy table intact. Resolve the failure and rerun the copy.
@@ -492,7 +539,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0093`.
+deployment only after the API has migrated to `0099`.
 
 ```yaml
 apiVersion: apps/v1
@@ -705,7 +752,7 @@ Shared (all three, same values):
 | `QYM_ENVIRONMENT` | yes | `dev` | |
 | `QYM_SKIP_MIGRATIONS` | yes | `0` | `1` on every service; one migration job per release |
 | `QYM_LLM_CONFIG_ENCRYPTION_KEY` | yes (split) | — | Same key everywhere: main encrypts queued product-eval secrets and LLM connections, workers decrypt them. `..._KEYS_PREVIOUS` as for rotation |
-| `QYM_AUTH_MODE` | yes | `none` | Ingestion only authenticates Bearer API keys, but `none` vs others changes key handling |
+| `QYM_AUTH_MODE` | yes | `none` | Ingestion only authenticates Bearer API keys, but `none` vs others changes key handling. Main does not start with `none`, an empty or unknown mode outside dev/test/local |
 | `QYM_MAINTENANCE_MODE` | no | `false` | Ingestion answers 503 + `Retry-After`; set on all services for one window |
 | `QYM_BASE_URL` | yes | `http://localhost:8000` | Public URL of the ingress (OIDC redirect URIs, same-origin guard, link fallback); sent to Evaluation Services as `env_overrides.QYM_BASE_URL` when their settings schema declares it, so their runs report back here |
 | `QYM_ROOT_PATH`, `QYM_MAIN_PREFIX`, `QYM_INGESTION_PREFIX`, `QYM_WORKERS_PREFIX` | no | `""`, `""`, `/ingestion`, `/workers` | Keep identical on all services and in the ingress |
@@ -716,6 +763,7 @@ main:
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `QYM_AUTH_SESSION_SECRET`, `QYM_AUTH_LOCAL_*`, `QYM_AUTH_GOOGLE_*`, `QYM_AUTH_GITHUB_*`, `QYM_AUTH_GITLAB_*`, `QYM_ADMIN_BOOTSTRAP_TOKEN` | per auth mode | — | Only main serves sign-in |
+| `QYM_PROXY_SHARED_SECRET` | with `proxy_headers` | — | The value the proxy sends in `X-Qym-Proxy-Secret`; main does not start without it outside dev/test/local |
 | `QYM_WEB_WORKERS` | no | `1` | 2 recommended; no loop process is started for `main` |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` / `QYM_HTTP_THREADPOOL_SIZE` | no | `10` / `10` / `0` | Per web process |
 | `QYM_MAX_UPLOAD_BYTES` | no | 100 MB | Dataset uploads |

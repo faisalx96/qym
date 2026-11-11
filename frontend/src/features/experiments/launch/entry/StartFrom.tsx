@@ -62,15 +62,15 @@ export function StartFrom() {
           />
           {doc.clone ? (
             <StartCard
-              eyebrow="Copy an experiment"
-              title={doc.clone.sourceName ? `“${doc.clone.sourceName}”` : 'Copy of experiment'}
+              eyebrow="Run again"
+              title={doc.clone.sourceName ? `“${doc.clone.sourceName}”` : 'An earlier experiment'}
               body="Its configuration, ready to change."
               checked={kind === 'clone'}
               onSelect={() => pick('clone')}
             />
           ) : latest.data ? (
             <StartCard
-              eyebrow="Copy an experiment"
+              eyebrow="Run again"
               title={latest.data.name}
               body="Your most recent experiment."
               meta={envNames(latest.data.environment_ids).join(', ') || undefined}

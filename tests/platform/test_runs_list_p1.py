@@ -58,6 +58,16 @@ def test_search_matches_shown_name_run_name_and_id_prefix(dataset):  # noqa: F81
     assert _ids(get(client, filters={"q": " Nightly  eval "})) == ["run-0009"]
 
 
+def test_search_matches_a_single_dataset_run_by_its_dataset_name(dataset):  # noqa: F811
+    # C069: the box is 'Search run or dataset names'; a single-dataset run is found by its dataset.
+    engine, client, _ = dataset
+    seed(engine, count=8)
+    # dataset-a: runs 0 and 4; dataset-b: the rest.
+    assert set(_ids(get(client, filters={"q": "DATASET-A"}))) == {"run-0000", "run-0004"}
+    assert get(client, filters={"q": "dataset-"}).json()["total_runs"] == 8
+    assert get(client, filters={"q": "dataset-z"}).json()["total_runs"] == 0
+
+
 def test_search_scopes_counts_facets_and_kpis(dataset):  # noqa: F811
     engine, client, _ = dataset
     seed(engine, count=12)

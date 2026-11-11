@@ -1,28 +1,40 @@
-/* .qym-help-marker / .qym-help-tooltip: 12px circle, 240px tooltip. */
+/* .qym-help-marker / .qym-help-tooltip: a filled 12px disc (round 10), 240px tooltip. */
 .marker {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: var(--info-marker-size);
   height: var(--info-marker-size);
   padding: 0;
-  border: 1px solid var(--accent-primary);
+  border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--accent-primary);
-  font-family: var(--font-sans);
-  font-size: var(--font-xs); /* glyph inside a 12px circle */
-  font-weight: 700;
-  font-style: italic;
-  line-height: 1;
+  line-height: 0;
   cursor: pointer;
   vertical-align: middle;
 }
 
-.marker[data-hovered],
-.marker[data-pinned] {
-  background: var(--accent-primary);
-  color: var(--bg-void);
+.glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.disc {
+  fill: currentcolor;
+}
+
+.letter {
+  fill: var(--bg-void);
+}
+
+/* C202: a 24x24 hit area around the 12px disc, drawn size unchanged */
+.marker::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--info-marker-size) - 24px) / 2);
 }
 
 .marker[data-focus-visible] {

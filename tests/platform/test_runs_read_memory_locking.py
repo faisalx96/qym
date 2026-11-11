@@ -8,6 +8,7 @@ lock modes of request-path run locks.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 import json
 
 import sqlalchemy.orm
@@ -119,6 +120,11 @@ def test_compact_build_keeps_digests_and_reads_outputs_in_batches(
 ):
     with session_factory() as db:
         _repeat_run_with_attempts(db)
+        # Digests serve a page that follows a live run; a finished run's index drops them (C084).
+        run = db.get(Run, "rep-att")
+        run.status = RunWorkflowStatus.RUNNING
+        run.last_event_at = datetime.utcnow()  # fresh, so the read does not stop it as stale
+        db.commit()
     statements, stop = _capture_statements(session_factory)
     try:
         body = _ok(client.get("/api/runs/rep-att?view=compact", headers=_ui(OWNER)))

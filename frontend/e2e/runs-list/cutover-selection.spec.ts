@@ -21,7 +21,7 @@ test('a run deleted while the reader was away drops out of the kept selection', 
     await clickBox(dataRows(page).nth(i).getByRole('checkbox'));
   }
   const [a, b] = names as [string, string, string];
-  await expect(selected(page)).toHaveText('3 executions selected');
+  await expect(selected(page)).toHaveText('3 runs selected');
   await rowOf(page, a).locator('td[data-col="run"] a').click();
   await expect(page).toHaveURL(/\/runs\//);
   // Someone deletes one of the picked runs meanwhile.
@@ -30,7 +30,7 @@ test('a run deleted while the reader was away drops out of the kept selection', 
   expect(res.ok(), await res.text()).toBeTruthy();
   await page.goBack();
   await expect(dataRows(page).first()).toBeVisible();
-  await expect(selected(page)).toHaveText('2 executions selected', { timeout: 20_000 });
+  await expect(selected(page)).toHaveText('2 runs selected', { timeout: 20_000 });
   await expect(rowOf(page, b)).toHaveCount(0);
   await expect(rowOf(page, a)).toHaveAttribute('data-selected', '');
   const stored = await page.evaluate(
@@ -49,13 +49,13 @@ test('the selection belongs to its project: another project starts empty and the
   await openRuns(page, one.project.slug);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   await clickBox(dataRows(page).first().getByRole('checkbox'));
-  await expect(selected(page)).toHaveText('1 execution selected');
+  await expect(selected(page)).toHaveText('1 run selected');
   await page.goto(`${APP}/projects/${two.project.slug}`);
   await expect(dataRows(page).first()).toBeVisible();
   await expect(page.getByTestId('selection-bar')).toHaveCount(0);
   await page.goBack();
   await expect(dataRows(page).first()).toBeVisible();
-  await expect(selected(page)).toHaveText('1 execution selected');
+  await expect(selected(page)).toHaveText('1 run selected');
 });
 
 test('the sign-in page starts the tab clean: no kept selection, no saved filters', async ({
@@ -66,7 +66,7 @@ test('the sign-in page starts the tab clean: no kept selection, no saved filters
   await openRuns(page, s.project.slug, 'sort=task-asc');
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   await clickBox(dataRows(page).first().getByRole('checkbox'));
-  await expect(selected(page)).toHaveText('1 execution selected');
+  await expect(selected(page)).toHaveText('1 run selected');
   expect(await page.evaluate(() => Object.keys(sessionStorage).length)).toBeGreaterThan(0);
   await page.goto(`${APP}/login?next=%2F`);
   await expect(page.locator('[data-login-page]')).toBeVisible();
@@ -81,7 +81,7 @@ for (const width of [1280, 1440, 1024]) {
     await page.getByRole('button', { name: 'Select', exact: true }).click();
     await clickBox(dataRows(page).nth(0).getByRole('checkbox'));
     await clickBox(dataRows(page).nth(2).getByRole('checkbox'));
-    await expect(selected(page)).toHaveText('2 executions selected');
+    await expect(selected(page)).toHaveText('2 runs selected');
     const geometry = await page.evaluate(() => {
       const box = (el: Element | null) => {
         if (!el) return null;
@@ -119,6 +119,6 @@ for (const width of [1280, 1440, 1024]) {
     await expect(next).toBeEnabled();
     await next.click();
     await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('2');
-    await expect(selected(page)).toHaveText('2 executions selected');
+    await expect(selected(page)).toHaveText('2 runs selected');
   });
 }

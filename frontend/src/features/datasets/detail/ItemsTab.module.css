@@ -9,29 +9,11 @@
   min-height: 160px;
 }
 
-.indexLink {
-  display: inline-block;
-  min-width: 100%;
-  color: var(--text-muted);
-  text-decoration: none;
-}
-
-.indexLink:hover {
-  color: var(--accent-primary);
-}
-
-.indexLink:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 1px;
-  border-radius: 2px;
-}
-
 .preview {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
   unicode-bidi: plaintext;
   text-align: start;
 }
@@ -42,7 +24,6 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
-  font-family: var(--font-mono);
   overflow-wrap: anywhere;
   unicode-bidi: plaintext;
   text-align: start;
@@ -104,4 +85,15 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
+}
+
+/* Item text reads in the sans face (design-language rule 4); JSON such as metadata stays mono (C153). */
+.preview[data-mono],
+.previewWrap[data-mono] {
+  font-family: var(--font-mono);
+}
+
+.indexText {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }

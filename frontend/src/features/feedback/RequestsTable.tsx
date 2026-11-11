@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, DataTable, EmptyState, type Column, type Key, type SortState } from '@/ui';
+import { Button, DataTable, EmptyState, type Column, type Key, type SortState, Flag } from '@/ui';
 import type { FeedbackList, FeedbackRow } from '@/api/feedback';
 import { ComplexityTag, PriorityBadge, StatusBadge } from './badges';
 import { shortDate } from './format';
@@ -17,7 +17,7 @@ function TitleCell({ r }: { r: FeedbackRow }) {
       </span>
       {r.duplicate_of ? (
         <span className={styles.dupNote} data-testid="dup-note">
-          <Badge tone="warning">Duplicate</Badge> of <RequestLink id={r.duplicate_of} small />
+          <Flag tone="warning">Duplicate</Flag> of <RequestLink id={r.duplicate_of} small />
         </span>
       ) : r.possible_duplicate_of ? (
         <span className={styles.dupNote} data-testid="possible-dup-note">

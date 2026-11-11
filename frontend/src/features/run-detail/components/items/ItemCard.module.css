@@ -152,3 +152,8 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+
+/* C086: the space the metrics take while they render in idle time, so the card does not jump */
+.metricsPending {
+  min-height: 160px;
+}

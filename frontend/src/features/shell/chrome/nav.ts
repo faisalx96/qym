@@ -25,7 +25,6 @@ export function projectNav(slug: string): NavItem[] {
     { id: 'overview', label: 'Dashboard', icon: 'home', to: projectPath(slug, 'overview') },
     { id: 'charts', label: 'Charts', icon: 'chart', to: projectPath(slug, 'charts') },
     { id: 'runs', label: 'Runs', icon: 'list', to: projectPath(slug), activeFor: ['run-detail', 'compare'] },
-    { id: 'models', label: 'Models', icon: 'grid', to: projectPath(slug, 'models') },
     {
       id: 'experiments',
       label: 'Experiments',
@@ -79,14 +78,13 @@ const PAGE_LABELS: Record<string, string> = {
   runs: 'Runs',
   overview: 'Dashboard',
   charts: 'Charts',
-  models: 'Models',
   experiments: 'Experiments',
   'experiments-queue': 'Queue',
   environments: 'Environments',
   datasets: 'Datasets',
   analysis: 'Auto-analysis',
   analyzer: 'Auto-analysis',
-  settings: 'Settings',
+  settings: 'Project settings',
   'run-detail': 'Run',
   'not-found': 'Not found',
 };

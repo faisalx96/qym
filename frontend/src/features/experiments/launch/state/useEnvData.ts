@@ -127,12 +127,12 @@ export function useEnvData(
         if (r.isPending) g.pending = true;
         if (p.kind === 'form') {
           if (r.data) g.form = r.data as FormResponse;
-          else if (r.error) g.formError = errorMessage(r.error) || 'Failed to load the settings form';
+          else if (r.error) g.formError = errorMessage(r.error) || 'Couldn’t load the settings form';
         } else if (p.kind === 'slots') {
           if (r.data) g.slots = r.data as ModelSlotsPayload;
         } else if (p.kind === 'options') {
           if (r.data) g.options = r.data as ModelOptions;
-          else if (r.error) g.optionsError = errorMessage(r.error) || 'Failed to load project models';
+          else if (r.error) g.optionsError = errorMessage(r.error) || 'Couldn’t load project models';
         } else if (p.name) {
           g.extra[p.name] = (r.data as ModelSlot | null | undefined) ?? null;
         }
@@ -198,11 +198,11 @@ export async function loadEnvDataNow(
       ]);
       const group: Group = {
         form: form.value,
-        formError: form.error ? errorMessage(form.error) || 'Failed to load the settings form' : undefined,
+        formError: form.error ? errorMessage(form.error) || 'Couldn’t load the settings form' : undefined,
         slots: slots.value,
         options: options.value,
         optionsError: options.error
-          ? errorMessage(options.error) || 'Failed to load project models'
+          ? errorMessage(options.error) || 'Couldn’t load project models'
           : undefined,
         extra: Object.fromEntries(extras),
         pending: false,

@@ -40,7 +40,11 @@ function countTasks(page: Page) {
     const m = /\/eval-environments\/([^/]+)\/tasks$/.exec(r.url());
     if (r.method() === 'GET' && m) hits.push(m[1]!);
   });
-  return { of: (id: string) => hits.filter((h) => h === id).length, total: () => hits.length, reset: () => (hits = []) };
+  return {
+    of: (id: string) => hits.filter((h) => h === id).length,
+    total: () => hits.length,
+    reset: () => (hits = []),
+  };
 }
 
 test.describe('the Task section', () => {
@@ -66,7 +70,9 @@ test.describe('the Task section', () => {
     });
   }
 
-  test('C-2-1 no environment box holds a select or a Task control, and there is exactly one Task select', async ({ page }) => {
+  test('C-2-1 no environment box holds a select or a Task control, and there is exactly one Task select', async ({
+    page,
+  }) => {
     await openHome(page, f.project.slug, both());
     await expect(taskSelect(page)).toBeEnabled();
     for (const name of ['production', 'staging']) {
@@ -76,14 +82,21 @@ test.describe('the Task section', () => {
     await expect(part(page, 'task-select')).toHaveCount(1);
   });
 
-  test('C-2-4 the list is the union by id, Worker default first, with who offers each; one request per environment', async ({ page }) => {
+  test('C-2-4 the list is the union by id, Worker default first, with who offers each; one request per environment', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const counts = countTasks(page);
     await openHome(page, f.project.slug, `?env=${f.production.id}`);
     await expect(taskSelect(page)).toBeEnabled();
     await taskSelect(page).click();
     let texts = await page.getByRole('option').allInnerTexts();
-    expect(texts.map((t) => t.split('\n')[0])).toEqual(['Worker default', 'Answer a ticket', 'Route a ticket', 'Summarise a ticket']);
+    expect(texts.map((t) => t.split('\n')[0])).toEqual([
+      'Worker default',
+      'Answer a ticket',
+      'Route a ticket',
+      'Summarise a ticket',
+    ]);
     expect(texts[1]).toContain('production');
     expect(texts[1]).not.toContain('only'); // the only ticked environment offers it
     await page.keyboard.press('Escape');
@@ -92,7 +105,12 @@ test.describe('the Task section', () => {
     await expect(part(page, 'task-availability')).toBeVisible();
     await taskSelect(page).click();
     texts = await page.getByRole('option').allInnerTexts();
-    expect(texts.map((t) => t.split('\n')[0])).toEqual(['Worker default', 'Answer a ticket', 'Route a ticket', 'Summarise a ticket']);
+    expect(texts.map((t) => t.split('\n')[0])).toEqual([
+      'Worker default',
+      'Answer a ticket',
+      'Route a ticket',
+      'Summarise a ticket',
+    ]);
     expect(texts[1]).toContain('production and staging');
     expect(texts[2]).toContain('production only');
     await page.keyboard.press('Escape');
@@ -101,7 +119,9 @@ test.describe('the Task section', () => {
     expect(counts.of(f.staging.id)).toBe(1);
   });
 
-  test('C-2-5 with nothing ticked the select is disabled and the section keeps its height', async ({ page }) => {
+  test('C-2-5 with nothing ticked the select is disabled and the section keeps its height', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openHome(page, f.project.slug);
     await expect(taskSection(page)).toContainText('Pick an environment first');
@@ -112,7 +132,9 @@ test.describe('the Task section', () => {
     near((await box(taskSection(page))).height, empty.height, 0.5, 'height with an environment ticked');
   });
 
-  test('C-2-6 a task an environment does not offer flags it, blocks Launch, and fixing it clears all four', async ({ page }) => {
+  test('C-2-6 a task an environment does not offer flags it, blocks Launch, and fixing it clears all four', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openHome(page, f.project.slug, both());
     await expect(taskSelect(page)).toBeEnabled();
@@ -121,14 +143,23 @@ test.describe('the Task section', () => {
     // staging does not list route-ticket
     await expect(envBox(page, 'staging')).toHaveAttribute('data-state', 'flagged');
     await expect(envBox(page, 'production')).toHaveAttribute('data-state', 'selected');
-    await expect(envBox(page, 'staging').locator('[data-part=env-flag]')).toContainText('does not offer the task');
-    await expect(part(page, 'task-availability').locator('[data-offered=false]')).toContainText('staging: not offered');
+    await expect(envBox(page, 'staging').locator('[data-part=env-flag]')).toContainText(
+      'does not offer the task',
+    );
+    await expect(part(page, 'task-availability').locator('[data-offered=false]')).toContainText(
+      'staging: not offered',
+    );
     await expect(part(page, 'bar-launch')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Launch as is' })).toBeDisabled();
     // the review names the environment and the task, and focus goes to the select
-    await page.getByRole('button', { name: 'Customize →' }).click();
-    await page.getByRole('button', { name: /Review and launch/ }).first().click();
-    const problem = page.getByRole('list', { name: 'Problems to fix' }).getByRole('button', { name: /staging does not offer the task “Route a ticket”/ });
+    await page.getByRole('button', { name: 'Customize' }).click();
+    await page
+      .getByRole('button', { name: /Review and launch/ })
+      .first()
+      .click();
+    const problem = page
+      .getByRole('list', { name: 'Problems to fix' })
+      .getByRole('button', { name: /staging does not offer the task “Route a ticket”/ });
     await expect(problem).toBeVisible();
     await problem.click();
     await expect(page.getByRole('heading', { name: 'Where it runs', level: 2 })).toBeVisible();
@@ -141,7 +172,10 @@ test.describe('the Task section', () => {
     await expect(part(page, 'bar-status')).not.toContainText('does not offer');
   });
 
-  test('C-2-7 the section is not rendered when no active environment declares task', async ({ page, request }) => {
+  test('C-2-7 the section is not rendered when no active environment declares task', async ({
+    page,
+    request,
+  }) => {
     await resetFakes(request);
     f = await seedR9(request, { tasks: false });
     await openHome(page, f.project.slug, both());
@@ -164,13 +198,20 @@ test.describe('the Task section', () => {
     await expect.poll(() => posts.dryRuns.at(-1)?.body.spec.evaluator.task).toBeUndefined();
   });
 
-  test('C-2-8 a clone of a per-environment experiment shows "Different per environment", read only, and sends the object', async ({ page, request }) => {
+  test('C-2-8 a clone of a per-environment experiment shows "Different per environment", read only, and sends the object', async ({
+    page,
+    request,
+  }) => {
     const { launchExperiment } = await import('../support');
     const x = await launchExperiment(request, f.project.id, {
       name: 'old per-environment tasks',
       environment_ids: [f.production.id, f.staging.id],
       spec: {
-        evaluator: { dataset: 'support-tickets', task: { [f.production.id]: 'route-ticket', [f.staging.id]: 'answer-ticket' }, config: { samples: 1 } },
+        evaluator: {
+          dataset: 'support-tickets',
+          task: { [f.production.id]: 'route-ticket', [f.staging.id]: 'answer-ticket' },
+          config: { samples: 1 },
+        },
         slot_bindings: { 'endpoint:primary': { connection_id: f.connectionId } },
         env_overrides: {},
       },
@@ -179,10 +220,12 @@ test.describe('the Task section', () => {
     await page.goto(cloneUrl(f.project.slug, x.id));
     await expect(taskSection(page)).toContainText('Different per environment');
     await expect(taskSelect(page)).toBeDisabled();
-    await expect.poll(() => posts.dryRuns.at(-1)?.body.spec.evaluator.task).toEqual({
-      [f.production.id]: 'route-ticket',
-      [f.staging.id]: 'answer-ticket',
-    });
+    await expect
+      .poll(() => posts.dryRuns.at(-1)?.body.spec.evaluator.task)
+      .toEqual({
+        [f.production.id]: 'route-ticket',
+        [f.staging.id]: 'answer-ticket',
+      });
   });
 
   test('the loading frame has the loaded height', async ({ page, request }) => {
@@ -195,7 +238,10 @@ test.describe('the Task section', () => {
     near((await box(taskSection(page))).height, loading.height, 1, 'height loading vs loaded');
   });
 
-  test('an unreadable list says why and does not block; an unsupported one offers only Worker default', async ({ page, request }) => {
+  test('an unreadable list says why and does not block; an unsupported one offers only Worker default', async ({
+    page,
+    request,
+  }) => {
     await setFakeTasks(request, FAKE_A, { status: 503 });
     await openHome(page, f.project.slug, `?env=${f.production.id}`);
     await expect(taskSection(page)).toContainText('Couldn’t read the tasks of production');

@@ -46,10 +46,12 @@ Operators choose one UI authentication mode with `QYM_AUTH_MODE`:
 | Mode | Behavior |
 |---|---|
 | `none` | Local development. qym creates/reuses `dev@local` as an admin. |
-| `proxy_headers` | Trusts `X-User-Email` or `X-Email` from an authentication proxy. |
+| `proxy_headers` | Trusts `X-User-Email` or `X-Email` from an authentication proxy. The proxy sends `QYM_PROXY_SHARED_SECRET` in the `X-Qym-Proxy-Secret` header, and a request without it is not accepted as any user. |
 | `oidc` | Uses configured Google, GitHub, and/or self-hosted GitLab sign-in. |
 
-Email/password sign-in can be enabled alongside any non-`none` mode. SAML and generic enterprise SSO are not implemented.
+Email/password sign-in can be enabled alongside any non-`none` mode. For password sign-in only, use `oidc` with `QYM_AUTH_LOCAL_ENABLED=true` and no provider. SAML and generic enterprise SSO are not implemented.
+
+When `QYM_ENVIRONMENT` is not `dev`, `development`, `local`, `test` or `testing`, the platform does not start with `none`, an empty or unknown mode, or `proxy_headers` without `QYM_PROXY_SHARED_SECRET`. The startup error names the variable to set.
 
 Self-hosted GitLab sign-in needs `QYM_AUTH_GITLAB_URL` (the GitLab issuer, for example `https://gitlab.example.com`), `QYM_AUTH_GITLAB_CLIENT_ID`, and `QYM_AUTH_GITLAB_CLIENT_SECRET`. Register a confidential GitLab OAuth application with the scopes `openid`, `email`, and `profile` and the redirect URI `<QYM_BASE_URL>/v1/auth/callback/gitlab`. A malformed `QYM_AUTH_GITLAB_URL` stops the platform at startup.
 

@@ -282,7 +282,7 @@ export function CollectionTable({
       </TableWrap>
       <AddRow
         placeholder={`New ${noun} name`}
-        buttonText={`+ Add ${noun}`}
+        buttonText={`Add ${noun}`}
         onAdd={(raw) => {
           const key = raw.trim();
           if (!key) return `Enter a ${noun} name.`;

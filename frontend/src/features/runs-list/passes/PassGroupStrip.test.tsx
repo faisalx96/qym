@@ -10,7 +10,7 @@ import type * as HttpModule from '@/lib/http';
 import { createQueryClient } from '@/app/queryClient';
 import { runKeys } from '@/api/dashboard';
 import type { RunRow } from '@/api/dashboardTypes';
-import { groupQueryFor } from './groupQuery';
+import { groupChoiceFor, summaryPasses } from './groupQuery';
 import { PassGroupStrip } from './PassGroupStrip';
 
 const waiting: Array<{ url: string; resolve: (v: unknown) => void }> = [];
@@ -71,19 +71,18 @@ beforeEach(() => {
 });
 
 describe('PassGroupStrip', () => {
-  it('asks for view=group with the metric and threshold groupQueryFor names', async () => {
+  it('asks for view=group with the metric and threshold groupChoiceFor names', async () => {
     const { qc, Wrapper } = wrap();
     render(<PassGroupStrip row={row} remembered={null} onMetric={() => undefined} />, { wrapper: Wrapper });
-    const q = groupQueryFor(row, null, {})!;
+    const q = groupChoiceFor(row, null, {});
     const url = `/api/runs/run-1/group-metrics?metric=${q.metric}&threshold=${q.threshold}&view=group`;
     expect(waiting.map((w) => w.url)).toContain(url);
-    // the cache entry is the one a prefetch of the same query fills
     expect(
-      qc.getQueryCache().find({ queryKey: runKeys.groupMetrics('run-1', q.metric, q.threshold, 'group') }),
+      qc.getQueryCache().find({ queryKey: runKeys.groupMetrics('run-1', q.metric!, q.threshold, 'group') }),
     ).toBeDefined();
     // the run page's full curve is a different entry
     expect(
-      qc.getQueryCache().find({ queryKey: runKeys.groupMetrics('run-1', q.metric, q.threshold) }),
+      qc.getQueryCache().find({ queryKey: runKeys.groupMetrics('run-1', q.metric!, q.threshold) }),
     ).toBeUndefined();
   });
 
@@ -97,7 +96,10 @@ describe('PassGroupStrip', () => {
     expect(within(strip).getByText('10 · 300 items')).toBeInTheDocument();
     const labels = Array.from(strip.querySelectorAll('dl[aria-busy] dt')).map((d) => d.textContent);
     expect(labels).toEqual(['Pass@10', 'Pass^10', 'Avg@10', 'Consistency', 'Reliability']);
-    expect(within(strip).getAllByRole('status')).toHaveLength(5);
+    // the five skeleton values (the threshold slider's <output> is a status too, outside the statistics)
+    const stats = strip.querySelector<HTMLElement>('dl[aria-busy]')!;
+    expect(within(stats).getAllByRole('status')).toHaveLength(5);
+    expect(within(strip).getByRole('slider', { name: /^Pass if ≥/ })).toBeInTheDocument();
     expect(strip.querySelectorAll('dd')).toHaveLength(5 + 5); // five skeleton values + the five help definitions
   });
 
@@ -122,8 +124,65 @@ describe('PassGroupStrip', () => {
     });
     const strip = screen.getByRole('group', { name: 'Group metrics' });
     await waitFor(() => expect(strip).not.toHaveAttribute('aria-busy'));
-    expect(within(strip).queryAllByRole('status')).toHaveLength(0);
+    expect(within(strip.querySelector<HTMLElement>('dl')!).queryAllByRole('status')).toHaveLength(0);
     expect(within(strip).getByText('90.0%')).toBeInTheDocument(); // Pass@10
     expect(within(strip).getByText('55.0%')).toBeInTheDocument(); // Reliability
+  });
+
+  it('C023: a finished run opens on its summary with no request, and asks only for another threshold', async () => {
+    const pass = {
+      status: 'completed',
+      primary_metric: 'correct',
+      primary_score: 1,
+      error_count: 0,
+      task_error_count: 0,
+      metric_error_count: 0,
+      metric_error_counts: {},
+      retry_count: 0,
+      analysis_cause_count: 0,
+    };
+    const detail = {
+      metric_means: { correct: 1, quality: 0.6 },
+      items_scored: 300,
+      items_total: 300,
+      completed_count: 300,
+      avg_latency_ms: 10,
+      median_latency_ms: 9,
+      p95_latency_ms: 20,
+      started_at: null,
+      ended_at: null,
+      duration_ms: 1000,
+      trace_stats: null,
+    };
+    const settled = {
+      ...row,
+      pass_summaries: [{ ...pass, pass_number: 1 }],
+      pass_details: [{ ...detail, pass_number: 1 }],
+      pass_groups: { correct: { threshold: 1, group }, quality: { threshold: 0.7, group } },
+    } as unknown as RunRow;
+    expect(summaryPasses(settled)?.passes[0]).toMatchObject({
+      pass_number: 1,
+      completed_count: 300,
+      retry_count: 0,
+    });
+    expect(summaryPasses(row)).toBeUndefined();
+    const { Wrapper } = wrap();
+    render(<PassGroupStrip row={settled} remembered={null} onMetric={() => undefined} />, {
+      wrapper: Wrapper,
+    });
+    const strip = screen.getByRole('group', { name: 'Group metrics' });
+    expect(strip).not.toHaveAttribute('aria-busy');
+    expect(within(strip).getByText('90.0%')).toBeInTheDocument();
+    expect(waiting).toHaveLength(0);
+    // another threshold than the summary's is a real question for the server
+    const slider = within(strip).getByRole('slider', { name: /^Pass if ≥/ });
+    act(() => {
+      slider.focus();
+    });
+    await act(async () => {
+      slider.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    });
+    await waitFor(() => expect(waiting.some((w) => w.url.includes('/group-metrics'))).toBe(true));
+    expect(waiting.some((w) => w.url.includes('/passes'))).toBe(false);
   });
 });

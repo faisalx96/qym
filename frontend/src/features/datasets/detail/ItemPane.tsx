@@ -1,9 +1,8 @@
 /** Docked (non-modal) item editor beside the items table: Text/JSON fields, sticky footer, Prev/Next. */
 import { useState } from 'react';
 import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   ErrorState,
@@ -12,13 +11,16 @@ import {
   Skeleton,
   Text,
   useToast,
+  StatusMark,
 } from '@/ui';
 import { DisableItemDialog } from '../components/dialogs';
+import { ConflictNotice } from '../components/ConflictNotice';
 import { FieldEditor } from '../components/FieldEditor';
 import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
 import { useItemEditor } from '../item/useItemEditor';
 import { datasetPath } from '../lib/route';
 import styles from './ItemPane.module.css';
+import { APP_LOCALE } from '@/lib/dates';
 
 export interface ItemPaneProps {
   slug: string;
@@ -81,9 +83,10 @@ export function ItemPane({
     try {
       const saved = await editor.save();
       if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
-      return true;
+      // null: someone saved first, and the conflict notice asks what to keep
+      return Boolean(saved);
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
+      toast.show(actionErrorMessage('save the item', e), { tone: 'error' });
       return false;
     }
   };
@@ -97,9 +100,11 @@ export function ItemPane({
             {itemId}
           </Text>
           <span className={styles.pos}>
-            {position.index + 1} / {position.total.toLocaleString()}
+            {position.index + 1} / {position.total.toLocaleString(APP_LOCALE)}
           </span>
-          {disabled ? <Badge tone="neutral">Disabled</Badge> : null}
+          {disabled ? (
+            <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+          ) : null}
         </div>
         <div className={styles.headActions}>
           <IconButton label="Previous item" icon="chevron-up" onPress={() => onNavigate(-1)} />
@@ -135,6 +140,19 @@ export function ItemPane({
             ) : null}
           </div>
         ) : null}
+        {editor.conflict ? (
+          <ConflictNotice
+            conflict={editor.conflict}
+            busy={editor.saving}
+            onReview={editor.reviewTheirs}
+            onKeep={() =>
+              void editor
+                .keepMine()
+                .then((saved) => saved && toast.show(`Item ${saved.item_id} saved`, { tone: 'success' }))
+                .catch((e: unknown) => toast.show(actionErrorMessage('save the item', e), { tone: 'error' }))
+            }
+          />
+        ) : null}
         {item && editor.state ? (
           <div className={styles.fields} data-disabled={disabled ? '' : undefined}>
             <FieldEditor
@@ -168,8 +186,8 @@ export function ItemPane({
       {editable ? (
         <footer className={styles.foot}>
           {item && !disabled ? (
-            <Button variant="neutral" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
-              Disable item…
+            <Button variant="danger" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
+              Disable item
             </Button>
           ) : null}
           <Text as="span" variant="sm" tone="muted" aria-live="polite" className={styles.status}>
@@ -192,12 +210,13 @@ export function ItemPane({
       ) : null}
       {!readOnly && published && item && onCreateDraft ? (
         <footer className={styles.foot}>
+          {/* one action to change a published item, the same as on the item page (C142) */}
           <Button
-            variant="neutral"
+            variant="accent"
             onPress={() => onCreateDraft(item.item_id)}
-            data-testid="item-state-action"
+            data-testid="pane-edit-in-draft"
           >
-            {disabled ? 'Create a draft to enable' : 'Create a draft to disable'}
+            Edit in a new draft
           </Button>
         </footer>
       ) : null}

@@ -1,28 +1,24 @@
 import type { FeedbackEvent, FeedbackStatus } from '@/api/feedback';
+import { formatAgo, formatShortDay, formatTableDate, formatTime } from '@/lib/dates';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
+/** 'Sep 14' (lib/dates, C048). */
 export function shortDate(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  return formatShortDay(iso);
 }
 
+/** '19:05' (lib/dates). */
 export function clock(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return formatTime(iso);
 }
 
+/** Table form 'Sep 14 · 19:05' (lib/dates). */
 export function dateTime(iso: string | null | undefined): string {
-  return iso ? `${shortDate(iso)}, ${clock(iso)}` : '';
+  return iso ? formatTableDate(iso) : '';
 }
 
+/** Freshness, then the day (lib/dates). */
 export function ago(iso: string | null | undefined, now = Date.now()): string {
-  if (!iso) return '';
-  const days = Math.floor((now - new Date(iso).getTime()) / 86_400_000);
-  if (days <= 0) return 'today';
-  return days === 1 ? '1 day ago' : `${days} days ago`;
+  return iso ? formatAgo(iso, now) : '';
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

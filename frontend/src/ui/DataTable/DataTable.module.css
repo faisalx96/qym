@@ -1,6 +1,9 @@
 /* .qdt-table reference table recipe, v2 (DESIGN_LANGUAGE §3 "Data table"): density rows, zebra, bands, pins, cues. */
 .card {
   --row-h: var(--row-regular);
+  /* Row separators are a faint hairline, and none where zebra stripes already separate the rows: a full-strength line
+     on every row read as a grid of boxes (round 10). */
+  --row-line: color-mix(in srgb, var(--border-subtle) 55%, transparent);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -16,6 +19,10 @@
 }
 .card[data-density='comfortable'] {
   --row-h: var(--row-comfortable);
+}
+
+.card[data-zebra] {
+  --row-line: transparent;
 }
 
 .card[data-variant='embedded'] {
@@ -172,6 +179,10 @@
   text-align: end;
 }
 
+.th[data-align='center'] {
+  text-align: center;
+}
+
 .th[data-sorted] {
   color: var(--accent-primary);
 }
@@ -226,6 +237,10 @@
 
 .th[data-align='end'] .thInner {
   justify-content: flex-end;
+}
+
+.th[data-align='center'] .thInner {
+  justify-content: center;
 }
 
 .th[data-align='end'] .sortButton {
@@ -366,7 +381,7 @@
   font-family: var(--font-sans);
   padding: 0 var(--space-sm);
   height: var(--row-h);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--row-line);
   background:
     linear-gradient(var(--row-tint, transparent), var(--row-tint, transparent)),
     var(--row-base, var(--bg-base));
@@ -375,6 +390,11 @@
   outline: none;
   text-align: start;
   vertical-align: middle;
+}
+
+/* The frame closes the last row: its own line would double the frame's bottom edge at the rounded corners. */
+.tbody > tr:last-child > td {
+  border-bottom-color: transparent;
 }
 
 .table[data-tall] .tbody td {
@@ -387,6 +407,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* C090: room for a control's full 2px focus ring (offset up to 2px) inside the clip, with no change to the row */
+  padding-block: var(--space-xs);
+  margin-block: calc(-1 * var(--space-xs));
+}
+
+/* Content fit: for one measuring pass every cell and header label takes its max-content width (DataTable.tsx). */
+.table[data-measure] .cell,
+.table[data-measure] [data-th-label]:not([data-hidden]) {
+  width: max-content;
+  max-width: none;
 }
 
 .cell[data-wrap] {
@@ -427,6 +457,10 @@
   text-align: end;
 }
 
+.td[data-align='center'] {
+  text-align: center;
+}
+
 .td[data-mono] {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -437,33 +471,65 @@
   text-align: center;
 }
 
+/* The reserved select column while select mode is off (C020): in the table, 0px wide, empty. */
+.th[data-collapsed],
+.td[data-collapsed] {
+  padding: 0;
+  border-inline-width: 0;
+  overflow: hidden;
+}
+
 .td[data-pin] {
   position: sticky;
   z-index: 2;
 }
 
-/* The boundary of the frozen columns is drawn by the frozen cells themselves (round 7, Q1/D3): one 1px
-   `--border-strong` line on the inner edge of the last start cell and the first end cell, header and body alike.
-   Nothing is painted over scrolling content, and a row that has no pinned cell (a detail row: the passes strip,
-   an expanded item) has no line. The line is static: it never changes with the scroll position, so no cell repaints
-   when scrolling starts. `box-shadow` has no logical sides, so the right-to-left case is spelled out. The line lives in
-   `--pin-line` so a row rail (state, selection, open group, focus ring) can keep it: those rules add it to their own
-   shadow instead of replacing it. */
-.th[data-pin-edge='start'],
-.td[data-pin-edge='start'],
-.bandCell[data-pin-edge='start'],
-.th[data-pin-edge='end']:dir(rtl),
-.td[data-pin-edge='end']:dir(rtl),
-.bandCell[data-pin-edge='end']:dir(rtl) {
-  --pin-line: inset -1px 0 0 var(--border-strong);
+/* The boundary of the frozen columns (round 9): no line. While content is scrolled under a frozen edge, the frozen
+   cells darken softly toward that edge: an 8px (`--space-sm`, inside the cell padding) `--pin-shade` gradient on the
+   cell's own ::after. It stays inside the frozen cell, so nothing is painted over the scrolling content and no glyph
+   is under it (owner rule, round 7). The start edge shades when the scroller has left its start (`data-scrolled-x`),
+   the end edge while columns remain past the end (`data-scrolled-end`). Both flags are written only when they change,
+   never per scroll event, and the shade has no transition (perf round 6, A12). A table that does not scroll
+   sideways, or is scrolled fully to that side, shows nothing. A fold column (the runs Actions column) never shades.
+   `--pin-line` stays as an empty shadow so a row rail (state, selection, open group, focus ring) can keep adding it. */
+:is(.th, .td, .bandCell)[data-pin-edge] {
+  --pin-line: 0 0 0 transparent;
 }
-.th[data-pin-edge='end'],
-.td[data-pin-edge='end'],
-.bandCell[data-pin-edge='end'],
-.th[data-pin-edge='start']:dir(rtl),
-.td[data-pin-edge='start']:dir(rtl),
-.bandCell[data-pin-edge='start']:dir(rtl) {
-  --pin-line: inset 1px 0 0 var(--border-strong);
+.th[data-pin-edge]::after,
+.td[data-pin-edge]::after,
+.bandCell[data-pin-edge]::after {
+  content: '';
+  position: absolute;
+  inset-block: 0 -1px;
+  inline-size: var(--space-sm);
+  pointer-events: none;
+  opacity: 0;
+}
+.th[data-pin-edge='start']::after,
+.td[data-pin-edge='start']::after,
+.bandCell[data-pin-edge='start']::after {
+  inset-inline-end: 0;
+  background: linear-gradient(to right, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='end']::after,
+.td[data-pin-edge='end']::after,
+.bandCell[data-pin-edge='end']::after {
+  inset-inline-start: 0;
+  background: linear-gradient(to left, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='start']:dir(rtl)::after,
+.td[data-pin-edge='start']:dir(rtl)::after,
+.bandCell[data-pin-edge='start']:dir(rtl)::after {
+  background: linear-gradient(to left, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='end']:dir(rtl)::after,
+.td[data-pin-edge='end']:dir(rtl)::after,
+.bandCell[data-pin-edge='end']:dir(rtl)::after {
+  background: linear-gradient(to right, transparent, var(--pin-shade));
+}
+.scroller[data-scrolled-x] [data-pin-edge='start']::after,
+.scroller[data-scrolled-end] [data-pin-edge='end']:not([data-fold])::after {
+  opacity: 1;
 }
 .th[data-pin-edge],
 .td[data-pin-edge],
@@ -475,6 +541,149 @@
   box-shadow:
     var(--pin-line),
     inset 0 -1px 0 var(--border-default);
+}
+
+/* Fold column (`Column.foldLabel`, the runs Actions column). While the scroller has columns past its end edge
+   (`data-scroll-end` on the body host) the pinned end cell is one small handle: the rest of the cell is see-through,
+   draws no freeze line and lets clicks pass, so it covers nothing but the handle. The handle opens the cell for its
+   row (the usual opaque cell). Scrolled to the end, or with no overflow, the column renders as usual. */
+.fold {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.foldBody {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.foldHandle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.foldHandle:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.foldHandle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+/* Round 10: the handle shows on the row under the pointer, the focused row and an open cell only, so at rest no handle
+   covers the scores scrolling under the column (a touch screen, with no hover, keeps every handle). */
+.bodyHost[data-scroll-end] .foldHandle {
+  display: inline-flex;
+  pointer-events: auto;
+  opacity: 0;
+}
+.bodyHost[data-scroll-end] .tr:hover .foldHandle,
+.bodyHost[data-scroll-end] .tr[data-focused] .foldHandle,
+.bodyHost[data-scroll-end] .fold[data-open] .foldHandle,
+.bodyHost[data-scroll-end] .foldHandle:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .bodyHost[data-scroll-end] .foldHandle {
+    opacity: 1;
+  }
+}
+
+.bodyHost[data-scroll-end] .fold:not([data-open]) .foldBody {
+  display: none;
+}
+
+/* Row menu (`RowMenu` in a `Column.menuColumn` cell, the runs Actions column, owner decision Nov 1): the cell is a
+   fold column with no body (see-through while columns remain past the end, through `data-fold`), and its one handle
+   shows on the hovered or focused row and while its menu is open (every row on a touch screen), so at rest no handle
+   covers the scores under the column. */
+.rowMenu {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rowMenuHandle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--badge-height);
+  height: var(--badge-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: auto;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.rowMenuHandle[data-hovered],
+.rowMenuHandle[data-pressed],
+.rowMenuHandle[aria-expanded='true'] {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.rowMenuHandle[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.tr:hover .rowMenuHandle,
+.tr[data-focused] .rowMenuHandle,
+.card2:hover .rowMenuHandle,
+.card2:focus-within .rowMenuHandle,
+.rowMenuHandle[aria-expanded='true'],
+.rowMenuHandle[data-focus-visible] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .rowMenuHandle {
+    opacity: 1;
+  }
+}
+
+/* folded: the title is clipped out of sight but keeps the column's accessible name; the header menu is hidden */
+.bodyHost[data-scroll-end] .th[data-fold] .thInner > * {
+  visibility: hidden;
+}
+.bodyHost[data-scroll-end] .th[data-fold] .thLabel {
+  visibility: visible;
+  clip-path: inset(50%);
+}
+
+.bodyHost[data-scroll-end] .th[data-fold],
+.bodyHost[data-scroll-end] .td[data-fold]:not(:has(.fold[data-open])) {
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .tr {
@@ -493,6 +702,20 @@
 
 .tr:hover {
   --row-base: var(--bg-hover);
+}
+
+/* hoverEdge: the row under the pointer draws an accent hairline above and below it and a 2px accent edge at its start */
+.card[data-hover-edge] .tr:hover > .td {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent);
+}
+
+.card[data-hover-edge] .tr:hover > .td:first-child {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
 
 .tr[data-focused] {
@@ -577,6 +800,19 @@
   border-inline-end: 1px solid var(--border-default);
 }
 
+/* The selection line of a toolbar with facet rows: the full width, a hairline under it. */
+.selectionLine {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding-block-end: var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.selectionLine > .selectionCluster {
+  padding-inline-end: 0;
+  border-inline-end: 0;
+}
+
 .rowActions {
   display: inline-flex;
   align-items: center;
@@ -649,6 +885,9 @@
 }
 .groupRow td[data-align='end'] {
   text-align: end;
+}
+.groupRow td[data-align='center'] {
+  text-align: center;
 }
 .groupRow td[data-mono] {
   font-family: var(--font-mono);
@@ -742,6 +981,36 @@
   }
 }
 
+/* singleTabStop (runs list C089): the first Tab into the table shows this at its top start; it moves focus to the pager. */
+.skipLink {
+  position: absolute;
+  z-index: 6;
+  inset-block-start: var(--space-xs);
+  inset-inline-start: var(--space-sm);
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.skipLink:focus-visible {
+  width: auto;
+  height: auto;
+  padding: var(--space-xs) var(--space-sm);
+  overflow: visible;
+  clip-path: none;
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 .srOnly {
   position: absolute;
   width: 1px;
@@ -773,8 +1042,37 @@
   border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
+/* selectionReplaces (C228): the selection actions sit over the toolbar's own controls, which keep its height */
+.toolbar[data-selection-replaces] {
+  position: relative;
+  background: var(--bg-elevated);
+}
+
+.selectionOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: inherit;
+}
+
+.selectionOverlay > .selectionCluster {
+  border-inline-end: 0;
+}
+
+.toolbarHidden {
+  display: contents;
+  visibility: hidden;
+}
+
 .toolbar[data-selection-bar] {
   background: var(--bg-elevated);
+}
+
+/* A toolbar with facet rows (the runs filter bar) is two control lines: 8px above and below them instead of 4, so the
+   filter row does not sit on the column headers (round 10). */
+.toolbar:has(> .toolbarStart) {
+  padding-block: var(--space-sm);
 }
 
 .footer {
@@ -797,6 +1095,23 @@
 
 .toolbarMain {
   flex: 1 1 auto;
+}
+
+/* With facet rows: the main line and the rows stack on the start side, the end controls centre on the stack. */
+.toolbarStart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toolbarLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  min-width: 0;
 }
 
 .toolbarEnd {
@@ -1144,7 +1459,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  flex: 1 0 100%;
   min-width: 0;
 }
 .toolbarRows:empty {
@@ -1271,4 +1585,18 @@
 
 .cardPassesGroup {
   display: block;
+}
+
+/* C202: the row '>' handle has a 24x24 hit area (drawn 20px) and is 32px on a touch screen */
+.rowMenuHandle::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+
+@media (pointer: coarse) {
+  .rowMenuHandle {
+    width: 32px;
+    height: 32px;
+  }
 }

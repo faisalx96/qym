@@ -299,6 +299,10 @@ test.describe('review of WP-D', () => {
       out.strip = await h(page.getByLabel('Job totals'));
       out.matrix = await h(page.locator('[data-exp-matrix]'));
       out.matrixRows = await page.locator('[data-exp-matrix] tbody tr').count();
+      await page
+        .locator('[data-exp-jobs]')
+        .getByRole('button', { name: /Job history/ })
+        .click(); // starts closed (C206)
       out.history = await h(page.locator('[data-exp-jobs]'));
       out.historyTable = await page
         .locator('[data-exp-jobs] table')
@@ -357,7 +361,10 @@ test.describe('review of WP-D', () => {
     await addDataset(page, 'billing-faq');
     await expect(page.getByTestId('pair-count')).toHaveText('2 dataset versions from 2 datasets');
     // One run each is the default shape; the combined-run help text is read in the opt-in shape
-    await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
+    await page
+      .getByTestId('run-shape')
+      .getByRole('radio', { name: 'Combine into one run' })
+      .click({ force: true });
     const help = await page.getByTestId('run-shape').locator('p').first().textContent();
     await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
     const helpEach = await page.getByTestId('run-shape').locator('p').first().textContent();

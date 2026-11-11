@@ -1,15 +1,7 @@
 /** J6 / §8.7: expanding a repeat run: passes, group metrics, select mode, pass delete. */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { BOOL, LOWER, SCORE, seedRun } from './seed';
-import {
-  clickBox,
-  freshProject,
-  openRuns,
-  rowOf,
-  openPassMenu,
-  deletePassFromMenu,
-  withoutPrefetch,
-} from './support';
+import { clickBox, freshProject, openRuns, rowOf, openPassMenu, deletePassFromMenu } from './support';
 
 const NAME = 'summarize-repeat-done';
 
@@ -25,7 +17,6 @@ async function seedRepeat(page: Page, request: APIRequestContext) {
     samples: 3,
     status: 'COMPLETED',
   });
-  await withoutPrefetch(page); // these tests count the requests an open makes: the prefetch has its own spec (e2e/perf)
   await openRuns(page, s.project.slug);
   return s;
 }
@@ -77,20 +68,18 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       .click();
     const panel = page.getByTestId('runs-table');
     await expect(panel.locator('[aria-label="Group metrics"]').first()).toContainText('Pass@3');
-    await expect.poll(() => reqs.length).toBeGreaterThanOrEqual(1);
+    // C023: a finished run opens on its summary; only another metric or threshold asks the server
     const base = reqs.length;
-    const first = reqs.at(-1)!;
     // metric select
-    const current = first.searchParams.get('metric');
+    const current = (await panel.getByRole('button', { name: /Metric/ }).innerText()).trim();
     await panel.getByRole('button', { name: /Metric/ }).click();
     const other = current === 'quality' ? 'accuracy' : 'quality';
     await page.getByRole('option', { name: other }).click();
     await expect.poll(() => reqs.length).toBeGreaterThan(base);
     expect(reqs.at(-1)!.searchParams.get('metric')).toBe(other);
-    // slider: keyboard step triggers a request with a new threshold
+    // slider (inline in the strip, no popover): keyboard step triggers a request with a new threshold
     const n = reqs.length;
-    await panel.getByTestId('pass-threshold-chip').click();
-    const thumb = page.getByRole('slider', { name: 'Pass threshold' });
+    const thumb = panel.getByRole('slider', { name: /^Pass if [≥≤]/ });
     const t0 = Number(await thumb.inputValue());
     await thumb.focus();
     await page.keyboard.press('ArrowRight');
@@ -116,7 +105,7 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await expect(passBoxes).toHaveCount(3);
     const parent = page.getByRole('checkbox', { name: `Select ${NAME}`, exact: true });
     await clickBox(passBoxes.nth(0));
-    await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
     await expect.poll(() => parent.evaluate((el) => (el as HTMLInputElement).indeterminate)).toBe(true);
     const stored = await page.evaluate(
       (slug) => JSON.parse(sessionStorage.getItem(`qym:runs-selection:${slug}`) ?? 'null'),
@@ -124,15 +113,15 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     );
     expect(stored.selected).toEqual([expect.stringMatching(/::pass1$/)]);
     await clickBox(passBoxes.nth(1));
-    await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('2 runs selected');
     // ticking the parent of an expanded repeat run ticks all of its passes (3 executions)
     await clickBox(page.getByRole('checkbox', { name: `Select ${NAME}`, exact: true }));
-    await expect(page.getByTestId('selection-bar')).toContainText('3 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('3 runs selected');
     await expect(passBoxes.nth(2)).toBeChecked();
     await expect(parent).toBeChecked();
     // and clears them all again
     await clickBox(parent);
-    await expect(page.getByTestId('selection-bar')).toContainText('0 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('0 runs selected');
     await expect(passBoxes.nth(0)).not.toBeChecked();
   });
 
@@ -167,7 +156,7 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       s.project.slug,
     );
     expect(stored.selected).toEqual([expect.stringMatching(/::pass1$/)]);
-    await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('1 run selected');
     await clickBox(passBoxes.nth(1));
     await page.getByTestId('selection-bar').getByRole('button', { name: 'Compare' }).click();
     await expect(page).toHaveURL(/\/compare\?/);
@@ -187,7 +176,8 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await expect(panel.getByRole('columnheader', { name: 'Date' })).toBeVisible();
     await expect(rows.first().locator('time')).toBeVisible();
     await expect(panel.locator('[aria-label="Group metrics"]').first()).toContainText('Avg@3');
-    await expect(panel.getByText(/^Pass if [≥≤] \d+%$/)).toBeVisible();
+    // the threshold is one inline slider: label, track, the value once
+    await expect(panel.getByTestId('pass-threshold')).toHaveText(/^Pass if [≥≤]\s*\d+%$/);
     const analyze = rows.nth(1).getByRole('link', { name: /^Analyze pass 2/ });
     await expect(analyze).toHaveAttribute('href', /\/analyzer\?.*pass=2/);
     // the pass row opens that pass of the run
@@ -226,6 +216,6 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(3);
     await openPassMenu(panel, page, 1);
     await expect(page.getByRole('menuitem', { name: /Open pass 1/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Delete pass/ })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: /Delete pass/ })).toHaveCount(0);
   });
 });

@@ -14,7 +14,13 @@ describe('runtime bootstrap', () => {
     delete window.__QYM_ROOT_PATH__;
   });
   it('defaults to the dev proxy shape', () => {
-    expect(bootstrap()).toEqual({ rootPath: '', authMode: 'none', sessionAuth: false, environment: 'dev' });
+    expect(bootstrap()).toEqual({
+      rootPath: '',
+      authMode: 'none',
+      sessionAuth: false,
+      environment: 'dev',
+      deletedRunGraceDays: null,
+    });
     expect(appBase()).toBe('/');
     expect(appUrl('/projects/x')).toBe('/projects/x');
     expect(appUrl('/')).toBe('/');

@@ -53,7 +53,11 @@ services:
       QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
       QYM_DELETED_RUN_GRACE_DAYS: ${QYM_DELETED_RUN_GRACE_DAYS:-30}
       QYM_ADMIN_BOOTSTRAP_TOKEN: ${QYM_ADMIN_BOOTSTRAP_TOKEN}
-      QYM_AUTH_MODE: ${QYM_AUTH_MODE}
+      # Unset gives proxy_headers, which needs QYM_PROXY_SHARED_SECRET (the
+      # value the proxy sends in X-Qym-Proxy-Secret) outside dev/test/local.
+      # QYM_AUTH_MODE=none starts only with QYM_ENVIRONMENT=dev, test or local.
+      QYM_AUTH_MODE: ${QYM_AUTH_MODE:-proxy_headers}
+      QYM_PROXY_SHARED_SECRET: ${QYM_PROXY_SHARED_SECRET:-}
       QYM_AUTH_SESSION_SECRET: ${QYM_AUTH_SESSION_SECRET}
       QYM_AUTH_LOCAL_ENABLED: ${QYM_AUTH_LOCAL_ENABLED}
       QYM_AUTH_LOCAL_SIGNUP: ${QYM_AUTH_LOCAL_SIGNUP:-false}

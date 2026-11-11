@@ -26,6 +26,23 @@ const ANALYSIS_KEYS = [
   'analysis_warning',
 ];
 
+/**
+ * A pass attempt's trace stats with the keys the server left out put back (C084): a finished run's index drops the
+ * zero, false and empty values of attempt stats, so a missing key takes the empty form of the row-level value.
+ */
+export function fullTraceStats<T extends object>(stats: T, template: object | null | undefined): T {
+  if (!template) return stats;
+  const out = { ...stats } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(template)) {
+    if (key in out) continue;
+    if (typeof value === 'number') out[key] = 0;
+    else if (typeof value === 'boolean') out[key] = false;
+    else if (Array.isArray(value)) out[key] = [];
+    else if (value && typeof value === 'object') out[key] = {};
+  }
+  return out as T;
+}
+
 export function scopedPassAttempt(row: Row, passNumber: number): PassAttempt | null {
   const attempts = Array.isArray(row.pass_attempts) ? row.pass_attempts : [];
   const explicit = attempts.find((candidate) => candidate && Number(candidate.pass_number) === passNumber);
@@ -116,7 +133,7 @@ export function scopeRowToPass(row: Row, metricNames: string[], passNumber: numb
     retry_count: Number(att?.retry_count ?? 0),
     trace_id: att?.trace_id ?? '',
     trace_url: att?.trace_url ?? '',
-    trace_stats: att?.trace_stats ?? null,
+    trace_stats: att?.trace_stats ? fullTraceStats(att.trace_stats, row.trace_stats) : null,
     _pass_has_attempt: !!att,
     __pass_scope: true,
   };

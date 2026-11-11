@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { projectPath } from '@/app/routes';
 import { useState } from 'react';
 import {
   useAnalysisConfig,
@@ -13,19 +15,19 @@ import {
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
-  Badge,
   Button,
   Checkbox,
   ConfirmDialog,
   DropdownMenu,
   EmptyState,
   ErrorState,
-  Icon,
   IconButton,
   SectionHeader,
   Skeleton,
   Text,
   useToast,
+  Flag,
+  StatusMark,
 } from '@/ui';
 import { formatDateParts } from '@/lib/format';
 import { useDraftRules } from '../useDraftRules';
@@ -81,14 +83,9 @@ export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canMana
 }
 
 function stateBadge(v: RuleVersion, productionId: string | null) {
-  if (v.id === productionId || v.is_active)
-    return (
-      <Badge tone="success" dot>
-        Live
-      </Badge>
-    );
-  if (v.status === 'draft') return <Badge tone="warning">Draft</Badge>;
-  return <Badge tone="neutral">Published</Badge>;
+  if (v.id === productionId || v.is_active) return <StatusMark tone="success" shape="full" label="Live" />;
+  if (v.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
+  return <StatusMark tone="neutral" shape="full" label="Published" />;
 }
 
 function RulesView({
@@ -143,12 +140,24 @@ function RulesView({
   });
 
   if (!open) {
+    // C126: a project with no version yet can start one here (managers)
     return (
       <div className={s.rules}>
         <EmptyState
           compact
-          title="No rule versions yet"
-          body="A draft appears here once the project has rules."
+          title="No rules yet"
+          body="Create a draft to add rules by hand, or to generate them from project documents and approved examples."
+          action={
+            canManage ? (
+              <Button
+                variant="primary"
+                loading={createDraft.isPending}
+                onPress={() => void onCreateDraft(null)}
+              >
+                Create draft
+              </Button>
+            ) : undefined
+          }
         />
       </div>
     );
@@ -160,32 +169,33 @@ function RulesView({
   const selectedExamples = examples.ids.length;
   const docsUsed = includeDocs ? enabledDocs : 0;
   const usable = docsUsed > 0 || selectedExamples > 0;
+  // C249: say what blocks generation in the project's own numbers
   let sourceMessage = '';
   if (!usable) {
     if (enabledDocs === 0 && approved === 0)
       sourceMessage =
-        'Rules cannot be generated yet. This project has neither an enabled project document nor an approved example. Add and enable a project document, or approve an example, then try again.';
-    else if (includeDocs && enabledDocs === 0)
-      sourceMessage =
-        'Rules cannot be generated yet. No enabled project documents are available. Add an approved example, or add and enable a project document, then try again.';
-    else if (approved > 0 && selectedExamples === 0)
-      sourceMessage =
-        'Add at least one approved example before generating rules, or turn on Project documents.';
-    else
-      sourceMessage =
-        'Rules cannot be generated yet. No approved examples are available, and Project documents are turned off.';
+        'Nothing to generate from yet: enable a project document in Documents, or approve a diagnosis in Reviews.';
+    else if (approved > 0 && enabledDocs > 0)
+      sourceMessage = `Pick some of the ${approved} approved ${approved === 1 ? 'example' : 'examples'}, or turn on documents, to generate rules.`;
+    else if (approved > 0)
+      sourceMessage = `Pick some of the ${approved} approved ${approved === 1 ? 'example' : 'examples'} to generate rules. No project document is enabled.`;
+    else sourceMessage = 'Turn on documents to generate rules. No diagnosis is approved yet.';
   }
 
-  async function onCreateDraft(from: RuleVersion) {
+  async function onCreateDraft(from: RuleVersion | null) {
     try {
-      const res = await createDraft.mutateAsync(from.id);
+      const res = await createDraft.mutateAsync(from?.id);
       setOpenId(res.version.id);
-      toast.show(`Draft v${res.version.version} created from v${from.version}`, { tone: 'success' });
-    } catch (e) {
       toast.show(
-        e instanceof ApiError ? e.detail || 'Could not create a draft' : 'Could not create a draft',
-        { tone: 'error' },
+        from
+          ? `Draft v${res.version.version} created from v${from.version}`
+          : `Draft v${res.version.version} created`,
+        { tone: 'success' },
       );
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || 'Couldn’t create a draft' : 'Couldn’t create a draft', {
+        tone: 'error',
+      });
     }
   }
 
@@ -257,8 +267,8 @@ function RulesView({
                 items={[
                   ...(canManage ? [{ id: 'draft', label: 'Create draft from this version' }] : []),
                   { id: 'download', label: 'Download JSON' },
-                  { id: 'compare', label: 'Compare with…' },
-                  ...(canManage ? [{ id: 'merge', label: 'Merge with…' }] : []),
+                  { id: 'compare', label: 'Compare versions' },
+                  ...(canManage ? [{ id: 'merge', label: 'Merge versions' }] : []),
                   ...(data.can_delete && v.id !== productionId && !v.is_active
                     ? [
                         {
@@ -291,21 +301,24 @@ function RulesView({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not promote this version'
-                : 'Could not promote this version',
+                ? e.detail || 'Couldn’t make this version live'
+                : 'Couldn’t make this version live',
               { tone: 'error' },
             );
           }
         }}
         promoting={promote.isPending}
-        onCreateDraft={() => void onCreateDraft(open)}
         sources={
           <div className={s.sources}>
             <Text variant="md" weight={600}>
               Rule sources
             </Text>
             <div className={s.sourceRow}>
-              <Checkbox isSelected={includeDocs} onChange={setIncludeDocs} isDisabled={!canManage}>
+              <Checkbox
+                isSelected={includeDocs && enabledDocs > 0}
+                onChange={setIncludeDocs}
+                isDisabled={!canManage || enabledDocs === 0}
+              >
                 {`Add documents (${enabledDocs} enabled)`}
               </Checkbox>
               <Button size="sm" isDisabled={!canManage || approved === 0} onPress={() => setPickerOpen(true)}>
@@ -344,7 +357,8 @@ function RulesView({
             ) : null}
             {config.llm_configured ? null : (
               <Text variant="sm" tone="muted" as="p">
-                Add an LLM connection in project settings to generate rules.
+                Add an LLM connection to generate rules:{' '}
+                <Link to={`${projectPath(scope.slug, 'settings')}?tab=llm`}>open LLM connections</Link>.
               </Text>
             )}
           </div>
@@ -353,7 +367,7 @@ function RulesView({
           generator.job ? (
             <div className={s.genCard} role="status" aria-label="Rule generation progress">
               <div className={s.genHead}>
-                <Badge
+                <StatusMark
                   tone={
                     generator.job.status === 'completed'
                       ? 'success'
@@ -361,14 +375,21 @@ function RulesView({
                         ? 'danger'
                         : 'info'
                   }
-                  dot
-                >
-                  {generator.job.status === 'running' ||
-                  generator.job.status === 'queued' ||
-                  generator.job.status === 'cancelling'
-                    ? String(generator.job.progress.phase)
-                    : generator.job.status}
-                </Badge>
+                  shape={
+                    generator.job.status === 'completed'
+                      ? 'full'
+                      : generator.job.status === 'failed'
+                        ? 'cross'
+                        : 'orbit'
+                  }
+                  label={
+                    generator.job.status === 'running' ||
+                    generator.job.status === 'queued' ||
+                    generator.job.status === 'cancelling'
+                      ? String(generator.job.progress.phase)
+                      : generator.job.status
+                  }
+                />
                 <Text variant="base" tone="secondary">
                   Rule generation progress
                 </Text>
@@ -465,7 +486,7 @@ function RulesView({
         title="Delete version?"
         description={
           deleting
-            ? `v${deleting.version} is removed from the history. A version that analyses still reference cannot be deleted.`
+            ? `v${deleting.version} is removed from the history. A platform admin can restore it.`
             : undefined
         }
         tone="danger"
@@ -479,8 +500,8 @@ function RulesView({
           } catch (e) {
             toast.show(
               e instanceof ApiError
-                ? e.detail || 'Could not delete this version'
-                : 'Could not delete this version',
+                ? e.detail || 'Couldn’t delete this version'
+                : 'Couldn’t delete this version',
               { tone: 'error' },
             );
           }
@@ -508,7 +529,6 @@ function VersionWorkspace({
   onPublish,
   onPromote,
   promoting,
-  onCreateDraft,
   sources,
   generation,
 }: {
@@ -520,7 +540,6 @@ function VersionWorkspace({
   onPublish: () => void;
   onPromote: () => void;
   promoting: boolean;
-  onCreateDraft: () => void;
   sources: React.ReactNode;
   generation: React.ReactNode;
 }) {
@@ -533,14 +552,10 @@ function VersionWorkspace({
         title={`Rules in v${version.version}`}
         aside={
           <div className={s.sourceRow}>
-            <Badge tone={editable ? 'warning' : 'neutral'}>
+            <Flag tone={editable ? 'warning' : 'neutral'} icon={editable ? 'edit' : 'lock'}>
               {editable ? 'Editable draft' : version.status === 'draft' ? 'Draft (read-only)' : 'Read-only'}
-            </Badge>
-            {isProduction ? (
-              <Badge tone="success" dot>
-                Live
-              </Badge>
-            ) : null}
+            </Flag>
+            {isProduction ? <StatusMark tone="success" shape="full" label="Live" /> : null}
             {editable ? (
               <Button
                 variant="accent"
@@ -552,12 +567,7 @@ function VersionWorkspace({
               </Button>
             ) : version.status === 'published' && !isProduction && canPromote ? (
               <Button variant="accent" size="sm" loading={promoting} onPress={onPromote}>
-                Promote to production
-              </Button>
-            ) : null}
-            {!editable && canManage ? (
-              <Button size="sm" icon={<Icon name="edit" size={12} />} onPress={onCreateDraft}>
-                Create draft to edit
+                Make live
               </Button>
             ) : null}
           </div>

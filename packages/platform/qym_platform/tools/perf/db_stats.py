@@ -103,6 +103,23 @@ def _fmt(n: Optional[float]) -> str:
     return f"{n:.1f} TB"
 
 
+def outbox_stats(conn, tables: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The dashboard outbox's size, rows and oldest row age (C074): a growing outbox delays new results.
+
+    Rows come from the table statistics, not a count, so a bloated table is not scanned; the oldest row is
+    one index read on ``created_at``.
+    """
+    row = next(t for t in tables if t["table"] == "dashboard_change_events")
+    age = conn.execute(
+        text("SELECT EXTRACT(EPOCH FROM (now() AT TIME ZONE 'utc') - MIN(created_at)) FROM dashboard_change_events")
+    ).scalar()
+    return {
+        "total_bytes": row["total_bytes"],
+        "rows": row["live_rows"],
+        "oldest_age_seconds": None if age is None else round(float(age)),
+    }
+
+
 def collect(engine: Engine, *, top: int = 15, sample_pct: float = 5.0) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     with engine.connect() as conn:
@@ -116,6 +133,8 @@ def collect(engine: Engine, *, top: int = 15, sample_pct: float = 5.0) -> Dict[s
         out["tables"] = [dict(r._mapping) for r in conn.execute(_TABLE_SIZES)]
         out["indexes"] = [dict(r._mapping) for r in conn.execute(_INDEX_SIZES, {"top": top})]
         tables = {t["table"] for t in out["tables"]}
+        if "dashboard_change_events" in tables:
+            out["outbox"] = outbox_stats(conn, out["tables"])
         if "run_events" in tables:
             out["run_events_by_type"] = [dict(r._mapping) for r in conn.execute(_EVENT_TYPES)]
         if "spans" in tables:

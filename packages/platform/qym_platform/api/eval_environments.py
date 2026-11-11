@@ -44,7 +44,9 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.llm_endpoint_security import (
+    KEY_FOR_NEW_HOST_MESSAGE,
     LlmEndpointValidationError,
+    key_host_changed,
     validate_llm_base_url,
 )
 from qym_platform.permissions import require_project_writable
@@ -146,7 +148,10 @@ class EnvironmentCreateRequest(BaseModel):
 
 
 class EnvironmentUpdateRequest(BaseModel):
-    """Omitted fields keep their value. A blank ``api_key`` keeps the stored key."""
+    """Omitted fields keep their value. A blank ``api_key`` keeps the stored key.
+
+    A ``base_url`` on another scheme, host or port needs a new ``api_key`` (400).
+    """
 
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=5000)
@@ -860,6 +865,22 @@ def update_environment(
     env = _get_environment(db, project_id, env_id)
     fields = req.model_fields_set
 
+    api_key = (req.api_key or "").strip()
+    key_changed = bool(api_key) and api_key != _KEEP_KEY
+    new_base_url = (
+        normalize_environment_url(req.base_url, settings)
+        if req.base_url is not None
+        else env.base_url
+    )
+    # The stored key is bound to the host it was entered for (C004): a new scheme,
+    # host or port needs the key again, so the old key never reaches the new host.
+    if (
+        not key_changed
+        and env.api_key_encrypted
+        and key_host_changed(env.base_url, new_base_url)
+    ):
+        raise HTTPException(status_code=400, detail=KEY_FOR_NEW_HOST_MESSAGE)
+
     if req.name is not None:
         name = req.name.strip()
         if not name:
@@ -869,11 +890,8 @@ def update_environment(
     if req.description is not None:
         env.description = req.description.strip()
 
-    url_changed = False
-    if req.base_url is not None:
-        base_url = normalize_environment_url(req.base_url, settings)
-        url_changed = base_url != env.base_url
-        env.base_url = base_url
+    url_changed = new_base_url != env.base_url
+    env.base_url = new_base_url
 
     reactivating = req.is_active is True and not env.is_active
     if req.is_active is not None:
@@ -891,8 +909,6 @@ def update_environment(
                 )
             raise
 
-    api_key = (req.api_key or "").strip()
-    key_changed = bool(api_key) and api_key != _KEEP_KEY
     if key_changed:
         _store_key(env, api_key, settings)
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TemporaryModelForm } from '@/features/environments/TemporaryModelForm';
-import { Button, SegmentedControl, Select, Tag, Card } from '@/ui';
+import { Button, SegmentedControl, Select, Tag, Card, Icon } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import {
   bindingChanged,
@@ -224,8 +224,12 @@ export function SlotCard({ slot }: { slot: UnionSlot }) {
               ) : null}
               {launchMode && mode !== 'global' && !formOpen ? (
                 <div className={styles.row}>
-                  <Button variant="neutral" onPress={() => bind(startModelSweep(binding))}>
-                    + models
+                  <Button
+                    variant="neutral"
+                    icon={<Icon name="plus" size={12} />}
+                    onPress={() => bind(startModelSweep(binding))}
+                  >
+                    Add models
                   </Button>
                 </div>
               ) : null}

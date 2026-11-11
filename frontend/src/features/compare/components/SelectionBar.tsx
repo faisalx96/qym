@@ -1,7 +1,7 @@
 /** The cohort banner with inline-editable labels, and the metric / baseline / pass controls. */
 import { useState } from 'react';
 import { IconButton, Select, SegmentedControl, Tag, TextField } from '@/ui';
-import { useCompare, letterOf } from '../CompareContext';
+import { useCompare } from '../CompareContext';
 import { columnName } from '../lib/columnName';
 import styles from './SelectionBar.module.css';
 
@@ -78,11 +78,29 @@ export function PassToggle() {
   );
 }
 
-/** The analysis metric: segmented tabs up to four metrics, a select beyond (round 8, C-ov-1). */
-export function MetricTabs() {
+/**
+ * The analysis metric: segmented tabs up to four metrics, a select beyond (round 8, C-ov-1). `compact` (the sticky
+ * nav, K6) is always a labelled select.
+ */
+export function MetricTabs({ compact }: { compact?: boolean } = {}) {
   const { model, metric, c } = useCompare();
   if (model.metrics.length < 2) return null;
   const set = (k: string) => c.setView({ metric: k, filters: { ...c.view.filters, baseline: null } });
+  if (compact)
+    return (
+      <span className={styles.inlineLabel} data-part="metric-control">
+        <span aria-hidden="true">Metric</span>
+        <Select
+          label="Metric"
+          hideLabel
+          value={metric}
+          onChange={(k) => k && set(String(k))}
+          items={model.metrics.map((m) => ({ key: m, label: m }))}
+          searchable="auto"
+          width={150}
+        />
+      </span>
+    );
   if (model.metrics.length > 4)
     return (
       <Select
@@ -109,14 +127,15 @@ const RESET_KEY = '__reset-baseline__';
 
 /** Which column every change is measured against; also resets thresholds. Lives in the Averages head (C-avg-1). */
 export function BaselineSelect() {
-  const { columns, baseline, model, c } = useCompare();
-  if (columns.length < 2) return null;
+  const { columns, baseline, model, c, letter } = useCompare();
+  // C058: runs of different tasks have no baseline
+  if (columns.length < 2 || model.unpaired) return null;
   const dirty = !!c.view.baseline || Object.keys(c.view.thresholds).length > 0;
   const items = [
     ...columns.map((col) => {
       const idx = col.runIdxs[0] ?? 0;
       const name = columnName(model, col);
-      return { key: col.key, label: `${letterOf(idx)}  ${name}` };
+      return { key: col.key, label: `${letter(idx)}  ${name}` };
     }),
     ...(dirty ? [{ key: RESET_KEY, label: 'Reset baseline and thresholds' }] : []),
   ];

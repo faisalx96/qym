@@ -9,9 +9,8 @@ import {
   type RuleItem,
   type RuleVersion,
 } from '@/api/analysis';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import {
-  Badge,
   Button,
   Dialog,
   ErrorState,
@@ -22,6 +21,7 @@ import {
   Textarea,
   TextField,
   useToast,
+  Tag,
 } from '@/ui';
 import s from './rules.module.css';
 
@@ -57,7 +57,7 @@ export function PublishDialog({
       });
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail || e.message : 'Publishing failed.');
+      setError(actionErrorMessage('publish the version', e));
     }
   }
 
@@ -161,10 +161,10 @@ export function CompareDialog({
       ) : data ? (
         <>
           <div className={s.sourceRow} data-testid="compare-summary">
-            <Badge tone="success">{`${data.summary.added} added`}</Badge>
-            <Badge tone="danger">{`${data.summary.removed} removed`}</Badge>
-            <Badge tone="warning">{`${data.summary.changed} changed`}</Badge>
-            <Badge tone="neutral">{`${data.summary.unchanged} unchanged`}</Badge>
+            <Tag tone="success">{`${data.summary.added} added`}</Tag>
+            <Tag tone="danger">{`${data.summary.removed} removed`}</Tag>
+            <Tag tone="warning">{`${data.summary.changed} changed`}</Tag>
+            <Tag>{`${data.summary.unchanged} unchanged`}</Tag>
           </div>
           <ul className={s.diffList}>
             {data.changed_rules.map((r) => (
@@ -238,7 +238,7 @@ export function MergeDialog({
       setChoices({});
     } catch (e) {
       setPreview(null);
-      setError(e instanceof ApiError ? e.detail || e.message : 'The merge preview failed.');
+      setError(actionErrorMessage('preview the merge', e));
     }
   }
 
@@ -266,7 +266,7 @@ export function MergeDialog({
       onMerged(res.version);
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail || e.message : 'The merge failed.');
+      setError(actionErrorMessage('merge the versions', e));
     }
   }
 
@@ -314,10 +314,10 @@ export function MergeDialog({
       {preview ? (
         <div className={s.main} data-testid="merge-preview">
           <div className={s.sourceRow}>
-            <Badge tone="success">{`${preview.summary.added} added`}</Badge>
-            <Badge tone="danger">{`${preview.summary.removed} removed`}</Badge>
-            <Badge tone="warning">{`${preview.summary.changed} changed`}</Badge>
-            <Badge tone={conflicts.length ? 'danger' : 'neutral'}>{`${conflicts.length} conflicts`}</Badge>
+            <Tag tone="success">{`${preview.summary.added} added`}</Tag>
+            <Tag tone="danger">{`${preview.summary.removed} removed`}</Tag>
+            <Tag tone="warning">{`${preview.summary.changed} changed`}</Tag>
+            <Tag tone={conflicts.length ? 'danger' : undefined}>{`${conflicts.length} conflicts`}</Tag>
           </div>
           {conflicts.map((c) => (
             <fieldset key={c.key} className={s.conflict}>

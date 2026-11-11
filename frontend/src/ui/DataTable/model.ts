@@ -16,15 +16,22 @@ export const MONO_TYPES: ReadonlySet<CellType> = new Set(['id', 'number', 'score
 export const DEFAULT_MIN_WIDTH = 44;
 export const FLEX_MIN_WIDTH = 120;
 export const SELECT_COL_WIDTH = 40;
+/** Content fit: cell padding plus room for the header's sort glyph, added to a measured content width. */
+export const FIT_PAD = 28;
+/** Content fit: no column asks for more than this before the spare width is shared (long text ellipsises). */
+export const FIT_MAX_WIDTH = 480;
+/** Content fit: cells that fill their column (bars, deltas) have no content width, so their declared width counts. */
+export const DECLARED_WIDTH_TYPES: ReadonlySet<CellType> = new Set(['score', 'delta', 'actions']);
 
 export function sortKeyOf<R>(col: Column<R>): string | undefined {
   if (typeof col.sort === 'string') return col.sort;
   return col.sort?.key;
 }
 
-export function alignOf<R>(col: Column<R>): 'start' | 'end' {
+export function alignOf<R>(col: Column<R>): 'start' | 'center' | 'end' {
   if (col.align) return col.align;
-  return col.type && NUMERIC_TYPES.has(col.type) ? 'end' : 'start';
+  // C236: numeric columns are centred, header and values, in every table.
+  return col.type && NUMERIC_TYPES.has(col.type) ? 'center' : 'start';
 }
 
 export function isMono<R>(col: Column<R>): boolean {
@@ -331,4 +338,40 @@ export function headerMinWidth<R>(col: Column<R>, sortable: boolean): number {
   const label = typeof header === 'string' || typeof header === 'number' ? String(header).length : 0;
   if (!label) return DEFAULT_MIN_WIDTH;
   return Math.ceil(label * 8.6) + 16 + (sortable ? 16 : 0);
+}
+
+/**
+ * Content fit: each column gets its wanted (content) width plus a share of the spare width in proportion to it, the
+ * way an auto table layout spreads it. When the wanted widths are a little too wide, the flexible columns (`min` set)
+ * give width back down to their `min`, in proportion to what each can give. Widths are whole pixels and add up to
+ * `available` exactly (the rounding rest goes to the widest column). When even that does not fit, every column keeps
+ * its content width and the table scrolls sideways: a declared width narrower than the content would cut it with an
+ * ellipsis (owner review round 10). Null only when there is nothing to fit.
+ */
+export function fitColumnWidths(
+  want: { id: string; w: number; min?: number }[],
+  available: number,
+): Record<string, number> | null {
+  const sum = want.reduce((n, x) => n + x.w, 0);
+  if (!want.length || sum <= 0) return null;
+  let cols = want;
+  if (sum > available) {
+    const deficit = sum - available;
+    const give = want.reduce((n, x) => n + (x.min !== undefined ? Math.max(0, x.w - x.min) : 0), 0);
+    if (give < deficit) return Object.fromEntries(want.map((x) => [x.id, Math.ceil(x.w)]));
+    cols = want.map((x) =>
+      x.min !== undefined && x.w > x.min ? { ...x, w: x.w - (deficit * (x.w - x.min)) / give } : x,
+    );
+  }
+  const total = cols.reduce((n, x) => n + x.w, 0);
+  const spare = Math.max(0, available - total);
+  const out: Record<string, number> = {};
+  let used = 0;
+  for (const x of cols) {
+    out[x.id] = Math.floor(x.w + (spare * x.w) / total);
+    used += out[x.id]!;
+  }
+  const widest = cols.reduce((a, b) => (b.w > a.w ? b : a));
+  out[widest.id]! += Math.round(available - used);
+  return out;
 }

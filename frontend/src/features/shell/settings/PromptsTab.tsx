@@ -8,21 +8,44 @@ import {
   ConfirmDialog,
   Dialog,
   ErrorState,
+  Icon,
   Skeleton,
-  Stack,
   Tag,
   Text,
   Textarea,
   useToast,
+  type IconName,
 } from '@/ui';
+import { wordDiff as boundedWordDiff, type DiffOp } from '@/features/datasets/lib/wordDiff';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
+import { SaveFooter, SettingsCard } from './SettingsCard';
 
-const LABELS: Record<string, string> = {
-  llm_analyzer: 'LLM analyzer',
-  aggregator: 'Aggregator',
-  rules_writer: 'Rules writer',
+/** Each prompt type: its name, one line on what it does, and an icon (the old settings page's list, round 10). */
+const PROMPT_TYPES: Record<string, { label: string; description: string; icon: IconName }> = {
+  llm_analyzer: {
+    label: 'LLM analyzer',
+    description: 'Diagnoses why an item got its result for a metric.',
+    icon: 'sparkles',
+  },
+  aggregator: {
+    label: 'Aggregator',
+    description: 'Merges root-cause labels that name the same diagnosis.',
+    icon: 'chain',
+  },
+  rules_writer: {
+    label: 'Rules writer',
+    description: 'Writes reusable diagnostic rules from documents and approved examples.',
+    icon: 'book',
+  },
 };
+const labelOf = (k: string) => PROMPT_TYPES[k]?.label ?? k;
+
+/** The editor grows with the prompt, so most prompts show in full with no inner scroll (round 11: "expand"). */
+function editorRows(text: string): number {
+  const lines = text.split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 110)), 0);
+  return Math.min(48, Math.max(16, lines + 1));
+}
 
 function relative(iso: string | null | undefined, now: number): string {
   if (!iso) return 'never';
@@ -35,37 +58,18 @@ function relative(iso: string | null | undefined, now: number): string {
   return `${Math.round(h / 24)} d ago`;
 }
 
-/** Word-level LCS diff, capped so huge prompts stay cheap (project_settings.html 24 000 cells). */
-export function wordDiff(
-  a: string,
-  b: string,
-  cap = 24_000,
-): { kind: 'same' | 'add' | 'del'; text: string }[] {
-  const x = a.split(/(\s+)/);
-  const y = b.split(/(\s+)/);
-  if (x.length * y.length > cap)
-    return [
+/**
+ * Word diff of a prompt against its shipped default: the shared bounded diff, which trims the common leading and
+ * trailing words first, so one changed word in a 5,000-character prompt marks one word. The old LCS gave up past
+ * 24 000 cells and marked the whole prompt deleted and re-added (round 11). Past the shared budgets, both whole texts.
+ */
+export function wordDiff(a: string, b: string): DiffOp[] {
+  return (
+    boundedWordDiff(a, b) ?? [
       { kind: 'del', text: a },
       { kind: 'add', text: b },
-    ];
-  const dp: number[][] = Array.from({ length: x.length + 1 }, () => new Array<number>(y.length + 1).fill(0));
-  for (let i = x.length - 1; i >= 0; i--)
-    for (let j = y.length - 1; j >= 0; j--)
-      dp[i]![j] = x[i] === y[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
-  const out: { kind: 'same' | 'add' | 'del'; text: string }[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < x.length && j < y.length) {
-    if (x[i] === y[j]) {
-      out.push({ kind: 'same', text: x[i]! });
-      i++;
-      j++;
-    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) out.push({ kind: 'del', text: x[i++]! });
-    else out.push({ kind: 'add', text: y[j++]! });
-  }
-  while (i < x.length) out.push({ kind: 'del', text: x[i++]! });
-  while (j < y.length) out.push({ kind: 'add', text: y[j++]! });
-  return out;
+    ]
+  );
 }
 
 export function PromptsTab() {
@@ -130,124 +134,170 @@ export function PromptsTab() {
       });
       toast.show('Prompt saved', { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', { tone: 'error' });
+      toast.show(e instanceof ApiError ? e.detail || 'Couldn’t save' : 'Couldn’t save', { tone: 'error' });
     }
   }
 
   return (
-    <div className={styles.promptLayout} data-prompts>
-      <div className={styles.promptRail} role="tablist" aria-label="Prompts" aria-orientation="vertical">
-        {keys.map((k, idx) => (
-          <button
-            key={k}
-            type="button"
-            role="tab"
-            aria-selected={k === key}
-            aria-controls={`prompt-panel-${k}`}
-            tabIndex={k === key ? 0 : -1}
-            className={styles.promptTab}
-            onClick={() => setSelected(k)}
-            onKeyDown={(e) => {
-              const move = (d: number) => setSelected(keys[(idx + d + keys.length) % keys.length]!);
-              if (e.key === 'ArrowDown' || e.key === 'ArrowRight') move(1);
-              else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') move(-1);
-              else if (e.key === 'Home') setSelected(keys[0]!);
-              else if (e.key === 'End') setSelected(keys[keys.length - 1]!);
-              else return;
-              e.preventDefault();
-            }}
-          >
-            <span>{LABELS[k] ?? k}</span>
-            {(prompts.data.prompts[k] ?? '') !== (prompts.data.defaults[k] ?? '') ? (
-              <Tag kind="accent">custom</Tag>
-            ) : (
-              <Tag>default</Tag>
-            )}
-          </button>
-        ))}
-      </div>
-      <Stack gap="md" id={`prompt-panel-${key}`} role="tabpanel" aria-label={LABELS[key] ?? key}>
-        <Textarea
-          label={`${LABELS[key] ?? key} prompt`}
-          value={draft}
-          onChange={(v) => setDrafts((d) => ({ ...d, [key]: v }))}
-          rows={14}
-          mono
-          className={styles.promptEditor}
-          isReadOnly={readOnly}
-        />
-        <div className={styles.promptMeta}>
-          <span>{draft.length.toLocaleString()} characters</span>
-          <span>edited {relative(prompts.data.updated_at, now)}</span>
-          {dirty ? <span className={styles.unsaved}>● Unsaved changes</span> : null}
-          {isCustom ? <Tag kind="accent">custom</Tag> : <Tag>default</Tag>}
+    <SettingsCard
+      title="AI prompts"
+      description="The instructions the analysis pipeline sends to the LLM. A change applies to new analysis, aggregation and rules-writer requests; saved results are not rerun."
+      data-prompts
+    >
+      <div className={styles.promptLayout}>
+        <div className={styles.promptRail} role="tablist" aria-label="Prompts" aria-orientation="vertical">
+          {keys.map((k, idx) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={k === key}
+              aria-controls={`prompt-panel-${k}`}
+              tabIndex={k === key ? 0 : -1}
+              className={styles.promptTab}
+              onClick={() => setSelected(k)}
+              onKeyDown={(e) => {
+                const move = (d: number) => setSelected(keys[(idx + d + keys.length) % keys.length]!);
+                if (e.key === 'ArrowDown' || e.key === 'ArrowRight') move(1);
+                else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') move(-1);
+                else if (e.key === 'Home') setSelected(keys[0]!);
+                else if (e.key === 'End') setSelected(keys[keys.length - 1]!);
+                else return;
+                e.preventDefault();
+              }}
+            >
+              <span className={styles.promptIcon} aria-hidden="true">
+                <Icon name={PROMPT_TYPES[k]?.icon ?? 'file'} />
+              </span>
+              <span className={styles.promptLabel}>{labelOf(k)}</span>
+              {/* on/off: only the exception shows. A customised prompt is configuration, so the tag is purple
+                  (meta); the shipped default has no tag (round 11) */}
+              <span className={styles.promptState}>
+                {(prompts.data.prompts[k] ?? '') !== (prompts.data.defaults[k] ?? '') ? (
+                  <Tag tone="meta">custom</Tag>
+                ) : null}
+              </span>
+              {PROMPT_TYPES[k] ? (
+                <small className={styles.promptDesc}>{PROMPT_TYPES[k].description}</small>
+              ) : null}
+            </button>
+          ))}
         </div>
-        {!readOnly ? (
-          <Stack direction="row" gap="sm">
-            <Button
-              variant="primary"
-              isDisabled={!dirty}
-              loading={save.isPending}
-              onPress={() => persist(draft)}
-            >
-              Save
-            </Button>
-            <Button
-              variant="neutral"
-              isDisabled={!dirty}
-              onPress={() => setDrafts((d) => ({ ...d, [key]: current }))}
-            >
-              Discard
-            </Button>
-            <Button variant="neutral" isDisabled={!isCustom && !dirty} onPress={() => setShowDiff(true)}>
-              View diff
-            </Button>
-            <Button variant="danger" isDisabled={!isCustom} onPress={() => setConfirmRestore(true)}>
-              Restore default
-            </Button>
-          </Stack>
-        ) : null}
-        <Dialog
-          open={showDiff}
-          onOpenChange={setShowDiff}
-          title={`${LABELS[key] ?? key}: changes vs shipped default`}
-          size="data"
+        <div
+          className={styles.promptPanel}
+          id={`prompt-panel-${key}`}
+          role="tabpanel"
+          aria-label={labelOf(key)}
         >
-          <Text variant="sm">Deleted words are red, added words are green.</Text>
-          <div className={styles.diff}>
-            {wordDiff(shipped, draft).map((part, i) =>
-              part.kind === 'same' ? (
-                <span key={i}>{part.text}</span>
-              ) : part.kind === 'add' ? (
-                <ins key={i}>{part.text}</ins>
-              ) : (
-                <del key={i}>{part.text}</del>
-              ),
-            )}
+          <div className={styles.cardHeader}>
+            <div>
+              <Text variant="md">{labelOf(key)}</Text>
+              {PROMPT_TYPES[key] ? <Text variant="sm">{PROMPT_TYPES[key].description}</Text> : null}
+            </div>
+            {!readOnly ? (
+              <div className={styles.cardAction}>
+                <Button
+                  variant="neutral"
+                  icon={<Icon name="diff" size={12} />}
+                  isDisabled={!isCustom && !dirty}
+                  onPress={() => setShowDiff(true)}
+                >
+                  View diff
+                </Button>
+                <Button
+                  variant="danger"
+                  icon={<Icon name="retry" size={12} />}
+                  isDisabled={!isCustom}
+                  onPress={() => setConfirmRestore(true)}
+                >
+                  Restore default
+                </Button>
+              </div>
+            ) : null}
           </div>
-        </Dialog>
-        <ConfirmDialog
-          open={blocker.state === 'blocked'}
-          onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
-          title="Discard unsaved changes?"
-          description="A prompt has edits that are not saved."
-          cancelLabel="Keep editing"
-          confirmLabel="Discard changes"
-          tone="danger"
-          onConfirm={() => {
-            if (blocker.state === 'blocked') blocker.proceed();
+          <Textarea
+            label={`${labelOf(key)} prompt`}
+            hideLabel
+            value={draft}
+            onChange={(v) => setDrafts((d) => ({ ...d, [key]: v }))}
+            rows={editorRows(draft)}
+            mono
+            spellCheck={false}
+            quietFocus
+            className={styles.promptEditor}
+            isReadOnly={readOnly}
+          />
+          <SaveFooter
+            dirty={dirty}
+            saving={save.isPending}
+            onSave={() => persist(draft)}
+            hideSave={readOnly}
+            meta={
+              <>
+                <span>{draft.length.toLocaleString('en-US')} characters</span>
+                <span>edited {relative(prompts.data.updated_at, now)}</span>
+              </>
+            }
+            secondary={
+              <Button
+                variant="neutral"
+                isDisabled={!dirty}
+                disabledReason="No changes to discard"
+                onPress={() => setDrafts((d) => ({ ...d, [key]: current }))}
+              >
+                Discard
+              </Button>
+            }
+          />
+        </div>
+      </div>
+      <Dialog
+        open={showDiff}
+        onOpenChange={setShowDiff}
+        title={`${labelOf(key)}: changes vs shipped default`}
+        size="data"
+      >
+        <Text variant="sm">Deleted words are red, added words are green.</Text>
+        <div
+          className={styles.diff}
+          ref={(el) => {
+            // open on the first change, not on the top of a long prompt
+            if (el)
+              requestAnimationFrame(() => el.querySelector('ins, del')?.scrollIntoView({ block: 'center' }));
           }}
-        />
-        <ConfirmDialog
-          open={confirmRestore}
-          onOpenChange={setConfirmRestore}
-          title="Restore the shipped default?"
-          tone="danger"
-          description="Your customised prompt is replaced by the default that ships with qym."
-          confirmLabel="Restore default"
-          onConfirm={() => persist(shipped)}
-        />
-      </Stack>
-    </div>
+        >
+          {wordDiff(shipped, draft).map((part, i) =>
+            part.kind === 'same' ? (
+              <span key={i}>{part.text}</span>
+            ) : part.kind === 'add' ? (
+              <ins key={i}>{part.text}</ins>
+            ) : (
+              <del key={i}>{part.text}</del>
+            ),
+          )}
+        </div>
+      </Dialog>
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
+        title="Discard unsaved changes?"
+        description="A prompt has edits that are not saved."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        tone="danger"
+        onConfirm={() => {
+          if (blocker.state === 'blocked') blocker.proceed();
+        }}
+      />
+      <ConfirmDialog
+        open={confirmRestore}
+        onOpenChange={setConfirmRestore}
+        title="Restore the shipped default?"
+        tone="danger"
+        description="Your customised prompt is replaced by the default that ships with qym."
+        confirmLabel="Restore default"
+        onConfirm={() => persist(shipped)}
+      />
+    </SettingsCard>
   );
 }

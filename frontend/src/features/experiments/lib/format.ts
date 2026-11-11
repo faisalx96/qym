@@ -1,5 +1,7 @@
 /** Small display helpers for experiments and jobs (pure, no React). */
 import type { BaseSource, Experiment, ExperimentJob } from '@/api/experiments';
+import { formatAgo, formatHeaderDate } from '@/lib/dates';
+import { formatPercentValue } from '@/lib/format';
 
 export function titleCase(status: string | null | undefined): string {
   const text = String(status ?? '')
@@ -8,22 +10,14 @@ export function titleCase(status: string | null | undefined): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** Freshness, then the day (lib/dates, C048). */
 export function relTime(value: string | null | undefined, now = Date.now()): string {
-  if (!value) return '—';
-  const stamp = Date.parse(value);
-  if (Number.isNaN(stamp)) return '—';
-  const seconds = Math.max(0, Math.floor((now - stamp) / 1000));
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
-  return new Date(stamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatAgo(value, now);
 }
 
+/** Header form (lib/dates, C048). */
 export function absTime(value: string | null | undefined): string {
-  if (!value) return '';
-  const stamp = new Date(value);
-  return Number.isNaN(stamp.getTime()) ? '' : stamp.toLocaleString();
+  return value ? formatHeaderDate(value) : '';
 }
 
 const BASE_LABELS: Record<string, string> = {
@@ -31,7 +25,7 @@ const BASE_LABELS: Record<string, string> = {
   best_run: 'Best run',
   saved: 'Saved preset',
   blank: 'Blank',
-  clone: 'Clone',
+  clone: 'Run again',
 };
 
 export function baseSourceLabel(base: BaseSource | null | undefined): string {
@@ -44,8 +38,10 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 /** Headline metric / tick value: 3 decimals, fewer digits for large numbers. */
+/** A metric value: a 0–1 score reads as a percent with one decimal, as ScoreValue shows it (C164); else the number. */
 export function formatMetric(value: unknown): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  if (value >= 0 && value <= 1) return formatPercentValue(value, 1);
   const abs = Math.abs(value);
   if (abs >= 1000) return value.toFixed(0);
   if (abs >= 100) return value.toFixed(1);
@@ -97,21 +93,37 @@ export function sweepSummary(job: ExperimentJob, labels: Record<string, string> 
 export interface JobTally {
   ok: number;
   failed: number;
+  /** Queued, blocked or running: every job that has not finished. */
   live: number;
   cancelled: number;
+  /** The part of `live` that is on the Evaluation Service (not queued or blocked here). */
+  running: number;
 }
 
 /** ok / failed / live / cancelled from the experiment's `job_counts`. */
 export function tallyJobCounts(counts: Experiment['job_counts'] | null | undefined): JobTally {
-  const tally: JobTally = { ok: 0, failed: 0, live: 0, cancelled: 0 };
+  const tally: JobTally = { ok: 0, failed: 0, live: 0, cancelled: 0, running: 0 };
   for (const [status, raw] of Object.entries(counts ?? {})) {
     const n = Number(raw) || 0;
     if (status === 'SUCCEEDED') tally.ok += n;
     else if (status === 'FAILED' || status === 'TIMED_OUT') tally.failed += n;
     else if (status === 'CANCELLED') tally.cancelled += n;
-    else tally.live += n;
+    else {
+      tally.live += n;
+      // queued and blocked jobs wait on the platform; the others are on the Evaluation Service
+      if (status !== 'QUEUED' && status !== 'BLOCKED') tally.running += n;
+    }
   }
   return tally;
+}
+
+/** "5/6 · 1 failed": succeeded of all jobs; the failed and cancelled parts only when they are not zero (C139). */
+export function jobsText(t: JobTally): string {
+  const total = t.ok + t.failed + t.cancelled + t.live;
+  const parts = [`${t.ok}/${total}`];
+  if (t.failed) parts.push(`${t.failed} failed`);
+  if (t.cancelled) parts.push(`${t.cancelled} cancelled`);
+  return parts.join(' · ');
 }
 
 /** The label of a versioning filter: the key exactly as the Evaluation Service reports it (round 10, C-3-10). */

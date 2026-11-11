@@ -1,12 +1,11 @@
 /**
  * Run hero (round 3 P6): three compact bands, everything about what was run visible without a click. Band 1: identity
- * and actions. Band 2: seven labelled facts. Band 3: versioning, config and metadata as chips, clamped to two lines
- * (three on a phone) with "+ N more". Nothing hides behind a chevron.
+ * (name, passes, status) and actions. Band 2: seven labelled facts. Band 3: versioning, config and metadata as chips,
+ * clamped to two lines (three on a phone) with "+ N more". Nothing hides behind a chevron. Round 10: the first qym's
+ * gradient top line and wash instead of a status rail; the status sits beside the name; the facts share one height.
  */
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { exportHtmlUrl } from '@/api/runs';
-import { platformUrl } from '@/lib/runtime';
 import {
   Button,
   Card,
@@ -14,16 +13,15 @@ import {
   CopyButton,
   DatasetTag,
   Icon,
+  InlineNotice,
   isBareRunId,
   JsonPreview,
   KeyValueTag,
-  LinkButton,
   ModelTag,
   RunStatusBadge,
   Tag,
   TaskTag,
-  runStatusTone,
-  type CardTone,
+  UserName,
 } from '@/ui';
 import { readJson, writeJson } from '@/lib/storage';
 import type { LiveRunState } from '../hooks/useLiveRun';
@@ -38,13 +36,36 @@ import {
   isLiveStatus,
   isUnionRun,
   runEntityLinks,
-  stopReasonLine,
+  runNotice,
 } from '../lib/heroModel';
+import { runErrorTally } from '../lib/overviewModel';
 import type { RunModel } from '../lib/runModel';
 import { DatasetChip, DatasetCountTag, datasetChipStyles } from './DatasetChip';
 import type { PassSummary, Run } from '../types';
 import { RunPager } from './RunPager';
+import { RejectNote, ReviewLog, RunHeaderActions } from './RunActions';
+import { useRunPage } from '../RunContext';
+import { useModelIndex } from '@/api/dashboard';
+import { useOptionalProject } from '@/features/shell/ProjectContext';
+import { modelSlot } from '@/features/runs-list/model';
 import styles from './RunHero.module.css';
+
+type Series = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+/** The model's series slot from the project's model index; neutral until the index loads or when the model is absent. */
+function modelSeriesOf(
+  index: Record<string, number> | null,
+  name: string,
+  reasoning: boolean,
+): Series | undefined {
+  if (!index) return undefined;
+  const key = [
+    `${name}|||${reasoning ? 'reasoning' : 'plain'}`,
+    `${name}|||plain`,
+    `${name}|||reasoning`,
+  ].find((k) => k in index);
+  return key ? (modelSlot(key, index) as Series) : undefined;
+}
 
 export interface RunHeroProps {
   run: Run;
@@ -223,6 +244,7 @@ function ContextBand({
 
 export function RunHero({ run, model, live, passSummary, slug, listParam, basePath }: RunHeroProps) {
   const location = useLocation();
+  const snapshot = !!useOptionalProject()?.snapshot;
   const samples = model.samples;
   const viewPass = model.viewPass;
   const pass = viewPass ? passSummary : null;
@@ -242,26 +264,32 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
   const links = runEntityLinks(run, slug);
   const warning = ingestWarning(run);
   const groups = headerChips(run);
-  const stop = viewPass ? null : stopReasonLine(run);
   const runningPass =
     !viewPass && samples > 1 && liveNow
       ? ` • pass ${Math.min((run.last_completed_pass ?? 0) + 1, samples)}/${samples}`
       : '';
   const ownerLabel = run.owner?.display_name || run.owner?.email || run.owner?.id || '';
+  // C051: the model's colour is its slot in the project's model index, as on the runs list and charts.
+  const modelIndex = useModelIndex(run.project?.slug);
+  const reasoning = !!(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning;
   const projectName = run.project?.name ?? '';
+  const { reviewEventCount, summaryPending, rowsPending, payload } = useRunPage();
+  // RF2 (C097): why a failed or stopped run ended, how many items had a task error, how much of the dataset it covers
+  const errors = useMemo(
+    () => (rowsPending || viewPass ? null : runErrorTally(model.rows, model.isRepeat)),
+    [rowsPending, viewPass, model.rows, model.isRepeat],
+  );
+  const notice = viewPass
+    ? null
+    : runNotice(run, {
+        received: payload.snapshot.rows_total ?? (rowsPending ? null : model.rows.length),
+        errors,
+      });
+  // the summary says whether the run has review events; until it answers, ask only once it is known
+  const reviewsKnown = reviewEventCount !== undefined ? reviewEventCount !== 0 : !summaryPending;
 
   return (
-    <Card
-      as="section"
-      aria-label="Run summary"
-      className={styles.hero}
-      tone={
-        (runStatusTone(statusKey) as CardTone) === 'neutral'
-          ? undefined
-          : (runStatusTone(statusKey) as CardTone)
-      }
-      data-testid="run-hero"
-    >
+    <Card as="section" aria-label="Run summary" className={styles.hero} data-testid="run-hero">
       <div className={styles.heroBody}>
         <div className={styles.top}>
           <div className={styles.headline}>
@@ -277,8 +305,10 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
                 className={styles.passPill}
                 to={basePath}
                 title={`Viewing pass ${viewPass} of ${samples}. Return to all passes.`}
+                aria-label={`Pass ${viewPass} of ${samples}. Show all passes`}
               >
                 Pass {viewPass}/{samples}
+                <Icon name="close" size={12} />
               </Link>
             ) : samples === 1 && model.isRepeat ? (
               <Link
@@ -294,39 +324,43 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
               </Tag>
             ) : null}
             <CopyButton text={run.run_id} label="Copy run id" />
-          </div>
-          <div className={styles.right}>
-            <span title={!viewPass && run.status_reason_label ? run.status_reason_label : undefined}>
+            <span
+              className={styles.status}
+              title={!viewPass && run.status_reason_label ? run.status_reason_label : undefined}
+            >
               <RunStatusBadge status={statusKey} label={statusText + runningPass} />
             </span>
+            {viewPass ? null : <ReviewLog runId={run.run_id} enabled={reviewsKnown} />}
+          </div>
+          <div className={styles.right}>
             <LiveIndicator live={live} run={run} />
             {liveNow && runtimeMs != null ? (
               <span className={styles.live} data-testid="hero-runtime-live">
                 Runtime <span className={styles.mono}>{formatDurationMs(runtimeMs)}</span>
               </span>
             ) : null}
-            <LinkButton
-              variant="accent"
-              size="sm"
-              href={platformUrl(exportHtmlUrl(run.run_id))}
-              target="_blank"
-              rel="noopener noreferrer"
-              icon={<Icon name="external" size={14} />}
-              title="Download this run as a standalone HTML file (opens the classic export)"
-            >
-              Export HTML
-            </LinkButton>
-            <RunPager runId={run.run_id} slug={slug} listParam={listParam} />
+            {/* An exported file (C173) has no server: no actions and no other runs to page to */}
+            {snapshot ? null : (
+              <>
+                <RunHeaderActions run={run} slug={slug} />
+                <RunPager runId={run.run_id} slug={slug} listParam={listParam} />
+              </>
+            )}
           </div>
         </div>
-        {stop ? (
-          <p
-            className={styles.stop}
-            data-danger={stop.danger ? '' : undefined}
-            data-testid="hero-stop-reason"
-          >
-            {stop.text}
-          </p>
+        {viewPass ? null : <RejectNote runId={run.run_id} status={run.status} enabled={reviewsKnown} />}
+        {notice ? (
+          <InlineNotice tone={notice.tone} lead={notice.lead} data-testid="hero-stop-reason">
+            {notice.text}
+            {notice.errorsLink ? (
+              <>
+                {' '}
+                <Link to={{ search: location.search, hash: '#errors' }} data-testid="hero-see-errors">
+                  See Errors
+                </Link>
+              </>
+            ) : null}
+          </InlineNotice>
         ) : null}
 
         {warning ? (
@@ -430,14 +464,15 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
                 <ModelTag
                   name={modelName}
                   title={modelName}
-                  reasoning={!!(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning}
+                  series={modelSeriesOf(modelIndex, modelName, reasoning)}
+                  reasoning={reasoning}
                 />
               </MetaLink>
             ) : null}
           </Fact>
           <Fact label="Owner" title={ownerLabel}>
             <MetaLink to={links.owner} title={`Runs owned by ${ownerLabel}`}>
-              {ownerLabel}
+              <UserName id={run.owner?.id} name={run.owner?.display_name} email={run.owner?.email} />
             </MetaLink>
           </Fact>
           <Fact label="Project" title={projectName}>

@@ -61,9 +61,8 @@
   font-size: var(--font-base);
   font-weight: 650;
   color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* C177: an item id wraps instead of ending in an ellipsis */
+  overflow-wrap: anywhere;
 }
 
 .conf {
@@ -93,4 +92,10 @@
 .actions {
   display: inline-flex;
   gap: var(--space-xs);
+}
+
+/* C213: a 24px target around the 14px box (WCAG 2.5.8 without the spacing exception) */
+.check {
+  padding: 5px;
+  margin: -5px;
 }

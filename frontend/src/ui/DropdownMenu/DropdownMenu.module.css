@@ -46,6 +46,13 @@
   background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
 }
 
+.item[data-tone='meta'] {
+  color: var(--accent-tertiary-soft);
+}
+.item[data-tone='meta'][data-focused] {
+  background: color-mix(in srgb, var(--accent-tertiary) var(--tint-soft), transparent);
+}
+
 .item[data-disabled] {
   opacity: 0.45;
   cursor: not-allowed;

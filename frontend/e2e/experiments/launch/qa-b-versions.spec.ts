@@ -73,13 +73,20 @@ const overflowing = (l: Locator) =>
 
 async function twoEnvs(request: Parameters<typeof createEnvironment>[0]) {
   const other = await createEnvironment(request, f.project.id, 'Other', { port: FAKE_B });
-  await setFakeVersioning(request, FAKE_B, { agent_version: 'agent-9.9.9', image_version: 'img-b', kb_version: 'kb-b' });
+  await setFakeVersioning(request, FAKE_B, {
+    agent_version: 'agent-9.9.9',
+    image_version: 'img-b',
+    kb_version: 'kb-b',
+  });
   return other;
 }
 
 test.describe('versions inside the environment box on step 1', () => {
   for (const width of WIDTHS) {
-    test(`placement, size, rows and copy at ${width}px (QA4-1 to QA4-5, QA2-11)`, async ({ page, request }) => {
+    test(`placement, size, rows and copy at ${width}px (QA4-1 to QA4-5, QA2-11)`, async ({
+      page,
+      request,
+    }) => {
       const other = await twoEnvs(request);
       await page.setViewportSize({ width, height: 900 });
       // QA4-1: no environment ticked, no versions anywhere.
@@ -102,14 +109,25 @@ test.describe('versions inside the environment box on step 1', () => {
       // QA4-2 / QA4-3: the line spans the box's content width, one row high above 390.
       const liBox = await box(boxOf(page, 'Alpha'));
       const b = await box(lineOf(page, 'Alpha'));
-      console.log('QA4-2 box', width, round(liBox.width), round(liBox.height), 'line', round(b.width), round(b.height));
+      console.log(
+        'QA4-2 box',
+        width,
+        round(liBox.width),
+        round(liBox.height),
+        'line',
+        round(b.width),
+        round(b.height),
+      );
       // 14 px padding each side + the 1 px border and the 3 px rail of a selected box
       expect(round(liBox.width - b.width)).toBeCloseTo(32, 0);
       // Row 1 = label | Refresh (24 px), then the values grid: two columns in the 343 px box (two
       // rows), one column at 390 (three rows); 4 px top gap + 1 px rule.
       // Round 10 (C-3-3, C-3-7, amends QA4-3): the "Versions" label on its own line, then key-over-value cells; the fake's
       // three keys fit one row at 1440 and 1024 (61.8 px with the rule and gaps) and take two rows in the 237 px box at 390.
-      expect(Math.abs(b.height - (width === 390 ? 103.2 : 61.8)), `line height ${b.height}`).toBeLessThanOrEqual(2);
+      expect(
+        Math.abs(b.height - (width === 390 ? 103.2 : 61.8)),
+        `line height ${b.height}`,
+      ).toBeLessThanOrEqual(2);
       expect(await overflowing(boxOf(page, 'Alpha'))).toEqual([]);
       expect(await overflowing(boxOf(page, 'Other'))).toEqual([]);
       // QA4-4: copy, one Refresh button per line, no input, no block title.
@@ -125,10 +143,24 @@ test.describe('versions inside the environment box on step 1', () => {
       await expect(lineOf(page, 'Alpha')).not.toContainText('agent-9.9.9');
       // Value tags: mono 10 px / 650, 20 px high, never truncated.
       const tag = lineOf(page, 'Alpha').locator('dd span').first();
-      expect(await tag.evaluate((el) => [getComputedStyle(el).fontSize, getComputedStyle(el).fontWeight, getComputedStyle(el).textOverflow])).toEqual(['10px', '650', 'clip']);
+      expect(
+        await tag.evaluate((el) => [
+          getComputedStyle(el).fontSize,
+          getComputedStyle(el).fontWeight,
+          getComputedStyle(el).textOverflow,
+        ]),
+      ).toEqual(['10px', '650', 'clip']);
       expect(Math.round((await box(tag)).height)).toBe(20);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
-      if (SHOTS) await page.screenshot({ path: `${SHOTS}/after-qb-versions-inline-step1-${width}.png`, fullPage: true });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBe(0);
+      if (SHOTS)
+        await page.screenshot({
+          path: `${SHOTS}/after-qb-versions-inline-step1-${width}.png`,
+          fullPage: true,
+        });
     });
   }
 
@@ -141,15 +173,24 @@ test.describe('versions inside the environment box on step 1', () => {
       await expect(lineOf(page, 'Alpha')).toContainText('agent-1.4.2');
       await expect(lineOf(page, 'Other')).toContainText('agent-9.9.9');
       await expect(page.getByText('Evaluation Service versions')).toHaveCount(0);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
-      if (SHOTS) await page.screenshot({ path: `${SHOTS}/after-qb-versions-inline-home-${width}.png`, fullPage: true });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBe(0);
+      if (SHOTS)
+        await page.screenshot({
+          path: `${SHOTS}/after-qb-versions-inline-home-${width}.png`,
+          fullPage: true,
+        });
     });
   }
 
   test('the same DOM and text as the home view (QA4-5)', async ({ page }) => {
     await openHome(page, f.project.slug, `?env=${f.env.id}`);
     await expect(loaded(page)).toHaveCount(1);
-    const html = (l: Locator) => l.evaluate((el) => el.outerHTML.replace(/ (id|aria-labelledby|aria-describedby)="[^"]*"/g, ''));
+    const html = (l: Locator) =>
+      l.evaluate((el) => el.outerHTML.replace(/ (id|aria-labelledby|aria-describedby)="[^"]*"/g, ''));
     const home = await html(lineOf(page, 'Alpha'));
     await page.getByRole('button', { name: 'Customize' }).click();
     await expect(page).toHaveURL(/step=where/);
@@ -202,11 +243,15 @@ test.describe('versions inside the environment box on step 1', () => {
   });
 
   for (const width of WIDTHS) {
-    test(`the loading frame is the loaded height at ${width}px (QA4-7, R10 C-3-4)`, async ({ page, request }) => {
+    test(`the loading frame is the loaded height at ${width}px (QA4-7, R10 C-3-4)`, async ({
+      page,
+      request,
+    }) => {
       await page.setViewportSize({ width, height: 900 });
       // R10 L1: at 390 one or two keys keep the loading frame's one row (three keys add a row once, the price of no
       // permanent empty band); at 1440 and 1024 one to three keys do
-      if (width === 390) await setFakeVersioning(request, FAKE_A, { agent_version: 'agent-1.4.2', kb_version: 'kb-77' });
+      if (width === 390)
+        await setFakeVersioning(request, FAKE_A, { agent_version: 'agent-1.4.2', kb_version: 'kb-77' });
       let release: () => void = () => undefined;
       const gate = new Promise<void>((r) => (release = r));
       await page.route('**/versioning-details', async (route) => {
@@ -228,17 +273,32 @@ test.describe('versions inside the environment box on step 1', () => {
     });
   }
 
-  test('unsupported, error and unset states per box; none blocks launching (QA4-8, QA4-9)', async ({ page, request }) => {
+  test('unsupported, error and unset states per box; none blocks launching (QA4-8, QA4-9)', async ({
+    page,
+    request,
+  }) => {
     const other = await twoEnvs(request);
     const third = await createEnvironment(request, f.project.id, 'Third', { port: FAKE_B });
     await page.route(`**/eval-environments/${other.id}/versioning-details`, (route) =>
       route.fulfill({
-        json: { environment_id: other.id, status: 'unsupported', versioning_details: {}, error: null, fetched_at: null },
+        json: {
+          environment_id: other.id,
+          status: 'unsupported',
+          versioning_details: {},
+          error: null,
+          fetched_at: null,
+        },
       }),
     );
     await page.route(`**/eval-environments/${third.id}/versioning-details`, (route) =>
       route.fulfill({
-        json: { environment_id: third.id, status: 'error', versioning_details: {}, error: 'kb offline', fetched_at: null },
+        json: {
+          environment_id: third.id,
+          status: 'error',
+          versioning_details: {},
+          error: 'kb offline',
+          fetched_at: null,
+        },
       }),
     );
     await page.route(`**/eval-environments/${f.env.id}/versioning-details`, (route) =>
@@ -264,7 +324,10 @@ test.describe('versions inside the environment box on step 1', () => {
     // R10 C-3-1: a key the service does not report (null) is not drawn: no "not set"
     await expect(ok.locator('[data-unset]')).toHaveCount(0);
     await expect(ok).not.toContainText('not set');
-    expect(await ok.locator('[data-part=version-key]').allInnerTexts()).toEqual(['agent_version', 'kb_version']);
+    expect(await ok.locator('[data-part=version-key]').allInnerTexts()).toEqual([
+      'agent_version',
+      'kb_version',
+    ]);
     for (const name of ['Alpha', 'Other', 'Third']) expect(await overflowing(boxOf(page, name))).toEqual([]);
     expect(describeViolations(await axeSeriousViolations(page))).toBe('');
     // The states are informational: typing keeps them, and no problem item mentions versions.
@@ -273,7 +336,9 @@ test.describe('versions inside the environment box on step 1', () => {
     await expect(lines(page).first()).toBeVisible();
   });
 
-  test('Refresh pressed twice reads once more for its box, which never shrinks (QA4-11)', async ({ page }) => {
+  test('Refresh pressed twice reads once more for its box, which never shrinks (QA4-11)', async ({
+    page,
+  }) => {
     const reads = countReads(page);
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await expect(loaded(page)).toHaveCount(1);
@@ -316,18 +381,33 @@ test.describe('versions inside the environment box on step 1', () => {
     await expect(loaded(page)).toHaveCount(1);
     await nameBox(page).focus();
     const seen: string[] = [];
-    for (let i = 0; i < 40 && !seen.some((s) => s.includes('golden')); i++) {
+    for (let i = 0; i < 40 && !seen.some((s) => /golden|Choose a dataset/.test(s)); i++) {
       await page.keyboard.press('Tab');
       seen.push(
         await page.evaluate(() => {
           const el = document.activeElement as HTMLElement;
-          return (el.getAttribute('aria-label') ?? el.closest('label')?.textContent ?? el.textContent ?? el.tagName).trim().slice(0, 40);
+          return (
+            el.getAttribute('aria-label') ??
+            el.closest('label')?.textContent ??
+            el.textContent ??
+            el.tagName
+          )
+            .trim()
+            .slice(0, 40);
         }),
       );
     }
     const at = (needle: string) => seen.findIndex((s) => s.includes(needle));
     console.log('QA4-13 tab order', JSON.stringify(seen));
-    const order = [at('Environment default'), at('Latency-sensitive run'), at('Alpha'), at('Refresh versions of Alpha'), at('Details of Alpha'), at('New environment'), at('golden')];
+    const order = [
+      at('Environment default'),
+      at('Latency-sensitive run'),
+      at('Alpha'),
+      at('Refresh versions of Alpha'),
+      at('Details of Alpha'),
+      at('New environment'),
+      Math.max(at('golden'), at('Choose a dataset')),
+    ];
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
     await expect(refreshOf(page, 'Alpha')).toHaveAccessibleName('Refresh versions of Alpha');
@@ -379,7 +459,9 @@ test.describe('no versioning input anywhere (QA2-9, QA2-14, QA2-16, QA2-12)', ()
     });
     await page.getByRole('button', { name: 'Launch as is' }).click();
     await expect(
-      page.getByText('Versioning details are set by the Evaluation Service and cannot be sent with an experiment.'),
+      page.getByText(
+        'Versioning details are set by the Evaluation Service and cannot be sent with an experiment.',
+      ),
     ).toBeVisible();
     await expect(nameBox(page)).toHaveValue('stale tab');
   });
@@ -389,7 +471,10 @@ test.describe('no versioning input anywhere (QA2-9, QA2-14, QA2-16, QA2-12)', ()
       data: {
         name: 'to clone',
         environment_ids: [f.env.id],
-        spec: { evaluator: { dataset: 'golden', config: {} }, slot_bindings: { 'endpoint:primary': { connection_id: f.connectionId } } },
+        spec: {
+          evaluator: { dataset: 'golden', config: {} },
+          slot_bindings: { 'endpoint:primary': { connection_id: f.connectionId } },
+        },
       },
     });
     expect(res.ok(), await res.text()).toBeTruthy();

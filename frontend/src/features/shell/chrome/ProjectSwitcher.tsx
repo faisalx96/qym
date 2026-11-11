@@ -5,7 +5,7 @@ import type { Project } from '@/api/types';
 import { canCreateProject } from '@/api/me';
 import { projectPath } from '@/app/routes';
 import { KEYS, writeLocal } from '@/lib/storage';
-import { Badge, Icon, Identicon, SearchField, Text } from '@/ui';
+import { Icon, Identicon, SearchField, StatusMark, Text } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { CreateProjectDialog } from '../dialogs';
 import styles from './ProjectSwitcher.module.css';
@@ -57,13 +57,11 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
           data-project-switcher
           data-compact={compact ? '' : undefined}
         >
-          {current ? (
-            <Identicon seed={current.slug} cell={5} gap={2} chip />
-          ) : (
-            <Icon name="folder" size={14} />
-          )}
+          {current ? <Identicon seed={current.slug} cell={3} gap={1} /> : <Icon name="folder" size={14} />}
           <span className={styles.triggerName}>{current ? current.name : 'Projects'}</span>
-          {current && !current.is_active ? <Badge tone="warning">archived</Badge> : null}
+          {current && !current.is_active ? (
+            <StatusMark tone="warning" shape="pause" label="Archived" data-status="archived" />
+          ) : null}
           <Icon name="chevron-down" size={12} />
         </AriaButton>
         <Popover placement="bottom start" offset={6} className={styles.popover}>
@@ -107,7 +105,9 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
                         {p.slug}
                       </Text>
                     </span>
-                    {!p.is_active ? <Badge tone="warning">archived</Badge> : null}
+                    {!p.is_active ? (
+                      <StatusMark tone="warning" shape="pause" label="Archived" data-status="archived" />
+                    ) : null}
                     {current?.id === p.id ? <Icon name="check" size={12} /> : null}
                   </button>
                 </li>

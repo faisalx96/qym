@@ -9,16 +9,19 @@ test.beforeAll(async () => {
   s = await seedR8('r8-avg');
 });
 
-test('C-avg-1: the Baseline select is in the head (14 rem x 24); the sticky nav has neither select nor pass toggle', async ({
+test('K1 (C036): the Baseline select is by the page title (14 rem x 24); the sticky nav has no Baseline and no pass toggle', async ({
   page,
 }) => {
   await openCompare(page, s.four, 1440);
-  const control = part(page, 'section-averages').locator('[data-part="section-head"] [data-part="baseline-control"]');
+  const control = part(page, 'title-block').locator('[data-part="baseline-control"]');
   await expect(control).toBeVisible();
   const trigger = control.getByRole('button', { name: /Baseline/ });
   within((await box(trigger)).w, 224, 3, 'select width');
   within((await box(trigger)).h, 24, 1, 'select height');
-  await expect(part(page, 'section-nav').locator('select, [role=radiogroup], button')).toHaveCount(0);
+  // K6 (C154): the sticky nav holds Metric, the slider, Filters and Clear, but not the Baseline or the pass toggle
+  await expect(
+    part(page, 'section-nav').locator('[data-part="baseline-control"], [role=radiogroup]'),
+  ).toHaveCount(0);
   // no repeat run selected: no pass toggle
   await expect(page.getByRole('radiogroup', { name: 'Repeat run columns' })).toHaveCount(0);
 });
@@ -37,7 +40,9 @@ test('C-avg-1: with a repeat run the head carries Run average | Each pass and it
   await expect(part(page, 'averages-colhead')).toHaveCount(2);
 });
 
-test('C-avg-2/3: 1440 with 4 runs: metric column 144, run columns 254, heads 34 high, sentence case', async ({ page }) => {
+test('C-avg-2/3: 1440 with 4 runs: metric column 144, run columns 254, heads 34 high, sentence case', async ({
+  page,
+}) => {
   await openCompare(page, s.four, 1440);
   const heads = part(page, 'averages-colhead');
   await expect(heads).toHaveCount(4);
@@ -65,11 +70,15 @@ test('C-avg-2/3/4: 8 runs fit at 1440 (column >= 120, heads wrap), amended heigh
   const [sw, cw] = await part(page, 'averages-table').evaluate((e) => [e.scrollWidth, e.clientWidth]);
   expect(sw).toBeLessThanOrEqual(cw);
   expect((await box(part(page, 'averages-table'))).h).toBeLessThanOrEqual(340); // amended from 296 and 320 (measured 332 after the panel took 30 px; owner decision H6)
-  for (const cell of await part(page, 'averages-cell').filter({ has: page.locator('[data-part=averages-value]') }).all())
+  for (const cell of await part(page, 'averages-cell')
+    .filter({ has: page.locator('[data-part=averages-value]') })
+    .all())
     within((await box(cell)).h, 76, 2, 'metric cell at 8 runs');
 });
 
-test('C-avg-2: 1024: 4 runs fit (150), 8 runs scroll (>= 1104) and the metric column stays pinned', async ({ page }) => {
+test('C-avg-2: 1024: 4 runs fit (150), 8 runs scroll (>= 1104) and the metric column stays pinned', async ({
+  page,
+}) => {
   await openCompare(page, s.four, 1024);
   within((await box(part(page, 'averages-colhead').first())).w, 150, 3, 'column at 1024'); // 157 before the section panel (owner decision H6)
   const [sw, cw] = await part(page, 'averages-table').evaluate((e) => [e.scrollWidth, e.clientWidth]);
@@ -92,10 +101,18 @@ test('C-avg-4/5/6/8: row heights, the verdict box only beyond noise, the change 
   const rows = await page.evaluate(() => {
     const q = (sel: string) => Array.from(document.querySelectorAll<HTMLElement>(sel));
     return {
-      metric: q('[data-part="averages-metric-row"] [data-part="averages-cell"]').map((e) => Math.round(e.getBoundingClientRect().height)),
-      latency: q('[data-part="averages-latency-row"] [data-part="averages-cell"]').map((e) => Math.round(e.getBoundingClientRect().height)),
-      errors: q('[data-part="averages-errors-row"] [data-part="averages-cell"]').map((e) => Math.round(e.getBoundingClientRect().height)),
-      table: Math.round(document.querySelector('[data-part="averages-table"]')!.getBoundingClientRect().height),
+      metric: q('[data-part="averages-metric-row"] [data-part="averages-cell"]').map((e) =>
+        Math.round(e.getBoundingClientRect().height),
+      ),
+      latency: q('[data-part="averages-latency-row"] [data-part="averages-cell"]').map((e) =>
+        Math.round(e.getBoundingClientRect().height),
+      ),
+      errors: q('[data-part="averages-errors-row"] [data-part="averages-cell"]').map((e) =>
+        Math.round(e.getBoundingClientRect().height),
+      ),
+      table: Math.round(
+        document.querySelector('[data-part="averages-table"]')!.getBoundingClientRect().height,
+      ),
     };
   });
   for (const h of rows.metric) within(h, 76, 2, 'metric cell');
@@ -112,7 +129,13 @@ test('C-avg-4/5/6/8: row heights, the verdict box only beyond noise, the change 
     within((await box(v)).h, 20, 1, 'value box');
     const css = await v.evaluate((e) => {
       const c = getComputedStyle(e);
-      return { f: c.fontFamily, w: c.fontWeight, b: c.borderTopWidth, col: c.borderTopColor, v: e.getAttribute('data-verdict') };
+      return {
+        f: c.fontFamily,
+        w: c.fontWeight,
+        b: c.borderTopWidth,
+        col: c.borderTopColor,
+        v: e.getAttribute('data-verdict'),
+      };
     });
     expect(css.f).toMatch(/mono/i);
     expect(Number(css.w)).toBe(600);
@@ -154,7 +177,7 @@ test('C-avg-7: a count button filters, scrolls the list under the nav, shows the
   });
   const before = await widths();
   const btn = part(page, 'averages-counts').first().locator('button').first();
-  within((await box(btn)).h, 20, 1, 'count button height');
+  within((await box(btn)).h, 24, 1, 'count button height (C201: 24 px)');
   expect((await box(btn)).w).toBeGreaterThanOrEqual(24);
   await expect(btn).toHaveAttribute('aria-label', /^\d+ items improved vs baseline on correct/);
   await btn.click();
@@ -164,7 +187,13 @@ test('C-avg-7: a count button filters, scrolls the list under the nav, shows the
   await expectShown(page, 9);
   // the list head is under the nav (+12 +-6) once the scroll settles
   await expect
-    .poll(async () => Math.abs((await box(part(page, 'section-items'))).y - (await box(part(page, 'section-nav'))).bottom - 12), { timeout: 5000 })
+    .poll(
+      async () =>
+        Math.abs(
+          (await box(part(page, 'section-items'))).y - (await box(part(page, 'section-nav'))).bottom - 12,
+        ),
+      { timeout: 5000 },
+    )
     .toBeLessThanOrEqual(6);
   expect(await widths()).toEqual(before);
   await expect(page.getByRole('complementary', { name: 'Quick filters' })).toHaveCount(0);

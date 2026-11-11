@@ -2,15 +2,18 @@ from __future__ import annotations
 
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from qym_platform.auth_oidc import SESSION_MAX_AGE_SECONDS, origin_matches_base, session_auth_enabled
 from qym_platform.middleware.cache_control import NoStoreMiddleware
 from qym_platform.api.auth import router as auth_router
-from qym_platform.settings import PlatformSettings
-from qym_platform.validation_errors import validation_exception_handler
+from qym_platform.settings import (
+    PlatformSettings,
+    auth_config_error,
+    auth_config_warning,
+)
+from qym_platform.error_body import install_error_handlers
 from qym_platform.api.web import router as web_router
 from qym_platform.api.projects import router as projects_router
 from qym_platform.api.eval_environments import router as eval_environments_router
@@ -76,6 +79,13 @@ def process_layout_warning(settings: PlatformSettings) -> str | None:
 def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     configure_logging()
     settings = settings or PlatformSettings()
+    # The UI app refuses an open auth configuration outside dev/test/local:
+    # mode none (everyone is admin), an empty or unknown mode, or proxy
+    # headers without the proxy's shared secret.
+    auth_error = auth_config_error(settings)
+    if auth_error:
+        logger.error(auth_error)
+        raise RuntimeError(auth_error)
     analysis_job_manager.configure(max_workers=settings.analysis_job_max_workers)
     rule_inference_job_manager.configure(max_workers=settings.analysis_job_max_workers)
 
@@ -86,8 +96,8 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json",
     )
-    # 422 responses must never echo a submitted key (security checklist §15).
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    # One error body for /api and /v1 (C159); 422s never echo a submitted key (security checklist §15).
+    install_error_handlers(app)
     from qym_platform.api.feedback import feedback_error_handler
     from qym_platform.feedback_agent.store import FeedbackError
 
@@ -162,6 +172,12 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             logger.warning(warning)
 
     @app.on_event("startup")
+    def warn_dev_only_auth() -> None:
+        warning = auth_config_warning(settings)
+        if warning:
+            logger.warning(warning)
+
+    @app.on_event("startup")
     def warn_untrusted_proxy() -> None:
         from qym_platform.login_throttle import proxy_trust_warning
 
@@ -181,6 +197,11 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
                 "Dashboard summary worker did not stop within the shutdown timeout"
             )
 
+    # A finished run's reads get an ETag and a 304 on revisit (C072). Added before GZip, so it runs inside it and
+    # hashes the JSON, not the compressed bytes.
+    from qym_platform.middleware.etag import FinishedRunEtagMiddleware
+
+    app.add_middleware(FinishedRunEtagMiddleware)
     # Run lists and detail payloads are large JSON; gzip cuts them ~5-10x.
     app.add_middleware(GZipExceptStatic, minimum_size=1024, compresslevel=GZIP_COMPRESSLEVEL)
     # Private pages and API data must not be replayed from the browser cache
@@ -340,7 +361,7 @@ def create_ingestion_app(settings: PlatformSettings | None = None) -> FastAPI:
     settings = settings or PlatformSettings()
     layout = resolve_layout(settings)
     app = FastAPI(title="qym-ingestion", version="0.2.3", docs_url=None, redoc_url=None, openapi_url=None)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    install_error_handlers(app)
     app.state.service_layout = layout
     app.add_middleware(NoStoreMiddleware)
     app.add_middleware(UploadLimitMiddleware, max_upload_bytes=settings.max_upload_bytes)

@@ -9,7 +9,7 @@ export type ErrorKind =
 
 export const REQUEST_ERROR_COPY: Record<Exclude<ErrorKind, 'abort'>, string> = {
   auth: 'Your session has ended. Sign in again to continue.',
-  forbidden: 'You do not have access to this. Ask a project admin for access.',
+  forbidden: 'You do not have access to this. Ask a project manager for access.',
   not_found: 'It may have been deleted, or the link is wrong.',
   server: 'The server had a problem. Nothing was changed. Try again in a moment.',
   network: 'The server could not be reached. Check your connection and try again.',
@@ -141,9 +141,17 @@ export async function apiFetch<T = unknown>(path: string, init: ApiFetchInit = {
   }
   if (!response.ok) {
     const obj = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
-    let detail = obj ? (obj.detail ?? obj.error ?? '') : '';
+    // The one error body (C159): {error: {code, message, details, request_id}, detail}; feedback errors carry code.
+    const envelope =
+      obj?.error && typeof obj.error === 'object' ? (obj.error as Record<string, unknown>) : null;
+    const code =
+      obj && typeof obj.code === 'string'
+        ? obj.code
+        : envelope && typeof envelope.code === 'string'
+          ? envelope.code
+          : undefined;
+    let detail = obj ? (obj.detail ?? envelope?.message ?? obj.error ?? '') : '';
     if (detail && typeof detail !== 'string') detail = formatDetail(detail);
-    const code = obj && typeof obj.code === 'string' ? obj.code : undefined;
     const err = new ApiError(
       response.status,
       String(detail || (typeof data === 'string' ? data.slice(0, 200) : '')),
@@ -195,4 +203,46 @@ export const api = {
 /** 409 "archived" from the server means the project became read-only. */
 export function isArchivedConflict(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && /archiv/i.test(error.detail);
+}
+
+/**
+ * C181: why a write failed, as one plain sentence, never the browser or server text as is ('Failed to fetch',
+ * 'Internal Server Error'). A refused request (400, 409, 422) keeps the server's own sentence, which says what to change.
+ */
+export function errorSentence(error: unknown): string {
+  const info = classifyError(error);
+  // A server fault keeps its own sentence (an upstream service that names the problem); generic status text does not.
+  const generic =
+    /^(HTTP \d+|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout|Failed to fetch)$/i;
+  if (info.kind === 'server')
+    return info.detail && !generic.test(info.detail.trim())
+      ? info.detail
+      : 'The server had a problem. Try again.';
+  if (info.kind === 'network') return REQUEST_ERROR_COPY.network;
+  if (info.kind === 'forbidden') return REQUEST_ERROR_COPY.forbidden;
+  if (info.kind === 'auth') return REQUEST_ERROR_COPY.auth;
+  if (info.kind === 'not_found') return 'It may have been deleted.';
+  const fields = fieldErrorsOf(error);
+  const firstField = Object.entries(fields)[0];
+  if (firstField) return `${firstField[0]}: ${firstField[1]}`;
+  const detail = info.detail && !generic.test(info.detail.trim()) ? info.detail : '';
+  return detail || 'Check the fields and try again.';
+}
+
+/** 'Couldn’t save the rules. The server had a problem. Try again.' (C181) */
+export function actionErrorMessage(action: string, error: unknown): string {
+  return `Couldn’t ${action}. ${errorSentence(error)}`;
+}
+
+/** C181: a FastAPI 422 body ({detail: [{loc: [..., field], msg}]}) as {field: message}, for the field's own error. */
+export function fieldErrorsOf(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError) || error.status !== 422) return {};
+  const body = error.body as { detail?: unknown } | undefined;
+  const out: Record<string, string> = {};
+  if (Array.isArray(body?.detail))
+    for (const d of body.detail as { loc?: unknown[]; msg?: string }[]) {
+      const field = Array.isArray(d.loc) ? String(d.loc[d.loc.length - 1] ?? '') : '';
+      if (field && d.msg && !(field in out)) out[field] = d.msg.replace(/^Value error, /, '');
+    }
+  return out;
 }

@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { useDeleteEnvironment, useUpdateEnvironment, type EnvironmentUpdate } from '@/api/evalEnvironments';
 import { PRIORITIES, type EvalEnvironment, type EvalPriority, type LatencyMinRole } from '@/api/evalCommon';
+import { KEY_FOR_NEW_HOST_ERROR, KEY_FOR_NEW_HOST_PLACEHOLDER, keyHostChanged } from '@/lib/keyHost';
 import { Button, Checkbox, ConfirmDialog, NumberField, Select, Tag, TextField, useToast } from '@/ui';
 import { connectionKeysBodyValue, connectionKeysView } from './environmentUrl';
 import { LATENCY_ROLE_HELP, LATENCY_ROLE_ITEMS, LATENCY_ROLE_LABEL } from './copy';
@@ -60,6 +61,8 @@ export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFor
   const [general, setGeneral] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // The stored key stays with its host: another host needs the key again (C004).
+  const needsKey = env.api_key_set && keyHostChanged(env.base_url, draft.base_url);
   const keys = connectionKeysView({
     storedUrl: env.base_url,
     draftUrl: draft.base_url,
@@ -96,6 +99,7 @@ export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFor
     const baseUrl = draft.base_url.trim();
     if (!name) next.name = 'A name is required.';
     if (!baseUrl) next.base_url = 'A base URL is required.';
+    if (needsKey && !draft.api_key.trim()) next.api_key = KEY_FOR_NEW_HOST_ERROR;
     if (
       !Number.isNaN(draft.ranking_k) &&
       (!Number.isInteger(draft.ranking_k) || draft.ranking_k < 1 || draft.ranking_k > 1000)
@@ -142,7 +146,7 @@ export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFor
       });
       onDeleted();
     } catch (e) {
-      setGeneral(mapEnvironmentError(e).general || 'Could not delete the environment.');
+      setGeneral(mapEnvironmentError(e).general || 'Couldn’t delete the environment.');
       throw e;
     }
   }
@@ -260,10 +264,13 @@ export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFor
             autoComplete="new-password"
             value={draft.api_key}
             maxLength={4096}
+            isRequired={needsKey}
             placeholder={
-              env.api_key_set
-                ? `Leave blank to keep ${env.api_key_hint || 'the stored key'}`
-                : 'Paste the service API key'
+              needsKey
+                ? KEY_FOR_NEW_HOST_PLACEHOLDER
+                : env.api_key_set
+                  ? `Leave blank to keep ${env.api_key_hint || 'the stored key'}`
+                  : 'Paste the service API key'
             }
             errorMessage={errors.api_key}
             onChange={(v) => patch({ api_key: v }, 'api_key')}
@@ -290,7 +297,7 @@ export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFor
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete environment?"
+        title={`Delete the environment “${env.name}”?`}
         description={[
           `Delete “${env.name}” and its stored schemas and LLM slots.`,
           'If experiments or presets use it, it is disabled instead so their history stays intact.',

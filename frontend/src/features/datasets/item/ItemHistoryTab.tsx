@@ -1,4 +1,7 @@
-/** Item → History tab: per-version revisions with word diffs; "Revert to this" on drafts (full-body PATCH). */
+/**
+ * Item → History tab: per-version revisions with word diffs, newest first; "Revert to this" on drafts (full-body PATCH),
+ * except on the newest revision, which is the item as it is now (C189).
+ */
 import { useState } from 'react';
 import {
   useItemLineage,
@@ -10,10 +13,11 @@ import {
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
-import { Badge, Button, ConfirmDialog, EmptyState, ErrorState, Skeleton, Tag, Text, useToast } from '@/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorState, Skeleton, Tag, Text, useToast } from '@/ui';
 import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge } from '../components/VersionSwitcher';
+import { orderItemHistory, showsTypeChange } from '../lib/itemHistory';
 import { formatDate, sameValue, storedType } from '../lib/itemValue';
 import styles from './ItemHistoryTab.module.css';
 
@@ -54,10 +58,14 @@ export function ItemHistoryTab({
     );
   if (!query.data) return null;
   if (!query.data.lineage.length) return <EmptyState compact title="No history recorded" />;
+  const { lineage, numberOf } = orderItemHistory(query.data.lineage);
+  const current = lineage.find((l) => l.version.id === version.id);
+  const newestId = current?.revisions[0]?.id;
+  const num = (r: ItemRevision) => numberOf.get(r.id) ?? r.revision_number;
 
   return (
     <div className={styles.wrap} data-item-history>
-      {query.data.lineage.map(({ version: v, revisions }) => (
+      {lineage.map(({ version: v, revisions }) => (
         <section key={v.id} className={styles.versionCard} aria-label={`${v.version} revisions`}>
           <header className={styles.versionHead}>
             <span className={styles.versionLabel}>{v.version}</span>
@@ -74,9 +82,12 @@ export function ItemHistoryTab({
                   : FIELDS.filter((f) =>
                       r.change_type === 'updated' ? !sameValue(r.before?.[f.key], r.after?.[f.key]) : true,
                     );
-                const typeChanged = FIELDS.filter(
-                  (f) => r.before && r.after && storedType(r.before[f.key]) !== storedType(r.after[f.key]),
-                );
+                const typeChanged = showsTypeChange(r)
+                  ? FIELDS.filter(
+                      (f) =>
+                        r.before && r.after && storedType(r.before[f.key]) !== storedType(r.after[f.key]),
+                    )
+                  : [];
                 return (
                   <li
                     key={r.id}
@@ -85,7 +96,7 @@ export function ItemHistoryTab({
                     data-testid={stateChange ? `rev-${r.change_type}` : undefined}
                   >
                     <div className={styles.revHead}>
-                      <Badge
+                      <Tag
                         tone={
                           r.change_type === 'created' || r.change_type === 'enabled'
                             ? 'success'
@@ -95,8 +106,8 @@ export function ItemHistoryTab({
                         }
                       >
                         {r.change_type}
-                      </Badge>
-                      <Tag kind="count">#{r.revision_number}</Tag>
+                      </Tag>
+                      <Tag kind="count">#{num(r)}</Tag>
                       <UserPill
                         user={
                           r.actor ??
@@ -124,6 +135,7 @@ export function ItemHistoryTab({
                       ) : null}
                       {editable &&
                       v.id === version.id &&
+                      r.id !== newestId &&
                       r.change_type !== 'deleted' &&
                       !stateChange &&
                       r.after ? (
@@ -170,7 +182,7 @@ export function ItemHistoryTab({
       <ConfirmDialog
         open={revert !== null}
         onOpenChange={(o) => !o && setRevert(null)}
-        title={`Revert to revision #${revert?.revision_number ?? ''}?`}
+        title={`Revert to revision #${revert ? num(revert) : ''}?`}
         description="Input, expected output, metadata and labels are replaced by the values saved in that revision. This creates a new revision."
         confirmLabel="Revert"
         tone="accent"
@@ -186,7 +198,7 @@ export function ItemHistoryTab({
                 labels: revert.after.labels ?? [],
               },
             });
-            toast.show(`Reverted to revision #${revert.revision_number}`, { tone: 'success' });
+            toast.show(`Reverted to revision #${num(revert)}`, { tone: 'success' });
             setRevert(null);
           } catch (e) {
             toast.show(e instanceof ApiError ? e.detail || e.message : 'Revert failed', { tone: 'error' });

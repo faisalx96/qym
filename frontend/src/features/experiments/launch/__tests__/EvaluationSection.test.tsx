@@ -20,6 +20,65 @@ async function open(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /Evaluation configurations/ }));
 }
 
+function setupWizard(capabilities?: { datasets: boolean; task: boolean }) {
+  const env = makeEnv(PRODUCTION, 'production', capabilities ? { capabilities } : {});
+  const doc = createDocument({ environmentIds: [PRODUCTION] });
+  return renderSection(<EvaluationSection inWizard />, {
+    envs: [env],
+    doc,
+    overrides: { ctx: makeCtx({ envs: [env] }) },
+  });
+}
+
+async function openAdvanced(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Advanced' }));
+}
+
+describe('EvaluationSection input groups (C185)', () => {
+  it('keeps the common inputs open and the rest under a closed Advanced, with the key only on hover', async () => {
+    const user = userEvent.setup();
+    setup();
+    await open(user);
+    expect(screen.getByRole('button', { name: 'Common' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Advanced' })).toHaveAttribute('aria-expanded', 'false');
+    for (const name of ['samples', 'timeout', 'max_concurrency', 'max_retries'])
+      expect(document.querySelector(`[data-eval-field="${name}"]`)).toBeInTheDocument();
+    expect(document.querySelector('[data-eval-field="report_k"]')).toBeNull();
+    const samples = document.querySelector('[data-eval-field="samples"]') as HTMLElement;
+    expect(within(samples).getByText('Samples', { selector: 'span' })).toHaveAttribute('title', 'samples');
+    expect(within(samples).queryByText('samples')).toBeNull();
+    await openAdvanced(user);
+    expect(document.querySelector('[data-eval-field="report_k"]')).toBeInTheDocument();
+  });
+});
+
+describe('EvaluationSection in the wizard (C172)', () => {
+  it('moves the task and dataset inputs to Where it runs when the environment accepts both', async () => {
+    const user = userEvent.setup();
+    setupWizard({ datasets: true, task: true });
+    await open(user);
+    await openAdvanced(user);
+    for (const name of ['task_name', 'dataset_version', 'dataset_alias'])
+      expect(document.querySelector(`[data-eval-field="${name}"]`)).toBeNull();
+    expect(document.querySelector('[data-eval-field="samples"]')).toBeInTheDocument();
+    expect(screen.getByTestId('set-in-where')).toHaveTextContent(
+      'Dataset and task are set in Where it runs.',
+    );
+    expect(
+      within(screen.getByTestId('set-in-where')).getByRole('button', { name: 'Edit' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the inputs for an environment that does not accept them', async () => {
+    const user = userEvent.setup();
+    setupWizard();
+    await open(user);
+    await openAdvanced(user);
+    expect(document.querySelector('[data-eval-field="task_name"]')).toBeInTheDocument();
+    expect(screen.queryByTestId('set-in-where')).toBeNull();
+  });
+});
+
 describe('EvaluationSection', () => {
   it('generates the evaluation inputs and writes edits on top of the base', async () => {
     const user = userEvent.setup();

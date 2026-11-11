@@ -14,6 +14,7 @@ import {
   type Seeded,
   metricRow,
   openMetric,
+  goToSection,
 } from './support';
 
 let s: Seeded;
@@ -123,6 +124,23 @@ test.describe('open an item (scenario 6, J6)', () => {
     await expect(page).toHaveURL(/item=item-0005/);
     await expect(card(page, 'item-0005')).toBeVisible();
     expect(Math.abs((await scrollTop(page)) - settled)).toBeLessThan(5);
+  });
+
+  test('Escape closes the open item, drops ?item and keeps focus on its row (C231)', async ({ page }) => {
+    await openRun(page, s.slug, classic);
+    await itemButton(page, 3).click();
+    await expect(card(page, 'item-0003')).toBeVisible();
+    await card(page, 'item-0003').getByRole('button').first().focus();
+    await page.keyboard.press('Escape');
+    await expect(card(page, 'item-0003')).toHaveCount(0);
+    expect(params(page).get('item')).toBeNull();
+    await expect(page.locator('tr[data-item-id="item-0003"]')).toBeFocused();
+    // Escape with focus on an open row closes it too
+    await itemButton(page, 3).click();
+    await expect(card(page, 'item-0003')).toBeVisible();
+    await page.locator('tr[data-item-id="item-0003"]').focus();
+    await page.keyboard.press('Escape');
+    await expect(card(page, 'item-0003')).toHaveCount(0);
   });
 
   test('Copy link copies the deep link of the item', async ({ page }) => {
@@ -249,18 +267,19 @@ test.describe('score edits (scenario 7, J8)', () => {
     const lockedPanel = await openMetric(c, 'quality');
     await expect(lockedPanel).toBeVisible();
     await expect(c.getByRole('button', { name: /^Edit score$/ })).toHaveCount(0);
-    // the submit event shows in the review history under the hero, with a Reviews link in the nav
+    // C027: the submit event shows in the review log behind the hero's History button; the nav has no Reviews link
+    await page.getByTestId('review-history-button').click();
     await expect(page.getByTestId('review-history')).toContainText(/Submitted/i);
     await expect(
       page.getByRole('navigation', { name: 'Run sections' }).getByRole('link', { name: /Reviews/ }),
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 
   test('an unsubmitted run shows no lock notice', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await expect(page.getByTestId('scores-locked-notice')).toHaveCount(0);
     await expect(page.getByTestId('read-only-notice')).toHaveCount(0);
-    await expect(page.getByTestId('review-history')).toHaveCount(0);
+    await expect(page.getByTestId('review-history-button')).toHaveCount(0);
     await expect(
       page.getByRole('navigation', { name: 'Run sections' }).getByRole('link', { name: /Reviews/ }),
     ).toHaveCount(0);
@@ -285,12 +304,12 @@ test.describe('read-only (archived) project', () => {
     await itemButton(page, 2).click();
     await expect(card(page, 'item-0002')).toBeVisible();
     await expect(card(page, 'item-0002').getByRole('button', { name: /^Edit score$/ })).toHaveCount(0);
-    await expect(card(page, 'item-0002').getByRole('button', { name: '+ Add issue' })).toHaveCount(0);
+    await expect(card(page, 'item-0002').getByRole('button', { name: 'Add issue' })).toHaveCount(0);
   });
 });
 
 test.describe('root-cause issues (scenario 9)', () => {
-  test('add an issue through the dialog: "Pending review"; Approve: "Approved"', async ({ page }) => {
+  test('add an issue in the inline form: "pending"; Approve: "Approved"', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 3).click(); // item-0003: quality 60.5% < 70% => failing
     const c = card(page, 'item-0003');
@@ -298,8 +317,8 @@ test.describe('root-cause issues (scenario 9)', () => {
     const rc = c.locator('[data-testid=metric-analysis-card][data-metric=quality]');
     await expect(rc).toBeVisible();
     await expect(rc).toContainText('No issues recorded');
-    await rc.getByRole('button', { name: '+ Add issue' }).click();
-    const dlg = page.getByTestId('issue-dialog');
+    await rc.getByRole('button', { name: 'Add issue' }).click();
+    const dlg = page.getByTestId('issue-form');
     await expect(dlg).toBeVisible();
     await dlg.getByRole('button', { name: /Category/ }).click();
     await page
@@ -314,7 +333,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await expect(dlg).toHaveCount(0);
     const issue = rc.getByTestId('issue');
     await expect(issue).toHaveCount(1);
-    await expect(issue).toContainText('Pending review');
+    await expect(issue).toContainText('pending');
     await expect(issue).toContainText('The answer cites the wrong clause.');
     await expect(issue).toContainText('Improve retrieval ranking');
     await issue.getByRole('button', { name: /Approve issue/ }).click();
@@ -324,10 +343,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await page.reload();
     await expect(card(page, 'item-0003').locator('[data-testid=issue]')).toContainText('Approved');
     // the Root cause section now appears with a category card
-    await page
-      .getByRole('navigation', { name: 'Run sections' })
-      .getByRole('link', { name: 'Root cause' })
-      .click();
+    await goToSection(page, 'Root cause');
     await expect(page.getByTestId('root-cause-card').first()).toBeVisible();
   });
 
@@ -336,12 +352,12 @@ test.describe('root-cause issues (scenario 9)', () => {
     await itemButton(page, 4).click();
     await openRootCause(card(page, 'item-0004'));
     const rc = card(page, 'item-0004').locator('[data-testid=metric-analysis-card][data-metric=exact_match]');
-    await rc.getByRole('button', { name: '+ Add issue' }).click();
-    const dlg = page.getByTestId('issue-dialog');
+    await rc.getByRole('button', { name: 'Add issue' }).click();
+    const dlg = page.getByTestId('issue-form');
     await dlg.getByRole('button', { name: /Category/ }).click();
     await page
       .getByRole('listbox', { name: /Category/ })
-      .getByRole('option', { name: 'New category…' })
+      .getByRole('option', { name: 'New category' })
       .click();
     await dlg.getByRole('textbox', { name: 'New category' }).fill('Scoring quirk');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('Verbatim match too strict.');
@@ -354,7 +370,12 @@ test.describe('root-cause issues (scenario 9)', () => {
     await dlg.getByTestId('issue-save').click();
     await expect(issue).toContainText('far too strict');
     await issue.getByRole('button', { name: 'Edit' }).click();
-    await dlg.getByRole('button', { name: /Delete issue|Delete/ }).click();
+    await dlg.getByRole('button', { name: 'Delete issue' }).click();
+    // C125: Delete asks first
+    await page
+      .getByRole('alertdialog', { name: 'Delete this issue?' })
+      .getByRole('button', { name: 'Delete issue' })
+      .click();
     await expect(rc.getByTestId('issue')).toHaveCount(0);
   });
 
@@ -363,12 +384,24 @@ test.describe('root-cause issues (scenario 9)', () => {
     await itemButton(page, 9).click();
     await openRootCause(card(page, 'item-0009'));
     const rc = card(page, 'item-0009').locator('[data-testid=metric-analysis-card][data-metric=quality]');
-    await rc.getByRole('button', { name: '+ Add issue' }).click();
-    const dlg = page.getByTestId('issue-dialog');
+    await rc.getByRole('button', { name: 'Add issue' }).click();
+    const dlg = page.getByTestId('issue-form');
     await dlg.getByTestId('issue-save').click();
     await expect(dlg).toContainText('Choose or type a category.');
-    await page.keyboard.press('Escape');
+    await dlg.getByRole('button', { name: 'Cancel' }).click();
     await expect(dlg).toHaveCount(0);
+  });
+
+  test('repeat run: a Pass N link keeps the filters and scrolls the item into view (C127)', async ({
+    page,
+  }) => {
+    await openRun(page, s.slug, repeat, 'q=sql-001');
+    await itemButton(page, 1).click(); // sql-001
+    await card(page, 'sql-001').getByRole('link', { name: 'Pass 2' }).click();
+    await expect.poll(() => params(page).get('pass')).toBe('2');
+    expect(params(page).get('q')).toBe('sql-001');
+    expect(params(page).get('item')).toBe('sql-001');
+    await expect(card(page, 'sql-001')).toBeInViewport();
   });
 
   test('repeat run: all-passes view links to ?pass=N, issues are added per pass', async ({ page }) => {
@@ -390,17 +423,17 @@ test.describe('root-cause issues (scenario 9)', () => {
     await openRootCause(c3);
     const rc = c3.locator('[data-testid=metric-analysis-card]').first();
     await expect(rc).toBeVisible();
-    await rc.getByRole('button', { name: '+ Add issue' }).click();
-    const dlg = page.getByTestId('issue-dialog');
+    await rc.getByRole('button', { name: 'Add issue' }).click();
+    const dlg = page.getByTestId('issue-form');
     await dlg.getByRole('button', { name: /Category/ }).click();
     await page
       .getByRole('listbox', { name: /Category/ })
-      .getByRole('option', { name: 'New category…' })
+      .getByRole('option', { name: 'New category' })
       .click();
     await dlg.getByRole('textbox', { name: 'New category' }).fill('SQL schema');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('Relation does not exist.');
     await dlg.getByTestId('issue-save').click();
-    await expect(rc.getByTestId('issue')).toContainText('Pending review');
+    await expect(rc.getByTestId('issue')).toContainText('pending');
     await rc
       .getByTestId('issue')
       .getByRole('button', { name: /Approve issue/ })

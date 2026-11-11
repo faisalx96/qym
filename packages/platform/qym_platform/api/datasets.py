@@ -11,7 +11,7 @@ import sys
 import unicodedata
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, Iterable, Iterator, Optional
+from typing import Any, Dict, Iterable, Iterator, Literal, Optional
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -1627,12 +1627,18 @@ def _decode_json_text(raw: bytes, kind: str) -> str:
         raise HTTPException(status_code=400, detail=f"{kind} files must be UTF-8 encoded") from exc
 
 
+NO_INPUT_DETAIL = "An item needs an input."
+
+
 def _json_record_problem(obj: Any) -> Optional[str]:
     if not isinstance(obj, dict):
         return "must be a JSON object"
     metadata = obj.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         return "metadata must be a JSON object"
+    # A record with no input would import as an empty item, and runs would send null (C013).
+    if obj.get("input") is None:
+        return "has no input"
     return None
 
 
@@ -1734,6 +1740,15 @@ def _upload_format(requested: str, filename: str, raw: bytes) -> str:
 
 
 _INSERT_BATCH_SIZE = 1000
+
+
+def _mark_dataset_changed(dataset: Dataset) -> None:
+    """A version, its items or an alias changed: the dataset's "updated" time follows.
+
+    The catalog shows and sorts by this time ("Last updated"), so a new item, an
+    import, a publish or a production move must count, not only a rename (C065).
+    """
+    dataset.updated_at = utc_now_naive()
 
 
 def _insert_items(db: Session, version_id: str, items: list[Dict[str, Any]]) -> int:
@@ -1911,6 +1926,8 @@ class PatchItemRequest(BaseModel):
     expected_output: Any = None
     metadata: Optional[Dict[str, Any]] = None
     labels: Optional[list[str]] = None
+    # The item's updated_at as the editor loaded it: a save answers 409 when someone saved since (C015).
+    expected_updated_at: Optional[str] = None
 
 
 class BulkUpsertEntry(BaseModel):
@@ -1925,6 +1942,11 @@ class BulkUpsertEntry(BaseModel):
 class BulkItemsRequest(BaseModel):
     upserts: list[BulkUpsertEntry] = Field(default_factory=list)
     deletes: list[str] = Field(default_factory=list)
+    # An upsert whose item_id names an existing item: "replace" (the default and
+    # the only behaviour before this field) overwrites it, "skip" keeps it as it is.
+    on_existing: Literal["replace", "skip"] = "replace"
+    # Count what the request would do. Write nothing.
+    dry_run: bool = False
 
 
 @router.get("/v1/datasets")
@@ -1964,6 +1986,69 @@ def list_datasets(
         "datasets": _dataset_payloads(db, datasets, principal),
         "total": total,
         "permissions": {"can_manage": _can_manage_datasets(db, principal, project.id)},
+    }
+
+
+# The catalog lists at most this many unregistered names, the most used first.
+UNREGISTERED_MAX = 100
+
+
+@router.get("/v1/datasets:unregistered")
+def list_unregistered_dataset_names(
+    project_slug: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(dataset_principal),
+) -> Dict[str, Any]:
+    """Dataset names the project's runs used that no dataset registers (C030).
+
+    A run links to a dataset by ``dataset_id``. Runs sent with a name that no
+    dataset of the project carries keep ``dataset_id`` empty, so the catalog
+    never showed them ("No datasets yet" next to hundreds of runs). Each name
+    comes with its run count (live runs; a union run counts once per name). A
+    name that a live dataset now carries (its name or slug) is left out.
+    """
+    _require_scope(principal, "datasets:read")
+    project = _project_for_request(db, principal, project_slug)
+    counts: Dict[str, int] = {}
+    for name, runs in (
+        db.query(Run.dataset, func.count(Run.id))
+        .filter(
+            Run.project_id == project.id,
+            Run.deleted_at.is_(None),
+            Run.dataset_id.is_(None),
+            Run.dataset_count == 1,
+            Run.dataset != "",
+        )
+        .group_by(Run.dataset)
+    ):
+        counts[name] = counts.get(name, 0) + int(runs)
+    for name, runs in (
+        db.query(RunDataset.dataset, func.count(func.distinct(RunDataset.run_id)))
+        .join(Run, Run.id == RunDataset.run_id)
+        .filter(
+            Run.project_id == project.id,
+            Run.deleted_at.is_(None),
+            RunDataset.dataset_id.is_(None),
+            RunDataset.dataset != "",
+        )
+        .group_by(RunDataset.dataset)
+    ):
+        counts[name] = counts.get(name, 0) + int(runs)
+    known = {
+        value.casefold()
+        for row in db.query(Dataset.name, Dataset.slug).filter(
+            Dataset.project_id == project.id, Dataset.deleted_at.is_(None)
+        )
+        for value in row
+        if value
+    }
+    names = sorted(
+        ((name, runs) for name, runs in counts.items() if name and name.casefold() not in known),
+        key=lambda pair: (-pair[1], pair[0].casefold()),
+    )
+    return {
+        "names": [{"name": name, "runs": runs} for name, runs in names[:UNREGISTERED_MAX]],
+        "total": len(names),
     }
 
 
@@ -2506,6 +2591,7 @@ def create_version(
     _record_change(
         db, version, {"type": "created", "from_version_id": parent.id if parent else None}, actor_user_id=principal.user.id
     )
+    _mark_dataset_changed(dataset)
     db.commit()
     logger.info("Dataset version %s created (dataset=%s)", version.id, version.dataset_id)
     return {"version": _version_payload(db, version)}
@@ -2547,6 +2633,7 @@ def publish_version(
     _store_published_counts(db, version)
     if req.set_alias:
         _set_alias(db, dataset, req.set_alias, version, principal)
+    _mark_dataset_changed(dataset)
     db.commit()
     logger.info("Dataset %s version %s published (%s items)", dataset.id, version.version, item_count)
     return {"version": _version_payload(db, version)}
@@ -2583,6 +2670,7 @@ def update_version(
     if req.description is not None:
         version.description = req.description
     version.updated_at = utc_now_naive()
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"version": _version_payload(db, version)}
 
@@ -2690,6 +2778,7 @@ def set_alias(
     dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     version = _resolve_version(db, dataset, req.version)
     alias = _set_alias(db, dataset, alias_name, version, principal)
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"alias": {"dataset_id": dataset.id, "alias": alias.alias, "dataset_version_id": alias.dataset_version_id}}
 
@@ -2879,7 +2968,7 @@ def list_items(
     dataset_ref: str,
     version_ref: str,
     project_slug: Optional[str] = Query(default=None),
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     search: Optional[str] = Query(default=None),
     sort: str = Query(default="index_asc"),
@@ -2976,6 +3065,8 @@ def create_item(
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
+    if req.input is None:
+        raise HTTPException(status_code=422, detail=NO_INPUT_DETAIL)
     input_value = _json_safe(req.input)
     expected = _json_safe(req.expected_output)
     metadata = _json_safe(req.metadata or {})
@@ -3014,6 +3105,7 @@ def create_item(
         after=_item_snapshot(item),
         actor_user_id=principal.user.id,
     )
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"item": _item_payload(item)}
 
@@ -3071,8 +3163,27 @@ def update_item(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Dataset item not found")
+    if req.expected_updated_at and req.expected_updated_at != to_api_timestamp(item.updated_at):
+        # Someone saved this item after the editor loaded it: say who and send their version (C015).
+        last = (
+            db.query(DatasetItemRevision)
+            .filter(DatasetItemRevision.dataset_item_id == item.id)
+            .order_by(DatasetItemRevision.id.desc())
+            .first()
+        )
+        editor = db.get(User, last.actor_user_id) if last and last.actor_user_id else None
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "item_changed",
+                "message": "Someone else saved this item after you opened it.",
+                "item": _item_payload(item, users=_item_users(db, [item])),
+                "changed_by": _user_payload(editor),
+                "changed_at": to_api_timestamp(item.updated_at),
+            },
+        )
     before = _item_snapshot(item)
-    changes = req.model_dump(exclude_unset=True)
+    changes = req.model_dump(exclude_unset=True, exclude={"expected_updated_at"})
     next_item_id = (changes.get("item_id") or "").strip() or item.item_id
     input_value = _json_safe(changes["input"]) if "input" in changes else item.input
     expected = _json_safe(changes["expected_output"]) if "expected_output" in changes else item.expected_output
@@ -3099,6 +3210,7 @@ def update_item(
     item.fingerprint = build_identity_fingerprint(input_value=input_value, expected_value=expected, metadata=metadata)
     item.updated_at = utc_now_naive()
     _record_item_revision(db, version, item, change_type="updated", before=before, after=_item_snapshot(item), actor_user_id=principal.user.id)
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"item": _item_payload(item, users=_item_users(db, [item]))}
 
@@ -3131,6 +3243,7 @@ def delete_item(
     _detach_item_run_results(db, item)
     db.delete(item)
     version.item_count = max(0, int(version.item_count or 0) - 1)
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"ok": True}
 
@@ -3215,6 +3328,7 @@ def _toggle_item_state(
         dataset,
         after={"version": version.version, "item_id": item.item_id, "reason": text},
     )
+    _mark_dataset_changed(dataset)
     db.commit()
     return {"item": _item_payload(item, users=_item_users(db, [item])), "changed": True}
 
@@ -3384,6 +3498,7 @@ def batch_items(
             },
         )
         version.updated_at = utc_now_naive()
+    _mark_dataset_changed(dataset)
     db.commit()
     logger.info(
         "Dataset %s version %s batch %s: %d of %d items",
@@ -3465,6 +3580,88 @@ def _apply_batch(
 MAX_BULK_ENTRIES = 1000
 
 
+def _bulk_delete_ids(req: BulkItemsRequest) -> list[str]:
+    """The request's delete targets: stripped, without blanks or repeats, in order."""
+    return list(dict.fromkeys(target for target in ((raw or "").strip() for raw in req.deletes or []) if target))
+
+
+def _preview_bulk(db: Session, version: DatasetVersion, req: BulkItemsRequest, skip_existing: bool) -> Dict[str, Any]:
+    """Count what ``bulk_items`` would do with ``req``, and write nothing.
+
+    The decisions follow ``bulk_items`` step by step (deletes first, then the
+    upserts in order), so the counts and any 409 are the ones an apply gives.
+    Read-only: it runs ID lookups only and loads or locks no row.
+    """
+    in_version = DatasetItem.dataset_version_id == version.id
+
+    def ids_in_version(candidates: Iterable[str]) -> set[str]:
+        values = list(candidates)
+        if not values:
+            return set()
+        return {
+            item_id for (item_id,) in db.query(DatasetItem.item_id).filter(in_version, DatasetItem.item_id.in_(values))
+        }
+
+    deleted = ids_in_version(_bulk_delete_ids(req))
+    index_query = db.query(func.max(DatasetItem.index)).filter(in_version)
+    if deleted:
+        index_query = index_query.filter(DatasetItem.item_id.not_in(deleted))
+    max_index = index_query.scalar()
+    next_index = int(max_index) + 1 if max_index is not None else 0
+
+    upserts = req.upserts or []
+    named = {(entry.item_id or "").strip() for entry in upserts if entry.item_id} - {""}
+    present = ids_in_version(named) - deleted
+    # The same refusal as the apply: a new item needs an input (C013).
+    missing = [
+        entry.item_id or f"#{position + 1}"
+        for position, entry in enumerate(upserts)
+        if entry.input is None
+        and ((entry.op or "").lower() == "create" or (entry.item_id or "").strip() not in present)
+    ]
+    if missing:
+        shown = ", ".join(missing[:5]) + (f" and {len(missing) - 5} more" if len(missing) > 5 else "")
+        raise HTTPException(status_code=422, detail=f"{len(missing)} new item(s) have no input: {shown}")
+    known = set(present)  # the item IDs that exist when an entry is reached
+    created_here: set[str] = set()
+    unchecked: list[str] = []  # generated IDs not yet checked against the version
+    counts = {"created": 0, "updated": 0, "skipped": 0}
+    matched = 0
+
+    def check_generated() -> None:
+        # bulk_items checks generated IDs when it flushes new items.
+        taken = ids_in_version(unchecked) - deleted
+        for item_id in unchecked:
+            if item_id in taken:
+                raise HTTPException(status_code=409, detail=f"Dataset item ID already exists: {item_id}")
+        unchecked.clear()
+
+    for entry in upserts:
+        key = (entry.item_id or "").strip()
+        hit = bool(entry.item_id) and key in known
+        if entry.item_id and key in present:
+            matched += 1
+        if hit and (entry.op or "").lower() != "create":
+            if skip_existing:
+                counts["skipped"] += 1
+                continue
+            if key in created_here:
+                check_generated()
+            counts["updated"] += 1
+            continue
+        item_id = key or f"item-{next_index + 1}"
+        if hit or item_id in known:
+            raise HTTPException(status_code=409, detail=f"Dataset item ID already exists: {item_id}")
+        if item_id not in named:
+            unchecked.append(item_id)
+        known.add(item_id)
+        created_here.add(item_id)
+        counts["created"] += 1
+        next_index += 1
+    check_generated()
+    return {"dry_run": True, "matched": matched, "summary": {**counts, "deleted": len(deleted)}}
+
+
 @router.post("/v1/datasets/{dataset_ref}/versions/{version_ref}/items:bulk")
 def bulk_items(
     dataset_ref: str,
@@ -3480,6 +3677,12 @@ def bulk_items(
     send larger imports in several requests). Lookups, detaches and the
     version's item count are set-based, and the version row is written once,
     at the end, so its row lock is held only for the commit.
+
+    An upsert whose ``item_id`` names an existing item (in the version, or
+    created earlier in the same request) replaces it by default.
+    ``on_existing="skip"`` keeps that item as it is and lists the id under
+    ``skipped``. ``dry_run`` returns the same counts plus ``matched`` (the
+    upserts that name an item already in the version) and writes nothing.
     """
     _require_scope(principal, "datasets:write")
     entries = len(req.upserts or []) + len(req.deletes or [])
@@ -3496,6 +3699,9 @@ def bulk_items(
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
+    skip_existing = req.on_existing == "skip"
+    if req.dry_run:
+        return _preview_bulk(db, version, req, skip_existing)
     actor_user_id = principal.user.id
     revision_number = _revision_count(db, version)
 
@@ -3506,9 +3712,10 @@ def bulk_items(
 
     created: list[Dict[str, Any]] = []
     updated: list[Dict[str, Any]] = []
+    skipped: list[str] = []
     deleted: list[str] = []
 
-    delete_ids = list(dict.fromkeys(target for target in ((raw or "").strip() for raw in req.deletes or []) if target))
+    delete_ids = _bulk_delete_ids(req)
     doomed = (
         {
             item.item_id: item
@@ -3566,6 +3773,16 @@ def bulk_items(
         if named
         else {}
     )
+    # A new item with no input would run with a null input (C013): refuse the request, naming the first ones.
+    missing = [
+        entry.item_id or f"#{position + 1}"
+        for position, entry in enumerate(upserts)
+        if entry.input is None
+        and ((entry.op or "").lower() == "create" or (entry.item_id or "").strip() not in existing_by_id)
+    ]
+    if missing:
+        shown = ", ".join(missing[:5]) + (f" and {len(missing) - 5} more" if len(missing) > 5 else "")
+        raise HTTPException(status_code=422, detail=f"{len(missing)} new item(s) have no input: {shown}")
     # New items are flushed together; their "created" revisions need their ids.
     pending: list[tuple[DatasetItem, int]] = []
 
@@ -3620,6 +3837,9 @@ def bulk_items(
         existing = existing_by_id.get(key) if entry.item_id else None
         op = (entry.op or "").lower()
         if existing and op != "create":
+            if skip_existing:
+                skipped.append(key)
+                continue
             if existing.id is None:
                 # Updating an item created earlier in this request.
                 flush_pending()
@@ -3668,11 +3888,18 @@ def bulk_items(
     version.item_count = int(
         db.query(func.count(DatasetItem.id)).filter(DatasetItem.dataset_version_id == version.id).scalar() or 0
     )
+    _mark_dataset_changed(dataset)
     db.commit()
     return {
-        "summary": {"created": len(created), "updated": len(updated), "deleted": len(deleted)},
+        "summary": {
+            "created": len(created),
+            "updated": len(updated),
+            "skipped": len(skipped),
+            "deleted": len(deleted),
+        },
         "created": created,
         "updated": updated,
+        "skipped": skipped,
         "deleted": deleted,
     }
 
@@ -4547,6 +4774,7 @@ def _upload_dataset_sync(
         _store_published_counts(db, version_row)
         if set_alias:
             _set_alias(db, dataset, set_alias, version_row, principal)
+    _mark_dataset_changed(dataset)
     db.commit()
     logger.info(
         "Dataset %s uploaded: version %s, %d items from %s%s",

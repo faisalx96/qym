@@ -54,7 +54,7 @@ test('QC-U34, QC-U35: the Dataset filter lists real names and matches members; s
   await expect(dataRows(page)).toHaveCount(1);
   await expect(dataRows(page).first()).toContainText('release-gate-nightly');
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText('dataset:');
+  await expect(page.getByTestId('status-bar')).toContainText('dataset:');
   // search by an entry name finds the union run
   await openRuns(page, s.slug, 'q=billing');
   await expect(dataRows(page)).toHaveCount(1);

@@ -58,7 +58,7 @@ test.describe('repeat analysis (J4)', () => {
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(60);
     expect((await itemsCount(page))[0]).toBe(33);
     await expect.poll(() => params(page).get('filters') ?? '').toContain('repeat');
-    await page.getByTestId('clear-filters').click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([60, 60]);
   });
 
@@ -188,7 +188,7 @@ test.describe('latency filter (scenario 10)', () => {
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(60);
     await expect.poll(() => params(page).get('filters') ?? '').toContain('latency');
     await expect(page.getByRole('button', { name: /Remove filter .*(ms|s)/i }).first()).toBeVisible();
-    await page.getByTestId('clear-filters').click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([60, 60]);
   });
 });

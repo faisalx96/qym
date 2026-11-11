@@ -18,12 +18,14 @@ export interface CompareValue {
   /** Items after every filter, in display order. */
   items: FilteredItem[];
   itemIds: string[];
-  /** Stats over the filtered items. */
+  /** Stats over every aligned item (C011): filters pick the rows to read, not the statistics. */
   stats: ComparisonStats;
   defs: FieldDef[];
   cohorts: CohortGroups | null;
   slug: string | undefined;
   searchPending: boolean;
+  /** The letter of the run at a position: A, B, C... or, in a cohort compare, A1-An and B1-Bn (C162). */
+  letter: (index: number) => string;
 }
 
 export const CompareCtx = createContext<CompareValue | null>(null);
@@ -32,6 +34,24 @@ export function useCompare(): CompareValue {
   const v = useContext(CompareCtx);
   if (!v) throw new Error('useCompare outside <ComparePage>');
   return v;
+}
+
+/**
+ * Run letters by position. A cohort compare letters its sides A and B and numbers their runs (A1-A5, B1-B5), so a side
+ * B run never carries a letter like 'F' (C162).
+ */
+export function runLetters(refs: string[], cohorts: Pick<CohortGroups, 'left' | 'right'> | null): string[] {
+  if (!cohorts) return refs.map((_, i) => letterOf(i));
+  const counter = { A: 0, B: 0 };
+  const sideOf = (ref: string): 'A' | 'B' | null =>
+    cohorts.left.includes(ref) ? 'A' : cohorts.right.includes(ref) ? 'B' : null;
+  const numbered = cohorts.left.length > 1 || cohorts.right.length > 1;
+  return refs.map((ref, i) => {
+    const side = sideOf(ref);
+    if (!side) return letterOf(i);
+    counter[side] += 1;
+    return numbered ? `${side}${counter[side]}` : side;
+  });
 }
 
 export const letterOf = (i: number) =>

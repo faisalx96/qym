@@ -71,7 +71,11 @@ export function tryParseObject(value: unknown): Record<string, unknown> | null {
 const body = (row: Row | null, field: 'input' | 'expected' | 'output') =>
   row ? (row[`${field}_full` as 'input_full'] ?? row[field]) : undefined;
 
-export function discoverExportColumns(model: CompareModel, items: ExportItem[]): ExportGroup[] {
+/**
+ * `baseIdx`: the baseline run's position. Each other run gets a '<metric> change vs baseline' column per metric (K8,
+ * C210).
+ */
+export function discoverExportColumns(model: CompareModel, items: ExportItem[], baseIdx = 0): ExportGroup[] {
   const groups: ExportGroup[] = [];
   const inputKeys = new Set<string>();
   const expectedKeys = new Set<string>();
@@ -139,6 +143,8 @@ export function discoverExportColumns(model: CompareModel, items: ExportItem[]):
     cols.push({ key: `run:${ri}:root_cause_issues`, label: 'Root cause issues (JSON)', checked: true });
     for (const m of model.metrics) {
       cols.push({ key: `run:${ri}:${m}_score`, label: `${m} score`, checked: true });
+      if (ri !== baseIdx && !model.unpaired)
+        cols.push({ key: `run:${ri}:chg:${baseIdx}:${m}`, label: `${m} change vs baseline`, checked: true });
       for (const k of Array.from(metricMetaKeys.get(m) ?? []).sort())
         cols.push({ key: `run:${ri}:${m}:${k}`, label: `${m} > ${k}`, checked: true });
     }
@@ -175,6 +181,19 @@ export function exportCell(model: CompareModel, item: ExportItem, key: string): 
     const issues = getRowRootCauseAnalyses(row, 'all', false).flatMap((a) => rootCauseIssues(a, false));
     return issues.length ? JSON.stringify(issues.map(({ issue_id: _id, ...rest }) => rest)) : '';
   }
+  const chg = field.match(/^chg:(\d+):(.+)$/);
+  if (chg) {
+    const metric = chg[2] ?? '';
+    const baseRow = item.rows[parseInt(chg[1] ?? '', 10)];
+    const baseRun = model.runs[parseInt(chg[1] ?? '', 10)];
+    const value = (r: Row | null | undefined, cr: typeof run | undefined): number => {
+      const idx = cr?.metricIndex[metric];
+      const raw = idx === undefined || !r ? '' : (r.metric_values ?? [])[idx];
+      return raw === '' || raw === null || raw === undefined ? NaN : Number(raw);
+    };
+    const d = value(row, run) - value(baseRow, baseRun);
+    return Number.isFinite(d) ? String(Math.round(d * 1e6) / 1e6) : '';
+  }
   if (field === 'latency_ms') return String(row.latency_ms || '');
   if (field === 'trace_url') return row.trace_url || '';
   if (field.endsWith('_score')) {
@@ -200,4 +219,34 @@ export function buildCompareCsv(model: CompareModel, items: ExportItem[], column
   for (const item of items)
     lines.push(columns.map((c) => csvEscape(neutralizeFormula(exportCell(model, item, c.key)))).join(','));
   return '﻿' + lines.join('\n');
+}
+
+export type ExportPreset = 'scores' | 'outputs' | 'everything';
+
+/** The input field that holds the prompt, when the input is an object: question, prompt, query or input, else none. */
+function promptKey(groups: ExportGroup[]): string | null {
+  const keys = groups.find((g) => g.group === 'Input fields')?.columns.map((c) => c.key) ?? [];
+  for (const name of ['question', 'prompt', 'query', 'input', 'text'])
+    if (keys.includes(`input.${name}`)) return `input.${name}`;
+  return null;
+}
+
+/**
+ * The columns a preset ticks (K8, C210). 'Scores and change' (the default): the item id, the prompt, each run's score on
+ * the page metric and each other run's change vs the baseline. 'Scores and outputs' adds each run's output.
+ * 'Everything' ticks every column.
+ */
+export function presetKeys(groups: ExportGroup[], preset: ExportPreset, metric: string): Set<string> {
+  const all = groups.flatMap((g) => g.columns.map((c) => c.key));
+  if (preset === 'everything') return new Set(all);
+  const prompt = promptKey(groups) ?? 'input';
+  const keep = all.filter(
+    (k) =>
+      k === 'item_id' ||
+      k === prompt ||
+      k.endsWith(`:${metric}_score`) ||
+      k.match(/^run:\d+:chg:\d+:(.+)$/)?.[1] === metric ||
+      (preset === 'outputs' && /^run:\d+:output(\.|$)/.test(k)),
+  );
+  return new Set(keep);
 }

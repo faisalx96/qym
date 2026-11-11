@@ -337,7 +337,7 @@ function ChangePasswordForm({
         tone: 'error',
         text:
           err instanceof ApiError
-            ? err.detail || 'Could not change the password.'
+            ? err.detail || 'Couldn’t change the password.'
             : 'The server could not be reached.',
       });
     } finally {
@@ -414,7 +414,7 @@ function SignupForm({ next, onBack }: { next: string; onBack: () => void }) {
         tone: 'error',
         text:
           err instanceof ApiError
-            ? err.detail || 'Could not create the account.'
+            ? err.detail || 'Couldn’t create the account.'
             : 'The server could not be reached.',
       });
     } finally {

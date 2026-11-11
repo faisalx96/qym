@@ -4,7 +4,7 @@
  *   dataset database glyph, name, version suffix (and alias tags)
  *   model   tag tinted with the model's series colour and its dot
  * and the run's own name (RunName): sans, a link when it has a target, mono only when the label is a bare id.
- * Long names truncate with an ellipsis and show in full as a tooltip.
+ * Long names wrap inside their column (C218); the full name is also the tooltip.
  */
 import type { FocusEventHandler, MouseEventHandler, PointerEventHandler, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -20,7 +20,9 @@ export function TaskTag({ name, className }: EntityTagBase & { name: string | nu
   if (!name) return <span className={styles.none}>—</span>;
   return (
     <Tag kind="task" title={name} className={[styles.entity, className].filter(Boolean).join(' ')}>
-      <span className={styles.text}>{name}</span>
+      <span className={styles.text} dir="auto">
+        {name}
+      </span>
     </Tag>
   );
 }
@@ -44,7 +46,9 @@ export function DatasetTag({
     <span className={[styles.group, className].filter(Boolean).join(' ')}>
       <Tag kind="dataset" title={title} className={styles.entity}>
         <Icon name="database" size={12} />
-        <span className={styles.text}>{name}</span>
+        <span className={styles.text} dir="auto">
+          {name}
+        </span>
         {v ? <span className={styles.version}>v{v.replace(/^v/i, '')}</span> : null}
       </Tag>
       {aliases?.map((a) => (
@@ -81,7 +85,9 @@ export function ModelTag({
       className={[styles.entity, className].filter(Boolean).join(' ')}
     >
       {mark}
-      <span className={styles.text}>{name}</span>
+      <span className={styles.text} dir="auto">
+        {name}
+      </span>
       {reasoning ? <span className={styles.version}>reasoning</span> : null}
     </Tag>
   );

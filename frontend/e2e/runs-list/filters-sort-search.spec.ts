@@ -3,7 +3,9 @@ import { test, expect } from '@playwright/test';
 import {
   clickBox,
   capture,
+  clearButton,
   dataRows,
+  filterSummary,
   listRequests,
   openFacet,
   openFilters,
@@ -18,7 +20,7 @@ const ALL_STATUS = ['COMPLETED', 'FAILED', 'SUBMITTED', 'APPROVED', 'REJECTED', 
   .join('&');
 
 test.describe('runs list: filters, sort, search (J2)', () => {
-  test('deep link with filters, sort and page 2: chips, aria-sort, pager, URL untouched', async ({
+  test('deep link with filters, sort and page 2: summary, aria-sort, pager, URL untouched', async ({
     page,
     request,
   }) => {
@@ -32,10 +34,10 @@ test.describe('runs list: filters, sort, search (J2)', () => {
       'aria-sort',
       'ascending',
     );
-    const chips = page.getByRole('group', { name: 'Active filters', exact: true });
-    await expect(chips).toContainText('task: rag-qa');
-    await expect(chips).toContainText('status: Completed');
-    await expect(chips).toContainText('origin: local');
+    const summary = filterSummary(page);
+    await expect(summary).toContainText('task: rag-qa');
+    await expect(summary).toContainText('status: Completed');
+    await expect(summary).toContainText('local runs');
     await expect(dataRows(page)).toHaveCount(6);
     // request: text sort sends the collation order; offset is page 2
     const last = listRequests(cap).at(-1)!.body;
@@ -56,16 +58,14 @@ test.describe('runs list: filters, sort, search (J2)', () => {
   test('no sessionStorage precedence: the URL alone defines the view', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug, 'task=summarize');
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
-      'task: summarize',
-    );
+    await expect(filterSummary(page)).toContainText('task: summarize');
     await page.goto(runsUrl(s.project.slug));
     await expect(dataRows(page).first()).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toHaveCount(0);
+    await expect(clearButton(page)).toHaveCount(0);
     await expect(page.getByTestId('status-bar')).toContainText('13 runs');
   });
 
-  test('filter bar: one trigger per facet, tick stays open, Only, Select all / None, Escape returns focus', async ({
+  test('filter bar: one trigger per facet, every value ticked by default, untick, Only, Select all / None, Escape returns focus', async ({
     page,
     request,
   }) => {
@@ -79,27 +79,35 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     const trigger = bar.getByRole('button', { name: /^Model filter/ });
     await openFacet(page, 'Models');
     const panel = page.getByTestId('filters-panel');
+    // searchable even with two values, and no filter = every box ticked
+    await expect(panel.getByRole('textbox', { name: 'Search Model' })).toBeVisible();
     await expect(panel.getByRole('button', { name: /^Only / })).toHaveCount(2);
-    // ticking keeps the list open and applies at once
+    await expect(panel.getByRole('checkbox', { name: /gpt-4o/ })).toBeChecked();
+    await expect(panel.getByRole('checkbox', { name: /claude/ })).toBeChecked();
+    await expect(panel).not.toContainText('Nothing ticked');
+    // unticking one keeps the list open and applies at once: the other value is the filter
     await clickBox(panel.getByRole('checkbox', { name: /gpt-4o/ }));
     await expect(panel).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText('model: ');
-    await expect.poll(() => urlParams(page).getAll('model').length).toBe(1);
-    await expect(trigger).toContainText(/gpt-4o/);
+    await expect(filterSummary(page)).toContainText('model: ');
+    await expect.poll(() => urlParams(page).getAll('model')).toEqual([expect.stringContaining('claude')]);
+    await expect(trigger).toContainText(/claude/);
     await expect
       .poll(() => listRequests(cap).at(-1)!.body.filters.models)
-      .toEqual([expect.stringMatching(/gpt-4o\|\|\|plain$/)]);
-    // tick the second one too, then Only on it
-    await clickBox(panel.getByRole('checkbox', { name: /claude/ }));
-    await expect.poll(() => urlParams(page).getAll('model').length).toBe(2);
-    await expect(trigger).toContainText('2');
+      .toEqual([expect.stringMatching(/claude.*\|\|\|plain$/)]);
+    // ticking it again ticks every value: no filter
+    await clickBox(panel.getByRole('checkbox', { name: /gpt-4o/ }));
+    await expect.poll(() => urlParams(page).has('model')).toBe(false);
     await panel.getByRole('button', { name: /Only .*claude/ }).click();
     await expect.poll(() => urlParams(page).getAll('model')).toEqual([expect.stringContaining('claude')]);
     await expect(panel).toBeVisible();
-    // Select all / None (None clears the facet)
+    // Select all = no filter; None = no value ticked, which matches no run
     await panel.getByRole('button', { name: 'Select all' }).click();
-    await expect.poll(() => urlParams(page).getAll('model').length).toBe(2);
+    await expect.poll(() => urlParams(page).has('model')).toBe(false);
     await panel.getByRole('button', { name: 'None' }).click();
+    await expect.poll(() => urlParams(page).getAll('model')).toEqual(['__none__']);
+    await expect(trigger).toContainText('None');
+    await expect(panel.getByRole('checkbox', { name: /claude/ })).not.toBeChecked();
+    await panel.getByRole('button', { name: 'Select all' }).click();
     await expect.poll(() => urlParams(page).has('model')).toBe(false);
     await expect(dataRows(page).first()).toBeVisible();
     // Escape closes the list and restores focus to its trigger
@@ -120,7 +128,7 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await expect(panel).toHaveCount(0);
   });
 
-  test('facet values narrow rows, Status facet writes status= and chips remove', async ({
+  test('facet values narrow rows, Status facet writes status= and Clear removes it', async ({
     page,
     request,
   }) => {
@@ -139,12 +147,17 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     ))
       expect(st).toBe('COMPLETED');
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Remove status: Completed' }).click();
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toHaveCount(0);
+    await clearButton(page).click();
+    await expect(clearButton(page)).toHaveCount(0);
     await expect(page.getByTestId('status-bar')).toContainText('13 runs');
   });
 
-  test('time range segmented and the custom Range dialog validate', async ({ page, request }) => {
+  test('time range segmented and the custom Range fields open in place and validate', async ({
+    page,
+    request,
+  }) => {
+    // round 10: the date and time segments are typed key by key, which takes longer than a native date fill
+    test.setTimeout(60_000);
     const s = await sharedProject(request, 12);
     const cap = capture(page, 'runs');
     await openRuns(page, s.project.slug);
@@ -153,34 +166,47 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await time.getByText('7d', { exact: true }).click();
     await expect.poll(() => urlParams(page).get('range')).toBe('week');
     await expect.poll(() => !!listRequests(cap).at(-1)!.body.filters.since).toBe(true);
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
-      'range: 7 days',
-    );
+    await expect(filterSummary(page)).toContainText('last 7d');
     await time.getByText('All', { exact: true }).click();
     await expect.poll(() => urlParams(page).has('range')).toBe(false);
-    // custom range dialog
-    await time.getByText('Range…').click();
-    const dlg = page.getByRole('dialog', { name: 'Custom date range' });
-    await expect(dlg).toBeVisible();
-    await dlg.getByRole('button', { name: 'Apply' }).click();
-    await expect(dlg.getByRole('alert')).toHaveText('Choose a start date, an end date or both.');
-    await dlg.getByLabel('From').fill('2026-10-05');
-    await dlg.getByLabel('To').fill('2026-10-01');
-    await dlg.getByRole('button', { name: 'Apply' }).click();
-    await expect(dlg.getByRole('alert')).toHaveText('The start date must be on or before the end date.');
-    // open-ended is allowed
-    await dlg.getByLabel('To').fill('');
-    await dlg.getByRole('button', { name: 'Apply' }).click();
-    await expect(dlg).toHaveCount(0);
-    expect(urlParams(page).get('range')).toBe('custom');
-    expect(urlParams(page).get('from')).toBe('2026-10-05');
+    // custom range: the date fields expand next to the control, no dialog
+    await expect(time.getByText('Range', { exact: true })).toBeVisible();
+    await time.getByText('Range', { exact: true }).click();
+    const range = page.getByTestId('custom-range');
+    await expect(range).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    // round 10: a qym date and time field per side (typed segments: month, day, year, hour, minute)
+    const from = range.getByRole('group', { name: 'From', exact: true });
+    const to = range.getByRole('group', { name: 'To', exact: true });
+    await expect(from.getByRole('spinbutton').first()).toBeFocused();
+    await range.getByRole('button', { name: 'Apply' }).click();
+    await expect(range.getByRole('alert')).toHaveText('Choose a start, an end or both.');
+    await from.getByRole('spinbutton').first().click();
+    await page.keyboard.type('100520260930');
+    await to.getByRole('spinbutton').first().click();
+    await page.keyboard.type('100120262359');
+    await range.getByRole('button', { name: 'Apply' }).click();
+    await expect(range.getByRole('alert')).toHaveText('The start must be on or before the end.');
+    // open-ended is allowed; the applied range keeps its fields open so the dates can be changed
+    await to.getByRole('spinbutton').last().click();
+    for (let i = 0; i < 12; i++) await page.keyboard.press('Backspace');
+    await range.getByRole('button', { name: 'Apply' }).click();
+    await expect.poll(() => urlParams(page).get('range')).toBe('custom');
+    expect(urlParams(page).get('from')).toBe('2026-10-05T09:30');
     expect(urlParams(page).has('to')).toBe(false);
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
-      'range: from 2026-10-05',
-    );
+    await expect(range).toBeVisible();
+    await expect(from.getByRole('spinbutton', { name: /hour/i })).toHaveText('09');
+    await expect(filterSummary(page)).toContainText('from 2026-10-05 09:30');
     const f = listRequests(cap).at(-1)!.body.filters;
     expect(f.since).toBeTruthy();
     expect(f.until).toBeUndefined();
+    // another range folds the fields
+    await time.getByText('All', { exact: true }).click();
+    await expect(range).toHaveCount(0);
+    // Cancel folds an unapplied range
+    await time.getByText('Range', { exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel custom range' }).click();
+    await expect(page.getByTestId('custom-range')).toHaveCount(0);
   });
 
   test('origin segmented writes ?origin= and filters; Clear removes every filter', async ({
@@ -189,22 +215,21 @@ test.describe('runs list: filters, sort, search (J2)', () => {
   }) => {
     const s = await sharedProject(request, 12);
     const cap = capture(page, 'runs');
-    await openRuns(page, s.project.slug, 'task=summarize');
+    // C208: with no official run the Origin control shows only while an Origin filter is set (the URL keeps working)
+    await openRuns(page, s.project.slug, 'task=summarize&origin=official');
     await openFilters(page);
     const origin = page.getByRole('radiogroup', { name: 'Origin' });
-    await origin.getByText('Official', { exact: true }).click();
     await expect.poll(() => urlParams(page).get('origin')).toBe('official');
     await expect.poll(() => listRequests(cap).at(-1)!.body.filters.origins).toEqual(['official']);
     await expect(page.getByText('No runs match current filters')).toBeVisible();
     await origin.getByText('Local', { exact: true }).click();
     await expect.poll(() => urlParams(page).get('origin')).toBe('local');
     await expect(dataRows(page).first()).toBeVisible();
-    const chips = page.getByRole('group', { name: 'Active filters', exact: true });
     await page
       .getByTestId('filter-bar')
       .getByRole('button', { name: /^Clear \d/ })
       .click();
-    await expect(chips).toHaveCount(0);
+    await expect(clearButton(page)).toHaveCount(0);
     expect(new URL(page.url()).search).toBe('');
   });
 
@@ -219,18 +244,24 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await expect
       .poll(() => listRequests(cap).at(-1)?.body.filters.versioning)
       .toEqual({ agent: ['alpha'], prompt_version: ['v2', 'v3'] });
-    const chips = page.getByRole('group', { name: 'Active filters', exact: true });
-    await expect(chips).toContainText('Prompt version: v2');
-    await expect(chips).toContainText('Agent: alpha');
+    const summary = filterSummary(page);
+    await expect(summary).toContainText('Prompt version: v2, v3');
+    await expect(summary).toContainText('Agent: alpha');
     await expect(page.getByTestId('filters-trigger')).toContainText('More filters · 3');
     // the URL keeps the keys (sorted) and the values
     const sp = urlParams(page);
     expect(sp.getAll('v.prompt_version')).toEqual(['v2', 'v3']);
     expect(sp.getAll('v.agent')).toEqual(['alpha']);
     await page.reload();
-    await expect(chips).toContainText('Agent: alpha');
-    // removing a chip drops that value from the URL
-    await page.getByRole('button', { name: 'Remove Agent: alpha' }).click();
+    await expect(summary).toContainText('Agent: alpha');
+    // Select all in the Agent list (More filters) drops that key from the URL
+    await page.getByTestId('filters-trigger').click();
+    const more = page.getByTestId('filters-panel');
+    await more.getByRole('button', { name: /^Agent/ }).click();
+    await more
+      .getByRole('group', { name: 'Agent options' })
+      .getByRole('button', { name: 'Select all' })
+      .click();
     await expect.poll(() => urlParams(page).has('v.agent')).toBe(false);
   });
 
@@ -278,7 +309,7 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await openRuns(page, s.project.slug, 'task=summarize&status=COMPLETED');
     const clear = page.getByTestId('filter-bar').getByRole('button', { name: /^Clear 2/ });
     await clear.click();
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toHaveCount(0);
+    await expect(clearButton(page)).toHaveCount(0);
     expect(new URL(page.url()).search).toBe('');
     await expect(clear).toHaveCount(0);
   });
@@ -313,7 +344,9 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await openRuns(page, s.project.slug);
     await page.locator('body').click({ position: { x: 5, y: 5 } });
     await page.keyboard.press('/');
-    const search = page.getByRole('searchbox', { name: 'Search runs' }).or(page.getByLabel('Search runs'));
+    const search = page
+      .getByRole('searchbox', { name: 'Search run or dataset names' })
+      .or(page.getByLabel('Search run or dataset names'));
     await expect(search).toBeFocused();
     const before = listRequests(cap).length;
     await search.pressSequentially('summarize', { delay: 20 });
@@ -322,9 +355,7 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await expect.poll(() => urlParams(page).get('q')).toBe('summarize');
     await expect.poll(() => listRequests(cap).at(-1)!.body.filters.q).toBe('summarize');
     expect(listRequests(cap).length - before).toBe(1); // one request, not one per keystroke
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
-      'search: “summarize”',
-    );
+    await expect(filterSummary(page)).toContainText('search: "summarize"');
     // the previous page of rows stays up (not faded) until the filtered rows arrive
     await expect
       .poll(async () => {
@@ -345,7 +376,7 @@ test.describe('runs list: filters, sort, search (J2)', () => {
   test('Esc in the search box clears the field and the q filter', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug, 'q=summarize');
-    const search = page.getByLabel('Search runs');
+    const search = page.getByLabel('Search run or dataset names');
     await expect(search).toHaveValue('summarize');
     await search.focus();
     await page.keyboard.press('Escape');
@@ -373,8 +404,6 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await page.goBack();
     await expect(page).toHaveURL(new RegExp(`/projects/${s.project.slug}\\?task=summarize&sort=task-asc$`));
     await expect(dataRows(page).first()).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
-      'task: summarize',
-    );
+    await expect(filterSummary(page)).toContainText('task: summarize');
   });
 });

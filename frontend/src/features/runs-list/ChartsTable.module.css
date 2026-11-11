@@ -29,7 +29,7 @@
 
 .rowLink:hover {
   color: var(--accent-primary);
-  text-decoration: underline;
+  text-decoration: none; /* the colour step is the hover cue: no underline */
 }
 
 .rowLink:focus-visible {
@@ -114,4 +114,15 @@
 
 .wrap [data-chart-group] > td {
   background: var(--bg-elevated);
+}
+
+/* A score cell: the band-coloured number alone, centred; the best value of the column is bold (C149). */
+.score {
+  display: inline-flex;
+  justify-content: center;
+}
+
+.score[data-best],
+.score[data-best] > * {
+  font-weight: 650;
 }

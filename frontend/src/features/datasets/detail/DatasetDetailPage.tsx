@@ -15,15 +15,16 @@ import {
   useSetProduction,
   type Dataset,
   type DatasetVersion,
+  useCreateVersion,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
+import { projectPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
 import { useCrumbLabel } from '@/lib/crumb-label';
-import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
+import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   DropdownMenu,
@@ -40,22 +41,20 @@ import {
   Text,
   Tooltip,
   useToast,
+  Flag,
 } from '@/ui';
 import { AddItemDialog, CreateDraftDialog, NameVersionDialog, PublishDialog } from '../components/dialogs';
-import { UserPill } from '../components/UserPill';
 import { VersionSwitcher } from '../components/VersionSwitcher';
-import { pluralize, relativeTime } from '../lib/itemValue';
-import { versionItemsText } from '../lib/itemState';
 import { catalogPath, comparePath, datasetPath, parseDatasetRoute, type DetailTab } from '../lib/route';
 import { PRODUCTION_RULE, isProduction, resolveActiveVersion } from '../lib/versions';
 import { UploadWizard, type WizardMode } from '../wizard/UploadWizard';
 import { ItemsWorkspace } from './ItemsWorkspace';
 import { LineageTab } from './LineageTab';
 import { RunsTab } from './RunsTab';
+import { RunOnVersionLink, useCanLaunch } from './RunOnVersion';
 import { AccessTab } from './AccessTab';
 import { SettingsTab } from './SettingsTab';
 import { ItemPage } from '../item/ItemPage';
-import { InlineEditDialog } from './InlineEditDialog';
 import styles from './DatasetDetailPage.module.css';
 
 export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
@@ -123,21 +122,6 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
     datasetRef,
   ]);
 
-  const runCount = dataset?.run_count;
-  const itemCount = active?.item_count ?? 0;
-  const stats = useMemo(
-    () =>
-      runCount === undefined
-        ? null
-        : [
-            { value: versions.length, label: 'versions' },
-            { value: runCount, label: 'runs' },
-            { value: itemCount, label: 'items' },
-          ],
-    [runCount, versions.length, itemCount],
-  );
-  useTopbarStats(stats);
-
   if (showSkeleton && !dataset)
     return (
       <div className={fullWidth}>
@@ -166,8 +150,10 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
         <ErrorState
           error={dsQuery.error}
           title="Couldn’t load this dataset"
-          notFoundMessage="No dataset with this name or slug exists in the project (it may have been deleted)."
+          notFoundTitle="Dataset not found"
+          notFoundMessage="No dataset with this name or slug exists in the project. It may have been deleted."
           onRetry={() => void dsQuery.refetch()}
+          parent={{ to: projectPath(slug, 'datasets'), label: 'Datasets' }}
         />
       </div>
     );
@@ -233,9 +219,12 @@ function DetailBody({
   const [search] = useSearchParams();
   const toast = useToast();
   const setProduction = useSetProduction(slug, dataset.slug);
-  const [dialog, setDialog] = useState<'draft' | 'publish' | 'name' | 'rename' | 'describe' | null>(null);
+  const [dialog, setDialog] = useState<'draft' | 'publish' | 'name' | null>(null);
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  // the draft that the first Add item just made: its item toast says so (C116)
+  const [newDraft, setNewDraft] = useState<DatasetVersion | null>(null);
+  const createVersion = useCreateVersion(slug, dataset.slug);
   const [accessDirty, setAccessDirty] = useState(false);
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
   const qc = useQueryClient();
@@ -274,22 +263,46 @@ function DetailBody({
       await setProduction.mutateAsync(active.version);
       toast.show(`${active.version} is now production`, { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Could not set production', {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t set production', {
         tone: 'error',
       });
     }
   }
 
+  // A dataset with no versions: the first Add item makes draft v1 itself (C116), no separate draft step.
+  async function addFirstItem() {
+    try {
+      const r = await createVersion.mutateAsync({});
+      setNewDraft(r.version);
+      navigate(datasetPath(slug, ref, { tab: 'items', v: r.version.version }));
+      setAddItemOpen(true);
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t create the draft', {
+        tone: 'error',
+      });
+    }
+  }
+
+  // C130: with an active environment, a published version offers 'Run experiment on v2' (any member who can launch)
+  const { project } = useProjectContext();
+  const canLaunch = useCanLaunch(project.id) === true && !archived;
+  const launchable = canLaunch && active?.status === 'published';
   const primaryActions =
     !canWrite || !contentAccess ? null : !active ? (
-      <Button
-        variant="primary"
-        icon={<Icon name="plus" size={12} />}
-        onPress={() => setDialog('draft')}
-        data-testid="create-first-draft"
-      >
-        Create first draft
-      </Button>
+      <>
+        <Button
+          variant="neutral"
+          icon={<Icon name="plus" size={12} />}
+          onPress={() => void addFirstItem()}
+          loading={createVersion.isPending}
+          data-testid="add-item"
+        >
+          Add item
+        </Button>
+        <Button variant="neutral" onPress={() => setWizard('new-version')} data-testid="import-draft">
+          Import
+        </Button>
+      </>
     ) : isDraft ? (
       <>
         <Button
@@ -343,7 +356,12 @@ function DetailBody({
     );
 
   const tabItems = [
-    { id: 'items', label: 'Items', count: active?.item_count },
+    // the active items: disabled ones are left out of runs (C042)
+    {
+      id: 'items',
+      label: 'Items',
+      count: active ? active.item_count - (active.disabled_count ?? 0) : undefined,
+    },
     { id: 'runs', label: 'Runs', count: active?.run_count },
     { id: 'lineage', label: 'Lineage', count: versions.length },
     // the grant count shows for a restricted dataset only: "0" on a project-wide one would read as "nobody" (QD10)
@@ -362,20 +380,21 @@ function DetailBody({
         title={
           <span className={styles.titleRow}>
             <span dir="auto">{dataset.name}</span>
-            {canWrite ? (
-              <IconButton label="Rename dataset" icon="edit" onPress={() => setDialog('rename')} />
+            {dataset.private_test_set ? (
+              <Flag tone="warning" icon="eye-off">
+                Private test set
+              </Flag>
             ) : null}
-            {dataset.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
             {dataset.access_mode === 'restricted' ? (
-              <Badge tone="neutral" glyph={<Icon name="lock" size={12} />} data-testid="restricted-badge">
+              <Flag icon="lock" data-testid="restricted-badge">
                 Restricted
-              </Badge>
+              </Flag>
             ) : null}
             {!archived && dataset.permissions.access_level === 'view' ? (
               <>
-                <Badge tone="neutral" glyph={<Icon name="eye" size={12} />} data-testid="view-only-badge">
+                <Flag icon="eye" data-testid="view-only-badge">
                   View only
-                </Badge>
+                </Flag>
                 <HelpMarker label="About view only access">
                   You can open this dataset but not change it. Ask a project manager for modify access.
                 </HelpMarker>
@@ -383,58 +402,18 @@ function DetailBody({
             ) : null}
           </span>
         }
+        // Plain text: Settings › General is the one place to edit the name and description (C169).
         description={
           dataset.description ? (
-            <button
-              type="button"
-              className={styles.descButton}
-              onClick={() => canWrite && setDialog('describe')}
-              disabled={!canWrite}
-              dir="auto"
-            >
-              {dataset.description}
-            </button>
+            <span dir="auto">{dataset.description}</span>
           ) : canWrite ? (
-            <button type="button" className={styles.descButton} onClick={() => setDialog('describe')}>
-              + Add a description
-            </button>
+            <Link to={datasetPath(slug, ref, { tab: 'settings' })} className={styles.addDescription}>
+              Add a description
+            </Link>
           ) : undefined
         }
-        meta={[
-          pluralize(versions.length, 'version'),
-          pluralize(dataset.run_count, 'run'),
-          <span key="items" data-testid="meta-items">
-            {active?.disabled_count ? (
-              <>
-                {pluralize(active.item_count, 'item')}{' '}
-                <span className={styles.disabledCount}>({active.disabled_count} disabled)</span>
-              </>
-            ) : (
-              versionItemsText(active?.item_count ?? 0, 0)
-            )}
-          </span>,
-          ...(active?.parent_version_id
-            ? [
-                <span key="fork">
-                  forked from{' '}
-                  <Link
-                    to={hrefFor(versions.find((v) => v.id === active.parent_version_id) ?? active)}
-                    className={styles.inlineLink}
-                  >
-                    {versions.find((v) => v.id === active.parent_version_id)?.version ?? '?'}
-                  </Link>
-                </span>,
-              ]
-            : []),
-          ...(active ? [<span key="source">source: {active.source_type}</span>] : []),
-          ...(active?.published_by
-            ? [<UserPill key="pub" user={active.published_by} label="Published by:" />]
-            : []),
-          ...(active?.created_by
-            ? [<UserPill key="drafted" user={active.created_by} label="Drafted By:" />]
-            : []),
-          `updated ${relativeTime(dataset.updated_at)}`,
-        ]}
+        // The header holds the name, description, version switcher and actions only; counts stay on the state
+        // filter, the pager and the Items tab, and provenance is on the Lineage card (C042).
         actions={
           <div className={styles.heroActions}>
             {active ? (
@@ -442,14 +421,17 @@ function DetailBody({
             ) : (
               <Tag>no versions</Tag>
             )}
+            {launchable && active ? (
+              <RunOnVersionLink slug={slug} datasetName={dataset.name} version={active.version} />
+            ) : null}
             {primaryActions}
             {active ? (
               <DropdownMenu
                 label="More actions"
                 trigger={<IconButton label="More actions" icon="more" data-testid="hero-more" />}
                 items={[
-                  ...(canWrite ? [{ id: 'name', label: 'Name version…' }] : []),
-                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare…' }] : []),
+                  ...(canWrite ? [{ id: 'name', label: 'Name version' }] : []),
+                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare versions' }] : []),
                   ...(dataset.items_visible
                     ? [
                         {
@@ -469,7 +451,14 @@ function DetailBody({
                       ]
                     : []),
                   ...(canWrite
-                    ? [{ id: 'upload', label: '↑ Upload file as new version…', separatorBefore: true }]
+                    ? [
+                        {
+                          id: 'upload',
+                          label: 'Upload file as new version',
+                          icon: <Icon name="upload" size={12} />,
+                          separatorBefore: true,
+                        },
+                      ]
                     : []),
                 ]}
                 onAction={(id) => {
@@ -522,7 +511,13 @@ function DetailBody({
           )}
         </TabPanel>
         <TabPanel id="runs">
-          <RunsTab slug={slug} datasetRef={ref} version={active} />
+          <RunsTab
+            slug={slug}
+            datasetRef={ref}
+            datasetName={dataset.name}
+            version={active}
+            canLaunch={canLaunch}
+          />
         </TabPanel>
         <TabPanel id="lineage">
           <LineageTab slug={slug} datasetRef={ref} />
@@ -589,20 +584,17 @@ function DetailBody({
           version={active}
         />
       ) : null}
-      <InlineEditDialog
-        open={dialog === 'rename' || dialog === 'describe'}
-        field={dialog === 'describe' ? 'description' : 'name'}
-        onOpenChange={(o) => !o && setDialog(null)}
-        slug={slug}
-        dataset={dataset}
-      />
       {active && isDraft ? (
         <AddItemDialog
           open={addItemOpen}
-          onOpenChange={setAddItemOpen}
+          onOpenChange={(o) => {
+            setAddItemOpen(o);
+            if (!o) setNewDraft(null);
+          }}
           slug={slug}
           dataset={dataset}
           version={active}
+          newDraft={newDraft?.id === active.id}
         />
       ) : null}
       <UploadWizard
@@ -654,8 +646,8 @@ function NoVersions({
       </Text>
       {canWrite ? (
         <div className={styles.noVersionsActions}>
-          <Button variant="primary" onPress={onCreate}>
-            + Create first draft
+          <Button icon={<Icon name="plus" size={12} />} variant="primary" onPress={onCreate}>
+            Create first draft
           </Button>
           <Button variant="neutral" onPress={onImport}>
             Import a file

@@ -1,14 +1,16 @@
 /** A filter that came from a click upstream (count button, winner / distribution segment, category or error card) says so here (C-items-2). */
 import type { ReactNode } from 'react';
-import { Button, Icon } from '@/ui';
 import { useCompare } from '../../CompareContext';
 import { activeChips } from '../../lib/activeChips';
 import { columnName } from '../../lib/columnName';
-import type { CompareView } from '../../lib/filters';
 import styles from './ItemsBanner.module.css';
 
 const UPSTREAM = (key: string) =>
-  key === 'baseline' || key === 'winner' || key === 'pass_rate' || key.startsWith('err:') || key.startsWith('cat:');
+  key === 'baseline' ||
+  key === 'winner' ||
+  key === 'pass_rate' ||
+  key.startsWith('err:') ||
+  key.startsWith('cat:');
 
 export function ItemsBanner() {
   const { c, model, columns, baseline } = useCompare();
@@ -38,22 +40,15 @@ export function ItemsBanner() {
       .
     </>
   );
-  const clear = () => {
-    let view: CompareView = c.view;
-    let patch: Partial<CompareView> = {};
-    for (const chip of chips) {
-      const next = chip.clear(view);
-      patch = { ...patch, ...next };
-      view = { ...view, ...next };
-    }
-    c.setView(patch);
-  };
   return (
-    <div className={styles.banner} role="status" data-part="baseline-delta-banner" data-testid="baseline-delta-banner">
+    <div
+      className={styles.banner}
+      role="status"
+      data-part="baseline-delta-banner"
+      data-testid="baseline-delta-banner"
+    >
       <span>{sentence}</span>
-      <Button size="sm" variant="ghost" icon={<Icon name="close" size={12} />} onPress={clear}>
-        Clear
-      </Button>
+      {/* K6 (C154): one Clear, in the sticky nav */}
     </div>
   );
 }

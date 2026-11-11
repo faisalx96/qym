@@ -9,6 +9,39 @@ export function isRTL(text: unknown): boolean {
   return rtl > latin;
 }
 
+/* ── search folding (C066), the same fold as the server (services/text_search.py) ── */
+
+// Combining marks in the Arabic blocks, the alef variants and alef maqsura, tatweel, and Arabic-Indic and Persian digits.
+const MARK = /\p{M}/gu;
+/** A combining mark in the Arabic blocks (U+0610-06FF, U+08D3-08FF); other scripts keep their marks. */
+const arabicMark = (m: string) => {
+  const code = m.charCodeAt(0);
+  return (code >= 0x0610 && code <= 0x06ff) || (code >= 0x08d3 && code <= 0x08ff);
+};
+const LETTER_FOLD: Record<string, string> = {
+  '\u0623': '\u0627', // alef with hamza above
+  '\u0625': '\u0627', // alef with hamza below
+  '\u0622': '\u0627', // alef with madda
+  '\u0671': '\u0627', // alef wasla
+  '\u0649': '\u064A', // alef maqsura -> ya
+  '\u0640': '', // tatweel
+};
+const FOLDED_LETTER = /[\u0623\u0625\u0622\u0671\u0649\u0640]/g;
+const ARABIC_DIGIT = /[\u0660-\u0669\u06F0-\u06F9]/g;
+
+/**
+ * Text as run and compare search compare it: NFKC, Arabic written with or without hamza on alef, alef maqsura,
+ * tatweel or diacritics reads the same, '٣٠' and '۳۰' read as '30', and case is ignored. Ta marbuta stays distinct.
+ */
+export function foldSearchText(text: string): string {
+  return text
+    .normalize('NFKC')
+    .replace(MARK, (m) => (arabicMark(m) ? '' : m))
+    .replace(FOLDED_LETTER, (c) => LETTER_FOLD[c] ?? c)
+    .replace(ARABIC_DIGIT, (c) => String((c.charCodeAt(0) - 0x0660) % 0x90))
+    .toLowerCase();
+}
+
 export interface TextDirAttrs {
   dir: 'rtl' | 'auto';
   lang?: 'ar';

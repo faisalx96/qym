@@ -24,7 +24,6 @@ import { ModelsSection } from '../sections/ModelsSection';
 import { RawJsonSection } from '../sections/RawJsonSection';
 import { SettingsSection } from '../sections/SettingsSection';
 import { SweepsSection } from '../sections/SweepsSection';
-import { prefersReducedMotion } from '../state/useSections';
 import { StepPanel } from './StepPanel';
 import { stepLabel, stepOfItem, WIZARD_STEPS, type WizardStepDef, type WizardStepId } from './steps';
 import wizard from './wizard.module.css';
@@ -106,7 +105,8 @@ export function LaunchWizard({
   renderStep,
   review: reviewBody,
 }: WizardProps) {
-  const { doc, ctx, review, flags, sectionSummary, isLaunching, launch, readOnly, preview, preemptionAck } = useLaunch();
+  const { doc, ctx, review, flags, sectionSummary, isLaunching, launch, readOnly, preview, preemptionAck } =
+    useLaunch();
   const swept = useMemo(
     () => axesOf(buildSpec(doc, ctx.evaluatorPanel)).axes.length,
     [doc, ctx.evaluatorPanel],
@@ -120,9 +120,9 @@ export function LaunchWizard({
     return `Step ${index} of ${stepList.length}: ${stepLabel(step, stepList)}`;
   }, [step, stepList]);
 
-  // A step change: the rail comes to the top of the view and the heading takes focus. The stage keeps
-  // the previous step's height until the scroll ends, so a shorter step cannot clamp the scroll to 0
-  // and make it jump back down to the rail.
+  // A step change: the heading takes focus, and the view does not scroll (C171) unless the rail is above the view,
+  // where it jumps (no glide) so the new step reads from its top. The stage keeps the previous step's height for a
+  // moment, so a shorter step cannot clamp the scroll to 0.
   const stage = useRef<HTMLDivElement>(null);
   const lastHeight = useRef(0);
   const held = useRef(false);
@@ -138,18 +138,14 @@ export function LaunchWizard({
   }, []);
   useLayoutEffect(() => {
     const el = stage.current;
-    const smooth = !prefersReducedMotion();
     let timer: ReturnType<typeof setTimeout> | undefined;
     if (el && !firstStep.current && lastHeight.current) {
       held.current = true;
       el.style.minHeight = `${lastHeight.current}px`;
-      timer = setTimeout(
-        () => {
-          el.style.minHeight = '';
-          held.current = false;
-        },
-        smooth ? 700 : 50,
-      );
+      timer = setTimeout(() => {
+        el.style.minHeight = '';
+        held.current = false;
+      }, 50);
     }
     const wasFirst = firstStep.current;
     firstStep.current = false;
@@ -160,7 +156,9 @@ export function LaunchWizard({
     const before = scroller?.scrollTop ?? 0;
     queueMicrotask(() => {
       if (scroller && !wasFirst) scroller.scrollTop = before;
-      rail.current?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
+      const top = rail.current?.getBoundingClientRect().top ?? 0;
+      const viewTop = scroller?.getBoundingClientRect().top ?? 0;
+      if (!wasFirst && top < viewTop) rail.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
     });
     heading.current?.focus({ preventScroll: true });
     return () => {
@@ -276,7 +274,7 @@ export function LaunchWizard({
                   {swept && !editor ? <SweepsSection /> : null}
                 </>
               ) : null}
-              {step === 'evaluation' ? <EvaluationSection /> : null}
+              {step === 'evaluation' ? <EvaluationSection inWizard /> : null}
             </StaticSections>
           )}
         </StepPanel>
@@ -285,7 +283,9 @@ export function LaunchWizard({
   }
 
   // Priority: the review step's acknowledgement is needed while any run is High (launch mode only).
-  const highRuns = editor ? 0 : highRunCount(doc, preview.data?.jobs, defaultRunPriority(doc, ctx, preview.data));
+  const highRuns = editor
+    ? 0
+    : highRunCount(doc, preview.data?.jobs, defaultRunPriority(doc, ctx, preview.data));
   const needsAck = highRuns > 0 && !preemptionAck;
   const launchPrimary: BarPrimary = primary ?? {
     label: launchLabel(review.count.runs, isLaunching),

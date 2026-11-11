@@ -192,7 +192,7 @@ export function RunPager({
       title={
         !data
           ? isError
-            ? 'Could not load the Runs list order.'
+            ? 'Couldn’t load the Runs list order.'
             : undefined
           : data.context
             ? undefined

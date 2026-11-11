@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from typing import Optional
 from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# QYM_ENVIRONMENT values for local development and the test suite. Every other
+# value (also an empty one) is a deployment, where auth_config_error applies.
+DEV_ENVIRONMENTS = frozenset({"dev", "development", "local", "test", "testing"})
+AUTH_MODES = ("none", "proxy_headers", "oidc")
+# The header in which the authentication proxy sends QYM_PROXY_SHARED_SECRET.
+PROXY_SECRET_HEADER = "X-Qym-Proxy-Secret"
 
 
 class PlatformSettings(BaseSettings):
@@ -25,7 +33,13 @@ class PlatformSettings(BaseSettings):
     )
 
     # Auth
-    auth_mode: str = Field(default="none")  # none|proxy_headers|oidc|saml (SSO later)
+    # none|proxy_headers|oidc. Outside dev/test/local, "none", an empty or an
+    # unknown mode stops the platform at startup (auth_config_error).
+    auth_mode: str = Field(default="none")
+    # proxy_headers: the authentication proxy sends this value in the
+    # X-Qym-Proxy-Secret header. Identity headers (X-User-Email, X-Email) on a
+    # request without it are ignored. Required outside dev/test/local.
+    proxy_shared_secret: str = Field(default="")
     admin_bootstrap_token: str = Field(default="")
     auto_provision_users: bool = Field(default=True)
     allow_legacy_empty_api_key_scopes: bool = Field(default=True)
@@ -54,6 +68,11 @@ class PlatformSettings(BaseSettings):
     auth_gitlab_url: str = Field(default="")
     auth_gitlab_client_id: str = Field(default="")
     auth_gitlab_client_secret: str = Field(default="")
+
+    @field_validator("auth_mode")
+    @classmethod
+    def _normalize_auth_mode(cls, value: str) -> str:
+        return str(value or "").strip().lower()
 
     @field_validator("auth_gitlab_url")
     @classmethod
@@ -263,3 +282,64 @@ class ProductEvalSettings(BaseSettings):
     # Finished jobs kept in this process's memory (older ones are served from
     # the shared ``background_jobs`` registry).
     max_retained_jobs: int = Field(default=100, ge=1)
+
+
+def is_dev_environment(settings: PlatformSettings) -> bool:
+    """True for local development and tests (``DEV_ENVIRONMENTS``)."""
+    return str(settings.environment or "").strip().lower() in DEV_ENVIRONMENTS
+
+
+def auth_config_error(settings: PlatformSettings) -> Optional[str]:
+    """The reason the UI app must not start with this auth configuration, or None.
+
+    Outside dev, test and local, the platform refuses:
+
+    - mode ``none``: every visitor becomes an admin;
+    - an empty or unknown mode;
+    - ``proxy_headers`` without ``QYM_PROXY_SHARED_SECRET``: a client that
+      reaches the app port directly could send any identity header.
+    """
+    if is_dev_environment(settings):
+        return None
+    mode = settings.auth_mode
+    where = (
+        f"QYM_ENVIRONMENT is {settings.environment!r}, and the platform refuses this "
+        "outside dev, test and local."
+    )
+    local = "For a local setup, set QYM_ENVIRONMENT=dev."
+    if mode == "none":
+        return (
+            "QYM_AUTH_MODE is 'none', which makes every visitor an admin. "
+            f"{where} Set QYM_AUTH_MODE to proxy_headers or oidc. {local}"
+        )
+    if mode not in AUTH_MODES:
+        shown = repr(mode) if mode else "empty"
+        return (
+            f"QYM_AUTH_MODE is {shown}. Use one of: {', '.join(AUTH_MODES)}. "
+            f"{where} {local}"
+        )
+    if mode == "proxy_headers" and not settings.proxy_shared_secret:
+        return (
+            "QYM_AUTH_MODE is 'proxy_headers', but QYM_PROXY_SHARED_SECRET is not set. "
+            f"{where} Set QYM_PROXY_SHARED_SECRET, and configure the authentication "
+            f"proxy to send the same value in the {PROXY_SECRET_HEADER} header. "
+            "Without it, a request that does not go through the proxy can claim any identity."
+        )
+    return None
+
+
+def auth_config_warning(settings: PlatformSettings) -> Optional[str]:
+    """A startup warning for an auth configuration that only dev, test and local allow."""
+    if not is_dev_environment(settings):
+        return None
+    if settings.auth_mode == "proxy_headers" and not settings.proxy_shared_secret:
+        return (
+            "QYM_AUTH_MODE=proxy_headers without QYM_PROXY_SHARED_SECRET: identity headers "
+            "are accepted from any client. Only dev, test and local allow this."
+        )
+    if settings.auth_mode not in AUTH_MODES:
+        return (
+            f"QYM_AUTH_MODE {settings.auth_mode!r} is not a known mode "
+            f"({', '.join(AUTH_MODES)}). UI requests without a session get 401."
+        )
+    return None

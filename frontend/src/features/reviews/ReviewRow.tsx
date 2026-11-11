@@ -1,9 +1,10 @@
 /** One 56px queue row. Checkbox, select button and decision actions are siblings (no nested interactive). */
 import type { CorrectionRow } from '@/api/reviews';
-import { Badge, Checkbox, IconButton, Tag, Tooltip } from '@/ui';
+import { Checkbox, IconButton, Tag, Tooltip } from '@/ui';
 import { textDirAttrs } from '@/lib/text';
 import { correctionPriority } from './lib/filters';
-import { STATUS_TONE } from './DetailPane';
+import { ReviewStatusMark } from './DetailPane';
+import { REJECT_TIP } from './DetailPane';
 import styles from './ReviewRow.module.css';
 
 export interface ReviewRowProps {
@@ -52,8 +53,9 @@ export function ReviewRow({
       <Checkbox
         isSelected={selected}
         onChange={onToggleSelected}
-        aria-label={`Select correction ${row.id}`}
+        aria-label={`Select diagnosis ${row.id}`}
         hideLabel
+        className={styles.check}
       />
       <button
         type="button"
@@ -67,9 +69,7 @@ export function ReviewRow({
         <span className={styles.top}>
           <span className={styles.id}>#{row.id}</span>
           <span className={styles.item}>{row.item_id}</span>
-          <Badge tone={STATUS_TONE[row.status]} glyph={row.status === 'approved' ? '✓' : undefined}>
-            {row.status}
-          </Badge>
+          <ReviewStatusMark status={row.status} />
           {priority ? (
             <Tag tone={priority.level === 'high' ? 'danger' : 'warning'}>
               {priority.level === 'high' ? 'High' : 'Medium'}
@@ -96,16 +96,16 @@ export function ReviewRow({
           <>
             <Tooltip content={blocked ? blockTip : 'Approve'}>
               <IconButton
-                label={`Approve correction ${row.id}`}
+                label={`Approve diagnosis ${row.id}`}
                 icon="check"
                 tone="approve"
                 isDisabled={decideDisabled}
                 onPress={onApprove}
               />
             </Tooltip>
-            <Tooltip content={blocked ? blockTip : 'Reject'}>
+            <Tooltip content={blocked ? blockTip : REJECT_TIP}>
               <IconButton
-                label={`Reject correction ${row.id}`}
+                label={`Reject diagnosis ${row.id}`}
                 icon="close"
                 tone="reject"
                 isDisabled={decideDisabled}
@@ -116,7 +116,7 @@ export function ReviewRow({
         ) : (
           <Tooltip content={blocked ? blockTip : 'Reset to pending'}>
             <IconButton
-              label={`Reset correction ${row.id}`}
+              label={`Reset diagnosis ${row.id}`}
               icon="retry"
               isDisabled={decideDisabled}
               onPress={onReset}

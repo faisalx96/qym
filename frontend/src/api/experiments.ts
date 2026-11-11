@@ -60,8 +60,10 @@ export interface Experiment {
   description: string;
   environment_ids: string[];
   base_source: BaseSource;
-  spec: Record<string, unknown>;
-  versioning_details: Record<string, unknown>;
+  /** Detail only: the list leaves it out (C077). */
+  spec?: Record<string, unknown>;
+  /** Detail only: the list leaves it out (C077). */
+  versioning_details?: Record<string, unknown>;
   priority: EvalPriority;
   /** Jobs per own priority (the experiment's `priority` is only the default of the runs launched with it). */
   priorities?: Record<EvalPriority, number>;

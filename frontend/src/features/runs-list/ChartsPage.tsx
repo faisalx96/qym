@@ -1,7 +1,7 @@
 /**
  * /projects/:slug/charts — one card per task, dataset tabs, model legend
  * (click toggles the model filter, double-click solos it: `?model=` updates),
- * Rows: Runs | Grouped, mini bars, sortable headers with aria-sort, group
+ * Rows: Runs | Grouped, score numbers with the column's best in bold, sortable headers with aria-sort, group
  * Pass@K / Consistency / Reliability (batched models/stats), lazy per-card
  * history, remembered card height (brief 03 J7).
  */
@@ -10,7 +10,7 @@ import { ToggleButton } from 'react-aria-components';
 import { useModelsStats, useOverview, usePoints, useRunsPage } from '@/api/dashboard';
 import type { Combo, GroupStats, MetricType, RunRow } from '@/api/dashboardTypes';
 import { Button, Card, EmptyState, ErrorState, SegmentedControl, Skeleton, Tabs, TabPanel, Text } from '@/ui';
-import { useDocumentTitle, useProjectContext } from '@/features/shell';
+import { useAuth, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { formatClock } from '@/lib/format';
 import { useDelayedPending } from '@/lib/pending';
 import { Mono, ModelMark } from './cells';
@@ -25,6 +25,7 @@ import {
   groupMetricName,
   groupStatRule,
   prefersBar,
+  runsMetricDirection,
   sortRuns,
   toChartRun,
   TRACE_METRICS,
@@ -35,8 +36,8 @@ import {
 } from './chartModel';
 import { plainModelName } from './model';
 import { RunsToolbar } from './RunsToolbar';
-import { useKpiTopbar } from './kpiTopbar';
-import { readVisibleColumns, writeVisibleColumns } from './selection';
+import { RunScatterCard } from './RunScatterCard';
+import { readChartColumns, writeChartColumns } from './selection';
 import { contextForView, countActiveFilters, DEFAULT_VIEW, type RunsView } from './urlState';
 import { useRefetchOnVisible, useRunsCadence } from './polling';
 import { useRunsView } from './useRunsView';
@@ -97,10 +98,10 @@ export function ChartsPage() {
   const { slug } = useProjectContext();
   useDocumentTitle('Charts');
   const { view, setView } = useRunsView();
-  const [visibleKeys, setVisibleKeys] = useState<Set<string> | null>(readVisibleColumns);
+  const { me } = useAuth();
+  const [visibleKeys, setVisibleKeys] = useState<Set<string> | null>(() => readChartColumns(me.id));
   const d = useRunsDataLite(slug, view, visibleKeys);
   const overview = d.overview;
-  useKpiTopbar(overview?.kpis);
   const showSkeleton = useDelayedPending(d.overviewQ.isPending);
   const owners = useMemo(
     () =>
@@ -156,7 +157,7 @@ export function ChartsPage() {
               visible={d.columnSet.visible}
               onChange={(keys) => {
                 setVisibleKeys(keys);
-                writeVisibleColumns(keys);
+                writeChartColumns(me.id, keys);
               }}
             />
           }
@@ -168,8 +169,8 @@ export function ChartsPage() {
             </Text>
             <Text variant="sm" tone="muted" as="p">
               {countActiveFilters(view) && overview ? `Filtered: ${overview.total_runs} runs · ` : ''}Average
-              metric scores across all items in matching runs. Score bars use a 0-100% scale; numeric metrics
-              and latency are relative to the best run in the card.
+              metric scores across all items in matching runs. The best score in each column is bold; latency
+              bars are relative to the best run in the card.
             </Text>
           </div>
           {models.length ? (
@@ -197,13 +198,16 @@ export function ChartsPage() {
                   Show all
                 </Button>
               ) : null}
+              <Text variant="sm" tone="muted" as="span">
+                Double-click a model to show only it.
+              </Text>
             </div>
           ) : null}
         </div>
         {d.overviewQ.isError && !overview ? (
           <ErrorState
             error={d.overviewQ.error}
-            title="Could not load charts"
+            title="Couldn’t load charts"
             onRetry={() => d.overviewQ.refetch()}
           />
         ) : !overview ? (
@@ -231,18 +235,21 @@ export function ChartsPage() {
             }
           />
         ) : (
-          overview.chart_data.tasks.map((t) => (
-            <TaskCard
-              key={t.task}
-              slug={slug}
-              view={view}
-              task={t.task}
-              combos={t.datasets}
-              metricTypes={overview.metric_types}
-              visibleKeys={visibleKeys}
-              revisionKey={overview.filtered_revision}
-            />
-          ))
+          <>
+            <RunScatterCard slug={slug} filters={d.filters} metricTypes={overview.metric_types} />
+            {overview.chart_data.tasks.map((t) => (
+              <TaskCard
+                key={t.task}
+                slug={slug}
+                view={view}
+                task={t.task}
+                combos={t.datasets}
+                metricTypes={overview.metric_types}
+                visibleKeys={visibleKeys}
+                revisionKey={overview.filtered_revision}
+              />
+            ))}
+          </>
         )}
         {d.overviewQ.dataUpdatedAt ? (
           <Text variant="sm" tone="muted" as="p" aria-live="polite">
@@ -432,9 +439,7 @@ function TaskCard({
 
   const sortedRuns = sortRuns(runs, sortKey, sortDir);
   const maxOf = (f: (r: ChartRun) => number | null | undefined) => Math.max(0, ...runs.map((r) => f(r) ?? 0));
-  const scaleMax = Object.fromEntries(
-    metricsForAgg.map((m) => [m, metricTypes[m] === 'numeric' ? maxOf((r) => r.metric_averages[m]) : 1]),
-  );
+  const directions = Object.fromEntries(metricsForAgg.map((m) => [m, runsMetricDirection(runs, m)]));
   const maxLatency = maxOf((r) => r.latency);
   const maxMedian = maxOf((r) => r.median_latency);
   const traceMax = Object.fromEntries(
@@ -552,7 +557,7 @@ function TaskCard({
               <ErrorState
                 compact
                 error={q.error}
-                title={`Could not load ${activeDataset} runs`}
+                title={`Couldn’t load ${activeDataset} runs`}
                 onRetry={() => q.refetch()}
               />
             ) : !seen || !loaded ? (
@@ -579,7 +584,7 @@ function TaskCard({
                 showMedian={showMedian}
                 statKinds={statKinds}
                 metricTypes={metricTypes}
-                scaleMax={scaleMax}
+                directions={directions}
                 maxLatency={maxLatency}
                 maxMedian={maxMedian}
                 traceMax={traceMax}

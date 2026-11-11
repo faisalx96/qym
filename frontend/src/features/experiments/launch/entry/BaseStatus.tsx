@@ -45,7 +45,13 @@ export function BaseStatus() {
           </Tag>
         ) : null}
         <span className={styles.statusActions}>
-          <Button size="sm" variant="ghost" isDisabled={total === 0 || readOnly} onPress={resetAll}>
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={total === 0 || readOnly}
+            disabledReason={readOnly ? 'Read-only' : 'No changes to undo'}
+            onPress={resetAll}
+          >
             Undo all changes
           </Button>
         </span>

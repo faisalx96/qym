@@ -58,7 +58,7 @@ test.describe('axe (14)', () => {
     await expect(previewDrawer(page)).toBeHidden();
 
     await rail(page)
-      .getByRole('button', { name: /^Test selected/ })
+      .getByRole('button', { name: /^Test (selected|the first target)/ })
       .click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
     await expectNoSerious(page, 'with a test result');
@@ -82,7 +82,7 @@ test.describe('axe (14)', () => {
       await page.getByRole('tab', { name: new RegExp(`^${label}`) }).click();
       await expectNoSerious(page, `categories / ${label}`);
     }
-    await page.getByRole('tab', { name: /^Production rules/ }).click();
+    await page.getByRole('tab', { name: /^Rules/ }).click();
     await expect(page.getByRole('heading', { name: 'Rules in v1' })).toBeVisible();
     await page.getByRole('button', { name: 'Add rule' }).click();
     await page.getByRole('textbox', { name: 'Title' }).fill('Cite the context');
@@ -113,7 +113,7 @@ test.describe('axe (14)', () => {
     await expect(page.getByText('Select a run to analyze')).toBeVisible();
     await expectNoSerious(page, 'landing');
     await gotoApp(page, analysisUrl(seed.slug, seed.repeatId!));
-    await expect(page.getByText('Choose a sample')).toBeVisible();
+    await expect(page.getByText('Choose a pass')).toBeVisible();
     await expectNoSerious(page, 'sample picker');
   });
 });
@@ -153,19 +153,13 @@ test.describe('keyboard (14)', () => {
     const first = tabs.getByRole('tab', { name: /^Diagnosis categories/ });
     await first.focus();
     await page.keyboard.press('ArrowRight');
-    await expect(tabs.getByRole('tab', { name: /^Production rules/ })).toBeFocused();
-    await expect(tabs.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(tabs.getByRole('tab', { name: /^Rules/ })).toBeFocused();
+    await expect(tabs.getByRole('tab', { name: /^Rules/ })).toHaveAttribute('aria-selected', 'true');
     await expect(page).toHaveURL(/scope=rules/);
     await page.keyboard.press('End');
     await expect(tabs.getByRole('tab', { name: /^Documents/ })).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('ArrowLeft');
-    await expect(tabs.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(tabs.getByRole('tab', { name: /^Rules/ })).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('Home');
     await expect(tabs.getByRole('tab', { name: /^Analyze run/ })).toHaveAttribute('aria-selected', 'true');
     await expect(page).not.toHaveURL(/scope=/);
@@ -261,7 +255,7 @@ test.describe('layout', () => {
     await expectFits('preview drawer');
     await page.keyboard.press('Escape');
     await rail(page)
-      .getByRole('button', { name: /^Test selected/ })
+      .getByRole('button', { name: /^Test (selected|the first target)/ })
       .click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
     await expectFits('with a result');
@@ -279,12 +273,12 @@ test.describe('layout', () => {
     const seed = await seedAnalyzer(request, { withRepeat: true });
     const t = trackErrors(page);
     await gotoApp(page, analysisUrl(seed.slug, seed.repeatId!));
-    await page.getByRole('button', { name: 'Analyze sample 1' }).click();
+    await page.getByRole('button', { name: 'Analyze pass 1' }).click();
     await waitWorkspace(page);
     await openPreview(page);
     await page.keyboard.press('Escape');
     await rail(page)
-      .getByRole('button', { name: /^Test selected/ })
+      .getByRole('button', { name: /^Test (selected|the first target)/ })
       .click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
     await analyzeToCompletion(page);

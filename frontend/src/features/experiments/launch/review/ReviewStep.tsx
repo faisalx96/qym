@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useRef } from 'react';
 import type { EnvTasksPayload } from '@/api/launch';
 import { useEnvTaskLists } from '@/api/launch';
-import { useMediaQuery } from '@/features/shell';
+import { readOnlyReason, useMediaQuery, useOptionalProject } from '@/features/shell';
 import { Checkbox, DataTable, Select, Tag, type Column } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
@@ -47,10 +47,7 @@ import { ChangesCard, ChecksCard, ReviewCard, ReviewKv, type ChangeRow, type KvR
 import styles from './reviewStep.module.css';
 
 /** The task's name for the summary and the run rows: the service's name when its list was read, else the id. */
-function taskName(
-  id: string | null,
-  lists: Readonly<Record<string, EnvTasksPayload | undefined>>,
-): string {
+function taskName(id: string | null, lists: Readonly<Record<string, EnvTasksPayload | undefined>>): string {
   if (!id) return 'Worker default';
   for (const list of Object.values(lists)) {
     const found = list?.tasks.find((t) => t.id === id);
@@ -91,7 +88,13 @@ function connectionNamer(ctx: FormContext): (id: string) => string | undefined {
 const labelOf = (ctx: FormContext) => (pointer: string) => locate(pointer, ctx).label;
 
 /** The Summary's "Swept settings" row (round 10, C-2-8): one line per axis, `name: v1, v2, v3`; a linked axis pairs. */
-function SweptSettings({ ctx, axes }: { ctx: FormContext; axes: NonNullable<ReturnType<typeof useLaunch>['preview']['data']>['axes'] }) {
+function SweptSettings({
+  ctx,
+  axes,
+}: {
+  ctx: FormContext;
+  axes: NonNullable<ReturnType<typeof useLaunch>['preview']['data']>['axes'];
+}) {
   const lines = sweepLines(axes ?? [], labelOf(ctx), connectionNamer(ctx));
   return (
     <ul className={styles.swept} data-part="review-swept">
@@ -196,7 +199,8 @@ function datasetOfJob(job: DryRunJob, doc: ReturnType<typeof useLaunch>['doc']):
 type FactColumn = 'env' | 'dataset' | 'task';
 
 /** A run-table column: a fact (environment, dataset, task) or one swept setting (its index in `RunRow.sweep`). */
-export type RunColumn = { kind: 'fact'; id: FactColumn } | { kind: 'sweep'; index: number; column: SweepColumn };
+export type RunColumn =
+  { kind: 'fact'; id: FactColumn } | { kind: 'sweep'; index: number; column: SweepColumn };
 
 /**
  * Columns shown between `#` and Priority (round 10, C-2-1): the varying ones of Environment and Dataset, one per swept
@@ -205,7 +209,8 @@ export type RunColumn = { kind: 'fact'; id: FactColumn } | { kind: 'sweep'; inde
 export function visibleColumns(rows: readonly RunRow[], sweeps: readonly SweepColumn[] = []): RunColumn[] {
   const varies = (values: string[]) => new Set(values).size > 1;
   const out: RunColumn[] = [];
-  for (const id of ['env', 'dataset'] as const) if (varies(rows.map((r) => r[id]))) out.push({ kind: 'fact', id });
+  for (const id of ['env', 'dataset'] as const)
+    if (varies(rows.map((r) => r[id]))) out.push({ kind: 'fact', id });
   sweeps.forEach((column, index) => {
     if (varies(rows.map((r) => r.sweep[index] ?? ''))) out.push({ kind: 'sweep', index, column });
   });
@@ -231,7 +236,16 @@ function AxisHeader({ column }: { column: SweepColumn }) {
 
 function tableColumns(columns: readonly RunColumn[], fallback: Priority): Column<RunRow>[] {
   return [
-    { id: 'n', header: '#', label: 'Run number', type: 'number', width: 48, minWidth: 48, resizable: false, cell: (r) => r.index },
+    {
+      id: 'n',
+      header: '#',
+      label: 'Run number',
+      type: 'number',
+      width: 48,
+      minWidth: 48,
+      resizable: false,
+      cell: (r) => r.index,
+    },
     ...columns.map((c): Column<RunRow> => {
       if (c.kind === 'sweep')
         return {
@@ -282,7 +296,12 @@ function PriorityCell({ row, fallback }: { row: RunRow; fallback: Priority }) {
         <Select
           label={`Priority of run ${row.index}`}
           hideLabel
-          items={options.map((o) => ({ key: o.value, label: o.label, description: o.description, disabled: o.disabled }))}
+          items={options.map((o) => ({
+            key: o.value,
+            label: o.label,
+            description: o.description,
+            disabled: o.disabled,
+          }))}
           value={value}
           isDisabled={readOnly}
           onChange={(key) =>
@@ -300,17 +319,14 @@ function PriorityCell({ row, fallback }: { row: RunRow; fallback: Priority }) {
   );
 }
 
-function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksPayload | undefined>; onAckRef: (el: HTMLElement | null) => void }) {
-  const {
-    doc,
-    setDoc,
-    ctx,
-    review,
-    preview,
-    preemptionAck,
-    setPreemptionAck,
-    readOnly,
-  } = useLaunch();
+function RunsCard({
+  taskLists,
+  onAckRef,
+}: {
+  taskLists: Record<string, EnvTasksPayload | undefined>;
+  onAckRef: (el: HTMLElement | null) => void;
+}) {
+  const { doc, setDoc, ctx, review, preview, preemptionAck, setPreemptionAck, readOnly } = useLaunch();
   const phone = useMediaQuery('(max-width: 760px)');
   const { count } = review;
   const envCount = doc.environmentIds.length;
@@ -362,7 +378,9 @@ function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksP
             {count.runs === 1 ? 'run' : 'runs'} to launch
           </h3>
           <div className={styles.tools}>
-            {estimate.combos > 1 || envCount > 1 || pairs >= 2 ? <span className={styles.math}>{estimate.math}</span> : null}
+            {estimate.combos > 1 || envCount > 1 || pairs >= 2 ? (
+              <span className={styles.math}>{estimate.math}</span>
+            ) : null}
             {several ? (
               <>
                 <span className={styles.toolLabel}>Set every run to</span>
@@ -380,7 +398,14 @@ function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksP
                     isDisabled={readOnly}
                     onChange={(key) =>
                       key != null &&
-                      setDoc((d) => setAllJobPriorities(d, rows.map((r) => r.key), String(key) as Priority, fallback))
+                      setDoc((d) =>
+                        setAllJobPriorities(
+                          d,
+                          rows.map((r) => r.key),
+                          String(key) as Priority,
+                          fallback,
+                        ),
+                      )
                     }
                   />
                 </span>
@@ -401,7 +426,8 @@ function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksP
     >
       {count.over ? (
         <Callout tone="error" live title="Over the run limit">
-          This would create {count.runs} runs; the limit is {count.cap} per launch. Remove sweep values or environments
+          This would create {count.runs} runs; the limit is {count.cap} per launch. Remove sweep values or
+          environments
           {pairs >= 2 && doc.selection.runShape === 'one_each' ? ', or choose “Combine into one run”' : ''}.
         </Callout>
       ) : null}
@@ -535,6 +561,7 @@ function useChangeRows(): ChangeRow[] {
 export function ReviewStep() {
   const { doc, selectedEnvs, projectId, preview, readOnly, baseState } = useLaunch();
   const taskLists = useEnvTaskLists(projectId, selectedEnvs);
+  const projectContext = useOptionalProject();
   const changeRows = useChangeRows();
   const ackRef = useRef<HTMLElement | null>(null);
   return (
@@ -542,9 +569,16 @@ export function ReviewStep() {
       <SummaryCard taskLists={taskLists} />
       <RunsCard taskLists={taskLists} onAckRef={(el) => (ackRef.current = el)} />
       <div className={styles.twoCol}>
-        <ChangesCard rows={changeRows} base={doc.environmentIds.length ? baseState.label : 'the starting point'} />
+        <ChangesCard
+          rows={changeRows}
+          base={doc.environmentIds.length ? baseState.label : 'the starting point'}
+        />
         <ChecksCard warnings={preview.data?.warnings ?? []}>
-          {readOnly ? <Callout tone="warning">Archived project: read only.</Callout> : null}
+          {readOnly ? (
+            <Callout tone="warning">
+              Read only: {projectContext ? readOnlyReason(projectContext) : 'This project is archived.'}
+            </Callout>
+          ) : null}
         </ChecksCard>
       </div>
     </div>

@@ -1,19 +1,21 @@
 /**
- * The Charts card table on the shared DataTable: runs as rows, metrics as ScoreBar columns,
- * latency/tokens as relative-scale bars. Grouped mode: one level uses `groupBy` (summary
+ * The Charts card table on the shared DataTable: runs as rows, scores as centred numbers in their band colour with the
+ * best value of each column in bold (C149), latency/tokens as relative-scale bars. Grouped mode: one level uses `groupBy` (summary
  * aggregates under the columns); version/model nesting renders both levels as aggregate rows.
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button as AriaButton } from 'react-aria-components';
 import type { MetricType } from '@/api/dashboardTypes';
-import { DataTable, Icon, NumberCell, ScoreBar, Tag, Text, Tooltip, type Column } from '@/ui';
+import { DataTable, Icon, NumberCell, ScoreBar, ScoreValue, Tag, Text, Tooltip, type Column } from '@/ui';
+import type { MetricDirection } from '@/lib/metrics';
 import { formatDateParts, formatLatency, formatNumericValue, formatPercentValue } from '@/lib/format';
 import { runPath } from '@/app/routes';
 import { Mono, ModelMark } from './cells';
 import { useRunsCtx } from './context';
 import { modelSlot } from './model';
 import {
+  bestValue,
   GROUP_STAT_COLUMNS,
   GROUP_STAT_KEYS,
   firstColumnLabel,
@@ -68,7 +70,8 @@ export interface ChartsTableProps {
   showMedian: boolean;
   statKinds: StatKind[];
   metricTypes: Record<string, MetricType>;
-  scaleMax: Record<string, number>;
+  /** Each metric's declared direction: the best value is the highest, or the lowest for minimize. */
+  directions: Record<string, MetricDirection>;
   maxLatency: number;
   maxMedian: number;
   traceMax: Record<string, number>;
@@ -239,45 +242,44 @@ export function ChartsTable(p: ChartsTableProps) {
         : undefined;
     const pick = (row: Row, render: (g: ChartGroup) => ReactNode, runCell: (r: ChartRun) => ReactNode) =>
       row.kind === 'group' ? render(row.g) : runCell(row.run);
-    const modelOf = (g: ChartGroup) => g.model ?? g.runs[0]?.model ?? '';
     const metricText = (m: string, v: number | null | undefined) =>
       p.metricTypes[m] === 'numeric' ? formatNumericValue(v, 2) : formatPercentValue(v);
 
+    // A score is a centred number in its band colour, with no bar; the best value of the column is bold (C149).
+    const best = (m: string) => bestValue(runs, m, p.directions[m] ?? null);
+    const scoreText = (m: string, v: number | null | undefined, isBest: boolean) => (
+      <span className={styles.score} data-best={isBest ? '' : undefined}>
+        <ScoreValue
+          variant="plain"
+          value={v}
+          type={p.metricTypes[m]}
+          direction={p.directions[m] ?? null}
+          text={metricText(m, v)}
+        />
+      </span>
+    );
     for (const m of p.barMetrics) {
-      const aggBar = (g: ChartGroup) => (
-        <Series modelKey={modelOf(g)} muted={g.kind !== 'model'}>
-          <ScoreBar
-            width={72}
-            value={g.agg.metricAverages[m]}
-            max={p.scaleMax[m] ?? 1}
-            text={metricText(m, g.agg.metricAverages[m])}
-          />
-        </Series>
-      );
+      const top = best(m);
+      const agg = (g: ChartGroup) => scoreText(m, g.agg.metricAverages[m], false);
       cols.push({
         id: m,
         header: m.replace(/_/g, ' '),
         group: 'Metrics',
         type: 'score',
+        align: 'center',
         sort: { key: m, first: 'desc' },
-        width: 190,
-        minWidth: 120,
+        width: 120,
+        minWidth: 96,
         priority: m === p.barMetrics[0] || m === p.barMetrics[1] ? 2 : 3,
         cell: (row) =>
-          pick(row, aggBar, (r) => (
-            <Series modelKey={r.model}>
-              <ScoreBar
-                width={72}
-                value={r.metric_averages[m]}
-                max={p.scaleMax[m] ?? 1}
-                text={metricText(m, r.metric_averages[m])}
-              />
-            </Series>
-          )),
-        summary: summary(aggBar),
+          pick(row, agg, (r) =>
+            scoreText(m, r.metric_averages[m], top !== null && r.metric_averages[m] === top),
+          ),
+        summary: summary(agg),
       });
     }
     for (const m of p.plainMetrics) {
+      const top = best(m);
       const agg = (g: ChartGroup) => <NumberCell value={g.agg.metricAverages[m]} decimals={2} />;
       cols.push({
         id: m,
@@ -288,7 +290,15 @@ export function ChartsTable(p: ChartsTableProps) {
         width: 110,
         minWidth: 90,
         priority: 3,
-        cell: (row) => pick(row, agg, (r) => <NumberCell value={r.metric_averages[m]} decimals={2} />),
+        cell: (row) =>
+          pick(row, agg, (r) => (
+            <span
+              className={styles.score}
+              data-best={top !== null && r.metric_averages[m] === top ? '' : undefined}
+            >
+              <NumberCell value={r.metric_averages[m]} decimals={2} />
+            </span>
+          )),
         summary: summary(agg),
       });
     }
@@ -423,6 +433,7 @@ export function ChartsTable(p: ChartsTableProps) {
         variant="embedded"
         zebra={false}
         columnMenu={false}
+        groupBand={false}
         columns={columns}
         rows={rows}
         rowKey={(row) => row.id}

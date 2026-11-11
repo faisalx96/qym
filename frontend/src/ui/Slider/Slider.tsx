@@ -14,13 +14,16 @@ export interface SliderProps extends Omit<AriaSliderProps<number>, 'className' |
   unit?: string;
   className?: string;
   width?: string | number;
+  /** 'stacked' (default): label and value above the track. 'inline': label, track, value on one 24px line (toolbars). */
+  layout?: 'stacked' | 'inline';
 }
 
-export function Slider({ label, unit, className, width, ...rest }: SliderProps) {
+export function Slider({ label, unit, className, width, layout = 'stacked', ...rest }: SliderProps) {
   return (
     <AriaSlider
       className={[fieldStyles.field, styles.slider, className].filter(Boolean).join(' ')}
       style={{ width }}
+      data-layout={layout === 'inline' ? 'inline' : undefined}
       {...rest}
     >
       <div className={styles.head}>

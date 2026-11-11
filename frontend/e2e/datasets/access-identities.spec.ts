@@ -10,7 +10,7 @@
 import { test, expect, type APIRequestContext, type Browser, type BrowserContext } from '@playwright/test';
 import { createUser, uniqueSlug } from '../helpers';
 import { runUrl } from '../run-detail/support';
-import { near, setAccess, size } from './access-support';
+import { expectNoPill, setAccess, size } from './access-support';
 import {
   bulkItems,
   createApiKey,
@@ -163,8 +163,8 @@ test.describe('a member with no access to a restricted dataset (real identities)
     const badge = page.locator('[data-dataset-card] ').getByText('View only', { exact: true });
     await expect(badge).toBeVisible();
     const box = await size(badge);
-    near(box.w, 91.5, 1);
     expect(box.h).toBe(20);
+    await expectNoPill(badge);
     await context.close();
   });
 });

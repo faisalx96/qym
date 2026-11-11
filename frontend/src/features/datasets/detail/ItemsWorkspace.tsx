@@ -16,7 +16,7 @@ import {
   type DatasetVersion,
 } from '@/api/datasets';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiError } from '@/lib/http';
+import { actionErrorMessage } from '@/lib/http';
 import { Button, ConfirmDialog, useToast } from '@/ui';
 import { DisableItemDialog } from '../components/dialogs';
 import type { BatchCriteria } from '../lib/batchCopy';
@@ -146,6 +146,11 @@ export function ItemsWorkspace({
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
   const index = paneId ? rows.findIndex((r) => r.item_id === paneId) : -1;
+  const byId = new Map(rows.map((r) => [r.item_id, r] as const));
+  const selectedMayBeDisabled = [...selected].some((k) => {
+    const row = byId.get(String(k));
+    return !row || row.state === 'disabled';
+  });
   const open = (item: DatasetItem) => {
     if (item.item_id === paneId) return;
     attempt(() => setPaneId(item.item_id));
@@ -166,7 +171,7 @@ export function ItemsWorkspace({
         tone: 'success',
       });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
+      toast.show(actionErrorMessage('delete the items', e), { tone: 'error' });
       throw e;
     }
   }
@@ -197,7 +202,7 @@ export function ItemsWorkspace({
     try {
       await applySelected('enable');
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t enable the items', {
+      toast.show(actionErrorMessage('enable the items', e), {
         tone: 'error',
       });
     }
@@ -220,22 +225,25 @@ export function ItemsWorkspace({
           bulkActions={
             <>
               <Button
-                variant="neutral"
+                variant="danger"
                 size="sm"
                 onPress={() => setDisableSelected(true)}
                 data-testid="bulk-disable-selected"
               >
-                Disable {selected.size}…
+                Disable {selected.size}
               </Button>
-              <Button
-                variant="neutral"
-                size="sm"
-                loading={selectedBatch.isPending && !disableSelected}
-                onPress={() => void enableSelected()}
-                data-testid="bulk-enable-selected"
-              >
-                Enable {selected.size}
-              </Button>
+              {/* Enable only when a selected row is disabled (or not loaded on this page) (C228) */}
+              {selectedMayBeDisabled ? (
+                <Button
+                  variant="neutral"
+                  size="sm"
+                  loading={selectedBatch.isPending && !disableSelected}
+                  onPress={() => void enableSelected()}
+                  data-testid="bulk-enable-selected"
+                >
+                  Enable {selected.size}
+                </Button>
+              ) : null}
               <Button
                 variant="danger"
                 size="sm"
@@ -323,7 +331,7 @@ export function ItemsWorkspace({
       <ConfirmDialog
         open={guard !== null}
         onOpenChange={(o) => !o && setGuard(null)}
-        title="Unsaved changes"
+        title="Discard the unsaved changes?"
         description="This item has edits that are not saved."
         cancelLabel="Keep editing"
         altLabel="Discard"
@@ -334,7 +342,7 @@ export function ItemsWorkspace({
             const g = guard;
             setGuard(null);
             g?.proceed();
-          } else throw new Error('Could not save; fix the item first.');
+          } else throw new Error('Couldn’t save; fix the item first.');
         }}
         onAlternative={() => {
           dirty.current.reset();

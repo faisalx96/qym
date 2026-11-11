@@ -88,7 +88,22 @@
   display: grid;
   grid-template-columns: 1fr 1fr auto;
   gap: var(--space-sm);
-  align-items: end;
+  align-items: start;
+}
+
+.remove {
+  align-self: end;
+}
+
+.category {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.runLink {
+  font-size: var(--font-sm);
 }
 
 .formActions {

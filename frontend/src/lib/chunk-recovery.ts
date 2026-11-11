@@ -1,6 +1,6 @@
 /**
  * Recover from a stale bundle. After a deploy the hashed chunks and stylesheets an open tab's `index.html` names are
- * gone, so the next lazy route fails with "Unable to preload CSS for …" or "Failed to fetch dynamically imported
+ * gone, so the next lazy route fails with "Couldn’t preload CSS for …" or "Failed to fetch dynamically imported
  * module". The only fix is a fresh `index.html`: reload the page once. A second failure inside a minute (the server
  * really lacks the file) is shown as an error instead of looping.
  */
@@ -9,7 +9,7 @@ const STORAGE_KEY = 'qym.chunk-reload-at';
 const RELOAD_WINDOW_MS = 60_000;
 /** Chromium, Firefox and Safari wording for a missing chunk, plus Vite's own preload helper. */
 const CHUNK_ERROR_PATTERNS = [
-  /Unable to preload CSS/i,
+  /Couldn’t preload CSS/i,
   /Failed to fetch dynamically imported module/i,
   /error loading dynamically imported module/i,
   /Importing a module script failed/i,
@@ -65,7 +65,10 @@ export function recoverFromChunkError(error: unknown, deps: ChunkRecoveryDeps = 
  * Vite's production preload helper dispatches a cancelable `vite:preloadError` on `window` before it throws;
  * cancelling it and reloading replaces the error page with a fresh bundle. Returns the uninstaller.
  */
-export function installChunkRecovery(target: Window = window, deps: ChunkRecoveryDeps = defaultDeps()): () => void {
+export function installChunkRecovery(
+  target: Window = window,
+  deps: ChunkRecoveryDeps = defaultDeps(),
+): () => void {
   const handler = (event: Event) => {
     if (reloadOnce(deps)) event.preventDefault();
   };

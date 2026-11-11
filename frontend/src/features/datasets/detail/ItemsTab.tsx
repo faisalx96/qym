@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Key } from 'react-aria-components';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useDatasetItems,
   fetchMatchingItemIds,
@@ -16,11 +16,10 @@ import {
   type DatasetVersion,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
+import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
 import {
-  Badge,
   Button,
   Chip,
   ConfirmDialog,
@@ -36,6 +35,7 @@ import {
   useToast,
   type Column,
   type RowAction,
+  StatusMark,
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
 import { menuLabel } from '../lib/batchCopy';
@@ -281,8 +281,8 @@ export function ItemsTab({
             action={
               canEdit ? (
                 <div className={styles.emptyActions}>
-                  <Button variant="primary" onPress={onAddItem}>
-                    + Add item
+                  <Button icon={<Icon name="plus" size={12} />} variant="primary" onPress={onAddItem}>
+                    Add item
                   </Button>
                   <Button variant="neutral" onPress={onImport}>
                     Import file
@@ -310,21 +310,11 @@ export function ItemsTab({
       pin: 'start',
       hideable: false,
       priority: 1,
+      // Plain text: the whole row opens the pane, and the row's arrow opens the item page (C142).
       cell: (item) => (
-        <Link
-          to={itemHref(item)}
-          className={styles.indexLink}
-          data-item-link={item.item_id}
-          onKeyDown={(e) => {
-            // Keyboard activation opens the docked pane; a click on the link opens the item page.
-            if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
-              e.preventDefault();
-              openItem(item);
-            }
-          }}
-        >
+        <span className={styles.indexText} data-item-link={item.item_id}>
           {item.index}
-        </Link>
+        </span>
       ),
     },
     ...(hasUserIds || route.state !== 'active'
@@ -339,7 +329,9 @@ export function ItemsTab({
             cell: (item: DatasetItem) => (
               <span className={styles.idCell}>
                 <span dir="ltr">{item.item_id}</span>
-                {item.state === 'disabled' ? <Badge tone="neutral">Disabled</Badge> : null}
+                {item.state === 'disabled' ? (
+                  <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+                ) : null}
               </span>
             ),
           } satisfies Column<DatasetItem>,
@@ -371,7 +363,7 @@ export function ItemsTab({
       sort: 'metadata',
       width: 180,
       priority: 3,
-      cell: (item) => <Preview value={item.metadata} />,
+      cell: (item) => <Preview value={item.metadata} mono />,
     },
     {
       id: 'labels',
@@ -427,7 +419,13 @@ export function ItemsTab({
   ];
 
   const rowActions = (): RowAction<DatasetItem>[] => [
-    { id: 'open', label: 'Open item', icon: 'external', primary: true, onPress: openItem },
+    {
+      id: 'open',
+      label: 'Open item page',
+      icon: 'external',
+      primary: true,
+      onPress: (it) => navigate(itemHref(it)),
+    },
     {
       id: 'copy',
       label: 'Copy as JSON',
@@ -441,7 +439,12 @@ export function ItemsTab({
             labels: it.labels,
           }),
         ).then((ok) =>
-          toast.show(ok ? 'Copied item as JSON' : 'Copy failed', { tone: ok ? 'success' : 'error' }),
+          ok
+            ? toast.show('Copied item as JSON', {
+                tone: 'success',
+                merge: { key: 'copy-json', text: (n) => `Copied ${n} items as JSON` },
+              })
+            : toast.show('Copy failed', { tone: 'error' }),
         ),
     },
     ...(canEdit
@@ -470,6 +473,7 @@ export function ItemsTab({
       <DataTable<DatasetItem>
         aria-label={`Items in ${version.version}`}
         storageKey="datasets.items.v3"
+        groupBand={false}
         density="compact"
         rows={items}
         rowKey={(i) => i.item_id}
@@ -491,7 +495,7 @@ export function ItemsTab({
             : undefined
         }
         bulkActions={bulkActions}
-        loading={showSkeleton}
+        loading={tableLoading(query.isPending && visible, showSkeleton)}
         refreshing={query.isFetching && query.isPlaceholderData}
         error={query.isError ? query.error : undefined}
         onRetry={() => void query.refetch()}
@@ -523,11 +527,12 @@ export function ItemsTab({
         className={styles.table}
       >
         <DataTable.Toolbar
+          selectionReplaces
           search={
             <SearchField
               label="Search items"
               hideLabel
-              placeholder="Search items…"
+              placeholder="Search items"
               value={search}
               onChange={setSearch}
               width={260}
@@ -652,22 +657,11 @@ export function ItemsTab({
                   onAction={(id) => onBatch(id as BatchAction, criteria)}
                 />
               ) : null}
-              {canEdit ? (
-                <Button variant="neutral" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
-                  Add item
-                </Button>
-              ) : null}
             </>
           }
         />
+        {/* Add item and Import live in the dataset header only (C116) */}
         <DataTable.Footer
-          trailing={
-            canEdit ? (
-              <Button variant="ghost" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
-                Add new item
-              </Button>
-            ) : null
-          }
           pagination={{
             total,
             page: route.page + 1,
@@ -705,7 +699,8 @@ export function ItemsTab({
 }
 
 /** Mono one-line preview; Arabic text flows RTL. Hovering for 700 ms shows the full value. */
-export function Preview({ value, wrap }: { value: unknown; wrap?: boolean }) {
+/** A cell preview: item text in the sans face; `mono` for JSON such as metadata (C153). */
+export function Preview({ value, wrap, mono }: { value: unknown; wrap?: boolean; mono?: boolean }) {
   const text = promptPreview(value);
   const dir = textDirAttrs(text);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
@@ -718,6 +713,7 @@ export function Preview({ value, wrap }: { value: unknown; wrap?: boolean }) {
   return (
     <span
       className={wrap ? styles.previewWrap : styles.preview}
+      data-mono={mono ? '' : undefined}
       {...dir}
       onMouseEnter={(e) => {
         if (!text) return;

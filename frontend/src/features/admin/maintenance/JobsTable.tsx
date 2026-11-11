@@ -1,26 +1,35 @@
 import { useMemo, useState } from 'react';
 import { useJobAction, ACTIVE_JOB_STATUSES, type JobStatus, type MaintenanceJob } from '@/api/admin';
-import { ApiError } from '@/lib/http';
-import { Badge, DataTable, Drawer, KeyValueGrid, Text, useToast, type BadgeTone, type Column } from '@/ui';
+import { actionErrorMessage } from '@/lib/http';
+import {
+  DataTable,
+  Drawer,
+  KeyValueGrid,
+  StatusMark,
+  Text,
+  useToast,
+  type Column,
+  type StatusShape,
+  type StatusTone,
+} from '@/ui';
 import { formatDateTime } from '../format';
 import styles from './maintenance.module.css';
 
-const TONE: Record<JobStatus, BadgeTone> = {
-  queued: 'neutral',
-  running: 'info',
-  paused: 'warning',
-  cancel_requested: 'warning',
-  cancelled: 'warning',
-  succeeded: 'success',
-  failed: 'danger',
+/** status → tone and figure. Paused waits for Start (hourglass), so it reads apart from Cancelled (pause). */
+const FIGURE: Record<JobStatus, [StatusTone, StatusShape]> = {
+  queued: ['neutral', 'ring'],
+  running: ['info', 'orbit'],
+  paused: ['warning', 'hourglass'],
+  cancel_requested: ['warning', 'orbit'],
+  cancelled: ['warning', 'pause'],
+  // C218: success is the normal case, so it is quiet; only failures and waits take a colour
+  succeeded: ['neutral', 'full'],
+  failed: ['danger', 'cross'],
 };
 
 export function JobStatusBadge({ status }: { status: JobStatus }) {
-  return (
-    <Badge tone={TONE[status] ?? 'neutral'} dot={status === 'running'}>
-      {status.replace(/_/g, ' ')}
-    </Badge>
-  );
+  const [tone, shape] = FIGURE[status] ?? ['neutral', 'ring'];
+  return <StatusMark tone={tone} shape={shape} label={status.replace(/_/g, ' ')} data-status={status} />;
 }
 
 export interface JobsTableProps {
@@ -40,7 +49,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
       await act.mutateAsync({ id: job.id, action });
       toast.show(`${action === 'start' ? 'Started' : 'Cancel requested for'} ${job.kind}`, { tone: 'info' });
     } catch (e) {
-      toast.show(`${action} failed: ${e instanceof ApiError ? e.detail || `HTTP ${e.status}` : String(e)}`, {
+      toast.show(actionErrorMessage(`${action.toLowerCase()} the job`, e), {
         tone: 'error',
       });
     }
@@ -103,7 +112,8 @@ export function JobsTable({ jobs }: JobsTableProps) {
         rows={jobs}
         rowKey={(j) => j.id}
         storageKey="admin-jobs"
-        density="regular"
+        density="comfortable"
+        densityLocked
         empty="No jobs yet."
         refreshing={jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status))}
         rowState={(j) => (j.status === 'failed' ? 'error' : j.status === 'running' ? 'live' : undefined)}

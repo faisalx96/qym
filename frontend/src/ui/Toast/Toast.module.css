@@ -1,7 +1,8 @@
-/* .shell-toast: top-right stack; errors role=alert, others role=status. */
+/* .shell-toast: a stack at the bottom end of the window, clear of the page-header actions (C143); errors
+   role=alert, others role=status. */
 .container {
   position: fixed;
-  top: var(--space-md);
+  bottom: var(--space-md);
   inset-inline-end: var(--space-md);
   z-index: var(--z-toast);
   display: flex;

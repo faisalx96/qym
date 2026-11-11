@@ -34,10 +34,16 @@ test('a run key names every run once, the baseline marked, and a chip per run si
   await expect(chips.nth(1)).toContainText('81.2%');
 });
 
-test('a chip is coloured by the score band; a task error is its own red shape', async ({ page }) => {
+test('K3 (C029): the baseline chip is neutral, a run chip shows its change; a task error is its own red shape', async ({
+  page,
+}) => {
   await open4(page);
   const chips = page.getByTestId('item-row').first().locator('[data-part="item-score-chip"]');
-  for (let i = 0; i < 4; i++) await expect(chips.nth(i)).toHaveAttribute('data-band', /^[1-5]$/);
+  await expect(chips.nth(0)).toHaveAttribute('data-baseline', '');
+  for (let i = 1; i < 4; i++) {
+    await expect(chips.nth(i)).toHaveAttribute('data-move', /^(improved|regressed|same)$/);
+    await expect(chips.nth(i).locator('[data-part="item-chip-delta"]')).toHaveText(/^(▲|▼|≈)/);
+  }
   const errored = page.getByTestId('item-row').and(page.locator('[data-error]')).first();
   await expect(errored).toBeVisible();
   const chip = errored.locator('[data-part="item-score-chip"][data-state="error"]').first();

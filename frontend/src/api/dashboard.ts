@@ -122,6 +122,15 @@ export function useOverview(
   });
 }
 
+/**
+ * The project's model index (models in frequency order): the one source of model colours on every page (C051). It
+ * reads the project's unfiltered overview, the same query the runs list starts with.
+ */
+export function useModelIndex(slug: string | null | undefined): Record<string, number> | null {
+  const q = useOverview(slug ?? '', {}, { enabled: Boolean(slug) });
+  return q.data?.chart_data?.modelIndex ?? null;
+}
+
 export function useKpis(
   slug: string,
   filters: DashboardFilters,
@@ -225,6 +234,27 @@ export function usePendingCorrections(slug: string, limit = 12) {
   });
 }
 
+/** The Charts scatter reads at most this many runs (the newest first). */
+export const SCATTER_MAX_RUNS = 2000;
+
+/** Every run in the page filters, across tasks and datasets, newest first: the Charts scatter (C052). */
+export function useScatterPoints(slug: string, filters: DashboardFilters, opts: { enabled?: boolean } = {}) {
+  return useInfiniteQuery({
+    queryKey: [...dashboardKeys.points(slug, filters, 'time-desc', '', ''), 'all'] as const,
+    queryFn: ({ pageParam, signal }) =>
+      api.post<RunsPage>(
+        '/api/dashboard/points',
+        { project_slug: slug, filters, limit: POINTS_PAGE, offset: pageParam, sort: 'time-desc' },
+        { signal },
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (last) =>
+      last.has_more && last.offset + last.limit < SCATTER_MAX_RUNS ? last.offset + last.limit : undefined,
+    enabled: opts.enabled ?? true,
+    staleTime: 60_000,
+  });
+}
+
 /** `{error}` with HTTP 200 on the legacy run routes → thrown Error. */
 function unwrapLegacy<T extends { error?: string }>(data: T): T {
   if (data && typeof data === 'object' && typeof data.error === 'string' && data.error)
@@ -294,21 +324,6 @@ export function useGroupMetrics(
     enabled: (opts.enabled ?? true) && Boolean(metric),
     placeholderData: keepPreviousData,
   });
-}
-
-/** Warm the cache for a run the reader has not opened yet (never throws: a failed prefetch shows nothing). */
-export function prefetchRunPasses(qc: QueryClient, runId: string): Promise<void> {
-  return qc.prefetchQuery(runPassesQuery(runId));
-}
-
-export function prefetchGroupMetrics(
-  qc: QueryClient,
-  runId: string,
-  metric: string,
-  threshold: number,
-  view: GroupMetricsView = 'group',
-): Promise<void> {
-  return qc.prefetchQuery(groupMetricsQuery(runId, metric, threshold, view));
 }
 
 export function useProjectMembers(projectId: string | undefined) {

@@ -16,7 +16,13 @@ import {
 } from '@/lib/metrics';
 import type { Row, Run, RunPayload } from '@/features/run-detail/types';
 import { scopeRowToPass } from '@/features/run-detail/lib/passScope';
-import { computeRunLabels, disambiguateRunNames, modelShortName, runShortName, type RunLabel } from './labels';
+import {
+  computeRunLabels,
+  disambiguateRunNames,
+  modelShortName,
+  runShortName,
+  type RunLabel,
+} from './labels';
 import { SKIPPED_METADATA } from './skipMetadata';
 import { expandRefs, makePassRef, passRefBase, passRefNumber } from './refs';
 
@@ -31,6 +37,10 @@ export interface ComparePayload {
 
 export type PassRun = Run & {
   pass_number?: number;
+  /** Passes of the run this slice comes from; a '· pass N' suffix shows only when it is more than 1 (C162). */
+  pass_count?: number;
+  /** Every compared column is a pass of this one run: the pass goes by 'Pass N' and the title names the run (C215). */
+  pass_only?: boolean;
   base_run_name?: string;
   compare_alignment_status?: string;
   compare_alignment_issues?: string[];
@@ -66,6 +76,11 @@ export interface CompareModel {
   defaultMetric: string | null;
   metadataKeys: string[];
   alignment: { status: 'aligned' | 'unalignable'; runs: Array<{ run_name: string; issues: string[] }> };
+  /**
+   * C058: the runs evaluated different tasks or datasets (by name), so items are not paired. One entry per base run
+   * (its name, task and dataset); null when the runs share a task and a dataset.
+   */
+  unpaired: Array<{ name: string; task: string; dataset: string }> | null;
   langfuseHost: string;
   langfuseProjectId: string;
   /** Distinct base runs (for labels and "remove run"). */
@@ -80,6 +95,7 @@ export function getRowCompareId(row: Row | null | undefined): string | null {
 export function slicePayloadToPass(base: RunPayload, ref: string, pass: number): RunPayload {
   const baseRun = base.run;
   const name = baseRun.run_name || baseRun.run_id || 'run';
+  const passCount = Number(baseRun.samples) || 1;
   const metricNames = base.snapshot.metric_names ?? baseRun.metric_names ?? [];
   const rows = (base.snapshot.rows ?? []).map((row) => scopeRowToPass(row, metricNames, pass));
   const failed = rows.filter((r) => r.status === 'error').length;
@@ -87,9 +103,10 @@ export function slicePayloadToPass(base: RunPayload, ref: string, pass: number):
   const run: PassRun = {
     ...baseRun,
     file_path: ref,
-    run_name: `${name} · pass ${pass}`,
+    run_name: passCount > 1 ? `${name} · pass ${pass}` : name,
     base_run_name: name,
     pass_number: pass,
+    pass_count: passCount,
     samples: 1,
     error_count: failed,
     execution_error_count: failed,
@@ -157,6 +174,9 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
     const metricIndex: Record<string, number> = {};
     names.forEach((n, i) => (metricIndex[n] = i));
     const lab = labels[p.base] ?? { label: p.base, title: p.base };
+    const name = String(byBase.get(p.base)!.run.run_name || byBase.get(p.base)!.run.run_id || p.base).trim();
+    const passCount = Number(byBase.get(p.base)!.run.samples) || 1;
+    const suffix = p.pass && passCount > 1 ? ` · pass ${p.pass}` : '';
     return {
       ref: p.ref,
       base: p.base,
@@ -165,8 +185,8 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
       rows,
       byItem,
       metricIndex,
-      label: p.pass ? `${lab.label} · pass ${p.pass}` : lab.label,
-      title: p.pass ? `${lab.title} · pass ${p.pass}` : lab.title,
+      label: `${name}${suffix}`,
+      title: `${lab.title}${suffix}`,
       position,
       snapshot,
     };
@@ -182,8 +202,19 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
   );
   runs.forEach((r, i) => {
     const base = runShortName({ label: r.label, run: r.run }).replace(/ · pass \d+$/, '');
-    if (shown[i] !== base) r.run = { ...r.run, run_name: shown[i] } as PassRun;
+    if (shown[i] !== base) {
+      r.run = { ...r.run, run_name: shown[i] } as PassRun;
+      r.label = r.label.replace(base, shown[i]!);
+    }
   });
+
+  // C215: the passes of one repeat run, alone, go by 'Pass 1' to 'Pass N'
+  if (new Set(runs.map((r) => r.base)).size === 1 && runs.length > 1)
+    runs.forEach((r) => {
+      if (!r.pass) return;
+      r.run = { ...r.run, pass_only: true } as PassRun;
+      r.label = `Pass ${r.pass}`;
+    });
 
   const metrics = mergeMetricNames(metricLists);
   const specs: Record<string, MetricSpec> = {};
@@ -237,6 +268,20 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
     (u, i) => unalignable.findIndex((o) => o.run_name === u.run_name) === i,
   );
 
+  // C058: different tasks, or different dataset names on single-dataset runs, are not paired item by item
+  const baseRuns = Array.from(new Set(runs.map((r) => r.base))).map((b) => byBase.get(b)!.run);
+  const tasks = new Set(baseRuns.map((r) => String(r.task_name ?? '').trim()).filter(Boolean));
+  const singleDataset = baseRuns.every((r) => (r.dataset_count ?? 1) <= 1);
+  const datasets = new Set(baseRuns.map((r) => String(r.dataset_name ?? '').trim()).filter(Boolean));
+  const unpaired =
+    baseRuns.length > 1 && (tasks.size > 1 || (singleDataset && datasets.size > 1))
+      ? baseRuns.map((r) => ({
+          name: String(r.run_name || r.run_id),
+          task: String(r.task_name ?? ''),
+          dataset: String(r.dataset_name ?? ''),
+        }))
+      : null;
+
   const first = loaded[0]?.run;
   return {
     runs,
@@ -247,9 +292,15 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
     isBoolean,
     directions,
     defaultThresholds,
-    defaultMetric: defaultMetricName(metrics, defaultSpecs),
+    // C155: open on a metric every compared run has, so the first view is never empty for some runs
+    defaultMetric: defaultMetricName(
+      metrics,
+      defaultSpecs,
+      metricLists.length ? metrics.filter((m) => metricLists.every((l) => l.includes(m))) : undefined,
+    ),
     metadataKeys: Array.from(metaKeys).sort(),
     alignment: { status: dedupedUnalignable.length ? 'unalignable' : 'aligned', runs: dedupedUnalignable },
+    unpaired,
     langfuseHost: payload.langfuse_host || first?.langfuse_host || '',
     langfuseProjectId: payload.langfuse_project_id || first?.langfuse_project_id || '',
     bases: Array.from(new Set(runs.map((r) => r.base))),

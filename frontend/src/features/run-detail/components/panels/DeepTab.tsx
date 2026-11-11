@@ -1,7 +1,13 @@
-/** Deep analysis: metric correlation matrix and the strongest relationship scatter (brief 04 J3). */
+/**
+ * Deep analysis (brief 04 J3). Round 10: "Between metrics", the correlation matrix beside the relationship scatter
+ * (the first qym's pair, its teal-and-purple scale, X and Y in the scatter's head and the legend on its own row); and,
+ * for a repeat run, "Across passes", the page metric's score spread in each pass (moved here from Repeat).
+ */
 import { useMemo, useRef, useState } from 'react';
-import { Select } from '@/ui';
+import { usePassesQuery } from '@/api/runs';
+import { Select, Subsection } from '@/ui';
 import { useRunPage } from '../../RunContext';
+import { PassDistribution } from './PassDistribution';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { correlationMatrix, strongestPair } from '../../lib/overviewModel';
 import { Scatter, ScatterLegend, useMeasuredWidth } from '../charts/Charts';
@@ -10,14 +16,30 @@ import { MATRIX_NUMBER_MIN, matrixCellSide } from '../charts/chartLabels';
 import chart from '../charts/Charts.module.css';
 import styles from './Panels.module.css';
 
-function tone(r: number | null): string | undefined {
+/**
+ * A heatmap of strength only (C167, owner note "we still need some sort of heatmap"): one `--chart-1` ramp by |r| on a
+ * fixed 0 to 1 scale. Strength is neither good nor bad, and teal and purple are not data; the sign is in the number.
+ */
+const RAMP_MIN = 4;
+const RAMP_MAX = 48;
+export function correlationTone(r: number | null): string | undefined {
   if (r === null) return undefined;
   const a = Math.min(1, Math.abs(r));
-  return `color-mix(in srgb, ${r >= 0 ? 'var(--chart-2)' : 'var(--chart-4)'} ${Math.round(a * 60)}%, var(--bg-elevated))`;
+  return `color-mix(in srgb, var(--chart-1) ${Math.round(RAMP_MIN + a * (RAMP_MAX - RAMP_MIN))}%, var(--bg-elevated))`;
+}
+
+/** +0.20, −0.15 (a true minus), 0.00. */
+export function signedR(r: number): string {
+  const v = r.toFixed(2);
+  if (Number(v) === 0) return '0.00';
+  return r > 0 ? `+${v}` : `\u2212${v.slice(1)}`;
 }
 
 export function DeepTab() {
-  const { items, api, model, setItem } = useDeep();
+  const { items, api, model, setItem, runId } = useDeep();
+  const repeat = model.isRepeat && !model.viewPass;
+  const passes = usePassesQuery(runId, repeat);
+  const donePasses = (passes.data?.passes ?? []).filter((p) => p.status !== 'pending' && !p.queued);
   const rows = useMemo(() => items.map((i) => i.row), [items]);
   const matrix = useMemo(() => correlationMatrix(api.ctx, rows), [api.ctx, rows]);
   const [pair, setPair] = useState<[number, number] | null>(null);
@@ -48,71 +70,121 @@ export function DeepTab() {
         })),
     [matrix, xi, yi, outcomes],
   );
-  if (names.length < 2) return <p className={styles.note}>Correlation needs at least two metrics.</p>;
   const r = matrix.r[xi]?.[yi];
   const opts = names.map((n, i) => ({ key: String(i), label: n }));
+  const unitScale = [xi, yi].every((i) => model.metricTypes[names[i] ?? ''] !== 'numeric');
+  const spread =
+    repeat && metric && !model.metricIsBoolean[metric] && donePasses.length > 1 ? (
+      <PassDistribution
+        metric={metric}
+        passes={donePasses}
+        kind={model.metricTypes[metric] === 'numeric' ? 'numeric' : 'percent'}
+      />
+    ) : null;
   return (
-    <div className={styles.single}>
-      <ChartCard
-        title="Metric correlation"
-        slot={false}
-        meta={
-          <span className={styles.note}>
-            Pearson r across matched item scores. Select a cell to plot the pair.
-          </span>
-        }
-      >
-        <CorrelationMatrix
-          names={names}
-          r={matrix.r}
-          selected={[xi, yi]}
-          onPick={(j, i) => {
-            setPair([j, i]);
-            requestAnimationFrame(() =>
-              relationRef.current?.scrollIntoView({
-                block: 'nearest',
-                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-              }),
-            );
-          }}
-        />
-      </ChartCard>
-      <div ref={relationRef}>
-        <ChartCard
-          title="Metric relationship"
-          slot={false}
-          meta={
-            <span className={styles.note}>{r === null || r === undefined ? 'r —' : `r ${r.toFixed(2)}`}</span>
-          }
-          legend={<ScatterLegend points={points} />}
-          intro={
-            <div className={styles.controls}>
-              <Select
-                label="X"
-                items={opts}
-                value={String(xi)}
-                onChange={(k) => k !== null && setPair([Number(k), yi])}
-                width="14ch"
-              />
-              <Select
-                label="Y"
-                items={opts}
-                value={String(yi)}
-                onChange={(k) => k !== null && setPair([xi, Number(k)])}
-                width="14ch"
-              />
-            </div>
-          }
+    <div className={styles.deepRoot}>
+      {names.length < 2 ? (
+        <p className={styles.note}>Correlation needs at least two metrics.</p>
+      ) : (
+        <Subsection
+          title="Between metrics"
+          description="How the metric results relate across the same items."
         >
-          <Scatter
-            points={points}
-            xLabel={names[xi] ?? ''}
-            yLabel={names[yi] ?? ''}
-            onPick={setItem}
-            fmt={(v) => (Math.abs(v) >= 100 ? String(Math.round(v)) : String(Math.round(v * 100) / 100))}
-          />
-        </ChartCard>
-      </div>
+          <div className={styles.deepPair}>
+            <ChartCard
+              title="Metric correlation"
+              slot={false}
+              intro={
+                <p className={styles.note}>
+                  Pearson r across matched item scores. Select a cell to plot the pair.
+                </p>
+              }
+            >
+              <CorrelationMatrix
+                names={names}
+                r={matrix.r}
+                selected={[xi, yi]}
+                onPick={(j, i) => {
+                  setPair([j, i]);
+                  requestAnimationFrame(() =>
+                    relationRef.current?.scrollIntoView({
+                      block: 'nearest',
+                      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                        ? 'auto'
+                        : 'smooth',
+                    }),
+                  );
+                }}
+              />
+            </ChartCard>
+            <div ref={relationRef} className={styles.deepCell}>
+              <ChartCard
+                title="Metric relationship"
+                slot={false}
+                controls={
+                  <span className={styles.controls}>
+                    <span className={styles.axisPick} aria-hidden="true">
+                      X
+                    </span>
+                    <Select
+                      label="X"
+                      hideLabel
+                      items={opts}
+                      value={String(xi)}
+                      onChange={(k) => k !== null && setPair([Number(k), yi])}
+                      width="15ch"
+                    />
+                    <span className={styles.axisPick} aria-hidden="true">
+                      Y
+                    </span>
+                    <Select
+                      label="Y"
+                      hideLabel
+                      items={opts}
+                      value={String(yi)}
+                      onChange={(k) => k !== null && setPair([xi, Number(k)])}
+                      width="15ch"
+                    />
+                    <span className={styles.rValue}>
+                      r <b>{r === null || r === undefined ? '—' : signedR(r)}</b>
+                    </span>
+                  </span>
+                }
+                intro={
+                  <div className={styles.relationIntro}>
+                    <p className={styles.note}>
+                      {names[xi]} versus {names[yi]}, one dot per item.
+                    </p>
+                    <ScatterLegend points={points} />
+                  </div>
+                }
+              >
+                <Scatter
+                  fit
+                  points={points}
+                  xLabel={names[xi] ?? ''}
+                  yLabel={names[yi] ?? ''}
+                  onPick={setItem}
+                  fmt={
+                    unitScale
+                      ? (v) => `${Math.round(v * 100)}%`
+                      : (v) =>
+                          Math.abs(v) >= 100 ? String(Math.round(v)) : String(Math.round(v * 100) / 100)
+                  }
+                />
+              </ChartCard>
+            </div>
+          </div>
+        </Subsection>
+      )}
+      {spread ? (
+        <Subsection
+          title="Across passes"
+          description={`How the ${metric} scores spread in each pass. Select a pass to open it.`}
+        >
+          {spread}
+        </Subsection>
+      ) : null}
     </div>
   );
 }
@@ -161,24 +233,49 @@ function CorrelationMatrix({
             </span>
             {names.map((colName, j) => {
               const v = r[i]?.[j] ?? null;
+              if (i === j)
+                return (
+                  <span role="gridcell" key={colName} aria-label={`${rowName} versus itself`}>
+                    <span
+                      className={styles.matrixSelf}
+                      style={{ height: side }}
+                      data-testid="matrix-diagonal"
+                    />
+                  </span>
+                );
               return (
                 <span role="gridcell" key={colName}>
                   <button
                     type="button"
                     className={chart.matrixCell}
-                    style={{ width: '100%', height: side, background: tone(v) }}
-                    aria-label={`${rowName} versus ${colName}: ${v === null ? 'not enough data' : v.toFixed(2)}`}
+                    style={{ width: '100%', height: side, background: correlationTone(v) }}
+                    aria-label={`${rowName} versus ${colName}: ${v === null ? 'not enough data' : signedR(v)}`}
                     aria-pressed={i === selected[0] && j === selected[1]}
-                    disabled={i === j}
                     onClick={() => onPick(j, i)}
                   >
-                    {colWidth >= MATRIX_NUMBER_MIN ? (v === null ? '—' : v.toFixed(2)) : null}
+                    {colWidth >= MATRIX_NUMBER_MIN ? (v === null ? '—' : signedR(v)) : null}
                   </button>
                 </span>
               );
             })}
           </div>
         ))}
+      </div>
+      <div className={styles.rampKey} data-testid="correlation-key">
+        <span>|r|</span>
+        <span className={styles.rampScale}>
+          <span
+            className={styles.rampBar}
+            style={{ background: `linear-gradient(to right, ${correlationTone(0)}, ${correlationTone(1)})` }}
+            aria-hidden="true"
+          />
+          <span className={styles.rampTicks} aria-hidden="true">
+            <span>0</span>
+            <span>0.5</span>
+            <span>1</span>
+          </span>
+        </span>
+        <span>More colour, stronger correlation. The sign is in the number.</span>
       </div>
     </div>
   );

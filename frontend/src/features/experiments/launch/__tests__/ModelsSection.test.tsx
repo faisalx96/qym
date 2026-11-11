@@ -97,7 +97,7 @@ describe('ModelsSection', () => {
     });
     const input = screen.getByRole('textbox', { name: 'New LLM endpoint name' });
     await user.type(input, 'bad name!');
-    await user.click(screen.getByRole('button', { name: '+ Add LLM endpoint' }));
+    await user.click(screen.getByRole('button', { name: 'Add LLM endpoint' }));
     expect(await screen.findByText(/Use letters, digits/)).toBeInTheDocument();
 
     await user.clear(input);
@@ -138,7 +138,7 @@ describe('ModelsSection', () => {
     const user = userEvent.setup();
     renderSection(<ModelsSection />);
     const primary = card('Primary model');
-    await user.click(within(primary).getByRole('button', { name: '+ models' }));
+    await user.click(within(primary).getByRole('button', { name: 'Add models' }));
     expect(live.current?.doc.bindings['endpoint:primary']).toEqual({ kind: 'sweep', items: [] });
     expect(screen.getByText(/Pick at least one model/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'gpt-4o prod · gpt-4o' }));

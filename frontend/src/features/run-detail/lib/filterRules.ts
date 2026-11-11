@@ -38,6 +38,7 @@ import {
 } from './rowMeta';
 import type { RunModel } from './runModel';
 import { rowDatasetKey } from './datasetFilter';
+import { foldSearchText } from '@/lib/text';
 
 /* ── types ── */
 
@@ -425,9 +426,7 @@ export function evalFilterNode(
     const hit =
       node.field === 'output' && outputMatcher
         ? outputMatcher(needle, row)
-        : String(v ?? '')
-            .toLowerCase()
-            .includes(needle.toLowerCase());
+        : foldSearchText(String(v ?? '')).includes(foldSearchText(needle));
     return node.oper === 'notcontains' ? !hit : hit;
   }
   return true;
@@ -489,7 +488,8 @@ export function applyItemFilters(
   const metric = view.metric ?? model.defaultMetric;
   const mIdx = metric ? model.metricNames.indexOf(metric) : -1;
   const f = view.filters;
-  const q = view.q.trim().toLowerCase();
+  // C066: run search folds Arabic letter forms, marks and digits the way dataset search does
+  const q = foldSearchText(view.q.trim());
   const items: FilteredItem[] = [];
 
   for (const row of model.rows) {
@@ -497,10 +497,10 @@ export function applyItemFilters(
       if (opts.searchMatcher) {
         if (!opts.searchMatcher(row)) continue;
       } else {
-        const itemId = String(row.item_id ?? row.index ?? '').toLowerCase();
-        const inp = stringify(row.input_full ?? row.input ?? row.input_preview ?? '').toLowerCase();
-        const exp = stringify(row.expected_full ?? row.expected ?? '').toLowerCase();
-        const out = stringify(row.output_full ?? row.output ?? '').toLowerCase();
+        const itemId = foldSearchText(String(row.item_id ?? row.index ?? ''));
+        const inp = foldSearchText(stringify(row.input_full ?? row.input ?? row.input_preview ?? ''));
+        const exp = foldSearchText(stringify(row.expected_full ?? row.expected ?? ''));
+        const out = foldSearchText(stringify(row.output_full ?? row.output ?? ''));
         if (!itemId.includes(q) && !inp.includes(q) && !exp.includes(q) && !out.includes(q)) continue;
       }
     }

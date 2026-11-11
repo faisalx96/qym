@@ -154,12 +154,10 @@ test.describe('frozen names stay put on real scrolling', () => {
       const scroller = page.getByTestId('runs-table').locator('[data-dt-scroller]').first();
       await expect(scroller).toBeVisible();
       await probe(page, scroller, `runs ${width}`);
-      // the band cell above the frozen columns is pinned too
-      await expect(
-        page
-          .getByTestId('runs-table')
-          .locator('thead th.bandCell[data-pin], thead th[scope="colgroup"][data-pin]'),
-      ).not.toHaveCount(0);
+      // round 8: the runs table has no group band row; its frozen header cells are pinned
+      const head = page.getByTestId('runs-table').locator('thead');
+      await expect(head.locator('th[scope="colgroup"]')).toHaveCount(0);
+      await expect(head.locator('th[data-pin]')).not.toHaveCount(0);
     });
   }
 
@@ -204,18 +202,16 @@ test.describe('frozen names stay put on real scrolling', () => {
     await page.setViewportSize({ width: 660, height: 900 });
     await gotoApp(page, '/__ui');
     await page.locator('[data-dt-scroller]').first().waitFor();
-    const wide = await page
-      .locator('[data-dt-scroller]')
-      .evaluateAll((scrollers) =>
-        scrollers.flatMap((sc, i) =>
-          Array.from(sc.querySelectorAll<HTMLElement>('thead th[data-pin]'))
-            .filter((th) => th.getBoundingClientRect().width > sc.clientWidth * 0.75)
-            .map(
-              (th) =>
-                `table ${i}: ${th.dataset.col} ${Math.round(th.getBoundingClientRect().width)} of ${sc.clientWidth}`,
-            ),
-        ),
-      );
+    const wide = await page.locator('[data-dt-scroller]').evaluateAll((scrollers) =>
+      scrollers.flatMap((sc, i) =>
+        Array.from(sc.querySelectorAll<HTMLElement>('thead th[data-pin]'))
+          .filter((th) => th.getBoundingClientRect().width > sc.clientWidth * 0.75)
+          .map(
+            (th) =>
+              `table ${i}: ${th.dataset.col} ${Math.round(th.getBoundingClientRect().width)} of ${sc.clientWidth}`,
+          ),
+      ),
+    );
     expect(wide, 'frozen header cells wider than 75% of their scroller').toEqual([]);
   });
 

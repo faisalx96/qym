@@ -48,7 +48,7 @@ describe('format', () => {
     expect(formatLatency(967)).toBe('967ms');
     expect(formatLatency(1523)).toBe('1.5s');
     expect(formatLatency(65_000)).toBe('1m 5s');
-    expect(formatDurationMs(43_343)).toBe('43s');
+    expect(formatDurationMs(43_343)).toBe('43.3s');
     expect(formatDurationMs(3_600_000 + 120_000)).toBe('1h 2m');
   });
   it('smart decimals add precision only on collisions', () => {

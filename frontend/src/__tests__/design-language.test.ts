@@ -224,7 +224,12 @@ describe('primitive module contracts', () => {
     Select: ['height: var(--control-height)', 'min-height: var(--dropdown-option-height)'],
     MultiSelect: ['min-height: var(--dropdown-option-height)', 'width: var(--dropdown-width)'],
     RadioGroup: ['min-block-size: var(--row-comfortable)', 'var(--accent-primary)', '[data-selected]'],
-    SegmentedControl: ['height: var(--control-height)', 'background: var(--accent-primary)', 'height: 100%'],
+    SegmentedControl: [
+      'height: var(--control-height)',
+      'color: var(--accent-primary)',
+      'color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent)',
+      'height: 100%',
+    ],
     Pagination: ['height: var(--control-height)', 'min-width: 160px', 'font-family: var(--font-mono)'],
     Badge: [
       'min-height: var(--badge-height)',
@@ -292,6 +297,52 @@ describe('primitive module contracts', () => {
       expect(rule, `${state} rule`).toContain('box-shadow: none;');
       expect(rule).not.toContain('color-mix(');
     }
+  });
+
+  it('Tabs: the selected tab is green and its 2px underline sits inside the list, unclipped (round 10)', () => {
+    const css = ui('Tabs');
+    const list = css.split('.list {')[1]?.split('}')[0] ?? '';
+    // a border baseline let the underline hang 1px below the scrolling list: clipped, with a 1px vertical scrollbar
+    expect(list).toContain('box-shadow: inset 0 -1px 0 var(--border-subtle);');
+    expect(list).toContain('overflow-y: hidden;');
+    expect(list).not.toMatch(/border-bottom:/);
+    const tab = css.split('.tab {')[1]?.split('}')[0] ?? '';
+    expect(tab).toContain('border-bottom: 2px solid transparent;');
+    expect(tab).not.toMatch(/margin-bottom: -/);
+    const selected = css.split('.tab[data-selected] {')[1]?.split('}')[0] ?? '';
+    expect(selected).toContain('color: var(--accent-primary);');
+    expect(selected).toContain('border-color: var(--accent-primary);');
+  });
+
+  it('Button: a disabled coloured button keeps its own colour, faded (round 11)', () => {
+    const css = ui('Button');
+    const sel =
+      ".button:is([data-variant='primary'], [data-variant='accent'], [data-variant='danger'])[data-disabled] {";
+    const fade = css.split(sel)[1]?.split('}')[0] ?? '';
+    expect(fade).toContain('opacity: 0.45;');
+    const primary = css.split(".button[data-variant='primary'][data-disabled] {")[1]?.split('}')[0] ?? '';
+    expect(primary).toContain('background: var(--accent-primary);');
+    const danger = css.split(".button[data-variant='danger'][data-disabled] {")[1]?.split('}')[0] ?? '';
+    expect(danger).toContain('var(--error)');
+  });
+
+  it('DataTable: rows part on a faint hairline, none under zebra stripes or on the last row (round 10)', () => {
+    const css = ui('DataTable');
+    expect(css).toContain('--row-line: color-mix(in srgb, var(--border-subtle) 55%, transparent);');
+    expect(css.split('.card[data-zebra] {')[1]?.split('}')[0] ?? '').toContain('--row-line: transparent;');
+    expect(css.split('.tbody td {')[1]?.split('}')[0] ?? '').toContain(
+      'border-bottom: 1px solid var(--row-line);',
+    );
+    expect(css.split('.tbody > tr:last-child > td {')[1]?.split('}')[0] ?? '').toContain(
+      'border-bottom-color: transparent;',
+    );
+  });
+
+  it('IconButton tile (row actions) is the soft tint at rest and the strong tint on hover', () => {
+    const css = ui('IconButton');
+    const rest = css.split('.iconAction[data-tile] {')[1]?.split('}')[0] ?? '';
+    expect(rest).toContain('color-mix(in srgb, var(--tile-tone) var(--tint-soft), transparent)');
+    expect(css).toMatch(/\.iconAction\[data-tile\]\[data-hovered\],[^{]*\{[^}]*var\(--tint-strong\)/);
   });
 
   it('DataTable keeps the .qdt-table header/cell recipe', () => {
@@ -364,6 +415,18 @@ describe('primitive module contracts', () => {
     expect(
       [...ALLOWED].filter((f) => !found.includes(f)),
       'Remove migrated files from the allow-list',
+    ).toEqual([]);
+  });
+
+  it('shows status with StatusMark and flags with Flag, never a Badge pill', () => {
+    // features/dev holds dated mock pages.
+    const found = tsxFiles
+      .filter((f) => /<Badge[\s>]/.test(read(f)))
+      .map(rel)
+      .filter((f) => !f.startsWith('ui/Badge/') && !f.startsWith('features/dev/'));
+    expect(
+      found,
+      'Status is a StatusMark, a fact on an item is a Flag, a category is a Tag (docs/DESIGN_LANGUAGE.md §3.3)',
     ).toEqual([]);
   });
 
@@ -485,7 +548,9 @@ describe('visual language (redesign round 2)', () => {
     expect(tokens).toMatch(/--bar-action-h:\s*56px/);
     // Round 8 (owner decision H5): the compare page's links-only jump nav is --bar-link-h (36 px).
     expect(tokens).toMatch(/--bar-link-h:\s*36px/);
-    expect(read(join(SRC, 'features/compare/components/CompareBar.module.css'))).toContain('var(--bar-link-h)');
+    expect(read(join(SRC, 'features/compare/components/CompareBar.module.css'))).toContain(
+      'var(--bar-link-h)',
+    );
     const nav = ['features/run-detail/components/SectionNav.module.css'];
     const action = [
       'features/experiments/launch/entry/entry.module.css',
@@ -510,7 +575,8 @@ describe('visual language (redesign round 2)', () => {
     expect(base).not.toMatch(/a:hover:not\(/);
     expect(read(join(SRC, 'ui/Card/Card.tsx'))).toContain('data-link="block"');
     expect(read(join(SRC, 'features/experiments/launch/entry/StartCard.tsx'))).toContain('data-link="block"');
-    expect(read(join(SRC, 'features/docs/DocsPage.tsx'))).toContain('data-link="block"');
+    // the docs pager links are link cards: ui/Card carries the opt-out
+    expect(read(join(SRC, 'features/docs/DocsPage.tsx'))).toMatch(/<Card to=\{docsPath\((prev|next)\)\}/);
     expect(read(join(SRC, 'features/run-detail/components/RunHero.tsx'))).toContain('data-link="block"');
     // no stylesheet adds a hover underline for an anchor without the opt-out (the docs prose rule carries it)
     const loose = cssFiles.filter((f) =>
@@ -570,35 +636,36 @@ describe('visual language (redesign round 2)', () => {
     expect(problems).toEqual([]);
   });
 
-  it("draws a table's boundary with its own cells and paints nothing over scrolling content (round 7, Q1/D3)", () => {
+  it("marks a table's frozen boundary with a soft shade from its own cells, only while content is under it (round 9)", () => {
     const css = read(join(SRC, 'ui/DataTable/DataTable.module.css'));
-    // no overlay element, no scroll-cue fades, no gradient, no opacity transition on the table's chrome
+    // no overlay element, no scroll-cue fade on the body host, no will-change layers
     expect(css, 'a .edge overlay rule').not.toMatch(/\.edge\b/);
     expect(css, 'a [data-edge] rule').not.toContain('data-edge');
-    // (the row tint layer and the skeleton shimmer are the only gradients; neither is a horizontal edge fade)
-    expect(css, 'a horizontal edge fade').not.toMatch(/linear-gradient\(\s*to (?:left|right)/);
     expect(css, 'a pseudo-element fade on the body host').not.toMatch(/\.bodyHost[^{]*::(?:before|after)/);
     expect(css, 'will-change: opacity layers').not.toMatch(/will-change:\s*opacity/);
-    // the pinned boundary: 1px --border-strong, inside the pinned cell's own box, on both sides and in RTL,
-    // for the header, the group band and the body cells (row rails add the same line to their shadow)
+    // no line: the edge cells keep only an empty --pin-line (row rails still add it to their own shadow)
+    expect(css).not.toMatch(/--pin-line:\s*inset/);
+    expect(css).toMatch(/:is\(\.th, \.td, \.bandCell\)\[data-pin-edge\] \{\s*--pin-line: 0 0 0 transparent;/);
+    // the shade: an 8px --pin-shade gradient on the edge cell's own ::after, inside the cell (nothing over the
+    // scrolling content), darkest at the edge, on both sides and in RTL
     for (const side of ['start', 'end'] as const) {
-      const line = side === 'start' ? 'inset -1px 0 0' : 'inset 1px 0 0';
-      for (const cell of ['.th', '.td', '.bandCell']) {
-        const block = css.match(
-          new RegExp(
-            `${cell.replace('.', '\\.')}\\[data-pin-edge='${side}'\\](?::dir\\(rtl\\))?,[^{]*\\{([^}]*)\\}`,
-          ),
-        );
-        expect(block?.[1], `${cell}[data-pin-edge='${side}']`).toMatch(
-          /--pin-line:\s*inset -?1px 0 0 var\(--border-strong\)/,
-        );
-        expect(css, `${cell} ${side} ${line}`).toContain(`--pin-line: ${line} var(--border-strong)`);
-      }
+      const block = css.match(
+        new RegExp(`\\.th\\[data-pin-edge='${side}'\\]::after,[^{]*\\{([^}]*)\\}`),
+      )?.[1];
+      expect(block, `${side} shade`).toContain(`inset-inline-${side === 'start' ? 'end' : 'start'}: 0;`);
+      expect(block, `${side} shade stays inside the cell`).not.toContain('100%');
+      expect(block, `${side} shade`).toMatch(
+        /linear-gradient\(to (?:left|right), transparent, var\(--pin-shade\)\)/,
+      );
     }
     expect(css).toMatch(
-      /\.th\[data-pin-edge\],\s*\.td\[data-pin-edge\],\s*\.bandCell\[data-pin-edge\]\s*\{\s*box-shadow: var\(--pin-line\)/,
+      /\[data-pin-edge\]::after,[^{]*\{[^}]*inline-size: var\(--space-sm\);[^}]*opacity: 0;/,
     );
-    expect(css).toContain(':dir(rtl)');
+    expect(css).toMatch(/\.th\[data-pin-edge='start'\]:dir\(rtl\)::after/);
+    // shown only from the scroll flags (written on change, never per scroll event); a fold column never shades
+    expect(css).toMatch(
+      /\.scroller\[data-scrolled-x\] \[data-pin-edge='start'\]::after,\s*\.scroller\[data-scrolled-end\] \[data-pin-edge='end'\]:not\(\[data-fold\]\)::after\s*\{\s*opacity: 1;/,
+    );
     // the markup keeps the overlay out too
     expect(read(join(SRC, 'ui/DataTable/DataTable.tsx'))).not.toContain('styles.edge');
   });
@@ -636,6 +703,137 @@ describe('visual language (redesign round 2)', () => {
     expect(cells).toContain('var(--motion-fill)');
     expect(cells).toContain('var(--motion-stagger)');
     expect(read(join(SRC, 'styles/base.css'))).toContain('animation-delay: 0s !important');
+  });
+});
+
+describe('buttons (C049, C136, C166, C232)', () => {
+  // Product source only: tests, stories and the dev mock gallery are not shipped UI.
+  const shipped = tsxFiles.filter((f) => f.endsWith('.tsx') && !/\.test\.tsx$|\/features\/dev\//.test(f));
+  const buttons = (src: string) =>
+    [...src.matchAll(/<(Button|LinkButton)\b((?:=>|[^>])*?)>([\s\S]*?)<\/\1>/g)].map((m) => ({
+      attrs: m[2]!,
+      text: m[3]!
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\{[^}]*\}/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    }));
+
+  it('draws Delete, Archive, Disable and Revoke as danger buttons', () => {
+    const problems: string[] = [];
+    for (const file of shipped)
+      for (const b of buttons(read(file)))
+        if (/^(Delete|Archive|Disable|Revoke)\b/.test(b.text) && !/variant="danger"/.test(b.attrs))
+          problems.push(`${rel(file)}: '${b.text}'`);
+    expect(problems).toEqual([]);
+  });
+
+  it('is 24px everywhere and 32px only in a dialog footer', () => {
+    const css = read(join(SRC, 'ui/Button/Button.module.css'));
+    expect(css).toContain(":global([data-dialog-footer]) .button[data-size='md']");
+    expect(css).not.toMatch(/^\.button\[data-size='md'\]/m);
+    expect(read(join(SRC, 'ui/Dialog/Dialog.tsx'))).toContain('data-dialog-footer');
+  });
+
+  it('gives a disabled button a hover reason through disabledReason', () => {
+    const tsx = read(join(SRC, 'ui/Button/Button.tsx'));
+    expect(tsx).toContain('disabledReason');
+    expect(read(join(SRC, 'ui/Button/Button.module.css'))).toContain('content: attr(data-reason)');
+  });
+
+  it('keeps the solid accent fill for primary buttons; a selected segment is an accent wash', () => {
+    const css = read(join(SRC, 'ui/SegmentedControl/SegmentedControl.module.css'));
+    expect(css).not.toMatch(/background:\s*var\(--accent-primary\)\s*;/);
+  });
+
+  it('carries no ellipsis in a label or placeholder (progress words such as Saving… excepted)', () => {
+    const problems: string[] = [];
+    const progress = /ing\b[^…]*…$/;
+    for (const file of shipped) {
+      const src = read(file);
+      for (const m of src.matchAll(/placeholder=(?:"([^"]*…)"|\{?'([^']*…)'\}?)/g))
+        problems.push(`${rel(file)}: placeholder '${m[1] ?? m[2]}'`);
+      for (const m of src.matchAll(/\blabel: '([^']*…)'/g))
+        if (!progress.test(m[1]!)) problems.push(`${rel(file)}: label '${m[1]}'`);
+      for (const b of buttons(src))
+        if (b.text.endsWith('…') && !progress.test(b.text)) problems.push(`${rel(file)}: button '${b.text}'`);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('uses an Icon in a button, never a typed glyph', () => {
+    const problems: string[] = [];
+    for (const file of shipped)
+      for (const b of buttons(read(file)))
+        if (/^(\+ |× ?|↑ |← ?|→ ?)\S/.test(b.text) || /\s(→|←)$/.test(b.text))
+          problems.push(`${rel(file)}: '${b.text}'`);
+    expect(problems).toEqual([]);
+  });
+});
+
+describe('people, models and tags (C144, C165, C051, C238)', () => {
+  it('draws no local pill beside Tag and Flag (the class names the crawl found may not come back)', () => {
+    const banned = /\.(baselineTag|failPill|errPill|errTotal)\b/;
+    const problems: string[] = [];
+    for (const file of cssFiles)
+      if (!rel(file).startsWith('features/dev/') && banned.test(read(file))) problems.push(rel(file));
+    const pills = [
+      read(join(SRC, 'features/datasets/components/UserPill.module.css')),
+      read(join(SRC, 'features/datasets/components/VersionSwitcher.module.css')),
+    ].join('\n');
+    expect(problems).toEqual([]);
+    expect(pills).not.toMatch(/^\.(pill|avatar)\s*\{/m);
+  });
+
+  it('sets name tags at 11px and count tags at 10px', () => {
+    const css = read(join(SRC, 'ui/Tag/Tag.module.css'));
+    expect(css).toMatch(/\[data-kind='model'\]\s*\{\s*font-size:\s*var\(--font-sm\)/);
+    expect(css).toMatch(/\.tag\s*\{[^}]*font-size:\s*var\(--font-xs\)/);
+  });
+
+  it('colours a model from the project model index only (no name hash)', () => {
+    const hero = read(join(SRC, 'features/run-detail/components/RunHero.tsx'));
+    expect(hero).toContain('useModelIndex');
+    expect(hero).not.toMatch(/charCodeAt/);
+  });
+});
+
+describe('confirm dialogs (C146)', () => {
+  it('ask a question: every ConfirmDialog title ends with "?"', () => {
+    // A blocking notice ("cannot be deleted yet") is not a question.
+    const NOTICE = /cannot be deleted yet/;
+    const problems: string[] = [];
+    const shipped = tsxFiles.filter((f) => f.endsWith('.tsx') && !/\.test\.tsx$|\/features\/dev\//.test(f));
+    for (const file of shipped) {
+      const src = read(file);
+      for (const m of src.matchAll(
+        /<ConfirmDialog\b(?:(?!<[A-Z])[\s\S])*?\btitle=(\{`[^`]*`\}|"[^"]*"|\{'[^']*'\})/g,
+      )) {
+        const title = m[1]!;
+        if (NOTICE.test(title)) continue;
+        if (!/\?["'`]\}?$/.test(title)) problems.push(`${rel(file)}: ${title}`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+});
+
+describe('Arabic text (C056, C140, C050)', () => {
+  it('lets names read in their own direction (dir="auto" on entity tags and people)', () => {
+    expect(read(join(SRC, 'ui/EntityTag/EntityTag.tsx'))).toContain('dir="auto"');
+    expect(read(join(SRC, 'ui/UserName/UserName.tsx'))).toContain('dir="auto"');
+  });
+  it('gives tag text room for Arabic dots and sets Arabic in sans', () => {
+    const css = read(join(SRC, 'ui/Tag/Tag.module.css'));
+    expect(css).toContain('line-height: 1.5');
+    expect(css).toContain(':dir(rtl)');
+  });
+  it('formats numbers and dates in one locale (no locale-less toLocale* call)', () => {
+    const problems: string[] = [];
+    for (const file of tsxFiles)
+      if (/\.toLocale(String|DateString|TimeString)\((\)|undefined)/.test(read(file)))
+        problems.push(rel(file));
+    expect(problems).toEqual([]);
   });
 });
 

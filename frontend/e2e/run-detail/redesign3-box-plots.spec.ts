@@ -174,8 +174,8 @@ test('P7-9b: Enter on the box applies a p25-p75 filter (a scope chip and fewer i
   await box.focus();
   await page.keyboard.press('Enter');
   await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(before);
-  await expect(page.getByTestId('clear-filters')).toBeVisible();
-  await page.getByTestId('clear-filters').click();
+  await expect(page.getByTestId('nav-clear-filters')).toBeVisible();
+  await page.getByTestId('nav-clear-filters').click();
   await expect.poll(async () => (await itemsCount(page))[0]).toBe(before);
 });
 

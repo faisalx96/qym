@@ -16,18 +16,23 @@ import csv
 import io
 import math
 from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from qym_platform.api.ingest import _span_oi_kind, _span_usage_scope
 from qym_platform.auth import Principal, require_ui_principal
-from qym_platform.db.models import Run, RunItemAttempt, Span
+from qym_platform.db.models import Run, RunItemAttempt, RunStepLatencySummary, Span
 from qym_platform.deps import get_db
+from qym_platform.middleware.etag import mark_cacheable
 from qym_platform.permissions import can_view_run
+from qym_platform.services.repeat_passes import pass_revision
+from qym_platform.services.span_scope import span_run_clause, spans_of_runs_clause
 
 router = APIRouter()
 
@@ -543,7 +548,7 @@ def _parse_run_ref(ref: str) -> tuple:
 
 def _load_spans(
     db: Session,
-    principal: Principal,
+    principal: Optional[Principal],
     run_ids: List[str],
     pass_number: Optional[int] = None,
 ) -> tuple:
@@ -576,7 +581,8 @@ def _load_spans(
     if missing:
         raise HTTPException(status_code=404, detail=f"Run not found: {missing[0]}")
     for run in runs:
-        if not can_view_run(db, principal, run):
+        # principal None: the summary writer (C022), which serves no user
+        if principal is not None and not can_view_run(db, principal, run):
             raise HTTPException(status_code=403, detail="Access denied")
 
     passes = sorted(
@@ -603,10 +609,10 @@ def _load_spans(
                 RunItemAttempt.trace_id.isnot(None),
             )
             filters.append(
-                and_(Span.run_id == base, Span.trace_id.in_(pass_traces))
+                and_(spans_of_runs_clause(db, [base]), Span.trace_id.in_(pass_traces))
             )
     if whole_runs:
-        filters.append(Span.run_id.in_(whole_runs))
+        filters.append(spans_of_runs_clause(db, whole_runs))
     return _project_spans(db, filters), passes
 
 
@@ -726,6 +732,90 @@ def _csv_response(fieldnames: List[str], rows: Iterable[Dict[str, Any]], filenam
     )
 
 
+# The run page's summary of a run is stored in run_step_latency_summaries (C022). The dashboard summary worker (the
+# existing summary writer; no new process, owner) rebuilds it after it publishes a run: once when the run finishes,
+# and at most every LIVE_SUMMARY_REBUILD while a run is live, so a large running run is not rebuilt per request.
+# A read serves the stored row; only a missing or stale row is built on read.
+LIVE_SUMMARY_REBUILD = timedelta(seconds=15)
+# A running run's stored summary is served while it is this new (two writer rebuild intervals).
+LIVE_SUMMARY_SERVE = timedelta(seconds=30)
+WRITER_ROLLUP = "site"
+
+
+def _summary_fingerprint(db: Session, run: Run) -> str:
+    """The span set a stored summary was built from: a late span, a removed pass or a new attempt changes it."""
+    span_count, max_span = (
+        db.query(func.count(Span.id), func.max(Span.id)).filter(span_run_clause(db, run.id, run.created_at)).one()
+    )
+    attempts = db.query(func.count()).select_from(RunItemAttempt).filter(RunItemAttempt.run_id == run.id).scalar()
+    status = run.status.value if hasattr(run.status, "value") else str(run.status or "")
+    return f"{status}|{pass_revision(run)}|{span_count or 0}|{max_span or 0}|{attempts or 0}"
+
+
+def _is_live(run: Run) -> bool:
+    return str(getattr(run.status, "value", run.status) or "").upper() in {"RUNNING", "PENDING"}
+
+
+def _usable(stored: Optional[RunStepLatencySummary], fingerprint: str, live: bool, age: timedelta) -> bool:
+    if stored is None:
+        return False
+    return stored.fingerprint == fingerprint or (live and datetime.utcnow() - stored.computed_at < age)
+
+
+def _store(db: Session, run: Run, stored, rollup: str, pass_number: Optional[int], fingerprint: str) -> Dict[str, Any]:
+    """Build the summary from the raw spans and store it; another writer's row wins a race."""
+    payload = _summary_payload(db, None, [run.id], rollup, pass_number)
+    now = datetime.utcnow()
+    try:
+        if stored is None:
+            db.add(
+                RunStepLatencySummary(
+                    run_id=run.id,
+                    pass_number=pass_number or 0,
+                    rollup=rollup,
+                    fingerprint=fingerprint,
+                    payload=payload,
+                    computed_at=now,
+                )
+            )
+        else:
+            stored.fingerprint, stored.payload, stored.computed_at = fingerprint, payload, now
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+    return payload
+
+
+def refresh_stored_summary(db: Session, run: Run) -> bool:
+    """The summary writer's hook: rebuild the run's stored summary when it is stale. Returns whether it rebuilt."""
+    fingerprint = _summary_fingerprint(db, run)
+    stored = db.get(RunStepLatencySummary, (run.id, 0, WRITER_ROLLUP))
+    if _usable(stored, fingerprint, _is_live(run), LIVE_SUMMARY_REBUILD):
+        return False
+    _store(db, run, stored, WRITER_ROLLUP, None, fingerprint)
+    return True
+
+
+def _stored_summary(
+    db: Session,
+    principal: Principal,
+    run_id: str,
+    rollup: str,
+    pass_number: Optional[int],
+) -> Dict[str, Any]:
+    """The run page's summary of one run or pass: the stored row, or built and stored when it is missing or stale."""
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    if not can_view_run(db, principal, run):
+        raise HTTPException(status_code=403, detail="Access denied")
+    fingerprint = _summary_fingerprint(db, run)
+    stored = db.get(RunStepLatencySummary, (run.id, pass_number or 0, rollup))
+    if _usable(stored, fingerprint, _is_live(run), LIVE_SUMMARY_SERVE):
+        return stored.payload
+    return _store(db, run, stored, rollup, pass_number, fingerprint)
+
+
 @router.get("/api/runs/step-latency")
 def multi_run_step_latency(
     run_ids: str = Query(..., description="Comma-separated run ids"),
@@ -745,8 +835,37 @@ def multi_run_step_latency(
     ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+    response: Response = None,
+) -> Dict[str, Any]:
     ids = [rid.strip() for rid in run_ids.split(",") if rid.strip()]
+    # C072: an ETag when every run asked for is finished (access is checked below, before any body is sent)
+    bases = list(dict.fromkeys(_parse_run_ref(ref)[0] for ref in ids))
+    mark_cacheable(response, Run.active(db).filter(Run.id.in_(bases)).all() if len(bases) <= MAX_STEP_LATENCY_RUNS else [])
+    if len(ids) == 1 and "::" not in ids[0] and level == "summary" and format == "json" and group_by is None:
+        # The run page's request: one run (or one pass), summary JSON. Served from the stored summary (C022).
+        return _stored_summary(db, principal, ids[0], rollup, pass_number)
+    return _step_latency_response(db, principal, ids, format, level, rollup, pass_number, group_by)
+
+
+def _summary_payload(
+    db: Session, principal: Optional[Principal], ids: List[str], rollup: str, pass_number: Optional[int]
+) -> Dict[str, Any]:
+    """The JSON summary of the given refs, built from their raw spans."""
+    payload = _step_latency_response(db, principal, ids, "json", "summary", rollup, pass_number, None)
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _step_latency_response(
+    db: Session,
+    principal: Optional[Principal],
+    ids: List[str],
+    format: str,
+    level: str,
+    rollup: str,
+    pass_number: Optional[int],
+    group_by: Optional[str],
+):
     spans, passes = _load_spans(db, principal, ids, pass_number=pass_number)
     trace_count = len(
         {(span.run_id, span.trace_id) for span in spans if span.trace_id}
@@ -799,13 +918,16 @@ def single_run_step_latency(
     pass_number: Optional[int] = Query(None, ge=1, description="Restrict to one repeat pass"),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
-):
+    response: Response = None,
+) -> Dict[str, Any]:
     return multi_run_step_latency(
         run_ids=run_id,
         format=format,
         level=level,
         rollup=rollup,
         pass_number=pass_number,
+        group_by=None,
         db=db,
         principal=principal,
+        response=response,
     )

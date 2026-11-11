@@ -7587,19 +7587,13 @@
         }
 
         if (window.__QYM_EXPORT_DATA__) {
+          // C173: an exported file is a read-only snapshot; no edits are kept or read back
           var data = window.__QYM_EXPORT_DATA__;
-          // Check localStorage for saved edits
-          var storageKey = 'qym_export_' + (data.run.file_path || 'unknown');
-          try {
-            var saved = localStorage.getItem(storageKey);
-            if (saved) data = JSON.parse(saved);
-          } catch (e) {}
           state.run = data.run;
           state.snapshot = data.snapshot;
           seedCategoryCatalogFromRun(state.run);
           state.langfuseHost = data.run.langfuse_host || '';
           state.langfuseProjectId = data.run.langfuse_project_id || '';
-          state._exportStorageKey = storageKey;
           syncProjectLinks(data.run.project);
           processRun();
           render();
@@ -9101,10 +9095,6 @@
         // The page URL is the link to this run (and the view on screen); the
         // standalone HTML file is an export, named as one.
         let actionsHtml =
-          '<button class="qym-inline-action qym-inline-action--neutral" id="export-download-btn" style="display:none;" title="Download a new file with your edits baked in">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
-            'Download with Changes' +
-          '</button>' +
           '<button class="qym-inline-action qym-inline-action--accent" id="export-share-btn" type="button" title="Download this run as a standalone HTML file">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
             'Export HTML' +
@@ -10131,11 +10121,6 @@
           });
         }
 
-        const dlBtn = el('export-download-btn');
-        if (dlBtn && !dlBtn.dataset.boundDownload) {
-          dlBtn.dataset.boundDownload = '1';
-          dlBtn.addEventListener('click', downloadExportHtml);
-        }
       }
 
       function buildExecutionContextSectionHtml() {
@@ -17202,16 +17187,15 @@
       }
 
       function applyExportMode() {
-        // Add warning banner
+        // C173: a read-only snapshot. The edit controls hide as on an archived project, and nothing is saved.
+        document.body.classList.add('run-read-only');
         var container = document.querySelector('.run-container');
         if (container) {
-          var warning = document.createElement('div');
-          warning.className = 'export-banner export-banner-warning';
-          warning.innerHTML = '<span class="export-banner-icon">&#9888;</span> The original file is not modified. To share your annotations with others, click <strong>Download with Changes</strong> to get an updated file.';
-          container.insertBefore(warning, container.firstChild);
           var info = document.createElement('div');
           info.className = 'export-banner export-banner-info';
-          info.innerHTML = '<span class="export-banner-icon">&#9432;</span> <strong>Exported view</strong> — You can edit root causes, feedback, and scores. Edits are saved in your browser and persist on refresh.';
+          var exportedAt = (window.__QYM_EXPORT_DATA__ && window.__QYM_EXPORT_DATA__.exported_at) || '';
+          info.innerHTML = '<span class="export-banner-icon">&#9432;</span> <strong>Read-only snapshot</strong> exported from qym' +
+            (exportedAt ? ' on ' + escapeHtml(String(exportedAt).slice(0, 10)) : '') + '. Scores, diagnoses and reviews cannot change in this file.';
           container.insertBefore(info, container.firstChild);
         }
         // Hide auto-analyze button
@@ -17220,45 +17204,14 @@
         // Hide Share button (user already has the file)
         var shareBtn = el('export-share-btn');
         if (shareBtn) shareBtn.style.display = 'none';
-        // Show Download with Changes button
-        var dlBtn = el('export-download-btn');
-        if (dlBtn) {
-          dlBtn.style.display = '';
-        }
         // Hide back link (no server)
         var backLink = el('back-link-header');
         if (backLink) backLink.style.display = 'none';
       }
 
-      function autoSaveExport() {
-        var key = state._exportStorageKey;
-        if (!key) return;
-        try {
-          var data = { run: state.run, snapshot: state.snapshot };
-          localStorage.setItem(key, JSON.stringify(data));
-        } catch (e) {}
-      }
+      // C173: an exported file keeps no edits (it is a read-only snapshot).
+      function autoSaveExport() {}
 
-      function downloadExportHtml() {
-        var updatedData = { run: state.run, snapshot: state.snapshot };
-        var dataJson = JSON.stringify(updatedData);
-        dataJson = dataJson.replace(/<\//g, '<\\/');
-
-        var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-        html = html.replace(
-          /window\.__QYM_EXPORT_DATA__\s*=\s*.*?;\s*\n/,
-          'window.__QYM_EXPORT_DATA__ = ' + dataJson + ';\n'
-        );
-
-        var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = (state.run?.run_name || 'run') + '_annotated.html';
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('success', 'Downloaded', 'File with your annotations is ready to share');
-      }
       // ── Initialize ──
       loadHeaderUser();
       loadRunData();

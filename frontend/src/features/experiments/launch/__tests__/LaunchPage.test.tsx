@@ -26,7 +26,15 @@ function mount(url: string, platform = installFakePlatform([envRecord()])) {
         path: '/projects/:slug/experiments/new',
         element: (
           <ProjectContext.Provider
-            value={{ project, slug: 'proj', readOnly: false, canManage: true, isAdmin: false }}
+            value={{
+              project,
+              slug: 'proj',
+              readOnly: false,
+              archived: false,
+              viewer: false,
+              canManage: true,
+              isAdmin: false,
+            }}
           >
             <LaunchPage />
           </ProjectContext.Provider>
@@ -61,6 +69,15 @@ describe('LaunchPage', () => {
       expect(screen.getByText('Default preset v1', { selector: 'strong' })).toBeInTheDocument(),
     );
     expect(screen.getByRole('radio', { name: /Default preset v1/ })).toBeChecked();
+  });
+
+  it('C130: opens with the dataset and version a dataset page named, over the preset dataset', async () => {
+    mount('/projects/proj/experiments/new?env=e1&dataset=ds2&version=3');
+    await waitFor(() =>
+      expect(screen.getByText('Default preset v1', { selector: 'strong' })).toBeInTheDocument(),
+    );
+    expect(await screen.findByRole('button', { name: 'Remove ds2' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove ds1' })).not.toBeInTheDocument();
   });
 
   it('asks before changing the starting point when there are edits', async () => {
@@ -181,7 +198,15 @@ describe('LaunchPage', () => {
           path: '/projects/:slug/experiments/new',
           element: (
             <ProjectContext.Provider
-              value={{ project, slug: 'proj', readOnly: false, canManage: true, isAdmin: false }}
+              value={{
+                project,
+                slug: 'proj',
+                readOnly: false,
+                archived: false,
+                viewer: false,
+                canManage: true,
+                isAdmin: false,
+              }}
             >
               <LaunchPage />
             </ProjectContext.Provider>
@@ -195,6 +220,9 @@ describe('LaunchPage', () => {
         <RouterProvider router={router} />
       </Providers>,
     );
-    expect(await screen.findByText('No active environments')).toBeInTheDocument();
+    // C121: the empty state opens Add environment in place, not a dead end on the environments page
+    expect(await screen.findByText('Connect an Evaluation Service first')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add environment' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 });

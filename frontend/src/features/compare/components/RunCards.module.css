@@ -34,6 +34,7 @@
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-sm);
   min-block-size: 24px;
@@ -41,6 +42,7 @@
   font-weight: 650;
 }
 
+/* The name keeps its own line when the badges and the Actions menu do not fit beside it. */
 .top > :first-child {
   flex: 1 1 auto;
   min-inline-size: 0;
@@ -94,6 +96,13 @@
   grid-template-columns: repeat(3, 1fr);
   gap: var(--space-xs);
   margin: 0;
+}
+
+.passes {
+  margin: var(--space-xs) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-align: center;
 }
 
 .stat {

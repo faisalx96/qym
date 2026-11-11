@@ -78,8 +78,8 @@ test.describe('chart filters (scenario 3)', () => {
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(240);
     expect((await itemsCount(page))[0]).toBeGreaterThan(0);
     await expect.poll(() => params(page).get('filters')).toContain('score');
-    await expect(page.getByTestId('clear-filters')).toBeVisible();
-    await page.getByTestId('clear-filters').click();
+    await expect(page.getByTestId('nav-clear-filters')).toBeVisible();
+    await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);
     await expect.poll(() => params(page).get('filters')).toBeNull();
   });
@@ -126,15 +126,15 @@ test.describe('rule builder (scenario 5)', () => {
     page,
   }) => {
     await openRun(page, s.slug, classic);
-    await page.getByTestId('open-filters').click();
+    await page.getByTestId('nav-open-filters').click();
     const dlg = page.getByRole('dialog', { name: 'Filter rules' });
-    await dlg.getByRole('button', { name: '+ Condition' }).click();
+    await dlg.getByRole('button', { name: 'Add condition' }).click();
     await expect(dlg.getByTestId('rule-condition')).toHaveCount(1);
     await dlg.getByRole('button', { name: 'Field' }).click();
     await page.getByRole('option', { name: /^exact_match/ }).click();
     await dlg.getByRole('button', { name: 'Verdict' }).click();
     await page.getByRole('option', { name: 'failed' }).click();
-    await dlg.getByRole('button', { name: '+ Condition' }).click();
+    await dlg.getByRole('button', { name: 'Add condition' }).click();
     await expect(dlg.getByTestId('rule-condition')).toHaveCount(2);
     await dlg.getByTestId('rule-condition').nth(1).getByRole('button', { name: 'Field' }).click();
     await page.getByRole('option', { name: /^Latency/ }).click();
@@ -145,13 +145,13 @@ test.describe('rule builder (scenario 5)', () => {
     await expect.poll(() => params(page).get('filters') ?? '').toContain('"value":"1000"');
     const raw = params(page).get('filters')!;
     expect(JSON.parse(raw).rules.children).toHaveLength(2);
-    await expect(page.getByTestId('open-filters')).toContainText('Filters (2)');
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
     const [n] = await itemsCount(page);
     expect(n).toBeLessThan(240);
     await page.reload();
     await expect(page.getByTestId('items-count')).toBeVisible();
     expect((await itemsCount(page))[0]).toBe(n);
-    await expect(page.getByTestId('open-filters')).toContainText('Filters (2)');
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
   });
 
   test('a ?filters= deep link applies, shows the chip and count, and is removable by keyboard', async ({
@@ -161,7 +161,7 @@ test.describe('rule builder (scenario 5)', () => {
     const [n] = await itemsCount(page);
     expect(n).toBeGreaterThan(0);
     expect(n).toBeLessThan(240);
-    await expect(page.getByTestId('open-filters')).toContainText('Filters (2)');
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
     const chip = page.getByRole('button', { name: /Remove filter 2 rules/ });
     await expect(chip).toBeVisible();
     await chip.focus();
@@ -174,7 +174,7 @@ test.describe('rule builder (scenario 5)', () => {
   test('the builder shows the deep-linked conditions and OR widens the match', async ({ page }) => {
     await openRun(page, s.slug, classic, `filters=${encodeURIComponent(JSON.stringify(RULES))}`);
     const [andCount] = await itemsCount(page);
-    await page.getByTestId('open-filters').click();
+    await page.getByTestId('nav-open-filters').click();
     const dlg = page.getByRole('dialog', { name: 'Filter rules' });
     await expect(dlg.getByTestId('rule-condition')).toHaveCount(2);
     await dlg.getByRole('radio', { name: 'OR' }).click({ force: true });
@@ -185,7 +185,7 @@ test.describe('rule builder (scenario 5)', () => {
 
   test('Escape closes the builder and focus returns to the Filters button', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    const button = page.getByTestId('open-filters');
+    const button = page.getByTestId('nav-open-filters');
     await button.focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('dialog', { name: 'Filter rules' })).toBeVisible();
@@ -204,7 +204,7 @@ test.describe('URL contract for the view params', () => {
       'metric=hallucination&threshold=20&show=failed&sort=latency_desc&page=2',
     );
     await expect(page.getByRole('button', { name: /hallucination Analysis metric/ })).toBeVisible();
-    await expect(page.getByRole('slider', { name: /Pass if score/ })).toHaveValue('20');
+    await expect(page.getByTestId('nav-threshold').getByRole('slider')).toHaveValue('20');
     await expect(page.getByRole('radio', { name: 'Fail' })).toBeChecked();
     await expect(page.getByRole('button', { name: /Sort/ })).toContainText('Latency');
     const [n] = await itemsCount(page);

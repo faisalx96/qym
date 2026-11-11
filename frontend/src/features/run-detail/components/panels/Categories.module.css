@@ -1,4 +1,5 @@
-/* Categories (round 3 P3): key switcher, one card of rows [value][bar + %][items][pass][latency]. */
+/* Categories (round 10): a control row (Cards | Compare, key toggles or the key picker, the metric, Sort), then the
+   Cards view (value cards per key) or the Compare view (one card of rows [value][bar + %][items][pass][latency]). */
 .root {
   display: flex;
   flex-direction: column;
@@ -15,7 +16,133 @@
 }
 
 .metricNote {
+  white-space: nowrap;
+}
+
+.overall {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.controlEnd {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
   margin-inline-start: auto;
+}
+
+/* Key toggles: plain checkboxes, no pills (round 10). */
+.keyToggles {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.keyCount {
+  margin-inline-start: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.cardsView {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.keyBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.keyTitle {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+/* Value cards (the first qym's): the value name in its band colour, three facts, a bar with the overall tick. */
+.valueGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  gap: var(--space-sm);
+}
+
+.valueCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.valueCard:hover {
+  background: var(--bg-hover);
+}
+
+.valueCard[data-selected] {
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.valueCard:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.valueName {
+  overflow: hidden;
+  font-size: var(--font-base);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.valueName[data-band] {
+  color: var(--tone-text);
+}
+
+.valueStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.valueStats > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.valueStats small {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.valueStats b {
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.valueStats b[data-band] {
+  color: var(--tone-text);
 }
 
 .catCard {
@@ -220,4 +347,15 @@
   .row > :nth-child(5) {
     display: none;
   }
+}
+
+/* the bar of a value card: a thin 6px track, the tick a little taller */
+.valueCard .track {
+  flex: none;
+  block-size: 6px;
+  background: var(--bg-active);
+}
+
+.valueCard .tick {
+  inset-block: -4px;
 }

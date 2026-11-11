@@ -7,6 +7,7 @@
 import {
   formatNumericValue,
   formatPercent,
+  hasTaskError,
   isErrorRow,
   isItemEdit,
   isItemTaskError,
@@ -51,6 +52,24 @@ export function runCounts(rows: Row[], repeatAggregate: boolean): RunCounts {
   }, 0);
   const notReceived = rows.filter((r) => isNotReceivedRow(r)).length;
   return { total, completed, errors, notReceived };
+}
+
+/** Task errors of a run (RF2, C097): items with an error in at least one pass, of all items, and errored passes. */
+export interface RunErrorTally {
+  items: number;
+  total: number;
+  passes: number;
+  repeat: boolean;
+}
+
+export function runErrorTally(rows: Row[], repeatAggregate: boolean): RunErrorTally {
+  const items = rows.filter((r) => hasTaskError(r) || Number(r.execution_error_count) > 0).length;
+  return {
+    items,
+    total: rows.length,
+    passes: runCounts(rows, repeatAggregate).errors,
+    repeat: repeatAggregate,
+  };
 }
 
 /* ── metric cards ── */
@@ -112,7 +131,6 @@ export function metricCardModel(ctx: FilterContext, rows: Row[], metric: string)
   let taskErrCnt = 0;
   let errorRows = 0;
   let taskErrorRows = 0;
-  let leftOutRows = 0;
   let cleanSum = 0;
   let cleanCnt = 0;
   const values: number[] = [];
@@ -133,7 +151,6 @@ export function metricCardModel(ctx: FilterContext, rows: Row[], metric: string)
       const counts = rowMetricErrorCounts(row, metric);
       errCnt += counts.scorer;
       taskErrCnt += counts.task;
-      if (score === null) leftOutRows++;
       continue;
     }
     const clean = scoreWithoutMetricErrors(row, mIdx, metric);
@@ -163,11 +180,12 @@ export function metricCardModel(ctx: FilterContext, rows: Row[], metric: string)
   ]
     .filter(Boolean)
     .join(' and ');
-  const across = perPass ? ' across passes' : '';
+  // a run with one surviving pass has nothing to sum across
+  const across = perPass && model.samples > 1 ? ' across passes' : '';
   if (leftOut && errCnt + taskErrCnt > 0) {
     const n = errCnt + taskErrCnt;
     errorNote = {
-      text: `${plural(n, 'error')}${across} · not counted in the mean`,
+      text: `${plural(n, 'error')}${across} not counted in the mean`,
       title: `${kinds}${across} ${n === 1 ? 'is' : 'are'} not counted in this mean. Lower is better for ${metric}, so an error counted as 0 would read as its best score. They count as fails in pass rates.`,
     };
   } else if (!leftOut && errCnt + taskErrCnt > 0) {
@@ -177,7 +195,7 @@ export function metricCardModel(ctx: FilterContext, rows: Row[], metric: string)
     const fmtMean = numeric ? formatNumericValue : formatPercent;
     const total = errCnt + taskErrCnt;
     errorNote = {
-      text: `${kinds}${across} · counted as ${zero}`,
+      text: `${kinds}${across} counted as ${zero}`,
       title: [
         errCnt ? `The ${metric} scorer failed on ${errCnt} ${unit(errCnt)}.` : '',
         taskErrCnt ? `The task failed on ${taskErrCnt} ${unit(taskErrCnt)}.` : '',
@@ -351,11 +369,8 @@ export function metricCardModel(ctx: FilterContext, rows: Row[], metric: string)
       note,
     };
   });
-  const badge = leftOut
-    ? `${totalWithScores} scored${leftOutRows > 0 ? ` · ${leftOutRows} err` : ''}`
-    : errorRows + taskErrorRows > 0
-      ? `${totalWithScores - errorRows - taskErrorRows} scored · ${errorRows + taskErrorRows} err`
-      : `${totalWithScores} scored`;
+  // C012: the badge counts the scored items only; the error note under the head names the errors
+  const badge = `${leftOut ? totalWithScores : totalWithScores - errorRows - taskErrorRows} scored`;
   return { ...base, avgText: formatPercent(avg), badge, kind: 'score', buckets };
 }
 

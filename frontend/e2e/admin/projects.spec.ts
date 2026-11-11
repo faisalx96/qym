@@ -87,5 +87,6 @@ test('unarchive confirm makes the project Active again', async ({ page, request 
   await expect(dialog.getByRole('button', { name: 'Revoke keys first' })).toHaveCount(0);
   await dialog.getByRole('button', { name: /^Unarchive( anyway)?$/ }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(row).toContainText('Active');
+  // on/off state: an active project shows no mark (only Archived shows, after the name)
+  await expect(row.locator('[data-status="archived"]')).toHaveCount(0);
 });

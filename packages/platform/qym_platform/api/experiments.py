@@ -120,7 +120,7 @@ from qym_platform.db.models import (
     User,
 )
 from qym_platform.deps import get_db
-from qym_platform.permissions import is_project_manager, require_project_writable
+from qym_platform.permissions import is_project_manager, require_project_writable, require_project_writer
 from qym_platform.secrets import decrypt_llm_api_key, encryption_available
 from qym_platform.api.eval_environments import (
     EvalClientFactory,
@@ -209,7 +209,7 @@ from qym_platform.services.eval_temporary_models import (
 from qym_platform.settings import PlatformSettings
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from qym_platform.log import get_logger
 
@@ -1254,9 +1254,14 @@ def _serialize_experiment(
     creator_email: Optional[str],
     job_counts: Optional[Dict[str, int]] = None,
     priorities: Optional[Dict[str, int]] = None,
+    summary: bool = False,
 ) -> Dict[str, Any]:
-    # Never includes secrets_encrypted.
-    return {
+    """An experiment for the API. Never includes secrets_encrypted.
+
+    ``summary`` (the list, C077) leaves out ``spec`` and ``versioning_details``: the
+    detail endpoint keeps them, and the list never reads them.
+    """
+    payload = {
         "id": experiment.id,
         "project_id": experiment.project_id,
         "name": experiment.name,
@@ -1283,6 +1288,9 @@ def _serialize_experiment(
         "cancelled_by_user_id": experiment.cancelled_by_user_id,
         "temporary_keys_stored": bool(experiment.secrets_encrypted),
     }
+    if summary:
+        del payload["spec"], payload["versioning_details"]
+    return payload
 
 
 def _user_emails(db: Session, user_ids: List[Optional[str]]) -> Dict[str, str]:
@@ -1290,6 +1298,65 @@ def _user_emails(db: Session, user_ids: List[Optional[str]]) -> Dict[str, str]:
     if not ids:
         return {}
     return {u.id: u.email for u in db.query(User).filter(User.id.in_(ids))}
+
+
+def _current_status_counts(db: Session, experiment_ids: List[str]) -> Dict[str, Dict[str, int]]:
+    """Current-job status counts per experiment in one grouped query (C077).
+
+    A job is current unless a newer attempt retries it (``retry_of_job_id``, indexed),
+    the rule of ``current_jobs``. The list polls this while anything runs, so it no
+    longer loads every job row.
+    """
+    if not experiment_ids:
+        return {}
+    retry = aliased(EvalExperimentJob)
+    rows = (
+        db.query(EvalExperimentJob.experiment_id, EvalExperimentJob.status, func.count())
+        .filter(
+            EvalExperimentJob.experiment_id.in_(experiment_ids),
+            ~db.query(retry.id).filter(retry.retry_of_job_id == EvalExperimentJob.id).exists(),
+        )
+        .group_by(EvalExperimentJob.experiment_id, EvalExperimentJob.status)
+        .all()
+    )
+    out: Dict[str, Dict[str, int]] = {}
+    for experiment_id, status, n in rows:
+        key = status.value if hasattr(status, "value") else str(status)
+        out.setdefault(experiment_id, {})[key] = int(n)
+    return out
+
+
+def _current_priority_counts(
+    db: Session, experiments: List[EvalExperiment]
+) -> Dict[str, Dict[str, int]]:
+    """``{LOW, NORMAL, HIGH}`` of the current jobs per experiment, one grouped query.
+
+    The same current-job rule as ``_current_status_counts``; a NULL ``priority`` (a row
+    older than migration 0099 whose stored body named none) is the experiment's.
+    """
+    if not experiments:
+        return {}
+    by_id = {x.id: x for x in experiments}
+    retry = aliased(EvalExperimentJob)
+    rows = (
+        db.query(EvalExperimentJob.experiment_id, EvalExperimentJob.priority, func.count())
+        .filter(
+            EvalExperimentJob.experiment_id.in_(list(by_id)),
+            ~db.query(retry.id).filter(retry.retry_of_job_id == EvalExperimentJob.id).exists(),
+        )
+        .group_by(EvalExperimentJob.experiment_id, EvalExperimentJob.priority)
+        .all()
+    )
+    out = {x.id: {"LOW": 0, "NORMAL": 0, "HIGH": 0} for x in experiments}
+    for experiment_id, priority, n in rows:
+        value = (
+            priority.upper()
+            if isinstance(priority, str) and priority
+            else by_id[experiment_id].priority.value
+        )
+        counts = out[experiment_id]
+        counts[value] = counts.get(value, 0) + int(n)
+    return out
 
 
 def _status_counts(jobs: List[EvalExperimentJob]) -> Dict[str, int]:
@@ -2027,20 +2094,17 @@ def list_experiments(
         .limit(limit)
         .all()
     )
-    jobs_by_experiment: Dict[str, List[EvalExperimentJob]] = {}
-    if experiments:
-        for job in db.query(EvalExperimentJob).filter(
-            EvalExperimentJob.experiment_id.in_([x.id for x in experiments])
-        ):
-            jobs_by_experiment.setdefault(job.experiment_id, []).append(job)
+    counts = _current_status_counts(db, [x.id for x in experiments])
+    priority_counts = _current_priority_counts(db, experiments)
     emails = _user_emails(db, [x.created_by_user_id for x in experiments])
     result: Dict[str, Any] = {
         "experiments": [
             _serialize_experiment(
                 x,
                 creator_email=emails.get(x.created_by_user_id or ""),
-                job_counts=_status_counts(jobs_by_experiment.get(x.id, [])),
-                priorities=_priority_counts(jobs_by_experiment.get(x.id, []), x),
+                job_counts=counts.get(x.id, {}),
+                priorities=priority_counts.get(x.id),
+                summary=True,
             )
             for x in experiments
         ],
@@ -2090,6 +2154,7 @@ def cancel_experiment(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    require_project_writer(db, project_id)  # a Viewer cannot cancel (C033)
     experiment = _get_experiment(db, project_id, experiment_id)
     _require_control(db, principal, experiment)
     reason = req.reason if req else None
@@ -2140,6 +2205,7 @@ def cancel_experiment_job(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    require_project_writer(db, project_id)  # a Viewer cannot cancel (C033)
     experiment = _get_experiment(db, project_id, experiment_id)
     job = _get_job(db, experiment, job_id)
     _require_control(db, principal, experiment)

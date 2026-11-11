@@ -143,8 +143,8 @@ export function FieldControl({ field }: { field: EvaluatorFieldView }) {
             <span className={styles.sr}>Changed from the starting point</span>
           </span>
         ) : null}
-        <span>{label}</span>
-        <Tag kind="data">{name}</Tag>
+        {/* the raw key shows only on hover of the label (C185) */}
+        <span title={name}>{label}</span>
         {missing.map((n) => (
           <Tag key={n} tone="warning">
             not in {n}

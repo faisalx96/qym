@@ -1,4 +1,4 @@
-/** Runs table redesign: first-paint content, header focus, text selection vs row click, exposed bands. */
+/** Runs table redesign: first-paint content, header focus, text selection vs row click, one header line. */
 import { test, expect, type Page } from '@playwright/test';
 import { clickBox, dataRows, openRuns, sharedProject, table } from './support';
 
@@ -7,7 +7,7 @@ const scroller = (page: Page) => table(page).locator('[data-dt-scroller]');
 test.describe('runs table redesign', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('score bars, task chips and the Date column are on screen on first paint', async ({
+  test('score values, task chips and the Date column are on screen on first paint', async ({
     page,
     request,
   }) => {
@@ -21,11 +21,16 @@ test.describe('runs table redesign', () => {
     expect(date.x + date.width).toBeLessThanOrEqual(view.x + view.width + 48);
     const row = dataRows(page).first();
     await expect(row.locator('td[data-col="task"] span').first()).toBeVisible();
-    expect(await table(page).locator('tbody [data-band]').count(), 'metric score bars').toBeGreaterThan(0);
-    await expect(
-      table(page).getByRole('columnheader', { name: 'Scores', exact: true }).first(),
-    ).toBeVisible();
-    await expect(table(page).getByRole('columnheader', { name: 'Overview', exact: true })).toBeVisible();
+    // a score is its band-coloured number (round 8: no bar), and the header is one line (no group band)
+    expect(await table(page).locator('tbody td[data-col^="metric-"] [data-band]').count()).toBeGreaterThan(0);
+    expect(
+      await table(page)
+        .locator('tbody td[data-col^="metric-"] [role="meter"], tbody [class*="track"]')
+        .count(),
+    ).toBe(0);
+    await expect(table(page).getByRole('columnheader', { name: 'Scores', exact: true })).toHaveCount(0);
+    await expect(table(page).getByRole('columnheader', { name: 'Overview', exact: true })).toHaveCount(0);
+    await expect(table(page).locator('thead tr')).toHaveCount(1);
   });
 
   test('Date (the default sort) is on screen at 1280 too, before the first score', async ({
@@ -60,7 +65,7 @@ test.describe('runs table redesign', () => {
   test('Tab enters the header row once, arrows move between headers', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
-    await page.getByPlaceholder('Search runs').focus();
+    await page.getByPlaceholder('Search run or dataset names').focus();
     let inHeader = 0;
     for (let i = 0; i < 12; i++) {
       await page.keyboard.press('Tab');
@@ -128,7 +133,7 @@ test.describe('runs table redesign', () => {
       .nth(3)
       .locator('td[data-col="time"]')
       .click({ modifiers: ['Shift'] });
-    await expect(page.getByTestId('selection-bar')).toContainText('4 executions selected');
+    await expect(page.getByTestId('selection-bar')).toContainText('4 runs selected');
     expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
   });
 

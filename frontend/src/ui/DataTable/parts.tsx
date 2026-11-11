@@ -25,6 +25,11 @@ export interface ToolbarProps {
   columnsMenu?: boolean;
   /** Density menu: default shown unless the table locks its density. */
   densityMenu?: boolean;
+  /**
+   * While rows are selected, the selection actions take the toolbar's place at the same height, so the table does not
+   * move down (C228). The toolbar's own controls stay laid out under them, hidden.
+   */
+  selectionReplaces?: boolean;
 }
 
 const DENSITIES: { id: Density; label: string }[] = [
@@ -43,6 +48,7 @@ export function Toolbar({
   trailing,
   columnsMenu,
   densityMenu,
+  selectionReplaces,
 }: ToolbarProps) {
   const {
     model,
@@ -59,33 +65,66 @@ export function Toolbar({
   const hideable = columns.filter((c) => c.hideable !== false && !c.id.startsWith('__'));
   const showColumns = columnsMenu ?? hideable.length >= 5;
   const showDensity = densityMenu ?? !model.densityLocked;
+  const cluster = selecting ? (
+    <div
+      className={styles.selectionCluster}
+      role={bulkOwnSummary ? undefined : 'region'}
+      aria-label={bulkOwnSummary ? undefined : 'Selection actions'}
+      data-selection-bar=""
+    >
+      {bulkOwnSummary ? null : (
+        <span className={styles.selCount} role="status">
+          {selectedCount} selected
+        </span>
+      )}
+      {bulkActions}
+      {bulkOwnSummary ? null : (
+        <Button variant="ghost" onPress={clearSelection}>
+          Clear selection
+        </Button>
+      )}
+    </div>
+  ) : null;
+  const main = (
+    <div className={styles.toolbarMain}>
+      {search}
+      {filters}
+      {chips ? <div className={styles.chips}>{chips}</div> : null}
+    </div>
+  );
+  if (selectionReplaces && cluster)
+    return (
+      <div className={styles.toolbar} data-dt-toolbar="" data-selection-replaces="">
+        <div className={styles.selectionOverlay}>{cluster}</div>
+        {/* visibility: hidden also takes these controls out of the Tab order */}
+        <div className={styles.toolbarHidden} aria-hidden="true">
+          {main}
+          <div className={styles.toolbarEnd}>
+            {count ? <span className={styles.count}>{count}</span> : null}
+            {trailing}
+          </div>
+        </div>
+      </div>
+    );
   return (
     <div className={styles.toolbar} data-dt-toolbar="">
-      {selecting ? (
-        <div
-          className={styles.selectionCluster}
-          role={bulkOwnSummary ? undefined : 'region'}
-          aria-label={bulkOwnSummary ? undefined : 'Selection actions'}
-          data-selection-bar=""
-        >
-          {bulkOwnSummary ? null : (
-            <span className={styles.selCount} role="status">
-              {selectedCount} selected
-            </span>
-          )}
-          {bulkActions}
-          {bulkOwnSummary ? null : (
-            <Button variant="ghost" onPress={clearSelection}>
-              Clear selection
-            </Button>
-          )}
-        </div>
+      {rows && cluster ? (
+        // With facet rows the selection is a line of its own above them (round 10): its actions never push the search,
+        // the filters or the end controls aside, and never wrap the end controls under the filters.
+        <div className={styles.selectionLine}>{cluster}</div>
       ) : null}
-      <div className={styles.toolbarMain}>
-        {search}
-        {filters}
-        {chips ? <div className={styles.chips}>{chips}</div> : null}
-      </div>
+      {rows ? (
+        // Facet rows under the main line: the end controls centre on the whole block, not on its first line.
+        <div className={styles.toolbarStart}>
+          <div className={styles.toolbarLine}>{main}</div>
+          <div className={styles.toolbarRows}>{rows}</div>
+        </div>
+      ) : (
+        <>
+          {cluster}
+          {main}
+        </>
+      )}
       <div className={styles.toolbarEnd}>
         {count ? <span className={styles.count}>{count}</span> : null}
         {trailing}
@@ -109,7 +148,6 @@ export function Toolbar({
           />
         ) : null}
       </div>
-      {rows ? <div className={styles.toolbarRows}>{rows}</div> : null}
     </div>
   );
 }

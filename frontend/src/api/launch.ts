@@ -160,7 +160,10 @@ export function useEnvTasks(projectId: string | undefined, envId: string | undef
 }
 
 /** The same entries for several environments (the review and validation need the ids). */
-export function useEnvTaskLists(projectId: string, envs: ReadonlyArray<Pick<EvalEnvironment, 'id' | 'evaluator_capabilities'>>) {
+export function useEnvTaskLists(
+  projectId: string,
+  envs: ReadonlyArray<Pick<EvalEnvironment, 'id' | 'evaluator_capabilities'>>,
+) {
   const results = useQueries({
     queries: envs.map((e) => ({
       queryKey: launchKeys.tasks(projectId, e.id),
@@ -227,7 +230,9 @@ export interface LaunchDataset {
 }
 
 export async function fetchLaunchDatasets(projectId: string): Promise<LaunchDataset[]> {
-  const res = await api.get<{ datasets?: LaunchDataset[] }>(`${project(projectId)}/experiments/launch-datasets`);
+  const res = await api.get<{ datasets?: LaunchDataset[] }>(
+    `${project(projectId)}/experiments/launch-datasets`,
+  );
   return res.datasets ?? [];
 }
 
@@ -400,7 +405,7 @@ export function useBestRunBase(
 
 // ── Experiments: clone, dry run / launch, latest ─────────────────────────
 
-/** POST …/experiments/{xid}/clone[?job_id=]: the prefill of "Copy an experiment" / "Rerun with this config". */
+/** POST …/experiments/{xid}/clone[?job_id=]: the prefill of "Run again" (C183). */
 export const cloneExperiment = (pid: string, experimentId: string, jobId?: string | null) =>
   api.post<CloneResponse>(
     `${project(pid)}/experiments/${enc(experimentId)}/clone${jobId ? `?job_id=${enc(jobId)}` : ''}`,

@@ -1,13 +1,34 @@
-/** Right-hand correction detail: header actions, AI vs Human issues, previews, lazy full detail (o), inline edit. */
+/** Right-hand diagnosis detail: header actions, AI vs Human issues, previews, lazy full detail (o), inline edit. */
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useCorrection, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
 import { textDirAttrs } from '@/lib/text';
-import { Badge, Button, ErrorState, JsonTree, Kbd, Skeleton, Tag, Text, TextBlock } from '@/ui';
+import {
+  Button,
+  ErrorState,
+  JsonTree,
+  Kbd,
+  Skeleton,
+  Tag,
+  Text,
+  TextBlock,
+  ReviewStatusMark,
+  Tooltip,
+  TaskTag,
+  DatasetTag,
+  ModelTag,
+  UserName,
+} from '@/ui';
 import { formatDate } from '../datasets/lib/itemValue';
 import { IssueEditForm, IssueList } from './IssueList';
 import { correctionPriority } from './lib/filters';
 import styles from './DetailPane.module.css';
+
+/** C179: Reject and Delete say what they do, because they end in different places. */
+export const REJECT_TIP = 'Reject: the issue stays on the run, marked wrong, and leaves the queue.';
+export const DELETE_TIP =
+  'Delete: the issue leaves the run’s root causes and Reviews. An audit record is kept.';
 
 export interface DetailPaneProps {
   row: CorrectionRow;
@@ -27,7 +48,13 @@ export interface DetailPaneProps {
   onCancelEdit: () => void;
 }
 
-export const STATUS_TONE = { pending: 'neutral', approved: 'success', rejected: 'danger' } as const;
+export { ReviewStatusMark };
+
+/** The diagnosis an edit starts from: the human issues, else the AI's (an AI candidate has no human issues yet). */
+export function editSeed(row: CorrectionRow): CorrectionRow['human_root_cause_issues'] {
+  const human = row.human_root_cause_issues ?? [];
+  return human.length ? human : (row.ai_root_cause_issues ?? []);
+}
 
 export function DetailPane(p: DetailPaneProps) {
   const { row } = p;
@@ -37,15 +64,13 @@ export function DetailPane(p: DetailPaneProps) {
     : null;
   const pending = row.status === 'pending';
   return (
-    <aside className={styles.pane} aria-label={`Correction ${row.id}`} data-detail-pane={row.id}>
+    <aside className={styles.pane} aria-label={`Diagnosis ${row.id}`} data-detail-pane={row.id}>
       <header className={styles.head}>
         <div className={styles.titleRow}>
           <Text as="h2" variant="lg" mono>
             #{row.id} · {row.item_id}
           </Text>
-          <Badge tone={STATUS_TONE[row.status]} glyph={row.status === 'approved' ? '✓' : undefined}>
-            {row.status}
-          </Badge>
+          <ReviewStatusMark status={row.status} />
           {priority ? (
             <span title={priority.reasons.join(' · ')}>
               <Tag tone={priority.level === 'high' ? 'danger' : 'warning'}>{priority.label}</Tag>
@@ -61,7 +86,14 @@ export function DetailPane(p: DetailPaneProps) {
             <span>AI confidence {Math.round(row.ai_confidence * 100)}%</span>
           ) : null}
           {row.corrected_by ? (
-            <span>by {row.corrected_by.display_name || row.corrected_by.email}</span>
+            <span>
+              by{' '}
+              <UserName
+                id={row.corrected_by.id}
+                name={row.corrected_by.display_name}
+                email={row.corrected_by.email}
+              />
+            </span>
           ) : null}
           <span>{formatDate(row.created_at)}</span>
         </div>
@@ -74,18 +106,28 @@ export function DetailPane(p: DetailPaneProps) {
                 onPress={p.onApprove}
                 isDisabled={p.busy || Boolean(row.review_block)}
                 data-testid="detail-approve"
+                aria-keyshortcuts="a"
               >
-                Approve <Kbd>a</Kbd>
+                Approve{' '}
+                <span aria-hidden="true">
+                  <Kbd>a</Kbd>
+                </span>
               </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onPress={p.onReject}
-                isDisabled={p.busy || Boolean(row.review_block)}
-                data-testid="detail-reject"
-              >
-                Reject <Kbd>r</Kbd>
-              </Button>
+              <Tooltip content={REJECT_TIP}>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onPress={p.onReject}
+                  isDisabled={p.busy || Boolean(row.review_block)}
+                  data-testid="detail-reject"
+                  aria-keyshortcuts="r"
+                >
+                  Reject{' '}
+                  <span aria-hidden="true">
+                    <Kbd>r</Kbd>
+                  </span>
+                </Button>
+              </Tooltip>
             </>
           ) : (
             <Button
@@ -104,8 +146,13 @@ export function DetailPane(p: DetailPaneProps) {
             onPress={p.onEdit}
             isDisabled={p.editing}
             data-testid="detail-edit"
+            aria-keyshortcuts="e"
           >
-            Edit <Kbd>e</Kbd>
+            {/* C054: an edit withdraws the decision; the server asks for the decision right */}
+            {pending ? 'Edit' : 'Edit (sends back to review)'}{' '}
+            <span aria-hidden="true">
+              <Kbd>e</Kbd>
+            </span>
           </Button>
           <Button
             variant="ghost"
@@ -113,12 +160,24 @@ export function DetailPane(p: DetailPaneProps) {
             onPress={p.onToggle}
             aria-expanded={p.expanded}
             data-testid="detail-toggle"
+            aria-keyshortcuts="o"
           >
-            {p.expanded ? 'Hide details' : 'Details'} <Kbd>o</Kbd>
+            {p.expanded ? 'Hide details' : 'Details'}{' '}
+            <span aria-hidden="true">
+              <Kbd>o</Kbd>
+            </span>
           </Button>
-          <Button variant="ghost" size="sm" onPress={p.onDelete} isDisabled={p.busy}>
-            Delete
-          </Button>
+          <Tooltip content={DELETE_TIP}>
+            <Button
+              variant="danger"
+              size="sm"
+              onPress={p.onDelete}
+              isDisabled={p.busy}
+              data-testid="detail-delete"
+            >
+              Delete
+            </Button>
+          </Tooltip>
         </div>
         {row.review_block ? (
           <Text variant="sm" tone="warning" role="status" data-review-block>
@@ -128,7 +187,7 @@ export function DetailPane(p: DetailPaneProps) {
       </header>
 
       <div className={styles.chips}>
-        <Chipline label="Task" value={row.task} />
+        <Chipline label="Task" value={row.task} node={<TaskTag name={row.task} />} />
         <Chipline label="Metric" value={row.metric_name} />
         {p.showProject ? (
           <Chipline
@@ -139,10 +198,11 @@ export function DetailPane(p: DetailPaneProps) {
         ) : null}
         <Chipline label="Run" value={row.run_name} href={runHref} />
         {row.pass_number != null ? <Chipline label="Pass" value={String(row.pass_number)} /> : null}
-        <Chipline label="Dataset" value={row.dataset} />
+        <Chipline label="Dataset" value={row.dataset} node={<DatasetTag name={row.dataset} />} />
         <Chipline
           label="Model"
-          value={row.has_reasoning && row.model ? `${row.model} (reasoning)` : row.model}
+          value={row.model}
+          node={row.model ? <ModelTag name={row.model} reasoning={!!row.has_reasoning} /> : null}
         />
       </div>
 
@@ -159,7 +219,10 @@ export function DetailPane(p: DetailPaneProps) {
           </Text>
           {p.editing ? (
             <IssueEditForm
-              initial={row.human_root_cause_issues ?? []}
+              initial={editSeed(row)}
+              single={Boolean(row.issue_id)}
+              projectSlug={row.project_slug}
+              runHref={runHref}
               saving={p.saving}
               onSave={p.onSaveEdit}
               onCancel={p.onCancelEdit}
@@ -182,7 +245,12 @@ export function DetailPane(p: DetailPaneProps) {
 
       {row.reviewed_by ? (
         <footer className={styles.reviewed}>
-          Reviewed by {row.reviewed_by.display_name || row.reviewed_by.email}
+          Reviewed by{' '}
+          <UserName
+            id={row.reviewed_by.id}
+            name={row.reviewed_by.display_name}
+            email={row.reviewed_by.email}
+          />
           {row.reviewed_at ? ` · ${formatDate(row.reviewed_at)}` : ''}
           {row.review_comment ? ` · “${row.review_comment}”` : ''}
         </footer>
@@ -195,16 +263,21 @@ function Chipline({
   label,
   value,
   href,
+  node,
 }: {
   label: string;
   value: string | null | undefined;
   href?: string | null;
+  /** Draws the value with a shared component (TaskTag, DatasetTag, ModelTag: C165). */
+  node?: ReactNode;
 }) {
   if (!value) return null;
   return (
     <span className={styles.chip}>
       <span className={styles.chipLabel}>{label}</span>
-      {href ? (
+      {node ? (
+        node
+      ) : href ? (
         <Link to={href} className={styles.chipLink}>
           {value}
         </Link>
@@ -281,9 +354,19 @@ function FullDetail({ id }: { id: number }) {
             {d.history.map((h) => (
               <li key={h.revision_id}>
                 <span className={styles.histWhen}>{formatDate(h.created_at)}</span>
-                <span>#{h.revision_number}</span>
-                <span>{h.actor_user?.display_name || h.actor_user?.email || h.actor_source}</span>
-                {h.review ? <Badge tone={STATUS_TONE[h.review.status]}>{h.review.status}</Badge> : null}
+                <span>
+                  Revision {h.revision_number} by{' '}
+                  {h.actor_user ? (
+                    <UserName
+                      id={h.actor_user.id}
+                      name={h.actor_user.display_name}
+                      email={h.actor_user.email}
+                    />
+                  ) : (
+                    h.actor_source
+                  )}
+                </span>
+                {h.review ? <ReviewStatusMark status={h.review.status} /> : null}
                 {h.review?.review_comment ? <span>“{h.review.review_comment}”</span> : null}
               </li>
             ))}

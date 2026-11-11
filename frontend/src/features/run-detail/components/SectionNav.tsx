@@ -1,14 +1,31 @@
 /**
  * Sticky section nav: run name and status once the hero has scrolled away, jump links to every section of the
- * report (scroll-spy marks the one in view), and the page-wide Filters rule builder and Clear.
+ * report (scroll-spy marks the one in view; the first qym's underline tabs, round 10), the page-wide metric and its
+ * Pass if threshold that every section follows (C039, C154: the only metric and threshold controls on the page), the
+ * page-wide Filters rule builder and Clear, and back to top. Below 1600 px the stuck nav does not repeat the run name,
+ * and the links that do not fit go into a More menu, with the active one always in the row (RF1, C132).
  */
-import { useEffect, useRef, useState } from 'react';
-import { Button, Icon, Popover, RunStatusBadge } from '@/ui';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Button as AriaButton } from 'react-aria-components';
+import {
+  Button,
+  DropdownMenu,
+  Icon,
+  IconButton,
+  Popover,
+  RunStatusBadge,
+  SegmentedControl,
+  Select,
+  Slider,
+} from '@/ui';
+import { useMediaQuery } from '@/features/shell';
 import { useShellScroller } from '../hooks/useScrollMargin';
 import { countActiveFilters, type FilterGroup } from '../lib/filterRules';
+import { fitNavLinks } from '../lib/navFit';
+import { metricHasPassThreshold } from '../lib/runModel';
 import { useRunPage } from '../RunContext';
 import { RuleBuilder } from './items/RuleBuilder';
-import { sectionDomId, useSectionEntries, type SectionKey } from './ReportSections';
+import { sectionDomId, useSectionEntries, type SectionEntry, type SectionKey } from './ReportSections';
 import styles from './SectionNav.module.css';
 
 export type SectionId = 'summary' | SectionKey;
@@ -112,12 +129,132 @@ function NavFilters() {
   );
 }
 
+/** Chips fit while the metrics are few and the bar is wide; otherwise one select, narrow enough that every section
+ * link fits beside it and the Pass if slider at 1440 px (RF1, RF3). */
+const METRIC_CHIPS_MAX = 5;
+
+/**
+ * The page's one metric (round 10): the Repeat tiles and curves, Quality vs latency, Categories and the Items
+ * analysis all follow it, so no section carries its own metric picker.
+ */
+function NavMetric() {
+  const { model, api } = useRunPage();
+  const wide = useMediaQuery('(min-width: 1680px)');
+  const names = model.metricNames;
+  const metric = api.selectedMetric;
+  if (names.length < 2 || !metric) return null;
+  const pick = (m: string) => api.setView({ metric: m === model.defaultMetric ? null : m, threshold: null });
+  return (
+    <span className={styles.metric} data-testid="nav-metric">
+      <span className={styles.metricLabel}>Metric</span>
+      {wide && names.length <= METRIC_CHIPS_MAX ? (
+        <SegmentedControl<string>
+          label="Metric"
+          value={metric}
+          onChange={pick}
+          options={names.map((m) => ({ value: m, label: m }))}
+        />
+      ) : (
+        <Select
+          label="Metric"
+          hideLabel
+          items={names.map((m) => ({ key: m, label: m }))}
+          value={metric}
+          onChange={(k) => k && pick(String(k))}
+          searchable={names.length > 8}
+          width={128}
+        />
+      )}
+    </span>
+  );
+}
+
+/**
+ * The page's one Pass if threshold (C039): Overview, Items, Quality vs latency and the Repeat tiles all read
+ * ?threshold=, so this slider is the only place it is set. A repeat run keeps it for a metric with no pass rule,
+ * as its Repeat section did.
+ */
+function NavThreshold() {
+  const { model, api } = useRunPage();
+  const metric = api.selectedMetric;
+  const show =
+    !!metric && (metricHasPassThreshold(model, metric) || (model.isRepeat && !model.metricIsBoolean[metric]));
+  const value = metric
+    ? Math.round((api.view.threshold ?? model.defaultThresholds[metric] ?? 0.8) * 100)
+    : 80;
+  const [draft, setDraft] = useState(value);
+  const [seen, setSeen] = useState(value);
+  if (seen !== value) {
+    setSeen(value);
+    setDraft(value);
+  }
+  if (!show) return null;
+  return (
+    <Slider
+      label="Pass if ≥"
+      unit="%"
+      layout="inline"
+      minValue={0}
+      maxValue={100}
+      step={5}
+      value={draft}
+      onChange={(v) => setDraft(v as number)}
+      onChangeEnd={(v) => api.setView({ threshold: (v as number) / 100 })}
+      width="176px"
+      className={styles.threshold}
+      data-testid="nav-threshold"
+    />
+  );
+}
+
+/**
+ * Which links stay in the row (RF1): a hidden copy of every link and of the More trigger gives the widths, and the
+ * links row gives the room. Measured again when the row resizes, the links change, or another section is active.
+ */
+function useFittedLinks(entries: SectionEntry[], active: SectionId) {
+  const rowRef = useRef<HTMLSpanElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const [shown, setShown] = useState<boolean[] | null>(null);
+  const activeIndex = entries.findIndex((e) => e.id === active);
+  const key = entries.map((e) => `${e.id}:${e.label}:${e.count ?? ''}`).join('|');
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const measure = measureRef.current;
+    if (!row || !measure) return undefined;
+    const fit = () => {
+      const copies = Array.from(measure.children) as HTMLElement[];
+      const more = copies.pop();
+      const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+      const next = fitNavLinks(
+        copies.map((c) => c.offsetWidth),
+        { available: row.clientWidth, gap, more: more?.offsetWidth ?? 0, active: activeIndex },
+      );
+      setShown((prev) =>
+        prev && prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : next,
+      );
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(fit);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [key, activeIndex]);
+  const fits = (i: number) => !shown || shown.length !== entries.length || shown[i];
+  return {
+    rowRef,
+    measureRef,
+    visible: entries.filter((_, i) => fits(i)),
+    overflow: entries.filter((_, i) => !fits(i)),
+  };
+}
+
 export function SectionNav({ onSection }: SectionNavProps) {
   const { payload } = useRunPage();
   const entries = useSectionEntries();
   const navRef = useRef<HTMLElement>(null);
   const ids = entries.map((e) => e.id);
   const active = useScrollSpy(navRef, ids);
+  const { rowRef, measureRef, visible, overflow } = useFittedLinks(entries, active);
   const run = payload.run;
   // The page's sticky offsets (filter bar, scroll margins) follow the nav's real height.
   useEffect(() => {
@@ -135,17 +272,24 @@ export function SectionNav({ onSection }: SectionNavProps) {
   }, []);
   const status = String(run.status || '').toUpperCase();
 
-  const link = (id: SectionId, label: string, opts: { count?: number; danger?: boolean }) => (
+  const link = (id: SectionId, label: string, opts: { count?: number; danger?: boolean; tip?: string }) => (
     <a
       key={id}
       href={`#run-section-${id}`}
       className={styles.link}
+      title={opts.tip}
       data-link="block"
       aria-current={active === id ? 'location' : undefined}
       data-section={id}
       data-tone={opts.danger ? 'danger' : undefined}
       onClick={(e) => {
         e.preventDefault();
+        // C117: the URL names the section in view (a replace, so Back still leaves the run)
+        window.history.replaceState(
+          window.history.state,
+          '',
+          `${window.location.pathname}${window.location.search}#run-section-${id}`,
+        );
         onSection(id);
       }}
     >
@@ -166,13 +310,48 @@ export function SectionNav({ onSection }: SectionNavProps) {
         <span className={styles.name}>{run.run_name || run.run_id}</span>
         <RunStatusBadge status={status} label={String(run.status || '').toLowerCase()} />
       </span>
-      <span className={styles.links}>
-        {link('summary', 'Summary', {})}
-        <span className={styles.sep} aria-hidden="true" />
-        {entries.map((e) => link(e.id, e.label, { count: e.count, danger: e.danger }))}
+      <span ref={rowRef} className={styles.links}>
+        {visible.map((e) => link(e.id, e.label, { count: e.count, danger: e.danger, tip: e.tip }))}
+        {overflow.length ? (
+          <DropdownMenu
+            label="More sections"
+            placement="bottom start"
+            trigger={
+              <AriaButton className={styles.link} data-testid="nav-more">
+                More
+                <Icon name="chevron-down" size={12} />
+              </AriaButton>
+            }
+            items={overflow.map((e) => ({
+              id: e.id,
+              label: typeof e.count === 'number' ? `${e.label} (${e.count})` : e.label,
+            }))}
+            onAction={(id) => onSection(id as SectionId)}
+          />
+        ) : null}
+      </span>
+      <span ref={measureRef} className={styles.measure} aria-hidden="true">
+        {entries.map((e) => (
+          <span key={e.id} className={styles.link}>
+            {e.label}
+            {typeof e.count === 'number' ? <span className={styles.count}>{e.count}</span> : null}
+          </span>
+        ))}
+        <span className={styles.link}>
+          More
+          <Icon name="chevron-down" size={12} />
+        </span>
       </span>
       <span className={styles.actions}>
+        <NavMetric />
+        <NavThreshold />
         <NavFilters />
+        <IconButton
+          label="Back to top"
+          icon={<Icon name="chevron-up" size={14} />}
+          onPress={() => onSection('summary')}
+          data-testid="nav-top"
+        />
       </span>
     </nav>
   );

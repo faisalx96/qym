@@ -19,7 +19,7 @@ test.describe('live run (scenario 2, J2)', () => {
     const { runId, stream, next } = await seedRunningRun(client, s.token, 30);
     await openRun(page, s.slug, runId);
     const hero = page.getByRole('region', { name: 'Run summary' });
-    await expect(hero).toContainText('RUNNING');
+    await expect(hero).toContainText(/running/i);
     await expect(page.getByTestId('live-indicator')).toBeVisible();
     await expect(page.getByTestId('live-indicator')).toContainText(/Live · updated \d+s ago/);
     await expect(page.getByTestId('hero-runtime'))
@@ -62,7 +62,7 @@ test.describe('live run (scenario 2, J2)', () => {
     // finish: indicator disappears and the status flips
     await completeRun(stream);
     await expect(page.getByTestId('live-indicator')).toHaveCount(0, { timeout: 15_000 });
-    await expect(hero).toContainText('COMPLETED');
+    await expect(hero).toContainText(/completed/i);
     await expect(card).toBeVisible();
   });
 
@@ -89,7 +89,7 @@ test.describe('live run (scenario 2, J2)', () => {
     const { runId, stream } = await seedRunningRun(client, s.token, 5);
     await completeRun(stream);
     await openRun(page, s.slug, runId);
-    await expect(page.getByRole('region', { name: 'Run summary' })).toContainText('COMPLETED');
+    await expect(page.getByRole('region', { name: 'Run summary' })).toContainText(/completed/i);
     await expect(page.getByTestId('live-indicator')).toHaveCount(0);
   });
 });

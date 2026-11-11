@@ -42,7 +42,7 @@ export function CsvExport() {
       setSelected(new Set(cols.map((c) => c.id)));
       setOpen(true);
     } catch {
-      toast.show('Could not load every item for the export.', { tone: 'error' });
+      toast.show('Couldn’t load every item for the export.', { tone: 'error' });
     } finally {
       clearInterval(timer);
       setLoading(null);
@@ -97,6 +97,7 @@ export function CsvExport() {
               variant="accent"
               onPress={download}
               isDisabled={selected.size === 0}
+              disabledReason="Select at least one column"
               data-testid="csv-download"
             >
               Download {selected.size} columns
