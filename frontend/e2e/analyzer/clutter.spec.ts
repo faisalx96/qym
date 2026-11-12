@@ -21,7 +21,7 @@ test('1280x900 regression guard: first control near the top; fold counts do not 
   await page.setViewportSize({ width: 1280, height: 900 });
   await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+  await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
   const m = await page.evaluate(() => {
     const main = document.querySelector('main') as HTMLElement;
     const vh = window.innerHeight;
@@ -85,8 +85,8 @@ test('390 wide: no horizontal scroll, the rail keeps the primary action and an o
   expect(overflow).toBeLessThanOrEqual(0);
   // target rows are two lines (id, metric, Preview / tag and input text), not four stacked ones
   const rowHeight = await page
-    .getByRole('list', { name: 'Targets' })
-    .getByRole('listitem')
+    .getByRole('grid', { name: 'Targets' })
+    .locator('tbody tr')
     .first()
     .evaluate((el) => el.getBoundingClientRect().height);
   expect(rowHeight, `390 px target row is ${rowHeight}px tall`).toBeLessThanOrEqual(64);

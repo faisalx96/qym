@@ -6,8 +6,8 @@ import s from './blocks.module.css';
 import { APP_LOCALE } from '@/lib/dates';
 
 /**
- * Role-labelled messages, copy, char count and fields sent (the context switches live in the
- * drawer header). No LLM call is made. The text never auto-scrolls: while an update is
+ * Role-labelled messages, copy, char count and fields sent (the context switches are in "Prompt
+ * contents" on the page and in the drawer head). No LLM call is made. The text never auto-scrolls: while an update is
  * pending it is dimmed in place instead of being swapped.
  */
 export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxHeight?: boolean }) {

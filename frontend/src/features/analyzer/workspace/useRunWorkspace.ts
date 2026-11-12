@@ -263,6 +263,8 @@ export function useRunWorkspace(
       cur.includes(key) ? cur.filter((k) => k !== key) : cur.length >= 3 ? cur : [...cur, key],
     );
   }, []);
+  /** Replace the checked targets (the table's header checkbox): keeps the order given, at most 3. */
+  const setTests = useCallback((keys: string[]) => setTestKeys(keys.slice(0, 3)), []);
 
   return {
     settings,
@@ -284,6 +286,7 @@ export function useRunWorkspace(
     setFocusKey,
     testKeys: liveTestKeys,
     toggleTest,
+    setTests,
     connectionId,
     setConnectionId,
     preview: {

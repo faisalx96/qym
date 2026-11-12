@@ -35,7 +35,7 @@ test.describe('axe (14)', () => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
     await expectNoSerious(page, 'page');
 
     // detected variable row + open path picker
@@ -216,7 +216,7 @@ test.describe('layout', () => {
     const seed = await seedAnalyzer(request, { withArabic: true });
     await gotoApp(page, analysisUrl(seed.slug, seed.arabicId!));
     await waitWorkspace(page);
-    const first = page.getByRole('list', { name: 'Targets' }).getByRole('listitem').first();
+    const first = page.getByRole('grid', { name: 'Targets' }).locator('tbody tr').first();
     const text = first.locator('[dir="rtl"]', { hasText: 'اعرض' });
     await expect(text).toHaveCount(1);
     await expect(text).toHaveCSS('direction', 'rtl');
@@ -245,7 +245,7 @@ test.describe('layout', () => {
     };
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
     await expectFits('page');
     await page.getByRole('textbox', { name: 'Additional instructions' }).fill('Use {rubric}');
     await expectFits('with a variable');

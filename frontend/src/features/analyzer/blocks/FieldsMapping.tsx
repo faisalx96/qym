@@ -1,12 +1,9 @@
 import { useState } from 'react';
-import { Button, Checkbox, Icon, Select, Switch, Text } from '@/ui';
+import { Button, Checkbox, Icon, Select, Text } from '@/ui';
 import {
   SOURCE_FIELDS,
   STD_VARIABLES,
   leafPaths,
-  metadataKey,
-  nodeLeaves,
-  pathsToTree,
   toggleNode,
   type FieldSlot,
   type PathNode,
@@ -36,25 +33,27 @@ interface RowDef {
 
 /**
  * Variable mapping: INPUT / EXPECTED / OUTPUT and every `{variable}` of the
- * instructions map to a source field (with a JSON-path picker), plus the
- * Error / Scores / Metric metadata include toggles and the metadata picker.
+ * instructions map to a source field (with a JSON-path picker). The include
+ * switches and the metadata picker are in `PromptContents`.
  */
 export function FieldsMapping({
   ws,
   bodiesLoading,
   onlyCustom,
   onlyStandard,
+  onPickerOpen,
 }: {
   ws: RunWorkspace;
   bodiesLoading?: boolean;
   /** Render only the `{variable}` rows (next to the instructions). */
   onlyCustom?: boolean;
-  /** Render only INPUT / EXPECTED / OUTPUT and the include toggles (`{variable}` rows sit by the instructions). */
+  /** Render only INPUT / EXPECTED / OUTPUT (`{variable}` rows sit by the instructions). */
   onlyStandard?: boolean;
+  /** Called when a JSON field picker opens: the page then loads the item bodies it needs. */
+  onPickerOpen?: () => void;
 }) {
   const { settings, update, trees, customVars } = ws;
   const [open, setOpen] = useState<string | null>(null);
-  const [metaOpen, setMetaOpen] = useState(false);
 
   const rows: RowDef[] = [
     ...(onlyCustom
@@ -116,7 +115,10 @@ export function FieldsMapping({
                     <Button
                       size="sm"
                       aria-expanded={isOpen}
-                      onPress={() => setOpen(isOpen ? null : r.id)}
+                      onPress={() => {
+                        if (!isOpen) onPickerOpen?.();
+                        setOpen(isOpen ? null : r.id);
+                      }}
                       iconEnd={<Icon name={isOpen ? 'collapse' : 'expand'} size={12} />}
                     >
                       {summary}
@@ -159,68 +161,6 @@ export function FieldsMapping({
           })}
         </div>
       )}
-
-      {onlyCustom ? null : (
-        <>
-          <div className={s.includeRow} role="group" aria-label="Include in prompt">
-            <Text variant="sm" weight={600} tone="muted">
-              Include in prompt
-            </Text>
-            <Switch isSelected={settings.includeError} onChange={(v) => update({ includeError: v })}>
-              Error
-            </Switch>
-            <Switch isSelected={settings.includeScores} onChange={(v) => update({ includeScores: v })}>
-              Scores
-            </Switch>
-            <Switch isSelected={settings.includeMetadata} onChange={(v) => update({ includeMetadata: v })}>
-              Metric metadata
-            </Switch>
-            {trees.metadata.length ? (
-              <Button
-                size="sm"
-                isDisabled={!settings.includeMetadata}
-                aria-expanded={metaOpen}
-                onPress={() => setMetaOpen((o) => !o)}
-                iconEnd={<Icon name={metaOpen ? 'collapse' : 'expand'} size={12} />}
-              >
-                {settings.metaDeselected.length ? 'Choose metadata (custom)' : 'Choose metadata (all)'}
-              </Button>
-            ) : null}
-          </div>
-          {metaOpen && settings.includeMetadata ? <MetadataPicker ws={ws} /> : null}
-        </>
-      )}
-    </div>
-  );
-}
-
-function MetadataPicker({ ws }: { ws: RunWorkspace }) {
-  const { settings, update, trees } = ws;
-  const off = new Set(settings.metaDeselected);
-  return (
-    <div className={s.picker} role="group" aria-label="Metric metadata fields">
-      {trees.metadata.map((group) => {
-        const tree = pathsToTree(group.paths);
-        const selected = new Set(leafPaths(tree).filter((l) => !off.has(metadataKey(group.metric, l))));
-        return (
-          <div key={group.metric} className={s.metaGroup}>
-            <Text variant="md" weight={600} mono>
-              {group.metric}
-            </Text>
-            <PathTree
-              nodes={tree}
-              selected={selected}
-              onToggle={(node) => {
-                const leaves = nodeLeaves(node).map((l) => metadataKey(group.metric, l));
-                const allOn = leaves.every((k) => !off.has(k));
-                const next = new Set(off);
-                leaves.forEach((k) => (allOn ? next.add(k) : next.delete(k)));
-                update({ metaDeselected: [...next] });
-              }}
-            />
-          </div>
-        );
-      })}
     </div>
   );
 }

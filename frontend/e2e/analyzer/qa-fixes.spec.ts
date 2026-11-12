@@ -131,7 +131,7 @@ test.describe('settings (4, 15, 16, 21)', () => {
     await openRun(page, seed.slug, seed.runId);
     await page.getByRole('button', { name: 'Analyze 4 items' }).click();
     await expect(jobRegion(page)).toContainText('metric analyses succeeded', { timeout: 30_000 });
-    await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
     await page.getByRole('button', { name: 'Refresh targets' }).click();
     await expect(page.getByRole('link', { name: 'Open Reviews' })).toHaveAttribute(
       'href',

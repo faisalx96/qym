@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useAnalysisConfig, type AnalysisScope } from '@/api/analysis';
 import { PageHeader, TabPanel, Tabs } from '@/ui';
-import { fullWidth } from '@/features/shell/layout';
+import { constrained } from '@/features/shell/layout';
 import type { AnalyzerScope } from './useAnalyzerRoute';
 import s from './analyzer.module.css';
 
@@ -30,7 +30,7 @@ export function AnalyzerFrame({
   const config = useAnalysisConfig(scope);
   const c = config.data;
   return (
-    <div className={`${fullWidth} ${s.page}`}>
+    <div className={`${constrained} ${s.page}`}>
       <PageHeader
         title="Auto-analysis"
         description={description}

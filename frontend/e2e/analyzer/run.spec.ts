@@ -92,7 +92,7 @@ test.describe('Analyze job (7)', () => {
     const created = page.waitForResponse(
       (r) => r.url().endsWith('/analysis-jobs') && r.request().method() === 'POST',
     );
-    const targets = page.getByRole('list', { name: 'Targets' }).getByRole('listitem');
+    const targets = page.getByRole('grid', { name: 'Targets' }).locator('tbody tr');
     const before = await targets.count();
     await rail(page).getByRole('button', { name: 'Analyze 4 items' }).click();
     expect((await created).status()).toBe(202);
