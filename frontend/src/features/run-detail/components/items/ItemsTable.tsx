@@ -226,6 +226,8 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
             header: 'Trace',
             hideLabel: true,
             width: 48,
+            // cv4 Y17: pinned at the end, so the trace tile stays whole when the metric columns overflow
+            pin: 'end',
             align: 'center',
             resizable: false,
             hideable: false,
