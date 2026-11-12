@@ -170,8 +170,9 @@ function runCell(col: ColumnDef, row: RunRow, p: RunsTableProps, h: CellHandlers
 }
 
 /**
- * A child row shows the pass's own values in the run's columns. Task, Model, Dataset, Owner, Experiment and
- * Version are facts of the run and stay empty; the group columns (Pass@k ...) belong to the strip.
+ * A child row shows the pass's own values in the run's columns. Task, Model, Dataset and Owner are facts of the run:
+ * a pass row repeats them with the run row's chips (cv4 B2: the owner wants them filled, not empty). Experiment and
+ * Version stay empty; the group columns (Pass@k ...) belong to the strip.
  */
 function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
   const id = col.id;
@@ -206,6 +207,14 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
       return <PassNameCell run={run} pass={pass} status={status} />;
     case 'status':
       return <PassStatus run={run} pass={pass} status={status} />;
+    case 'task':
+      return <TaskTag name={run.task_name} />;
+    case 'model':
+      return <ModelCell row={run} />;
+    case 'dataset':
+      return <DatasetCell row={run} />;
+    case 'owner':
+      return <OwnerCell row={run} />;
     case 'time':
       return <PassDate pass={pass} />;
     case 'analysis':
