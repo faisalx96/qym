@@ -3,7 +3,15 @@
  * with metric columns; private test sets show the locked state and never
  * request items.
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { Key } from 'react-aria-components';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -184,7 +192,12 @@ export function ItemsTab({
     if (!host || !row) return;
     shownKey.current = activeKey;
     const focused = document.activeElement;
-    if (focused instanceof HTMLElement && focused !== row && host.contains(focused) && focused.matches('tbody tr'))
+    if (
+      focused instanceof HTMLElement &&
+      focused !== row &&
+      host.contains(focused) &&
+      focused.matches('tbody tr')
+    )
       row.focus({ preventScroll: true });
     row.scrollIntoView?.({ block: 'nearest' });
   }, [activeKey, items]);
@@ -398,9 +411,7 @@ export function ItemsTab({
       priority: 1,
       // without an id column the input is the row's primary text (cv4 E13)
       cardTitle: !showIdColumn,
-      cell: (item, ctx) => (
-        <Preview value={item.input} density={ctx.density} primary={!showIdColumn} />
-      ),
+      cell: (item, ctx) => <Preview value={item.input} density={ctx.density} primary={!showIdColumn} />,
     },
     {
       id: 'expected',
@@ -521,6 +532,7 @@ export function ItemsTab({
     meta: metaFilters,
   };
   return (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- a double click on a row opens the item page (cv4 E3); the keyboard path is Enter, then the pane's Open page
     <div
       ref={wrapRef}
       className={styles.wrap}

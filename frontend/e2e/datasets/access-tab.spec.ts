@@ -328,7 +328,9 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     expect(dates).toHaveLength(3);
     for (const date of dates) expect(date).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
     // D-28: the level reads as a Tag; the row's edit tile changes it
-    await expect(table.getByRole('row').filter({ hasText: list[0]!.name }).getByText('View', { exact: true })).toBeVisible();
+    await expect(
+      table.getByRole('row').filter({ hasText: list[0]!.name }).getByText('View', { exact: true }),
+    ).toBeVisible();
   });
 
   test('a level change keeps the date; remove and re-add is clean again (QA5-41, QA5-47, QA5-51)', async ({

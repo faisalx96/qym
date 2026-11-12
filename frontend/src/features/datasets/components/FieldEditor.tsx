@@ -254,7 +254,11 @@ function CodeArea({
     under.current.scrollLeft = el.scrollLeft;
   };
   return (
-    <div className={styles.editorWrap} data-coloured={coloured ? '' : undefined} data-big={big ? '' : undefined}>
+    <div
+      className={styles.editorWrap}
+      data-coloured={coloured ? '' : undefined}
+      data-big={big ? '' : undefined}
+    >
       {coloured ? (
         <pre ref={under} className={styles.under} aria-hidden="true" data-testid="json-colour" {...dir}>
           {/* a final newline needs a character after it, or the copy is one line shorter than the textarea */}

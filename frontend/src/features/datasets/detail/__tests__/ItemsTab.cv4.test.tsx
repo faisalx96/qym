@@ -50,7 +50,13 @@ vi.mock('@/api/datasets', async (importOriginal) => {
 });
 
 const dataset = { slug: 'gold', name: 'Gold', items_visible: true } as Dataset;
-const version = { id: 'ver-2', version: 'v2', status: 'draft', labels: [], item_count: 3 } as unknown as DatasetVersion;
+const version = {
+  id: 'ver-2',
+  version: 'v2',
+  status: 'draft',
+  labels: [],
+  item_count: 3,
+} as unknown as DatasetVersion;
 
 function Where() {
   const loc = useLocation();

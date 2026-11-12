@@ -2,7 +2,18 @@
 import { Link } from 'react-router-dom';
 import { useDatasetLineage, type DatasetVersion, type LineageChange } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
-import { EmptyState, ErrorState, Icon, type IconName, LinkButton, Section, Skeleton, Tag, Text, Card } from '@/ui';
+import {
+  EmptyState,
+  ErrorState,
+  Icon,
+  type IconName,
+  LinkButton,
+  Section,
+  Skeleton,
+  Tag,
+  Text,
+  Card,
+} from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
 import { formatDate, pluralize } from '../lib/itemValue';

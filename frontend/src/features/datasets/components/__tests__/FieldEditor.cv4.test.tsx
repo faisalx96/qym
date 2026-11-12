@@ -8,7 +8,16 @@ import { FieldEditor, fillWeight, initialFieldState, type FieldState } from '../
 function Editable({ value, jsonOnly }: { value: unknown; jsonOnly?: boolean }) {
   const [state, setState] = useState<FieldState>(initialFieldState(value, jsonOnly));
   return (
-    <FieldEditor compact fill label="Input" value={value} editable jsonOnly={jsonOnly} state={state} onChange={setState} />
+    <FieldEditor
+      compact
+      fill
+      label="Input"
+      value={value}
+      editable
+      jsonOnly={jsonOnly}
+      state={state}
+      onChange={setState}
+    />
   );
 }
 

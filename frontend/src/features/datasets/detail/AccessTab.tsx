@@ -469,7 +469,9 @@ function AccessBody({
                       onChange={setWho}
                       placeholder="Choose a project member"
                       width="100%"
-                      renderItem={(p) => <UserName id={String(p.key)} name={p.label} email={p.email} showEmail />}
+                      renderItem={(p) => (
+                        <UserName id={String(p.key)} name={p.label} email={p.email} showEmail />
+                      )}
                       renderValue={(p) => <UserName id={String(p.key)} name={p.label} email={p.email} />}
                     />
                   </div>

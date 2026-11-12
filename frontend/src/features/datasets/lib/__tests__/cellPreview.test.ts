@@ -14,9 +14,9 @@ describe('item cell preview by density (cv4 E1)', () => {
   });
 
   it('puts each field of an object, or each chat message, on its own line for comfortable', () => {
-    expect(cellPreviewText({ instruction: 'Summarize  the\nclause', document_id: 'doc-1' }, 'comfortable')).toBe(
-      'instruction: Summarize the clause\ndocument_id: doc-1',
-    );
+    expect(
+      cellPreviewText({ instruction: 'Summarize  the\nclause', document_id: 'doc-1' }, 'comfortable'),
+    ).toBe('instruction: Summarize the clause\ndocument_id: doc-1');
     expect(cellPreviewText('{"a": 1, "b": [2]}', 'comfortable')).toBe('a: 1\nb: [2]');
     expect(
       cellPreviewText(
