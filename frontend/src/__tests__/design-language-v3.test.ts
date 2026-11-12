@@ -395,8 +395,9 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
       for (const b of buttons(read(f)))
         if (/iconEnd=\{<Icon name="chevron-right"/.test(b.attrs)) problems.push(`${rel(f)}:${b.line}`);
     none(problems);
-    const empty = src('ui/EmptyState/EmptyState.tsx');
-    expect(empty).toContain('chevron-right');
+    // cv4 F13: the one text link to another page is ui/TextLink (accent text, end chevron); EmptyState uses it
+    expect(src('ui/TextLink/TextLink.tsx')).toContain('name="chevron-right"');
+    expect(src('ui/EmptyState/EmptyState.tsx')).toContain('<TextLink');
     // E-28 / D-13: no JSX text ends with a typed →
     none(grep(shippedTsx, /→\s*(<\/|$)/m));
     expect(src('features/runs-list/OverviewPage.tsx')).not.toContain('→');
