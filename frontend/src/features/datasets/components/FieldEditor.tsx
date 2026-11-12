@@ -202,7 +202,6 @@ export function FieldEditor({
         onOpenChange={setExpanded}
         title={label}
         size="wide"
-        className={styles.expandModal}
         data-testid="field-expanded"
       >
         <div className={styles.expandBody}>

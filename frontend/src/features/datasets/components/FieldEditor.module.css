@@ -119,16 +119,13 @@
   max-height: none;
 }
 
-/* cv4 E4: the expanded field, a wide dialog (Dialog size "wide", cv4 X9); the editor takes the dialog's height. */
-.expandModal {
-  height: min(860px, 100%);
-}
-
+/* cv4 E4: the expanded field, a wide dialog (Dialog size "wide", cv4 X9). Y19: the dialog is as high as the value,
+   from 240px up to 640px of editor (less on a short window); a longer value scrolls inside the editor. */
 .expandBody {
+  --expand-editor-max: min(640px, calc(100vh - 260px));
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  height: 100%;
   min-height: 0;
 }
 
@@ -139,20 +136,16 @@
   gap: var(--space-sm);
 }
 
-.expandBody > .editorWrap,
-.expandBody > .pre {
-  flex: 1;
-  min-height: 0;
-}
-
 .expandBody .textarea {
-  flex: 1;
-  max-height: none;
+  field-sizing: content;
+  min-height: 240px;
+  max-height: var(--expand-editor-max);
   resize: none;
 }
 
 .expandBody > .pre {
-  max-height: none;
+  min-height: 240px;
+  max-height: var(--expand-editor-max);
 }
 
 .textarea:hover {
