@@ -28,7 +28,7 @@ import { ItemsSkeleton } from './components/StageSkeletons';
 import { loadItemsSection, loadTraceHost, preloadPanels } from './chunks';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
-import { alignToElement, focusSectionHeading } from '@/lib/scrollToElement';
+import { alignToElement, cancelAlign, focusSectionHeading } from '@/lib/scrollToElement';
 import { prefersReducedMotion, sectionScrollTop, smoothScrollTo } from './lib/smoothScroll';
 import { useSidebarHidden } from '@/lib/useSidebarHidden';
 import { useScope } from './hooks/useScope';
@@ -69,6 +69,8 @@ async function scrollToSection(
   { focus = false, smooth = false }: { focus?: boolean; smooth?: boolean } = {},
 ): Promise<void> {
   const scroller = document.getElementById('shell-content');
+  // cv4 Y2: a new travel ends the re-alignment of the last one, so the page does not snap back to the old section
+  cancelAlign();
   const glide = smooth && !!scroller && !prefersReducedMotion();
   if (id === 'summary') {
     if (glide) await smoothScrollTo(scroller!, () => 0);
