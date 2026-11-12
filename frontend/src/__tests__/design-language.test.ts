@@ -339,11 +339,16 @@ describe('primitive module contracts', () => {
     );
   });
 
-  it('IconButton tile (row actions) is the soft tint at rest and the strong tint on hover', () => {
+  it('IconButton tile (row actions) is the strong tint at rest and the tile hover tint on hover (cv4 F9)', () => {
     const css = ui('IconButton');
     const rest = css.split('.iconAction[data-tile] {')[1]?.split('}')[0] ?? '';
-    expect(rest).toContain('color-mix(in srgb, var(--tile-tone) var(--tint-soft), transparent)');
-    expect(css).toMatch(/\.iconAction\[data-tile\]\[data-hovered\],[^{]*\{[^}]*var\(--tint-strong\)/);
+    expect(rest).toContain('color-mix(in srgb, var(--tile-tone) var(--tint-strong), transparent)');
+    expect(rest).toContain('width: var(--control-height)');
+    expect(css).toMatch(/\.iconAction\[data-tile\]\[data-hovered\],[^{]*\{[^}]*var\(--tint-tile-hover\)/);
+    // a disabled tile stays readable: no fade
+    const off = css.split('.iconAction[data-tile][data-disabled] {')[1]?.split('}')[0] ?? '';
+    expect(off).toContain('opacity: 1;');
+    expect(off).toContain('color: var(--text-muted);');
   });
 
   it('DataTable keeps the .qdt-table header/cell recipe', () => {
