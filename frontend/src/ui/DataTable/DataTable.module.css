@@ -47,6 +47,19 @@
   overflow: hidden;
 }
 
+/* cv4 F2: the header row and the rows sit flush with the card edge. A toolbar above (or a footer below) already has the
+   card's round corner, so the body under it is square at that edge: a round body corner left an empty wedge between the
+   toolbar and the header row ("at the corner there is an empty space"). */
+.toolbar ~ .bodyHost {
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
+}
+
+.bodyHost:has(~ .footer) {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+
 .scroller {
   position: relative;
   min-height: 0;
@@ -710,7 +723,7 @@
 }
 
 .tr:hover {
-  --row-base: var(--bg-hover);
+  --row-base: var(--row-hover);
 }
 
 /* hoverEdge: the row under the pointer draws an accent hairline above and below it and a 2px accent edge at its start */
@@ -720,7 +733,7 @@
     inset 0 -1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
 
-.card[data-hover-edge] .tr:hover > .td:first-child {
+.card[data-hover-edge] .tr:hover > :is(.td:first-child:not([data-collapsed]), .td[data-collapsed] + .td) {
   box-shadow:
     inset 2px 0 0 var(--accent-primary),
     inset 0 1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent),
@@ -728,7 +741,7 @@
 }
 
 .tr[data-focused] {
-  --row-base: var(--bg-hover);
+  --row-base: var(--row-hover);
 }
 
 .tr[data-state='error'] {
@@ -740,10 +753,10 @@
 }
 
 .tr[data-selected] {
-  --row-tint: var(--bg-selected);
+  --row-tint: var(--row-selected, var(--bg-selected));
 }
 
-.tr[data-selected] td:first-child,
+.tr[data-selected] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td),
 .tr[data-selected] td[data-pseudo='select'] {
   box-shadow:
     inset 2px 0 0 var(--accent-primary),
@@ -754,23 +767,28 @@
   --row-base: var(--card-bg);
 }
 
+/* cv4 F11: an open parent row still shows the hover tone under the pointer (the rule above came later and won). */
+.tr[aria-expanded='true']:hover {
+  --row-base: var(--row-hover);
+}
+
 /* Row state rail on the first cell. */
-.tr[data-state='error'] td:first-child {
+.tr[data-state='error'] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 3px 0 0 var(--error),
     var(--pin-line, 0 0 0 transparent);
 }
-.tr[data-state='warn'] td:first-child {
+.tr[data-state='warn'] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 3px 0 0 var(--warning),
     var(--pin-line, 0 0 0 transparent);
 }
-.tr[data-state='live'] td:first-child {
+.tr[data-state='live'] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 3px 0 0 var(--info),
     var(--pin-line, 0 0 0 transparent);
 }
-.tr[data-state='new'] td:first-child {
+.tr[data-state='new'] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 3px 0 0 var(--accent-primary),
     var(--pin-line, 0 0 0 transparent);
@@ -784,7 +802,7 @@
     var(--pin-line, 0 0 0 transparent);
 }
 
-.tr:focus-visible td:first-child {
+.tr:focus-visible :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 2px 0 0 var(--accent-primary),
     inset 0 2px 0 var(--accent-primary),
@@ -845,20 +863,7 @@
   justify-content: flex-end;
   gap: 2px;
   width: 100%;
-  opacity: 0.6; /* resting state: present, quiet; full strength on hover/focus/selection */
-  transition: opacity var(--transition-fast);
-}
-.tr[data-selected] .rowActions,
-.tr:hover .rowActions,
-.tr:focus-within .rowActions,
-.rowActions:focus-within {
-  opacity: 1;
-}
-
-@media (hover: none) {
-  .rowActions {
-    opacity: 1;
-  }
+  /* cv4 F9: full strength at rest; a 0.6 rest opacity made the tiles dim (the revoke tile all but vanished) */
 }
 
 .detailRow > td {
@@ -1264,22 +1269,6 @@
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-subtle);
 }
-.cardSortLabel {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-.cardSortSelect {
-  height: var(--control-height);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--card-bg);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-base);
-}
 .cards {
   margin: 0;
   padding: 0;
@@ -1535,15 +1524,15 @@
 
 .childRow:hover,
 .childRow[data-focused] {
-  --row-base: var(--bg-hover);
+  --row-base: var(--row-hover);
 }
 
 .childRow > td {
   color: var(--text-secondary);
 }
 
-.tr[data-group-open]:not([data-state]) > td:first-child,
-.childRow > td:first-child {
+.tr[data-group-open]:not([data-state]) > :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td),
+.childRow > :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset var(--rail-width) 0 0 var(--accent-primary),
     var(--pin-line, 0 0 0 transparent);
@@ -1554,7 +1543,7 @@
   font-weight: 600;
 }
 
-.childRow[data-selected] > td:first-child,
+.childRow[data-selected] > :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td),
 .childRow[data-selected] > td[data-pseudo='select'] {
   box-shadow:
     inset var(--rail-width) 0 0 var(--accent-primary),

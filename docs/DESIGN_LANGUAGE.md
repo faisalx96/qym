@@ -58,8 +58,11 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 | Page title | `--font-title` | 22px / 600–650 | primary | One per page. No page invents its own title size. |
 | Stat / hero value | `--font-stat` | 26px / 700 | primary or score color | Mono, `tabular-nums`. |
 | Modal / empty-state title, mid-tier value | `--font-xl` | 18px / 600–650 | primary | Also emphasized inline stats (e.g. drawer aggregates). |
+| Report section title | `--font-section` | 22px / 650 | primary | `ReportSection` only (cv4 F10): the biggest of the three report title roles. |
+| Subsection title | `--font-subsection` | 16px / 650 | primary | `Subsection`, with its 3px accent bar (cv4 F10). |
+| Card title | `--font-card-title` | 14px / 600 | primary | `CardTitle` (cv4 F10); a local card title (`ChartCard`) uses the same token. |
 | Section header | `--font-lg` | 15px / 600 | primary | |
-| Card title / sub-header | `--font-md` | 13px / 600 | primary | Also form inputs. |
+| Sub-header, form input | `--font-md` | 13px / 600 | primary | Also form inputs. |
 | Body / table cell / code | `--font-base` | 12px / 400 | secondary | |
 | Meta / caption / label / **table header** | `--font-sm` | 11px / 400 (labels 600–650) | muted | Uppercase labels get `letter-spacing: 0.05em`. |
 | Badge / pill | `--font-xs` | 10px / 650 | semantic | Tag chrome (and the retired Badge) only — nothing else may be 10px. |
@@ -69,6 +72,10 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 (`SectionHeader`'s default level; the run, compare, analysis, charts and admin sections), a panel or group heading is
 `--font-lg` 15/600 (Overview panels, per-task chart cards, run-detail group titles such as "Response time" and "By pass"),
 and a small label is `--font-md` 13/600 uppercase and tracked. No page writes its own heading size.
+**Report title roles (cv4 F10, owner 2026-11-12: "this should be the biggest, then smaller, smallest").** On the run and
+compare pages three title roles nest in three clear steps: the `ReportSection` title 22/650 (`--font-section`), the
+`Subsection` title 16/650 (`--font-subsection`) and the card title 14/600 (`--font-card-title`, `ui/Card` `CardTitle`:
+title, one muted caption directly below it, controls on the title row). A feature sets no title size of its own.
 
 Major analytical sections use a sentence-case section title (`--font-xl`) followed
 by a concise muted `--font-base` description, through the `Section` recipe below. Do not introduce a major section
@@ -227,13 +234,21 @@ preselected.
   (ghost) tone: a show-more, expand or earlier toggle is a neutral button, also in a table cell (Q44 B). A button that
   grows a list says "Show N more"; hidden tags in a row show a "+N more" count tag (Q49 C, resolution 4). A danger
   action states what will be deleted. No button draws an outline ring at rest (round 10), also the Analyze done and
-  running states. A neutral button is quiet at rest
-  (`--bg-elevated`, no border or ring, round 9) and brighter on hover (`--bg-active`), never the
-  reverse: a resting fill brighter than its hover reads as already pressed (round 8). Field-like controls (text field,
-  select, filter trigger, segmented control, date and time field) share that `--bg-elevated` fill with a soft
-  `--control-edge` (round 10: the `--border-default` outlines read as too bold next to the borderless buttons). A
-  disabled neutral button keeps the flat shape at half its fill with muted text and no outline (round 10: an
-  outline made a locked button look like another, louder style).
+  running states. **Button ladder (cv4 F6, owner 2026-11-12: "this white text is too bright ... the background is too
+  dim. It's not clear they are buttons").** A neutral button reads as a button at rest: the `--button-fill` fill
+  (`--bg-hover`), a 1px inner edge `--button-edge` drawn with an inset box-shadow (the size does not change) and the
+  `--button-text` label, a step under `--text-primary` and brighter than a dropdown's muted label. Hover brightens all
+  three (`--button-fill-hover`, `--button-edge-hover`, `--text-primary`); press goes one step back; never the reverse (a
+  resting fill brighter than its hover reads as already pressed, round 8). Accent, meta and danger use the same ladder
+  in their tone: `--tint-soft` fill and a 30% tone edge at rest, `--tint-strong` and a 55% edge on hover. Primary is
+  the solid accent with no edge, `--accent-primary-hover` on hover. The menu actions Select all and None are the same
+  neutral recipe at `--control-height-sm`. Field-like controls (text field, select, filter trigger, segmented control,
+  date and time field) share the `--control-fill` fill with a soft `--control-edge`. **One look on every surface (cv4
+  F7, F8):** a `ReportSection` body (inset cards at `--bg-elevated`) lifts `--control-fill` to `--bg-hover` and the
+  edge to `--border-default`, so a search field, a select or a segmented control on an inset card looks the same as
+  on the page ground; a feature never sets a control's fill, edge, height or font size. A disabled neutral button
+  keeps the flat shape at half its fill with muted text and no edge (round 10: an outline made a locked button look
+  like another, louder style).
   **Which button** (round 11, owner: "one unified rule set"): `primary` (solid green) is the one action that commits a
   card or form: Save, Create, Add, New project. `accent` (green tint) runs something useful without saving: Test
   connection, Run preset, Unarchive. `neutral` cancels, discards, compares or navigates: Cancel, Discard, View diff.
@@ -260,10 +275,16 @@ preselected.
   Icon in `--text-muted`. Icon size follows the control: 12px in a labelled 24px button and in menu tiles, 14px in an
   icon-only 24px button and for the three-dot glyph, 16px only in a 32px dialog footer.
   **Links** (Q43 A): a text link to another page or section ends with the 12px `chevron-right` Icon; a button never
-  does. A control that opens a new tab ends with the `external` Icon (12px); no typed ↗.
+  does. The one component is `TextLink` (`ui/TextLink`, cv4 F13): accent text at 600, the end chevron, no underline,
+  `--accent-primary-hover` on hover ("Read the guide ›", "Open LLM connections ›"). A link that must look like a button
+  is a `LinkButton`. A control that opens a new tab ends with the `external` Icon (12px); no typed ↗.
   **Back button:** a neutral 24px `LinkButton` with the `prev` Icon (12px) at its start (Q28 A). Editor pages
   (Environment, New experiment, default preset editor) keep one at the end of the title row; an empty or error state
   uses it as its action. No text-only back link, no typed arrow.
+  **Save state (cv4 F14):** a form or card footer shows no state text while nothing changed (no "All changes saved");
+  it shows text only for unsaved changes, while saving, or for an error. No divider line above a save row.
+  **Sticky bar over a table:** a page's sticky action bar uses `z-index: var(--z-sticky-bar)`, above the sticky header
+  and pinned layers of `DataTable` and under every popover; no local z-index number.
   **Fields:** Required is the red * from `isRequired` on every field primitive, `Textarea` included. No field says
   (required), (optional) or Optional. Forms never draw native select, input or textarea; they use the primitives.
   Brand colour
@@ -276,6 +297,15 @@ preselected.
 - **Glossary** (copy): run (never eval run, evaluation run); pass (never sample) for one repeat of a run; issue = one
   root-cause finding (run page and Reviews); Diagnosis stays only for Live diagnosis labels and Auto-analysis
   categories.
+
+- **One dropdown (cv4 F5, owner 2026-11-12: "I need all drop-downs to be this").** `Select` (one choice) and
+  `MultiSelect` (many) are the only dropdowns; their reference is the Runs filter trigger. Closed: 24px, `--control-fill`,
+  1px `--control-edge`, `--font-sm`, the chevron at the end in `--text-muted`; hover = `--bg-active` fill and the
+  hover edge; open = the accent edge and the chevron turned up in the accent. Open: one panel (`--card-bg`, 1px
+  `--border-default`, `--dropdown-radius`, `--shadow-popover`), 32px option rows in `--font-base` secondary text,
+  `--bg-hover` under the pointer; a `Select` marks the chosen row with primary text at 600 and the accent check at its
+  end, a `MultiSelect` with its checkboxes. `triggerVariant="bar"` puts the label inside the trigger (no label above it).
+  No native `<select>` anywhere, the page size of `Pagination` and the card-mode sort of `DataTable` included.
 
 - **Multiselect** (`MultiSelect`): content in fixed order: search, actions
   (Select all and None/Clear, neutral 20px buttons at rest, round 10), then `--dropdown-option-height` option rows.
@@ -328,7 +358,9 @@ preselected.
 
 - **Pagination** (`Pagination`): every paginated view uses it. Borderless
   rounded-square icon buttons for First, Previous, Next, Last around a direct
-  page entry (28x24px, growing only with the digit count) and total, mono; no
+  page entry (cv4 F3: `--control-height-sm` 20px high, 22px wide, growing only with the digit count, a soft
+  `--control-edge`, in proportion with the 11px pager text and the 14px arrows) and total, mono; the page size is a
+  `Select`; no
   connected pill and no visible action names. The Runs view pins it inside the
   status bar with the range summary. Pass page-size options only where changing
   the size is supported. Every list footer shows the range and page buttons in the centre, also on one page; the far
@@ -347,11 +379,13 @@ preselected.
   exception is `tile`: every row action of a table or a row list (rules, diagnosis subcategories, documents) is a
   tile; a harmful action (archive, revoke, remove, cancel, delete, force stop, disable) is a red tile, every other
   action a green tile (Q26 A). A tile is the
-  tone's `--tint-soft` 20px square at rest and `--tint-strong` on hover, focus and press,
+  tone's `--tint-strong` 24px square (`--control-height`) with a 14px glyph at rest and `--tint-tile-hover` on hover,
+  focus and press (cv4 F9, owner: "too dim, too small"), the row's action group at full opacity at rest (no 0.6 rest
+  fade), a disabled tile at full opacity with a neutral fill and the `--text-muted` glyph (readable, not missing),
   the glyph in the tone (accent, `--error` for danger, `--accent-tertiary` for `meta`, the auto-analysis purple).
   Cancel of a Live worker job uses `ban`. A per-row action in a form (sweep, reset, remove) is an `IconButton`, not a
   text link and not a tile.
-  `ActionTile` draws the same square with no action of its own, as the glyph of a `RowMenu` item. Help markers and
+  `ActionTile` draws the 20px square with a 12px glyph and no action of its own, as the glyph of a `RowMenu` item. Help markers and
   passive icons are not icon actions.
   Revoking a key or token and disabling a user use the `ban` glyph (a circle with a slash), never a bare square or a
   cross (round 10). Removing a person from an access list uses the danger `ban` tile, as revoking a key. Closing a
@@ -478,7 +512,7 @@ preselected.
 - **Report section** (`ReportSection`; the run page and the compare page, `CompareSection` is retired; round 8b, owner
   decision H6): every top-level section is a framed panel: `--bg-surface`, 1px `--border-subtle`, `--radius-md`, 14px
   padding, 20px under the previous panel, the first panel with no lead-in. It opens with a `section-head` inside the
-  panel (no rule): a `--font-xl` / 650 primary title, one muted `--font-sm` description line, the section controls on the right, then
+  panel (no rule): a `--font-section` (22px, cv4 F10) / 650 primary title, one muted `--font-sm` description line, the section controls on the right, then
   14px to the body. A card inside the body is an inset card: `--bg-elevated` with no visible outline. The primitive owns
   every distance: pages set no gap between sections, sections add no margin of their own. Reason (section 6 amendment
   rule): measured on both pages, the old 1.33:1 hairline was as faint as the card borders in the bodies and the compare
@@ -591,8 +625,9 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   settings with a chevron, table tag cells); in the run scope bar it is a passive `Tag kind="count"`. A list that
   grows says "Show N more" (`Button`, see "Show more"). A dialog list ends with plain "and N more".
 
-- **Count box** (`CountTile`): one recipe for a count next to a label (tab, nav link, list option): grey box, mono,
-  number in the exact centre.
+- **Count box** (`CountTile`): one recipe for a count next to a label (tab, nav link, list option, a Categories field
+  chip): grey box, mono, number in the exact centre; `tone="danger"` is the red tint with a readable numeral ("Errors
+  18"). It is the one count badge (cv4 F12): no plain "· 3" count text after a label.
 
 - **Level tag**: a `Tag` that starts with a three-bar level glyph; high red, medium orange, low grey; used for
   Feedback Priority and Complexity.
@@ -637,7 +672,7 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
 
 - **Subsection** (`ui/Subsection`, round 10): a named part inside a report section (Repeat performance, Between
   metrics, Across passes, Response time, Inside the traces): a 3px `--accent-primary` bar at the inline start, the
-  `--font-md` / 650 title and one muted `--font-sm` line on the same line, controls at the end, then the body; 20px
+  `--font-subsection` (16px) / 650 title (cv4 F10) and one muted `--font-sm` line on the same line, controls at the end, then the body; 20px
   between two subsections. It is the one sub-grouping recipe of the report pages; a card title is never a subsection.
 
 - **Section boundary** (`ui/SectionBoundary`, round 10): every report section's body renders inside one, so a render
@@ -682,6 +717,10 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
 
 ### 3.4 Data tables
 
+**Search placement (cv4 F15, owner 2026-11-12).** On a page with a card grid (Projects, Datasets) the search box is in
+the page header action row, immediately before the primary action. On a page with a table the search box is the
+first control of the table toolbar. `SearchField` has one look and one height (24px) on every page and surface.
+
 **List toolbars (C152).** Every list toolbar starts with a 260px search (runs, experiments, queue, deleted runs,
 reviews), then its filters. The search is `SearchField` at `var(--search-width)`, labelled "Search <things>". Every list
 search sets `shortcut="/"`: it shows the "/" hint (`ui/Kbd`, 11px) and the "/" key focuses it. Pickers inside a card
@@ -699,7 +738,14 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   stripes; the hovered row (`--bg-hover`) is always brighter than a stripe. Every admin table, Maintenance included,
   is locked to comfortable rows with no density menu (round 10); a leading identicon in a regular table is the 30px
   chip (cell 4, gap 1);
-  hover `--bg-hover`; selected `--bg-selected` plus a 2px accent bar; `rowState` draws a 3px rail (error, warn, live,
+  **row ladder (cv4 F11):** stripe (faint, neutral) < hover `--row-hover` (`--bg-hover` with a 6% accent tint, so a
+  hovered row never reads as a stripe; child rows and an open parent use it too) < selected `--row-selected` (a 15%
+  accent wash) plus a 2px accent bar; every first-cell rail (open group, child rows, selected bar, state rail, the
+  start of the focus frame) is drawn on the first visible cell, also when the select column is reserved at 0px;
+  **row primary text (cv4 F4):** in a clickable row the primary cell (`Column.primary`, default the `cardTitle` or
+  first priority-1 column, or any element with `data-row-primary`, `RunName` links included) turns `--accent-primary`
+  while the row is hovered or holds keyboard focus, never underlined; **flush corner (cv4 F2):** under a toolbar (or
+  over a footer) the body is square at that edge, so the header row and the rows sit flush with the card edge; `rowState` draws a 3px rail (error, warn, live,
   new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are centred, header and values, in every
   table (C236: the default for numeric column types in `ui/DataTable/model.ts`; `align` overrides it); a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
@@ -1097,7 +1143,9 @@ page-wide totals between the hero and the tabs; it is the same on every tab, so 
 admin, projects, overview, models) use the `constrained` container, capped at
 `--page-max-w` (1233px, the width the report pages fill at 1440), from
 `@/features/shell/layout`. Every page uses one frame: 20px top and side padding. Constrained pages are capped at
-`--page-max-w` and start at the left edge; profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
+`--page-max-w` and centred in the content area (cv4 F1, owner 2026-11-12, reverses E-42 "start at the left edge"): on a
+screen wider than the cap the free space is equal at both sides. A feature does not set its own `margin` on a
+constrained page. Profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
 `fullWidth` with their own layout. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
 
 - **Title and path.** The page title is the page name that the last crumb shows (Dashboard). Project settings is the
@@ -1110,7 +1158,8 @@ admin, projects, overview, models) use the `constrained` container, capped at
   row; page controls (Compare | Sweep, Baseline) sit in one toolbar row under the meta line. Editor pages and the empty
   Compare page keep one back control: a neutral `LinkButton` with the `prev` Icon (Q28 A, see "Back button"). Other
   pages use the breadcrumb.
-- **List pages** put search and sort in a toolbar row above the list, never in the `PageHeader` actions (25-03, Q65 A).
+- **List pages** put search and sort in a toolbar row above a table. A card grid page puts its search in the
+  `PageHeader` actions, immediately before the primary action (cv4 F15 replaces 25-03 / Q65 A for card grids).
 - **Spacing.** A page that stacks blocks with a flex gap sets the `PageHeader` margin to 0, so one gap separates the
   header from the content.
 

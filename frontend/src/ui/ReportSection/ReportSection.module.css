@@ -36,6 +36,13 @@
   margin: 0;
 }
 
+/* cv4 F10: the biggest of the three report title roles (section > subsection > card title). Three classes: it must
+   beat the Text variant rule (0,2,0). */
+.section .head .title {
+  font-size: var(--font-section);
+  line-height: 1.2;
+}
+
 .desc {
   margin-block-start: var(--space-xs);
 }
@@ -54,6 +61,11 @@
 .body {
   --card-bg: var(--bg-elevated);
   --card-edge: transparent;
+  /* cv4 F7/F8: controls on an inset card are one step brighter than the card, with the stronger edge, so a search
+     field, a select or a segmented control looks the same as on the page ground (the sticky nav reference). */
+  --control-fill: var(--bg-hover);
+  --control-edge: var(--border-default);
+  --control-edge-hover: var(--border-strong);
 
   /* The containing block for visually hidden (absolute) text, which must never widen the page. */
   position: relative;

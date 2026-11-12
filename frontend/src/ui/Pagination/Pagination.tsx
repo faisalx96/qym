@@ -1,5 +1,6 @@
 import { useState, type RefObject } from 'react';
 import { IconButton } from '../IconButton';
+import { Select } from '../Select';
 import styles from './Pagination.module.css';
 
 export interface PaginationProps {
@@ -106,18 +107,17 @@ export function Pagination({
         <IconButton label="Last page" icon="last" isDisabled={current >= pages} onPress={() => go(pages)} />
       </span>
       {pageSizeOptions && onPageSizeChange ? (
-        <select
+        <Select
           className={styles.size}
-          aria-label={`${noun} per page`}
+          label={`${noun} per page`}
+          hideLabel
+          searchable={false}
+          items={pageSizeOptions.map((s) => ({ key: s, label: `${s} / page` }))}
           value={pageSize}
-          onChange={(e) => onPageSizeChange(Number(e.target.value))}
-        >
-          {pageSizeOptions.map((s) => (
-            <option key={s} value={s}>
-              {s} / page
-            </option>
-          ))}
-        </select>
+          onChange={(k) => {
+            if (k !== null) onPageSizeChange(Number(k));
+          }}
+        />
       ) : null}
     </nav>
   );

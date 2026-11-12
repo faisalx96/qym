@@ -144,6 +144,7 @@ export function RunName({
       to={to}
       className={cls}
       data-id={id}
+      data-row-primary=""
       title={tip}
       onClick={onClick}
       onPointerEnter={onPointerEnter}

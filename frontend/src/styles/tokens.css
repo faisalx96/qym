@@ -81,12 +81,24 @@
   /* Canonical interactive component geometry.
      One aligned density is used across forms and analysis toolbars. */
   --control-height: 24px;
+  /* cv4 F6 (owner 2026-11-12): a neutral button reads as a button: a visible fill and edge at rest, a label a step
+     under --text-primary (brighter than a dropdown's muted label), and a brighter fill, edge and label on hover. */
+  --button-fill: var(--bg-hover);
+  --button-fill-hover: var(--bg-active);
+  --button-edge: var(--border-default);
+  --button-edge-hover: var(--border-strong);
+  --button-text: #cdcdd8; /* 11.6:1 on --bg-hover */
+  --control-height-sm: 20px; /* cv4 F3: a small box inside a control row (the pager's page number) */
   --control-radius: 5px;
   /* A field-like control's edge (text field, select, filter trigger, segmented control): a soft hairline at rest over
      the --bg-elevated fill, one step stronger on hover; focus and an active filter use the accent (round 10: the
      --border-default outlines read as too bold next to the borderless buttons). */
   --control-edge: var(--border-subtle);
   --control-edge-hover: var(--border-default);
+  /* cv4 F7/F8: the fill of a field-like control (text and search field, select, filter trigger, segmented control).
+     A surface that is itself --bg-elevated (the inset cards of a report section) lifts it one step (ReportSection),
+     so a control never melts into its card: one look on every page. */
+  --control-fill: var(--bg-elevated);
   --analysis-action-gap: 5px;
   --analysis-icon-optical-offset: 0.25px;
   --analysis-action-padding-start: 9px;
@@ -144,6 +156,10 @@
   --font-xl: 18px;
   --font-title: 22px;
   --font-stat: 26px;
+  /* cv4 F10 (owner 2026-11-12): the three title roles of a report page, three clear steps. Section > subsection > card. */
+  --font-section: 22px; /* ReportSection title (Overview, Deep analysis): the page title size, a report section is a page part */
+  --font-subsection: 16px; /* Subsection title (Between metrics), with its accent bar */
+  --font-card-title: 14px; /* CardTitle (Time budget, Metric correlation) */
 
   /* Shared width for the charts view label/control column */
 
@@ -269,6 +285,9 @@
   --focus-ring: 0 0 0 2px rgba(0, 212, 170, 0.15);
   --shadow-popover: 0 12px 28px rgba(0, 0, 0, 0.38);
   --shadow-dialog: 0 20px 60px rgba(0, 0, 0, 0.5);
+  /* cv4: a sticky bar of a page (an action bar under a table) stacks over the sticky header and pinned-column layers
+     of ui/DataTable (up to 6), under every popover. */
+  --z-sticky-bar: 10;
   --z-dropdown: 100;
   --z-dialog: 9998;
   --z-toast: 9999;
@@ -290,6 +309,10 @@
   --table-group-height: 24px;
   --table-footer-height: 40px;
   --bg-selected: rgba(0, 212, 170, 0.08);
+  /* cv4 F11: one row ladder for data tables. Stripe (--stripe-step, faint and neutral) < hover (a stronger, accent
+     tinted tone) < selected (the strongest accent wash, with the 2px accent rail). Three states never look the same. */
+  --row-hover: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-hover));
+  --row-selected: color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 
 /* ── Visual language (redesign round 2; DESIGN_LANGUAGE §3 "Colour as information") ──
@@ -299,6 +322,7 @@
   --tint-faint: 6%; /* row/section wash (danger and live only) */
   --tint-soft: 12%; /* Badge, Tag, Chip selected, score pill, icon tile fill */
   --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
+  --tint-tile-hover: 32%; /* cv4 F9: hover/pressed on a row action tile (its rest fill is --tint-strong) */
   --tint-gold: 17%; /* the admin role fill: at 12% gold reads brown on the dark surface (Q16) */
   --role-admin: #e0bc4a; /* admin role tag (Q16 B) */
   --stripe-step: 2%; /* page list stripe: --text-primary mixed into the row base (resolution 14, owner tunes) */

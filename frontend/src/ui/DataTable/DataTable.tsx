@@ -30,6 +30,7 @@ import { Icon } from '../Icon';
 import { Tooltip } from '../Tooltip';
 import { ActionTile, IconButton } from '../IconButton';
 import { ScoreValue } from '../ScoreValue';
+import { Select } from '../Select';
 import { Button } from '../Button';
 import { EnterContext, ENTER_MS } from '../motion';
 import { DataTableContext } from './context';
@@ -312,6 +313,8 @@ interface DataCellProps<R> {
   offset: number | undefined;
   edge: 'start' | 'end' | undefined;
   header: boolean;
+  /** The row's primary text column (cv4 F4): the cell carries `data-row-primary`. */
+  primary: boolean;
 }
 
 /**
@@ -329,6 +332,7 @@ const DataCell = memo(function DataCell<R>({
   offset,
   edge,
   header,
+  primary,
 }: DataCellProps<R>) {
   const ctx: CellCtx = { index, density, card: false };
   const cellContent = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
@@ -355,6 +359,7 @@ const DataCell = memo(function DataCell<R>({
       <div
         className={styles.cell}
         data-cell=""
+        data-row-primary={primary ? '' : undefined}
         data-wrap={col.wrap ? '' : undefined}
         data-truncate={col.truncate}
         style={col.wrap ? ({ '--lines': col.wrap } as React.CSSProperties) : undefined}
@@ -980,6 +985,14 @@ function DataTableInner<R>({
     return false;
   };
   const openable = Boolean(rowHref || onRowOpen);
+  // cv4 F4: the column whose text turns accent on row hover or keyboard focus (Column.primary)
+  const primaryCol = useMemo(() => {
+    const chosen = visible.find((c) => c.primary === true);
+    if (chosen) return chosen.id;
+    if (!openable && !selectOnRowClick && !expandOnRowClick) return null;
+    const lead = visible.find((c) => c.cardTitle) ?? visible.find((c) => c.priority === 1);
+    return lead && lead.primary !== false ? lead.id : null;
+  }, [visible, openable, selectOnRowClick, expandOnRowClick]);
 
   /* keyboard */
   const pendingNav = useRef<number | null>(null);
@@ -1709,6 +1722,7 @@ function DataTableInner<R>({
         offset={pin === 'start' || pin === 'end' ? offsets[col.id] : undefined}
         edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}
         header={ci === 0 && !selection && !renderExpanded && !childRows}
+        primary={col.id === primaryCol}
       />
     );
   };
@@ -2194,24 +2208,19 @@ function CardList<R>({
     <div className={styles.cardsHost}>
       {sortCols.length ? (
         <div className={styles.cardSort}>
-          <label className={styles.cardSortLabel}>
-            Sort by
-            <select
-              className={styles.cardSortSelect}
-              value={sort?.key ?? ''}
-              onChange={(e) => {
-                const col = sortCols.find((c) => sortKeyOf(c) === e.target.value);
-                setSort(col ? nextSort(null, col, unsortedOk) : null);
-              }}
-            >
-              <option value="">Default</option>
-              {sortCols.map((c) => (
-                <option key={c.id} value={sortKeyOf(c)}>
-                  {headerText(c)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            label="Sort by"
+            triggerVariant="bar"
+            items={[
+              { key: '', label: 'Default' },
+              ...sortCols.map((c) => ({ key: sortKeyOf(c) as string, label: headerText(c) })),
+            ]}
+            value={sort?.key ?? ''}
+            onChange={(k) => {
+              const col = sortCols.find((c) => sortKeyOf(c) === k);
+              setSort(col ? nextSort(null, col, unsortedOk) : null);
+            }}
+          />
           {sort ? (
             <Button
               variant="neutral"

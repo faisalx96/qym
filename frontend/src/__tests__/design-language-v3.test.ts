@@ -395,8 +395,9 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
       for (const b of buttons(read(f)))
         if (/iconEnd=\{<Icon name="chevron-right"/.test(b.attrs)) problems.push(`${rel(f)}:${b.line}`);
     none(problems);
-    const empty = src('ui/EmptyState/EmptyState.tsx');
-    expect(empty).toContain('chevron-right');
+    // cv4 F13: the one text link to another page is ui/TextLink (accent text, end chevron); EmptyState uses it
+    expect(src('ui/TextLink/TextLink.tsx')).toContain('name="chevron-right"');
+    expect(src('ui/EmptyState/EmptyState.tsx')).toContain('<TextLink');
     // E-28 / D-13: no JSX text ends with a typed →
     none(grep(shippedTsx, /→\s*(<\/|$)/m));
     expect(src('features/runs-list/OverviewPage.tsx')).not.toContain('→');
@@ -1812,18 +1813,18 @@ describe('consistency v3: family E (pages, dialogs, forms, layout)', () => {
     expect(t).not.toContain('function Stat(');
   });
 
-  it('E-42: pages share one width and padding (no narrow container)', () => {
+  it('E-42 (reversed by cv4 F1): pages share one width and padding, and the constrained page is centred', () => {
     const layout = src('features/shell/layout.module.css');
     expect(layout).not.toMatch(/\.narrow\b/);
-    expect(layout).not.toContain('margin: 0 auto');
+    // cv4 F1, owner 2026-11-12: "it should be centered like before" (Projects, Admin, Project settings, Auto-analysis)
+    expect(rule(layout, '.constrained')).toMatch(/margin-inline:\s*auto/);
+    expect(rule(layout, '.fullWidth')).not.toMatch(/margin/);
     const pad = (s: string) => (rule(layout, s).match(/padding[^;]*;/g) ?? []).join(' ');
     expect(pad('.fullWidth')).toBe(pad('.constrained'));
     expect(read(join(SRC, 'styles/tokens.css'))).not.toContain('--page-narrow-w');
     expect(rule(src('features/runs-list/ChartsPage.module.css'), '.screen')).toMatch(
       /padding:\s*var\(--space-lg\)/,
     );
-    expect(src('features/runs-list/OverviewPage.module.css')).not.toContain('margin: 0 auto');
-    expect(src('features/analyzer/analyzer.module.css')).not.toContain('margin-inline: auto');
     // shim: shell/layout.ts keeps a deprecated narrow container until the cv3-shim removal
     expect(src('features/shell/layout.ts')).not.toMatch(/export const narrow\b/);
   });
@@ -1898,5 +1899,100 @@ describe('consistency v3: family E (pages, dialogs, forms, layout)', () => {
     const css = src('features/live/live.module.css');
     expect(rule(css, '.tiles a:hover')).toMatch(/color:\s*var\(--accent-primary\)/);
     expect(css).not.toMatch(/\.tiles a\[data-tone/);
+  });
+});
+
+describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
+  const ui = (name: string) => stripComments(src(`ui/${name}/${name}.module.css`));
+  const tokens = () => read(join(SRC, 'styles/tokens.css'));
+
+  it('F2: the table body is square under a toolbar and over a footer (flush corner)', () => {
+    const css = ui('DataTable');
+    expect(rule(css, '.toolbar ~ .bodyHost')).toMatch(/border-start-start-radius:\s*0/);
+    expect(rule(css, '.bodyHost:has(~ .footer)')).toMatch(/border-end-start-radius:\s*0/);
+  });
+
+  it('F4: row primary text turns accent on row hover or keyboard focus, never underlined', () => {
+    const base = stripComments(read(join(SRC, 'styles/base.css')));
+    expect(base).toMatch(/:is\(tr, \[role='row'\]\):is\(:hover, :focus-visible, :has\(:focus-visible\)\)/);
+    expect(base).toMatch(
+      /\[data-row-primary\][^{]*\{\s*color:\s*var\(--accent-primary\);\s*text-decoration:\s*none;/,
+    );
+    expect(src('ui/DataTable/DataTable.tsx')).toContain('data-row-primary=');
+    expect(src('ui/DataTable/types.ts')).toContain('primary?: boolean');
+    expect(src('ui/EntityTag/EntityTag.tsx')).toContain('data-row-primary=""');
+  });
+
+  it('F5: one dropdown, no native <select> in ui; the open trigger takes the accent edge', () => {
+    none(grep(under(shippedTsx, 'ui/'), /<select\b/));
+    expect(src('ui/Pagination/Pagination.tsx')).toContain('<Select');
+    expect(rule(ui('Select'), ".trigger[aria-expanded='true']")).toMatch(
+      /border-color:\s*var\(--accent-primary\)/,
+    );
+    expect(rule(ui('Select'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--bg-active\)/);
+    expect(rule(ui('MultiSelect'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--bg-active\)/);
+  });
+
+  it('F6: a neutral button has a fill, an edge and a softer label at rest; hover brightens all three', () => {
+    for (const t of [
+      '--button-fill:',
+      '--button-fill-hover:',
+      '--button-edge:',
+      '--button-edge-hover:',
+      '--button-text:',
+    ])
+      expect(tokens(), t).toContain(t);
+    const rest = rule(ui('Button'), '.button');
+    expect(rest).toMatch(/background:\s*var\(--button-fill\)/);
+    expect(rest).toMatch(/box-shadow:\s*inset 0 0 0 1px var\(--button-edge\)/);
+    expect(rest).toMatch(/color:\s*var\(--button-text\)/);
+    const hover = rules(ui('Button'), '.button[data-hovered]').join('\n');
+    expect(hover).toMatch(/var\(--button-fill-hover\)/);
+    expect(hover).toMatch(/var\(--button-edge-hover\)/);
+  });
+
+  it('F7/F8: field-like controls share --control-fill; a report body lifts it', () => {
+    for (const n of ['Select', 'MultiSelect', 'TextField', 'SegmentedControl', 'Textarea'])
+      expect(ui(n), n).not.toMatch(/background:\s*var\(--bg-elevated\)/);
+    expect(rule(ui('SegmentedControl'), '.segmented')).toMatch(/background:\s*var\(--control-fill\)/);
+    expect(rule(ui('TextField'), '.control')).toMatch(/background:\s*var\(--control-fill\)/);
+    expect(rule(ui('ReportSection'), '.body')).toMatch(/--control-fill:\s*var\(--bg-hover\)/);
+  });
+
+  it('F10: three report title roles in three steps (section > subsection > card title)', () => {
+    const px = (t: string) => Number(tokens().match(new RegExp(`${t}:\\s*(\\d+)px`))?.[1]);
+    expect(px('--font-section')).toBeGreaterThan(px('--font-subsection'));
+    expect(px('--font-subsection')).toBeGreaterThan(px('--font-card-title'));
+    expect(px('--font-card-title')).toBeGreaterThan(px('--font-md'));
+    expect(ui('ReportSection')).toMatch(/\.section \.head \.title \{[^}]*var\(--font-section\)/);
+    expect(ui('Subsection')).toMatch(/\.sub \.head \.title \{[^}]*var\(--font-subsection\)/);
+    expect(rule(stripComments(src('ui/Card/CardTitle.module.css')), '.title')).toMatch(
+      /var\(--font-card-title\)/,
+    );
+  });
+
+  it('F11: one row ladder, and first-cell rails survive a collapsed select column', () => {
+    const css = ui('DataTable');
+    expect(tokens()).toContain('--row-hover:');
+    expect(tokens()).toContain('--row-selected:');
+    expect(rule(css, '.tr:hover')).toMatch(/--row-base:\s*var\(--row-hover\)/);
+    expect(rule(css, '.childRow:hover')).toMatch(/--row-base:\s*var\(--row-hover\)/);
+    expect(rule(css, '.tr[data-selected]')).toMatch(/var\(--row-selected/);
+    // every first-cell rail also names the first visible cell after a collapsed (0px) select cell
+    expect(css).not.toMatch(/td:first-child(?!:not\(\[data-collapsed\]\))/);
+    expect(rule(css, '.rowActions')).not.toMatch(/opacity/);
+  });
+
+  it('F12: CountTile is the one count badge, with a danger tone', () => {
+    expect(src('ui/CountTile/CountTile.tsx')).toContain("tone?: 'danger'");
+    expect(ui('CountTile')).toContain(".tile[data-tone='danger']");
+  });
+
+  it('F14: no shared component prints a resting "All changes saved"', () => {
+    none(grep(under(shippedTsx, 'ui/'), /All changes saved/));
+  });
+
+  it('sticky bars over a table use the --z-sticky-bar token', () => {
+    expect(tokens()).toMatch(/--z-sticky-bar:\s*\d+;/);
   });
 });

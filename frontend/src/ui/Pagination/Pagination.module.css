@@ -23,13 +23,15 @@
   gap: 2px;
 }
 
+/* cv4 F3: the page number box is in proportion with the 11px pager text and the 14px arrows: 20px high, as narrow as
+   its digits allow, a soft edge (the 24px box with a bold edge read as too big). Hover and focus show the edge. */
 .input {
-  width: max(28px, calc(var(--qym-page-digits, 1) * 1ch + 12px));
-  height: var(--control-height);
-  padding: 0 var(--space-xs);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  width: max(22px, calc(var(--qym-page-digits, 1) * 1ch + 10px));
+  height: var(--control-height-sm);
+  padding: 0 2px;
+  border: 1px solid var(--control-edge);
+  border-radius: 4px;
+  background: var(--control-fill);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -43,6 +45,10 @@
 .input::-webkit-outer-spin-button {
   appearance: none;
   margin: 0;
+}
+
+.input:hover {
+  border-color: var(--control-edge-hover);
 }
 
 .input:focus-visible {
@@ -59,12 +65,8 @@
   white-space: nowrap;
 }
 
+/* cv4 F5: the page size is the shared Select (one dropdown look); only its width is set here. */
 .size {
-  height: var(--control-height);
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: var(--font-sm);
+  flex: none;
+  width: 104px;
 }

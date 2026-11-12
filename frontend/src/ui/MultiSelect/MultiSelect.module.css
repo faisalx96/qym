@@ -8,12 +8,15 @@
   padding: 0 var(--space-sm);
   border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
   line-height: 1;
   cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .trigger svg {
@@ -24,8 +27,10 @@
 .trigger > svg:last-child {
   margin-inline-start: auto;
 }
+/* cv4 F5: every dropdown trigger (field or bar, Select or MultiSelect) brightens its fill on hover. */
 .trigger[data-hovered] {
   border-color: var(--control-edge-hover);
+  background: var(--bg-active);
 }
 .trigger[aria-expanded='true'] {
   border-color: var(--accent-primary);
@@ -108,23 +113,29 @@
   background: var(--card-bg);
 }
 
-/* Select all / None are buttons at rest (round 10): the neutral button recipe at 20px, brighter on hover. */
+/* Select all / None are buttons at rest (round 10): the neutral button recipe at 20px (cv4 F6: fill, edge and label of
+   ui/Button), brighter on hover. */
 .action {
   border: 0;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
+  background: var(--button-fill);
+  box-shadow: inset 0 0 0 1px var(--button-edge);
+  color: var(--button-text);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
   padding: 0 var(--space-sm);
-  height: 20px;
+  height: var(--control-height-sm);
   border-radius: var(--control-radius);
-  transition: background var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .action:hover {
-  background: var(--bg-active);
+  color: var(--text-primary);
+  background: var(--button-fill-hover);
+  box-shadow: inset 0 0 0 1px var(--button-edge-hover);
 }
 
 .action:focus-visible {
@@ -252,7 +263,7 @@
 .trigger[data-variant='bar'] {
   min-width: 96px;
   max-width: 168px;
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast);
@@ -279,7 +290,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .trigger[data-variant='bar'] {
+  .trigger {
     transition: none;
   }
 }

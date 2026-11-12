@@ -9,7 +9,7 @@
   padding: 0 var(--space-sm);
   border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
@@ -17,6 +17,7 @@
   cursor: pointer;
   text-align: start;
   transition:
+    background var(--transition-fast),
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
 }
@@ -33,8 +34,15 @@
   transform: rotate(180deg);
 }
 
+/* cv4 F5: one dropdown look. Hover and open are the Runs filter trigger's (BarTrigger): a brighter fill on hover, the
+   accent edge while the menu is open. */
 .trigger[data-hovered] {
   border-color: var(--control-edge-hover);
+  background: var(--bg-active);
+}
+
+.trigger[aria-expanded='true'] {
+  border-color: var(--accent-primary);
 }
 
 .trigger[data-focus-visible] {
@@ -99,6 +107,8 @@
   outline: none;
 }
 
+/* cv4 F5: the option row of the MultiSelect menu (32px, --font-base secondary text, --bg-hover under the pointer); the
+   chosen option is primary text with the accent check at its end. */
 .option {
   display: flex;
   align-items: center;
@@ -108,18 +118,29 @@
   padding: 0 var(--space-sm);
   border-radius: var(--control-radius);
   color: var(--text-secondary);
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
   cursor: pointer;
   outline: none;
 }
 
-.option[data-focused] {
+.option[data-focused],
+.option[data-hovered] {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .option[data-selected] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.option > svg {
+  flex: none;
   color: var(--accent-primary);
+}
+
+.option[data-focus-visible] {
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
 }
 
 .option[data-disabled] {
@@ -162,4 +183,11 @@
   text-overflow: clip;
   min-inline-size: 0;
   line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger,
+  .trigger svg {
+    transition: none;
+  }
 }

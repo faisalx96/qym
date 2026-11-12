@@ -1,0 +1,47 @@
+/* CardTitle (cv4 F10): title and caption on the left, controls on the title row at the end. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+}
+
+.text {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-card-title);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+/* The controls line up with the title line (24px controls, 19px title line). */
+.aside {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+  min-block-size: var(--control-height);
+  margin-block-start: calc((19px - var(--control-height)) / 2);
+  margin-inline-start: auto;
+}

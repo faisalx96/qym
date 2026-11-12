@@ -44,13 +44,14 @@
   color: var(--error-hover);
 }
 
-/* Row action tile (`tile`): a 20px square like the fold handle and badges, the tone's soft tint at rest, its strong
-   tint on hover; the glyph (12px) keeps the tone. */
+/* Row action tile (`tile`), cv4 F9 (owner: "too dim, too small"): a 24px square (the control height) with a 14px glyph,
+   the tone's strong tint at rest and a stronger one on hover; the glyph is the full tone at rest and the tone lifted
+   toward white on hover. The 20px / 12px tile is the static glyph of a row menu item (ActionTile, below). */
 .iconAction[data-tile] {
   --tile-tone: var(--accent-primary);
-  width: var(--badge-height);
-  height: var(--badge-height);
-  background: color-mix(in srgb, var(--tile-tone) var(--tint-soft), transparent);
+  width: var(--control-height);
+  height: var(--control-height);
+  background: color-mix(in srgb, var(--tile-tone) var(--tint-strong), transparent);
   color: var(--tile-tone);
   transition:
     background var(--transition-fast),
@@ -64,19 +65,29 @@
 .iconAction[data-tile][data-tone='meta'] {
   --tile-tone: var(--accent-tertiary);
 }
-/* ActionTile: the glyph of a row menu item, not a control */
+/* ActionTile: the glyph of a row menu item, not a control: the 20px tile with the 12px glyph */
 .iconAction[data-static] {
   flex: none;
+  width: var(--badge-height);
+  height: var(--badge-height);
   cursor: inherit;
 }
 .iconAction[data-tile][data-hovered],
 .iconAction[data-tile][data-pressed],
 .iconAction[data-tile][data-focus-visible] {
-  background: color-mix(in srgb, var(--tile-tone) var(--tint-strong), transparent);
-  color: var(--tile-tone);
+  background: color-mix(in srgb, var(--tile-tone) var(--tint-tile-hover), transparent);
+  color: color-mix(in srgb, var(--tile-tone) 70%, var(--text-primary));
 }
 
 .iconAction[data-disabled] {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* A disabled tile stays readable (cv4 F9): no fade, a neutral fill and the muted glyph, so it reads as "not now", not
+   as missing. */
+.iconAction[data-tile][data-disabled] {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text-muted) var(--tint-soft), transparent);
+  color: var(--text-muted);
 }

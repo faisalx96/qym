@@ -2,7 +2,7 @@
 .constrained {
   width: 100%;
   max-width: var(--page-max-w);
-  margin: 0; /* E-42: starts at the content area's left edge on every width (no centring) */
+  margin-inline: auto; /* F1 (cv4, reverses E-42): centred in the content area on a wide screen, as before */
   padding: var(--space-lg) var(--space-lg) var(--space-xl);
 }
 

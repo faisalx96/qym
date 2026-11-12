@@ -15,7 +15,7 @@ export interface IconButtonProps extends Omit<
   tone?: 'default' | 'danger' | 'approve' | 'reject' | 'meta';
   /** Shows the "copied" green glyph state. */
   active?: boolean;
-  /** Row action tile: a 20px square (`--badge-height`, 12px glyph), the tone's soft tint at rest and a stronger tint on
+  /** Row action tile: a 24px square (`--control-height`, 14px glyph, cv4 F9), the tone's strong tint at rest and a stronger tint on
    * hover (the runs Actions column). */
   tile?: boolean;
   /** Why the button is locked: shown on hover and read with the button (A-22, the Button recipe). */
@@ -42,7 +42,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       data-tile={tile ? '' : undefined}
       {...rest}
     >
-      {typeof icon === 'string' ? <Icon name={icon as IconName} size={tile ? 12 : 14} /> : icon}
+      {typeof icon === 'string' ? <Icon name={icon as IconName} size={14} /> : icon}
     </AriaButton>
   );
   if (!reason) return button;
