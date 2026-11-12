@@ -81,6 +81,7 @@
   /* Canonical interactive component geometry.
      One aligned density is used across forms and analysis toolbars. */
   --control-height: 24px;
+  --control-height-sm: 20px; /* cv4 F3: a small box inside a control row (the pager's page number) */
   --control-radius: 5px;
   /* A field-like control's edge (text field, select, filter trigger, segmented control): a soft hairline at rest over
      the --bg-elevated fill, one step stronger on hover; focus and an active filter use the accent (round 10: the

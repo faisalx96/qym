@@ -230,7 +230,8 @@ describe('primitive module contracts', () => {
       'color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent)',
       'height: 100%',
     ],
-    Pagination: ['height: var(--control-height)', 'min-width: 160px', 'font-family: var(--font-mono)'],
+    // cv4 F3: the page number box is the small control height (20px), in proportion with the pager text
+    Pagination: ['height: var(--control-height-sm)', 'min-width: 160px', 'font-family: var(--font-mono)'],
     Badge: [
       'min-height: var(--badge-height)',
       'border: 1px solid',
