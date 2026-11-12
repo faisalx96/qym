@@ -1,4 +1,4 @@
-"""Migration 0101 (Live chart images): matches the models and round-trips on SQLite and PostgreSQL."""
+"""Migration 0095 (Live chart images): matches the models and round-trips on SQLite and PostgreSQL."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from alembic.migration import MigrationContext
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = ROOT / "packages/platform/qym_platform/migrations"
-FILE = MIGRATIONS / "versions/0101_live_chart_images.py"
+FILE = MIGRATIONS / "versions/0095_live_chart_images.py"
 
 
 @pytest.fixture(params=["sqlite", "postgres"])
@@ -84,11 +84,11 @@ def _create_api_keys_before_0092(eng) -> None:
     md.create_all(eng, tables=[md.tables["api_keys"]])
 
 
-def test_revision_chain_names_0100() -> None:
-    spec = importlib.util.spec_from_file_location("migration_0101", FILE)
+def test_revision_chain_names_0094() -> None:
+    spec = importlib.util.spec_from_file_location("migration_0095", FILE)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert (module.revision, module.down_revision) == ("0101", "0100")
+    assert (module.revision, module.down_revision) == ("0095", "0094")
 
 
 def test_matches_models_and_round_trips(engine) -> None:
@@ -101,9 +101,9 @@ def test_matches_models_and_round_trips(engine) -> None:
         table = obj if kind == "table" else getattr(obj, "table", None)
         return table is not None and table.name == "live_chart_images"
 
-    # Seed 0100 prerequisites; older migrations contain PostgreSQL-only DDL.
-    command.stamp(config, "0100")
-    command.upgrade(config, "0101")
+    # Seed 0094 prerequisites; older migrations contain PostgreSQL-only DDL.
+    command.stamp(config, "0094")
+    command.upgrade(config, "0095")
     with engine.connect() as connection:
         inspector = sa.inspect(connection)
         assert "live_chart_images" in inspector.get_table_names()
@@ -126,7 +126,7 @@ def test_matches_models_and_round_trips(engine) -> None:
         )
         assert compare_metadata(context, Base.metadata) == []
 
-    command.downgrade(config, "0100")
+    command.downgrade(config, "0094")
     assert "live_chart_images" not in sa.inspect(engine).get_table_names()
-    command.upgrade(config, "0101")
+    command.upgrade(config, "0095")
     assert "live_chart_images" in sa.inspect(engine).get_table_names()

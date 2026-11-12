@@ -1775,7 +1775,7 @@ class RunItemPassScore(Base):
             name="uq_run_item_metric_pass",
         ),
         Index("ix_run_item_pass_scores_run_metric", "run_id", "metric_name"),
-        # Migration 0098 (C073): the numbers read from the index alone.
+        # Migration 0101 (C073): the numbers read from the index alone.
         Index(
             "ix_run_item_pass_scores_cover",
             "run_id",
@@ -1929,7 +1929,7 @@ class Span(Base):
 
     __table_args__ = (
         Index("ix_span_run_trace", "run_id", "trace_id"),
-        # Migration 0098 (C073): step latency reads these columns from the index alone.
+        # Migration 0101 (C073): step latency reads these columns from the index alone.
         Index(
             "ix_span_run_start_cover",
             "run_id",
@@ -2099,7 +2099,7 @@ class RunTraceContribution(Base):
 
 
 class RunCreateKey(Base):
-    """An Idempotency-Key of ``POST /v1/runs`` and the run it created, kept 24 hours (C190, migration 0097)."""
+    """An Idempotency-Key of ``POST /v1/runs`` and the run it created, kept 24 hours (C190, migration 0100)."""
 
     __tablename__ = "run_create_keys"
     project_id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -2109,7 +2109,7 @@ class RunCreateKey(Base):
 
 
 class RunStepLatencySummary(Base):
-    """The run page's step-latency summary of a run or one pass, stored on first read (C022, migration 0096)."""
+    """The run page's step-latency summary of a run or one pass, stored on first read (C022, migration 0099)."""
 
     __tablename__ = "run_step_latency_summaries"
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True)

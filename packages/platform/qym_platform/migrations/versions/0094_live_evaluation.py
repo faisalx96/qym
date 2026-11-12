@@ -2,8 +2,8 @@
 
 Feature round 2026-11-live-evaluation. Six new empty tables (quick DDL, no backfill).
 
-Revision ID: 0100
-Revises: 0099
+Revision ID: 0094
+Revises: 0093
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0100"
-down_revision = "0099"
+revision = "0094"
+down_revision = "0093"
 branch_labels = None
 depends_on = None
 

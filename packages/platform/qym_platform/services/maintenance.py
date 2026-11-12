@@ -643,7 +643,7 @@ def _drop_redundant_indexes(ctx: JobContext) -> bool:
     return True
 
 
-# The indexes migrations 0051, 0055, 0095 and 0098 defer to ``create_deferred_indexes``
+# The indexes migrations 0051, 0055, 0098 and 0101 defer to ``create_deferred_indexes``
 # when a table is too large to index during startup. The job builds only these: the
 # table, columns, INCLUDE columns and WHERE predicate come from here, never from job
 # params. ``partitioned`` builds the index on every partition CONCURRENTLY and attaches
@@ -669,14 +669,14 @@ DEFERRED_INDEXES: Dict[str, Dict[str, Any]] = {
             "columns": ["project_key", "bucket_key", "score"],
             "where": "present AND record_kind = 'score'",
         },
-        # Migration 0095 (C074): outbox retention walks published events.
+        # Migration 0098 (C074): outbox retention walks published events.
         {
             "name": "ix_dashboard_event_published",
             "table": "dashboard_change_events",
             "columns": ["source_version"],
             "where": "published_at IS NOT NULL",
         },
-        # Migration 0098 (C073): the numbers of a run's pass scores and spans,
+        # Migration 0101 (C073): the numbers of a run's pass scores and spans,
         # read from the index alone (pass scores average 1.6 KB a row, spans 2.5 KB).
         COVERING_SCORE_INDEX,
         COVERING_SPAN_INDEX,

@@ -75,7 +75,7 @@ class DashboardChangeEvent(NumericContribution, Base):
             "published_at",
             "source_version",
         ),
-        # Outbox retention walks published rows in source order (C074, migration 0095).
+        # Outbox retention walks published rows in source order (C074, migration 0098).
         Index(
             "ix_dashboard_event_published",
             "source_version",

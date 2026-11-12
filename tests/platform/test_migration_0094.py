@@ -1,4 +1,4 @@
-"""Migration 0100 (Live evaluation): matches the models and round-trips on SQLite and PostgreSQL."""
+"""Migration 0094 (Live evaluation): matches the models and round-trips on SQLite and PostgreSQL."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 ROOT = Path(__file__).resolve().parents[2]
-FILE = ROOT / "packages/platform/qym_platform/migrations/versions/0100_live_evaluation.py"
+FILE = ROOT / "packages/platform/qym_platform/migrations/versions/0094_live_evaluation.py"
 LIVE_TABLES = {
     "live_sources",
     "live_metric_specs",
@@ -62,9 +62,9 @@ def engine(request):
             admin.dispose()
 
 
-def test_revision_chain_names_0099() -> None:
+def test_revision_chain_names_0093() -> None:
     module = _load()
-    assert (module.revision, module.down_revision) == ("0100", "0099")
+    assert (module.revision, module.down_revision) == ("0094", "0093")
 
 
 def test_matches_models_and_round_trips(engine, monkeypatch) -> None:
@@ -72,7 +72,7 @@ def test_matches_models_and_round_trips(engine, monkeypatch) -> None:
 
     module = _load()
 
-    later_source_columns = {  # added by 0102
+    later_source_columns = {  # added by 0096
         "desired_state",
         "state_changed_at",
         "state_changed_by_user_id",

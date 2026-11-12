@@ -4,8 +4,8 @@ One new empty table (instant DDL): ``POST /v1/runs`` with an ``Idempotency-Key``
 header stores the key with the run it created, so a client that retries after a
 timeout gets the same run back, not a second one. Keys are kept 24 hours.
 
-Revision ID: 0097
-Revises: 0096
+Revision ID: 0100
+Revises: 0099
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0097"
-down_revision = "0096"
+revision = "0100"
+down_revision = "0099"
 branch_labels = None
 depends_on = None
 

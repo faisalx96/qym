@@ -81,7 +81,7 @@ def column_type_statements(table: str, *, downgrade: bool = False) -> list:
     return stmts
 
 
-# Covering indexes of migration 0098 (C073). Pass-score and span reads need only
+# Covering indexes of migration 0101 (C073). Pass-score and span reads need only
 # these columns, so with the index (and the visibility map of finished
 # partitions) they become index-only scans instead of reading wide heap rows.
 COVERING_SCORE_INDEX: Dict[str, Any] = {

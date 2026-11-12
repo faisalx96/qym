@@ -2,8 +2,8 @@
 
 One new empty table (quick DDL, no backfill).
 
-Revision ID: 0101
-Revises: 0100
+Revision ID: 0095
+Revises: 0094
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0101"
-down_revision = "0100"
+revision = "0095"
+down_revision = "0094"
 branch_labels = None
 depends_on = None
 
