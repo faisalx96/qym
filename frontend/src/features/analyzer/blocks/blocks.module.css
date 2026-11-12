@@ -414,3 +414,35 @@
   align-items: center;
   gap: var(--space-sm);
 }
+
+/* cv4 Y1: the pass picker of a repeat run: rows between hairlines, the Analyze action at the row end. */
+.passList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--border-subtle);
+}
+
+.passRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-sm);
+  min-height: 40px;
+  padding: var(--space-xs);
+}
+
+.passRow + .passRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.passHead {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
