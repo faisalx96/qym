@@ -210,20 +210,21 @@ export function PromptsTab() {
               </div>
             ) : null}
           </div>
+          {/* cv4 A5: a plain ui/Textarea (visible label, input surface, the green focus ring), so the prompt reads
+              as a text box to edit, not as a block of page text. */}
           <Textarea
-            label={`${labelOf(key)} prompt`}
-            hideLabel
+            label="Prompt"
             value={draft}
             onChange={(v) => setDrafts((d) => ({ ...d, [key]: v }))}
             rows={editorRows(draft)}
             mono
             spellCheck={false}
-            quietFocus
             className={styles.promptEditor}
             isReadOnly={readOnly}
           />
           <SaveFooter
             dirty={dirty}
+            savedText=""
             saving={save.isPending}
             onSave={() => persist(draft)}
             hideSave={readOnly}

@@ -151,11 +151,6 @@
   gap: var(--space-md);
 }
 
-.rowActions {
-  display: inline-flex;
-  gap: var(--space-xs);
-}
-
 .polling {
   display: inline-flex;
   align-items: center;

@@ -1407,14 +1407,16 @@ describe('consistency v3: family D (tables, bars, tabs, stats)', () => {
   });
 
   it('D-15: a page header holds no search', () => {
-    for (const p of [
-      'features/shell/projects/ProjectsPage.tsx',
-      'features/datasets/catalog/CatalogPage.tsx',
-    ]) {
+    // cv4 A1 reverses this for the Projects card grid: its search sits in the header row, before New project.
+    for (const p of ['features/datasets/catalog/CatalogPage.tsx']) {
       const t = src(p);
       for (const e of elements(t, ['PageHeader']))
         expect(propValue(e.attrs, 'actions') ?? '', p).not.toContain('<SearchField');
     }
+    const projects = elements(src('features/shell/projects/ProjectsPage.tsx'), ['PageHeader']);
+    const actions = propValue(projects[0]!.attrs, 'actions') ?? '';
+    expect(actions.indexOf('<SearchField')).toBeGreaterThan(-1);
+    expect(actions.indexOf('<SearchField')).toBeLessThan(actions.indexOf('data-new-project'));
   });
 
   it('D-16: list toolbars use bar Selects and the shared clear button', () => {

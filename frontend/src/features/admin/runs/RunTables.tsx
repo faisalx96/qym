@@ -21,7 +21,8 @@ function runHref(run: AdminRunSummary): string {
 function RunCell({ run }: { run: AdminRunSummary }) {
   return (
     <span className={styles.runInline} data-testid="admin-run-cell">
-      <RunName to={runHref(run)} name={runName(run)} runId={run.run_id} />
+      {/* The row's primary text turns green while the row is hovered or focused (cv4 A3, BRIEF §3). */}
+      <RunName to={runHref(run)} name={runName(run)} runId={run.run_id} data-row-primary="" />
       {run.task_name ? <TaskTag name={run.task_name} /> : null}
     </span>
   );

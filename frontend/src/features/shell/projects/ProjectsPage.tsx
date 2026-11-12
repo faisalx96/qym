@@ -36,6 +36,17 @@ export function ProjectsPage() {
         description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'} you belong to`}
         actions={
           <>
+            {/* A card grid: the search sits in the header row, just before the primary action (cv4 A1). */}
+            {me.projects.length > 0 ? (
+              <SearchField
+                label="Search projects"
+                placeholder="Search projects"
+                value={query}
+                onChange={setQuery}
+                width="var(--search-width)"
+                shortcut="/"
+              />
+            ) : null}
             {canCreate ? (
               <Button
                 variant="primary"
@@ -49,18 +60,6 @@ export function ProjectsPage() {
           </>
         }
       />
-      {me.projects.length > 0 ? (
-        <div className={styles.toolbar}>
-          <SearchField
-            label="Search projects"
-            placeholder="Search projects"
-            value={query}
-            onChange={setQuery}
-            width="var(--search-width)"
-            shortcut="/"
-          />
-        </div>
-      ) : null}
       {me.projects.length === 0 ? (
         <EmptyState
           icon={<Icon name="folder" />}
