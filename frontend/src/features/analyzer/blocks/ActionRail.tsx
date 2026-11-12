@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import type { AnalysisConfig } from '@/api/analysis';
-import { ActionTile, Button, CountTile, DropdownMenu, Icon, LinkButton, Select, Text } from '@/ui';
+import { ActionTile, Button, CountTile, DropdownMenu, Icon, LinkButton, Select, Text, TextLink } from '@/ui';
 import type { PhaseView } from '../useAnalysisPhase';
 import type { RunnerState } from '../useAnalysisRunner';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -200,9 +199,9 @@ export function ActionRail({
         </Text>
         {/* Its own element after the notice, so a long notice never cuts the link (cv4 D5). */}
         {status && !config.llm_connections.length && config.can_operate_analyzer ? (
-          <Link to={`${projectPath(slug, 'settings')}?tab=llm`} className={s.railLink}>
+          <TextLink to={`${projectPath(slug, 'settings')}?tab=llm`} className={s.railLink}>
             Open LLM connections
-          </Link>
+          </TextLink>
         ) : null}
       </div>
       <div className={s.railActions}>
