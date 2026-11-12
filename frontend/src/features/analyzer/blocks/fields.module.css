@@ -31,8 +31,11 @@
   gap: var(--space-sm);
 }
 
+/* cv4 Y11: one fixed label column, so every row's select starts at the same x ("EXPECTED OUTPUT" is the widest). */
 .label {
-  min-width: 108px;
+  flex: 0 0 136px;
+  min-width: 0;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
