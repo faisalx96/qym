@@ -143,7 +143,8 @@ export function CategoriesTab() {
           </span>
         ) : null}
         {view === 'cards' && shownKeys.length ? (
-          <span className={[styles.legend, styles.controlEnd].join(' ')}>
+          // cv4 Y4: the key sits right after the field toggles, next to what it explains
+          <span className={styles.legend}>
             <span className={styles.tickKey} aria-hidden="true" />
             Overall average
           </span>

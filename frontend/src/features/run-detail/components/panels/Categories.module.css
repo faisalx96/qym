@@ -14,10 +14,6 @@
   gap: var(--space-sm) var(--space-md);
 }
 
-.controlEnd {
-  margin-inline-start: auto;
-}
-
 /* Key toggles: plain checkboxes, no pills (round 10). */
 .keyToggles {
   display: inline-flex;
