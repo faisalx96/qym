@@ -14,26 +14,32 @@ async function openUsers(page: Page) {
 test.describe('create user', () => {
   test('validation, success toast, duplicate shows "already exists"', async ({ page }) => {
     await openUsers(page);
-    const form = page.locator('[data-create-user]');
-    const email = form.getByLabel('Email');
-    const submit = form.getByRole('button', { name: 'Create user' });
-    await expect(submit).toBeDisabled();
+    // Create user is a header button that opens a dialog (cv4 A2).
+    await page.locator('[data-create-user]').click();
+    let dialog = page.getByRole('dialog', { name: 'Create user' });
+    const email = dialog.getByLabel('Email');
+    const submit = dialog.getByRole('button', { name: 'Create user' });
+    await expect(email).toBeFocused();
     await email.fill('a@b');
     await submit.click();
-    // The app's message, on the reserved line under the whole bar (C243).
-    await expect(page.locator('[data-create-user-error]')).toHaveText('Enter a valid email address.');
+    // The app's message under the field, not the browser's (C243).
+    await expect(dialog.getByText('Enter a valid email address.')).toBeVisible();
 
     const addr = uniq('new');
     await email.fill(addr);
-    await form.getByLabel('Display name').fill('New Person');
+    await dialog.getByLabel('Display name').fill('New Person');
     await submit.click();
-    await expect(page.getByText(`User ${addr} created`)).toBeVisible();
+    await expect(page.getByText(`User ${addr} created`).first()).toBeVisible();
+    await expect(dialog).toBeHidden();
+    const done = page.getByRole('button', { name: 'Done' });
+    if (await done.isVisible()) await done.click();
     const table = page.getByRole('grid', { name: 'Users' });
     await expect(table.getByRole('row').filter({ hasText: addr })).toContainText('member');
-    await expect(email).toHaveValue('');
 
-    await email.fill(addr);
-    await submit.click();
+    await page.locator('[data-create-user]').click();
+    dialog = page.getByRole('dialog', { name: 'Create user' });
+    await dialog.getByLabel('Email').fill(addr);
+    await dialog.getByRole('button', { name: 'Create user' }).click();
     await expect(page.getByText(`${addr} already exists`)).toBeVisible();
   });
 });

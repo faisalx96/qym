@@ -44,7 +44,8 @@ test('project rename: Enter twice sends one PATCH', async ({ page, request }) =>
 
 test('admin create user: Enter twice sends one POST', async ({ page }) => {
   await gotoApp(page, '/admin/users');
-  const form = page.locator('[data-create-user]');
+  await page.locator('[data-create-user]').click();
+  const form = page.getByRole('dialog', { name: 'Create user' });
   await expect(form).toBeVisible();
   const writes: string[] = [];
   await slowWrites(page, writes);
