@@ -110,7 +110,8 @@
   color: var(--text-muted);
 }
 
-/* cv4 E10: the change log is a timeline. Time, then a mark on a rail, then the event, then the person. */
+/* cv4 E10: the change log is a timeline. Time, then a mark on a rail, then the event, then the person (Y8: directly
+   after the event text, as in the first qym, not in a far column). */
 .log {
   list-style: none;
   margin: 0;
@@ -121,7 +122,7 @@
 
 .event {
   display: grid;
-  grid-template-columns: 112px 20px minmax(0, 1fr) auto;
+  grid-template-columns: 112px 20px minmax(0, 1fr);
   align-items: center;
   column-gap: var(--space-md);
   min-height: 34px;
@@ -185,6 +186,10 @@
 }
 
 .what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
   min-width: 0;
   overflow-wrap: anywhere;
 }

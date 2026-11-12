@@ -155,8 +155,11 @@ export function LineageTab({
                       <Icon name={CHANGE_ICON[c.change_summary.type] ?? 'edit'} size={12} />
                     </span>
                   </span>
-                  <span className={styles.what}>{withVersions(describeChange(c, byId))}</span>
-                  <UserPill user={c.actor} />
+                  {/* cv4 Y8: the person follows the event text, so one event reads as one line */}
+                  <span className={styles.what}>
+                    <span>{withVersions(describeChange(c, byId))}</span>
+                    <UserPill user={c.actor} />
+                  </span>
                 </li>
               ))}
             </ol>
