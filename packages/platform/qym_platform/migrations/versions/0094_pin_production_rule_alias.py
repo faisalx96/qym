@@ -8,8 +8,8 @@ project that has published versions and no alias, to the version that was live: 
 runtime fallback. Quick: one SELECT and one INSERT per such project; no DDL. The downgrade removes nothing (the alias
 rows are valid data either way).
 
-Revision ID: 0092
-Revises: 0091
+Revision ID: 0094
+Revises: 0093
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from datetime import datetime
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0092"
-down_revision = "0091"
+revision = "0094"
+down_revision = "0093"
 branch_labels = None
 depends_on = None
 

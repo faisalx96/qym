@@ -15,8 +15,8 @@ reads them and old keys carry only ``runs:write``.
 Quick DDL (nullable column, constant default). SQLite takes the inline ``REFERENCES`` clause
 in ``ADD COLUMN`` (as in ``0088``) and drops the column in place.
 
-Revision ID: 0101
-Revises: 0100
+Revision ID: 0092
+Revises: 0091
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0101"
-down_revision = "0100"
+revision = "0092"
+down_revision = "0091"
 branch_labels = None
 depends_on = None
 

@@ -1,4 +1,4 @@
-"""Scope enforcement for the keys minted for Evaluation Service experiments (migration 0101).
+"""Scope enforcement for the keys minted for Evaluation Service experiments (migration 0092).
 
 An experiment key can upload runs and read dataset items, nothing else; a key a user
 creates is still unscoped. The key list tells the two kinds apart.
@@ -213,7 +213,7 @@ def test_key_list_carries_kind_and_experiment(world):
 
 MIGRATION = (
     Path(__file__).resolve().parents[2]
-    / "packages/platform/qym_platform/migrations/versions/0101_api_key_kind.py"
+    / "packages/platform/qym_platform/migrations/versions/0092_api_key_kind.py"
 )
 
 
@@ -223,15 +223,15 @@ def test_migration_backfill_marks_only_keys_an_experiment_references():
     from qym_platform.db import models
     from qym_platform.db.base import Base
 
-    spec = importlib.util.spec_from_file_location("migration_0101", MIGRATION)
+    spec = importlib.util.spec_from_file_location("migration_0092", MIGRATION)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert (module.revision, module.down_revision) == ("0101", "0100")
+    assert (module.revision, module.down_revision) == ("0092", "0091")
 
     engine = sa.create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
-        # Take the schema back to 0100: no kind / experiment_id on api_keys.
+        # Take the schema back to 0091: no kind / experiment_id on api_keys.
         connection.execute(sa.text("DROP TABLE api_keys"))
         connection.execute(
             sa.text(
@@ -288,7 +288,7 @@ def test_postgres_real_chain_backfill_and_round_trip(postgres) -> None:
     from qym_platform.db import models
 
     engine, config = postgres
-    command.upgrade(config, "0100")
+    command.upgrade(config, "0091")
     with engine.begin() as connection:
         insert_at_revision(connection, models.User, id="u1", email="u@x.test", role=models.UserRole.ADMIN)
         insert_at_revision(connection, models.Project, id="p1", name="P", slug="p", created_by_user_id="u1")
@@ -304,7 +304,7 @@ def test_postgres_real_chain_backfill_and_round_trip(postgres) -> None:
             connection, models.EvalExperiment, id="x1", project_id="p1", created_by_user_id="u1",
             name="x", environment_ids=[], job_count=0, qym_api_key_id="k-exp",
         )
-    command.upgrade(config, "0101")
+    command.upgrade(config, "0092")
     with engine.begin() as connection:
         rows = {
             r[0]: r[1:]
@@ -313,8 +313,8 @@ def test_postgres_real_chain_backfill_and_round_trip(postgres) -> None:
         assert rows == {"k-exp": ("experiment", "x1"), "k-name": ("user", None)}
         scopes = connection.execute(sa.text("SELECT scopes FROM api_keys WHERE id = 'k-exp'")).scalar_one()
         assert "datasets:read" in scopes
-    command.downgrade(config, "0100")
+    command.downgrade(config, "0091")
     with engine.begin() as connection:
         columns = {c["name"] for c in sa.inspect(connection).get_columns("api_keys")}
         assert "kind" not in columns and "experiment_id" not in columns
-    command.upgrade(config, "0101")
+    command.upgrade(config, "0092")

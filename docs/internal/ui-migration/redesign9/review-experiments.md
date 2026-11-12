@@ -185,7 +185,7 @@ Read: `api/experiments.py`, `services/eval_queue.py`, `services/eval_dispatcher.
 * Unknown keys: 422 `job_priority_unknown` (`test_job_priority_unknown_key_is_a_422`).
 * Retry: uses `eval_queue.job_priority(job, experiment)` for the cap check, the ack and the stored value (`test_retry_keeps_the_jobs_own_priority`); retried jobs are the only other `EvalExperimentJob` constructor.
 * Task pointer: `_task_error(..., per_environment)` gives `/evaluator/task` for the string form and keeps `/evaluator/task/<envId>` for the object form (`test_task_unsupported_for_a_service_without_it`).
-* Migration 0102: nullable `VARCHAR(10)`, Python backfill from `request_body.priority` else the experiment's, downgrade by batch. Round-trip tests `test_job_priority_migration_round_trips` (SQLite) and `test_job_priority_migration_postgres_round_trips` (PostgreSQL); run against the reviewer's container (section 6).
+* Migration 0093: nullable `VARCHAR(10)`, Python backfill from `request_body.priority` else the experiment's, downgrade by batch. Round-trip tests `test_job_priority_migration_round_trips` (SQLite) and `test_job_priority_migration_postgres_round_trips` (PostgreSQL); run against the reviewer's container (section 6).
 * Untested: the dispatcher ordering on PostgreSQL (`CASE` in `ORDER BY` with `FOR UPDATE SKIP LOCKED`, the ordering test is SQLite), the NULL-priority rank for rows written by an older build while a mixed deployment runs, and a non-manager retrying a HIGH job (403 on retry).
 
 ## 5. Follow-up measurements

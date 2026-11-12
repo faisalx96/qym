@@ -7,8 +7,8 @@ experiment's, read in Python so it works the same on SQLite and PostgreSQL.
 
 Quick DDL (nullable column, no default).
 
-Revision ID: 0102
-Revises: 0101
+Revision ID: 0093
+Revises: 0092
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0102"
-down_revision = "0101"
+revision = "0093"
+down_revision = "0092"
 branch_labels = None
 depends_on = None
 

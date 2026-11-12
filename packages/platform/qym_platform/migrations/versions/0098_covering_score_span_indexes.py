@@ -8,8 +8,8 @@ scans. Large tables (production) get them CONCURRENTLY from a maintenance job,
 which also vacuums the finished span partitions (an index-only scan needs
 their visibility map).
 
-Revision ID: 0096
-Revises: 0095
+Revision ID: 0098
+Revises: 0097
 """
 
 import sqlalchemy as sa
@@ -22,8 +22,8 @@ from qym_platform.db.migration_helpers import (
     table_bytes,
 )
 
-revision = "0096"
-down_revision = "0095"
+revision = "0098"
+down_revision = "0097"
 branch_labels = None
 depends_on = None
 
@@ -54,7 +54,7 @@ def upgrade():
             bind,
             "create_deferred_indexes",
             {"indexes": deferred},
-            note="queued by migration 0096: tables too large to index during startup",
+            note="queued by migration 0098: tables too large to index during startup",
         )
     for spec in INDEXES:
         if spec in deferred:

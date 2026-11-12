@@ -2,8 +2,8 @@
 
 Quick DDL, no backfill.
 
-Revision ID: 0100
-Revises: 0099
+Revision ID: 0102
+Revises: 0101
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0100"
-down_revision = "0099"
+revision = "0102"
+down_revision = "0101"
 branch_labels = None
 depends_on = None
 

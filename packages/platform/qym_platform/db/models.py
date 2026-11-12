@@ -477,7 +477,7 @@ class ApiKey(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # 'user' (created in Project Settings) or 'experiment' (minted at launch for one
-    # Evaluation Service experiment, ``services/eval_submitter_keys``); migration 0101.
+    # Evaluation Service experiment, ``services/eval_submitter_keys``); migration 0092.
     # Only experiment keys have their scopes enforced (``auth.require_api_key_scope``).
     kind: Mapped[str] = mapped_column(
         String(16), default="user", server_default="user", nullable=False
@@ -965,7 +965,7 @@ class EvalExperimentJob(Base):
     attempt: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
-    # LOW / NORMAL / HIGH this job is submitted with (0102). Always set at launch;
+    # LOW / NORMAL / HIGH this job is submitted with (0093). Always set at launch;
     # NULL only on rows older than the migration (read as the experiment's priority).
     priority: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     # The attempt this row retries (kept for history, left out of the aggregate).
@@ -1775,7 +1775,7 @@ class RunItemPassScore(Base):
             name="uq_run_item_metric_pass",
         ),
         Index("ix_run_item_pass_scores_run_metric", "run_id", "metric_name"),
-        # Migration 0096 (C073): the numbers read from the index alone.
+        # Migration 0098 (C073): the numbers read from the index alone.
         Index(
             "ix_run_item_pass_scores_cover",
             "run_id",
@@ -1929,7 +1929,7 @@ class Span(Base):
 
     __table_args__ = (
         Index("ix_span_run_trace", "run_id", "trace_id"),
-        # Migration 0096 (C073): step latency reads these columns from the index alone.
+        # Migration 0098 (C073): step latency reads these columns from the index alone.
         Index(
             "ix_span_run_start_cover",
             "run_id",
@@ -2099,7 +2099,7 @@ class RunTraceContribution(Base):
 
 
 class RunCreateKey(Base):
-    """An Idempotency-Key of ``POST /v1/runs`` and the run it created, kept 24 hours (C190, migration 0095)."""
+    """An Idempotency-Key of ``POST /v1/runs`` and the run it created, kept 24 hours (C190, migration 0097)."""
 
     __tablename__ = "run_create_keys"
     project_id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -2109,7 +2109,7 @@ class RunCreateKey(Base):
 
 
 class RunStepLatencySummary(Base):
-    """The run page's step-latency summary of a run or one pass, stored on first read (C022, migration 0094)."""
+    """The run page's step-latency summary of a run or one pass, stored on first read (C022, migration 0096)."""
 
     __tablename__ = "run_step_latency_summaries"
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True)
