@@ -39,6 +39,10 @@
 .modal[data-size='data'] {
   width: 760px;
 }
+/* cv4 X9: a full editor or a large value (the dataset field expand dialog) */
+.modal[data-size='wide'] {
+  width: 1100px;
+}
 
 .modal[data-entering] {
   animation: rise 180ms ease;

@@ -3,7 +3,8 @@ import { Dialog as AriaDialog, Heading, Modal, ModalOverlay } from 'react-aria-c
 import { IconButton } from '../IconButton';
 import styles from './Dialog.module.css';
 
-export type DialogSize = 'sm' | 'md' | 'lg' | 'data';
+/** sm 360, md 440, lg 600, data 760, wide 1100 (a full editor or a large value, cv4 X9). */
+export type DialogSize = 'sm' | 'md' | 'lg' | 'data' | 'wide';
 
 export interface DialogProps {
   open: boolean;

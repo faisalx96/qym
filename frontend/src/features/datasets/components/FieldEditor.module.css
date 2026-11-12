@@ -119,9 +119,8 @@
   max-height: none;
 }
 
-/* cv4 E4: the expanded field, a wide dialog; the editor takes the dialog's height. */
-.expandModal.expandModal[data-size] {
-  width: min(1100px, 100%);
+/* cv4 E4: the expanded field, a wide dialog (Dialog size "wide", cv4 X9); the editor takes the dialog's height. */
+.expandModal {
   height: min(860px, 100%);
 }
 
