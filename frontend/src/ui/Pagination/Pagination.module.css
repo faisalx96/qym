@@ -59,12 +59,8 @@
   white-space: nowrap;
 }
 
+/* cv4 F5: the page size is the shared Select (one dropdown look); only its width is set here. */
 .size {
-  height: var(--control-height);
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: var(--font-sm);
+  flex: none;
+  width: 104px;
 }

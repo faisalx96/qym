@@ -1264,22 +1264,6 @@
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-subtle);
 }
-.cardSortLabel {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-.cardSortSelect {
-  height: var(--control-height);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--card-bg);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-base);
-}
 .cards {
   margin: 0;
   padding: 0;

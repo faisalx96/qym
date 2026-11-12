@@ -26,7 +26,9 @@ describe("Pagination (the shared bundle's direct entry and page size)", () => {
     await user.tab();
     expect(onPageChange.mock.calls.every(([p]) => Number.isInteger(p))).toBe(true);
     expect(onPageChange).not.toHaveBeenCalledWith(3.7);
-    await user.selectOptions(screen.getByRole('combobox', { name: /per page|page size|rows/i }), '50');
+    // cv4 F5: the page size is the shared Select (a button and a listbox), not a native <select>
+    await user.click(screen.getByRole('button', { name: /per page/i }));
+    await user.click(await screen.findByRole('option', { name: '50 / page' }));
     expect(onPageSizeChange).toHaveBeenCalledWith(50);
   });
 });

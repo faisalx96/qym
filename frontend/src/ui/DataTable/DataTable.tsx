@@ -30,6 +30,7 @@ import { Icon } from '../Icon';
 import { Tooltip } from '../Tooltip';
 import { ActionTile, IconButton } from '../IconButton';
 import { ScoreValue } from '../ScoreValue';
+import { Select } from '../Select';
 import { Button } from '../Button';
 import { EnterContext, ENTER_MS } from '../motion';
 import { DataTableContext } from './context';
@@ -2207,24 +2208,19 @@ function CardList<R>({
     <div className={styles.cardsHost}>
       {sortCols.length ? (
         <div className={styles.cardSort}>
-          <label className={styles.cardSortLabel}>
-            Sort by
-            <select
-              className={styles.cardSortSelect}
-              value={sort?.key ?? ''}
-              onChange={(e) => {
-                const col = sortCols.find((c) => sortKeyOf(c) === e.target.value);
-                setSort(col ? nextSort(null, col, unsortedOk) : null);
-              }}
-            >
-              <option value="">Default</option>
-              {sortCols.map((c) => (
-                <option key={c.id} value={sortKeyOf(c)}>
-                  {headerText(c)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            label="Sort by"
+            triggerVariant="bar"
+            items={[
+              { key: '', label: 'Default' },
+              ...sortCols.map((c) => ({ key: sortKeyOf(c) as string, label: headerText(c) })),
+            ]}
+            value={sort?.key ?? ''}
+            onChange={(k) => {
+              const col = sortCols.find((c) => sortKeyOf(c) === k);
+              setSort(col ? nextSort(null, col, unsortedOk) : null);
+            }}
+          />
           {sort ? (
             <Button
               variant="neutral"

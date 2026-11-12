@@ -14,6 +14,9 @@
   font-size: var(--font-sm);
   line-height: 1;
   cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .trigger svg {
@@ -24,8 +27,10 @@
 .trigger > svg:last-child {
   margin-inline-start: auto;
 }
+/* cv4 F5: every dropdown trigger (field or bar, Select or MultiSelect) brightens its fill on hover. */
 .trigger[data-hovered] {
   border-color: var(--control-edge-hover);
+  background: var(--bg-active);
 }
 .trigger[aria-expanded='true'] {
   border-color: var(--accent-primary);
@@ -279,7 +284,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .trigger[data-variant='bar'] {
+  .trigger {
     transition: none;
   }
 }
