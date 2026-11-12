@@ -114,7 +114,7 @@ export function ReportNav() {
           data-section={s.key}
           onClick={(e) => {
             e.preventDefault();
-            scrollToSection(s.key, true);
+            scrollToSection(s.key, true, true);
           }}
         >
           {s.label}
