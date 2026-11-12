@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import { useDatasetLineage, type DatasetVersion, type LineageChange } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
-import { EmptyState, ErrorState, LinkButton, Section, Skeleton, Tag, Text, Card } from '@/ui';
+import { EmptyState, ErrorState, Icon, type IconName, LinkButton, Section, Skeleton, Tag, Text, Card } from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
 import { formatDate, pluralize } from '../lib/itemValue';
@@ -121,15 +121,25 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
       </Section>
       <Section title="Change log" description="Every change to this dataset’s versions, oldest first.">
         {changes.length ? (
-          <ol className={styles.log}>
-            {changes.map((c) => (
-              <li key={c.id} className={styles.logRow}>
-                <span className={styles.logTime}>{formatTableDate(c.created_at)}</span>
-                <span className={styles.logText}>{describeChange(c, byId)}</span>
-                <UserPill user={c.actor} />
-              </li>
-            ))}
-          </ol>
+          // cv4 E10: a timeline, one mark on the rail for each event, then the time, what happened and who did it
+          <Card>
+            <ol className={styles.log}>
+              {changes.map((c) => (
+                <li key={c.id} className={styles.event} data-kind={c.change_summary.type}>
+                  <time className={styles.when} dateTime={c.created_at} title={formatDate(c.created_at)}>
+                    {formatTableDate(c.created_at)}
+                  </time>
+                  <span className={styles.rail} aria-hidden="true">
+                    <span className={styles.mark} data-tone={changeTone(c)}>
+                      <Icon name={CHANGE_ICON[c.change_summary.type] ?? 'edit'} size={12} />
+                    </span>
+                  </span>
+                  <span className={styles.what}>{withVersions(describeChange(c, byId))}</span>
+                  <UserPill user={c.actor} />
+                </li>
+              ))}
+            </ol>
+          </Card>
         ) : (
           <Text variant="sm" tone="muted">
             No changes recorded.
@@ -137,6 +147,35 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
         )}
       </Section>
     </div>
+  );
+}
+
+/** The mark of a change log event (cv4 E10). */
+const CHANGE_ICON: Record<string, IconName> = {
+  created: 'plus',
+  published: 'check',
+  alias_set: 'star',
+  uploaded: 'upload',
+};
+
+/** Publishing and the production alias are the events a run picks up: their marks take the accent. */
+export function changeTone(c: LineageChange): 'accent' | undefined {
+  const s = c.change_summary;
+  return s.type === 'published' || (s.type === 'alias_set' && (s.alias ?? 'production') === 'production')
+    ? 'accent'
+    : undefined;
+}
+
+/** The event text with each version name (v1, v2 ...) in the version face. */
+function withVersions(text: string) {
+  return text.split(/\b(v\d+)\b/).map((part, i) =>
+    i % 2 ? (
+      <span key={i} className={styles.logVersion}>
+        {part}
+      </span>
+    ) : (
+      part
+    ),
   );
 }
 

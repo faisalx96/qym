@@ -15,11 +15,42 @@
   gap: var(--space-sm);
 }
 
+/* cv4 E9: connector lines from a parent version to each child, as the lineage before the React UI. A trunk drops from
+   under the parent's version name and turns into each child card at its first line (an elbow with a soft corner); a
+   child that has a younger sibling below it keeps the trunk running on. */
+.node {
+  --lineage-line: var(--border-strong);
+  --elbow-y: calc(var(--space-md) + 0.85em);
+  position: relative;
+}
+
 .children {
-  margin-top: var(--space-sm);
-  margin-inline-start: var(--space-xl);
-  padding-inline-start: var(--space-md);
-  border-inline-start: 2px solid var(--border-default);
+  margin-block-start: var(--space-sm);
+  margin-inline-start: var(--space-lg);
+  padding-inline-start: var(--space-xl);
+}
+
+.children > .node::before,
+.children > .node:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: calc(-1 * var(--space-xl));
+  pointer-events: none;
+}
+
+.children > .node::before {
+  top: calc(-1 * var(--space-sm));
+  width: calc(var(--space-xl) - var(--space-xs));
+  height: calc(var(--space-sm) + var(--elbow-y));
+  border-inline-start: 2px solid var(--lineage-line);
+  border-block-end: 2px solid var(--lineage-line);
+  border-end-start-radius: var(--radius-md);
+}
+
+.children > .node:not(:last-child)::after {
+  top: var(--elbow-y);
+  bottom: calc(-1 * var(--space-sm));
+  border-inline-start: 2px solid var(--lineage-line);
 }
 
 .grid {
@@ -79,6 +110,7 @@
   color: var(--text-muted);
 }
 
+/* cv4 E10: the change log is a timeline. Time, then a mark on a rail, then the event, then the person. */
 .log {
   list-style: none;
   margin: 0;
@@ -87,24 +119,78 @@
   flex-direction: column;
 }
 
-.logRow {
+.event {
   display: grid;
-  grid-template-columns: 170px 1fr auto;
+  grid-template-columns: 112px 20px minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-xs) 0;
-  border-top: 1px solid var(--border-subtle);
+  column-gap: var(--space-md);
+  min-height: 34px;
   font-size: var(--font-base);
   color: var(--text-secondary);
 }
 
-.logTime {
+.when {
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--text-muted);
 }
 
-.logText {
+.rail {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* the rail runs through every mark; it starts at the first mark and ends at the last */
+.rail::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(50% - 1px);
+  border-inline-start: 2px solid var(--border-default);
+}
+
+.event:first-child .rail::before {
+  top: 50%;
+}
+
+.event:last-child .rail::before {
+  bottom: 50%;
+}
+
+.event:only-child .rail::before {
+  display: none;
+}
+
+.mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.mark[data-tone='accent'] {
+  border-color: color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-elevated));
+  color: var(--accent-primary);
+}
+
+.what {
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.logVersion {
+  font-family: var(--font-mono);
+  font-weight: 650;
+  color: var(--text-primary);
 }
