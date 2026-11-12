@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useState } from 'react';
 import {
@@ -22,15 +21,16 @@ import {
   DropdownMenu,
   EmptyState,
   ErrorState,
+  Flag,
   Icon,
   IconButton,
   SectionHeader,
   Skeleton,
+  StatusMark,
   Text,
+  TextLink,
   UserName,
   useToast,
-  Flag,
-  StatusMark,
 } from '@/ui';
 import { formatAgo } from '@/lib/dates';
 import { formatDateParts } from '@/lib/format';
@@ -377,8 +377,10 @@ function RulesView({
             ) : null}
             {config.llm_configured ? null : (
               <Text variant="sm" tone="muted" as="p">
-                Add an LLM connection to generate rules:{' '}
-                <Link to={`${projectPath(scope.slug, 'settings')}?tab=llm`}>open LLM connections</Link>.
+                Add an LLM connection to generate rules.{' '}
+                <TextLink to={`${projectPath(scope.slug, 'settings')}?tab=llm`}>
+                  Open LLM connections
+                </TextLink>
               </Text>
             )}
           </div>

@@ -14,6 +14,8 @@ import { ApiError } from '@/lib/http';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
+  Card,
+  type Column,
   ConfirmDialog,
   DataTable,
   Disclosure,
@@ -25,11 +27,10 @@ import {
   Tag,
   Text,
   TextField,
-  useToast,
-  type Column,
-  Card,
+  TextLink,
   TwoLine,
   UserName,
+  useToast,
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
@@ -179,7 +180,7 @@ function KeysCard({
             </Text>
             <Text variant="sm">
               Used by the SDK (QYM_API_KEY) to push runs into this project.{' '}
-              <Link to="/docs/get-started/api-keys">Read the guide</Link>
+              <TextLink to="/docs/get-started/api-keys">Read the guide</TextLink>
             </Text>
           </div>
         </div>

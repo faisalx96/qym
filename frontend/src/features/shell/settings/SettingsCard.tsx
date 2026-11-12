@@ -1,6 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import { Button, Card, Text, type CardTone } from '@/ui';
+import { Button, Card, type CardTone, Text, TextLink } from '@/ui';
 import styles from './settings.module.css';
 
 export interface SettingsCardProps {
@@ -60,7 +59,7 @@ export function SettingsCard({
                 {guide ? (
                   <>
                     {description ? ' ' : null}
-                    <Link to={guide}>Read the guide</Link>
+                    <TextLink to={guide}>Read the guide</TextLink>
                   </>
                 ) : null}
               </Text>
