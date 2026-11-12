@@ -56,6 +56,11 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
    * the list belongs to and keeps the visible text inside the name. Replaces the 'bar' trigger's "<label> filter" name.
    */
   nameSuffix?: string;
+  /**
+   * The value is the page's default (cv4 Y12), for a choice whose default is a selection (all metrics): the trigger
+   * stays neutral, as an unfiltered Runs filter, and takes the accent only when the choice differs from it.
+   */
+  isDefault?: (selected: Set<Key>) => boolean;
 }
 
 /**
@@ -82,6 +87,7 @@ export function MultiSelect<T extends MultiSelectItem>({
   nameSuffix,
   emptyMeansAll = false,
   noneKey,
+  isDefault,
 }: MultiSelectProps<T>) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -96,6 +102,7 @@ export function MultiSelect<T extends MultiSelectItem>({
   }, [all, query]);
   const isNone = noneKey !== undefined && value.has(noneKey);
   const selectedCount = value.size;
+  const accent = selectedCount > 0 && !isDefault?.(value);
   /** Ticked on screen: with `emptyMeansAll` the empty set ticks every box and the none key ticks none. */
   const isTicked = (key: Key) =>
     emptyMeansAll ? !isNone && (value.size === 0 || value.has(key)) : value.has(key);
@@ -240,7 +247,7 @@ export function MultiSelect<T extends MultiSelectItem>({
           disabled={isDisabled}
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
-          data-active={selectedCount ? '' : undefined}
+          data-active={accent ? '' : undefined}
           onClick={() => setOpen(!open)}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown' && open) {
@@ -276,7 +283,7 @@ export function MultiSelect<T extends MultiSelectItem>({
                   : String(selectedCount)
               : undefined
           }
-          active={selectedCount > 0}
+          active={accent}
           className={className}
           isDisabled={isDisabled}
           aria-haspopup="dialog"
@@ -295,7 +302,7 @@ export function MultiSelect<T extends MultiSelectItem>({
           aria-controls={open ? listId : undefined}
           aria-label={nameSuffix ? `${label} ${nameSuffix}` : undefined}
           data-variant={triggerVariant}
-          data-active={selectedCount ? '' : undefined}
+          data-active={accent ? '' : undefined}
         >
           <span className={styles.triggerLabel}>{label}</span>
           <span className={styles.triggerValue}>{summary}</span>

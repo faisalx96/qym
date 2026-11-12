@@ -63,6 +63,8 @@ export function RunFacts({
                 : `${keys.size} of ${metrics.length}`
           }
           nameSuffix="to analyze"
+          // cv4 Y12: every metric is the default; neutral until the choice differs
+          isDefault={(keys) => keys.size === metrics.length}
         />
         <Text variant="sm" tone={selected.length ? 'muted' : 'warning'} as="span" role="status">
           {selected.length
