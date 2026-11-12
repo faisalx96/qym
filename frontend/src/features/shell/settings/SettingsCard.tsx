@@ -15,7 +15,8 @@ export interface SettingsCardProps {
   action?: ReactNode;
   /** A custom footer. A card that saves settings passes `save` instead (C145: one footer recipe). */
   footer?: ReactNode;
-  /** The one settings footer: state text at the start, a 24px Save at the end, disabled until there are changes. */
+  /** The one save row: state text at the start, a 24px Save at the end, disabled until there are changes. It ends
+   *  the card body, with no divider line above it (cv4 A4). */
   save?: SaveFooterProps;
   tone?: CardTone;
   children?: ReactNode;
@@ -46,7 +47,7 @@ export function SettingsCard({
       id={anchor}
       aria-labelledby={id}
       tone={tone}
-      footer={save ? <SaveFooter {...save} /> : footer}
+      footer={footer}
       header={
         <div className={styles.cardHeader}>
           <div>
@@ -70,7 +71,11 @@ export function SettingsCard({
       }
       {...rest}
     >
-      <div className={styles.cardBody}>{children}</div>
+      {/* The save row ends the body: no divider line above it (cv4 A4). */}
+      <div className={styles.cardBody}>
+        {children}
+        {save ? <SaveFooter savedText="" {...save} /> : null}
+      </div>
     </Card>
   );
 }
@@ -88,7 +93,8 @@ export interface SaveFooterProps {
   secondary?: ReactNode;
   /** No Save at all (read-only or no permission); the state text stays. */
   hideSave?: boolean;
-  /** The state text when nothing is unsaved (default 'All changes saved'). */
+  /** The state text when nothing is unsaved (default 'All changes saved'). '' = no text: the disabled Save already
+   *  says it. Project settings and Admin pass '' (cv4 A4). */
   savedText?: string;
   /** Locks Save even with changes (a required field is empty, a blocker). Pass disabledReason with it. */
   isDisabled?: boolean;
@@ -96,7 +102,11 @@ export interface SaveFooterProps {
   disabledReason?: string;
 }
 
-/** C145: every settings card ends the same way: what state it is in, then Save. */
+/**
+ * C145: every settings card ends the same way: its state, then Save. cv4 A4: with savedText '' the state text shows
+ * only when there is something to say (unsaved changes, saving). With nothing changed the row shows only the meta and
+ * the disabled Save.
+ */
 export function SaveFooter({
   dirty,
   saving,
@@ -109,13 +119,18 @@ export function SaveFooter({
   isDisabled,
   disabledReason,
 }: SaveFooterProps) {
+  const hasState = Boolean(saving || dirty || savedText);
+  // Read-only with nothing to say: no empty row.
+  if (hideSave && !meta && !hasState) return null;
   return (
     <div className={styles.saveFooter} data-save-footer>
       <div className={styles.saveState}>
         {meta}
-        <span data-dirty={dirty ? '' : undefined}>
-          {saving ? 'Saving…' : dirty ? 'Unsaved changes' : savedText}
-        </span>
+        {hasState ? (
+          <span data-dirty={dirty ? '' : undefined} data-save-state>
+            {saving ? 'Saving…' : dirty ? 'Unsaved changes' : savedText}
+          </span>
+        ) : null}
       </div>
       {hideSave ? null : (
         <div className={styles.cardAction}>
