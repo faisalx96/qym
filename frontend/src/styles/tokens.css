@@ -125,7 +125,6 @@
   --action-primary-width: 168px;
   --results-slot-min-height: 160px;
   --chars-tag-width: 96px;
-  --analysis-content-width: 1440px;
 
   /* Auto-analysis extensions to the upstream component geometry. */
   --dropdown-width: 240px;

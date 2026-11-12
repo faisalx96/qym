@@ -26,11 +26,6 @@ export interface TextareaProps extends Omit<
   dir?: 'auto' | 'rtl' | 'ltr';
   /** Browser spell check (red underlines); off for prompts, code and identifiers. */
   spellCheck?: boolean;
-  /**
-   * A long-form editor (a prompt): clicking in to type brightens the border instead of drawing the green focus ring;
-   * keyboard focus keeps the ring.
-   */
-  quietFocus?: boolean;
 }
 
 /** Roomy multi-line field (never inherits --control-height). */
@@ -46,7 +41,6 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     className,
     dir = 'auto',
     spellCheck,
-    quietFocus,
     ...rest
   },
   ref,
@@ -71,7 +65,6 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         placeholder={placeholder}
         className={styles.textarea}
         data-mono={mono ? '' : undefined}
-        data-quiet-focus={quietFocus ? '' : undefined}
         spellCheck={spellCheck}
         dir={dir}
       />

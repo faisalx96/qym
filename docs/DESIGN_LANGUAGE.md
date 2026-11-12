@@ -493,8 +493,8 @@ preselected.
   Facts about the project (slug, role, members, runs, created) live once, in the page header meta. The Danger zone is
   the last section of General, a card like the others with no red rail; only its Archive and Delete buttons are red
   (round 11). Members show the person, a role tag and an Edit action that changes the role in a dialog, as admin users
-  do (round 11). The AI prompt editor is a `Textarea` with `quietFocus` (a click in brightens the border to
-  `--border-strong` instead of the green ring; keyboard focus keeps the ring) and spell check off (round 11).
+  do (round 11). The AI prompt editor is a plain `Textarea` with the visible label "Prompt", the normal green focus ring
+  and spell check off (cv4 A5).
   **One footer and two title recipes (C145, C235):** a card that saves settings ends with `SaveFooter` (pass `save` to
   `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "All changes saved"), the 24px
   primary Save at the end, disabled with the reason "No changes to save" until something changed. Every card and every
