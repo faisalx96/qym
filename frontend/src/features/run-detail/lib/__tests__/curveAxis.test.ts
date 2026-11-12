@@ -57,6 +57,14 @@ describe('curve y axis (cv4 C1-7)', () => {
     expect(axis.domain[1]).toBeGreaterThan(13.1);
   });
 
+  it('fullAt: the pass box plots still zoom on a spread from 37 to 100% (cv4 Y7)', () => {
+    expect(curveAxis([0.37, 1]).domain).toEqual([0, 1]);
+    const axis = curveAxis([0.37, 1], { fullAt: 0.9 });
+    expect(axis.domain[0]).toBeGreaterThan(0);
+    expect(axis.domain[0]).toBeLessThan(0.37);
+    expect(axis.domain[1]).toBe(1);
+  });
+
   it('picks clean steps and labels them', () => {
     expect(niceStep(0.6, 0.8)).toBe(0.05);
     expect(niceStep(0, 1)).toBe(0.2);

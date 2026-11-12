@@ -34,11 +34,17 @@ export function niceStep(lo: number, hi: number): number {
 
 /**
  * The axis for `values`. `range` clamps it (a score is [0, 1]; null for a raw number). `minSpan` is the smallest
- * band the axis may show (2 points of a score), so one flat value is not blown up to fill the plot.
+ * band the axis may show (2 points of a score), so one flat value is not blown up to fill the plot. `fullAt` is the
+ * share of the range from which the axis shows the full range in fifths (0.6 for the curve; the per-pass box plots
+ * use 0.9, so a spread from 37 to 100% still zooms, cv4 Y7).
  */
 export function curveAxis(
   values: number[],
-  { range = [0, 1], minSpan = 0.02 }: { range?: [number, number] | null; minSpan?: number } = {},
+  {
+    range = [0, 1],
+    minSpan = 0.02,
+    fullAt = 0.6,
+  }: { range?: [number, number] | null; minSpan?: number; fullAt?: number } = {},
 ): CurveAxis {
   const finite = values.filter((v) => Number.isFinite(v));
   if (!finite.length) {
@@ -61,7 +67,7 @@ export function curveAxis(
     hi = Math.min(range[1], hi);
   }
   // most of the score range: the full range in fifths, as before
-  if (range && hi - lo >= (range[1] - range[0]) * 0.6) {
+  if (range && hi - lo >= (range[1] - range[0]) * fullAt) {
     const [a, b] = range;
     return { domain: [a, b], ticks: [0, 0.2, 0.4, 0.6, 0.8, 1].map((f) => round(a + f * (b - a))) };
   }
