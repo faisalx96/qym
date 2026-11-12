@@ -11,7 +11,6 @@ import {
   Card,
   Collapse,
   CopyButton,
-  DatasetTag,
   Icon,
   InlineNotice,
   isBareRunId,
@@ -43,7 +42,7 @@ import {
 } from '../lib/heroModel';
 import { runErrorTally } from '../lib/overviewModel';
 import type { RunModel } from '../lib/runModel';
-import { DatasetChip, DatasetCountTag, datasetChipStyles } from './DatasetChip';
+import { DatasetChip, DatasetCountTag, DatasetVersionTag, datasetChipStyles } from './DatasetChip';
 import type { PassSummary, Run } from '../types';
 import { RunPager } from './RunPager';
 import { RejectNote, ReviewLog, RunHeaderActions } from './RunActions';
@@ -467,7 +466,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
           ) : (
             <Fact label="Dataset">
               <MetaLink to={links.dataset} title={links.datasetTitle}>
-                <DatasetTag
+                <DatasetVersionTag
                   name={run.dataset_name}
                   version={run.dataset_version}
                   aliases={run.dataset_aliases}
