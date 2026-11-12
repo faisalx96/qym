@@ -18,6 +18,7 @@ import {
   type Column,
 } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
+import { curveAxis, percentTick } from '../../lib/curveAxis';
 import { queuedLabel, repeatCopy, statisticOptions, type RepeatStatistic } from '../../lib/repeatCopy';
 import { localRepeatStats, repeatStatsView } from '../../lib/repeatStats';
 import { useRunPage } from '../../RunContext';
@@ -96,13 +97,10 @@ export function RepeatTab() {
     .flatMap((sr) => sr.points.flatMap((p) => [p.value, p.low, p.high]))
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
   const hasCurve = curveValues.length > 0;
-  const domain: [number, number] = (() => {
-    if (!numericAverage || !curveValues.length) return [0, 1];
-    const lo = Math.min(...curveValues);
-    const hi = Math.max(...curveValues);
-    const pad = Math.max(1, Math.abs(hi) * 0.1, (hi - lo) * 0.25);
-    return [lo - pad / 2, hi + pad / 2];
-  })();
+  // C1-7: the y axis fits the shown series and their band (a score stays inside 0 to 100%)
+  const axis = numericAverage
+    ? curveAxis(curveValues, { range: null, minSpan: Math.max(1, Math.abs(Math.max(...curveValues, 0)) * 0.1) })
+    : curveAxis(curveValues);
   const stats = g?.group;
   const allPasses = passes.data?.passes ?? [];
   const donePasses = allPasses.filter((p) => p.status !== 'pending' && !p.queued);
@@ -201,7 +199,9 @@ export function RepeatTab() {
                   <Curve
                     series={shownSeries}
                     label={`${selected.label} for ${metric}`}
-                    domain={domain}
+                    domain={axis.domain}
+                    ticks={axis.ticks}
+                    tickFormat={numericAverage ? undefined : (t) => percentTick(t, axis.ticks)}
                     format={numericAverage ? (v) => String(Math.round(v * 100) / 100) : undefined}
                     xLabel={selected.key === 'cumulative_avg' ? 'n' : 'k'}
                   />
