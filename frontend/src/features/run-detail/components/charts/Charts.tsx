@@ -295,6 +295,7 @@ export function BandValue({
   type,
   direction,
   verdict,
+  className,
   children,
 }: {
   value: number | null;
@@ -302,12 +303,13 @@ export function BandValue({
   direction: MetricDirection;
   /** Where a pass threshold applies (C220): plain green (pass) or red (fail) in place of the band. */
   verdict?: 'pass' | 'fail' | null;
+  className?: string;
   children: React.ReactNode;
 }) {
   const band = value === null || verdict ? null : metricBand(value, type, direction);
   return (
     <span
-      className={styles.bandValue}
+      className={[styles.bandValue, className].filter(Boolean).join(' ')}
       data-band={band ?? undefined}
       data-tone={verdict ? (verdict === 'pass' ? 'success' : 'danger') : undefined}
       title={
@@ -662,6 +664,8 @@ export function Curve({
   series,
   label,
   domain = [0, 1],
+  ticks: yTicks,
+  tickFormat,
   format = (v: number) => `${(v * 100).toFixed(1)}%`,
   xLabel = 'k',
 }: {
@@ -669,6 +673,10 @@ export function Curve({
   label: string;
   /** Y range; a score is 0..1, a raw numeric average needs its own. */
   domain?: [number, number];
+  /** Y tick values inside `domain` (cv4 C1-7, `curveAxis`); default fifths of a 0..1 score, else quarters. */
+  ticks?: number[];
+  /** Y tick label; default a whole percent for a 0..1 score, else `format`. */
+  tickFormat?: (value: number) => string;
   format?: (value: number) => string;
   /** X tick prefix: `k` for attempts allowed, `n` for passes observed. */
   xLabel?: string;
@@ -688,16 +696,16 @@ export function Curve({
   const labelled = labelledPositions(ks.length, narrow, W >= 640);
   const ticks = tickPositions(ks.length, narrow);
   const unit = domain[1] === 1 && domain[0] === 0;
-  // a score reads in fifths (0, 20 … 100%) like the first qym; a raw average keeps quarters
-  const steps = unit ? [0, 0.2, 0.4, 0.6, 0.8, 1] : [0, 0.25, 0.5, 0.75, 1];
+  // a score reads in fifths (0, 20 … 100%) like the first qym; a raw average keeps quarters; a fitted axis brings its own
+  const steps = yTicks ?? (unit ? [0, 0.2, 0.4, 0.6, 0.8, 1] : [0, 0.25, 0.5, 0.75, 1]).map((f) => domain[0] + f * span);
+  const tickText = tickFormat ?? (unit ? (t: number) => `${Math.round(t * 100)}%` : format);
   return (
     <ChartTooltipHost>
       <figure ref={boxRef} className={styles.curve}>
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
-          {steps.map((f) => {
-            const t = domain[0] + f * span;
+          {steps.map((t) => {
             return (
-              <g key={f}>
+              <g key={t}>
                 <line className={styles.grid} x1={pad.l} x2={W - pad.r} y1={sy(t)} y2={sy(t)} />
                 <text
                   className={styles.tick}
@@ -706,7 +714,7 @@ export function Curve({
                   textAnchor="end"
                   dominantBaseline="middle"
                 >
-                  {unit ? `${Math.round(t * 100)}%` : format(t)}
+                  {tickText(t)}
                 </text>
               </g>
             );

@@ -12,10 +12,11 @@
   min-block-size: var(--control-height);
 }
 
+/* cv4 C1-9: the card title role (F10, --font-card-title; --font-md until it lands). */
 .title {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: var(--font-md);
+  font-size: var(--font-card-title, var(--font-md));
   font-weight: 600;
   color: var(--text-primary);
 }

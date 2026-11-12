@@ -29,6 +29,7 @@ import { loadItemsSection, loadTraceHost, preloadPanels } from './chunks';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
 import { alignToElement, focusSectionHeading } from '@/lib/scrollToElement';
+import { prefersReducedMotion, sectionScrollTop, smoothScrollTo } from './lib/smoothScroll';
 import { useSidebarHidden } from '@/lib/useSidebarHidden';
 import { useScope } from './hooks/useScope';
 import { readPassParam, useRunView } from './hooks/useRunView';
@@ -59,17 +60,27 @@ const HASH_ALIASES: Record<string, SectionId> = { summary: 'summary' };
 /**
  * Scroll the shell to a section; lazy sections above it mount while it travels, so re-align until the layout settles.
  * `focus` (a section link or button the reader pressed) also moves keyboard focus to the section heading (C091).
+ * `smooth` (a nav click, cv4 C1-1) travels there with an eased scroll instead of a jump, unless the reader asked for
+ * reduced motion; the promise resolves when the travel ends.
  */
-function scrollToSection(id: SectionId, host: HTMLElement | null, focus = false) {
+async function scrollToSection(
+  id: SectionId,
+  host: HTMLElement | null,
+  { focus = false, smooth = false }: { focus?: boolean; smooth?: boolean } = {},
+): Promise<void> {
   const scroller = document.getElementById('shell-content');
+  const glide = smooth && !!scroller && !prefersReducedMotion();
   if (id === 'summary') {
-    scroller?.scrollTo({ top: 0 });
+    if (glide) await smoothScrollTo(scroller!, () => 0);
+    else scroller?.scrollTo({ top: 0 });
     return;
   }
   const el = document.getElementById(sectionDomId(id));
   if (!el) return;
-  alignToElement(el, host);
   if (focus) focusSectionHeading(el);
+  // the travel ends on the live target; the re-align then holds it while late sections settle
+  if (glide && !(await smoothScrollTo(scroller!, () => sectionScrollTop(scroller!, el)))) return;
+  alignToElement(el, host);
 }
 
 /** Everything below the hero: nav, scope bar, sidebar, sections and items (needs the run context). */
@@ -86,7 +97,10 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
   if (!scope.active && drawerOpen) setDrawerOpen(false);
   if (!scope.searchOnly && searchSidebar) setSearchSidebar(false);
   const sidebarShown = scope.active && (scope.searchOnly ? searchSidebar : !sidebarHidden);
-  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current, true), [pageRef]);
+  const onSection = useCallback(
+    (id: SectionId) => scrollToSection(id, pageRef.current, { focus: true, smooth: true }),
+    [pageRef],
+  );
 
   // Links from before the report layout: `#overview`, `#run-section-errors`, `?panel=latency`.
   const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
@@ -95,12 +109,12 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
     const target: SectionId | null = isSectionKey(hash)
       ? hash
       : (HASH_ALIASES[hash] ?? (isSectionKey(panelParam) ? panelParam : null));
-    if (target) scrollToSection(target, pageRef.current);
+    if (target) void scrollToSection(target, pageRef.current);
   }, [hash, panelParam, pageRef]);
 
   const jumpToItems = () => {
     setDrawerOpen(false);
-    onSection('items');
+    void onSection('items');
   };
   const scopeNote = scope.active
     ? `over ${scope.shown.toLocaleString('en-US')} of ${scope.total.toLocaleString('en-US')} items`
