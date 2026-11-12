@@ -22,7 +22,16 @@ import { versionSourceText } from '../lib/versions';
 import { comparePath, datasetPath } from '../lib/route';
 import styles from './LineageTab.module.css';
 
-export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: string }) {
+export function LineageTab({
+  slug,
+  datasetRef,
+  openVersionId,
+}: {
+  slug: string;
+  datasetRef: string;
+  /** The version open on the page: its card takes the selected outline (cv4 X15, as the first qym). */
+  openVersionId?: string | null;
+}) {
   const query = useDatasetLineage(slug, datasetRef);
   const showSkeleton = useDelayedPending(query.isPending);
   if (showSkeleton) return <Skeleton kind="list" rows={4} label="Loading lineage" />;
@@ -49,13 +58,14 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
 
   const renderNode = (v: DatasetVersion, depth: number) => (
     <li key={v.id} className={styles.node} style={{ '--depth': depth } as React.CSSProperties}>
-      <Card data-version-node={v.version}>
+      <Card data-version-node={v.version} isSelected={v.id === openVersionId}>
         <div className={styles.grid}>
           <div className={styles.cardMain}>
             <Link
               to={datasetPath(slug, datasetRef, { tab: 'lineage', v: v.version })}
               className={styles.versionLink}
               data-link="name"
+              aria-current={v.id === openVersionId ? 'true' : undefined}
             >
               {v.version}
             </Link>

@@ -539,7 +539,7 @@ function DetailBody({
           />
         </TabPanel>
         <TabPanel id="lineage">
-          <LineageTab slug={slug} datasetRef={ref} />
+          <LineageTab slug={slug} datasetRef={ref} openVersionId={active?.id} />
         </TabPanel>
         <TabPanel id="access">
           <AccessTab slug={slug} dataset={dataset} archived={archived} onDirtyChange={setAccessDirty} />
