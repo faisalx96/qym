@@ -3,7 +3,7 @@
  * with metric columns; private test sets show the locked state and never
  * request items.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Key } from 'react-aria-components';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -40,6 +40,7 @@ import {
   StatusMark,
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
+import { cellPreviewText, DENSITY_LINES, type RowDensity } from '../lib/cellPreview';
 import { menuLabel } from '../lib/batchCopy';
 import { STATE_OPTIONS, stateCount, stateUrlValue, type StateFilter } from '../lib/itemState';
 import {
@@ -79,7 +80,17 @@ export interface ItemsTabProps {
   onCreateDraft?: () => void;
   /** "All matching" menu: open the batch dialog for the current criteria. */
   onBatch?: (action: BatchAction, criteria: BatchCriteria) => void;
+  /**
+   * The item open in the pane (cv4 E2): its row is the highlighted row and scrolls into view when the pane steps to
+   * another item. While the pane is open the table has no row-actions column (cv4 E5): the pane is the place to act on
+   * the item, and a folded actions column on the narrowed table read as an empty strip.
+   */
+  activeKey?: string | null;
 }
+
+/** A double click on these does not open the item page (cv4 E3). */
+const NO_OPEN_TARGET =
+  'a, button, input, textarea, select, label, [role="button"], [role="checkbox"], [role="menuitem"], td[data-pseudo]';
 
 export function ItemsTab({
   slug,
@@ -96,6 +107,7 @@ export function ItemsTab({
   onFilterChange,
   onCreateDraft,
   onBatch,
+  activeKey = null,
 }: ItemsTabProps) {
   const [params, setParams] = useSearchParams();
   const route = parseDatasetRoute(dataset.slug, params);
@@ -156,6 +168,29 @@ export function ItemsTab({
   useEffect(() => {
     onRows?.(items);
   }, [items, onRows]);
+
+  // cv4 E2: the pane's row follows the pane. When the pane steps to another item, its row scrolls into view, and a
+  // keyboard focus that was on the old row moves with it.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const shownKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeKey) {
+      shownKey.current = null;
+      return;
+    }
+    if (shownKey.current === activeKey) return;
+    const host = wrapRef.current;
+    const row = host?.querySelector<HTMLElement>(`tbody tr[data-row-key="${CSS.escape(activeKey)}"]`);
+    if (!host || !row) return;
+    shownKey.current = activeKey;
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused !== row && host.contains(focused) && focused.matches('tbody tr'))
+      row.focus({ preventScroll: true });
+    row.scrollIntoView?.({ block: 'nearest' });
+  }, [activeKey, items]);
+
+  // cv4 E3: a double click on a row opens the item page; a drag (a text selection) does not.
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
   const hasUserIds = useMemo(() => items.some((i) => i.item_id && !/^item-\d+$/.test(i.item_id)), [items]);
   const sort = parseItemSort(route.sort);
 
@@ -247,6 +282,22 @@ export function ItemsTab({
     return `${datasetPath(slug, dataset.slug)}?${next.toString()}`;
   };
 
+  const rowOf = (target: EventTarget | null): DatasetItem | undefined => {
+    const el = target instanceof HTMLElement ? target : null;
+    if (!el || el.closest(NO_OPEN_TARGET)) return undefined;
+    const tr = el.closest<HTMLElement>('tbody tr[data-row-key]');
+    if (!tr || !wrapRef.current?.contains(tr)) return undefined;
+    return items.find((i) => i.item_id === tr.dataset.rowKey);
+  };
+  const openPageOnDoubleClick = (e: ReactMouseEvent) => {
+    const item = rowOf(e.target);
+    if (!item) return;
+    const at = pressAt.current;
+    if (at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > 4) return;
+    window.getSelection()?.removeAllRanges();
+    navigate(itemHref(item));
+  };
+
   if (!visible) {
     return (
       <EmptyState
@@ -294,6 +345,7 @@ export function ItemsTab({
     );
   }
 
+  const showIdColumn = hasUserIds || route.state !== 'active';
   const openItem = (item: DatasetItem) => (onOpenItem ?? ((i: DatasetItem) => navigate(itemHref(i))))(item);
 
   const columns: Column<DatasetItem>[] = [
@@ -313,7 +365,7 @@ export function ItemsTab({
         </span>
       ),
     },
-    ...(hasUserIds || route.state !== 'active'
+    ...(showIdColumn
       ? [
           {
             id: 'item_id',
@@ -322,9 +374,13 @@ export function ItemsTab({
             sort: 'item_id',
             width: route.state !== 'active' ? 180 : 140,
             priority: 2,
+            // cv4 E13: the item id is the row's primary text (green while the row is hovered or focused)
+            cardTitle: true,
             cell: (item: DatasetItem) => (
               <span className={styles.idCell}>
-                <span dir="ltr">{item.item_id}</span>
+                <span dir="ltr" data-row-primary="">
+                  {item.item_id}
+                </span>
                 {item.state === 'disabled' ? (
                   <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
                 ) : null}
@@ -339,9 +395,12 @@ export function ItemsTab({
       sort: 'input',
       flex: true,
       minWidth: 220,
-      wrap: 2,
       priority: 1,
-      cell: (item) => <Preview value={item.input} wrap />,
+      // without an id column the input is the row's primary text (cv4 E13)
+      cardTitle: !showIdColumn,
+      cell: (item, ctx) => (
+        <Preview value={item.input} density={ctx.density} primary={!showIdColumn} />
+      ),
     },
     {
       id: 'expected',
@@ -349,9 +408,8 @@ export function ItemsTab({
       sort: 'expected',
       flex: true,
       minWidth: 180,
-      wrap: 2,
       priority: 2,
-      cell: (item) => <Preview value={item.expected_output} wrap />,
+      cell: (item, ctx) => <Preview value={item.expected_output} density={ctx.density} />,
     },
     {
       id: 'metadata',
@@ -463,20 +521,39 @@ export function ItemsTab({
     meta: metaFilters,
   };
   return (
-    <div className={styles.wrap} data-items-tab aria-busy={query.isFetching || undefined}>
+    <div
+      ref={wrapRef}
+      className={styles.wrap}
+      data-items-tab
+      aria-busy={query.isFetching || undefined}
+      onPointerDownCapture={(e) => {
+        pressAt.current = { x: e.clientX, y: e.clientY };
+      }}
+      onMouseDown={(e) => {
+        // the second press of a double click opens the page: it must not also select a word
+        if (e.detail > 1 && rowOf(e.target)) e.preventDefault();
+      }}
+      onDoubleClick={openPageOnDoubleClick}
+    >
       <DataTable<DatasetItem>
         aria-label={`Items in ${version.version}`}
         storageKey="datasets.items.v3"
         groupBand={false}
-        density="compact"
+        // cv4 E1: regular (two lines of item text) is the default, the look before the densities were told apart
+        density="regular"
         rows={items}
         rowKey={(i) => i.item_id}
         columns={columns}
         sort={sort}
         onSortChange={(s) => setQuery({ sort: s ? itemSortKey(s.key, s.direction) : null, page: null })}
         onRowOpen={openItem}
-        rowActions={rowActions}
-        rowProps={(item) => ({ 'data-state': item.state === 'disabled' ? 'disabled' : undefined })}
+        rowActions={activeKey ? undefined : rowActions}
+        rowProps={(item) => ({
+          'data-state': item.state === 'disabled' ? 'disabled' : undefined,
+          // cv4 E2: with the pane open, the highlighted row is the pane's item, not the row clicked or focused last
+          ...(activeKey ? { 'data-focused': item.item_id === activeKey ? '' : undefined } : {}),
+          'data-pane-row': activeKey && item.item_id === activeKey ? '' : undefined,
+        })}
         selection={
           selection
             ? {
@@ -667,10 +744,23 @@ export function ItemsTab({
   );
 }
 
-/** Mono one-line preview; Arabic text flows RTL. Hovering for 700 ms shows the full value. */
-/** A cell preview: item text in the sans face; `mono` for JSON such as metadata (C153). */
-export function Preview({ value, wrap, mono }: { value: unknown; wrap?: boolean; mono?: boolean }) {
-  const text = promptPreview(value);
+/**
+ * A cell preview: item text in the sans face; `mono` for JSON such as metadata (C153). Arabic text flows RTL. Hovering
+ * for 700 ms shows the full value. With `density` the text wraps to the lines of that density (cv4 E1).
+ */
+export function Preview({
+  value,
+  density,
+  mono,
+  primary,
+}: {
+  value: unknown;
+  density?: RowDensity;
+  mono?: boolean;
+  /** The row's primary text (cv4 E13). */
+  primary?: boolean;
+}) {
+  const text = density ? cellPreviewText(value, density) : promptPreview(value);
   const dir = textDirAttrs(text);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -681,8 +771,11 @@ export function Preview({ value, wrap, mono }: { value: unknown; wrap?: boolean;
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
     <span
-      className={wrap ? styles.previewWrap : styles.preview}
+      className={density ? styles.previewWrap : styles.preview}
       data-mono={mono ? '' : undefined}
+      data-density={density}
+      data-row-primary={primary ? '' : undefined}
+      style={density ? ({ '--lines': DENSITY_LINES[density] } as CSSProperties) : undefined}
       {...dir}
       onMouseEnter={(e) => {
         if (!text) return;

@@ -40,7 +40,8 @@ export function RunsTab({
       hideable: false,
       priority: 1,
       cell: (r) => (
-        <Text as="span" variant="md" weight={600}>
+        // cv4 E13: the run name turns green while its row is hovered or focused
+        <Text as="span" variant="md" weight={600} data-row-primary="">
           {r.run_name || r.external_run_id || r.id}
         </Text>
       ),

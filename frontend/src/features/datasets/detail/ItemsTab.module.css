@@ -9,6 +9,12 @@
   min-height: 160px;
 }
 
+/* cv4 E1: a comfortable row is clearly taller than a regular one, room for four lines of item text even when the item
+   is short. The shared comfortable height (52px) is what a two-line cell already takes. */
+div.table[data-density='comfortable'] {
+  --row-h: calc(4 * 1.35em + 2 * var(--space-sm));
+}
+
 .preview {
   display: block;
   overflow: hidden;
@@ -18,15 +24,23 @@
   text-align: start;
 }
 
+/* cv4 E1: the item text wraps to the lines of the row density (compact 1, regular 2, comfortable 5, `--lines`). */
 .previewWrap {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: var(--lines, 2);
+  line-clamp: var(--lines, 2);
+  white-space: normal;
   overflow-wrap: anywhere;
   unicode-bidi: plaintext;
   text-align: start;
+}
+
+/* comfortable: each field of a structured value on its own line, with room above and below */
+.previewWrap[data-density='comfortable'] {
+  white-space: pre-line;
+  padding-block: var(--space-xs);
 }
 
 .empty {
