@@ -8,7 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
@@ -48,7 +47,7 @@ import {
   StatusMark,
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
-import { cellPreviewText, DENSITY_LINES, type RowDensity } from '../lib/cellPreview';
+import { cellPreviewText, type RowDensity } from '../lib/cellPreview';
 import { menuLabel } from '../lib/batchCopy';
 import { STATE_OPTIONS, stateCount, stateUrlValue, type StateFilter } from '../lib/itemState';
 import {
@@ -409,6 +408,8 @@ export function ItemsTab({
       flex: true,
       minWidth: 220,
       priority: 1,
+      // the shared table clamps the text to the lines of the density (cv4 X6)
+      wrap: true,
       // without an id column the input is the row's primary text (cv4 E13)
       cardTitle: !showIdColumn,
       cell: (item, ctx) => <Preview value={item.input} density={ctx.density} primary={!showIdColumn} />,
@@ -420,6 +421,7 @@ export function ItemsTab({
       flex: true,
       minWidth: 180,
       priority: 2,
+      wrap: true,
       cell: (item, ctx) => <Preview value={item.expected_output} density={ctx.density} />,
     },
     {
@@ -758,7 +760,8 @@ export function ItemsTab({
 
 /**
  * A cell preview: item text in the sans face; `mono` for JSON such as metadata (C153). Arabic text flows RTL. Hovering
- * for 700 ms shows the full value. With `density` the text wraps to the lines of that density (cv4 E1).
+ * for 700 ms shows the full value. With `density` (a wrapping table column) the text wraps; the shared table clamps it
+ * to the lines of that density (cv4 E1, X6).
  */
 export function Preview({
   value,
@@ -787,7 +790,6 @@ export function Preview({
       data-mono={mono ? '' : undefined}
       data-density={density}
       data-row-primary={primary ? '' : undefined}
-      style={density ? ({ '--lines': DENSITY_LINES[density] } as CSSProperties) : undefined}
       {...dir}
       onMouseEnter={(e) => {
         if (!text) return;

@@ -272,6 +272,10 @@ const VIRTUAL_AFTER = 200;
 /** Rows read for the content fit of a column set (C020): enough for a fair width, few enough for one cheap layout. */
 const FIT_SAMPLE_ROWS = 20;
 const ROW_PX: Record<Density, number> = { compact: 32, regular: 40, comfortable: 52 };
+/** Text lines of a wrapping column (`Column.wrap`) at each density (cv4 X6). */
+const WRAP_LINES: Record<Density, number> = { compact: 1, regular: 2, comfortable: 5 };
+const wrapLines = (wrap: boolean | number | undefined, density: Density): number | undefined =>
+  wrap ? Math.min(WRAP_LINES[density], typeof wrap === 'number' ? wrap : Infinity) : undefined;
 /** First-guess height of a display row before it is measured: the density height, 45 for a full-width block. */
 const estimateHeight = (kind: DisplayRow<unknown>['kind'] | undefined, density: Density): number =>
   kind === 'detail' ? 45 : ROW_PX[density];
@@ -336,6 +340,7 @@ const DataCell = memo(function DataCell<R>({
 }: DataCellProps<R>) {
   const ctx: CellCtx = { index, density, card: false };
   const cellContent = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
+  const lines = wrapLines(col.wrap, density);
   const fold = pin === 'end' && col.foldLabel ? col.foldLabel(row) : null;
   const content = fold !== null ? <FoldCell label={fold}>{cellContent}</FoldCell> : cellContent;
   const menuFold = pin === 'end' && col.menuColumn === true;
@@ -360,9 +365,9 @@ const DataCell = memo(function DataCell<R>({
         className={styles.cell}
         data-cell=""
         data-row-primary={primary ? '' : undefined}
-        data-wrap={col.wrap ? '' : undefined}
+        data-wrap={lines ? '' : undefined}
         data-truncate={col.truncate}
-        style={col.wrap ? ({ '--lines': col.wrap } as React.CSSProperties) : undefined}
+        style={lines ? ({ '--lines': lines } as React.CSSProperties) : undefined}
       >
         {sec ? (
           <span className={styles.twoLine}>
@@ -653,7 +658,9 @@ function DataTableInner<R>({
   );
   const pseudoOf = (c: Column<R>) => (c as unknown as PseudoColumn).pseudo;
   const hasBands = groupBand && visible.some((c) => c.group);
-  const tall = visible.some((c) => c.secondary || c.wrap);
+  // A two-line (secondary) cell needs the comfortable height; a wrapping column follows the density instead (cv4 X6).
+  const tall = visible.some((c) => c.secondary);
+  const wrapTall = model.density === 'comfortable' && visible.some((c) => c.wrap);
   const cardMode =
     useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
 
@@ -1931,6 +1938,7 @@ function DataTableInner<R>({
       data-sticky={stickyHeader && !embedded && !headParent ? '' : undefined}
       data-shift={stickyHeader && !embedded && headParent ? '' : undefined}
       data-tall={tall ? '' : undefined}
+      data-wrap-tall={wrapTall ? '' : undefined}
       data-fit={fitWidths ? '' : undefined}
       style={{ minWidth: fitWidths ? undefined : Math.max(minWidth ?? 0, minTotal) || undefined }}
     >

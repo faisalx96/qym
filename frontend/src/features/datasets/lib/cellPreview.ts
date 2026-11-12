@@ -1,13 +1,11 @@
 /**
- * Item text cells in the items table, by row density (cv4 E1): compact shows one line, regular two, and comfortable
- * up to five, with each field of a structured value on its own line so the taller row shows more of the item.
+ * Item text of the items table, by row density (cv4 E1). The shared table clamps a wrapping column to the lines of the
+ * density (compact 1, regular 2, comfortable 5; cv4 X6); here comfortable puts each field of a structured value on its
+ * own line, so the taller row shows more of the item.
  */
 import { promptPreview } from '@/ui';
 
 export type RowDensity = 'compact' | 'regular' | 'comfortable';
-
-/** Text lines a cell shows at each density. */
-export const DENSITY_LINES: Record<RowDensity, number> = { compact: 1, regular: 2, comfortable: 5 };
 
 const COMFORTABLE_MAX = 800;
 

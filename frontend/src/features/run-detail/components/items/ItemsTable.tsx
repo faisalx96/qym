@@ -151,7 +151,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       header: 'Input',
       flex: true,
       minWidth: 220,
-      wrap: 2,
+      wrap: true,
       priority: 1,
       cell: ({ row }) => {
         const title = row.input_full ?? row.input ?? row.input_preview ?? '';

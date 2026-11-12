@@ -420,6 +420,13 @@
   height: max(var(--row-h), var(--row-comfortable));
 }
 
+/* cv4 X6: a wrapping column (`Column.wrap`) follows the density: compact 1 line, regular 2, comfortable up to 5 (the
+   cell's --lines). A comfortable row of such a table is a real step up, at least four text lines high, so the three
+   densities look different even for short text. Child combinators: a nested table keeps its own density. */
+.table[data-wrap-tall] > .tbody > tr > td {
+  height: max(var(--row-h), calc(4 * 1.35em + 2 * var(--space-sm)));
+}
+
 .cell {
   line-height: 1.35; /* one line box for sans and mono cells so values share a baseline */
   min-width: 0;

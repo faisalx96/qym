@@ -1,12 +1,8 @@
 /** cv4 E1: three densities, three clearly different item cells. */
 import { describe, expect, it } from 'vitest';
-import { cellPreviewText, DENSITY_LINES } from '../cellPreview';
+import { cellPreviewText } from '../cellPreview';
 
-describe('item cell preview by density (cv4 E1)', () => {
-  it('shows 1, 2 and 5 lines', () => {
-    expect(DENSITY_LINES).toEqual({ compact: 1, regular: 2, comfortable: 5 });
-  });
-
+describe('item cell preview by density (cv4 E1; the line counts come from the shared table, cv4 X6)', () => {
   it('keeps the one-line preview for compact and regular', () => {
     const v = { instruction: 'Summarize', document_id: 'doc-1' };
     expect(cellPreviewText(v, 'compact')).toBe(cellPreviewText(v, 'regular'));
