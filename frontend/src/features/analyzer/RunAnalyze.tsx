@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AnalysisConfig } from '@/api/analysis';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { ConfirmDialog, ErrorState, ReportSection, Skeleton, Subsection, Tag } from '@/ui';
+import { ConfirmDialog, CountTile, ErrorState, ReportSection, Skeleton, Subsection } from '@/ui';
 import { ActionRail } from './blocks/ActionRail';
 import { FieldsMapping } from './blocks/FieldsMapping';
 import { Instructions } from './blocks/Instructions';
@@ -193,9 +193,13 @@ function Workspace({
 
       <ReportSection
         id="analysis-targets"
-        title="Targets"
+        // cv4 Y16: the count is the count badge right after the title, not alone at the far end
+        title={
+          <>
+            Targets <CountTile>{ws.targetCount}</CountTile>
+          </>
+        }
         description="Failed item–metric targets. The limit applies to the most severe. Task and metric errors are never analyzed. Check up to 3 targets to test them together."
-        aside={<Tag kind="count">{ws.targetCount}</Tag>}
       >
         <div className={s.stack}>
           <TargetFilters
