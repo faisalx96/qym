@@ -12,11 +12,10 @@
   padding-block: var(--space-xs);
 }
 
+/* The title and its caption, then the table toolbar on its own row (cv4 C2-1). */
 .head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: var(--space-md);
 }
 
@@ -36,8 +35,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+/* Export: the right end of the toolbar, as the CSV button of the Items bar. */
+.toolsEnd {
+  display: inline-flex;
+  margin-inline-start: auto;
 }
 
 .scroller {
