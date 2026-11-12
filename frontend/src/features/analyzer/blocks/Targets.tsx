@@ -263,7 +263,7 @@ export function TargetList({
         },
         isDisabled: (t) => !checked.has(t.key) && testKeys.length >= 3,
       }}
-      rowLabel={(t) => `Include ${t.metric} of ${t.row.item_id} in Test selected`}
+      rowLabel={(t) => `Include ${t.metric} of ${t.row.item_id} in Test Selected`}
       selectAllLabel="Check the targets of this page to test (up to 3)"
       onRowOpen={onPreview ? (t) => onPreview(t.key) : undefined}
       rowActions={

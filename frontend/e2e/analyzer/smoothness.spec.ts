@@ -78,7 +78,7 @@ test('nothing above Results moves, the rail keeps its size and the list keeps it
   });
   await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+  await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
   await installProbe(page);
   await page.waitForTimeout(300);
   await analyzeButton(page).click();
@@ -173,7 +173,7 @@ test('Test then Analyze on a 20-item run stays under the layout-shift budget', a
   });
   await gotoApp(page, analysisUrl(seed.slug, bigRun));
   await waitWorkspace(page);
-  await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+  await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
   await page.waitForTimeout(500);
   const start = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
   await rail(page)
