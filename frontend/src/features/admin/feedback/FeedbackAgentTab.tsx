@@ -137,7 +137,6 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
         {/* The save row ends the body, no divider line above it (cv4 A4). */}
         <SaveFooter
           dirty={dirty}
-          savedText=""
           isDisabled={!complete || blocked}
           disabledReason={!complete || blocked ? 'Fill in every field' : undefined}
           saving={save.isPending}
@@ -230,7 +229,6 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
         {/* The save row ends the body, no divider line above it (cv4 A4). */}
         <SaveFooter
           dirty={days !== data.behaviour.draft_retention_days || max !== data.behaviour.max_user_messages}
-          savedText=""
           saving={save.isPending}
           onSave={async () => {
             try {

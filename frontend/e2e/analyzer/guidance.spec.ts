@@ -265,7 +265,8 @@ test.describe('Diagnosis (12)', () => {
     expect('base_revision' in body).toBe(true);
     expect(JSON.stringify(body)).toContain('Brand Voice');
     await expect(page.getByText('Categories saved').first()).toBeVisible();
-    await expect(page.locator('[data-save-footer]')).toContainText('All changes saved');
+    // cv4 X4: a clean save row shows no state text
+    await expect(page.locator('[data-save-footer]')).not.toContainText('Unsaved changes');
     await expect(page.getByRole('tab', { name: /^Brand Voice/ })).toBeVisible();
   });
 
@@ -327,7 +328,8 @@ test.describe('Diagnosis (12)', () => {
     await alert.getByRole('button', { name: 'Reload latest' }).click();
     await expect(alert).toBeHidden();
     await expect(page.getByRole('tab', { name: /^Tone Drift/ })).toHaveCount(0);
-    await expect(page.locator('[data-save-footer]')).toContainText('All changes saved');
+    // cv4 X4: a clean save row shows no state text
+    await expect(page.locator('[data-save-footer]')).not.toContainText('Unsaved changes');
   });
 });
 

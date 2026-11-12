@@ -232,7 +232,6 @@ export function ItemPane({
             dirty={editor.dirty}
             saving={editor.saving}
             // cv4 E12: no state text while nothing changed; the disabled Save already says so
-            savedText=""
             onSave={() => void saveAll()}
             isDisabled={!editor.valid}
             disabledReason={editor.dirty && !editor.valid ? 'Fix the invalid field to save' : undefined}

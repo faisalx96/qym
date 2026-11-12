@@ -362,7 +362,6 @@ function AccessBody({
     <SaveFooter
       dirty={dirty}
       saving={save.isPending}
-      savedText="" // cv4 E12 (A4 rule): no state text while nothing changed
       onSave={() => void onSave()}
       secondary={
         <Button

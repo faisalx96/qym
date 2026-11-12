@@ -224,7 +224,6 @@ export function PromptsTab() {
           />
           <SaveFooter
             dirty={dirty}
-            savedText=""
             saving={save.isPending}
             onSave={() => persist(draft)}
             hideSave={readOnly}

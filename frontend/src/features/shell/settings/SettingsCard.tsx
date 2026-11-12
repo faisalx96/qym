@@ -74,7 +74,7 @@ export function SettingsCard({
       {/* The save row ends the body: no divider line above it (cv4 A4). */}
       <div className={styles.cardBody}>
         {children}
-        {save ? <SaveFooter savedText="" {...save} /> : null}
+        {save ? <SaveFooter {...save} /> : null}
       </div>
     </Card>
   );
@@ -93,8 +93,8 @@ export interface SaveFooterProps {
   secondary?: ReactNode;
   /** No Save at all (read-only or no permission); the state text stays. */
   hideSave?: boolean;
-  /** The state text when nothing is unsaved (default 'All changes saved'). '' = no text: the disabled Save already
-   *  says it. Project settings and Admin pass '' (cv4 A4). */
+  /** The state text when nothing is unsaved. Default '' = no text: the disabled Save already says it (cv4 A4, X4).
+   *  Pass a fact only when it adds something ("No changes since v3"). */
   savedText?: string;
   /** Locks Save even with changes (a required field is empty, a blocker). Pass disabledReason with it. */
   isDisabled?: boolean;
@@ -103,7 +103,7 @@ export interface SaveFooterProps {
 }
 
 /**
- * C145: every settings card ends the same way: its state, then Save. cv4 A4: with savedText '' the state text shows
+ * C145: every settings card ends the same way: its state, then Save. cv4 A4, X4: the state text shows
  * only when there is something to say (unsaved changes, saving). With nothing changed the row shows only the meta and
  * the disabled Save.
  */
@@ -115,7 +115,7 @@ export function SaveFooter({
   meta,
   secondary,
   hideSave,
-  savedText = 'All changes saved',
+  savedText = '',
   isDisabled,
   disabledReason,
 }: SaveFooterProps) {
