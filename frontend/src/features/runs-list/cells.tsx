@@ -451,6 +451,7 @@ export function RunNameCell({
         name={name}
         runId={row.run_id}
         onClick={() => rememberRunFile(row.run_id)}
+        data-row-primary=""
         {...intent}
         {...textDirAttrs(name)}
       />

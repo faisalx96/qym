@@ -23,6 +23,7 @@ export function PassNameCell({ run, pass, status }: { run: RunRow; pass: RunPass
       <Link
         to={passHref(slug, listContext, run.run_id, n)}
         className={styles.passLink}
+        data-row-primary=""
         aria-label={`Pass ${n} of ${run.samples} of run ${runName(run)}`}
       >
         Pass {n}
