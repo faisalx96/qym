@@ -34,6 +34,9 @@
 
 .editorWrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .textarea {
@@ -55,8 +58,101 @@
   tab-size: 2;
 }
 
-.panel[data-expanded] .textarea,
-.panel[data-expanded] .pre {
+/* cv4 E6: JSON mode colours the text while it is edited. The coloured copy (`.under`) has the textarea's box, font and
+   wrapping; the textarea above it shows only its caret and selection. Both keep a scrollbar gutter, so the two wrap
+   the text at the same width. */
+.under {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-muted); /* punctuation, as the shared JSON viewer */
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+  text-align: start;
+  tab-size: 2;
+  pointer-events: none;
+}
+
+.editorWrap[data-coloured] .textarea {
+  position: relative;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text-primary);
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+}
+
+.editorWrap[data-coloured] .textarea::selection {
+  background: color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  color: transparent;
+}
+
+/* cv4 E7: in the docked pane each field takes a share of the free height and its editor grows into it. */
+.panel[data-fill] {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.panel[data-fill] .editorWrap {
+  flex: 1;
+  min-height: 96px;
+}
+
+.panel[data-fill] .textarea {
+  flex: 1;
+  max-height: none;
+  resize: none;
+}
+
+.panel[data-fill] .pre {
+  flex: 1;
+  max-height: none;
+}
+
+/* cv4 E4: the expanded field, a wide dialog; the editor takes the dialog's height. */
+.expandModal.expandModal[data-size] {
+  width: min(1100px, 100%);
+  height: min(860px, 100%);
+}
+
+.expandBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  height: 100%;
+  min-height: 0;
+}
+
+.expandBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.expandBody > .editorWrap,
+.expandBody > .pre {
+  flex: 1;
+  min-height: 0;
+}
+
+.expandBody .textarea {
+  flex: 1;
+  max-height: none;
+  resize: none;
+}
+
+.expandBody > .pre {
   max-height: none;
 }
 
@@ -133,24 +229,30 @@
   max-height: 180px;
 }
 
+/* JSON punctuation is muted, as in the shared JSON viewer; the tokens carry the colour */
+.pre:not([data-kind='text']) {
+  color: var(--text-muted);
+}
+
 .pre[dir='rtl'] {
   line-height: 1.7;
 }
 
+/* Token colours of the shared JSON viewer (ui/JsonViewer), in the read-only view and while editing (cv4 E6). */
 .tokKey {
   color: var(--accent-secondary);
 }
 
 .tokStr {
-  color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .tokNum {
-  color: var(--accent-tertiary);
+  color: var(--chart-5);
 }
 
 .tokLit {
-  color: var(--warning);
+  color: var(--accent-tertiary-soft);
 }
 
 /* Item text in the sans face (design-language rule 4): Text mode and a string value; JSON stays mono (C153). */
