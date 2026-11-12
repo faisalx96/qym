@@ -109,10 +109,10 @@ export function FilterBar({ display, end }: { display: DisplayState; end?: React
         <span className={styles.showSelect}>
           <Select
             label="Show"
+            triggerVariant="bar"
             items={showOptions.map((o) => ({ key: o.value, label: o.label }))}
             value={view.show}
             onChange={(k) => k && api.setView({ show: String(k) as ItemShow })}
-            width="9ch"
           />
         </span>
         <Select

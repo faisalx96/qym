@@ -1,7 +1,9 @@
-/* Single filter surface above the item table. */
+/* Single filter surface above the item table: the controls, then the count, the chips and the end slot; the count
+   row wraps under the controls only when the line is too short (cv4 C2-8). */
 .bar {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-sm);
 }
 
@@ -32,6 +34,7 @@
 
 .chips {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-sm);
@@ -51,8 +54,7 @@
 /* Wide (the bar is sticky): one --bar-action-h row, controls then the count and chips; extra chips scroll. */
 @media (min-width: 1440px) and (min-height: 640px) {
   .bar {
-    flex-direction: row;
-    align-items: center;
+    flex-wrap: nowrap;
     height: var(--bar-action-h);
   }
 
