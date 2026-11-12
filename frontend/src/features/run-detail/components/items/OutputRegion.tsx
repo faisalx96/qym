@@ -12,7 +12,7 @@ import {
   KeyTree,
   LinkButton,
   SegmentedControl,
-  StatusMark,
+  StateTag,
   Tag,
   TextBlock,
   allPaths,
@@ -20,7 +20,7 @@ import {
   useJsonView,
 } from '@/ui';
 import { bodyText } from '../../lib/itemText';
-import { VERDICT_MARK } from '../../lib/verdictMark';
+import { verdictTone } from '../../lib/verdictMark';
 import { latencyLabel, rowStatus } from '../../lib/rowDisplay';
 import { shownPasses } from '../../lib/passSelection';
 import { useRunPage } from '../../RunContext';
@@ -190,20 +190,15 @@ export function OutputRegion({
                 {multi ? (
                   <div className={styles.colHead}>
                     <Tag kind="count">Pass {c.pass}</Tag>
-                    <StatusMark
-                      tone={VERDICT_MARK[status.kind]?.[0] ?? 'neutral'}
-                      shape={VERDICT_MARK[status.kind]?.[1] ?? 'ring'}
-                      label={
-                        status.kind === 'pass'
-                          ? 'Pass'
-                          : status.kind === 'fail'
-                            ? 'Fail'
-                            : status.kind === 'error'
-                              ? 'Error'
-                              : status.label
-                      }
-                      title={status.title || undefined}
-                    />
+                    <StateTag tone={verdictTone(status.kind)} title={status.title || undefined}>
+                      {status.kind === 'pass'
+                        ? 'Pass'
+                        : status.kind === 'fail'
+                          ? 'Fail'
+                          : status.kind === 'error'
+                            ? 'Error'
+                            : status.label}
+                    </StateTag>
                     {c.scoped.latency_ms != null ? (
                       <span className={styles.latency}>{latencyLabel(c.scoped.latency_ms)}</span>
                     ) : null}

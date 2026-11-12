@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
-import { Button, Card, StatusMark, Text } from '@/ui';
+import { Button, Card, StateTag, Text } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
 import { ProblemList } from '../components/ProblemList';
@@ -175,13 +175,13 @@ export function ChecksCard({
             Checks
           </Text>
           {review.items.length ? (
-            <StatusMark tone="danger" shape="cross" label={plural(review.items.length, 'problem')} />
+            <StateTag tone="danger">{plural(review.items.length, 'problem')}</StateTag>
           ) : ready ? (
-            <StatusMark tone="success" shape="check" label="Ready" />
+            <StateTag tone="success">Ready</StateTag>
           ) : preview.loading ? (
-            <StatusMark tone="info" shape="orbit" label="Checking" />
+            <StateTag tone="info">Checking</StateTag>
           ) : (
-            <StatusMark tone="neutral" shape="ring" label="Review" />
+            <StateTag tone="neutral">Review</StateTag>
           )}
         </div>
       }

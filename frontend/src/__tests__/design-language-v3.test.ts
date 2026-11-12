@@ -505,7 +505,8 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
     none(problems);
   });
 
-  it('B-04: environment health is a StatusMark, not a dot or a tag', () => {
+  // Status rules (2026-11-12): health is a StateTag now; this guard keeps the old dot and ad-hoc tags out.
+  it('B-04: environment health is the shared HealthTag, not a dot or an ad-hoc tag', () => {
     expect(src('features/environments/EnvironmentsTable.module.css')).not.toMatch(/\.dot\b[^{]*\{/);
     const picker = src('features/experiments/launch/entry/EnvironmentPicker.tsx');
     for (const s of ['>Healthy</Tag>', '>Unhealthy', '>Not checked</Tag>'])
@@ -567,14 +568,14 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
     expect(src('features/run-detail/components/items/ItemsTable.tsx')).not.toContain('const STATUS_MARK');
   });
 
-  it('B-11: the worker state is a mark from workerStateMark', () => {
+  it('B-11: the worker state is a StateTag from workerStateTag', () => {
     const hist = src('features/live/components/worker/HistoryBlock.tsx');
     expect(hist).not.toContain("' · running'");
     expect(hist).not.toContain("'success' : 'primary'");
     const line = src('features/live/components/StatusLine.tsx');
     expect(line).not.toContain('Worker · {control.state}');
-    expect(line).toContain('workerStateMark(control.state)');
-    expect(src('features/live/components/worker/format.ts')).toMatch(/export function workerStateMark\b/);
+    expect(line).toMatch(/workerStateTag\(control\.state/);
+    expect(src('features/live/components/worker/format.ts')).toMatch(/export function workerStateTag\b/);
   });
 
   it('B-12: required is a RequiredFlag, not a tag', () => {
@@ -849,10 +850,10 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
     expect(map).toMatch(/high:\s*'danger'/);
   });
 
-  it('B-40: a worker problem level is a StatusMark', () => {
+  it('B-40: a worker problem level is a StateTag (status rules, 2026-11-12)', () => {
     const p = src('features/live/components/worker/ProblemsBlock.tsx');
     expect(p).not.toContain('<Tag tone={event.level');
-    expect(p).toContain('<StatusMark');
+    expect(p).toContain('<StateTag');
   });
 
   it('B-41: a diagnosis axis is not a danger tag', () => {

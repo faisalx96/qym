@@ -2,7 +2,7 @@
  * The item table on the shared DataTable: windowed rows on the shell scroller (virtualized), expandable
  * item cards, sortable headers, the `?item=` deep link landing, pagination that keeps the `page` param.
  * Review group R2: no Reason column (C017); scores are centred numbers with no bar in 120px columns, plain green or
- * red where the metric has a pass threshold (C149, C220); Status is a StatusMark with no fill; the open-trace
+ * red where the metric has a pass threshold (C149, C220); Status is a StateTag (an item result); the open-trace
  * action is a green tile with the trace glyph in a normal last column (C230); one header line, no group band (C253).
  */
 import { useMemo, useRef, useState } from 'react';
@@ -14,7 +14,7 @@ import {
   promptPreview,
   ScoreValue,
   Skeleton,
-  StatusMark,
+  StateTag,
   Tooltip,
   type Column,
   type Key,
@@ -26,7 +26,7 @@ import { metricPassesFor, type FilteredItem, type SortBy } from '../../lib/filte
 import { metricHasPassThreshold } from '../../lib/runModel';
 import { latencyLabel, metricCell, rowStatus } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
-import { VERDICT_MARK } from '../../lib/verdictMark';
+import { verdictTone } from '../../lib/verdictMark';
 import type { Row } from '../../types';
 import { defaultPageSize } from '../../lib/itemsPaging';
 import { isUnionRun } from '../../lib/heroModel';
@@ -135,14 +135,10 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       priority: 1,
       cell: ({ row }) => {
         const status = rowStatus(ctx, row, selectedMetric);
-        const [tone, shape] = VERDICT_MARK[status.kind] ?? ['neutral', 'ring'];
         return (
-          <StatusMark
-            tone={tone}
-            shape={shape}
-            label={status.kind === 'error' ? 'Error' : status.label}
-            title={status.title || undefined}
-          />
+          <StateTag tone={verdictTone(status.kind)} title={status.title || undefined}>
+            {status.kind === 'error' ? 'Error' : status.label}
+          </StateTag>
         );
       },
     },

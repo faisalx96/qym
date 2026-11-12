@@ -2,8 +2,8 @@ import { Link, useLocation } from 'react-router-dom';
 import type { LiveWorkerRead } from '@/api/liveWorker';
 import { formatHeaderDate } from '@/lib/dates';
 import { formatRelative } from '@/lib/format';
-import { Icon, StatStrip, StatusMark } from '@/ui';
-import { workerStateMark, workerTime } from './format';
+import { Icon, StatStrip, StateTag } from '@/ui';
+import { workerStateTag, workerTime } from './format';
 import styles from '../../worker.module.css';
 
 export function StatusStrip({ read }: { read: LiveWorkerRead }) {
@@ -11,7 +11,7 @@ export function StatusStrip({ read }: { read: LiveWorkerRead }) {
   const control = read.running;
   const state = control?.state ?? 'waiting';
   const version = control?.settings_version_applied;
-  const label = `${state}${state !== 'waiting' && version != null ? ` v${version}` : ''}`;
+  const stateTag = workerStateTag(state, state !== 'waiting' ? version : null);
   const poll = read.status.last_poll_at ?? read.status.last_heartbeat_at;
   const interval = control?.running?.evaluation?.poll_interval_s;
   const job = control?.job;
@@ -27,9 +27,7 @@ export function StatusStrip({ read }: { read: LiveWorkerRead }) {
           {
             label: 'State',
             icon: <Icon name="play" />,
-            value: (
-              <StatusMark tone={workerStateMark(state)[0]} shape={workerStateMark(state)[1]} label={label} />
-            ),
+            value: <StateTag tone={stateTag.tone}>{stateTag.label}</StateTag>,
             sub: (
               <span dir="auto" className={styles.wrap}>
                 {control?.reason ||

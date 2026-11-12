@@ -528,34 +528,44 @@ on every page. Every `ModelTag` passes `series` from `modelSeriesOf(useModelInde
 `series` prop is a bug. A count is `Tag kind="count"` (a failure count is `tone="danger"`), a fact such as Baseline,
 Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill.
 
-- **Status mark** (`StatusMark`, `RunStatusBadge`): the one status component. Every lifecycle or state of a
-  run, pass, job, experiment, review, request, version, credential, environment or save is a `StatusMark`. No pill,
-  outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project marks) in the status
-  tone, then the word with its first letter upper-cased (the rest as the caller gives it, so OK stays OK), `--font-base` / 600, `--tone-text`, at least `--badge-height` tall. The
-  figure's shape is the non-colour cue: `full` completed or succeeded, `check` approved or ready, `cross` failed or
-  rejected, `pause` stopped, cancelled, archived, disabled or revoked, `orbit` running, submitting, cancelling or
-  checking (the ring with its first pixel lit; static: an infinite animation would keep the page from settling),
-  `ring` pending, queued, not run or unknown, `hourglass` waiting on someone (submitted, paused, blocked, not sent), `dot` draft
-  or unsaved. Tones as the Status row of "Colour as information". Passive: no hover. Each domain keeps its own
-  status → tone and figure map next to its component (`RunStatusBadge`, `JobStatusBadge`, `ReviewStatusMark`, …).
-  `StatusMark` has no `data-tone` override; the `tone` prop is the only colour. The shared maps:
-  - Version: Published = `info` (blue) + `full`; Production (the version in use) = `success` (green) + `full` for a
-    rule version, and the `success` Flag "Production" with the `star` icon for a dataset version; Draft = `warning` +
-    `dot`. A running version or worker is the `info` `orbit` mark Running after the version; never a coloured word.
-  - Health (environments, queue, launch picker): Healthy `success` + `check`, Error `danger` + `cross`, Unknown
-    `neutral` + `ring`. Never a dot or a Tag.
-  - Live worker job: queued `neutral` `ring`, running `info` `orbit`, cancelling `warning` `orbit`, paused `neutral`
-    `hourglass`, done `success` `full`, failed `danger` `cross`, cancelled `warning` `pause`. Worker settings: running
-    `info` `orbit`, pending `neutral` `ring`, failed `danger` `cross`, waiting `neutral` `ring`.
-  - Feedback request: draft `warning` `dot`, new `neutral` `hourglass`, accepted `success` `check`, planned `neutral`
-    `hourglass`, done `success` `full`, declined `danger` `cross`.
-  - Item verdict: an item verdict (Pass, Fail, Error) is always the `StatusMark` of the Items table, also in pass heads,
-    the item bar and Compare cards; a partial repeat verdict is a `warning` `dot`.
-  - Check result: a check result reads name + OK in capitals; a raw key is shown in plain words (`judge_a` -> Judge A).
+- **Which style shows a state** (status rules, owner decision 2026-11-12). Ask in order; the first yes gives the style:
+  1. A step of a process (run, pass, job, experiment, analysis, review, feedback request, version)? A `StatusMark`.
+  2. A condition now, or the result of a check (health of an environment or worker, a connection, a credential, a
+     setting that is configured or not, an item's Pass or Fail, a SQL statement or check, a service call, a canary, a
+     turn diagnosis, a comparison verdict, a decision in a review log)? A `StateTag`.
+  3. An exception on an item that is normally on (archived project, disabled user, item or environment, revoked key or
+     token)? A grey `Flag` after the item's name: `archive` glyph for Archived, `ban` for Disabled and Revoked. The
+     normal state shows nothing, and a table has no Status column for an on/off state.
+  4. A save state? Plain text: `--text-muted`, `--error` only when the save failed. No figure.
 
-- **On/off state** (archived project, disabled user or item, revoked key or token): only the exception shows, as a
-  `StatusMark` (`warning`, `pause`) after the item's name. The normal state shows nothing, and a table has no Status
-  column for an on/off state. A single item's settings page shows the exception the same way, in its header.
+  A row may show a `StatusMark` and a `StateTag` together: a job can be Running on an environment that is Healthy.
+
+- **Status mark** (`StatusMark`, `RunStatusBadge`): the step of a process, and only that. No pill,
+  outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project marks) in the status
+  tone, then the word with its first letter upper-cased (the rest as the caller gives it, so OK stays OK), `--font-base` / 600, `--tone-text`, at least `--badge-height` tall.
+  Passive: no hover. Each domain keeps its own status → tone and figure map next to its component (`RunStatusBadge`,
+  `JobStatusBadge`, `ReviewStatusMark`, …). `StatusMark` has no `data-tone` override; the `tone` prop is the only
+  colour. One meaning per tone and figure:
+  - `info` + `orbit`: working now (running, submitting, analyzing, cancelling, stopping, retrying, cancel requested).
+    The orbit is the ring with its first pixel lit; static: an infinite animation would keep the page from settling.
+  - `warning`: a person is involved. `hourglass` waits for a person (submitted, awaiting review, blocked, new, a paused
+    maintenance job that waits for Start); `dot` draft or not submitted yet; `pause` a person stopped it (stopped,
+    cancelled); `full` partial or completed with errors.
+  - `neutral` + `ring`: not started (queued, pending, not run, planned, unknown). `neutral` + `pause`: paused or
+    replaced by the system, with no person (a worker job that the worker paused, a superseded proposal).
+  - `success`: ended well (`full` completed, succeeded, done; `check` approved, accepted).
+  - `danger` + `cross`: ended badly (failed, timed out, rejected, declined).
+  - Words: a job sent to the Evaluation Service is Sent (never Submitted, which is a run sent for review); a review that
+    waits for a reviewer is Awaiting review (never Pending, which is a run that has not started).
+  - Version (dataset and rule): Draft = `warning` + `dot`; the version in use is the `success` Flag "Production" with
+    the `star` icon; a released version that is not in use shows nothing, so green shows only on the version in use.
+
+- **State tag** (`StateTag`, `ui/Tag`): a condition now or the result of a check (rule 2 above). The tinted `Tag`
+  (`kind="state"`), sans, sentence case, no figure: a log line or a health never reads as a step. One meaning per tone:
+  `info` active now (the word Running is always `info`, also Live and Checking), `success` good (Healthy, OK, Pass,
+  Configured, Approved in a review log), `warning` needs a look (Not configured, Not received, Gap), `danger` bad
+  (Error, Fail, Stale, Rejected in a review log), neutral unknown, skipped, not yet or no verdict. A priority keeps its
+  own scale.
 
 - **Flag** (`Flag`): a fact attached to an item that is not a lifecycle (Private test set, Restricted, View only,
   Duplicate, Needs examples, Irreversible, a purge due date). An optional 12px glyph and the word in the tone
@@ -941,7 +951,7 @@ Recipes that exist only on the run report. They compose the primitives above and
   the hook writes `--head-shift` on the bar itself (a custom property is inherited: written on the item it restyled every descendant on every
   scroll event), and the bar is its own layer only while it is shifted (round 7, D1).
 
-- **Items table columns** (review group R2): #, Status (a `StatusMark`, no tinted pill), Input, one 120px centred score
+- **Items table columns** (review group R2): #, Status (the item result as a `StateTag`), Input, one 120px centred score
   column per metric (page metric first), Latency, then the open-trace action: a green action tile (`IconButton tile`) with
   the `trace` glyph and the tooltip "Open trace", in a normal last column that scrolls with the table (not pinned, C230).
   There is no Reason column (C017). The `list` glyph is for filters only; the compare output cards' Trace button uses
@@ -1042,7 +1052,8 @@ cross, trace clock, analysis sparkle), series keep their letter or name.
 | Encoding | Meaning | Tokens | Applied through | Rule |
 |---|---|---|---|---|
 | Band | quality of a value | `--score-1..5` | `ScoreValue` (text, pill), `ScoreBar`, `RateBar`, histogram buckets, `Card band`, stat values | direction-aware (`lib/metrics.ts`); a metric with no direction or a raw number stays neutral; an errored value shows Error in `--error` / `--metric-error`, never a band |
-| Status | lifecycle of a run, job, review, version | `--success` completed/succeeded/done/accepted/approved/production, `--accent-secondary` running (on every page, Live included)/published, `--error` failed/rejected, `--warning` stopped/draft/archived/disabled, neutral submitted/pending | `StatusMark` (`RunStatusBadge`) | the pixel figure's shape is the non-colour cue; running is the orbit figure; the done states of `--success` do not include Published; a boolean score is the Pass (success check) or Fail (danger cross) `StatusMark`, never coloured True/False words |
+| Status | step of a run, job, review, version | `--accent-secondary` working now, `--warning` a person is involved (waits: hourglass; stopped or cancelled: pause; draft: dot), neutral not started (ring) or paused by the system (pause), `--success` ended well, `--error` ended badly | `StatusMark` (`RunStatusBadge`) | the pixel figure's shape is the non-colour cue; running is the orbit figure |
+| State | condition now or result of a check | `--accent-secondary` active now (Running, Live, Checking), `--success` good, `--warning` needs a look, `--error` bad, neutral unknown or none | `StateTag` | tinted Tag, no figure; a boolean score is the Pass (success) or Fail (danger) `StateTag`, never coloured True/False words |
 | Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts; a delta in a table is a sign and an arrow in text, never a pill; item counts in the compare Averages cell use chevron Icons in the verdict colour (`--success` / `--error-text`), not typed arrows, and a change within the noise band shows no glyph there; relative latency is coloured words, +12% slower (`--error-text`) / −8% faster (`--success`), 2% or less muted, no arrow |
 | Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` (`--info` is the same blue as `--accent-secondary`: one blue) | 3px rail, glyph, title colour | rail and glyph, never a filled card; severity is a status mark in a table cell and a glyph before an inline tag; a category is never tinted by severity |
 | Kind (latency) | which kind of step | `--k-*` map to `--chart-N`: LLM sky (1), Eval pink (2), Retrieval amber (4), Agent lime (6), Guard cyan (7), Other slate (8); Tools orange (`--warning`) | latency kind marks | never teal, purple or a score colour; purple is not a kind colour |
@@ -1206,7 +1217,7 @@ rules for any future surface, not for the pages that taught them.
   A name or id that opens a page uses `a[data-link="name"]`: white at rest, green on hover, no underline (Q35 A). No
   `--accent-secondary` (blue) link anywhere. A green link (View all) takes `--accent-primary-hover` on hover.
 
-- **Nothing decorative where a glyph or a word will do** (round 8). Status is a `StatusMark`, not a pill; a filter's
+- **Nothing decorative where a glyph or a word will do** (round 8). A step is a `StatusMark` and a condition or result a `StateTag` (see "Which style shows a state"); a filter's
   value is written on its trigger, not repeated as a chip line; a score in a table is its number, not a bar; a project
   mark sits flush on its surface (the `Identicon` chip has no fill of its own); a three-dot menu glyph is drawn with
   4-unit dots so it is legible at 14px.

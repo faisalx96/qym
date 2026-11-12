@@ -5,7 +5,7 @@
 import type { ReactNode } from 'react';
 import { isTerminalJob, type CredentialState, type ExperimentDetail } from '@/api/experiments';
 import { formatHeaderDate, toDate } from '@/lib/dates';
-import { Eyebrow, InlineNotice, Text, StatusMark } from '@/ui';
+import { Eyebrow, Flag, InlineNotice, StateTag, Text } from '@/ui';
 import {
   CREDENTIALS_TITLE,
   CRED_API_KEY,
@@ -63,19 +63,17 @@ function CredBadge({
   label?: string;
   sent?: boolean;
 }) {
-  if (state.state === 'none') return <StatusMark tone="neutral" shape="ring" label="not issued" />;
+  if (state.state === 'none') return <StateTag tone="neutral">Not issued</StateTag>;
   if (state.state === 'revoked')
     return (
       <>
-        <StatusMark tone="warning" shape="pause" label="revoked" title={state.revoked_at ?? undefined} />
+        <Flag icon="ban" title={state.revoked_at ?? undefined}>
+          Revoked
+        </Flag>
         {label ? <Text as="span" variant="sm" tone="muted">{` ${label}`}</Text> : null}
       </>
     );
-  return sent ? (
-    <StatusMark tone="success" shape="full" label="active" />
-  ) : (
-    <StatusMark tone="warning" shape="hourglass" label="not sent" />
-  );
+  return sent ? <StateTag tone="success">Active</StateTag> : <StateTag tone="warning">Not sent</StateTag>;
 }
 
 /**

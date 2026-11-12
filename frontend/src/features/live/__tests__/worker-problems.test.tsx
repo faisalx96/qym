@@ -165,7 +165,7 @@ it('shows no Manage link and shows the problems badge only above zero with or wi
     '/projects/demo/live/worker?source=worker+%26+prod#problems',
   );
   expect(screen.getByText('Worker')).toBeVisible();
-  expect(screen.getByText('Running v3').closest('[data-shape]')).toHaveAttribute('data-tone', 'info');
+  expect(screen.getByText('Running v3').closest('[data-kind="state"]')).toHaveAttribute('data-tone', 'info');
   rerender(
     <MemoryRouter>
       <StatusLine slug="demo" source="worker" status={{ ...base, errors_last_hour: 0 }} />

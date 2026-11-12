@@ -5,7 +5,7 @@ import { adminKeys } from '@/api/admin';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
 import { ArchiveProjectDialog, UnarchiveProjectDialog } from '@/features/shell/dialogs';
-import { DataTable, Identicon, RelativeTime, SearchField, StatusMark, Text, type Column } from '@/ui';
+import { DataTable, Flag, Identicon, RelativeTime, SearchField, Text, type Column } from '@/ui';
 import styles from './projects.module.css';
 
 export interface ProjectsTableProps {
@@ -46,7 +46,9 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
             </Link>
             {/* on/off state: only the exception shows, after the name (no Status column) */}
             {p.is_active ? null : (
-              <StatusMark tone="warning" shape="pause" label="Archived" data-status="archived" />
+              <Flag icon="archive" data-status="archived">
+                Archived
+              </Flag>
             )}
           </span>
         ),

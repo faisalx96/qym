@@ -31,6 +31,8 @@ import {
   useToast,
   Flag,
   StatusMark,
+  type StatusShape,
+  type StatusTone,
 } from '@/ui';
 import { formatAgo } from '@/lib/dates';
 import { formatDateParts } from '@/lib/format';
@@ -79,11 +81,35 @@ export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canMana
   );
 }
 
+/** The version in use is the green star Flag, a draft is a StatusMark; a published version not in use shows nothing. */
 function stateBadge(v: RuleVersion, productionId: string | null) {
-  if (v.id === productionId || v.is_active)
-    return <StatusMark tone="success" shape="full" label="Production" />;
+  if (v.id === productionId || v.is_active) return <ProductionFlag />;
   if (v.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
-  return <StatusMark tone="info" shape="full" label="Published" />;
+  return null;
+}
+
+/** The rule generation job's mark by the word it shows: a phase while it works, else the job status. */
+function GenerationMark({ label }: { label: string }) {
+  const key = label.toLowerCase();
+  const [tone, shape]: [StatusTone, StatusShape] =
+    key === 'completed'
+      ? ['success', 'full']
+      : key === 'failed'
+        ? ['danger', 'cross']
+        : key === 'cancelled'
+          ? ['warning', 'pause']
+          : key === 'queued'
+            ? ['neutral', 'ring']
+            : ['info', 'orbit'];
+  return <StatusMark tone={tone} shape={shape} label={label} />;
+}
+
+function ProductionFlag() {
+  return (
+    <Flag tone="success" icon="star">
+      Production
+    </Flag>
+  );
 }
 
 function RulesView({
@@ -387,21 +413,7 @@ function RulesView({
           generator.job ? (
             <div className={s.genCard} role="status" aria-label="Rule generation progress">
               <div className={s.genHead}>
-                <StatusMark
-                  tone={
-                    generator.job.status === 'completed'
-                      ? 'success'
-                      : generator.job.status === 'failed'
-                        ? 'danger'
-                        : 'info'
-                  }
-                  shape={
-                    generator.job.status === 'completed'
-                      ? 'full'
-                      : generator.job.status === 'failed'
-                        ? 'cross'
-                        : 'orbit'
-                  }
+                <GenerationMark
                   label={
                     generator.job.status === 'running' ||
                     generator.job.status === 'queued' ||
@@ -575,7 +587,7 @@ function VersionWorkspace({
             <Flag tone={editable ? 'warning' : 'neutral'} icon={editable ? 'edit' : 'lock'}>
               {editable ? 'Editable draft' : version.status === 'draft' ? 'Draft (read-only)' : 'Read-only'}
             </Flag>
-            {isProduction ? <StatusMark tone="success" shape="full" label="Production" /> : null}
+            {isProduction ? <ProductionFlag /> : null}
             {editable ? (
               <Button
                 variant="primary"

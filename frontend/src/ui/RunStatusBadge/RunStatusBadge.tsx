@@ -26,7 +26,8 @@ const TONES: Record<string, StatusTone> = {
   STOPPED: 'warning',
   DRAFT: 'warning',
   PENDING: 'neutral',
-  SUBMITTED: 'neutral',
+  // sent and waits for a person (status rules 2026-11-12): warning + hourglass
+  SUBMITTED: 'warning',
 };
 
 const SHAPES: Record<string, StatusShape> = {

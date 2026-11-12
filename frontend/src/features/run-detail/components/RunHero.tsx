@@ -276,7 +276,8 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
   const stopping = !pass && (live.stopRequested || !!run.stop_requested) && liveNow;
   const scopedStatus = pass?.status ?? run.status ?? 'unknown';
   const statusText = stopping ? 'STOPPING…' : String(scopedStatus).toUpperCase();
-  const statusKey = stopping ? 'STOPPED' : String(scopedStatus).toUpperCase();
+  // a stop request on a live run is still working: STOPPING (info + orbit), not the STOPPED pause figure
+  const statusKey = stopping ? 'STOPPING' : String(scopedStatus).toUpperCase();
   const now = useTicker(liveNow);
   const timing = heroTiming(
     { ...run, status: liveNow ? 'RUNNING' : run.status },

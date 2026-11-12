@@ -28,7 +28,7 @@ import {
   NumberField,
   Section,
   Skeleton,
-  StatusMark,
+  StateTag,
   Text,
   useToast,
 } from '@/ui';
@@ -80,9 +80,9 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
         <div className={feedbackStyles.railHead}>
           <Text variant="md">Connection</Text>
           {data.configured ? (
-            <StatusMark tone="success" shape="full" label="Configured" />
+            <StateTag tone="success">Configured</StateTag>
           ) : (
-            <StatusMark tone="warning" shape="ring" label="Not configured" />
+            <StateTag tone="warning">Not configured</StateTag>
           )}
         </div>
       }

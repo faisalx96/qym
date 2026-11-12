@@ -11,7 +11,7 @@ import {
   JsonPreview,
   LinkButton,
   ScoreValue,
-  StatusMark,
+  StateTag,
   Tag,
   TextBlock,
 } from '@/ui';
@@ -390,11 +390,9 @@ export function OutputCard({
           {pill.state === 'none' ? (
             <span>—</span>
           ) : (
-            <StatusMark
-              tone={pill.state === 'pass' ? 'success' : 'danger'}
-              shape={pill.state === 'pass' ? 'check' : 'cross'}
-              label={pill.state === 'pass' ? 'Pass' : pill.state === 'fail' ? 'Fail' : 'Error'}
-            />
+            <StateTag tone={pill.state === 'pass' ? 'success' : 'danger'}>
+              {pill.state === 'pass' ? 'Pass' : pill.state === 'fail' ? 'Fail' : 'Error'}
+            </StateTag>
           )}
           {best ? (
             <Tag kind="data" tone="success" title="Highest score on this item">
