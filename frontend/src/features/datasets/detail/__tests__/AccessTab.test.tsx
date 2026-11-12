@@ -107,7 +107,8 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     // Save and Discard are disabled while nothing changed.
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
-    expect(screen.getByText('All changes saved')).toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument(); // cv4 E12: no text while nothing changed
   });
 
   it('choosing the restricted mode marks the section dirty and saves the full state with one PUT', async () => {
@@ -144,7 +145,8 @@ describe('Access tab (QA5-24 to QA5-62)', () => {
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Discard' }));
     expect(within(screen.getByTestId('access-grants-table')).getByText('Noura Alharbi')).toBeInTheDocument();
-    expect(screen.getByText('All changes saved')).toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument(); // cv4 E12: no text while nothing changed
   });
 
   it('adds a person at the chosen level', async () => {
@@ -293,7 +295,8 @@ describe('Access tab: new rules of the QA round', () => {
     expect(screen.queryByTestId('access-people')).not.toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: /Only people listed below/ }));
     expect(within(screen.getByTestId('access-grants-table')).getByText('Noura Alharbi')).toBeInTheDocument();
-    expect(screen.getByText('All changes saved')).toBeInTheDocument(); // back to the saved state is clean (QA5-47)
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument(); // cv4 E12: no text while nothing changed // back to the saved state is clean (QA5-47)
   });
 
   it('shows the grant date, Unknown user for a deleted granter and You / Not saved for a new row (QA5-40, QA5-41)', async () => {
@@ -332,7 +335,8 @@ describe('Access tab: new rules of the QA round', () => {
     await user.click(within(add).getByRole('button', { name: /Choose a project member/ }));
     await user.click(await screen.findByRole('option', { name: /Noura Alharbi/ }));
     await user.click(within(add).getByRole('button', { name: /^Add person$/ }));
-    expect(screen.getByText('All changes saved')).toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument(); // cv4 E12: no text while nothing changed
     expect(within(screen.getByTestId('access-grants-table')).getByText('Oct 20, 2026')).toBeInTheDocument();
   });
 

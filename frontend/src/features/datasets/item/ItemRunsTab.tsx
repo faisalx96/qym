@@ -82,6 +82,7 @@ export function ItemRunsTab({
           to={`${runPath(slug, r.run_id)}?item=${encodeURIComponent(r.item_id)}`}
           className={styles.runLink}
           data-link="name"
+          data-row-primary="" // cv4 E13
         >
           {r.run_name || r.external_run_id || r.run_id}
         </Link>

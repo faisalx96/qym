@@ -4,7 +4,8 @@
   flex-direction: column;
   position: sticky;
   top: var(--space-md);
-  max-height: calc(100vh - 200px);
+  /* cv4 E7: measured in ItemPane, from the pane's top to the bottom of the viewport */
+  height: var(--pane-height, calc(100vh - 200px));
   min-width: 0;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -35,15 +36,19 @@
 }
 
 .scroll {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: var(--space-md);
 }
 
+/* the fields fill the free height of the pane (cv4 E7) */
 .fields {
   display: flex;
   flex-direction: column;
+  flex: 1 0 auto;
   gap: var(--space-md);
 }
 

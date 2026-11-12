@@ -219,6 +219,7 @@ export function ItemsWorkspace({
           onAddItem={onAddItem}
           onImport={onImport}
           onRows={setRows}
+          activeKey={paneId}
           selection={editable ? { selected, onChange: setSelected } : undefined}
           onCreateDraft={onCreateDraft ? () => onCreateDraft() : undefined}
           onBatch={(action, criteria) => setBatch({ action, criteria })}

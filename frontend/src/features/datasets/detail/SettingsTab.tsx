@@ -133,6 +133,7 @@ export function SettingsTab({
             readOnly ? undefined : (
               <SaveFooter
                 dirty={dirty}
+                savedText="" // cv4 E12 (A4 rule): no state text while nothing changed
                 isDisabled={!name.trim()}
                 disabledReason={!name.trim() ? 'Enter a dataset name' : undefined}
                 saving={patch.isPending}
