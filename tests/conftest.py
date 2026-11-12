@@ -21,7 +21,10 @@ try:
 except ImportError:  # SDK-only environment without the platform's dependencies
     _platform_settings = None
 if _platform_settings is not None:
-    for _settings_cls in (_platform_settings.PlatformSettings, _platform_settings.ProductEvalSettings):
+    for _settings_cls in (
+        _platform_settings.PlatformSettings,
+        _platform_settings.ProductEvalSettings,
+    ):
         _settings_cls.model_config["env_file"] = None
     # Every platform app factory calls configure_logging() once per process.
     # Do it before any test so the first create_app() inside a test cannot
@@ -42,7 +45,9 @@ if dotenv is not None:
     _load_dotenv = dotenv.load_dotenv
 
     def _load_dotenv_outside_repo(dotenv_path=None, stream=None, *args, **kwargs):
-        if stream is None and (dotenv_path is None or Path(dotenv_path).resolve() == _repo_dotenv):
+        if stream is None and (
+            dotenv_path is None or Path(dotenv_path).resolve() == _repo_dotenv
+        ):
             return False
         return _load_dotenv(dotenv_path, stream, *args, **kwargs)
 
@@ -59,16 +64,19 @@ for _mod in ("arabic_reshaper", "bidi", "bidi.algorithm", "openpyxl"):
         _m.__path__ = []
         sys.modules[_mod] = _m
 
+
 @pytest.fixture
 def mock_langfuse():
     mock = MagicMock()
     return mock
+
 
 @pytest.fixture
 def mock_dataset():
     mock = MagicMock()
     mock.get_items.return_value = []
     return mock
+
 
 @pytest.fixture
 def mock_task():
@@ -109,20 +117,46 @@ def postgres_engine():
         admin.dispose()
 
 
-def pytest_collection_modifyitems(config, items):
-    """QYM_TEST_SHARD="K/N" keeps the K-th of N stable slices of the tests (CI runs N jobs in parallel).
+DURATIONS = Path(__file__).with_name(".test_durations.json")
+SMALL_TEST = (
+    0.15  # seconds: the mean CI time of the tests that the durations file leaves out
+)
 
-    A test's slice is a hash of its node id, so every xdist worker deselects the same tests.
+
+def duration_key(nodeid: str) -> str:
+    """The JUnit "classname::name" of a node id (the key of tests/.test_durations.json)."""
+    path, *parts = nodeid.split("::")
+    classname = ".".join([path[:-3].replace("/", ".")] + parts[:-1])
+    return f"{classname}::{parts[-1]}" if parts else classname
+
+
+def pytest_collection_modifyitems(config, items):
+    """QYM_TEST_SHARD="K/N" keeps the K-th of N slices of the tests (CI runs N jobs in parallel).
+
+    Slices have about equal time: tests/.test_durations.json holds each test's last CI time
+    (scripts/test_durations.py writes it from the CI JUnit files). The longest tests are placed
+    first, each in the slice with the least time so far; a test with no time (under 0.5 s, or new)
+    counts as SMALL_TEST seconds.
+    The order is fixed by time then node id, so every xdist worker keeps the same tests.
     """
     shard = os.environ.get("QYM_TEST_SHARD")
     if not shard:
         return
-    import zlib
+    import json
 
     index, total = (int(part) for part in shard.split("/"))
+    known = json.loads(DURATIONS.read_text()) if DURATIONS.is_file() else {}
+    cost = {
+        item.nodeid: known.get(duration_key(item.nodeid), SMALL_TEST) for item in items
+    }
+    loads = [0.0] * total
+    slot_of = {}
+    for nodeid in sorted(cost, key=lambda n: (-cost[n], n)):
+        slot = min(range(total), key=lambda k: (loads[k], k))
+        loads[slot] += cost[nodeid]
+        slot_of[nodeid] = slot
     keep, drop = [], []
     for item in items:
-        slot = zlib.crc32(item.nodeid.encode()) % total
-        (keep if slot == index - 1 else drop).append(item)
+        (keep if slot_of[item.nodeid] == index - 1 else drop).append(item)
     items[:] = keep
     config.hook.pytest_deselected(items=drop)
