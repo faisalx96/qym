@@ -3,7 +3,7 @@
  * one bar of where its time goes by kind, and the kind legend under it.
  */
 import { useMemo, useState } from 'react';
-import { Card, ChartTooltipHost, Mark, SegmentedControl, Text, Tag } from '@/ui';
+import { Card, CardTitle, ChartTooltipHost, Mark, SegmentedControl, Tag } from '@/ui';
 import {
   budgetBrackets,
   budgetSegments,
@@ -58,33 +58,34 @@ export function TimeBudget({ D }: { D: LatencyData }) {
   return (
     <Card as="section" className={styles.box} aria-label="Time budget">
       <div className={styles.inner}>
-        <div className={styles.head}>
-          <Text variant="md" weight={600} as="h4" className={styles.title}>
-            Time budget
-          </Text>
-          <div className={styles.headEnd}>
-            <ul className={styles.budgetLegend}>
-              {families.map((f) => (
-                <li key={f}>
-                  <i style={cssVars({ '--tone': FAMILY_TONE[f] })} aria-hidden="true" />
-                  {FAMILY_LABEL[f]} <b>{durText(byFamily[f]!)}</b>
-                  <em>{pct(byFamily[f]!, total).toFixed(0)}%</em>
-                </li>
-              ))}
-            </ul>
-            {hasAgents ? (
-              <SegmentedControl
-                label="Time budget grouping"
-                options={[
-                  { value: 'phase', label: 'By phase' },
-                  { value: 'agent', label: 'By agent' },
-                ]}
-                value={mode}
-                onChange={setMode}
-              />
-            ) : null}
-          </div>
-        </div>
+        <CardTitle
+          as="h4"
+          title="Time budget"
+          aside={
+            <div className={styles.headEnd}>
+              <ul className={styles.budgetLegend}>
+                {families.map((f) => (
+                  <li key={f}>
+                    <i style={cssVars({ '--tone': FAMILY_TONE[f] })} aria-hidden="true" />
+                    {FAMILY_LABEL[f]} <b>{durText(byFamily[f]!)}</b>
+                    <em>{pct(byFamily[f]!, total).toFixed(0)}%</em>
+                  </li>
+                ))}
+              </ul>
+              {hasAgents ? (
+                <SegmentedControl
+                  label="Time budget grouping"
+                  options={[
+                    { value: 'phase', label: 'By phase' },
+                    { value: 'agent', label: 'By agent' },
+                  ]}
+                  value={mode}
+                  onChange={setMode}
+                />
+              ) : null}
+            </div>
+          }
+        />
         <div className={styles.anatomy}>
           <div className={styles.summary}>
             <span>

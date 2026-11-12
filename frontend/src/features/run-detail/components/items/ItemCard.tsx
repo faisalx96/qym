@@ -5,11 +5,11 @@ import { textDirAttrs } from '@/lib/text';
 import { keyWithBreaks } from '@/lib/keyBreaks';
 import {
   Button,
+  CardTitle,
   CopyButton,
   FieldRow,
   StructuredValue,
   Tag,
-  Text,
   parseStructured,
   useStickyShift,
 } from '@/ui';
@@ -307,9 +307,7 @@ export function ItemCard({ row }: { row: Row }) {
           <section className={styles.metrics} aria-label="Metrics">
             {run.items_restricted || noVerdict ? (
               <>
-                <Text variant="md" weight={600} as="h3" className={styles.metricsTitle}>
-                  Metrics
-                </Text>
+                <CardTitle title="Metrics" />
                 <p className={styles.muted}>
                   {run.items_restricted
                     ? run.items_restricted_reason === 'dataset_access'

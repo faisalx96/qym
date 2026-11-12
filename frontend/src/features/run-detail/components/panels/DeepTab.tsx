@@ -6,7 +6,7 @@
  */
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePassesQuery } from '@/api/runs';
-import { Card, Select, Subsection, Text } from '@/ui';
+import { Card, CardTitle, Select, Subsection, Text } from '@/ui';
 import { useRunPage } from '../../RunContext';
 import { PassDistribution } from './PassDistribution';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
@@ -194,12 +194,7 @@ function DeepCard({
   return (
     <Card as="section" fill aria-label={title} className={styles.deepCard}>
       <div className={styles.deepHead}>
-        <div className={styles.deepRow}>
-          <Text variant="md" weight={600} as="h4" className={styles.deepTitle}>
-            {title}
-          </Text>
-          {controls}
-        </div>
+        <CardTitle as="h4" title={title} aside={controls} />
         <div className={styles.deepRow}>
           <Text variant="sm" tone="muted" as="p" className={styles.deepCaption}>
             {caption}

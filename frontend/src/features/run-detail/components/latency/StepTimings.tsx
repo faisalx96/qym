@@ -10,12 +10,13 @@ import {
   ActionTile,
   Button,
   Card,
+  CardTitle,
   ChartTooltipHost,
+  CountTile,
   DropdownMenu,
   Icon,
   SearchField,
   SegmentedControl,
-  Text,
   useMarkTip,
   Tag,
 } from '@/ui';
@@ -207,14 +208,11 @@ export const StepTimings = forwardRef<
     <Card as="section" ref={ref} id="lt-steps" className={styles.box} aria-label="Step timings">
       <div className={styles.inner}>
         <div className={styles.head}>
-          <div className={styles.titles}>
-            <Text variant="md" weight={600} as="h4" className={styles.title}>
-              Step timings
-            </Text>
-            <Text variant="sm" tone="muted" as="p" className={styles.desc}>
-              How long one call of each step takes, and how much it varies.
-            </Text>
-          </div>
+          <CardTitle
+            as="h4"
+            title="Step timings"
+            description="How long one call of each step takes, and how much it varies."
+          />
           {/* cv4 C2-1: the table toolbar on its own row, as the Items bar: search first, the toggles, Export at the end */}
           <div className={styles.tools} role="toolbar" aria-label="Step timings view">
             <SearchField
@@ -311,7 +309,7 @@ export const StepTimings = forwardRef<
                           </small>
                         </>
                       ) : null}
-                      {isGroup ? <span className={styles.count}>{countLeaves(node)}</span> : null}
+                      {isGroup ? <CountTile className={styles.count}>{countLeaves(node)}</CountTile> : null}
                     </span>
                   );
                   return (

@@ -27,19 +27,9 @@
   }
 }
 
+/* cv4 X16: the title row opens the card body, with no rule under it (the C2-3 card header recipe). */
 .passHead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xs) var(--space-md);
-}
-
-/* cv4 C1-9: the card title role (F10, --font-card-title; --font-md until it lands). */
-.title {
-  font-size: var(--font-card-title, var(--font-md));
-  font-weight: 600;
-  color: var(--text-primary);
+  margin-block-end: var(--space-md);
 }
 
 .passCard {

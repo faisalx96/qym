@@ -4,7 +4,7 @@
  * task errors as open red rings. The metric is the page metric from the sticky nav; the card has no picker.
  */
 import { useId } from 'react';
-import { Card, ChartTooltipHost, Text, useMarkTip } from '@/ui';
+import { Card, CardTitle, ChartTooltipHost, useMarkTip } from '@/ui';
 import { passThresholdLabel, type MetricDirection } from '@/lib/metrics';
 import { durText, niceStep, quantile, tickLabel, type LatencyItem } from '../../lib/latencyModel';
 import { useRunPage } from '../../RunContext';
@@ -106,19 +106,16 @@ export function QualityLatency({ items, metric }: { items: LatencyItem[]; metric
   return (
     <Card as="section" className={styles.box} aria-label="Quality versus latency">
       <div className={styles.inner}>
-        <div className={styles.head}>
-          <div className={styles.titles}>
-            <Text variant="md" weight={600} as="h4" className={styles.title}>
-              Quality vs latency
-            </Text>
-            <Text variant="sm" tone="muted" as="p" className={styles.desc}>
-              One dot per item.
-            </Text>
-          </div>
-          <span className={styles.metricName} title="The page metric (set in the section nav)">
-            {metric.name}
-          </span>
-        </div>
+        <CardTitle
+          as="h4"
+          title="Quality vs latency"
+          description="One dot per item."
+          aside={
+            <span className={styles.metricName} title="The page metric (set in the section nav)">
+              {metric.name}
+            </span>
+          }
+        />
         <ul className={styles.legend} aria-label="Legend">
           <li>
             <i className={styles.swZone} data-zone="good" aria-hidden="true" />

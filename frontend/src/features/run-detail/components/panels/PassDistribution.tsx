@@ -1,7 +1,7 @@
 /** "{metric} by pass" (round 3 P7): one box row per completed pass on a shared axis; a row opens that pass. */
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Tag } from '@/ui';
+import { Card, CardTitle, Tag } from '@/ui';
 import { boxAxis } from '../../lib/boxAxis';
 import { boxFormatter, boxTickFormatter, type BoxKind } from '../../lib/boxFormat';
 import { boxStats, type BoxStats } from '../../lib/boxStats';
@@ -67,19 +67,18 @@ export function PassDistribution({
   const x = (v: number) => axisPosition(v, axis.domain);
   const each = Math.max(...perPass.map((p) => p.stats.n));
   return (
-    <Card
-      as="section"
-      aria-label={`${metric} by pass`}
-      className={styles.passDist}
-      header={
-        <div className={styles.passHead}>
-          <span className={styles.title}>{metric} by pass</span>
+    <Card as="section" aria-label={`${metric} by pass`} className={styles.passDist}>
+      {/* cv4 X16: the card header recipe of C2-3 (CardTitle in the body, no rule under it) */}
+      <CardTitle
+        as="h4"
+        className={styles.passHead}
+        title={`${metric} by pass`}
+        aside={
           <Tag kind="count">
             {passes.length} passes · {each} items each
           </Tag>
-        </div>
-      }
-    >
+        }
+      />
       <div className={styles.passRows} role="group" aria-label={`${metric} distribution by pass`}>
         {perPass.map(({ pass, stats }: { pass: number; stats: BoxStats }) => (
           <button

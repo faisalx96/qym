@@ -6,7 +6,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError } from '@/lib/http';
 import { useIssueAction, useIssueBlocksQuery } from '@/api/runs';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, Disclosure, Icon, ReviewStatusMark, Tag, Text, Textarea, useToast } from '@/ui';
+import { Button, CardTitle, Disclosure, Icon, ReviewStatusMark, Tag, Textarea, useToast } from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
 import { useRunPage } from '../../RunContext';
@@ -107,22 +107,27 @@ function Card({
       data-metric={metric}
     >
       <div className={styles.stack}>
-        <header className={styles.head}>
-          <Text variant="md" weight={600} as="h5" className={styles.title}>
-            {metric}
-          </Text>
-          {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
-          {canEdit && !form ? (
-            <Button
-              icon={<Icon name="plus" size={12} />}
-              size="sm"
-              variant="neutral"
-              onPress={() => setForm({ key: '', issue: null })}
-            >
-              Add issue
-            </Button>
-          ) : null}
-        </header>
+        <CardTitle
+          as="h5"
+          title={metric}
+          aside={
+            analysis?.error || (canEdit && !form) ? (
+              <>
+                {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
+                {canEdit && !form ? (
+                  <Button
+                    icon={<Icon name="plus" size={12} />}
+                    size="sm"
+                    variant="neutral"
+                    onPress={() => setForm({ key: '', issue: null })}
+                  >
+                    Add issue
+                  </Button>
+                ) : null}
+              </>
+            ) : undefined
+          }
+        />
         {analysis?.error ? <p className={styles.errorText}>{String(analysis.error)}</p> : null}
         {issues.length === 0 && !analysis?.error ? (
           <p className={styles.muted}>No issues recorded for this metric.</p>
@@ -346,11 +351,7 @@ function LegacyDiagnosis({ md }: { md: Record<string, unknown> }) {
   return (
     <section className={styles.metricRow} aria-label="Legacy diagnosis">
       <div className={styles.stack}>
-        <header className={styles.head}>
-          <Text variant="md" weight={600} as="h5" className={styles.title}>
-            Diagnosis (legacy)
-          </Text>
-        </header>
+        <CardTitle as="h5" title="Diagnosis (legacy)" />
         <p className={styles.finding}>
           {rootCauseCategories(md).join(', ')}
           {md.root_cause_detail ? ` · ${String(md.root_cause_detail)}` : ''}

@@ -8,7 +8,7 @@ export interface CardTitleProps {
   /** Controls on the title row, at its end (a Select, a SegmentedControl, an Export button). */
   aside?: ReactNode;
   /** Heading level (default h3). */
-  as?: 'h2' | 'h3' | 'h4';
+  as?: 'h2' | 'h3' | 'h4' | 'h5';
   id?: string;
   className?: string;
 }

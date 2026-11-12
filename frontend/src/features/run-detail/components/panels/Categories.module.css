@@ -39,10 +39,6 @@
   min-width: 0;
 }
 
-.keyTitle {
-  margin: 0;
-}
-
 /* Value cards (the first qym's): the value name in its band colour, three facts, a bar with the overall tick. */
 .valueGrid {
   display: grid;
@@ -124,22 +120,6 @@
 
 .catCard {
   min-width: 0;
-}
-
-.head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xs) var(--space-md);
-  min-block-size: var(--control-height);
-}
-
-.headRight {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-md);
 }
 
 .legend {

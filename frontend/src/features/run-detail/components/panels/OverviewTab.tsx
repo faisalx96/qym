@@ -7,7 +7,7 @@
  * traces carry them. Cost per item is not shown: every attempt reports it by default, so it says nothing about the run.
  */
 import { useMemo } from 'react';
-import { Card, EmptyState, HelpMarker, Icon, Tag } from '@/ui';
+import { Card, CardTitle, EmptyState, HelpMarker, Icon, Tag } from '@/ui';
 import { useRunPage } from '../../RunContext';
 import { metricBand } from '@/lib/metrics';
 import { metricPassesFor } from '../../lib/filterRules';
@@ -85,16 +85,9 @@ function CardFoot({ note, reserve }: { note: MetricCardModel['errorNote']; reser
   );
 }
 
-/** cv4 C1-3, C1-4: the card's title row: the name as the card title, the count at the end. */
+/** cv4 C1-3, C1-4: the card's title row: the name as the card title (CardTitle, cv4 X1), the count at the end. */
 function CardHead({ title, hint, end }: { title: string; hint?: string; end: React.ReactNode }) {
-  return (
-    <div className={styles.metricHead}>
-      <h3 className={styles.metricName} title={hint}>
-        {title}
-      </h3>
-      <span className={styles.metricEnd}>{end}</span>
-    </div>
-  );
+  return <CardTitle title={<span title={hint}>{title}</span>} aside={end} />;
 }
 
 function ScoreCard({ card, reserveFoot }: { card: MetricCardModel; reserveFoot: boolean }) {

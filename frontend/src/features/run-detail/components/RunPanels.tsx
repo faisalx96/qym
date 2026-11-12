@@ -4,6 +4,7 @@ import { projectPath } from '@/app/routes';
 import { JobStatusBadge } from '@/features/experiments/components/StatusBadges';
 import {
   Card,
+  CardTitle,
   Disclosure,
   Flag,
   InlineNotice,
@@ -208,47 +209,47 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
   if (p.error) fields.push(['Job error', String(p.error), true]);
   return (
     <Card as="section" aria-labelledby="rxp-title" data-testid="experiment-panel">
-      <div className={styles.expHead}>
-        <div>
-          <div className={styles.titleRow}>
-            <h2 className={styles.title} id="rxp-title">
-              Experiment
-            </h2>
+      <CardTitle
+        as="h2"
+        id="rxp-title"
+        title={
+          <span className={styles.titleRow}>
+            Experiment
             <Flag tone="info" icon="shield">
               Official run
             </Flag>
-          </div>
-          <div className={styles.copy}>
-            Launched by qym on a registered environment. Settings show this run’s combination.
-          </div>
-        </div>
-        <div className={styles.actions}>
-          {experimentHref ? (
-            <LinkButton to={experimentHref} variant="neutral" size="sm">
-              Open experiment
-            </LinkButton>
-          ) : null}
-          {rerunHref ? (
-            <LinkButton
-              to={rerunHref}
-              variant="accent"
-              size="sm"
-              title="Open the launch form prefilled with this run’s configuration"
-            >
-              Run again
-            </LinkButton>
-          ) : (
-            <span className={styles.disabledHint} title="The experiment no longer exists">
-              Run again unavailable
-            </span>
-          )}
-          {promoteHref && promotable ? (
-            <LinkButton to={promoteHref} variant="neutral" size="sm">
-              Promote to default preset
-            </LinkButton>
-          ) : null}
-        </div>
-      </div>
+          </span>
+        }
+        description="Launched by qym on a registered environment. Settings show this run’s combination."
+        aside={
+          <>
+            {experimentHref ? (
+              <LinkButton to={experimentHref} variant="neutral" size="sm">
+                Open experiment
+              </LinkButton>
+            ) : null}
+            {rerunHref ? (
+              <LinkButton
+                to={rerunHref}
+                variant="accent"
+                size="sm"
+                title="Open the launch form prefilled with this run’s configuration"
+              >
+                Run again
+              </LinkButton>
+            ) : (
+              <span className={styles.disabledHint} title="The experiment no longer exists">
+                Run again unavailable
+              </span>
+            )}
+            {promoteHref && promotable ? (
+              <LinkButton to={promoteHref} variant="neutral" size="sm">
+                Promote to default preset
+              </LinkButton>
+            ) : null}
+          </>
+        }
+      />
       {!p.job_available ? (
         <p className={styles.note}>
           The launch job is no longer available; showing the configuration stored on the run.

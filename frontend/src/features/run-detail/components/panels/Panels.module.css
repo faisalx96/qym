@@ -229,32 +229,6 @@
   min-width: 0;
 }
 
-.metricHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-sm) var(--space-md);
-  min-width: 0;
-}
-
-/* The card title role (F10, --font-card-title; --font-md until it lands). A name wraps, it is never cut. */
-.metricName {
-  min-width: 0;
-  margin: 0;
-  font-size: var(--font-card-title, var(--font-md));
-  font-weight: 600;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  color: var(--text-primary);
-}
-
-.metricEnd {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
 .metricScore {
   display: flex;
   align-items: center;
@@ -518,13 +492,6 @@
   gap: var(--space-xs) var(--space-md);
 }
 
-.deepTitle {
-  display: flex;
-  align-items: center;
-  min-block-size: var(--control-height);
-  margin: 0;
-}
-
 .deepCaption {
   margin: 0;
 }
@@ -657,9 +624,13 @@
 
 .errHead {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-sm);
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+/* cv4 X1: the kind is a card title (CardTitle), its meaning the caption below; the icon tile sits at its start */
+.errKindHead {
+  flex: 1;
 }
 
 .errIcon {
@@ -673,17 +644,9 @@
   color: var(--err);
 }
 
-/* the kind's name in its colour; the size is the shared Text md role */
-.errHead > .errKind {
-  margin: 0;
+/* the kind's name in its colour; the size is the card title role */
+.errKind {
   color: var(--err);
-}
-
-.errMeaning {
-  flex: 1 1 24rem;
-  margin: 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
 }
 
 .errGrid {

@@ -19,18 +19,6 @@
   gap: var(--space-md);
 }
 
-.titles {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.title,
-.desc {
-  margin: 0;
-}
-
 .tools {
   display: flex;
   flex-wrap: wrap;
@@ -240,12 +228,10 @@ button.label:focus-visible {
   color: inherit;
 }
 
+/* cv4 X16: the group's leaf count is the one count badge (CountTile), as the tab and nav counts. */
 .count {
-  margin-left: 6px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  font-weight: 600;
+  margin-inline-start: 6px;
+  vertical-align: middle;
 }
 
 .chev {

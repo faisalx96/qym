@@ -1,22 +1,10 @@
 /* Run-page cards: review history, experiment, versioning, lock notices. */
-/* cv4 C1-9: a card title takes the card title role (F10, --font-card-title; --font-md until it lands). */
-.title {
-  margin: 0;
-  font-size: var(--font-card-title, var(--font-md));
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
+/* The Experiment title (CardTitle, cv4 X1) and its Official run flag on one line. */
 .titleRow {
-  display: flex;
+  display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
-}
-
-.copy {
-  margin-top: 2px;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
 }
 
 .list {
@@ -88,19 +76,6 @@
   font-family: var(--font-mono);
   font-size: var(--font-base);
   color: var(--text-primary);
-}
-
-.expHead {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
 }
 
 .disabledHint {

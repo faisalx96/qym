@@ -15,17 +15,6 @@
   padding-block: var(--space-xs);
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-}
-
-.title {
-  margin: 0;
-}
-
 .headEnd {
   display: flex;
   align-items: center;

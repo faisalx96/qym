@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatLatency, formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
 import { applyQueryUpdates } from '@/lib/url-state';
-import { Button, Card, Checkbox, CountTile, EmptyState, SegmentedControl, Select, Text } from '@/ui';
+import { Button, Card, CardTitle, Checkbox, CountTile, EmptyState, SegmentedControl, Select } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   barFraction,
@@ -239,9 +239,7 @@ function KeyCards({
   const tick = barFraction(b.overallAverage, max);
   return (
     <section className={styles.keyBlock} aria-label={categoryKey}>
-      <Text variant="md" weight={600} as="h4" className={styles.keyTitle}>
-        {categoryKey}
-      </Text>
+      <CardTitle as="h4" title={categoryKey} />
       <div className={styles.valueGrid} role="group" aria-label={`Values of ${categoryKey}`}>
         {ordered.map((g) => {
           const on = isOn(g.value);
@@ -317,17 +315,16 @@ function KeyCard({
       aria-label={b.key}
       className={styles.catCard}
       header={
-        <div className={styles.head}>
-          <Text variant="md" weight={600} as="h4" className={styles.keyTitle}>
-            {b.key}
-          </Text>
-          <span className={styles.headRight}>
+        <CardTitle
+          as="h4"
+          title={b.key}
+          aside={
             <span className={styles.legend}>
               <span className={styles.tickKey} aria-hidden="true" />
               Overall average
             </span>
-          </span>
-        </div>
+          }
+        />
       }
     >
       <div className={styles.cols} aria-hidden="true">
