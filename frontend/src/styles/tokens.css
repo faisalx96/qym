@@ -285,6 +285,9 @@
   --focus-ring: 0 0 0 2px rgba(0, 212, 170, 0.15);
   --shadow-popover: 0 12px 28px rgba(0, 0, 0, 0.38);
   --shadow-dialog: 0 20px 60px rgba(0, 0, 0, 0.5);
+  /* cv4: a sticky bar of a page (an action bar under a table) stacks over the sticky header and pinned-column layers
+     of ui/DataTable (up to 6), under every popover. */
+  --z-sticky-bar: 10;
   --z-dropdown: 100;
   --z-dialog: 9998;
   --z-toast: 9999;
@@ -306,6 +309,10 @@
   --table-group-height: 24px;
   --table-footer-height: 40px;
   --bg-selected: rgba(0, 212, 170, 0.08);
+  /* cv4 F11: one row ladder for data tables. Stripe (--stripe-step, faint and neutral) < hover (a stronger, accent
+     tinted tone) < selected (the strongest accent wash, with the 2px accent rail). Three states never look the same. */
+  --row-hover: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-hover));
+  --row-selected: color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 
 /* ── Visual language (redesign round 2; DESIGN_LANGUAGE §3 "Colour as information") ──
