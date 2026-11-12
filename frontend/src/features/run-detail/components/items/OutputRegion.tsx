@@ -14,6 +14,7 @@ import {
   SegmentedControl,
   StatusMark,
   Tag,
+  Text,
   TextBlock,
   allPaths,
   parseStructured,
@@ -88,7 +89,9 @@ export function OutputRegion({
   return (
     <section className={styles.region} aria-label="Output" data-kind="output">
       <div className={styles.head}>
-        <h3 className={styles.title}>Output</h3>
+        <Text variant="md" weight={600} as="h3" className={styles.title}>
+          Output
+        </Text>
         <span className={styles.meta}>
           {multi
             ? `${cols.length} of ${passes.length} passes shown`

@@ -6,7 +6,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError } from '@/lib/http';
 import { useIssueAction, useIssueBlocksQuery } from '@/api/runs';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, Disclosure, Icon, ReviewStatusMark, Tag, Textarea, useToast } from '@/ui';
+import { Button, Disclosure, Icon, ReviewStatusMark, Tag, Text, Textarea, useToast } from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
 import { useRunPage } from '../../RunContext';
@@ -108,7 +108,9 @@ function Card({
     >
       <div className={styles.stack}>
         <header className={styles.head}>
-          <h5 className={styles.title}>{metric}</h5>
+          <Text variant="md" weight={600} as="h5" className={styles.title}>
+            {metric}
+          </Text>
           {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
           {canEdit && !form ? (
             <Button
@@ -345,7 +347,9 @@ function LegacyDiagnosis({ md }: { md: Record<string, unknown> }) {
     <section className={styles.metricRow} aria-label="Legacy diagnosis">
       <div className={styles.stack}>
         <header className={styles.head}>
-          <h5 className={styles.title}>Diagnosis (legacy)</h5>
+          <Text variant="md" weight={600} as="h5" className={styles.title}>
+            Diagnosis (legacy)
+          </Text>
         </header>
         <p className={styles.finding}>
           {rootCauseCategories(md).join(', ')}

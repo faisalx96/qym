@@ -6,7 +6,7 @@
  */
 import { useMemo, useRef, useState } from 'react';
 import { formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
-import { Button, DataTable, Icon, IconButton, ScoreValue, Tag, type Column } from '@/ui';
+import { Button, DataTable, Icon, IconButton, ScoreValue, Tag, Text, type Column } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   DEFAULT_METRIC_ROWS,
@@ -248,7 +248,9 @@ export function MetricMatrix({
   return (
     <div ref={rootRef} className={styles.matrix}>
       <div className={styles.head}>
-        <h3 className={styles.title}>Metrics</h3>
+        <Text variant="md" weight={600} as="h3" className={styles.title}>
+          Metrics
+        </Text>
         <span className={styles.summary} data-testid="matrix-summary">
           {matrixSummary({
             shown: visible.length,

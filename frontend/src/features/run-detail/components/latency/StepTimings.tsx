@@ -215,7 +215,8 @@ export const StepTimings = forwardRef<
               How long one call of each step takes, and how much it varies.
             </Text>
           </div>
-          <div className={styles.tools}>
+          {/* cv4 C2-1: the table toolbar on its own row, as the Items bar: search first, the toggles, Export at the end */}
+          <div className={styles.tools} role="toolbar" aria-label="Step timings view">
             <SearchField
               label="Search steps and models"
               hideLabel
@@ -243,30 +244,32 @@ export const StepTimings = forwardRef<
               value={view.scale}
               onChange={(scale) => patch({ scale })}
             />
-            <DropdownMenu
-              label="Export step timings"
-              trigger={
-                <Button
-                  variant="accent"
-                  icon={<Icon name="download" size={12} />}
-                  iconEnd={<Icon name="chevron-down" size={12} />}
-                >
-                  Export
-                </Button>
-              }
-              items={[
-                { id: 'csv-summary', label: 'CSV summary', icon: <ActionTile icon="sheet" /> },
-                { id: 'csv-spans', label: 'CSV raw spans', icon: <ActionTile icon="sheet" /> },
-                {
-                  id: 'svg',
-                  label: 'SVG plot',
-                  icon: <ActionTile icon="picture" />,
-                  disabled: !rows.length,
-                  disabledReason: rows.length ? undefined : 'No step matches the search',
-                },
-              ]}
-              onAction={onExport}
-            />
+            <span className={styles.toolsEnd}>
+              <DropdownMenu
+                label="Export step timings"
+                trigger={
+                  <Button
+                    variant="accent"
+                    icon={<Icon name="download" size={12} />}
+                    iconEnd={<Icon name="chevron-down" size={12} />}
+                  >
+                    Export
+                  </Button>
+                }
+                items={[
+                  { id: 'csv-summary', label: 'CSV summary', icon: <ActionTile icon="sheet" /> },
+                  { id: 'csv-spans', label: 'CSV raw spans', icon: <ActionTile icon="sheet" /> },
+                  {
+                    id: 'svg',
+                    label: 'SVG plot',
+                    icon: <ActionTile icon="picture" />,
+                    disabled: !rows.length,
+                    disabledReason: rows.length ? undefined : 'No step matches the search',
+                  },
+                ]}
+                onAction={onExport}
+              />
+            </span>
           </div>
         </div>
         {tree.length ? (

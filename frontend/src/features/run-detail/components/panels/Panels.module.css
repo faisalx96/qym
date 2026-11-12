@@ -498,12 +498,43 @@
   color: var(--text-primary);
 }
 
-.relationIntro {
+/* cv4 C2-3: one header for both Deep analysis cards. Row 1: title, controls at the end; row 2: the caption directly
+   under the title, the legend at the end. No rule under it (as the latency cards). */
+.deepCard {
+  min-width: 0;
+}
+
+.deepHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deepRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-xs) var(--space-md);
+}
+
+.deepTitle {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height);
+  margin: 0;
+}
+
+.deepCaption {
+  margin: 0;
+}
+
+.deepPlot {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  margin-block-start: var(--space-md);
 }
 
 /* A pair whose columns share one height (latency histogram beside the scatter). */
@@ -642,10 +673,9 @@
   color: var(--err);
 }
 
-.errKind {
+/* the kind's name in its colour; the size is the shared Text md role */
+.errHead > .errKind {
   margin: 0;
-  font-size: var(--font-md);
-  font-weight: 650;
   color: var(--err);
 }
 
@@ -699,12 +729,6 @@
   min-width: 0;
 }
 
-.errNums {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
 .errCount {
   font-family: var(--font-mono);
   font-size: var(--font-xl);
@@ -712,12 +736,6 @@
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   color: var(--err);
-}
-
-.errUnit {
-  font-size: var(--font-sm);
-  white-space: nowrap;
-  color: var(--text-muted);
 }
 
 /* its share of the kind's errors */
