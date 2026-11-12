@@ -520,10 +520,44 @@ def _redact_metric_meta(meta: Any, placeholder: str = PRIVATE_TEST_SET_PLACEHOLD
     return safe
 
 
-def _redact(value: Any, placeholder: str = PRIVATE_TEST_SET_PLACEHOLDER) -> None:
+# Item metadata keys carrying category labels (``topic``, ``difficulty``,
+# ``language``...) are not item content: the run page's breakdown by category
+# is an aggregate over them. A reader without access to a restricted dataset
+# keeps those labels; a value that could quote the item does not survive: free
+# text keys (``note``, ``reason``...), nested objects (metric analyses, trace
+# stats) and any string longer than a label.
+_METADATA_LABEL_KEYS = frozenset({"metadata", "item_metadata", "metadata_snapshot"})
+_METADATA_LABEL_MAX_CHARS = 80
+
+
+def _is_label(value: Any) -> bool:
+    if value is None or isinstance(value, (bool, int, float)):
+        return True
+    return isinstance(value, str) and len(value) <= _METADATA_LABEL_MAX_CHARS
+
+
+def category_metadata(metadata: Any) -> dict[str, Any]:
+    """The category labels of an item's metadata: short scalars and lists of them,
+    under keys that are not free text. Everything else is dropped."""
+    if not isinstance(metadata, dict):
+        return {}
+    safe: dict[str, Any] = {}
+    for key, value in metadata.items():
+        if not isinstance(key, str) or _is_content_key(key):
+            continue
+        if _is_label(value):
+            safe[key] = value
+        elif isinstance(value, list) and value and all(_is_label(entry) for entry in value):
+            safe[key] = list(value)
+    return safe
+
+
+def _redact(
+    value: Any, placeholder: str = PRIVATE_TEST_SET_PLACEHOLDER, keep_labels: bool = False
+) -> None:
     if isinstance(value, list):
         for entry in value:
-            _redact(entry, placeholder)
+            _redact(entry, placeholder, keep_labels)
         return
     if not isinstance(value, dict):
         return
@@ -536,10 +570,12 @@ def _redact(value: Any, placeholder: str = PRIVATE_TEST_SET_PLACEHOLDER) -> None
         elif isinstance(key, str) and _is_content_key(key):
             if entry not in (None, "", [], {}):
                 value[key] = placeholder
+        elif keep_labels and key in _METADATA_LABEL_KEYS:
+            value[key] = category_metadata(entry) if isinstance(entry, dict) else entry if entry is None else {}
         elif key in _ITEM_CONTENT_CLEARED_KEYS:
             value[key] = [] if isinstance(entry, list) else {} if isinstance(entry, dict) else None
         else:
-            _redact(entry, placeholder)
+            _redact(entry, placeholder, keep_labels)
 
 
 def placeholder_for(reason: Optional[str]) -> str:
@@ -547,17 +583,28 @@ def placeholder_for(reason: Optional[str]) -> str:
     return DATASET_ACCESS_PLACEHOLDER if reason == "dataset_access" else PRIVATE_TEST_SET_PLACEHOLDER
 
 
+def keeps_metadata_labels(reason: Optional[str]) -> bool:
+    """Whether the item metadata's category labels stay visible under ``reason``.
+
+    A restricted dataset hides the items' contents, not the run's breakdown by
+    category (the labels are aggregated, never quoted). A private test set is
+    stricter: its item metadata is admin-only."""
+    return reason == "dataset_access"
+
+
 def redact_item_content(payload: Any, reason: Optional[str] = None) -> Any:
     """Redact item content in place from an item-shaped dict (or a list of
     them), recursing into nested values such as ``pass_attempts`` and metric
     explanations. Marks each top-level dict ``content_restricted``. ``reason`` is
     ``items_restricted_reason``: ``dataset_access`` words the placeholder for a
-    restricted dataset, anything else keeps the private-test-set text."""
+    restricted dataset and keeps the metadata's category labels
+    (:func:`category_metadata`); anything else keeps the private-test-set text
+    and clears the metadata."""
     if isinstance(payload, list):
         for entry in payload:
             redact_item_content(entry, reason)
         return payload
     if isinstance(payload, dict):
-        _redact(payload, placeholder_for(reason))
+        _redact(payload, placeholder_for(reason), keeps_metadata_labels(reason))
         payload["content_restricted"] = True
     return payload
