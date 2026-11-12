@@ -301,12 +301,17 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     await expect(signal).toBeVisible();
     await expect(signal).toHaveAttribute('href', /pass=2#errors$/);
     await expect(rows.first().locator('td[data-col="status"]').getByRole('link')).toHaveCount(0);
-    // inherited facts stay empty, own values are shown
-    for (let n = 0; n < 3; n++)
-      for (const id of ['task', 'model', 'dataset', 'owner', 'experiment', 'version']) {
+    // the run's Task, Model, Dataset and Owner repeat on each pass row (cv4 B2); Experiment and Version stay empty
+    for (let n = 0; n < 3; n++) {
+      for (const id of ['task', 'model', 'dataset', 'owner']) {
+        const c = rows.nth(n).locator(`td[data-col="${id}"]`);
+        if (await c.count()) expect((await c.textContent())?.trim()).not.toBe('');
+      }
+      for (const id of ['experiment', 'version']) {
         const c = rows.nth(n).locator(`td[data-col="${id}"]`);
         if (await c.count()) expect((await c.textContent())?.trim()).toBe('');
       }
+    }
     // no idle Analyze button in the row: auto-analysis is the first item of the pass's row menu
     await expect(rows.first().getByRole('link', { name: /^Analyze pass 1/ })).toHaveCount(0);
     for (const id of ['latency', 'duration', 'metric-quality', 'metric-accuracy']) {

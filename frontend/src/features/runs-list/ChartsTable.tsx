@@ -1,10 +1,12 @@
 /**
  * The Charts card table on the shared DataTable: runs as rows, scores as centred numbers in their band colour with the
- * best value of each column in bold (C149), latency/tokens as relative-scale bars. Grouped mode: one level uses `groupBy` (summary
- * aggregates under the columns); version/model nesting renders both levels as aggregate rows.
+ * best value of each column in bold (C149), latency/tokens as relative-scale bars. Grouped mode: each group is an
+ * aggregate row (one level, or version/model nesting) and its runs follow it while it is open. Group rows are ordinary
+ * table rows (cv4 B5): they take the zebra stripe and the hover of the table, and a click anywhere on one (or Enter)
+ * opens or closes it; a run row opens its run.
  */
 import { useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button as AriaButton } from 'react-aria-components';
 import type { MetricType } from '@/api/dashboardTypes';
 import { DataTable, Icon, NumberCell, ScoreBar, ScoreValue, Tag, Text, Tooltip, type Column } from '@/ui';
@@ -42,8 +44,6 @@ interface RunRowT {
   run: ChartRun;
   /** Indent depth (0 = flat, 1 = under a group, 2 = under a sub-group). */
   depth: 0 | 1 | 2;
-  /** `groupBy` path: the id of the group the run belongs to. */
-  gid?: string;
 }
 interface GroupRowT {
   kind: 'group';
@@ -134,7 +134,7 @@ function GroupStat({
 
 export function ChartsTable(p: ChartsTableProps) {
   const { slug, groupMode, groups, runs } = p;
-  const nested = groups.some((g) => g.children);
+  const navigate = useNavigate();
   const grouped = groupMode !== 'run';
   const [toggled, setToggled] = useState<Set<string>>(new Set());
   const toggle = (id: string) =>
@@ -144,31 +144,27 @@ export function ChartsTable(p: ChartsTableProps) {
       else n.add(id);
       return n;
     });
-  const groupById = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
 
   const rows = useMemo<Row[]>(() => {
-    const run = (r: ChartRun, depth: 0 | 1 | 2, gid?: string): RunRowT => ({
-      kind: 'run',
-      id: r.run_id,
-      run: r,
-      depth,
-      gid,
-    });
+    const run = (r: ChartRun, depth: 0 | 1 | 2): RunRowT => ({ kind: 'run', id: r.run_id, run: r, depth });
     if (!grouped) return runs.map((r) => run(r, 0));
-    if (!nested) return groups.flatMap((g) => g.runs.map((r) => run(r, 1, g.id)));
     const out: Row[] = [];
     for (const g of groups) {
       const open = p.defaultOpen !== toggled.has(g.id);
       out.push({ kind: 'group', id: g.id, g, level: 1, open });
       if (!open) continue;
-      for (const c of g.children ?? []) {
+      if (!g.children) {
+        for (const r of g.runs) out.push(run(r, 1));
+        continue;
+      }
+      for (const c of g.children) {
         const cOpen = p.defaultOpen !== toggled.has(c.id);
         out.push({ kind: 'group', id: c.id, g: c, level: 2, open: cOpen });
         if (cOpen) for (const r of c.runs) out.push(run(r, 2));
       }
     }
     return out;
-  }, [grouped, nested, runs, groups, p.defaultOpen, toggled]);
+  }, [grouped, runs, groups, p.defaultOpen, toggled]);
 
   const firstSortable = !(groupMode === 'version' || groupMode === 'version-model');
   const columns = useMemo<Column<Row>[]>(() => {
@@ -187,7 +183,7 @@ export function ChartsTable(p: ChartsTableProps) {
           </AriaButton>
         ) : null}
         {g.kind === 'model' && g.model ? <ModelMark modelKey={g.model} size="md" /> : null}
-        <Text variant="base" as="span" weight={600} tone="primary">
+        <Text variant="base" as="span" weight={600} tone="primary" data-row-primary="">
           {g.label}
         </Text>
         <Tag kind="count">{g.runs.length} runs</Tag>
@@ -214,7 +210,12 @@ export function ChartsTable(p: ChartsTableProps) {
         return (
           <span className={styles.head} data-depth={row.depth}>
             <ModelMark modelKey={r.model} />
-            <Link to={runPath(slug, r.run_id)} className={styles.rowLink} title={r.run_name}>
+            <Link
+              to={runPath(slug, r.run_id)}
+              className={styles.rowLink}
+              title={r.run_name}
+              data-row-primary=""
+            >
               {dateLabel ? `${date.date} · ${date.time}` : modelLabel(r.model)}
             </Link>
             {!dateLabel ? <Mono className={styles.rowDate}>{date.date}</Mono> : null}
@@ -228,18 +229,6 @@ export function ChartsTable(p: ChartsTableProps) {
       },
     });
 
-    const groupOfRows = (rs: Row[]): ChartGroup | undefined => {
-      const first = rs[0];
-      return first && first.kind === 'run' && first.gid ? groupById.get(first.gid) : undefined;
-    };
-    /** `summary` for the groupBy path, built from the group the rows belong to. */
-    const summary = (render: (g: ChartGroup) => ReactNode) =>
-      grouped && !nested
-        ? (rs: Row[]) => {
-            const g = groupOfRows(rs);
-            return g ? render(g) : null;
-          }
-        : undefined;
     const pick = (row: Row, render: (g: ChartGroup) => ReactNode, runCell: (r: ChartRun) => ReactNode) =>
       row.kind === 'group' ? render(row.g) : runCell(row.run);
     const metricText = (m: string, v: number | null | undefined) =>
@@ -275,7 +264,6 @@ export function ChartsTable(p: ChartsTableProps) {
           pick(row, agg, (r) =>
             scoreText(m, r.metric_averages[m], top !== null && r.metric_averages[m] === top),
           ),
-        summary: summary(agg),
       });
     }
     for (const m of p.plainMetrics) {
@@ -299,7 +287,6 @@ export function ChartsTable(p: ChartsTableProps) {
               <NumberCell value={r.metric_averages[m]} decimals={2} />
             </span>
           )),
-        summary: summary(agg),
       });
     }
     const system = (
@@ -327,7 +314,6 @@ export function ChartsTable(p: ChartsTableProps) {
               <ScoreBar value={value(r) || null} max={max} text={format(value(r))} />
             </Series>
           )),
-        summary: summary(agg),
       });
     };
     if (p.showLatency)
@@ -369,7 +355,6 @@ export function ChartsTable(p: ChartsTableProps) {
               </Series>
             );
           }),
-        summary: summary(agg),
       });
     }
     if (grouped) {
@@ -397,36 +382,12 @@ export function ChartsTable(p: ChartsTableProps) {
           minWidth: 100,
           priority: 3,
           cell: (row) => (row.kind === 'group' ? stat(row.g) : null),
-          summary: summary(stat),
         });
       }
     }
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p, grouped, nested, groupMode, firstSortable, groupById, toggled]);
-
-  const groupBy = useMemo(
-    () =>
-      grouped && !nested
-        ? {
-            key: (row: Row) => (row.kind === 'run' ? (row.gid ?? '') : ''),
-            label: (key: string) => {
-              const g = groupById.get(key);
-              if (!g) return key;
-              return (
-                <span className={styles.head} data-level={1}>
-                  {g.kind === 'model' && g.model ? <ModelMark modelKey={g.model} size="md" /> : null}
-                  <Text variant="base" as="span" weight={600} tone="primary">
-                    {g.label}
-                  </Text>
-                </span>
-              );
-            },
-            collapsible: true,
-          }
-        : undefined,
-    [grouped, nested, groupById],
-  );
+  }, [p, grouped, groupMode, firstSortable, toggled]);
 
   return (
     <div className={styles.wrap}>
@@ -440,21 +401,12 @@ export function ChartsTable(p: ChartsTableProps) {
         rowKey={(row) => row.id}
         sort={{ key: p.sort.key, direction: p.sort.dir }}
         onSortChange={(s) => s && p.onSort(s.key, s.direction)}
-        groupBy={groupBy}
-        groupCollapsed={
-          groupBy
-            ? new Set(groups.filter((g) => p.defaultOpen === toggled.has(g.id)).map((g) => g.id))
-            : undefined
-        }
-        onGroupCollapsedChange={(next) => {
-          for (const g of groups) {
-            const was = p.defaultOpen === toggled.has(g.id);
-            if (next.has(g.id) !== was) toggle(g.id);
-          }
-        }}
+        onRowOpen={(row) => (row.kind === 'group' ? toggle(row.g.id) : navigate(runPath(slug, row.run.run_id)))}
         empty={`No runs for ${p.dataset} match the current filters`}
         rowProps={(row) =>
-          row.kind === 'group' ? { 'data-chart-group': String(row.level) } : { 'data-chart-run': '' }
+          row.kind === 'group'
+            ? { 'data-chart-group': String(row.level), 'aria-expanded': String(row.open) }
+            : { 'data-chart-run': '' }
         }
       />
     </div>

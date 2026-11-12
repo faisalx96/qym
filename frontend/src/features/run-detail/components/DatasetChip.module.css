@@ -51,7 +51,15 @@ a.chip:focus-visible {
 }
 
 .version {
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid var(--border-strong);
   color: var(--accent-primary);
+}
+
+.chipProd {
+  flex: none;
+  min-block-size: 0;
+  line-height: 1.5;
 }
 
 .alias {
@@ -73,6 +81,52 @@ a.chip:focus-visible {
 
 .chip[data-deleted] .name {
   color: var(--text-secondary);
+}
+
+/* DatasetVersionTag (cv4 B1, the first qym's "contracts-gold | v1 | prod"): the version and every other alias are
+   segments inside the dataset tag, each after a thin divider; the version is green. The production version adds the
+   star Production Flag after the tag. The name wraps inside its column, never cut (C218). */
+.versioned {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.tag {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.tagName {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.segment {
+  flex: none;
+  margin-inline-start: 2px;
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid var(--border-strong);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.segment[data-part='version'] {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.prod {
+  flex: none;
+}
+
+.none {
+  color: var(--text-muted);
 }
 
 /* The Datasets fact of the strip: a count tag that jumps to the section. */

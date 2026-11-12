@@ -27,17 +27,13 @@
   padding-inline-start: calc(var(--control-height) + var(--space-xs));
 }
 
+/* White at rest; green while the pass row is hovered or focused (the shared data-row-primary rule, cv4 B6). */
 .passLink {
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: var(--font-base);
   text-decoration: none;
   border-radius: 2px;
-}
-
-.passLink:hover {
-  color: var(--accent-primary);
-  text-decoration: none; /* the colour step is the hover cue: no underline */
 }
 
 .passLink:focus-visible {

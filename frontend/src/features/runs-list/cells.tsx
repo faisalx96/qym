@@ -12,7 +12,6 @@ import {
   RowMenu,
   RunStatusBadge,
   ScoreValue,
-  DatasetTag,
   ModelTag,
   RunName,
   Tag,
@@ -27,7 +26,7 @@ import { useRunIntent } from '@/app/prefetch';
 import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
-import { DatasetCountTag } from '@/features/run-detail/components/DatasetChip';
+import { DatasetCountTag, DatasetVersionTag } from '@/features/run-detail/components/DatasetChip';
 import { AnalysisSpark, AnalyzeAction, analyzeState } from './AnalyzeAction';
 import { useRunsCtx } from './context';
 import { modelKeyOf, modelShape, modelSlot, plainModelName, STATUS_LABEL } from './model';
@@ -82,7 +81,7 @@ export function DatasetCell({ row }: { row: RunRow }) {
         testId="dataset-count-tag"
       />
     );
-  return <DatasetTag name={row.dataset_name} version={row.dataset_version} aliases={row.dataset_aliases} />;
+  return <DatasetVersionTag name={row.dataset_name} version={row.dataset_version} aliases={row.dataset_aliases} />;
 }
 
 export function VersionCell({ row }: { row: RunRow }) {
@@ -452,6 +451,7 @@ export function RunNameCell({
         name={name}
         runId={row.run_id}
         onClick={() => rememberRunFile(row.run_id)}
+        data-row-primary=""
         {...intent}
         {...textDirAttrs(name)}
       />

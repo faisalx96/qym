@@ -31,10 +31,25 @@ describe('DatasetCell', () => {
     expect(tag).toHaveAttribute('title', 'support-tickets v3 · support-tickets v4 · billing-faq v7');
   });
 
-  it('keeps today’s dataset tag for a single dataset', () => {
-    render(<DatasetCell row={row({ dataset_count: 1 })} />);
+  it('writes a single dataset as name, divider, version and the Production flag (cv4 B1)', () => {
+    render(<DatasetCell row={row({ dataset_count: 1, dataset_aliases: ['production', 'staging'] })} />);
     expect(screen.queryByTestId('dataset-count-tag')).toBeNull();
+    const tag = screen.getByTestId('dataset-version-tag');
     expect(screen.getByText('support-tickets')).toBeInTheDocument();
-    expect(screen.getByText('production')).toBeInTheDocument();
+    expect(tag.querySelector('[data-part="version"]')).toHaveTextContent('v3');
+    expect(tag.querySelector('[data-part="alias"]')).toHaveTextContent('staging');
+    expect(screen.getByText('Production')).toBeInTheDocument();
+    expect(screen.queryByText('production')).toBeNull();
+  });
+
+  it('shows no Production flag for a version that is not the production version', () => {
+    render(<DatasetCell row={row({ dataset_count: 1, dataset_version: '2', dataset_aliases: ['previous'] })} />);
+    expect(screen.getByTestId('dataset-version-tag').querySelector('[data-part="version"]')).toHaveTextContent('v2');
+    expect(screen.queryByText('Production')).toBeNull();
+  });
+
+  it('shows the name alone for a run with no dataset version', () => {
+    render(<DatasetCell row={row({ dataset_count: 1, dataset_version: null, dataset_aliases: [] })} />);
+    expect(screen.getByTestId('dataset-version-tag').querySelector('[data-part]')).toBeNull();
   });
 });

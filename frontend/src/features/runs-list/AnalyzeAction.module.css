@@ -5,15 +5,8 @@
   font-weight: 600;
 }
 
-/* idle: the plain meta button (tinted fill, sparkle); done: the same with a filled sparkle and the count */
-
-.action[data-state='running'] {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--info) var(--tint-strong), transparent);
-}
-.action[data-state='running']:hover {
-  background: color-mix(in srgb, var(--info) 32%, transparent);
-}
+/* Every state is the plain meta button (cv4 B7: no local button colours): idle shows the sparkle, done a filled sparkle
+   and the count, running the static info dot and "Analyzing". */
 
 .spark {
   flex: none;
@@ -24,28 +17,9 @@
 }
 
 .pulse {
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: var(--radius-pill);
   background: var(--info);
-  animation: analyzePulse 1.2s ease-in-out infinite;
-}
-
-@keyframes analyzePulse {
-  0%,
-  100% {
-    opacity: 0.4;
-    transform: scale(0.8);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pulse {
-    animation: none;
-  }
 }

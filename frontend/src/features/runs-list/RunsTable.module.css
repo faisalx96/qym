@@ -20,3 +20,13 @@
   font-size: var(--font-sm);
   color: var(--error);
 }
+
+/* cv4 B3: the group rail of an open repeat run. The shared rule draws it on the row's first cell, which in this table is
+   the reserved select column at 0px outside select mode, so the rail did not show. Here it goes on the first real cell
+   (the Run cell) of the open parent and of each pass row; a focused or selected row keeps its own frame. */
+.host tr[data-child]:not(:focus-visible, [data-selected]) > td[data-collapsed] + td,
+.host tr[data-group-open]:not([data-state], :focus-visible, [data-selected]) > td[data-collapsed] + td {
+  box-shadow:
+    inset var(--rail-width) 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
