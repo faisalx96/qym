@@ -128,6 +128,12 @@ textarea {
   outline-offset: 2px;
 }
 
+/* cv4 Y14: a React Aria button knows how it got focus. When a menu closes after a mouse choice, focus returns to its
+   trigger and the browser still matches :focus-visible; React Aria does not set data-focus-visible, so no ring. */
+button[data-rac]:focus-visible:not([data-focus-visible]) {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
