@@ -220,11 +220,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* cv4 Y3: the notice is shown in full; a long one wraps to a second line, never cut with "…". */
 .railText {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .railLink {
