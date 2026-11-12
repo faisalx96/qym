@@ -4,8 +4,8 @@ import { ApiError } from '@/lib/http';
 import {
   ConfirmDialog,
   DataTable,
+  Flag,
   SearchField,
-  StatusMark,
   Tag,
   Text,
   UserName,
@@ -99,13 +99,9 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
             ) : null}
             {/* on/off state: only the exception shows, after the name (no Status column) */}
             {u.is_active ? null : (
-              <StatusMark
-                tone="warning"
-                shape="pause"
-                label="Disabled"
-                data-status="disabled"
-                className={styles.offMark}
-              />
+              <Flag icon="ban" data-status="disabled" className={styles.offMark}>
+                Disabled
+              </Flag>
             )}
           </span>
         ),

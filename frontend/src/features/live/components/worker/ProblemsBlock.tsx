@@ -19,7 +19,7 @@ import {
   LinkButton,
   MultiSelect,
   Skeleton,
-  StatusMark,
+  StateTag,
   Tag,
   Text,
   type Column,
@@ -142,11 +142,9 @@ export function ProblemsBlock({
       id: 'level',
       header: 'Level',
       cell: (e) => (
-        <StatusMark
-          tone={e.level === 'error' ? 'danger' : 'warning'}
-          shape={e.level === 'error' ? 'cross' : 'dot'}
-          label={e.level === 'error' ? 'Error' : 'Warning'}
-        />
+        <StateTag tone={e.level === 'error' ? 'danger' : 'warning'}>
+          {e.level === 'error' ? 'Error' : 'Warning'}
+        </StateTag>
       ),
     },
     {

@@ -2,7 +2,17 @@ import type { HTMLAttributes, ReactNode } from 'react';
 import styles from './Tag.module.css';
 
 export type TagKind =
-  'role' | 'accent' | 'count' | 'data' | 'version' | 'task' | 'config' | 'dataset' | 'model' | 'origin';
+  | 'role'
+  | 'accent'
+  | 'count'
+  | 'data'
+  | 'version'
+  | 'task'
+  | 'config'
+  | 'dataset'
+  | 'model'
+  | 'origin'
+  | 'state';
 export type TagTone = 'success' | 'info' | 'warning' | 'danger' | 'meta' | 'accent' | 'gold';
 
 export interface TagProps extends HTMLAttributes<HTMLSpanElement> {

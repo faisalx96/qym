@@ -101,7 +101,7 @@ it('collapses settings with current summaries and disables Save until values or 
     screen.getByText(`gateway listed 5 models at ${formatTableDate('2026-11-03T14:20:00Z')}`),
   ).toBeVisible();
   const running = within(screen.getByRole('list', { name: 'Settings history' })).getByText('Running');
-  expect(running.closest('[data-shape]')).toHaveAttribute('data-tone', 'info');
+  expect(running.closest('[data-kind="state"]')).toHaveAttribute('data-tone', 'info');
   expect(running.closest('[data-worker-version]')).toHaveAttribute('data-worker-version', '3');
   await user.type(screen.getByRole('textbox', { name: 'Note' }), 'A note alone');
   expect(save).toBeDisabled();

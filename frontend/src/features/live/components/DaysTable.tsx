@@ -1,7 +1,8 @@
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import { formatDayKey } from '@/lib/dates';
 import { useSearchParamsState } from '@/lib/url-state';
-import { DataTable, ScoreValue, StatusMark, Text, type Column } from '@/ui';
+import { humanizeKey } from '@/lib/humanizeKey';
+import { DataTable, ScoreValue, StateTag, Text, type Column } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
 import { formatPrimaryMean } from '../lib/trend';
@@ -79,25 +80,24 @@ export function DaysTable({
       cell: (row) => {
         if (row.worker_gap) {
           return (
-            <StatusMark
-              tone="warning"
-              shape="hourglass"
-              label="Gap"
-              title={`Worker gap: ${row.max_poll_gap_s}s between heartbeats`}
-            />
+            <StateTag tone="warning" title={`Worker gap: ${row.max_poll_gap_s}s between heartbeats`}>
+              Gap
+            </StateTag>
           );
         }
         if (row.status === 'running' && stale) {
           return (
-            <StatusMark tone="danger" shape="cross" label="Stale" title="Open day, worker not heard from" />
+            <StateTag tone="danger" title="Open day, worker not heard from">
+              Stale
+            </StateTag>
           );
         }
         return (
-          <StatusMark
+          <StateTag
             tone={row.status === 'running' ? 'info' : row.status === 'closed' ? 'success' : 'neutral'}
-            shape={row.status === 'running' ? 'orbit' : 'full'}
-            label={row.status === 'closed' ? 'Closed' : row.status}
-          />
+          >
+            {humanizeKey(row.status)}
+          </StateTag>
         );
       },
     },

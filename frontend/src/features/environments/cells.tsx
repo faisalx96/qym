@@ -1,28 +1,39 @@
 /** Shared table/section cells of the environments area. */
 import type { EvalEnvironment } from '@/api/evalCommon';
-import { StatusMark, Tag } from '@/ui';
+import { StateTag, Tag, type StateTagTone } from '@/ui';
 import { absTime, relTime, shortHash } from './format';
 import styles from './EnvironmentsTable.module.css';
 
+type Health = 'ok' | 'error' | 'unknown';
+
+const HEALTH: Record<Health, { tone: StateTagTone; label: string }> = {
+  ok: { tone: 'success', label: 'Healthy' },
+  error: { tone: 'danger', label: 'Error' },
+  unknown: { tone: 'neutral', label: 'Unknown' },
+};
+
+/** An environment's health check result as a StateTag: Healthy, Error, or Unknown for any other value. */
+export function HealthTag({ status, title }: { status: string | null | undefined; title?: string }) {
+  const key: Health = status === 'ok' || status === 'error' ? status : 'unknown';
+  const { tone, label } = HEALTH[key];
+  return (
+    <StateTag tone={tone} title={title} data-status={key}>
+      {label}
+    </StateTag>
+  );
+}
+
 export function HealthCell({ env, showTime = true }: { env: EvalEnvironment; showTime?: boolean }) {
-  const status = env.health_status === 'ok' ? 'ok' : env.health_status === 'error' ? 'error' : 'unknown';
-  const label = status === 'ok' ? 'Healthy' : status === 'error' ? 'Error' : 'Unknown';
   const checked = relTime(env.health_checked_at);
   const title =
-    status === 'error' && env.health_error
+    env.health_status === 'error' && env.health_error
       ? env.health_error
       : checked
         ? `Checked ${checked}`
         : 'Not checked yet';
   return (
     <div className={styles.healthCell}>
-      <StatusMark
-        tone={status === 'ok' ? 'success' : status === 'error' ? 'danger' : 'neutral'}
-        shape={status === 'ok' ? 'check' : status === 'error' ? 'cross' : 'ring'}
-        label={label}
-        title={title}
-        data-status={status}
-      />
+      <HealthTag status={env.health_status} title={title} />
       {showTime && checked ? <span className={styles.meta}>{checked}</span> : null}
     </div>
   );

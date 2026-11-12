@@ -6,7 +6,7 @@ import {
   EmptyState,
   KeyValueGrid,
   ScoreValue,
-  StatusMark,
+  StateTag,
   StructuredValue,
   Text,
   TextBlock,
@@ -43,34 +43,30 @@ export function EvidenceCard({
 export function DiagnosisLabel({ value, specs }: { value: string | null; specs: LiveMetricSpec[] }) {
   const label = labelFor(value, specs);
   const v = verdictOf(label.specTone);
-  return <StatusMark tone={v.tone} shape={v.shape} label={label.label} dir="auto" />;
+  return (
+    <StateTag tone={v.tone} dir="auto">
+      {label.label}
+    </StateTag>
+  );
 }
 
+/** A service or tool call result: OK green, Failed red, anything else (Skipped, unknown, none) grey. */
 export function ServiceStatus({ status }: { status: string | null }) {
   return (
-    <StatusMark
-      tone={status === 'failed' ? 'danger' : status === 'ok' ? 'success' : 'neutral'}
-      shape={
-        status === 'failed' ? 'cross' : status === 'ok' ? 'check' : status === 'skipped' ? 'pause' : 'ring'
-      }
-      label={status ? statusWord(status) : '—'}
-      dir="auto"
-    />
+    <StateTag tone={status === 'failed' ? 'danger' : status === 'ok' ? 'success' : 'neutral'} dir="auto">
+      {status ? statusWord(status) : '—'}
+    </StateTag>
   );
 }
 
-/** A boolean Live score as the run pass mark: 1 = green check 'Pass', 0 = red cross 'Fail', null = '—' (C-19). */
-export function PassFailMark({ value }: { value: number | null }) {
+/** A boolean Live score as a check result: 1 = green 'Pass', 0 = red 'Fail', null = '—' (C-19). */
+export function PassFailTag({ value }: { value: number | null }) {
   if (value === null) return <span>—</span>;
-  return value ? (
-    <StatusMark tone="success" shape="check" label="Pass" />
-  ) : (
-    <StatusMark tone="danger" shape="cross" label="Fail" />
-  );
+  return value ? <StateTag tone="success">Pass</StateTag> : <StateTag tone="danger">Fail</StateTag>;
 }
 
 export function MetricValue({ value, spec }: { value: number | null; spec?: LiveMetricSpec | null }) {
-  if (spec?.score_type === 'boolean') return <PassFailMark value={value} />;
+  if (spec?.score_type === 'boolean') return <PassFailTag value={value} />;
   return (
     <ScoreValue
       value={value}
@@ -114,17 +110,15 @@ export function SqlParts({ parts }: { parts: SqlPart[] }) {
       {parts.map((part, index) => (
         <div key={index}>
           <div className={styles.sqlMeta}>
-            <StatusMark
+            <StateTag
               tone={part.executed === true ? 'success' : part.executed === false ? 'warning' : 'neutral'}
-              shape={part.executed === true ? 'check' : part.executed === false ? 'pause' : 'ring'}
-              label={
-                part.executed === true
-                  ? 'Executed'
-                  : part.executed === false
-                    ? 'Not executed'
-                    : 'Execution unknown'
-              }
-            />
+            >
+              {part.executed === true
+                ? 'Executed'
+                : part.executed === false
+                  ? 'Not executed'
+                  : 'Execution unknown'}
+            </StateTag>
             <span>{part.rows ?? '—'} rows</span>
             {part.text !== null ? <CopyButton text={part.text} label="Copy SQL" /> : null}
           </div>

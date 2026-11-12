@@ -27,8 +27,8 @@ import styles from '../../worker.module.css';
 const WORKER_JOB_MARK: Record<string, [StatusTone, StatusShape, string]> = {
   queued: ['neutral', 'ring', 'Queued'],
   running: ['info', 'orbit', 'Running'],
-  cancelling: ['warning', 'orbit', 'Cancelling'],
-  paused: ['neutral', 'hourglass', 'Paused'],
+  cancelling: ['info', 'orbit', 'Cancelling'],
+  paused: ['neutral', 'pause', 'Paused'],
   done: ['success', 'full', 'Done'],
   failed: ['danger', 'cross', 'Failed'],
   cancelled: ['warning', 'pause', 'Cancelled'],

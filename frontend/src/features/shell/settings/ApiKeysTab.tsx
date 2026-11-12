@@ -18,10 +18,10 @@ import {
   DataTable,
   Disclosure,
   ErrorState,
+  Flag,
   RelativeTime,
   Skeleton,
   Stack,
-  StatusMark,
   Tag,
   Text,
   TextField,
@@ -55,9 +55,13 @@ function IssuedGroup({ title, count, children }: { title: string; count: number;
   );
 }
 
-/** On/off state of a key or token: only the exception shows, after the name (no Status column). */
+/** On/off state of a key or token: only the exception shows, a grey Flag after the name (no Status column). */
 function RevokedMark({ at }: { at: string | null | undefined }) {
-  return at ? <StatusMark tone="warning" shape="pause" label="Revoked" data-status="revoked" /> : null;
+  return at ? (
+    <Flag icon="ban" data-status="revoked">
+      Revoked
+    </Flag>
+  ) : null;
 }
 
 export function ApiKeysTab() {

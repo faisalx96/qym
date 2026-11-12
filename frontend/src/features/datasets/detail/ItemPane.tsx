@@ -11,7 +11,7 @@ import {
   Skeleton,
   Text,
   useToast,
-  StatusMark,
+  Flag,
 } from '@/ui';
 import { DisableItemDialog } from '../components/dialogs';
 import { ConflictNotice } from '../components/ConflictNotice';
@@ -104,7 +104,9 @@ export function ItemPane({
             {position.index + 1} / {position.total.toLocaleString(APP_LOCALE)}
           </span>
           {disabled ? (
-            <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+            <Flag icon="ban" data-status="disabled">
+              Disabled
+            </Flag>
           ) : null}
           {editable && item && !disabled ? (
             <Button variant="danger" onPress={() => setDisableOpen(true)} data-testid="item-state-action">

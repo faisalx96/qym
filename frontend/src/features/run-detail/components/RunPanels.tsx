@@ -8,23 +8,22 @@ import {
   Flag,
   InlineNotice,
   LinkButton,
-  StatusMark,
+  StateTag,
   Tag,
   UserName,
-  type StatusShape,
-  type StatusTone,
+  type StateTagTone,
 } from '@/ui';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
 
-/** Each review event as a StatusMark (C174): the figure is the non-colour cue. */
-const ACTIONS: Record<string, { label: string; tone: StatusTone; shape: StatusShape }> = {
-  submit: { label: 'Submitted', tone: 'neutral', shape: 'hourglass' },
-  approve: { label: 'Approved', tone: 'success', shape: 'check' },
-  reject: { label: 'Rejected', tone: 'danger', shape: 'cross' },
-  unapprove: { label: 'Approval withdrawn', tone: 'warning', shape: 'ring' },
-  unreject: { label: 'Rejection withdrawn', tone: 'warning', shape: 'ring' },
+/** Each review event is a decision in a log, so a StateTag: Approved success, Rejected danger, all others neutral. */
+const ACTIONS: Record<string, { label: string; tone: StateTagTone }> = {
+  submit: { label: 'Submitted', tone: 'neutral' },
+  approve: { label: 'Approved', tone: 'success' },
+  reject: { label: 'Rejected', tone: 'danger' },
+  unapprove: { label: 'Approval withdrawn', tone: 'neutral' },
+  unreject: { label: 'Rejection withdrawn', tone: 'neutral' },
 };
 
 export function who(u: { display_name?: string; email?: string; id?: string } | null | undefined): string {
@@ -46,12 +45,11 @@ function HistoryEntry({ event, selfApproved }: { event: ReviewHistoryEvent; self
   const action = ACTIONS[event.action] ?? {
     label: String(event.action || 'Changed'),
     tone: 'neutral' as const,
-    shape: 'ring' as const,
   };
   return (
     <li className={styles.entry} data-action={event.action}>
       <div className={styles.entryHead}>
-        <StatusMark tone={action.tone} shape={action.shape} label={action.label} />
+        <StateTag tone={action.tone}>{action.label}</StateTag>
         <UserName id={event.actor?.id} name={who(event.actor)} email={event.actor?.email} />
         {selfApproved ? (
           <Flag tone="warning" icon="user" title="The same person submitted and approved this run">

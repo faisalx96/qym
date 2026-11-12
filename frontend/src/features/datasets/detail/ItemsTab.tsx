@@ -37,7 +37,7 @@ import {
   useToast,
   type Column,
   type RowAction,
-  StatusMark,
+  Flag,
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
 import { menuLabel } from '../lib/batchCopy';
@@ -326,7 +326,9 @@ export function ItemsTab({
               <span className={styles.idCell}>
                 <span dir="ltr">{item.item_id}</span>
                 {item.state === 'disabled' ? (
-                  <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+                  <Flag icon="ban" data-status="disabled">
+                    Disabled
+                  </Flag>
                 ) : null}
               </span>
             ),

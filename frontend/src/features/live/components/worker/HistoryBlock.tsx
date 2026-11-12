@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { LiveWorkerVersion } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
-import { Button, ConfirmDialog, EmptyState, ErrorState, StatusMark, Text, UserName, useToast } from '@/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorState, StateTag, Text, UserName, useToast } from '@/ui';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
@@ -27,9 +27,7 @@ export function HistoryBlock({
             <li key={version.version} className={styles.version} data-worker-version={version.version}>
               <Text as="div" variant="md" weight={600} tone="primary" className={styles.inline}>
                 v{version.version}
-                {version.version === runningVersion ? (
-                  <StatusMark tone="info" shape="orbit" label="Running" />
-                ) : null}
+                {version.version === runningVersion ? <StateTag tone="info">Running</StateTag> : null}
               </Text>
               <Text dir="auto" className={styles.wrap}>
                 {version.note ?? '—'}

@@ -46,13 +46,7 @@ export function QueuedNameCell({ queued }: { queued: QueuedView }) {
 }
 
 export function QueuedStatus({ queued }: { queued: QueuedView }) {
-  return (
-    <StatusMark
-      tone={queued.notRun ? 'warning' : 'neutral'}
-      shape="ring"
-      label={queued.notRun ? 'Not run' : 'Queued'}
-    />
-  );
+  return <StatusMark tone="neutral" shape="ring" label={queued.notRun ? 'Not run' : 'Queued'} />;
 }
 
 /** The pass status, then its signals, drawn as a run's and linking to the pass's Errors section (C028, C115). */
