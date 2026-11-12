@@ -218,8 +218,13 @@
   gap: var(--space-md);
 }
 
-/* Overview metric card (round 10, the first qym's card): ring and mean, then the name and the error note, the
-   scored count at the top end, the plot below. No header band, no side rail. */
+/* Overview metric card (cv4 C1-3, C1-4): one anatomy for a score and a plain number.
+   1. Title row: the metric name in the card title role, the count (and a help marker) at the end.
+   2. Main number: a score's ring and mean in its band (or pass / fail) colour, the plot's hatch key at the row's end;
+      a plain number's mean in the box plot's tone with the key of the plot's mean diamond.
+   3. The plot (histogram, or the Total, Min, Median and Max strip over the box plot).
+   4. Foot: the error note, under the plot, after a hairline.
+   No header band, no side rail. */
 .metricCard {
   min-width: 0;
 }
@@ -227,15 +232,50 @@
 .metricHead {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-md);
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
   min-width: 0;
+}
+
+/* The card title role (F10, --font-card-title; --font-md until it lands). A name wraps, it is never cut. */
+.metricName {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-card-title, var(--font-md));
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.metricEnd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.metricScore {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  margin-block-start: var(--space-md);
+  color: var(--text-primary);
+}
+
+/* The main number (stat role). No colour here: a score keeps its band or verdict colour from BandValue. */
+.metricScore .heroValue {
+  font-family: var(--font-mono);
+  font-size: var(--font-stat);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .ring {
   flex: none;
   width: 40px;
   height: 40px;
-  margin-block-start: 2px;
 }
 
 .ringTrack {
@@ -251,45 +291,49 @@
   stroke-linecap: round;
 }
 
-.metricTitle {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+/* A plain number's mean takes the box plot's tone (series 1): it is the plot's diamond, written out. */
+.metricScore[data-tone='series'] .heroValue {
+  color: var(--chart-1);
 }
 
-.metricName {
-  overflow: hidden;
-  font-size: var(--font-base);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-}
-
-.metricSub {
-  font-weight: 450;
+/* The key of the plot's mean diamond (series 1, the box plot's tone): the main number names that mark. */
+.meanKey {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
   color: var(--text-muted);
 }
 
-.metricEnd {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-sm);
+.meanGlyph {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--chart-1);
+  transform: rotate(45deg);
 }
 
-/* The error note: a warning glyph, the counts, and the key of the hatch the bars draw for those items. */
-/* C012: the error note and the hatch key on one line under the card head, the width of the card. */
-.cardNote {
+/* The foot: a hairline, then the error note. An empty foot keeps its line when another card of the grid has one. */
+.cardFoot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0 var(--space-xs);
+  gap: var(--space-xs) var(--space-md);
+  margin-block-start: var(--space-md);
+  padding-block-start: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
   font-size: var(--font-sm);
-  line-height: 1.45;
+  line-height: 16px;
   color: var(--text-muted);
+}
+
+.cardFoot[data-empty] {
+  visibility: hidden;
+}
+
+.cardNote {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .cardNote > svg {
@@ -301,8 +345,15 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  margin-inline-start: var(--space-md);
   white-space: nowrap;
+}
+
+/* The hatch key is the plot's legend: at the end of the main number's row, on its baseline, just above the bars. */
+.metricScore .hatchKey {
+  align-self: flex-end;
+  margin-inline-start: auto;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
 .hatchSwatch {
@@ -323,11 +374,11 @@
   margin-block-start: var(--space-md);
 }
 
-/* A plain-number card: Total, Min, Median and Max on one line over the box plot. */
+/* A plain number: Total, Min, Median and Max as one strip of equal columns, hairlines between them. */
 .numberFacts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs) var(--space-lg);
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   margin: var(--space-md) 0 0;
 }
 
@@ -335,6 +386,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding-inline: var(--space-md);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.numberFact:first-child {
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }
 
 .numberFact dt {
@@ -345,7 +403,7 @@
 .numberFact dd {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: var(--font-base);
+  font-size: var(--font-md);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
@@ -357,7 +415,7 @@
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-  margin-block-start: var(--space-sm);
+  margin-block-start: var(--space-md);
 }
 
 /* Overview metric cards: three in a row at 1440 (the first qym's width), so the note fits in two lines. */
