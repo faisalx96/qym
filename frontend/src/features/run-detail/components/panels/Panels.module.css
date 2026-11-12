@@ -300,6 +300,18 @@
   color: var(--text-muted);
 }
 
+/* cv4 Y9: one note for the whole score grid, in one line under it, with the hatch key. */
+.gridNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-lg);
+  margin: calc(-1 * var(--space-xs)) 0 0;
+  font-size: var(--font-sm);
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
 .cardFoot[data-empty] {
   visibility: hidden;
 }

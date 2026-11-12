@@ -90,7 +90,16 @@ function CardHead({ title, hint, end }: { title: string; hint?: string; end: Rea
   return <CardTitle title={<span title={hint}>{title}</span>} aside={end} />;
 }
 
-function ScoreCard({ card, reserveFoot }: { card: MetricCardModel; reserveFoot: boolean }) {
+function ScoreCard({
+  card,
+  reserveFoot,
+  sharedNote = false,
+}: {
+  card: MetricCardModel;
+  reserveFoot: boolean;
+  /** cv4 Y9: the grid shows the note and the hatch key once, under the cards; the card has neither. */
+  sharedNote?: boolean;
+}) {
   const filters = useChartFilters();
   const { api } = useRunPage();
   const band =
@@ -133,7 +142,7 @@ function ScoreCard({ card, reserveFoot }: { card: MetricCardModel; reserveFoot: 
             {card.avgText}
           </BandValue>
         )}
-        {card.kind === 'score' && card.errorNote ? <HatchKey /> : null}
+        {card.kind === 'score' && card.errorNote && !sharedNote ? <HatchKey /> : null}
       </div>
       <div className={styles.metricPlot}>
         {card.kind === 'score' && card.buckets ? (
@@ -154,7 +163,7 @@ function ScoreCard({ card, reserveFoot }: { card: MetricCardModel; reserveFoot: 
         ) : null}
         {card.kind === 'empty' ? <p className={styles.slotEmpty}>No scored items</p> : null}
       </div>
-      <CardFoot note={card.errorNote} reserve={reserveFoot} />
+      {sharedNote ? null : <CardFoot note={card.errorNote} reserve={reserveFoot} />}
     </Card>
   );
 }
@@ -262,15 +271,30 @@ export function OverviewTab() {
   const showTokens = tokens.length >= MIN_TRACE_ITEMS && tokens.some((t) => t.v > 0);
   // a row whose cards all lack a note has no foot; one note keeps the foot line on every card of that grid
   const scoreNotes = scoreCards.some((c) => c.errorNote);
+  // cv4 Y9: the same note on every score card is said once, in one line under the grid, with the hatch key
+  const firstNote = scoreCards[0]?.errorNote ?? null;
+  const sharedNote =
+    firstNote && scoreCards.length > 1 && scoreCards.every((c) => c.errorNote?.text === firstNote.text)
+      ? firstNote
+      : null;
   const numberNotes = numericCards.some((c) => c.errorNote);
   return (
     <div className={styles.overviewStack}>
       {scoreCards.length ? (
         <div className={styles.metricGrid} data-count={scoreCards.length}>
           {scoreCards.map((c) => (
-            <ScoreCard key={c.metric} card={c} reserveFoot={scoreNotes} />
+            <ScoreCard key={c.metric} card={c} reserveFoot={scoreNotes} sharedNote={!!sharedNote} />
           ))}
         </div>
+      ) : null}
+      {sharedNote ? (
+        <p className={styles.gridNote} data-testid="overview-shared-note">
+          <span className={styles.cardNote} title={sharedNote.title}>
+            <Icon name="warning" size={12} />
+            <span>{sharedNote.text}</span>
+          </span>
+          {scoreCards.some((c) => c.kind === 'score') ? <HatchKey /> : null}
+        </p>
       ) : null}
       {numericCards.length || showTokens ? (
         <div className={styles.metricGrid} data-count={numericCards.length + +showTokens}>
