@@ -61,6 +61,11 @@
 .body {
   --card-bg: var(--bg-elevated);
   --card-edge: transparent;
+  /* cv4 F7/F8: controls on an inset card are one step brighter than the card, with the stronger edge, so a search
+     field, a select or a segmented control looks the same as on the page ground (the sticky nav reference). */
+  --control-fill: var(--bg-hover);
+  --control-edge: var(--border-default);
+  --control-edge-hover: var(--border-strong);
 
   /* The containing block for visually hidden (absolute) text, which must never widen the page. */
   position: relative;

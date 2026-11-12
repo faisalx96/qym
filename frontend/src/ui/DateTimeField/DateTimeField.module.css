@@ -13,7 +13,7 @@
   padding: 0 2px 0 var(--space-sm);
   border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
@@ -138,7 +138,7 @@
   padding: 0;
   border: 0;
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -235,7 +235,7 @@
   padding: 0 var(--space-sm);
   border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
 }

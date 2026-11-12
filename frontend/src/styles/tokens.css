@@ -95,6 +95,10 @@
      --border-default outlines read as too bold next to the borderless buttons). */
   --control-edge: var(--border-subtle);
   --control-edge-hover: var(--border-default);
+  /* cv4 F7/F8: the fill of a field-like control (text and search field, select, filter trigger, segmented control).
+     A surface that is itself --bg-elevated (the inset cards of a report section) lifts it one step (ReportSection),
+     so a control never melts into its card: one look on every page. */
+  --control-fill: var(--bg-elevated);
   --analysis-action-gap: 5px;
   --analysis-icon-optical-offset: 0.25px;
   --analysis-action-padding-start: 9px;

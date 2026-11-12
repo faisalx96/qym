@@ -9,7 +9,7 @@
   padding: 0 var(--space-sm);
   border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
