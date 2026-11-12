@@ -1,51 +1,14 @@
 import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { describe, expect, it } from 'vitest';
-import { LaunchTestProvider, useLaunch } from '../../LaunchContext';
-import { createDocument, type LaunchDocument } from '../../model';
+import { LaunchTestProvider } from '../../LaunchContext';
+import { createDocument } from '../../model';
 import { makeEnv, PRODUCTION, syntheticEntries } from '../../model/__fixtures__/fixtures';
 import { SettingsSection } from '../../sections/SettingsSection';
 import { SweepsSection } from '../../sections/SweepsSection';
+import { openGroup, setup, SLOW_FORM, values } from './settingsHarness';
 
-function Probe() {
-  const { doc } = useLaunch();
-  return (
-    <>
-      <pre data-testid="values">{JSON.stringify(doc.values)}</pre>
-      <pre data-testid="added">{JSON.stringify(doc.addedKeys)}</pre>
-      <pre data-testid="links">{JSON.stringify(doc.links ?? null)}</pre>
-    </>
-  );
-}
-
-const envs = [makeEnv(PRODUCTION, 'production')];
-
-function setup(ui: React.ReactElement, doc?: Partial<LaunchDocument>, mode?: 'launch' | 'editor') {
-  const user = userEvent.setup();
-  const utils = render(
-    <LaunchTestProvider
-      envs={envs}
-      mode={mode}
-      doc={createDocument({ environmentIds: [PRODUCTION], ...doc })}
-    >
-      {ui}
-      <Probe />
-    </LaunchTestProvider>,
-  );
-  return { user, ...utils };
-}
-
-const values = () => JSON.parse(screen.getByTestId('values').textContent ?? '{}') as Record<string, unknown>;
-
-async function openGroup(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
-  const button = screen.getByRole('button', { name });
-  if (button.getAttribute('aria-expanded') !== 'true') await user.click(button);
-}
-
-// Every leaf is a ui Select, TextField or Textarea (E-25), so this form renders slowly in jsdom: 4-20 s per test
-// locally and 2-4 times that on the CI runner. A timed-out test also leaves a half-typed value for the next one.
-describe('SettingsSection', { timeout: 120_000 }, () => {
+describe('SettingsSection', SLOW_FORM, () => {
   it('shows closed groups, lazily', () => {
     setup(<SettingsSection />);
     expect(screen.getByRole('button', { name: /SQL runner/ })).toHaveAttribute('aria-expanded', 'false');
@@ -104,66 +67,6 @@ describe('SettingsSection', { timeout: 120_000 }, () => {
     expect(screen.queryByRole('button', { name: /SQL runner/ })).not.toBeInTheDocument();
   });
 
-  it('adds a key to a collection with Enter and shows "All endpoints"', async () => {
-    const { user } = setup(<SettingsSection />);
-    await openGroup(user, /LLM routing/);
-    await user.type(screen.getByRole('textbox', { name: 'New endpoint name' }), 'fast{Enter}');
-    expect(JSON.parse(screen.getByTestId('added').textContent ?? '{}')).toEqual({
-      '/LLM_OVERRIDES/endpoints': ['fast'],
-    });
-    const table = screen.getByRole('table', { name: 'endpoint overrides' });
-    expect(within(table).getByRole('rowheader', { name: 'fast' })).toBeInTheDocument();
-    expect(within(table).getByRole('rowheader', { name: 'All endpoints' })).toBeInTheDocument();
-    await user.type(screen.getByRole('textbox', { name: 'All endpoints · Timeout' }), '30{Enter}');
-    expect(values()).toMatchObject({
-      '/LLM_OVERRIDES/endpoints/primary/timeout': 30,
-      '/LLM_OVERRIDES/endpoints/fast/timeout': 30,
-    });
-  });
-
-  it('writes the "All roles" row to every role', async () => {
-    const { user } = setup(<SettingsSection />);
-    await openGroup(user, /LLM routing/);
-    await user.type(screen.getByRole('textbox', { name: 'All roles · max_tokens' }), '512{Enter}');
-    const written = Object.entries(values()).filter(([p]) => p.endsWith('/max_tokens'));
-    expect(written.length).toBeGreaterThanOrEqual(5);
-    expect(written.map(([p]) => p)).toContain('/LLM_OVERRIDES/router/max_tokens');
-    expect(written.every(([, v]) => v === 512)).toBe(true);
-    await user.click(screen.getByRole('button', { name: 'Reset roles' }));
-    expect(values()).toEqual({});
-  }, 60_000);
-
-  it('sweeps the "All roles" row: a compact summary, chips in a popover, every role swept together', async () => {
-    const { user } = setup(<SettingsSection />);
-    await openGroup(user, /LLM routing/);
-    await user.click(screen.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }));
-    const cell = document.querySelector('[data-global-sweep]') as HTMLElement;
-    expect(cell).toBeInTheDocument();
-    await user.click(within(cell).getByRole('button', { name: /edit sweep: All roles · max_tokens/ }));
-    const dialog = await screen.findByRole('dialog', { name: /Sweep values of/ });
-    await user.type(within(dialog).getByRole('textbox'), '256, 512{Enter}');
-    const swept = Object.entries(values()).filter(([p]) => p.endsWith('/max_tokens'));
-    expect(swept.length).toBeGreaterThanOrEqual(5);
-    expect(swept.every(([, v]) => JSON.stringify(v) === JSON.stringify({ sweep: [256, 512] }))).toBe(true);
-    expect(cell).toHaveTextContent('sweeps 2 runs');
-    expect(cell).toHaveTextContent('256 · 512');
-    await user.click(within(dialog).getByRole('button', { name: /Single value/ }));
-    expect(
-      Object.entries(values())
-        .filter(([p]) => p.endsWith('/max_tokens'))
-        .every(([, v]) => v === 256),
-    ).toBe(true);
-  }, 60_000);
-
-  it('narrows role rows with the role search', async () => {
-    const { user } = setup(<SettingsSection />);
-    await openGroup(user, /LLM routing/);
-    await user.type(screen.getByRole('searchbox', { name: 'Search roles' }), 'router');
-    const table = screen.getByRole('table', { name: 'role overrides' });
-    expect(within(table).getByRole('rowheader', { name: /router/i })).toBeInTheDocument();
-    expect(within(table).queryByRole('rowheader', { name: /brief/i })).not.toBeInTheDocument();
-  });
-
   it('sweeps a value: a range adds five chips', async () => {
     const { user } = setup(<SettingsSection />);
     await openGroup(user, /Misc/);
@@ -212,14 +115,6 @@ describe('SettingsSection', { timeout: 120_000 }, () => {
     await user.tab();
     expect(values()).toEqual({ '/REQUEST_TIMEOUT': { foo: 2 } });
   });
-
-  it('has no accessibility violations', async () => {
-    const { user, container } = setup(<SettingsSection />);
-    await openGroup(user, /LLM routing/);
-    await openGroup(user, /Feature toggles/);
-    expect(await axe(container)).toHaveNoViolations();
-    // axe over both open groups takes 60-85 s on the CI runner since the round 9/10 form grew
-  }, 180_000);
 });
 
 describe('SweepsSection', () => {
@@ -281,16 +176,8 @@ describe('structured JSON editor and open objects', () => {
       add: syntheticEntries.map((e) => ({ entry: e, group: 'misc', root: !e.parent })),
     }),
   ];
-  function setupSynthetic(doc: Partial<LaunchDocument>) {
-    const user = userEvent.setup();
-    render(
-      <LaunchTestProvider envs={synthetic} doc={createDocument({ environmentIds: [PRODUCTION], ...doc })}>
-        <SettingsSection />
-        <Probe />
-      </LaunchTestProvider>,
-    );
-    return user;
-  }
+  const setupSynthetic = (doc: Parameters<typeof setup>[1]) =>
+    setup(<SettingsSection />, doc, undefined, synthetic).user;
 
   it('edits a list of scalars with an "All" input and add/remove', async () => {
     const user = setupSynthetic({ values: { '/STOP_WORDS': ['a', 'b'] } });
