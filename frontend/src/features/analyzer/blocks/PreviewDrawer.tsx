@@ -4,6 +4,9 @@ import { ContextRow } from './PromptContents';
 import { PromptPreview } from './PromptPreview';
 import s from './blocks.module.css';
 
+/** Wide enough for an 80-column prompt line next to the page (cv4 D6: was 560). */
+const PREVIEW_DRAWER_WIDTH = 760;
+
 /**
  * Prompt preview in a right drawer (opened from the action rail or a target row, `?preview=1`):
  * previewed-target select, the Context switches (the same page state as "Prompt contents", cv4 D7), then the
@@ -29,7 +32,7 @@ export function PreviewDrawer({
       onOpenChange={onOpenChange}
       title="Prompt preview"
       subtitle="The exact messages the analyzer would send. No LLM call is made."
-      width={560}
+      width={PREVIEW_DRAWER_WIDTH}
     >
       <div className={s.stack}>
         <Select
