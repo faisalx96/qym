@@ -47,6 +47,19 @@
   overflow: hidden;
 }
 
+/* cv4 F2: the header row and the rows sit flush with the card edge. A toolbar above (or a footer below) already has the
+   card's round corner, so the body under it is square at that edge: a round body corner left an empty wedge between the
+   toolbar and the header row ("at the corner there is an empty space"). */
+.toolbar ~ .bodyHost {
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
+}
+
+.bodyHost:has(~ .footer) {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+
 .scroller {
   position: relative;
   min-height: 0;
