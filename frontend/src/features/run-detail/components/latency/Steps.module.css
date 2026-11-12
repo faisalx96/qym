@@ -228,9 +228,8 @@ button.label:focus-visible {
   color: inherit;
 }
 
-/* cv4 X16: the group's leaf count is the one count badge (CountTile), as the tab and nav counts. */
+/* cv4 X16: the group's leaf count is the one count badge (CountTile, with its own start margin), as the tab counts. */
 .count {
-  margin-inline-start: 6px;
   vertical-align: middle;
 }
 
