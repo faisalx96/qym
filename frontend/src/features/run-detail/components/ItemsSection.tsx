@@ -131,16 +131,11 @@ export function ItemsSection() {
         id="run-items"
         title="Items"
         description="Every input, outcome and metric. Filters apply to the table and to every section above."
-        aside={
-          // RF3 (C113): auto-analysis starts from the Root cause section and the header's Actions menu
-          <span className={styles.aside}>
-            <CsvExport />
-          </span>
-        }
       >
         <div ref={sectionRef} className={styles.section}>
           <div className={styles.sticky} data-run-filters="">
-            <FilterBar display={{ textMode, onTextMode: setTextMode }} />
+            {/* cv4 C2-8: the CSV export is the right end of the toolbar row, not the section head */}
+            <FilterBar display={{ textMode, onTextMode: setTextMode }} end={<CsvExport />} />
           </div>
           <DirectionNote metric={metric} />
           {showBanner && metric ? (

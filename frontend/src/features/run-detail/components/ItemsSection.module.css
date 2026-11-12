@@ -7,13 +7,6 @@
   min-width: 0;
 }
 
-.aside {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-}
-
 .srOnly {
   position: absolute;
   top: 0;
