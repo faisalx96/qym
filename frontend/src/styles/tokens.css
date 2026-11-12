@@ -288,7 +288,7 @@
      blur of what scrolls under it. */
   --glass-mix: 64%;
   --glass-blur: 16px;
-  --glass-saturate: 140%;
+  --glass-saturate: 110%; /* cv4 Y18: 140% made strong colours under the nav read as smudges */
   /* cv4: a sticky bar of a page (an action bar under a table) stacks over the sticky header and pinned-column layers
      of ui/DataTable (up to 6), under every popover. */
   --z-sticky-bar: 10;
