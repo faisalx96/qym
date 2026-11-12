@@ -362,6 +362,7 @@ function AccessBody({
     <SaveFooter
       dirty={dirty}
       saving={save.isPending}
+      savedText="" // cv4 E12 (A4 rule): no state text while nothing changed
       onSave={() => void onSave()}
       secondary={
         <Button
@@ -460,13 +461,16 @@ function AccessBody({
               pool.length ? (
                 <div className={styles.addPerson} data-testid="access-add" ref={addRef}>
                   <div className={styles.addSelect}>
+                    {/* cv4 E11: each member (and the chosen one) shows as the shared user view: avatar, name, email */}
                     <Select
                       label="Add person"
-                      items={pool.map((p) => ({ key: p.id, label: p.name, description: p.email }))}
+                      items={pool.map((p) => ({ key: p.id, label: p.name, email: p.email }))}
                       value={who}
                       onChange={setWho}
                       placeholder="Choose a project member"
                       width="100%"
+                      renderItem={(p) => <UserName id={String(p.key)} name={p.label} email={p.email} showEmail />}
+                      renderValue={(p) => <UserName id={String(p.key)} name={p.label} email={p.email} />}
                     />
                   </div>
                   <Select

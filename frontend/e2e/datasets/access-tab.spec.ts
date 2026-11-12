@@ -344,14 +344,14 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     await expect(saveFooter(page)).toContainText('Unsaved changes');
     expect(await table.getByTestId('grant-added-at').first().innerText()).toBe(before);
     await page.getByRole('button', { name: 'Discard' }).click();
-    await expect(saveFooter(page)).toContainText('All changes saved');
+    await expect(saveFooter(page)).not.toContainText('Unsaved changes');
     await table.getByRole('button', { name: `Remove ${list[1]!.name}` }).click();
     await expect(saveFooter(page)).toContainText('Unsaved changes');
     const add = page.getByTestId('access-add');
     await add.getByRole('button', { name: /Choose a project member/ }).click();
     await page.getByRole('option', { name: new RegExp(list[1]!.name) }).click();
     await add.getByRole('button', { name: /^Add person$/ }).click();
-    await expect(saveFooter(page)).toContainText('All changes saved');
+    await expect(saveFooter(page)).not.toContainText('Unsaved changes');
   });
 
   test('Unknown user for a deleted granter, You and Not saved for a new row (QA5-40, QA5-41)', async ({
@@ -427,7 +427,7 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     const { project, d } = await restrictedWith(request, 'states', 2);
     await open(page, 1440, project.slug, d.slug);
     const bar = saveFooter(page);
-    await expect(bar).toContainText('All changes saved');
+    await expect(bar).not.toContainText('Unsaved changes');
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Discard' })).toBeDisabled();
     await page.getByTestId('access-mode-project').click();
@@ -457,7 +457,7 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.locator('[data-toast-container]').getByText('Access saved')).toBeVisible();
     expect(puts).toHaveLength(1);
-    await expect(bar).toContainText('All changes saved');
+    await expect(bar).not.toContainText('Unsaved changes');
   });
 
   test('add a person, save, reload: one PUT and the count in the strip updates (QA5-46, QA5-68, QA5-78)', async ({
