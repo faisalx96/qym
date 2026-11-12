@@ -312,6 +312,8 @@ interface DataCellProps<R> {
   offset: number | undefined;
   edge: 'start' | 'end' | undefined;
   header: boolean;
+  /** The row's primary text column (cv4 F4): the cell carries `data-row-primary`. */
+  primary: boolean;
 }
 
 /**
@@ -329,6 +331,7 @@ const DataCell = memo(function DataCell<R>({
   offset,
   edge,
   header,
+  primary,
 }: DataCellProps<R>) {
   const ctx: CellCtx = { index, density, card: false };
   const cellContent = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
@@ -355,6 +358,7 @@ const DataCell = memo(function DataCell<R>({
       <div
         className={styles.cell}
         data-cell=""
+        data-row-primary={primary ? '' : undefined}
         data-wrap={col.wrap ? '' : undefined}
         data-truncate={col.truncate}
         style={col.wrap ? ({ '--lines': col.wrap } as React.CSSProperties) : undefined}
@@ -980,6 +984,14 @@ function DataTableInner<R>({
     return false;
   };
   const openable = Boolean(rowHref || onRowOpen);
+  // cv4 F4: the column whose text turns accent on row hover or keyboard focus (Column.primary)
+  const primaryCol = useMemo(() => {
+    const chosen = visible.find((c) => c.primary === true);
+    if (chosen) return chosen.id;
+    if (!openable && !selectOnRowClick && !expandOnRowClick) return null;
+    const lead = visible.find((c) => c.cardTitle) ?? visible.find((c) => c.priority === 1);
+    return lead && lead.primary !== false ? lead.id : null;
+  }, [visible, openable, selectOnRowClick, expandOnRowClick]);
 
   /* keyboard */
   const pendingNav = useRef<number | null>(null);
@@ -1709,6 +1721,7 @@ function DataTableInner<R>({
         offset={pin === 'start' || pin === 'end' ? offsets[col.id] : undefined}
         edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}
         header={ci === 0 && !selection && !renderExpanded && !childRows}
+        primary={col.id === primaryCol}
       />
     );
   };

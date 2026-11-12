@@ -87,6 +87,22 @@ a[data-link='name']:hover {
   text-decoration: none;
 }
 
+/* cv4 F4: the row's primary text (data-row-primary, and a plain link inside it) turns accent while the whole row is
+   hovered or holds keyboard focus, not only while the pointer is on the text. Never underlined. A Tag inside keeps its
+   own colour (data-tone). */
+a[data-row-primary],
+[data-row-primary] a {
+  text-decoration: none;
+}
+:is(tr, [role='row']):is(:hover, :focus-visible, :has(:focus-visible))
+  :is([data-row-primary], [data-row-primary] a:not([data-tone])) {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+[data-row-primary] {
+  transition: color var(--transition-fast);
+}
+
 button,
 input,
 select,
