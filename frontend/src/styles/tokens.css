@@ -81,6 +81,13 @@
   /* Canonical interactive component geometry.
      One aligned density is used across forms and analysis toolbars. */
   --control-height: 24px;
+  /* cv4 F6 (owner 2026-11-12): a neutral button reads as a button: a visible fill and edge at rest, a label a step
+     under --text-primary (brighter than a dropdown's muted label), and a brighter fill, edge and label on hover. */
+  --button-fill: var(--bg-hover);
+  --button-fill-hover: var(--bg-active);
+  --button-edge: var(--border-default);
+  --button-edge-hover: var(--border-strong);
+  --button-text: #cdcdd8; /* 11.6:1 on --bg-hover */
   --control-height-sm: 20px; /* cv4 F3: a small box inside a control row (the pager's page number) */
   --control-radius: 5px;
   /* A field-like control's edge (text field, select, filter trigger, segmented control): a soft hairline at rest over

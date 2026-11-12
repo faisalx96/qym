@@ -15,11 +15,14 @@
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  color: var(--text-primary);
-  /* quiet at rest (no border), brighter on hover and press: a resting fill brighter than its hover read as already active */
-  background: var(--bg-elevated);
+  /* cv4 F6: one ladder for every variant. Rest = a visible fill and a 1px inner edge (box-shadow, so the size does not
+     change), a label a step under --text-primary; hover = a brighter fill, edge and label; press = one step back. */
+  color: var(--button-text);
+  background: var(--button-fill);
+  box-shadow: inset 0 0 0 1px var(--button-edge);
   transition:
     background var(--transition-fast),
+    box-shadow var(--transition-fast),
     color var(--transition-fast);
   text-decoration: none;
 }
@@ -75,51 +78,67 @@
 
 .button[data-hovered],
 a.button:hover:not([data-disabled]) {
-  background: var(--bg-active);
+  color: var(--text-primary);
+  background: var(--button-fill-hover);
+  box-shadow: inset 0 0 0 1px var(--button-edge-hover);
 }
 .button[data-pressed],
 a.button:active:not([data-disabled]) {
-  background: var(--bg-hover);
+  background: var(--button-fill);
 }
 
+/* Tinted variants: the tone's soft tint and a tone edge at rest, the strong tint and a stronger edge on hover. */
 .button[data-variant='accent'] {
   color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 30%, transparent);
 }
 .button[data-variant='accent'][data-hovered],
 a.button[data-variant='accent']:hover:not([data-disabled]) {
+  color: var(--accent-primary-hover);
   background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 55%, transparent);
 }
 
 .button[data-variant='meta'] {
   color: var(--accent-tertiary-soft);
   background: color-mix(in srgb, var(--accent-tertiary) var(--tint-soft), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-tertiary) 30%, transparent);
 }
 .button[data-variant='meta'][data-hovered],
 a.button[data-variant='meta']:hover:not([data-disabled]) {
+  color: var(--accent-tertiary-soft);
   background: color-mix(in srgb, var(--accent-tertiary) var(--tint-strong), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-tertiary) 55%, transparent);
 }
 .button[data-variant='meta'][data-pressed],
 a.button[data-variant='meta']:active:not([data-disabled]) {
   background: color-mix(in srgb, var(--accent-tertiary) var(--tint-strong), var(--bg-elevated));
 }
 
+/* Primary: the solid accent, no edge; hover = the brighter accent. */
 .button[data-variant='primary'] {
   color: var(--bg-void);
   background: var(--accent-primary);
+  box-shadow: none;
 }
 .button[data-variant='primary'][data-hovered],
 a.button[data-variant='primary']:hover:not([data-disabled]) {
+  color: var(--bg-void);
   background: var(--accent-primary-hover);
+  box-shadow: none;
 }
 
 .button[data-variant='danger'] {
   color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
   background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 30%, transparent);
 }
 .button[data-variant='danger'][data-hovered],
 a.button[data-variant='danger']:hover:not([data-disabled]) {
+  color: color-mix(in srgb, var(--error) 55%, var(--text-primary));
   background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 55%, transparent);
 }
 
 /* Disabled reads as inert but stays legible: muted text (6:1) in every variant, instead of fading the variant's own fill
@@ -129,6 +148,7 @@ a.button[data-variant='danger']:hover:not([data-disabled]) {
 .button[data-disabled] {
   color: var(--text-muted);
   background: color-mix(in srgb, var(--bg-elevated) 50%, transparent);
+  box-shadow: none;
   cursor: not-allowed;
 }
 
