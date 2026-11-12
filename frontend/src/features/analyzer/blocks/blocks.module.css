@@ -227,6 +227,11 @@
   white-space: nowrap;
 }
 
+.railLink {
+  flex: none;
+  white-space: nowrap;
+}
+
 .railPrimary {
   min-width: var(--action-primary-width);
   justify-content: center;

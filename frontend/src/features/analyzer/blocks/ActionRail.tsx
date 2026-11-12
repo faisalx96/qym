@@ -197,13 +197,13 @@ export function ActionRail({
           title={status}
         >
           {status}
-          {status && !config.llm_connections.length && config.can_operate_analyzer ? (
-            <>
-              {' '}
-              <Link to={`${projectPath(slug, 'settings')}?tab=llm`}>Open LLM connections</Link>
-            </>
-          ) : null}
         </Text>
+        {/* Its own element after the notice, so a long notice never cuts the link (cv4 D5). */}
+        {status && !config.llm_connections.length && config.can_operate_analyzer ? (
+          <Link to={`${projectPath(slug, 'settings')}?tab=llm`} className={s.railLink}>
+            Open LLM connections
+          </Link>
+        ) : null}
       </div>
       <div className={s.railActions}>
         {primary}
