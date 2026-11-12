@@ -4,6 +4,7 @@ import {
   ClampedText,
   CopyButton,
   Dialog,
+  Disclosure,
   Icon,
   IconButton,
   JsonTree,
@@ -126,10 +127,9 @@ function Messages({ node, only }: { node: SpanNode; only?: 'input' | 'output' })
           }
         >
           {m.reasoning ? (
-            <details className={styles.reasoning}>
-              <summary>Reasoning</summary>
+            <Disclosure className={styles.reasoning} title="Reasoning">
               <TextBlock text={m.reasoning} />
-            </details>
+            </Disclosure>
           ) : null}
           {m.content ? <ClampedText text={m.content} lines={14} /> : null}
           {m.toolCalls.map((t, j) => (
@@ -151,10 +151,9 @@ function Messages({ node, only }: { node: SpanNode; only?: 'input' | 'output' })
       {render(input, 'in')}
       {render(output, 'out')}
       {reasoning && !output.some((m) => m.reasoning) ? (
-        <details className={styles.reasoning}>
-          <summary>Reasoning</summary>
+        <Disclosure className={styles.reasoning} title="Reasoning">
           <TextBlock text={reasoning} />
-        </details>
+        </Disclosure>
       ) : null}
     </div>
   );

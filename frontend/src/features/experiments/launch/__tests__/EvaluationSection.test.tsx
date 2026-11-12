@@ -45,7 +45,7 @@ describe('EvaluationSection input groups (C185)', () => {
       expect(document.querySelector(`[data-eval-field="${name}"]`)).toBeInTheDocument();
     expect(document.querySelector('[data-eval-field="report_k"]')).toBeNull();
     const samples = document.querySelector('[data-eval-field="samples"]') as HTMLElement;
-    expect(within(samples).getByText('Samples', { selector: 'span' })).toHaveAttribute('title', 'samples');
+    expect(within(samples).getByText('Passes', { selector: 'span' })).toHaveAttribute('title', 'samples');
     expect(within(samples).queryByText('samples')).toBeNull();
     await openAdvanced(user);
     expect(document.querySelector('[data-eval-field="report_k"]')).toBeInTheDocument();
@@ -86,13 +86,13 @@ describe('EvaluationSection', () => {
     await open(user);
     const field = document.querySelector('[data-eval-field="samples"]') as HTMLElement;
     expect(field).toBeInTheDocument();
-    const input = within(field).getByRole('textbox', { name: 'Samples' });
+    const input = within(field).getByRole('textbox', { name: 'Passes' });
     expect(input).toHaveValue('2');
     await user.clear(input);
     await user.type(input, '7');
     expect(live.current?.doc.evaluator.config['samples']).toBe(7);
     expect(within(field).getByText('Changed from the starting point')).toBeInTheDocument();
-    await user.click(within(field).getByRole('button', { name: /Reset Samples/ }));
+    await user.click(within(field).getByRole('button', { name: /Reset Passes/ }));
     expect(live.current?.doc.evaluator.config['samples']).toBeUndefined();
     expect(screen.queryByText('Changed from the starting point')).not.toBeInTheDocument();
   });

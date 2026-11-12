@@ -38,6 +38,7 @@ export function EnvironmentPage({ environmentId }: { environmentId: string }) {
         actions={
           <LinkButton
             to={backTo}
+            variant="neutral"
             icon={<Icon name="prev" size={12} />}
             className={styles.pageBack}
           >
@@ -46,10 +47,7 @@ export function EnvironmentPage({ environmentId }: { environmentId: string }) {
         }
         tabs={<ExperimentsTabs current="environments" />}
       />
-      <EnvironmentPanelBody
-        environmentId={environmentId}
-        onDeleted={() => navigate(backTo)}
-      />
+      <EnvironmentPanelBody environmentId={environmentId} onDeleted={() => navigate(backTo)} />
     </div>
   );
 }

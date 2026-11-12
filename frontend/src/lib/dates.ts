@@ -4,6 +4,7 @@
  *   headers    'Sep 14, 2026, 19:05'
  *   a day      'Sep 14, 2026'           (a date with no time of day, such as Created or Granted)
  *   freshness  '5m ago'                 ('just now', '3h ago', '2d ago'; older than 30 days falls back to a day)
+ *   day keys   'Nov 5, 2026' / 'Nov 5'   (Live calendar days, no zone shift)
  * Times are 24-hour. Every page formats dates through this module.
  */
 
@@ -58,6 +59,22 @@ export function formatHeaderDate(value: string | number | Date | null | undefine
 export function formatDay(value: string | number | Date | null | undefined): string {
   const d = toDate(value);
   return d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : '—';
+}
+
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** A calendar day key 'YYYY-MM-DD' as 'Nov 5, 2026', with no time-zone shift (Live days). */
+export function formatDayKey(key: string): string {
+  const m = DAY_KEY.exec(key);
+  if (!m) return key;
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+}
+
+/** A day key as 'Nov 5' (ranges). */
+export function formatShortDayKey(key: string): string {
+  const m = DAY_KEY.exec(key);
+  if (!m) return key;
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}`;
 }
 
 /** Freshness: 'just now', '5m ago', '3h ago', '2d ago'; past 30 days the day itself. */

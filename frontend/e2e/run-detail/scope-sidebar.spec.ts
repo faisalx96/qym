@@ -35,7 +35,7 @@ test.describe('desktop 1280', () => {
     await expect(sidebar(page)).toHaveCount(0);
   });
 
-  test('a filter brings in the scope bar and the sidebar; Clear all removes both', async ({ page }) => {
+  test('a filter brings in the scope bar and the sidebar; the nav Clear removes both', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await page.getByRole('radio', { name: 'Fail' }).click({ force: true });
     await expect(scopeBar(page)).toBeVisible();
@@ -43,7 +43,7 @@ test.describe('desktop 1280', () => {
     const [shown] = await itemsCount(page);
     await expect(scopeBar(page)).toContainText(`Scope: ${shown} of 240 items`);
     await expect(page.locator('#run-section-overview')).toContainText(`over ${shown} of 240 items`);
-    await scopeBar(page).getByRole('button', { name: 'Clear all' }).click();
+    await page.getByTestId('nav-clear-filters').click();
     await expect(scopeBar(page)).toHaveCount(0);
     await expect(sidebar(page)).toHaveCount(0);
     expect(await itemsCount(page)).toEqual([240, 240]);
@@ -60,7 +60,7 @@ test.describe('desktop 1280', () => {
       .getByRole('group', { name: /^Category/ })
       .first();
     await category.getByRole('button').first().click();
-    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(2);
+    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(0);
   });
 
   test('C154: a search alone does not open the sidebar; its scope-bar button does', async ({ page }) => {
@@ -71,11 +71,10 @@ test.describe('desktop 1280', () => {
     await expect(sidebar(page)).toBeVisible();
   });
 
-  test('removing the last chip closes the scope', async ({ page }) => {
+  test('the nav Clear closes the scope (C-44: the chip has no remove button)', async ({ page }) => {
     await openRun(page, s.slug, classic, 'show=failed');
-    await scopeBar(page)
-      .getByRole('button', { name: /from scope/ })
-      .click();
+    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(0);
+    await page.getByTestId('nav-clear-filters').click();
     await expect(scopeBar(page)).toHaveCount(0);
   });
 
@@ -146,8 +145,8 @@ test.describe('scope stays visible', () => {
   }) => {
     await openRun(page, s.slug, classic, 'show=failed');
     await expect(sidebar(page).getByRole('group', { name: 'Active filters' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /from scope/ })).toHaveCount(1);
-    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /from scope/ })).toHaveCount(0);
+    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(0);
     // still visible after reading far down the report: the sidebar is sticky
     await goToSection(page, /^Errors/);
     await expect(sidebar(page).getByText('Quick filters', { exact: true })).toBeInViewport();

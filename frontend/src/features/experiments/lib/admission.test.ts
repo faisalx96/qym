@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { formatHeaderDate } from '@/lib/dates';
 import { admissionLine, clockTime, type AdmissionJob } from './admission';
 
 const job = (over: Partial<AdmissionJob> = {}): AdmissionJob => ({
@@ -32,7 +33,7 @@ describe('admissionLine', () => {
     const iso = '2026-10-20T12:52:00';
     const running = admissionLine(job({ status: 'RUNNING', deferrals: 2, admitted_at: iso }));
     expect(running?.text).toBe(`admitted ${clockTime(iso)}`);
-    expect(running?.title).toBe(iso);
+    expect(running?.title).toBe(formatHeaderDate(iso));
   });
   it('shows re-queues of a waiting job after its deferral text', () => {
     expect(admissionLine(job({ deferrals: 1, deferral_reason: 'gateway quiet window', contaminated_attempts: 1 }))?.text).toBe(

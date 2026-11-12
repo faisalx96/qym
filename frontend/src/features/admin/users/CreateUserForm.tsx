@@ -106,7 +106,6 @@ export function CreateUserForm({ onCreated, localAuth = false, providers = [] }:
           label="Display name"
           value={name}
           onChange={setName}
-          placeholder="Optional"
           width={180}
           isDisabled={create.isPending}
           name="display_name"
@@ -150,11 +149,7 @@ export function CreateUserForm({ onCreated, localAuth = false, providers = [] }:
               onFocus={(e) => e.target.select()}
               data-secret
             />
-            <CopyButton
-              text={secret.password}
-              label="Copy one-time password"
-              onCopied={() => toast.show('One-time password copied', { tone: 'success' })}
-            />
+            <CopyButton text={secret.password} label="Copy one-time password" />
           </div>
           <Text variant="sm" tone="muted">
             They set a new password at first sign-in. It is not shown again.

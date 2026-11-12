@@ -1,0 +1,17 @@
+/* CountTile: a count inside a control, centred in an 18px tile. */
+.tile {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-xs);
+  margin-inline-start: var(--space-xs);
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}

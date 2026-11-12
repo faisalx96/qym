@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom';
 import type { LiveFilters, LiveMetricSpec, LiveTurnRow, LiveTurnsPage } from '@/api/live';
+import { formatHeaderDate, formatTableDate } from '@/lib/dates';
+import { formatDuration, formatPercentValue } from '@/lib/format';
 import { applyQueryUpdates, useSearchParamsState } from '@/lib/url-state';
 import { DataTable, EmptyState, ScoreValue, StatusMark, Tag, type Column, type SortState } from '@/ui';
 import { listedScoreColumns } from '../lib/filters';
-import { diagnosisSpec, mixSegments } from '../lib/mix';
+import { diagnosisSpec, mixSegments, verdictOf } from '../lib/mix';
+import { PassFailMark } from './turn/Evidence';
 import styles from '../turns.module.css';
 
 interface TurnsTableProps {
@@ -21,9 +24,9 @@ function scoreText(row: LiveTurnRow, spec: LiveMetricSpec): string {
   const value = score.score_numeric;
   if (value === null) return score.label ?? '—';
   const digits = spec.precision ?? (spec.score_type === 'numeric' ? 2 : 0);
-  if (spec.score_type === 'percentage') return `${(value * 100).toFixed(digits)}%`;
-  if (spec.score_type === 'boolean') return value ? 'True' : 'False';
-  return `${value.toFixed(digits)}${spec.unit ? ` ${spec.unit}` : ''}`;
+  if (spec.score_type === 'percentage') return formatPercentValue(value, 1);
+  if (spec.score_type === 'boolean') return value ? 'Pass' : 'Fail';
+  return `${value.toFixed(digits)}${spec.unit ? (['s', 'ms', 'min', 'h'].includes(spec.unit) ? spec.unit : ` ${spec.unit}`) : ''}`;
 }
 
 export function TurnsTable({ slug, source, filters, data, specs, refreshing }: TurnsTableProps) {
@@ -45,12 +48,15 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
   const columns: Column<LiveTurnRow>[] = [
     {
       id: 'turn_at',
-      header: 'Time (UTC)',
-      width: 88,
+      header: 'Time',
+      width: 120,
       pin: 'start',
-      mono: true,
       sort: { key: 'turn_at', first: 'desc' },
-      cell: (row) => <span title={row.turn_at}>{row.turn_at.slice(11, 16)}</span>,
+      cell: (row) => (
+        <time className={styles.time} dateTime={row.turn_at} title={formatHeaderDate(row.turn_at)}>
+          {formatTableDate(row.turn_at)}
+        </time>
+      ),
     },
     {
       id: 'question',
@@ -81,19 +87,13 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
       width: 200,
       cell: (row) => {
         const label = labelFor(row.label);
-        const tone = label?.tone ?? 'neutral';
+        const v = verdictOf(label?.specTone);
         return (
           <span
             className={styles.diagnosisCell}
             title={[label?.label ?? row.label, row.label_reason].filter(Boolean).join(' · ')}
           >
-            <StatusMark
-              tone="neutral"
-              data-tone={tone}
-              shape={tone === 'danger' ? 'cross' : tone === 'accent' || tone === 'success' ? 'check' : 'ring'}
-              label={label?.label ?? row.label ?? '—'}
-              dir="auto"
-            />
+            <StatusMark tone={v.tone} shape={v.shape} label={label?.label ?? row.label ?? '—'} dir="auto" />
             {row.label_reason ? (
               <span className={styles.reason} dir="auto" title={row.label_reason}>
                 {row.label_reason}
@@ -107,11 +107,17 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
       id: `metric:${spec.metric_name}`,
       header: spec.label,
       width: 108,
-      align: 'end',
+      align: 'center',
       mono: true,
       sort: { key: `metric:${spec.metric_name}`, first: 'desc' },
       cell: (row) =>
-        spec.is_primary ? (
+        spec.score_type === 'boolean' ? (
+          <PassFailMark
+            value={
+              row.scores[spec.metric_name]?.skipped ? null : (row.scores[spec.metric_name]?.score_numeric ?? null)
+            }
+          />
+        ) : (
           <ScoreValue
             value={row.scores[spec.metric_name]?.skipped ? null : row.scores[spec.metric_name]?.score_numeric}
             direction={spec.direction}
@@ -119,8 +125,6 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
             text={scoreText(row, spec)}
             variant="plain"
           />
-        ) : (
-          <span className={styles.number}>{scoreText(row, spec)}</span>
         ),
     })),
     {
@@ -131,7 +135,11 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
       sort: { key: 'latency_ms', first: 'desc' },
       cell: (row) => (
         <span data-live-latency={row.latency_ms ?? undefined}>
-          {row.latency_ms === null ? '—' : `${Math.round(row.latency_ms / 1000)} s`}
+          {row.latency_ms === null
+            ? '—'
+            : row.latency_ms >= 1000 && row.latency_ms < 60_000
+              ? `${Math.round(row.latency_ms / 1000)}s`
+              : formatDuration(row.latency_ms)}
         </span>
       ),
     },
@@ -191,7 +199,8 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
             </span>
             {row.conversation_id ? (
               <Link
-                className={styles.number}
+                data-link="name"
+                className={`${styles.number} ${styles.oneLine}`}
                 to={linkTo(row.conversation_id)}
                 title={row.conversation_id}
                 dir="auto"

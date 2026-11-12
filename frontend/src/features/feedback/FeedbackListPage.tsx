@@ -13,8 +13,10 @@ import { useDocumentTitle, useMediaQuery } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { useSearchParamsState } from '@/lib/url-state';
 import {
+  ActionTile,
   Button,
   Card,
+  ClearFiltersButton,
   DataTable,
   DropdownMenu,
   Drawer,
@@ -23,7 +25,7 @@ import {
   MultiSelect,
   PageHeader,
   SearchField,
-  SegmentedControl,
+  Select,
   StaleBanner,
   useToast,
   type Key,
@@ -76,25 +78,19 @@ function writeFrame(rows: number, height: number) {
   }
 }
 
-export function NewFeedbackButton({ disabled, size = 'md' }: { disabled?: boolean; size?: 'md' | 'sm' }) {
+export function NewFeedbackButton({ disabled }: { disabled?: boolean }) {
   const navigate = useNavigate();
-  const button = (
+  return (
     <Button
-      variant="accent"
-      size={size}
-      icon={<Icon name="plus" size={14} />}
+      variant="primary"
+      icon={<Icon name="plus" size={12} />}
       isDisabled={disabled}
+      disabledReason="An admin must connect a model first"
+      data-testid={disabled ? 'new-feedback-disabled' : undefined}
       onPress={() => navigate('/feedback/new')}
     >
       New feedback
     </Button>
-  );
-  return disabled ? (
-    <span title="An administrator has to connect a model first" data-testid="new-feedback-disabled">
-      {button}
-    </span>
-  ) : (
-    button
   );
 }
 
@@ -135,6 +131,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="Status"
         triggerVariant="bar"
+        emptyMeansAll
         items={STATUSES}
         value={new Set(view.status)}
         onChange={multi('status')}
@@ -142,6 +139,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="About"
         triggerVariant="bar"
+        emptyMeansAll
         items={ABOUT}
         value={new Set(view.about)}
         onChange={multi('about')}
@@ -149,6 +147,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="Project"
         triggerVariant="bar"
+        emptyMeansAll
         items={(data?.facets.projects ?? []).map((p) => ({ key: p.slug, label: p.name, count: p.count }))}
         value={new Set(view.project)}
         onChange={multi('project')}
@@ -156,6 +155,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="Priority"
         triggerVariant="bar"
+        emptyMeansAll
         items={PRIORITIES}
         value={new Set(view.priority)}
         onChange={multi('priority')}
@@ -163,6 +163,7 @@ export function FeedbackListPage() {
       <MultiSelect
         label="Complexity"
         triggerVariant="bar"
+        emptyMeansAll
         items={COMPLEXITIES}
         value={new Set(view.complexity)}
         onChange={multi('complexity')}
@@ -170,14 +171,16 @@ export function FeedbackListPage() {
     </>
   );
   const whose = (
-    <SegmentedControl
-      label="Whose requests"
+    <Select
+      label="Created by"
+      hideLabel
+      triggerVariant="bar"
+      items={[
+        { key: 'all', label: 'Everyone' },
+        { key: 'mine', label: 'Me' },
+      ]}
       value={view.mine ? 'mine' : 'all'}
       onChange={(v) => set({ mine: v === 'mine' ? '1' : null })}
-      options={[
-        { value: 'all', label: 'Everyone' },
-        { value: 'mine', label: 'Mine' },
-      ]}
     />
   );
   const filterRow = phone ? (
@@ -201,6 +204,20 @@ export function FeedbackListPage() {
     <div className={styles.filterRow} data-testid="filter-row">
       <span className={styles.facets}>{facetNodes}</span>
       {whose}
+      <ClearFiltersButton
+        count={activeFilterCount(view) + (view.q ? 1 : 0)}
+        onClear={() =>
+          set({
+            status: null,
+            about: null,
+            project: null,
+            priority: null,
+            complexity: null,
+            q: null,
+            mine: null,
+          })
+        }
+      />
     </div>
   );
 
@@ -217,19 +234,6 @@ export function FeedbackListPage() {
       }}
     />
   ) : null;
-
-  // QE-150: "/" focuses the search, as on the runs list.
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (el && (el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName))) return;
-      e.preventDefault();
-      searchRef.current?.focus();
-    };
-    window.addEventListener('keydown', on);
-    return () => window.removeEventListener('keydown', on);
-  }, []);
 
   const empty = data && data.counts.all === 0 && !filtered && !list.isFetching;
   return (
@@ -278,17 +282,7 @@ export function FeedbackListPage() {
             sort={sortToState(view.sort)}
             onSortChange={(s) => set({ sort: s ? `${s.key}:${s.direction}` : null })}
             filtered={filtered}
-            onClearFilters={() =>
-              set({
-                status: null,
-                about: null,
-                project: null,
-                priority: null,
-                complexity: null,
-                q: null,
-                mine: null,
-              })
-            }
+            q={view.q || undefined}
             lastCount={remembered.rows}
             toolbar={
               <DataTable.Toolbar
@@ -297,14 +291,14 @@ export function FeedbackListPage() {
                     ref={searchRef}
                     label="Search requests"
                     placeholder="Search requests"
-                    width="100%"
+                    width="var(--search-width)"
+                    shortcut="/"
                     value={view.q}
                     onChange={(q) => set({ q: q || null })}
                     onClear={() => set({ q: null })}
                   />
                 }
                 rows={filterRow}
-                count={`${data?.matching ?? 0} ${data?.matching === 1 ? 'request' : 'requests'}`}
                 trailing={exportMenu}
                 columnsMenu={false}
                 densityMenu={false}
@@ -314,8 +308,9 @@ export function FeedbackListPage() {
               <DataTable.Footer
                 testId="feedback-footer"
                 ariaLabel="Feedback status"
+                filterNote={data && filtered ? `Filtered from ${data.counts.all} requests` : undefined}
                 pagination={
-                  data && data.total > PAGE_SIZE
+                  data
                     ? {
                         total: data.total,
                         page: view.page,
@@ -334,12 +329,15 @@ export function FeedbackListPage() {
   );
 }
 
+const FORMAT_GLYPH = { csv: 'sheet', xlsx: 'xgrid', json: 'braces', jsonl: 'braces-lines' } as const;
+
 function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (f: ExportFormat) => void }) {
   const trigger = (
     <Button
-      variant="neutral"
+      variant="accent"
       size="sm"
       icon={<Icon name="download" size={12} />}
+      iconEnd={<Icon name="chevron-down" size={12} />}
       isDisabled={disabled}
       data-testid="export-menu"
     >
@@ -356,7 +354,11 @@ function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (f: Expor
     <DropdownMenu
       label="Export format"
       trigger={trigger}
-      items={EXPORT_FORMATS.map((f) => ({ id: f.id, label: f.label }))}
+      items={EXPORT_FORMATS.map((f) => ({
+        id: f.id,
+        label: f.label,
+        icon: <ActionTile icon={FORMAT_GLYPH[f.id]} />,
+      }))}
       onAction={(id) => onPick(id as ExportFormat)}
     />
   );

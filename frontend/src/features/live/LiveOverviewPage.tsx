@@ -1,10 +1,13 @@
+import { useModelIndex } from '@/api/dashboard';
 import { overviewFrames, useCachedOverview, useLiveOverview } from './lib/overview';
 import { useProjectContext } from '@/features/shell/ProjectContext';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { ErrorState, PageHeader, Skeleton } from '@/ui';
+import { projectPath } from '@/app/routes';
+import { ErrorState, InlineNotice, LinkButton, PageHeader, Skeleton } from '@/ui';
+import { staleText } from './lib/stale';
 import { SourceControl } from './components/SourceControl';
 import { DaySwitcher } from './components/DaySwitcher';
 import { StatusLine } from './components/StatusLine';
@@ -26,6 +29,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
   const requestedDaysPage = Number(get('days_page', '1'));
   const daysPage = Number.isSafeInteger(requestedDaysPage) && requestedDaysPage > 0 ? requestedDaysPage : 1;
   const query = useLiveOverview(slug, { source, day, trendDays, daysPage });
+  const modelIndex = useModelIndex(slug);
   const showSkeleton = useDelayedPending(query.isPending);
   const overview = query.data;
   const cachedOverview = useCachedOverview(slug, source);
@@ -40,8 +44,17 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
           description="Every real user turn, evaluated as it happens"
           meta={[
             <SourceControl key="source" slug={slug} source={source} status={overview?.status} />,
-            <DaySwitcher key="day" day={day} />,
+            <DaySwitcher
+              key="day"
+              day={day}
+              today={overview?.status.today ?? new Date().toISOString().slice(0, 10)}
+            />,
           ]}
+          actions={
+            <LinkButton to={`${projectPath(slug, 'live/worker')}?${new URLSearchParams({ source })}`}>
+              Manage worker
+            </LinkButton>
+          }
         />
       </div>
       {query.isError ? (
@@ -74,7 +87,12 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
         </div>
       ) : overview ? (
         <>
-          <StatusLine status={overview.status} slug={slug} source={source} />
+          {overview.status.stale ? (
+            <InlineNotice tone="danger" lead="Stale." data-testid="live-stale-notice">
+              {`${staleText(overview.status)}.`}
+            </InlineNotice>
+          ) : null}
+          <StatusLine status={overview.status} slug={slug} source={source} modelIndex={modelIndex} />
           <DayNumbers overview={overview} linkTo={linkTo} />
           <div className={styles.mixRow}>
             <DiagnosisMix overview={overview} linkTo={linkTo} />

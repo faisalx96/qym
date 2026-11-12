@@ -13,6 +13,7 @@ import {
 import type { EvalEnvironment } from '@/api/evalCommon';
 import {
   Button,
+  Disclosure,
   DataTable,
   ErrorState,
   JsonTree,
@@ -137,10 +138,9 @@ export function VersionView({
           ) : null}
         </dd>
       </dl>
-      <details className={styles.jsonDetails}>
-        <summary>Config document (read-only)</summary>
+      <Disclosure className={styles.jsonDetails} title="Config document (read-only)">
         <JsonTree data={config} expandDepth={1} label={`Config of v${version.version}`} />
-      </details>
+      </Disclosure>
     </div>
   );
 }
@@ -160,20 +160,23 @@ function VersionItem({
 }) {
   const [opened, setOpened] = useState(false);
   return (
-    <details
+    <Disclosure
       className={styles.version}
-      data-version={version.version}
-      onToggle={(e) => e.currentTarget.open && setOpened(true)}
-    >
-      <summary className={styles.versionSummary}>
-        <Tag kind="version">v{version.version}</Tag>
-        {isCurrent ? <Tag tone="success">current</Tag> : null}
-        <span>{version.published_by?.name || 'Unknown'}</span>
-        <span className={styles.mono} title={absTime(version.published_at)}>
-          {relTime(version.published_at)}
+      onOpenChange={(o) => {
+        if (o) setOpened(true);
+      }}
+      title={
+        <span className={styles.versionSummary}>
+          <Tag kind="version">v{version.version}</Tag>
+          {isCurrent ? <Tag tone="success">current</Tag> : null}
+          <span>{version.published_by?.name || 'Unknown'}</span>
+          <span className={styles.mono} title={absTime(version.published_at)}>
+            {relTime(version.published_at)}
+          </span>
+          <span className={styles.versionNotes}>{version.notes || ''}</span>
         </span>
-        <span className={styles.versionNotes}>{version.notes || ''}</span>
-      </summary>
+      }
+    >
       {opened ? (
         <div className={styles.versionBody}>
           {version.notes ? <div>{version.notes}</div> : null}
@@ -192,7 +195,7 @@ function VersionItem({
           ) : null}
         </div>
       ) : null}
-    </details>
+    </Disclosure>
   );
 }
 
@@ -281,17 +284,6 @@ export function PresetsSection({
     },
   ];
   const savedActions = (p: Preset): RowAction<Preset>[] => [
-    ...(env.is_active !== false && p.current_version
-      ? [
-          {
-            id: 'open',
-            label: `Open ${p.name} in the launch form`,
-            icon: 'external',
-            primary: true,
-            onPress: () => navigate(launchPath(slug, { env: env.id, base: 'saved', preset: p.id })),
-          },
-        ]
-      : []),
     ...(writable && p.current_version
       ? [
           {
@@ -390,6 +382,14 @@ export function PresetsSection({
           <DataTable<Preset>
             density="regular"
             rowActions={savedActions}
+            onRowOpen={
+              env.is_active !== false
+                ? (p) => {
+                    if (p.current_version)
+                      navigate(launchPath(slug, { env: env.id, base: 'saved', preset: p.id }));
+                  }
+                : undefined
+            }
             aria-label="Saved presets"
             columns={savedColumns}
             rows={saved}

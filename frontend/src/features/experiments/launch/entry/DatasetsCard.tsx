@@ -295,7 +295,7 @@ export function DatasetsCard() {
             <Button
               size="sm"
               variant="neutral"
-              icon={<Icon name="plus" />}
+              icon={<Icon name="plus" size={12} />}
               isDisabled={readOnly || !remaining.length}
               data-add-dataset=""
             >

@@ -49,7 +49,7 @@ export function DraftsStrip({ drafts }: { drafts: FeedbackDraftRow[] }) {
                   </Button>
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="danger"
                     aria-label={`Discard ${title}`}
                     onPress={() => (d.message_count > 1 ? setPending(d) : void discard(d))}
                   >

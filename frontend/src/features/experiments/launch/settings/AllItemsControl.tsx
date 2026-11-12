@@ -14,7 +14,7 @@ import {
   type AllItemsField,
   type DescriptorEntry,
 } from '../model';
-import { Button, Popover } from '@/ui';
+import { Button, IconButton, Popover, Select, TextField } from '@/ui';
 import { plural } from '../../lib/format';
 import { useLaunch } from '../LaunchContext';
 import { endpointNames, useSettingsActions } from './SettingsContext';
@@ -83,15 +83,11 @@ function AllItemsControlImpl(props: AllItemsControlProps) {
     <>
       <PlainAllControl {...props} />
       {canSweep ? (
-        <button
-          type="button"
-          className={styles.linkBtn}
-          aria-label={`Sweep values: ${field.label}`}
-          title="One run per value, for every item together"
-          onClick={() => setDoc((d) => startGlobalSweep(d, field.entry, targets, shared))}
-        >
-          Sweep values
-        </button>
+        <IconButton
+          label={`Sweep values: ${field.label}`}
+          icon="plus"
+          onPress={() => setDoc((d) => startGlobalSweep(d, field.entry, targets, shared))}
+        />
       ) : null}
     </>
   );
@@ -121,58 +117,48 @@ function PlainAllControl({ field, pointers, same, value }: AllItemsControlProps)
   if (isSelect) {
     const shown = isSame ? formatInput(entry, current) : MIXED;
     const keys = entry.widget === 'endpoint-ref' ? endpointNames({ endpoints }, entry) : [];
+    const options =
+      entry.type === 'boolean'
+        ? ['true', 'false'].map((v) => ({ key: v, label: v }))
+        : entry.type === 'enum'
+          ? enumOptions(entry).map((o) => ({ key: o.value, label: o.label }))
+          : keys.map((k) => ({ key: k, label: k }));
     return (
-      <select
-        className={styles.control}
-        data-mono={entry.widget === 'endpoint-ref' ? '' : undefined}
-        aria-label={label}
-        title="A value set here is written to every item"
-        disabled={!targets.length}
-        value={shown}
-        onChange={(e) => {
-          if (e.target.value !== MIXED) apply(e.target.value);
-        }}
-      >
-        {!isSame ? <option value={MIXED}>Mixed</option> : null}
-        <option value="">{unsetLabel(entry)}</option>
-        {entry.type === 'boolean' ? (
-          <>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </>
-        ) : entry.type === 'enum' ? (
-          enumOptions(entry).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))
-        ) : (
-          keys.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))
-        )}
-      </select>
+      <span title="A value set here is written to every item">
+        <Select
+          label={label}
+          hideLabel
+          items={[
+            ...(!isSame ? [{ key: MIXED, label: 'Mixed' }] : []),
+            { key: '', label: unsetLabel(entry) },
+            ...options,
+          ]}
+          value={shown}
+          onChange={(k) => {
+            const v = String(k ?? '');
+            if (v !== MIXED) apply(v);
+          }}
+          isDisabled={!targets.length}
+        />
+      </span>
     );
   }
   const shown = isSame ? formatInput(entry, current) : '';
   const numeric = entry.type === 'integer' || entry.type === 'number';
   return (
     <>
-      <input
-        className={styles.control}
-        data-mono={numeric || entry.widget === 'model-name' || entry.widget === 'url' ? '' : undefined}
-        type="text"
-        spellCheck={false}
+      <TextField
+        label={label}
+        hideLabel
+        mono={numeric || entry.widget === 'model-name' || entry.widget === 'url'}
+        spellCheck="false"
         inputMode={numeric ? 'decimal' : undefined}
-        aria-label={label}
-        aria-invalid={error ? true : undefined}
+        isInvalid={Boolean(error)}
         title={error || 'A value set here is written to every item'}
         placeholder={isSame ? undefined : 'Mixed'}
-        disabled={!targets.length}
+        isDisabled={!targets.length}
         value={draft ?? shown}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={setDraft}
         onBlur={() => {
           if (draft !== null && draft !== shown) apply(draft);
           else setDraft(null);

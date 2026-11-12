@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { runKeys } from '@/api/runs';
-import { Button, Checkbox, Dialog, Icon, useToast } from '@/ui';
+import { Button, Checkbox, Dialog, Disclosure, Icon, useToast } from '@/ui';
 import { buildCsv, discoverColumns, type CsvColumn } from '../../lib/csv';
 import { useRunPage } from '../../RunContext';
 import type { Row, RunPayload } from '../../types';
@@ -74,8 +74,8 @@ export function CsvExport() {
     <>
       <Button
         size="sm"
-        variant="neutral"
-        icon={<Icon name="expand" size={12} />}
+        variant="accent"
+        icon={<Icon name="download" size={12} />}
         onPress={() => void start()}
         loading={!!loading}
         data-testid="csv-button"
@@ -94,7 +94,7 @@ export function CsvExport() {
               Cancel
             </Button>
             <Button
-              variant="accent"
+              variant="primary"
               onPress={download}
               isDisabled={selected.size === 0}
               disabledReason="Select at least one column"
@@ -115,13 +115,12 @@ export function CsvExport() {
         </div>
         <div className={styles.groups}>
           {groups.map(([name, cols]) => (
-            <details key={name} open={name === 'Core' || name === 'Content'} className={styles.group}>
-              <summary>
-                {name}{' '}
-                <span className={styles.count}>
-                  {cols.filter((c) => selected.has(c.id)).length}/{cols.length}
-                </span>
-              </summary>
+            <Disclosure
+              key={name}
+              defaultOpen={name === 'Core' || name === 'Content'}
+              title={name}
+              summary={`${cols.filter((c) => selected.has(c.id)).length}/${cols.length}`}
+            >
               <div className={styles.cols}>
                 {cols.map((c) => (
                   <Checkbox
@@ -140,7 +139,7 @@ export function CsvExport() {
                   </Checkbox>
                 ))}
               </div>
-            </details>
+            </Disclosure>
           ))}
         </div>
       </Dialog>

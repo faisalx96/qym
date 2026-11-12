@@ -26,6 +26,8 @@ export interface TextFieldProps extends Omit<AriaTextFieldProps, 'className' | '
   autoComplete?: string;
   /** Native model/id suggestions shared by several fields. */
   list?: string;
+  /** The hover text of a read-only or bound value (react-aria TextField has no title prop). */
+  title?: string;
   /** Width in ch or px (CSS value). */
   width?: string | number;
 }
@@ -45,6 +47,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
     inputClassName,
     autoComplete,
     list,
+    title,
     width,
     isRequired,
     ...rest
@@ -79,6 +82,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
           ref={ref}
           className={[styles.control, inputClassName].filter(Boolean).join(' ')}
           placeholder={placeholder}
+          title={title}
           autoComplete={autoComplete}
           list={list}
           data-mono={mono ? '' : undefined}

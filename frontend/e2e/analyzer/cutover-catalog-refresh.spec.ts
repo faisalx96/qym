@@ -36,7 +36,7 @@ test('new approvals while editing keep the edits and the starting revision', asy
   // edit the first category's description: unsaved changes
   const description = page.getByRole('textbox', { name: /^Description/ });
   await description.fill('Edited before the approval arrived.');
-  await expect(page.getByTestId('catalog-save-state')).toHaveText('Unsaved changes');
+  await expect(page.locator('[data-save-footer]')).toContainText('Unsaved changes');
 
   // another reviewer approves an example: the config the page refetches has a new revision and example
   const cfg = current as unknown as {
@@ -76,7 +76,7 @@ test('new approvals while editing keep the edits and the starting revision', asy
     await route.fulfill({ json: { catalog: { version: startRevision + 2, categories: [] }, created: true } });
   });
   const put = page.waitForRequest((r) => r.method() === 'PUT' && /analysis-category-catalog$/.test(r.url()));
-  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await put;
   expect(body.base_revision).toBe(startRevision);
 });

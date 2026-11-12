@@ -147,7 +147,7 @@ function Card({
             return (
               <li key={key} className={styles.issue} data-testid="issue" data-status={status}>
                 <div className={styles.issueHead}>
-                  <Tag kind="accent">{issue.category || 'Uncategorized'}</Tag>
+                  <Tag kind="data">{issue.category || 'Uncategorized'}</Tag>
                   {issue.subcategory ? <span className={styles.sub}>{issue.subcategory}</span> : null}
                   <ReviewStatusMark status={status} />
                   {issue.confidence != null ? (
@@ -163,11 +163,12 @@ function Card({
                           <Button
                             size="sm"
                             variant="accent"
+                            icon={<Icon name="check" size={12} />}
                             onPress={() => decide(issue, key, 'approve')}
                             isDisabled={action.isPending || !!block}
                             aria-label={`Approve issue ${issue.category}`}
                           >
-                            ✓ Approve
+                            Approve
                           </Button>
                           <Button
                             size="sm"
@@ -209,7 +210,7 @@ function Card({
                 {isRejecting ? (
                   <div className={styles.rejectForm} data-testid="reject-form">
                     <Textarea
-                      label="Why reject it? (optional)"
+                      label="Why reject it?"
                       value={rejecting.comment}
                       onChange={(comment) => setRejecting({ key, comment })}
                       rows={2}

@@ -53,13 +53,13 @@ export function ItemsToolbar({
           value={q}
           onChange={setQ}
           onClear={() => setQ('')}
-          width="100%"
+          width="var(--search-width)"
           className={styles.search}
         />
         <Button
           size="sm"
           variant="neutral"
-          icon={<Icon name="sidebar" size={14} />}
+          icon={<Icon name="sidebar" size={12} />}
           aria-expanded={facetsOpen}
           data-part="items-facets-btn"
           onPress={() => onFacetsOpen(!facetsOpen)}
@@ -86,8 +86,8 @@ export function ItemsToolbar({
             <Button
               size="sm"
               variant="neutral"
-              icon={<Icon name="menu" size={14} />}
-              iconEnd={<Icon name="chevron-down" size={14} />}
+              icon={<Icon name="menu" size={12} />}
+              iconEnd={<Icon name="chevron-down" size={12} />}
               data-part="items-display-btn"
             >
               Display
@@ -126,7 +126,7 @@ export function ItemsToolbar({
         <Button
           size="sm"
           variant="accent"
-          icon={<Icon name="download" size={14} />}
+          icon={<Icon name="download" size={12} />}
           data-part="items-csv-btn"
           onPress={() => setCsv(true)}
           isDisabled={!items.length}

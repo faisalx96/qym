@@ -10,6 +10,7 @@ import { useSearchParamsState } from '@/lib/url-state';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
+  ActionTile,
   Button,
   DropdownMenu,
   EmptyState,
@@ -80,48 +81,29 @@ export function CatalogPage() {
       }
       actions={
         <>
-          {datasets.length ? (
-            <>
-              <SearchField
-                label="Search datasets"
-                placeholder="Search datasets"
-                value={search}
-                onChange={setSearch}
-                width={240}
-              />
-              <Select
-                label="Sort"
-                hideLabel
-                items={CATALOG_SORTS.map((s) => ({ key: s.key, label: s.label }))}
-                value={sort}
-                onChange={(k) => replaceUrlQuery({ sort: k === 'updated_desc' ? null : String(k) })}
-                searchable={false}
-                width={150}
-              />
-            </>
-          ) : null}
-          <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="ghost">
+          <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="neutral">
             Deleted datasets
           </LinkButton>
           {canCreate ? (
             <DropdownMenu
               label="New dataset"
               trigger={
-                <Button
-                  variant="primary"
-                  icon={<Icon name="plus" size={12} />}
-                  iconEnd={<Icon name="chevron-down" size={12} />}
-                  data-testid="new-dataset"
-                >
+                <Button variant="primary" icon={<Icon name="plus" size={12} />} data-testid="new-dataset">
                   New dataset
                 </Button>
               }
               items={[
-                { id: 'blank', label: 'Start blank', description: 'Create an empty dataset' },
+                {
+                  id: 'blank',
+                  label: 'Start blank',
+                  description: 'Create an empty dataset',
+                  icon: <ActionTile icon="plus" />,
+                },
                 {
                   id: 'import',
                   label: 'Import CSV / TSV / JSON / JSONL',
                   description: 'Upload a file as version v1',
+                  icon: <ActionTile icon="upload" />,
                 },
               ]}
               onAction={(id) => (id === 'blank' ? setCreating(true) : setImporting(true))}
@@ -135,6 +117,27 @@ export function CatalogPage() {
   return (
     <div className={fullWidth} data-datasets-catalog>
       {header}
+      {datasets.length ? (
+        <div className={styles.toolbar}>
+          <SearchField
+            label="Search datasets"
+            placeholder="Search datasets"
+            value={search}
+            onChange={setSearch}
+            width="var(--search-width)"
+            shortcut="/"
+          />
+          <Select
+            label="Sort"
+            hideLabel
+            items={CATALOG_SORTS.map((s) => ({ key: s.key, label: s.label }))}
+            value={sort}
+            onChange={(k) => replaceUrlQuery({ sort: k === 'updated_desc' ? null : String(k) })}
+            searchable={false}
+            width={150}
+          />
+        </div>
+      ) : null}
       {showSkeleton ? (
         <Skeleton kind="cards" count={6} label="Loading datasets" />
       ) : query.isError ? (
@@ -169,8 +172,7 @@ export function CatalogPage() {
       ) : query.data && visible.length === 0 ? (
         <EmptyState
           compact
-          title="No datasets match"
-          body={`Nothing matches “${search}”.`}
+          title={`No datasets match “${search}”`}
           action={
             <Button variant="neutral" onPress={() => setSearch('')}>
               Clear search
@@ -264,14 +266,12 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
           {d.description || <span className={styles.noDescription}>No description</span>}
         </p>
         <div className={styles.stats}>
+          <span>{catalogItemCount(d).toLocaleString(APP_LOCALE)} items</span>
           <span>
-            <strong>{catalogItemCount(d).toLocaleString(APP_LOCALE)}</strong> items
+            {catalogVersionCount(d)} {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
           </span>
           <span>
-            <strong>{catalogVersionCount(d)}</strong> {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
-          </span>
-          <span>
-            <strong>{d.run_count.toLocaleString(APP_LOCALE)}</strong> {d.run_count === 1 ? 'run' : 'runs'}
+            {d.run_count.toLocaleString(APP_LOCALE)} {d.run_count === 1 ? 'run' : 'runs'}
           </span>
         </div>
         <div className={styles.cardFoot}>

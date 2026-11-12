@@ -42,11 +42,11 @@ export interface OutboxStats {
   oldest_age_seconds: number | null;
 }
 
-/** An age in its largest whole unit: '31 days', '5 h', '40 min'. */
+/** An age in its largest whole unit: '31 days', '5h', '40m'. */
 function age(seconds: number): string {
   if (seconds >= 86_400) return days(Math.floor(seconds / 86_400));
-  if (seconds >= 3_600) return `${Math.floor(seconds / 3_600)} h`;
-  return `${Math.max(1, Math.floor(seconds / 60))} min`;
+  if (seconds >= 3_600) return `${Math.floor(seconds / 3_600)}h`;
+  return `${Math.max(1, Math.floor(seconds / 60))}m`;
 }
 
 /** The outbox fact (C074): size and rows, and the oldest row's age when there is one. */
@@ -86,7 +86,6 @@ export function MaintenanceSummary({
               ) : (
                 formatBytes(sizeBytes)
               ),
-            mono: true,
           },
           ...(outbox === null
             ? []
@@ -100,22 +99,19 @@ export function MaintenanceSummary({
                     ) : (
                       outboxText(outbox)
                     ),
-                  mono: true,
                 },
               ]),
           { key: 'events', label: 'Event log', value: s.event_log_mode },
-          { key: 'spans', label: 'Span retention', value: days(s.span_retention_days), mono: true },
+          { key: 'spans', label: 'Span retention', value: days(s.span_retention_days) },
           {
             key: 'grace',
             label: 'Deleted runs retention',
             value: retentionLabel(s.deleted_run_grace_days),
-            mono: Boolean(s.deleted_run_grace_days),
           },
           {
             key: 'partitions',
             label: 'Span partitions ahead',
             value: days(s.span_partition_days_ahead),
-            mono: true,
           },
           {
             key: 'role',

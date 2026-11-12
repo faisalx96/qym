@@ -158,18 +158,37 @@
   min-height: var(--dropdown-option-height);
 }
 
+/* The Checkbox label part fills the row, so the count box sits at its end (B-32). */
+.checkbox > :last-child {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
 .optionLabel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* An option's count: the CountTile recipe (B-32, X15), the number in the exact centre of an 18px tile. */
 .count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-xs);
   margin-inline-start: auto;
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   font-size: var(--font-sm);
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
 }
 
 .only {

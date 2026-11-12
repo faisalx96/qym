@@ -5,7 +5,7 @@
  * the page's filter for that error.
  */
 import { useMemo } from 'react';
-import { Icon, type IconName, Tag } from '@/ui';
+import { EmptyState, Icon, type IconName, Tag } from '@/ui';
 import {
   collectErrors,
   slotOfKind,
@@ -54,7 +54,7 @@ export function ErrorsTab() {
       return { kind, buckets: list, total: list.reduce((a, b) => a + b.count, 0) };
     }).filter((g) => g.buckets.length);
   }, [items, repeatAggregate]);
-  if (!groups.length) return <p className={styles.note}>No errors in the current view.</p>;
+  if (!groups.length) return <EmptyState compact title="No errors in this view" />;
   const active = api.view.filters.errors;
   const toggle = (b: ErrorBucket) => {
     const slot = slotOfKind(b.kind);

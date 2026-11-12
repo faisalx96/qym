@@ -43,7 +43,9 @@ async function openGroup(user: ReturnType<typeof userEvent.setup>, name: RegExp)
   if (button.getAttribute('aria-expanded') !== 'true') await user.click(button);
 }
 
-describe('SettingsSection', () => {
+// Every leaf is a ui Select, TextField or Textarea (E-25), so this form renders slowly in jsdom: 4-20 s per test
+// locally and 2-4 times that on the CI runner. A timed-out test also leaves a half-typed value for the next one.
+describe('SettingsSection', { timeout: 120_000 }, () => {
   it('shows closed groups, lazily', () => {
     setup(<SettingsSection />);
     expect(screen.getByRole('button', { name: /SQL runner/ })).toHaveAttribute('aria-expanded', 'false');
@@ -216,7 +218,8 @@ describe('SettingsSection', () => {
     await openGroup(user, /LLM routing/);
     await openGroup(user, /Feature toggles/);
     expect(await axe(container)).toHaveNoViolations();
-  }, 60_000);
+    // axe over both open groups takes 60-85 s on the CI runner since the round 9/10 form grew
+  }, 180_000);
 });
 
 describe('SweepsSection', () => {

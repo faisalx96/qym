@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
+import { formatTableDate } from '@/lib/dates';
 import { DayNumbers } from '../components/DayNumbers';
 import { DaySwitcher } from '../components/DaySwitcher';
 import { DiagnosisMix } from '../components/DiagnosisMix';
@@ -105,7 +106,7 @@ describe('overview blocks', () => {
         <DayNumbers overview={overview} linkTo={linkTo} />
       </MemoryRouter>,
     );
-    expect(screen.getAllByRole('listitem')).toHaveLength(6);
+    expect(container.querySelectorAll('[data-live-stat]')).toHaveLength(6);
     expect(container.querySelector('[data-live-stat="major"] a')).toHaveAttribute(
       'href',
       linkTo({ label: 'major' }),
@@ -117,7 +118,7 @@ describe('overview blocks', () => {
       'href',
       linkTo({ status: 'completed' }),
     );
-    expect(container.querySelector('[data-live-stat="primary"]')).toHaveTextContent('71%');
+    expect(container.querySelector('[data-live-stat="primary"]')).toHaveTextContent('71.0%');
     expect(container.querySelector('[data-live-stat="latency"]')).toHaveTextContent('6.5s');
   });
 
@@ -174,42 +175,37 @@ describe('overview blocks', () => {
       <StatusLine slug="demo" source="worker" status={overview.status} />,
       { wrapper: MemoryRouter },
     );
-    expect(screen.getByText('last poll 42 s ago')).toBeVisible();
+    expect(screen.getByText('last poll just now')).toBeVisible();
     expect(screen.getByText('Judge A')).toBeVisible();
     expect(screen.getByText('hash1')).toBeVisible();
     act(() => vi.advanceTimersByTime(10_000));
-    expect(screen.getByText('last poll 52 s ago')).toBeVisible();
+    expect(screen.getByText('last poll 1m ago')).toBeVisible();
     rerender(<StatusLine slug="demo" source="worker" status={{ ...overview.status, stale: true }} />);
     expect(container.querySelector('[data-live-block="status"]')).toHaveAttribute('data-live-stale', 'true');
-    expect(screen.getByText('Worker not heard from since 09:00 UTC')).toBeVisible();
+    expect(screen.queryByText(/Worker not heard from since/)).toBeNull();
     unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each([
-    ['2026-11-01', '12:31 UTC'],
-    ['2026-10-14', '14 Oct 12:31 UTC'],
-  ])('dates last turns and stale heartbeats from %s relative to today in UTC', (day, expected) => {
+  it.each(['2026-11-01', '2026-10-14'])('dates last turns from %s on the viewer clock', (day) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-01T13:00:00Z'));
+    const at = `${day}T12:31:00Z`;
+    const expected = formatTableDate(at);
     render(
       <StatusLine
         slug="demo"
         source="worker"
-        status={{
-          ...overview.status,
-          stale: true,
-          last_heartbeat_at: `${day}T12:31:00Z`,
-          last_turn_at: `${day}T12:31:00Z`,
-        }}
+        status={{ ...overview.status, stale: true, last_heartbeat_at: at, last_turn_at: at }}
       />,
       { wrapper: MemoryRouter },
     );
-    expect(screen.getByText(`Worker not heard from since ${expected}`)).toBeVisible();
+    expect(screen.queryByText(/Worker not heard from since/)).toBeNull();
     expect(screen.getByText(expected).parentElement).toHaveTextContent(`Last turn ${expected}`);
+    expect(expected).not.toContain('UTC');
   });
 
-  it('moves by UTC days while preserving source and disables next on today', () => {
+  it('moves by source days while preserving source and disables next on today', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-01T23:00:00Z'));
     function Switcher() {
@@ -217,7 +213,7 @@ describe('overview blocks', () => {
       const params = new URLSearchParams(location.search);
       return (
         <>
-          <DaySwitcher day={params.get('day')!} />
+          <DaySwitcher day={params.get('day')!} today="2026-11-01" />
           <output aria-label="URL">{location.search}</output>
         </>
       );
@@ -230,12 +226,11 @@ describe('overview blocks', () => {
     expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Previous day' }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('day=2026-10-31&source=worker');
-    expect(screen.getByRole('button', { name: 'Sat 31 Oct 2026' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Sat Oct 31, 2026' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
     expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Today · 1 Nov 2026' }));
-    expect(
-      within(screen.getByRole('dialog', { name: 'Choose day' })).getByRole('group', { name: 'Day (UTC)' }),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Today · Nov 1, 2026' }));
+    expect(screen.getByRole('button', { name: 'Today · Nov 1, 2026' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('group', { name: 'Day' })).toBeInTheDocument();
   });
 });

@@ -16,6 +16,7 @@ import {
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
+import { useItemCrumbLabel } from '@/lib/crumb-label';
 import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
@@ -91,6 +92,9 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
   const stateActions = useItemStateActions(slug, dataset.slug, version);
   const editable = version.status === 'draft' && !readOnly;
   const item = itemQuery.data;
+  useItemCrumbLabel(
+    item ? (/^item-\d+$/.test(item.item_id) ? `Item #${item.index}` : item.item_id) : undefined,
+  );
 
   const tab: ItemTab = ITEM_TABS.includes(route.itemTab) ? route.itemTab : 'details';
   const linkTo = useCallback(
@@ -279,6 +283,7 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
                 size="md"
                 onPress={() => void save()}
                 isDisabled={!dirty || !valid}
+                disabledReason={!dirty ? 'No changes to save' : undefined}
                 loading={editor.saving}
                 data-testid="save-item"
               >

@@ -132,7 +132,7 @@ export function ItemsHeadAside() {
     <Popover
       label="Auto-analyze runs"
       trigger={
-        <Button size="sm" variant="neutral" icon={<Icon name="search" size={14} />}>
+        <Button size="sm" variant="neutral" icon={<Icon name="search" size={12} />}>
           Auto-analyze
         </Button>
       }

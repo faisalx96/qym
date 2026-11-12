@@ -33,7 +33,7 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Create project"
+      title="New project"
       description="Projects group runs, datasets and members. The slug becomes part of every URL."
       confirmLabel="Create project"
       submittingLabel="Creating…"

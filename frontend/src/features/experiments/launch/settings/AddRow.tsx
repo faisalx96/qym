@@ -1,6 +1,6 @@
 /** A text input + button that adds a key; Enter adds too. `onAdd` returns an error message or ''. */
 import { useState } from 'react';
-import { Button, Icon } from '@/ui';
+import { Button, Icon, TextField } from '@/ui';
 import styles from './settings.module.css';
 
 export function AddRow({
@@ -21,15 +21,15 @@ export function AddRow({
   };
   return (
     <div className={styles.addRow}>
-      <input
-        className={[styles.control, styles.addInput].join(' ')}
-        data-mono=""
-        type="text"
+      <TextField
+        className={styles.addInput}
+        label={placeholder}
+        hideLabel
+        mono
         maxLength={200}
         placeholder={placeholder}
-        aria-label={placeholder}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={setValue}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();

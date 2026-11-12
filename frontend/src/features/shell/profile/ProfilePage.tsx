@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '../AuthContext';
 import { useDocumentTitle } from '../hooks';
-import { narrow } from '../layout';
+import { constrained } from '../layout';
 import { projectPath } from '@/app/routes';
 import { api, ApiError } from '@/lib/http';
 import {
@@ -34,8 +34,10 @@ const COLUMNS: Column<Project>[] = [
     priority: 1,
     cell: (p) => (
       <span className={styles.projectCell}>
-        <Identicon seed={p.slug} cell={5} gap={2} chip />
-        <Link to={projectPath(p.slug)}>{p.name}</Link>
+        <Identicon seed={p.slug} cell={4} gap={1} chip />
+        <Link to={projectPath(p.slug)} data-link="name">
+          {p.name}
+        </Link>
       </span>
     ),
   },
@@ -55,7 +57,7 @@ export function ProfilePage() {
   const navigate = useNavigate();
   useDocumentTitle('Profile');
   return (
-    <div className={narrow} data-profile-page>
+    <div className={constrained} data-profile-page>
       <PageHeader title="Profile" description="Your account and the projects you belong to." />
       <Section title="Account">
         <Card>
@@ -70,7 +72,9 @@ export function ProfilePage() {
                 key: 'default',
                 label: 'Default project',
                 value: me.default_project ? (
-                  <Link to={projectPath(me.default_project.slug)}>{me.default_project.name}</Link>
+                  <Link to={projectPath(me.default_project.slug)} data-link="name">
+                    {me.default_project.name}
+                  </Link>
                 ) : (
                   '—'
                 ),
@@ -90,13 +94,6 @@ export function ProfilePage() {
           onRowOpen={(p) => navigate(projectPath(p.slug))}
           rowActions={(p) => [
             {
-              id: 'open',
-              label: `Open ${p.name}`,
-              icon: 'external',
-              primary: true,
-              onPress: () => navigate(projectPath(p.slug)),
-            },
-            {
               id: 'settings',
               label: `Settings for ${p.name}`,
               icon: 'settings',
@@ -109,7 +106,7 @@ export function ProfilePage() {
           rows={me.projects}
           rowKey={(p) => p.id}
           storageKey="profile-projects"
-          empty="You are not a member of any project yet."
+          empty="You are not a member of any project yet"
         />
       </Section>
     </div>

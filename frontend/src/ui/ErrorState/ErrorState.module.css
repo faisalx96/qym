@@ -16,6 +16,18 @@
   text-align: start;
 }
 
+/* C-38: the dim icon of a not-found, the EmptyState icon recipe. */
+.icon {
+  font-size: var(--glyph-lg); /* decorative glyph */
+  line-height: 1;
+  color: var(--text-dim); /* decorative */
+  opacity: 0.7;
+}
+.icon svg {
+  width: var(--glyph-lg);
+  height: var(--glyph-lg);
+}
+
 .title {
   margin: 0;
 }

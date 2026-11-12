@@ -1,5 +1,5 @@
 /**
- * Ranking, Policies and Connection of an environment, with the sticky Delete / Save footer.
+ * Ranking, Policies and Connection of an environment; Connection ends with the Save footer, then the Danger zone card.
  * The draft lives in this component's state, apart from the server record, so background
  * refetches and Test/Re-enable never overwrite unsaved edits; server errors land on fields.
  */
@@ -7,7 +7,19 @@ import { useMemo, useState } from 'react';
 import { useDeleteEnvironment, useUpdateEnvironment, type EnvironmentUpdate } from '@/api/evalEnvironments';
 import { PRIORITIES, type EvalEnvironment, type EvalPriority, type LatencyMinRole } from '@/api/evalCommon';
 import { KEY_FOR_NEW_HOST_ERROR, KEY_FOR_NEW_HOST_PLACEHOLDER, keyHostChanged } from '@/lib/keyHost';
-import { Button, Checkbox, ConfirmDialog, NumberField, Select, Tag, TextField, useToast } from '@/ui';
+import {
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  InlineNotice,
+  NumberField,
+  Select,
+  Text,
+  TextField,
+  useToast,
+} from '@/ui';
+import { SaveFooter, SettingsCard } from '@/features/shell/settings/SettingsCard';
+import settingsStyles from '@/features/shell/settings/settings.module.css';
 import { connectionKeysBodyValue, connectionKeysView } from './environmentUrl';
 import { LATENCY_ROLE_HELP, LATENCY_ROLE_ITEMS, LATENCY_ROLE_LABEL } from './copy';
 import { mapEnvironmentError, type FieldErrors } from './fieldErrors';
@@ -218,9 +230,7 @@ export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFor
           />
         </div>
         {draft.max_priority === 'HIGH' ? (
-          <div className={styles.callout} data-tone="warning" role="note">
-            {highPriorityWarning(env.name)}
-          </div>
+          <InlineNotice tone="warning">{highPriorityWarning(env.name)}</InlineNotice>
         ) : null}
         <div>
           <Checkbox
@@ -236,68 +246,70 @@ export function SettingsForm({ projectId, env, canEdit, onDeleted }: SettingsFor
         </div>
       </Section>
       {canEdit ? (
-        <Section
-          id="env-connection"
-          title="Connection"
-          description="Changing the URL or key resets health until the next test."
-        >
-          <TextField
-            label="Name"
-            value={draft.name}
-            maxLength={200}
-            errorMessage={errors.name}
-            onChange={(v) => patch({ name: v }, 'name')}
-          />
-          <TextField
-            label="Base URL"
-            mono
-            type="url"
-            value={draft.base_url}
-            maxLength={500}
-            errorMessage={errors.base_url}
-            onChange={(v) => patch({ base_url: v }, 'base_url')}
-          />
-          <TextField
-            label="API key"
-            mono
-            type="password"
-            autoComplete="new-password"
-            value={draft.api_key}
-            maxLength={4096}
-            isRequired={needsKey}
-            placeholder={
-              needsKey
-                ? KEY_FOR_NEW_HOST_PLACEHOLDER
-                : env.api_key_set
-                  ? `Leave blank to keep ${env.api_key_hint || 'the stored key'}`
-                  : 'Paste the service API key'
-            }
-            errorMessage={errors.api_key}
-            onChange={(v) => patch({ api_key: v }, 'api_key')}
-          />
-          {general ? (
-            <div className={styles.callout} data-tone="error" role="alert">
-              {general}
+        <>
+          <Section
+            id="env-connection"
+            title="Connection"
+            description="Changing the URL or key resets health until the next test."
+          >
+            <TextField
+              label="Name"
+              value={draft.name}
+              maxLength={200}
+              errorMessage={errors.name}
+              onChange={(v) => patch({ name: v }, 'name')}
+            />
+            <TextField
+              label="Base URL"
+              mono
+              type="url"
+              value={draft.base_url}
+              maxLength={500}
+              errorMessage={errors.base_url}
+              onChange={(v) => patch({ base_url: v }, 'base_url')}
+            />
+            <TextField
+              label="API key"
+              mono
+              type="password"
+              autoComplete="new-password"
+              value={draft.api_key}
+              maxLength={4096}
+              isRequired={needsKey}
+              placeholder={
+                needsKey
+                  ? KEY_FOR_NEW_HOST_PLACEHOLDER
+                  : env.api_key_set
+                    ? `Leave blank to keep ${env.api_key_hint || 'the stored key'}`
+                    : 'Paste the service API key'
+              }
+              errorMessage={errors.api_key}
+              onChange={(v) => patch({ api_key: v }, 'api_key')}
+            />
+            {general ? <InlineNotice tone="danger">{general}</InlineNotice> : null}
+            <div className={styles.sectionFooter}>
+              <SaveFooter dirty={dirty} saving={update.isPending} onSave={() => void save()} />
             </div>
-          ) : null}
-        </Section>
-      ) : null}
-      {canEdit ? (
-        <div className={styles.footer} data-part="env-footer">
-          <Button variant="danger" size="sm" onPress={() => setConfirmDelete(true)}>
-            Delete environment
-          </Button>
-          <span className={styles.footerSpacer} />
-          {dirty ? <Tag tone="warning">Unsaved changes</Tag> : null}
-          <Button variant="primary" size="sm" loading={update.isPending} onPress={() => void save()}>
-            Save changes
-          </Button>
-        </div>
+          </Section>
+          <SettingsCard title="Danger zone" data-danger-zone>
+            <div className={settingsStyles.dangerRow}>
+              <div>
+                <Text variant="md">Delete this environment</Text>
+                <Text variant="sm">{`Delete “${env.name}” and its stored schemas and LLM slots. If experiments or presets use it, it is disabled instead so their history stays intact.`}</Text>
+              </div>
+              <Button variant="danger" onPress={() => setConfirmDelete(true)}>
+                Delete environment
+              </Button>
+            </div>
+          </SettingsCard>
+        </>
       ) : null}
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`Delete the environment “${env.name}”?`}
+        requireText={env.name}
+        inputLabel={`Type ${env.name} to confirm`}
         description={[
           `Delete “${env.name}” and its stored schemas and LLM slots.`,
           'If experiments or presets use it, it is disabled instead so their history stays intact.',

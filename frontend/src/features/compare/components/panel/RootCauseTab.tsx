@@ -27,7 +27,7 @@ export function AnalyzeLinks() {
             : `/run/${run.base.split('/').map(encodeURIComponent).join('/')}/analyzer`;
           return (
             <li key={run.ref}>
-              <a href={platformUrl(href)} title={`Analyze ${run.title}`}>
+              <a href={platformUrl(href)} title={`Analyze ${run.title}`} data-link="name">
                 <RunDot index={i} /> {letter(i)} · {run.label}
               </a>
             </li>

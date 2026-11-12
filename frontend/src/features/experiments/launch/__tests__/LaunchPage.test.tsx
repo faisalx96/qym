@@ -185,7 +185,7 @@ describe('LaunchPage', () => {
     await userEvent.type(screen.getByLabelText('Experiment name'), 'draft');
     await router.navigate('/projects/proj/experiments');
     const dialog = await screen.findByRole('alertdialog');
-    expect(within(dialog).getByText('Leave without launching?')).toBeInTheDocument();
+    expect(within(dialog).getByText('Discard unsaved changes?')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
     expect(router.state.location.pathname).toBe('/projects/proj/experiments/new');
   });

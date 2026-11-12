@@ -75,6 +75,7 @@ export interface Experiment {
   job_counts: Record<string, number>;
   created_by_user_id: string | null;
   created_by_email: string | null;
+  created_by_name?: string | null;
   created_at: string;
   updated_at: string;
   cancelled_at: string | null;

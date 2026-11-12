@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from math import ceil
 from typing import Any, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
+from qym_platform.datetime_utils import ensure_utc, to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
     LiveCanaryResult,
     LiveDay,
@@ -28,6 +29,15 @@ logger = get_logger(__name__)
 def utcnow() -> datetime:
     """Return qym's current time as naive UTC."""
     return utc_now_naive()
+
+
+def source_today(source: LiveSource, now: datetime) -> date:
+    """Return the current calendar day in the source's day_key_timezone (UTC when the zone is unknown)."""
+    try:
+        zone = ZoneInfo(source.day_key_timezone or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        zone = ZoneInfo("UTC")
+    return ensure_utc(now).astimezone(zone).date()
 
 
 def source_status(
@@ -60,6 +70,7 @@ def source_status(
         "last_heartbeat_at": to_api_timestamp(source.last_heartbeat_at),
         "last_poll_at": to_api_timestamp(source.last_poll_at),
         "last_turn_at": to_api_timestamp(source.last_turn_at),
+        "today": source_today(source, now).isoformat(),
         "worker": source.worker,
     }
 
@@ -421,7 +432,7 @@ def overview_payload(
             db.query(func.max(LiveDay.day))
             .filter(LiveDay.source_id == source.id)
             .scalar()
-            or now.date()
+            or source_today(source, now)
         )
     row = (
         db.query(LiveDay)

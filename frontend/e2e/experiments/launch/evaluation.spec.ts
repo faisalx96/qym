@@ -49,7 +49,7 @@ test.describe('evaluation inputs and run metadata', () => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await nameBox(page).fill('eval run');
     const ev = await openSection(page, 'Evaluation configurations');
-    await ev.getByRole('textbox', { name: 'Samples' }).fill('5');
+    await ev.getByRole('textbox', { name: 'Passes' }).fill('5');
     await expect(rail(page).getByRole('button', { name: /\d\s*Evaluation configurations/ })).toContainText(
       '1',
     );
@@ -116,7 +116,7 @@ test.describe('Raw JSON', () => {
     await expect(raw.getByRole('list', { name: 'Raw JSON errors' })).toHaveCount(0);
     await expect(raw.getByRole('status')).toContainText('In sync with the form');
     await openSection(page, 'Evaluation configurations');
-    await expect(page.getByRole('textbox', { name: 'Samples' })).toHaveValue('7');
+    await expect(page.getByRole('textbox', { name: 'Passes' })).toHaveValue('7');
     await expectReady(page);
     await toReview(page);
     await expect(launchButton(page)).toBeEnabled();
@@ -131,7 +131,7 @@ test.describe('Raw JSON', () => {
     await expect(raw.getByRole('status')).toContainText(/Unapplied edits/);
     // The form did not change while typing.
     await openSection(page, 'Evaluation configurations');
-    await expect(page.getByRole('textbox', { name: 'Samples' })).toHaveValue('2');
+    await expect(page.getByRole('textbox', { name: 'Passes' })).toHaveValue('2');
     await openSection(page, 'Raw JSON');
     await raw.getByRole('button', { name: 'Revert to form' }).click();
     await expect(raw.getByRole('status')).toContainText('In sync with the form');

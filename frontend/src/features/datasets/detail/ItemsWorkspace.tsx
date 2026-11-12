@@ -331,7 +331,7 @@ export function ItemsWorkspace({
       <ConfirmDialog
         open={guard !== null}
         onOpenChange={(o) => !o && setGuard(null)}
-        title="Discard the unsaved changes?"
+        title="Discard unsaved changes?"
         description="This item has edits that are not saved."
         cancelLabel="Keep editing"
         altLabel="Discard"

@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { useEnvTasks, useEnvVersioning } from '@/api/launch';
-import { Tag } from '@/ui';
+import { Button, Tag } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import styles from './entry.module.css';
 
@@ -17,8 +17,6 @@ export function versionValueText(value: unknown): string {
   return String(value);
 }
 
-/** Longest JSON shown in a cell; the whole text is the cell's title. */
-const JSON_MAX = 48;
 /** A value longer than this (or any object / array) takes the whole row of the grid. */
 const WIDE = 16;
 /** Placeholder cells of the loading frame (one row at every box width, round 10 L1). */
@@ -37,15 +35,13 @@ function VersionValue({ value }: { value: unknown }) {
       </Tag>
     );
   const text = versionValueText(value);
-  const cut = text.length > JSON_MAX;
   return (
     <span
       className={styles.vText}
       data-part="version-value"
       data-kind={value !== null && typeof value === 'object' ? 'json' : 'scalar'}
-      title={cut ? text : undefined}
     >
-      {cut ? `${text.slice(0, JSON_MAX)}…` : text}
+      {text}
     </span>
   );
 }
@@ -70,7 +66,13 @@ function KeyName({ name }: { name: string }) {
  * written above its value; a key the service does not report is not drawn; no fixed key list. The grid takes the height
  * of its keys (L1). Loading: three placeholder cells on one row.
  */
-export function VersionsGrid({ details, loading = false }: { details?: Record<string, unknown> | null; loading?: boolean }) {
+export function VersionsGrid({
+  details,
+  loading = false,
+}: {
+  details?: Record<string, unknown> | null;
+  loading?: boolean;
+}) {
   if (loading)
     return (
       <div className={styles.vLoading} aria-busy="true">
@@ -113,17 +115,17 @@ export function EnvRefresh({ env, projectId }: { env: EvalEnvironment; projectId
   const tasksQuery = useEnvTasks(projectId, env.id, offersTasks);
   const hasTasks = offersTasks && tasksQuery.data?.status !== 'unsupported';
   return (
-    <button
-      type="button"
-      className={styles.linkButton}
+    <Button
+      variant="neutral"
+      size="sm"
       aria-label={hasTasks ? `Refresh versions and tasks of ${env.name}` : `Refresh versions of ${env.name}`}
-      onClick={() => {
+      onPress={() => {
         void query.refetch({ cancelRefetch: false });
         if (offersTasks) void tasksQuery.refetch({ cancelRefetch: false });
       }}
     >
       Refresh
-    </button>
+    </Button>
   );
 }
 
@@ -135,8 +137,7 @@ export function EnvRefresh({ env, projectId }: { env: EvalEnvironment; projectId
 export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectId: string }) {
   const query = useEnvVersioning(projectId, env.id, true);
   const data = query.data;
-  const status =
-    query.isPending || query.isFetching ? 'loading' : query.isError ? 'error' : data?.status;
+  const status = query.isPending || query.isFetching ? 'loading' : query.isError ? 'error' : data?.status;
   return (
     <div className={styles.versions} data-part="env-versions" data-env-version={env.id} data-status={status}>
       <span className={styles.versionLabel}>Versions</span>
@@ -148,7 +149,9 @@ export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectI
           <VersionsGrid loading />
         </>
       ) : status === 'unsupported' ? (
-        <p className={styles.vEmpty}>Not supported by this environment (its Evaluation Service is older than v1.2).</p>
+        <p className={styles.vEmpty}>
+          Not supported by this environment (its Evaluation Service is older than v1.2).
+        </p>
       ) : status === 'ok' ? (
         <VersionsGrid details={data?.versioning_details} />
       ) : (
@@ -170,7 +173,9 @@ function SummaryEnv({ env, projectId, many }: { env: EvalEnvironment; projectId:
   ) : data?.status === 'ok' ? (
     <VersionsGrid details={data.versioning_details} />
   ) : (
-    <p className={styles.vEmpty}>{data?.status === 'unsupported' ? 'Not supported by this environment' : '—'}</p>
+    <p className={styles.vEmpty}>
+      {data?.status === 'unsupported' ? 'Not supported by this environment' : '—'}
+    </p>
   );
   return (
     <div className={many ? styles.reviewEnv : undefined} data-part="review-versions-env" data-env={env.name}>

@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import type { Key } from 'react-aria-components';
 import { useLocation } from 'react-router-dom';
 import type { LiveSourceInfo } from '@/api/live';
 import {
@@ -7,7 +9,21 @@ import {
   type WorkerEventsFilters,
 } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
-import { Chip, CopyButton, EmptyState, ErrorState, LinkButton, Skeleton, Tag, Text } from '@/ui';
+import { humanizeKey } from '@/lib/humanizeKey';
+import {
+  ClearFiltersButton,
+  CopyButton,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  LinkButton,
+  MultiSelect,
+  Skeleton,
+  StatusMark,
+  Tag,
+  Text,
+  type Column,
+} from '@/ui';
 import { WorkerBlock } from './WorkerBlock';
 import styles from '../../worker.module.css';
 
@@ -19,6 +35,11 @@ const componentLabels: Record<string, string> = {
   turn: 'Turns',
   job: 'Jobs',
 };
+
+/** A worker component key as its label; an unknown key reads as plain words (X18). */
+export function componentLabel(key: string): string {
+  return componentLabels[key] ?? humanizeKey(key);
+}
 const checkSections: Record<string, { id: string; title: string }> = {
   gateway: { id: 'models', title: 'Models' },
   database: { id: 'database', title: 'Database' },
@@ -45,7 +66,7 @@ function FailedChecks({ event, path }: { event: LiveWorkerEvent; path: string })
         {failed.map(([name]) => name).join(' · ')}
       </Text>
       {section ? (
-        <LinkButton to={`${path}#settings-${section.id}`} variant="ghost">
+        <LinkButton to={`${path}#settings-${section.id}`} variant="neutral">
           Fix in {section.title}
         </LinkButton>
       ) : null}
@@ -76,63 +97,154 @@ export function ProblemsBlock({
   onEventsRetry,
 }: ProblemsProps) {
   const location = useLocation();
+  const [componentKeys, setComponentKeys] = useState<Set<Key>>(new Set());
+  const [levelKeys, setLevelKeys] = useState<Set<Key>>(new Set());
+  function onComponents(keys: Set<Key>) {
+    setComponentKeys(keys);
+    onEventsFilters({ ...eventsFilters, component: keys.size === 1 ? String([...keys][0]) : undefined });
+  }
+  function onLevels(keys: Set<Key>) {
+    setLevelKeys(keys);
+    onEventsFilters({
+      ...eventsFilters,
+      level: keys.size === 1 ? (String([...keys][0]) as 'error' | 'warning') : undefined,
+    });
+  }
   const components = [
     ...new Set([
       ...Object.keys(componentLabels),
       ...events.map((event) => event.component),
-      ...(eventsFilters.component ? [eventsFilters.component] : []),
+      ...[...componentKeys].map(String),
     ]),
   ];
   const rows = events
     .filter(
       (event) =>
-        (!eventsFilters.component || eventsFilters.component === event.component) &&
-        (!eventsFilters.level || eventsFilters.level === event.level),
+        (componentKeys.size === 0 || componentKeys.has(event.component)) &&
+        (levelKeys.size === 0 || levelKeys.has(event.level)),
     )
     .sort((a, b) => b.last_at.localeCompare(a.last_at));
   const sourceStatus = status ?? read.status;
   const worker = sourceStatus.worker;
   const workerVersion = typeof worker?.worker_version === 'string' ? worker.worker_version : undefined;
   const evalVersion = typeof worker?.eval_code_version === 'string' ? worker.eval_code_version : undefined;
+  const problemColumns: Column<LiveWorkerEvent>[] = [
+    {
+      id: 'time',
+      header: 'Time',
+      cell: (e) => (
+        <time dateTime={e.last_at} title={e.last_at}>
+          {formatRelative(e.last_at)}
+        </time>
+      ),
+    },
+    {
+      id: 'level',
+      header: 'Level',
+      cell: (e) => (
+        <StatusMark
+          tone={e.level === 'error' ? 'danger' : 'warning'}
+          shape={e.level === 'error' ? 'cross' : 'dot'}
+          label={e.level === 'error' ? 'Error' : 'Warning'}
+        />
+      ),
+    },
+    {
+      id: 'component',
+      header: 'Component',
+      cell: (e) => (
+        <Text as="span" tone="secondary" dir="auto">
+          {componentLabel(e.component)}
+        </Text>
+      ),
+    },
+    {
+      id: 'code',
+      header: 'Code',
+      cell: (e) => (
+        <span className={styles.number} dir="auto">
+          {e.code}
+        </span>
+      ),
+    },
+    {
+      id: 'message',
+      header: 'Message',
+      flex: true,
+      minWidth: 320,
+      cell: (e) => (
+        <div className={styles.messageCell}>
+          <Text as="p" dir="auto" className={styles.wrap}>
+            {e.message.replace(/^\[LIVE\] /, '')}
+          </Text>
+          {e.count > 1 ? (
+            <span className={styles.inline}>
+              <Tag kind="count">×{e.count}</Tag>
+              <Text as="span" tone="muted">
+                in {Math.max(0, Math.round((Date.parse(e.last_at) - Date.parse(e.first_at)) / 60000))} min
+              </Text>
+            </span>
+          ) : null}
+          <FailedChecks event={e} path={`${location.pathname}${location.search}`} />
+          <CopyButton
+            label="Copy report"
+            className={styles.messageCopy}
+            text={() =>
+              problemReport({
+                source,
+                environment: sourceStatus.environment,
+                worker_version: workerVersion,
+                eval_code_version: evalVersion,
+                settings_version_applied: read.running?.settings_version_applied,
+                event: e,
+              })
+            }
+          />
+        </div>
+      ),
+    },
+  ];
   return (
     <WorkerBlock
       name="problems"
       title="Problems"
-      aside={
+      table
+      count={
         read.running?.errors_last_hour ? (
-          <Text tone="danger">{read.running.errors_last_hour} in the last hour</Text>
+          <Tag kind="count" tone="danger">
+            {read.running.errors_last_hour} in the last hour
+          </Tag>
         ) : undefined
       }
     >
-      <div className={styles.inline}>
-        <Chip
-          isSelected={!eventsFilters.component}
-          onChange={() => onEventsFilters({ ...eventsFilters, component: undefined })}
-        >
-          All
-        </Chip>
-        {components.map((component) => (
-          <Chip
-            key={component}
-            isSelected={eventsFilters.component === component}
-            onChange={(selected) =>
-              onEventsFilters({ ...eventsFilters, component: selected ? component : undefined })
-            }
-          >
-            {componentLabels[component] ?? component}
-          </Chip>
-        ))}
-        {(['error', 'warning'] as const).map((level) => (
-          <Chip
-            key={level}
-            isSelected={eventsFilters.level === level}
-            onChange={(selected) =>
-              onEventsFilters({ ...eventsFilters, level: selected ? level : undefined })
-            }
-          >
-            {level === 'error' ? 'Errors' : 'Warnings'}
-          </Chip>
-        ))}
+      <div className={styles.problemsFilters}>
+        <MultiSelect
+          label="Component"
+          triggerVariant="bar"
+          emptyMeansAll
+          items={components.map((c) => ({ key: c, label: componentLabel(c) }))}
+          value={componentKeys}
+          onChange={onComponents}
+        />
+        <MultiSelect
+          label="Level"
+          triggerVariant="bar"
+          emptyMeansAll
+          items={[
+            { key: 'error', label: 'Errors' },
+            { key: 'warning', label: 'Warnings' },
+          ]}
+          value={levelKeys}
+          onChange={onLevels}
+        />
+        <ClearFiltersButton
+          count={(componentKeys.size ? 1 : 0) + (levelKeys.size ? 1 : 0)}
+          onClear={() => {
+            setComponentKeys(new Set());
+            setLevelKeys(new Set());
+            onEventsFilters({ ...eventsFilters, component: undefined, level: undefined });
+          }}
+        />
       </div>
       {eventsError ? (
         <ErrorState
@@ -144,53 +256,16 @@ export function ProblemsBlock({
       ) : eventsPending ? (
         <Skeleton reserve kind="rows" rows={6} label="Loading worker problems" />
       ) : rows.length ? (
-        <ul className={styles.problems}>
-          {rows.map((event) => (
-            <li key={event.id} className={styles.problem} data-worker-event={event.id}>
-              <div className={styles.inline}>
-                <time dateTime={event.last_at} title={event.last_at}>
-                  {formatRelative(event.last_at)}
-                </time>
-                <Tag tone={event.level === 'error' ? 'danger' : 'warning'} dir="auto">
-                  {event.component}
-                </Tag>
-                <span className={styles.number} dir="auto">
-                  {event.code}
-                </span>
-                {event.count > 1 ? (
-                  <span>
-                    × {event.count}{' '}
-                    <Text as="span" tone="muted">
-                      in{' '}
-                      {Math.max(
-                        0,
-                        Math.round((Date.parse(event.last_at) - Date.parse(event.first_at)) / 60000),
-                      )}{' '}
-                      min
-                    </Text>
-                  </span>
-                ) : null}
-                <CopyButton
-                  label="Copy report"
-                  text={() =>
-                    problemReport({
-                      source,
-                      environment: sourceStatus.environment,
-                      worker_version: workerVersion,
-                      eval_code_version: evalVersion,
-                      settings_version_applied: read.running?.settings_version_applied,
-                      event,
-                    })
-                  }
-                />
-              </div>
-              <Text as="p" dir="auto" className={styles.wrap}>
-                {event.message.replace(/^\[LIVE\] /, '')}
-              </Text>
-              <FailedChecks event={event} path={`${location.pathname}${location.search}`} />
-            </li>
-          ))}
-        </ul>
+        <DataTable<LiveWorkerEvent>
+          aria-label="Worker problems"
+          variant="embedded"
+          density="regular"
+          rows={rows}
+          rowKey={(e) => e.id}
+          rowProps={(e) => ({ 'data-worker-event': String(e.id) })}
+          responsive="cards"
+          columns={problemColumns}
+        />
       ) : (
         <EmptyState title="No problems reported by the worker" />
       )}

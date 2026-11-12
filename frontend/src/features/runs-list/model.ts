@@ -14,6 +14,23 @@ export function modelSlot(key: string, index: Record<string, number>): number {
   return ((index[key] ?? 0) % 8) + 1;
 }
 
+export type Series = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+/** The model's series slot from the project's model index; neutral until the index loads or when the model is absent. */
+export function modelSeriesOf(
+  index: Record<string, number> | null,
+  name: string,
+  reasoning: boolean,
+): Series | undefined {
+  if (!index) return undefined;
+  const key = [
+    `${name}|||${reasoning ? 'reasoning' : 'plain'}`,
+    `${name}|||plain`,
+    `${name}|||reasoning`,
+  ].find((k) => k in index);
+  return key ? (modelSlot(key, index) as Series) : undefined;
+}
+
 /** Marker shape for the wrap-around beyond 8 models. */
 export function modelShape(key: string, index: Record<string, number>): 'circle' | 'square' | 'diamond' {
   return (['circle', 'square', 'diamond'] as const)[Math.floor((index[key] ?? 0) / 8) % 3] ?? 'circle';
@@ -31,16 +48,3 @@ export const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
   STOPPING: 'Stopping…',
 };
-
-/** Smart decimals (percent points) so a score differs from its neighbours. */
-export function smartDigits(
-  value: number | undefined,
-  neighbours: [number | null, number | null] | undefined,
-): number {
-  if (value === undefined || !neighbours) return 1;
-  for (let d = 1; d <= 3; d++) {
-    const r = (x: number) => (x * 100).toFixed(d);
-    if (neighbours.every((n) => n === null || r(n) !== r(value))) return d;
-  }
-  return 3;
-}

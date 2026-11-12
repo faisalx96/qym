@@ -85,7 +85,7 @@ function Rows({
       ))}
       {shown.length < entries.length ? (
         <div className={styles.more}>
-          <Button size="sm" variant="ghost" onPress={() => setAll(true)}>
+          <Button size="sm" variant="neutral" onPress={() => setAll(true)}>
             Show {entries.length - shown.length} more
           </Button>
         </div>
@@ -159,7 +159,7 @@ function KeyRow({
               <>
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="neutral"
                   aria-label={`Expand all in ${name}`}
                   onPress={() => onOpenChange(expandKey(open, value, path))}
                 >
@@ -167,7 +167,7 @@ function KeyRow({
                 </Button>
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="neutral"
                   aria-label={`Collapse all in ${name}`}
                   onPress={() => onOpenChange(collapseBelow(open, value, path))}
                 >
@@ -213,9 +213,9 @@ function Leaf({ name, value, textMode }: { name: string; value: unknown; textMod
         <TextBlock text={text} mode={textMode} code={sql ? true : undefined} />
       </div>
       {long ? (
-        <button type="button" className={styles.showFull} aria-expanded={full} onClick={() => setFull(!full)}>
+        <Button variant="neutral" size="sm" aria-expanded={full} onPress={() => setFull(!full)}>
           {full ? 'Show less' : 'Show full value'}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

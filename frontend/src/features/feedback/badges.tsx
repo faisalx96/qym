@@ -1,18 +1,19 @@
 import { StatusMark, Tag, type StatusShape, type StatusTone } from '@/ui';
 import type { FeedbackComplexity, FeedbackPriority, FeedbackStatus, RelatedKind } from '@/api/feedback';
+import styles from './badges.module.css';
 
 const STATUS_FIGURE: Record<FeedbackStatus, [StatusTone, StatusShape]> = {
   draft: ['warning', 'dot'],
-  new: ['neutral', 'ring'],
-  accepted: ['info', 'check'],
-  planned: ['info', 'hourglass'],
+  new: ['neutral', 'hourglass'],
+  accepted: ['success', 'check'],
+  planned: ['neutral', 'hourglass'],
   done: ['success', 'full'],
   declined: ['danger', 'cross'],
 };
-const PRIORITY_TONE: Record<FeedbackPriority, 'info' | 'warning' | 'danger' | undefined> = {
+const PRIORITY_TONE: Record<FeedbackPriority, 'warning' | 'danger' | undefined> = {
   low: undefined,
-  medium: 'info',
-  high: 'warning',
+  medium: 'warning',
+  high: 'danger',
   critical: 'danger',
 };
 const KIND_TONE: Record<RelatedKind, 'warning' | 'danger' | undefined> = {
@@ -38,6 +39,39 @@ export function PriorityBadge({ value }: { value: FeedbackPriority | null }) {
   return (
     <Tag tone={PRIORITY_TONE[value]} data-priority={value}>
       {cap(value)}
+    </Tag>
+  );
+}
+
+/** The level of a Priority or Complexity tag: 1 grey bar, 2 orange bars, 3 red bars (D-30). */
+export const PRIORITY_LEVEL: Record<FeedbackPriority, 1 | 2 | 3> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 3,
+};
+export const COMPLEXITY_LEVEL: Record<FeedbackComplexity, 1 | 2 | 3> = { S: 1, M: 2, L: 3, XL: 3 };
+
+/** 'Priority High' / 'Complexity M': a neutral Tag led by three level bars; the tooltip holds the reasoning (D-30). */
+export function LevelTag({
+  label,
+  value,
+  level,
+  title,
+}: {
+  label: string;
+  value: string;
+  level: 1 | 2 | 3;
+  title?: string;
+}) {
+  return (
+    <Tag title={title}>
+      <span className={styles.levels} data-level={level} aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      {label} {value}
     </Tag>
   );
 }

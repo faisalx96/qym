@@ -152,6 +152,7 @@ def test_control_returns_state_settings_and_jobs_to_worker_key(
     assert settings["version"] == 1
     assert settings["created_at"] == "2026-11-03T12:00:00Z"
     assert settings["created_by"] == "Worker owner"
+    assert settings["created_by_user_id"] == "live-user-1"
     assert settings["values"] == values
     assert settings["errors"] == []
     assert settings["secrets"] == {
@@ -189,6 +190,7 @@ def test_control_returns_state_settings_and_jobs_to_worker_key(
             "progress": {},
             "error": None,
             "requested_by": "Worker owner",
+            "requested_by_user_id": "live-user-1",
             "requested_at": "2026-11-03T12:01:00Z",
             "updated_at": "2026-11-03T12:00:00Z",
             "started_at": None,

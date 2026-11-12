@@ -20,3 +20,10 @@
 .icon {
   flex: none;
 }
+
+/* RequiredFlag: the red star of a required Field; the 5px gap less 1px gives about 4px before the word (B-12). */
+.star {
+  color: var(--error);
+  font-weight: 600;
+  margin-inline-end: -1px;
+}

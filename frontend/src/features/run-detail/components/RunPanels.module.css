@@ -42,10 +42,6 @@
   color: var(--text-secondary);
 }
 
-.actor {
-  color: var(--text-primary);
-}
-
 .when {
   font-family: var(--font-mono);
   font-size: var(--font-sm);
@@ -150,19 +146,6 @@
   background: var(--bg-elevated);
   font-family: var(--font-mono);
   font-size: var(--font-base);
-}
-
-.notice {
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.notice b {
-  color: var(--text-primary);
 }
 
 .flat {

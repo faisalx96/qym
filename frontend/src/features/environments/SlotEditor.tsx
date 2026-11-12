@@ -20,6 +20,8 @@ import {
   Button,
   Dialog,
   ErrorState,
+  IconButton,
+  InlineNotice,
   Select,
   Skeleton,
   Tag,
@@ -27,7 +29,7 @@ import {
   useToast,
   Card,
   Icon,
-  Flag,
+  RequiredFlag,
 } from '@/ui';
 import styles from './SlotEditor.module.css';
 import {
@@ -266,7 +268,7 @@ function RoleCell({
   const items = [
     ...(role === 'model' && value
       ? []
-      : [{ key: NONE, label: role === 'model' ? 'Pick a model field…' : 'Not mapped' }]),
+      : [{ key: NONE, label: role === 'model' ? 'Pick a model field' : 'Not mapped' }]),
     ...candidates.map((p) => ({ key: p, label: p })),
   ];
   return (
@@ -277,7 +279,7 @@ function RoleCell({
         hideLabel
         items={items}
         value={value ?? (role === 'model' ? null : NONE)}
-        placeholder={role === 'model' ? 'Pick a model field…' : 'Not mapped'}
+        placeholder={role === 'model' ? 'Pick a model field' : 'Not mapped'}
         onChange={(key) =>
           editor.dispatch({
             type: 'setRole',
@@ -328,7 +330,7 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
               {status.label}
             </Tag>
           ) : null}
-          {slot.required ? <Flag title="Required by the service">Required</Flag> : null}
+          {slot.required ? <RequiredFlag title="Required by the service" /> : null}
         </header>
         <div className={styles.keysets}>
           {sets.map((_, setIdx) => (
@@ -338,7 +340,7 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
                   <span className={styles.keysetTitle}>Keys {setIdx + 1}</span>
                   {editor && setIdx > 0 ? (
                     <Button
-                      variant="ghost"
+                      variant="danger"
                       aria-label={`Remove key set ${setIdx + 1} of ${slot.label || slot.slot_key}`}
                       onPress={() => editor.dispatch({ type: 'removeSet', slotKey: slot.slot_key, setIdx })}
                     >
@@ -370,20 +372,18 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
           <div className={styles.transport}>
             <span className={styles.roleName}>Transport</span>
             {Object.entries(slot.transport_fields).map(([name, pointer]) => (
-              <Tag key={name} kind="data" title={pointer}>
-                <span className={styles.chip}>
+              <span key={name} className={styles.chip}>
+                <Tag kind="data" title={pointer}>
                   {name}
-                  {editor ? (
-                    <Button
-                      variant="ghost"
-                      aria-label={`Unmap ${name}; it stays a plain input`}
-                      onPress={() => editor.dispatch({ type: 'detach', slotKey: slot.slot_key, name })}
-                    >
-                      ×
-                    </Button>
-                  ) : null}
-                </span>
-              </Tag>
+                </Tag>
+                {editor ? (
+                  <IconButton
+                    label={`Unmap ${name}; it stays a plain input`}
+                    icon="close"
+                    onPress={() => editor.dispatch({ type: 'detach', slotKey: slot.slot_key, name })}
+                  />
+                ) : null}
+              </span>
             ))}
           </div>
         ) : null}
@@ -461,7 +461,7 @@ function AddGroup({ editor }: { editor: SlotEditorController }) {
           items={flatModels.map((p) => ({ key: p, label: p }))}
           value={flat}
           isDisabled={flatModels.length === 0}
-          placeholder={flatModels.length ? 'Pick a model field…' : 'No unassigned model fields'}
+          placeholder={flatModels.length ? 'Pick a model field' : 'No unassigned model fields'}
           onChange={(k) => setFlat(k === null ? null : String(k))}
         />
         <Button
@@ -492,19 +492,19 @@ export function SlotEditor({ controller, readOnly }: SlotEditorProps) {
   return (
     <div className={styles.editor}>
       {state.general ? (
-        <div className={styles.callout} data-tone="error" role="alert">
+        <InlineNotice tone="danger">
           {state.general}{' '}
           {state.generalReload ? (
             <Button variant="neutral" onPress={() => void controller.reload()}>
               Reload slots
             </Button>
           ) : null}
-        </div>
+        </InlineNotice>
       ) : null}
       {state.notice ? (
-        <div className={styles.callout} role="status">
+        <InlineNotice tone="neutral" icon="info">
           {state.notice}
-        </div>
+        </InlineNotice>
       ) : null}
       <div className={styles.cards}>
         {state.slots.length ? (
@@ -572,7 +572,7 @@ function LoadedDialog({
             Cancel
           </Button>
           <Button variant="primary" size="md" loading={controller.busy} onPress={() => void save()}>
-            Save groups
+            Save
           </Button>
         </>
       }

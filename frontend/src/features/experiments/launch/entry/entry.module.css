@@ -86,31 +86,6 @@
   background: var(--bg-elevated);
 }
 
-.detailsLink,
-.linkButton {
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.detailsLink:hover,
-.linkButton:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
-}
-
-.detailsLink:focus-visible,
-.linkButton:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
 .envFlag {
   grid-column: 1 / -1;
   margin: 0;
@@ -537,6 +512,7 @@
 .vKey {
   max-inline-size: 100%;
   font-size: var(--font-sm);
+  font-weight: 600;
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }

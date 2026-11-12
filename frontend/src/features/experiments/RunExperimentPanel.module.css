@@ -47,10 +47,6 @@
   cursor: not-allowed;
 }
 
-.link {
-  color: var(--accent-primary);
-}
-
 .mono {
   font-family: var(--font-mono);
 }
@@ -73,9 +69,4 @@
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--font-sm);
-}
-
-.result summary {
-  color: var(--text-secondary);
-  cursor: pointer;
 }

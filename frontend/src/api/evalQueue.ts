@@ -52,6 +52,7 @@ export interface QueueJob {
   queue_position: number | null;
   created_by_user_id: string | null;
   created_by_email: string | null;
+  created_by_name?: string | null;
   created_at: string;
   next_attempt_at: string | null;
   submitted_at: string | null;

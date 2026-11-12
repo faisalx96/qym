@@ -7,6 +7,7 @@ import {
   Dialog,
   EmptyState,
   HelpMarker,
+  Icon,
   MultiSelect,
   Pagination,
   SearchField,
@@ -45,7 +46,7 @@ const pct = (v: number | null | undefined, d = 1) =>
 /** Sweep item rows per page (C217). */
 const SWEEP_PAGE = 25;
 
-const signed = (v: number, d = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v * 100).toFixed(d)}%`;
+const signed = (v: number, d = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v * 100).toFixed(d)} pts`;
 
 function useSweepFilters(): [
   SweepFilters,
@@ -212,7 +213,11 @@ export function SweepView() {
         title={`${ctx.metric} declares no direction`}
         body={`Sweep cannot say which side is better. Declare direction="maximize" or "minimize" in its SDK MetricSpec, or choose another metric.`}
         action={
-          <Button variant="neutral" onPress={() => c.setView({ tab: 'compare' })}>
+          <Button
+            variant="neutral"
+            icon={<Icon name="prev" size={12} />}
+            onPress={() => c.setView({ tab: 'compare' })}
+          >
             Back to Compare
           </Button>
         }
@@ -361,11 +366,11 @@ export function SweepView() {
         />
         <SearchField
           label="Search sweep items"
-          placeholder="Item id, domain, complexity"
+          placeholder="Search sweep items"
           value={f.q}
           onChange={(q) => setF({ q })}
           onClear={() => setF({ q: '' })}
-          width="14rem"
+          width="var(--search-width)"
         />
         <Select
           label="Metadata"
@@ -539,7 +544,7 @@ export function SweepView() {
                                 data-part="sweep-domain-delta"
                                 data-beyond={beyond ? '' : undefined}
                               >
-                                {glyph} {signed(delta, 0)}
+                                {glyph} {signed(delta)}
                               </Tag>
                             </td>
                           );
@@ -666,7 +671,8 @@ export function SweepView() {
                           .slice(0, 4)
                           .map((v) => (
                             <span key={v} className={styles.metaBadge} data-k={v.toLowerCase()}>
-                              {'◆'} {v}
+                              <Icon name="diamond" size={12} className={styles.keyMark} />
+                              {v}
                             </span>
                           ))}
                       </td>
@@ -681,7 +687,11 @@ export function SweepView() {
                           className={styles.move}
                           data-tone={item.move > 0 ? 'up' : item.move < 0 ? 'down' : 'flat'}
                         >
-                          {item.move > 0 ? `+${item.move}` : item.move < 0 ? `−${Math.abs(item.move)}` : '0'}
+                          {item.move > 0
+                            ? `▲ +${item.move}`
+                            : item.move < 0
+                              ? `▼ −${Math.abs(item.move)}`
+                              : '– 0'}
                         </span>
                       </td>
                     </tr>

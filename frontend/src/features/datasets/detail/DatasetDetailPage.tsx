@@ -25,13 +25,13 @@ import { useCrumbLabel } from '@/lib/crumb-label';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
+  ActionTile,
   Button,
   ConfirmDialog,
   DropdownMenu,
   HelpMarker,
   ErrorState,
   Icon,
-  IconButton,
   Identicon,
   PageHeader,
   Skeleton,
@@ -136,7 +136,11 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
           title="You don’t have access to this dataset"
           message="Ask a project manager to add you. Its runs stay listed with item contents hidden."
           action={
-            <Button variant="neutral" onPress={() => navigate(catalogPath(slug))}>
+            <Button
+              variant="neutral"
+              icon={<Icon name="prev" size={12} />}
+              onPress={() => navigate(catalogPath(slug))}
+            >
               Back to datasets
             </Button>
           }
@@ -428,22 +432,37 @@ function DetailBody({
             {active ? (
               <DropdownMenu
                 label="More actions"
-                trigger={<IconButton label="More actions" icon="more" data-testid="hero-more" />}
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="neutral"
+                    icon={<Icon name="more" size={14} />}
+                    data-testid="hero-more"
+                  >
+                    Actions
+                  </Button>
+                }
                 items={[
-                  ...(canWrite ? [{ id: 'name', label: 'Name version' }] : []),
-                  ...(versions.length > 1 ? [{ id: 'compare', label: 'Compare versions' }] : []),
+                  ...(canWrite
+                    ? [{ id: 'name', label: 'Name version', icon: <ActionTile icon="edit" /> }]
+                    : []),
+                  ...(versions.length > 1
+                    ? [{ id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> }]
+                    : []),
                   ...(dataset.items_visible
                     ? [
                         {
                           id: 'download',
-                          label: '↓ Download JSONL',
+                          label: 'Download JSONL',
+                          icon: <ActionTile icon="braces-lines" />,
                           href: platformUrl(downloadUrl(slug, ref, active.version)),
                         },
                         ...(active.disabled_count > 0
                           ? [
                               {
                                 id: 'download-all',
-                                label: '↓ Download JSONL with disabled items',
+                                label: 'Download JSONL with disabled items',
+                                icon: <ActionTile icon="braces-lines" />,
                                 href: platformUrl(downloadUrl(slug, ref, active.version, true)),
                               },
                             ]
@@ -455,7 +474,7 @@ function DetailBody({
                         {
                           id: 'upload',
                           label: 'Upload file as new version',
-                          icon: <Icon name="upload" size={12} />,
+                          icon: <ActionTile icon="upload" />,
                           separatorBefore: true,
                         },
                       ]
@@ -532,7 +551,7 @@ function DetailBody({
       <ConfirmDialog
         open={leaveTo !== null}
         onOpenChange={(o) => !o && setLeaveTo(null)}
-        title="Discard access changes?"
+        title="Discard unsaved changes?"
         description="You have unsaved changes to who can access this dataset. They are lost if you leave this tab."
         cancelLabel="Keep editing"
         confirmLabel="Discard changes"

@@ -1,7 +1,7 @@
 /** Expanded item: input, expected output, metadata and one output card per compared run (bodies load lazily). */
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Button, CopyButton, Tag } from '@/ui';
+import { Button, CopyButton, InlineNotice, Tag } from '@/ui';
 import { bodyText } from '@/features/run-detail/lib/itemText';
 import {
   HIDDEN_METADATA_KEYS,
@@ -95,7 +95,7 @@ export function ItemDetail({ itemId }: { itemId: string }) {
   return (
     <div className={styles.detail} data-testid="item-detail" data-part="item-detail" data-item-id={itemId}>
       {failed.length ? (
-        <div role="alert" className={styles.alert}>
+        <InlineNotice tone="danger">
           Item details could not be loaded for {failed.map((r) => r.label).join(', ')}.{' '}
           <Button
             size="sm"
@@ -104,7 +104,7 @@ export function ItemDetail({ itemId }: { itemId: string }) {
           >
             Retry
           </Button>
-        </div>
+        </InlineNotice>
       ) : !loadedAll ? (
         <p className={styles.muted} aria-busy="true">
           Loading item details…
@@ -175,12 +175,12 @@ export function ItemDetail({ itemId }: { itemId: string }) {
             )}
           </div>
           <span className={styles.toggleAll}>
-            <Button size="sm" variant="ghost" onPress={() => setHidden(new Set())}>
+            <Button size="sm" variant="neutral" onPress={() => setHidden(new Set())}>
               All
             </Button>
             <Button
               size="sm"
-              variant="ghost"
+              variant="neutral"
               onPress={() =>
                 setHidden(new Set(differing.map((keep, i) => (keep ? -1 : i)).filter((i) => i >= 0)))
               }
@@ -190,7 +190,7 @@ export function ItemDetail({ itemId }: { itemId: string }) {
             {/* C141: mark the words each output adds to the baseline's */}
             <Button
               size="sm"
-              variant="ghost"
+              variant="neutral"
               aria-pressed={diff}
               data-part="diff-vs-baseline"
               isDisabled={!baseRow}
@@ -221,9 +221,11 @@ export function ItemDetail({ itemId }: { itemId: string }) {
         </div>
       </div>
       {!all && cards.length > INITIAL_CARDS ? (
-        <Button size="sm" variant="neutral" onPress={() => setAll(true)}>
-          Show all {cards.length} runs
-        </Button>
+        <div className={styles.more}>
+          <Button size="sm" variant="neutral" onPress={() => setAll(true)}>
+            Show {cards.length - INITIAL_CARDS} more
+          </Button>
+        </div>
       ) : null}
     </div>
   );

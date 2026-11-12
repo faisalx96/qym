@@ -41,7 +41,9 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         cell: (p) => (
           <span className={styles.nameCell}>
             <Identicon seed={p.slug} cell={5} gap={2} chip />
-            <Link to={projectPath(p.slug)}>{p.name}</Link>
+            <Link to={projectPath(p.slug)} data-link="name">
+              {p.name}
+            </Link>
             {/* on/off state: only the exception shows, after the name (no Status column) */}
             {p.is_active ? null : (
               <StatusMark tone="warning" shape="pause" label="Archived" data-status="archived" />
@@ -103,7 +105,7 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         storageKey="admin-projects"
         density="comfortable"
         densityLocked
-        empty="No projects yet."
+        empty="No projects yet"
         isFiltered={q !== ''}
         filteredEmpty={<Text variant="sm">No projects match “{query.trim()}”.</Text>}
         rowActions={(p) => [
@@ -136,17 +138,25 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
           columnsMenu={false}
           search={
             <SearchField
-              label="Filter projects"
-              placeholder="Filter by name or slug"
+              label="Search projects"
+              placeholder="Search projects"
               value={query}
               onChange={setQuery}
               onClear={() => setQuery('')}
-              width={320}
+              width="var(--search-width)"
+              shortcut="/"
             />
           }
         />
         <DataTable.Footer
-          summary={q ? `${shown.length} of ${projects.length} projects` : `${projects.length} projects`}
+          filterNote={q ? `Filtered from ${projects.length} projects` : undefined}
+          pagination={{
+            total: shown.length,
+            page: 1,
+            pageSize: Math.max(1, shown.length),
+            noun: 'projects',
+            onPageChange: () => {},
+          }}
         />
       </DataTable>
       {archiving ? (

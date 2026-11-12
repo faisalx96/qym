@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { LiveWorkerVersion } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
-import { Button, ConfirmDialog, EmptyState, ErrorState, Text, useToast } from '@/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorState, StatusMark, Text, UserName, useToast } from '@/ui';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
@@ -25,28 +25,29 @@ export function HistoryBlock({
         <ul className={styles.versions} aria-label="Settings history">
           {versions.map((version) => (
             <li key={version.version} className={styles.version} data-worker-version={version.version}>
-              <Text
-                as="div"
-                variant="md"
-                weight={600}
-                tone={version.version === runningVersion ? 'success' : 'primary'}
-              >
+              <Text as="div" variant="md" weight={600} tone="primary" className={styles.inline}>
                 v{version.version}
-                {version.version === runningVersion ? ' · running' : ''}
+                {version.version === runningVersion ? (
+                  <StatusMark tone="info" shape="orbit" label="Running" />
+                ) : null}
               </Text>
               <Text dir="auto" className={styles.wrap}>
                 {version.note ?? '—'}
               </Text>
-              <div className={styles.inline}>
+              <div className={`${styles.inline} ${styles.versionMeta}`}>
                 <time dateTime={version.created_at} title={version.created_at}>
                   {formatRelative(version.created_at)}
                 </time>
-                <Text as="span" dir="auto" className={styles.wrap}>
-                  {version.created_by ?? '—'}
-                </Text>
-                <Button isDisabled={busy} onPress={() => setRestore(version.version)}>
-                  Restore
-                </Button>
+                {version.created_by ? (
+                  <UserName id={version.created_by_user_id} name={version.created_by} />
+                ) : (
+                  <Text as="span">—</Text>
+                )}
+                {version.version !== runningVersion ? (
+                  <Button isDisabled={busy} onPress={() => setRestore(version.version)}>
+                    Restore
+                  </Button>
+                ) : null}
               </div>
             </li>
           ))}

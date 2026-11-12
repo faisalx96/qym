@@ -13,6 +13,8 @@ export interface ColumnDef {
   align?: 'start' | 'center' | 'end';
   /** Key stored in the visible-columns set (null = always shown). */
   visKey: string | null;
+  /** The title starts with the zap Icon (trace and system columns). */
+  bolt?: boolean;
 }
 
 const base = (id: string, label: string, width: number, sortKey?: string): ColumnDef => ({
@@ -43,7 +45,8 @@ export const BASE_COLUMNS: ColumnDef[] = [
 export const SYSTEM_COLUMNS: ColumnDef[] = [
   {
     id: 'latency',
-    label: '⚡ Avg latency',
+    label: 'Avg latency',
+    bolt: true,
     group: 'system',
     sortKey: 'latency',
     width: 110,
@@ -52,7 +55,8 @@ export const SYSTEM_COLUMNS: ColumnDef[] = [
   },
   {
     id: 'median-latency',
-    label: '⚡ Median latency',
+    label: 'Median latency',
+    bolt: true,
     group: 'system',
     sortKey: 'median-latency',
     width: 120,
@@ -69,7 +73,8 @@ export const DURATION_COLUMN: ColumnDef = {
 export const TRACE_COLUMNS: ColumnDef[] = [
   {
     id: 'trace-avg_tokens',
-    label: '⚡ Avg tokens',
+    label: 'Avg tokens',
+    bolt: true,
     group: 'trace',
     sortKey: 'trace-avg_tokens',
     width: 110,
@@ -78,7 +83,8 @@ export const TRACE_COLUMNS: ColumnDef[] = [
   },
   {
     id: 'trace-avg_llm_calls',
-    label: '⚡ LLM calls',
+    label: 'LLM calls',
+    bolt: true,
     group: 'trace',
     sortKey: 'trace-avg_llm_calls',
     width: 106,
@@ -87,7 +93,8 @@ export const TRACE_COLUMNS: ColumnDef[] = [
   },
   {
     id: 'trace-avg_tool_calls',
-    label: '⚡ Tool calls',
+    label: 'Tool calls',
+    bolt: true,
     group: 'trace',
     sortKey: 'trace-avg_tool_calls',
     width: 106,
@@ -96,7 +103,8 @@ export const TRACE_COLUMNS: ColumnDef[] = [
   },
   {
     id: 'trace-tool_success_rate',
-    label: '⚡ Tool success',
+    label: 'Tool success',
+    bolt: true,
     group: 'trace',
     sortKey: 'trace-tool_success_rate',
     width: 116,

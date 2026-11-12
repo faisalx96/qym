@@ -10,7 +10,7 @@ import {
 } from '@/api/evalEnvironments';
 import { errorMessage, type EvalEnvironment } from '@/api/evalCommon';
 import { useEnvTasks } from '@/api/launch';
-import { Button, ErrorState, Skeleton, Tag, useToast } from '@/ui';
+import { Button, ErrorState, InlineNotice, KeyValueGrid, Skeleton, Tag, TaskTag, useToast } from '@/ui';
 import { DefaultPresetTag, HealthCell } from './cells';
 import { absTime, relTime, shortHash } from './format';
 import styles from './EnvironmentPage.module.css';
@@ -76,33 +76,37 @@ export function StatusSection({ projectId, env, canEdit }: BaseProps) {
         ) : null
       }
     >
-      <dl className={styles.kv}>
-        <dt>State</dt>
-        <dd>{env.is_active ? 'Active' : <Tag tone="warning">Disabled</Tag>}</dd>
-        <dt>Health</dt>
-        <dd>
-          <HealthCell env={env} />
-          {env.health_status === 'error' && env.health_error ? (
-            <div className={styles.errorText}>{env.health_error}</div>
-          ) : null}
-        </dd>
-        <dt>API key</dt>
-        <dd>
-          {env.api_key_set ? (
-            <span className={styles.mono}>{env.api_key_hint || 'set'}</span>
-          ) : (
-            <Tag tone="warning">Not set</Tag>
-          )}
-        </dd>
-        <dt>Default preset</dt>
-        <dd>
-          <DefaultPresetTag env={env} />
-        </dd>
-        <dt>Created</dt>
-        <dd>
-          <span className={styles.mono}>{absTime(env.created_at) || '—'}</span>
-        </dd>
-      </dl>
+      <KeyValueGrid
+        aria-label="Status"
+        columns={4}
+        items={[
+          {
+            key: 'state',
+            label: 'State',
+            value: env.is_active ? 'Active' : <Tag tone="warning">Disabled</Tag>,
+          },
+          {
+            key: 'health',
+            label: 'Health',
+            value: (
+              <>
+                <HealthCell env={env} />
+                {env.health_status === 'error' && env.health_error ? (
+                  <div className={styles.errorText}>{env.health_error}</div>
+                ) : null}
+              </>
+            ),
+          },
+          {
+            key: 'key',
+            label: 'API key',
+            value: env.api_key_set ? env.api_key_hint || 'set' : <Tag tone="warning">Not set</Tag>,
+            mono: Boolean(env.api_key_set),
+          },
+          { key: 'preset', label: 'Default preset', value: <DefaultPresetTag env={env} /> },
+          { key: 'created', label: 'Created', value: absTime(env.created_at) || '—' },
+        ]}
+      />
     </Section>
   );
 }
@@ -114,9 +118,9 @@ const DIFF_LIMIT = 50;
 export function SchemaDiffBlock({ diff }: { diff: SchemaDiff }) {
   if (!diff.changed) {
     return (
-      <div className={styles.callout} role="status">
+      <InlineNotice tone="neutral" icon="info">
         Schema unchanged <span className={styles.mono}>{shortHash(diff.schema_hash)}</span>.
-      </div>
+      </InlineNotice>
     );
   }
   const first = !diff.previous_schema_id;
@@ -186,28 +190,31 @@ export function SchemaSection({
         ) : null
       }
     >
-      <dl className={styles.kv}>
-        <dt>Hash</dt>
-        <dd>
-          {env.schema_hash ? (
-            <span className={styles.mono} title={env.schema_hash}>
-              {shortHash(env.schema_hash)}
-            </span>
-          ) : (
-            '—'
-          )}
-        </dd>
-        <dt>Fetched</dt>
-        <dd>
-          <span className={styles.mono} title={absTime(env.schema_fetched_at)}>
-            {relTime(env.schema_fetched_at) || '—'}
-          </span>
-        </dd>
-        <dt>Settings</dt>
-        <dd>
-          <span className={styles.mono}>{form.data ? countFields(form.data.descriptor) : '—'}</span>
-        </dd>
-      </dl>
+      <KeyValueGrid
+        aria-label="Schema"
+        columns={4}
+        items={[
+          {
+            key: 'hash',
+            label: 'Hash',
+            value: env.schema_hash ? <span title={env.schema_hash}>{shortHash(env.schema_hash)}</span> : '—',
+            mono: Boolean(env.schema_hash),
+          },
+          {
+            key: 'fetched',
+            label: 'Fetched',
+            value: (
+              <span title={absTime(env.schema_fetched_at)}>{relTime(env.schema_fetched_at) || '—'}</span>
+            ),
+          },
+          {
+            key: 'settings',
+            label: 'Settings',
+            value: form.data ? countFields(form.data.descriptor) : '—',
+            mono: Boolean(form.data),
+          },
+        ]}
+      />
       {diff ? <SchemaDiffBlock diff={diff} /> : null}
     </Section>
   );
@@ -250,10 +257,10 @@ export function SlotsSection({
       ) : (
         <>
           {needs ? (
-            <div className={styles.callout} data-tone="warning" role="note">
+            <InlineNotice tone="warning">
               Group LLM settings to pick project models. Until then the launch form shows LLM fields as raw
               inputs.
-            </div>
+            </InlineNotice>
           ) : null}
           {slots.data.slots.length ? (
             slots.data.slots.map((slot) => <SlotCard key={slot.slot_key} slot={slot} />)
@@ -323,12 +330,14 @@ export function TasksSection({ projectId, env }: Omit<BaseProps, 'canEdit'>) {
         ) : (
           <>
             {listed.map((t) => (
-              <Tag key={t.id} kind="task" title={t.description ?? t.id} data-task-id={t.id}>
-                {t.name || t.id}
-              </Tag>
+              <span key={t.id} data-task-id={t.id} title={t.description ?? t.id}>
+                <TaskTag name={t.name || t.id} />
+              </span>
             ))}
             {listed.find((t) => t.default) ? (
-              <span className={styles.help}>default: {listed.find((t) => t.default)?.name}</span>
+              <span className={styles.help}>
+                Default: <TaskTag name={listed.find((t) => t.default)?.name} />
+              </span>
             ) : null}
           </>
         )}

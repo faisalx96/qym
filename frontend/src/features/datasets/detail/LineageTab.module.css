@@ -48,16 +48,11 @@
   font-family: var(--font-mono);
   font-size: var(--font-md);
   font-weight: 650;
-  color: var(--accent-primary);
   text-decoration: none;
 }
 
-.versionLink:hover {
-  text-decoration: underline;
-}
-
 .versionLink:focus-visible {
-  outline: var(--focus-ring);
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
   border-radius: 2px;
 }
@@ -67,8 +62,8 @@
 }
 
 .meta {
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 
@@ -79,8 +74,8 @@
 
 .dates {
   grid-column: 1 / -1;
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 
@@ -104,8 +99,9 @@
 }
 
 .logTime {
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--text-muted);
 }
 

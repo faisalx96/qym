@@ -1,36 +1,11 @@
-/* Collapsible remote-queue card (.exq-remote). */
-.queueCard {
+/* Collapsible remote-queue section (.exq-remote). */
+.queueSection {
   margin-bottom: var(--space-xl);
-}
-
-.toggle {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  align-items: center;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  text-align: start;
-  cursor: pointer;
-}
-
-.title {
-  font-size: var(--font-md);
-  font-weight: 600;
-}
-
-.sub {
-  color: var(--text-secondary);
-  font-size: var(--font-sm);
 }
 
 .tags {
   display: inline-flex;
   gap: var(--space-xs);
-  margin-inline-start: auto;
 }
 
 .body {

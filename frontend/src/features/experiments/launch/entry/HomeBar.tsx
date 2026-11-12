@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Icon, TextField } from '@/ui';
+import { TextField } from '@/ui';
 import { plural } from '../../lib/format';
 import { NAME_MAX, PSEUDO, pointerToFieldName } from '../model';
 import { useLaunch } from '../LaunchContext';
@@ -111,7 +111,6 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
         <BarButton
           part="bar-customize"
           variant="neutral"
-          iconEnd={<Icon name="chevron-right" size={12} />}
           onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}
         >
           Customize
@@ -121,6 +120,7 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
           variant="primary"
           loading={isLaunching}
           isDisabled={readOnly || !review.canLaunch || review.items.length > 0 || isLaunching}
+          disabledReason={envCount === 0 ? 'Pick an environment' : undefined}
           onPress={() => void launch()}
         >
           Launch as is

@@ -53,6 +53,7 @@ export interface LiveWorkerVersion {
   version: number;
   created_at: string;
   created_by: string | null;
+  created_by_user_id?: string | null;
   note: string | null;
 }
 export interface LiveWorkerKey {
@@ -77,6 +78,7 @@ export interface LiveJob {
   };
   error: string | null;
   requested_by: string | null;
+  requested_by_user_id?: string | null;
   requested_at: string;
   updated_at: string;
   started_at: string | null;

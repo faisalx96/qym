@@ -7,6 +7,7 @@ import {
   type FeedbackPriority,
   type FeedbackStatus,
 } from '@/api/feedback';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import { ApiError } from '@/lib/http';
 import { Button, Card, Eyebrow, Select, Tag, Text, Textarea, useToast } from '@/ui';
 import { cap } from './badges';
@@ -135,24 +136,20 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
       header={
         <div className={styles.railHead}>
           <Text variant="md">Triage</Text>
-          <Tag kind="accent">Admin</Tag>
+          <Tag kind="role">admin</Tag>
         </div>
       }
       footer={
-        <div className={styles.footActions}>
-          <Button variant="ghost" isDisabled={!changes.length && !form.note} onPress={reset}>
-            Reset
-          </Button>
-          <Button
-            variant="accent"
-            isDisabled={!changes.length}
-            disabledReason="No changes to save"
-            loading={triage.isPending}
-            onPress={() => void save()}
-          >
-            Save changes
-          </Button>
-        </div>
+        <SaveFooter
+          dirty={changes.length > 0}
+          saving={triage.isPending}
+          onSave={() => void save()}
+          secondary={
+            <Button variant="neutral" isDisabled={!changes.length && !form.note} onPress={reset}>
+              Reset
+            </Button>
+          }
+        />
       }
     >
       <div className={styles.triageBody}>
@@ -160,7 +157,7 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
           <p className={styles.triageError} role="alert">
             {error}{' '}
             {error.startsWith('Someone') ? (
-              <Button size="sm" variant="ghost" onPress={() => window.location.reload()}>
+              <Button size="sm" variant="neutral" onPress={() => window.location.reload()}>
                 Reload
               </Button>
             ) : null}

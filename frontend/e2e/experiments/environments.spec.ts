@@ -135,8 +135,9 @@ test.describe('add environment', () => {
     );
     await expect(dialog.getByText('“added env” is saved.')).toBeVisible();
     // the read-only preview opens its first group
-    await expect(dialog.locator('details').first()).toHaveAttribute('open', '');
-    await expect(dialog.locator('details[open]')).toHaveCount(1);
+    const triggers = dialog.locator('button[aria-expanded]');
+    await expect(triggers.first()).toHaveAttribute('aria-expanded', 'true');
+    await expect(dialog.locator('button[aria-expanded="true"]')).toHaveCount(1);
     // the typed key is not kept anywhere in the page
     expect(await page.content()).not.toContain('typed-secret-key-1');
     const created = await (await request.get(`/v1/projects/${project.id}/eval-environments`)).json();
@@ -212,7 +213,7 @@ test.describe('environment page', () => {
     await expect(schema.getByText(/Schema unchanged/)).toBeVisible();
 
     await page.getByRole('textbox', { name: 'Base URL' }).fill('ftp://not-allowed.example.com');
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Unsaved changes')).toBeVisible();
     const saved = await (await request.get(`/v1/projects/${project.id}/eval-environments/${env.id}`)).json();
     expect(JSON.stringify(saved)).toContain(env.url);
@@ -250,7 +251,7 @@ test.describe('environment page', () => {
     });
     await pickSelect(page, 'Default priority', 'LOW');
     await page.getByRole('textbox', { name: 'Ranking metric' }).fill('exact_match');
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expectToast(page, 'Saved “staging”');
     expect(bodies[0]).toMatchObject({
       base_url: other,
@@ -268,7 +269,7 @@ test.describe('environment page', () => {
     const third = `http://127.0.0.1:${FAKE_A}/${uniqueSlug('moved2')}`;
     bodies.length = 0;
     await base.fill(third);
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expectToast(page, 'Saved “staging”');
     expect(bodies[0]).not.toHaveProperty('allow_connection_keys');
     const final = (await (
@@ -300,13 +301,13 @@ test.describe('environment page', () => {
           })
         : route.fallback(),
     );
-    await dialog.getByRole('button', { name: 'Save groups' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(dialog.locator('[data-slot-key="endpoint:primary"]').getByRole('alert')).toContainText(
       'Pointer belongs to two slots',
     );
     await page.unroute('**/model-slots');
 
-    await dialog.getByRole('button', { name: 'Save groups' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expectToast(page, 'LLM model groups saved for “staging”');
     await expect(dialog).toBeHidden();
     await expect(section.getByText('Primary model')).toBeVisible();
@@ -336,6 +337,7 @@ test.describe('environment page', () => {
     await confirm.getByRole('button', { name: 'Cancel' }).click();
     await expect(confirm).toBeHidden();
     await page.getByRole('button', { name: 'Delete environment' }).click();
+    await confirm.getByRole('textbox', { name: 'Type unused to confirm' }).fill('unused');
     await confirm.getByRole('button', { name: 'Delete environment' }).click();
     await expectToast(page, 'Deleted “unused”');
     await expect(page).toHaveURL(new RegExp(`/projects/${project.slug}/environments$`));
@@ -343,6 +345,7 @@ test.describe('environment page', () => {
 
     await grid(page).getByRole('link', { name: 'used', exact: true }).click();
     await page.getByRole('button', { name: 'Delete environment' }).click();
+    await confirm.getByRole('textbox', { name: 'Type used to confirm' }).fill('used');
     await confirm.getByRole('button', { name: 'Delete environment' }).click();
     await expectToast(page, '“used” is in use, so it was disabled');
     await expect(grid(page).getByRole('row').filter({ hasText: 'used' })).toContainText('Disabled');

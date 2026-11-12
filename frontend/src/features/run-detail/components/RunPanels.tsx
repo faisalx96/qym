@@ -2,7 +2,18 @@
 import { useState } from 'react';
 import { projectPath } from '@/app/routes';
 import { JobStatusBadge } from '@/features/experiments/components/StatusBadges';
-import { Card, Flag, LinkButton, StatusMark, Tag, type StatusShape, type StatusTone } from '@/ui';
+import {
+  Card,
+  Disclosure,
+  Flag,
+  InlineNotice,
+  LinkButton,
+  StatusMark,
+  Tag,
+  UserName,
+  type StatusShape,
+  type StatusTone,
+} from '@/ui';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
@@ -41,7 +52,7 @@ function HistoryEntry({ event, selfApproved }: { event: ReviewHistoryEvent; self
     <li className={styles.entry} data-action={event.action}>
       <div className={styles.entryHead}>
         <StatusMark tone={action.tone} shape={action.shape} label={action.label} />
-        <span className={styles.actor}>{who(event.actor)}</span>
+        <UserName id={event.actor?.id} name={who(event.actor)} email={event.actor?.email} />
         {selfApproved ? (
           <Flag tone="warning" icon="user" title="The same person submitted and approved this run">
             Self-approved
@@ -169,7 +180,9 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
     [
       'Experiment',
       experimentHref ? (
-        <a href={experimentHref}>{String(p.experiment_name ?? experimentId.slice(0, 8))}</a>
+        <a href={experimentHref} data-link="name">
+          {String(p.experiment_name ?? experimentId.slice(0, 8))}
+        </a>
       ) : (
         String(p.experiment_name ?? (experimentId.slice(0, 8) || '—'))
       ),
@@ -201,7 +214,9 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
             <h2 className={styles.title} id="rxp-title">
               Experiment
             </h2>
-            <Tag kind="accent">Official run</Tag>
+            <Flag tone="info" icon="shield">
+              Official run
+            </Flag>
           </div>
           <div className={styles.copy}>
             Launched by qym on a registered environment. Settings show this run’s combination.
@@ -248,10 +263,9 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
         ))}
       </dl>
       {p.remote_result != null ? (
-        <details className={styles.result} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-          <summary>Service result</summary>
+        <Disclosure className={styles.result} title="Service result" open={open} onOpenChange={setOpen}>
           <pre className={styles.json}>{JSON.stringify(p.remote_result, null, 2)}</pre>
-        </details>
+        </Disclosure>
       ) : null}
     </Card>
   );
@@ -262,13 +276,13 @@ export function RunNotices({ run, readOnly }: { run: Run; readOnly: boolean }) {
   return (
     <>
       {readOnly ? (
-        <div className={styles.notice} role="note" data-testid="read-only-notice">
-          <b>{READ_ONLY_COPY.lead}</b> {READ_ONLY_COPY.body}
-        </div>
+        <InlineNotice tone="neutral" icon="info" lead={READ_ONLY_COPY.lead} data-testid="read-only-notice">
+          {READ_ONLY_COPY.body}
+        </InlineNotice>
       ) : lock ? (
-        <div className={styles.notice} role="note" data-testid="scores-locked-notice">
-          <b>{lock.lead}</b> {lock.body}
-        </div>
+        <InlineNotice tone="neutral" icon="info" lead={lock.lead} data-testid="scores-locked-notice">
+          {lock.body}
+        </InlineNotice>
       ) : null}
     </>
   );

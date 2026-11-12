@@ -54,7 +54,9 @@ test.describe('390px', () => {
     await expect(page).toHaveURL(/\/experiments\/[0-9a-f-]{36}$/);
   });
 
-  test('the bar links to the first problem (a link in its status row, no overflow menu; at 390 the field name is hidden, amended C-3-7) and jumps to it', async ({ page }) => {
+  test('the bar links to the first problem (a link in its status row, no overflow menu; at 390 the field name is hidden, amended C-3-7) and jumps to it', async ({
+    page,
+  }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await expect(page.getByRole('button', { name: 'More launch options' })).toHaveCount(0);
     const problem = page.getByRole('button', { name: /^Fix 1 problem first/ });

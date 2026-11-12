@@ -15,20 +15,24 @@ import {
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
+  ActionTile,
   Button,
   Checkbox,
   ConfirmDialog,
   DropdownMenu,
   EmptyState,
   ErrorState,
+  Icon,
   IconButton,
   SectionHeader,
   Skeleton,
   Text,
+  UserName,
   useToast,
   Flag,
   StatusMark,
 } from '@/ui';
+import { formatAgo } from '@/lib/dates';
 import { formatDateParts } from '@/lib/format';
 import { useDraftRules } from '../useDraftRules';
 import { useRuleGenerator } from '../useRuleGenerator';
@@ -38,14 +42,7 @@ import { ExamplePicker, allExampleFields, type ExampleSelection } from './Exampl
 import s from './rules.module.css';
 
 function relative(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (seconds < 60) return 'just now';
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
+  return iso ? formatAgo(iso) : '';
 }
 
 export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canManage: boolean }) {
@@ -83,9 +80,10 @@ export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canMana
 }
 
 function stateBadge(v: RuleVersion, productionId: string | null) {
-  if (v.id === productionId || v.is_active) return <StatusMark tone="success" shape="full" label="Live" />;
+  if (v.id === productionId || v.is_active)
+    return <StatusMark tone="success" shape="full" label="Production" />;
   if (v.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
-  return <StatusMark tone="neutral" shape="full" label="Published" />;
+  return <StatusMark tone="info" shape="full" label="Published" />;
 }
 
 function RulesView({
@@ -151,6 +149,7 @@ function RulesView({
             canManage ? (
               <Button
                 variant="primary"
+                icon={<Icon name="plus" size={12} />}
                 loading={createDraft.isPending}
                 onPress={() => void onCreateDraft(null)}
               >
@@ -230,7 +229,13 @@ function RulesView({
             Versions
           </Text>
           {canManage ? (
-            <Button size="sm" loading={createDraft.isPending} onPress={() => void onCreateDraft(open)}>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Icon name="plus" size={12} />}
+              loading={createDraft.isPending}
+              onPress={() => void onCreateDraft(open)}
+            >
               Create draft
             </Button>
           ) : null}
@@ -250,8 +255,12 @@ function RulesView({
                   </Text>
                   {stateBadge(v, productionId)}
                 </span>
-                <Text variant="sm" tone="muted">
-                  {`${v.rule_count} ${v.rule_count === 1 ? 'rule' : 'rules'} · ${v.created_by?.display_name ?? 'unknown'} · ${relative(v.updated_at ?? v.created_at)}`}
+                <Text variant="sm" tone="muted" className={s.metaLine}>
+                  <span>{`${v.rule_count} ${v.rule_count === 1 ? 'rule' : 'rules'}`}</span>
+                  <span>·</span>
+                  <UserName id={v.created_by?.id} name={v.created_by?.display_name ?? 'unknown'} />
+                  <span>·</span>
+                  <span>{relative(v.updated_at ?? v.created_at)}</span>
                 </Text>
               </button>
               <DropdownMenu
@@ -265,15 +274,26 @@ function RulesView({
                 }
                 onAction={onMenu}
                 items={[
-                  ...(canManage ? [{ id: 'draft', label: 'Create draft from this version' }] : []),
-                  { id: 'download', label: 'Download JSON' },
-                  { id: 'compare', label: 'Compare versions' },
-                  ...(canManage ? [{ id: 'merge', label: 'Merge versions' }] : []),
+                  ...(canManage
+                    ? [
+                        {
+                          id: 'draft',
+                          label: 'Create draft from this version',
+                          icon: <ActionTile icon="plus" />,
+                        },
+                      ]
+                    : []),
+                  { id: 'download', label: 'Download JSON', icon: <ActionTile icon="braces" /> },
+                  { id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> },
+                  ...(canManage
+                    ? [{ id: 'merge', label: 'Merge versions', icon: <ActionTile icon="swap" /> }]
+                    : []),
                   ...(data.can_delete && v.id !== productionId && !v.is_active
                     ? [
                         {
                           id: 'delete',
                           label: 'Delete version',
+                          icon: <ActionTile icon="trash" tone="danger" />,
                           tone: 'danger' as const,
                           separatorBefore: true,
                         },
@@ -555,10 +575,10 @@ function VersionWorkspace({
             <Flag tone={editable ? 'warning' : 'neutral'} icon={editable ? 'edit' : 'lock'}>
               {editable ? 'Editable draft' : version.status === 'draft' ? 'Draft (read-only)' : 'Read-only'}
             </Flag>
-            {isProduction ? <StatusMark tone="success" shape="full" label="Live" /> : null}
+            {isProduction ? <StatusMark tone="success" shape="full" label="Production" /> : null}
             {editable ? (
               <Button
-                variant="accent"
+                variant="primary"
                 size="sm"
                 isDisabled={!settled || draft.rules.length === 0}
                 onPress={onPublish}
@@ -566,19 +586,24 @@ function VersionWorkspace({
                 Publish
               </Button>
             ) : version.status === 'published' && !isProduction && canPromote ? (
-              <Button variant="accent" size="sm" loading={promoting} onPress={onPromote}>
+              <Button variant="primary" size="sm" loading={promoting} onPress={onPromote}>
                 Make live
               </Button>
             ) : null}
           </div>
         }
       />
-      <Text variant="sm" tone="muted" as="p" data-testid="version-meta">
-        {[
-          `Created ${formatDateParts(version.created_at).full || '—'}`,
-          `Updated ${formatDateParts(version.updated_at).full || '—'}`,
-          `By ${version.created_by?.display_name ?? '—'}`,
-        ].join(' · ')}
+      <Text variant="sm" tone="muted" as="p" data-testid="version-meta" className={s.metaLine}>
+        <span>{`Created ${formatDateParts(version.created_at).full || '—'}`}</span>
+        <span>·</span>
+        <span>{`Updated ${formatDateParts(version.updated_at).full || '—'}`}</span>
+        <span>·</span>
+        <span>By</span>
+        {version.created_by ? (
+          <UserName id={version.created_by.id} name={version.created_by.display_name} />
+        ) : (
+          <span>—</span>
+        )}
       </Text>
       {generation}
       <RuleEditor draft={draft} editable={editable} />

@@ -8,6 +8,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import { Textarea } from '@/ui';
 import type { EditorHandle } from './CodeMirrorEditor';
 import styles from './raw.module.css';
 
@@ -40,15 +41,16 @@ function PlainEditor({ value, onChange, readOnly, label, innerRef, lostFocus }: 
     };
   }, [innerRef, lostFocus]);
   return (
-    <textarea
+    <Textarea
       ref={innerRef}
       className={styles.fallback}
-      aria-label={label}
+      label={label}
+      hideLabel
+      mono
       value={value}
-      readOnly={readOnly}
+      isReadOnly={readOnly}
       spellCheck={false}
-      dir="auto"
-      onChange={(e) => onChange?.(e.target.value)}
+      onChange={(text) => onChange?.(text)}
     />
   );
 }

@@ -64,7 +64,6 @@ export function GeneralTab() {
         save={
           !readOnly && canManage
             ? {
-                label: 'Save rules',
                 dirty:
                   approvers !== project.correction_approvers ||
                   differentReviewer !== project.correction_require_different_reviewer,

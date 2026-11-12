@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatLatency, formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
 import { applyQueryUpdates } from '@/lib/url-state';
-import { Button, Card, Checkbox, Icon, SegmentedControl, Select, Text } from '@/ui';
+import { Button, Card, Checkbox, EmptyState, Icon, SegmentedControl, Select, Text } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   barFraction,
@@ -70,12 +70,12 @@ export function CategoriesTab() {
     [selectedKey, rows, metric, api.ctx, filters.domain],
   );
   if (!keys.length || !metric || !selectedKey) {
-    return <p className={panel.note}>No metadata categories to break down.</p>;
+    return <EmptyState compact title="No metadata categories to break down" />;
   }
   const numeric = model.metricTypes[metric] === 'numeric';
   const direction = model.metricDirections[metric] ?? null;
   const fmt = (v: number | null) =>
-    v === null ? '—' : numeric ? formatNumericValue(v) : formatPercent(v, 0);
+    v === null ? '—' : numeric ? formatNumericValue(v) : formatPercent(v, 1);
   const choose = (key: string) =>
     setParams((prev) => applyQueryUpdates(prev, { category: key }), {
       replace: true,
@@ -183,7 +183,7 @@ export function CategoriesTab() {
           fmt={fmt}
         />
       ) : (
-        <p className={panel.note}>No scored items for {selectedKey} with the current filters.</p>
+        <EmptyState compact title={`No scored items for ${selectedKey} with these filters`} />
       )}
     </div>
   );
@@ -396,7 +396,7 @@ function KeyCard({
                 </span>
               </span>
               <span className={styles.num}>{g.itemCount}</span>
-              <span className={styles.num}>{g.passRate === null ? '—' : formatPercent(g.passRate, 0)}</span>
+              <span className={styles.num}>{g.passRate === null ? '—' : formatPercent(g.passRate, 1)}</span>
               <span className={styles.num}>{g.avgLatency ? formatLatency(g.avgLatency) : '—'}</span>
             </button>
           );
@@ -405,7 +405,7 @@ function KeyCard({
       {ordered.length > DEFAULT_VISIBLE_VALUES ? (
         <div className={styles.more}>
           <Button size="sm" variant="neutral" onPress={() => setAll(!all)}>
-            {all ? 'Show fewer' : `Show all ${ordered.length} values`}
+            {all ? 'Show fewer' : `Show ${ordered.length - DEFAULT_VISIBLE_VALUES} more`}
           </Button>
         </div>
       ) : null}

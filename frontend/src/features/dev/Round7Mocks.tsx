@@ -147,10 +147,10 @@ function KeyRow({ node, depth, openAll }: { node: Node; depth: number; openAll: 
           <span className={styles.actions} data-part="actions">
             {nested ? (
               <>
-                <Button size="sm" variant="ghost" aria-label={`Expand all in ${node.key}`}>
+                <Button size="sm" variant="neutral" aria-label={`Expand all in ${node.key}`}>
                   Expand all
                 </Button>
-                <Button size="sm" variant="ghost" aria-label={`Collapse all in ${node.key}`}>
+                <Button size="sm" variant="neutral" aria-label={`Collapse all in ${node.key}`}>
                   Collapse all
                 </Button>
               </>
@@ -409,10 +409,10 @@ function ItemDetail() {
         <span className={styles.regionTitle}>Output</span>
         <span className={`${styles.muted} ${styles.mono}`}>700ms · 3 keys</span>
         <span className={styles.itemActions}>
-          <Button size="sm" variant="ghost">
+          <Button size="sm" variant="neutral">
             Expand all
           </Button>
-          <Button size="sm" variant="ghost">
+          <Button size="sm" variant="neutral">
             Collapse all
           </Button>
         </span>

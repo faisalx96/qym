@@ -1,5 +1,5 @@
 import type { LiveMetricSpec, LiveTurnDetail } from '@/api/live';
-import { Text, TextBlock } from '@/ui';
+import { EmptyState, TextBlock } from '@/ui';
 import { chartsOf, type ChartEvidence } from '../../lib/summary';
 import { ChartImage } from './ChartImage';
 import { EvidenceCard, MetricValue } from './Evidence';
@@ -37,7 +37,7 @@ export function ChartEvidenceBody({
           ))}
         </ul>
       ) : (
-        <Text tone="muted">No chart issues reported.</Text>
+        <EmptyState compact title="No chart issues reported" />
       )}
       {reading && chart.reading ? <TextBlock text={chart.reading} dir="auto" mode="rendered" /> : null}
     </>
@@ -46,7 +46,7 @@ export function ChartEvidenceBody({
 
 export function ChartsTab({ data }: { data: LiveTurnDetail }) {
   const charts = chartsOf(data.summary, data.chart_images);
-  if (!charts.length) return <Text tone="muted">No charts available for this turn.</Text>;
+  if (!charts.length) return <EmptyState compact title="No charts for this turn" />;
   return (
     <div className={styles.twoColumns}>
       {charts.map((chart, index) => (

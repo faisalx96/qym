@@ -2,7 +2,15 @@
 /** Brief 06 §2.6 (journey 6): the default preset editor (the launch form in editor mode). */
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { resetFakes, test } from '../support';
-import { dialog, launchButton, listPresets, maxAttempts, seedLaunch, toReview, type LaunchFixture } from './launchSupport';
+import {
+  dialog,
+  launchButton,
+  listPresets,
+  maxAttempts,
+  seedLaunch,
+  toReview,
+  type LaunchFixture,
+} from './launchSupport';
 
 test.setTimeout(90_000);
 test.use({ actionTimeout: 10_000 });
@@ -149,7 +157,7 @@ test('leaving the editor with unpublished changes asks first', async ({ page }) 
   await (await maxAttempts(page)).fill('4');
   await expect(page.locator('[data-part=bar-status]')).toContainText('1 change');
   await page.locator('[data-part=bar-cancel]').click();
-  await expect(dialog(page)).toContainText('Leave without publishing?');
+  await expect(dialog(page)).toContainText('Discard unsaved changes?');
   await dialog(page).getByRole('button', { name: 'Keep editing' }).click();
   await expect(page).toHaveURL(/default-preset\/edit/);
 });

@@ -110,7 +110,7 @@ export function EvaluationSection({ inWizard }: { inWizard?: boolean } = {}) {
                   {moved ? (
                     <div className={styles.readonlyRow} data-testid="set-in-where">
                       <span>Dataset and task are set in Where it runs.</span>
-                      <Button variant="ghost" size="sm" onPress={() => revealStep('where')}>
+                      <Button variant="neutral" size="sm" onPress={() => revealStep('where')}>
                         Edit
                       </Button>
                     </div>

@@ -43,10 +43,13 @@ def engine(request, tmp_path, monkeypatch):
     monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
     try:
         Base.metadata.create_all(
+            eng, tables=[Base.metadata.tables[name] for name in ("users", "projects")]
+        )
+        _create_api_keys_before_0101(eng)
+        Base.metadata.create_all(
             eng,
             tables=[
-                Base.metadata.tables[name]
-                for name in ("users", "projects", "api_keys", "live_sources", "live_turns")
+                Base.metadata.tables[name] for name in ("live_sources", "live_turns")
             ],
         )
         yield eng
@@ -56,6 +59,29 @@ def engine(request, tmp_path, monkeypatch):
             with admin.begin() as conn:
                 conn.execute(sa.text(f'DROP SCHEMA "{schema}" CASCADE'))
             admin.dispose()
+
+
+def _create_api_keys_before_0101(eng) -> None:
+    """Create api_keys as it was before migration 0101 (no kind, no experiment_id).
+
+    The model now has both columns, and experiment_id points at eval_experiments, which these
+    tests do not build. users and projects must already exist.
+    """
+    from qym_platform.db.base import Base
+
+    md = sa.MetaData()
+    for name in ("users", "projects", "api_keys"):
+        skip = {"kind", "experiment_id"} if name == "api_keys" else set()
+        sa.Table(
+            name,
+            md,
+            *[
+                c._copy()
+                for c in Base.metadata.tables[name].columns
+                if c.name not in skip
+            ],
+        )
+    md.create_all(eng, tables=[md.tables["api_keys"]])
 
 
 def test_revision_chain_names_0098() -> None:

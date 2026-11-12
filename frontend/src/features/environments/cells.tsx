@@ -1,6 +1,6 @@
 /** Shared table/section cells of the environments area. */
 import type { EvalEnvironment } from '@/api/evalCommon';
-import { Tag } from '@/ui';
+import { StatusMark, Tag } from '@/ui';
 import { absTime, relTime, shortHash } from './format';
 import styles from './EnvironmentsTable.module.css';
 
@@ -16,10 +16,13 @@ export function HealthCell({ env, showTime = true }: { env: EvalEnvironment; sho
         : 'Not checked yet';
   return (
     <div className={styles.healthCell}>
-      <span className={styles.health} data-status={status} title={title}>
-        <span className={styles.dot} aria-hidden="true" />
-        {label}
-      </span>
+      <StatusMark
+        tone={status === 'ok' ? 'success' : status === 'error' ? 'danger' : 'neutral'}
+        shape={status === 'ok' ? 'check' : status === 'error' ? 'cross' : 'ring'}
+        label={label}
+        title={title}
+        data-status={status}
+      />
       {showTime && checked ? <span className={styles.meta}>{checked}</span> : null}
     </div>
   );

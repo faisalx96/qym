@@ -7,13 +7,14 @@
 }
 
 .runLink {
-  color: var(--accent-primary);
+  color: var(--text-primary);
   font-family: var(--font-mono);
   text-decoration: none;
 }
 
 .runLink:hover {
-  text-decoration: underline;
+  color: var(--accent-primary);
+  text-decoration: none;
 }
 
 .meta {

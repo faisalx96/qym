@@ -36,13 +36,6 @@ export function ProjectsPage() {
         description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'} you belong to`}
         actions={
           <>
-            <SearchField
-              label="Search projects"
-              placeholder="Search projects"
-              value={query}
-              onChange={setQuery}
-              width={240}
-            />
             {canCreate ? (
               <Button
                 variant="primary"
@@ -56,6 +49,18 @@ export function ProjectsPage() {
           </>
         }
       />
+      {me.projects.length > 0 ? (
+        <div className={styles.toolbar}>
+          <SearchField
+            label="Search projects"
+            placeholder="Search projects"
+            value={query}
+            onChange={setQuery}
+            width="var(--search-width)"
+            shortcut="/"
+          />
+        </div>
+      ) : null}
       {me.projects.length === 0 ? (
         <EmptyState
           icon={<Icon name="folder" />}
@@ -96,21 +101,23 @@ function ProjectCard({ project }: { project: Project }) {
         <div className={styles.cardHead}>
           <Identicon seed={project.slug} chip />
           <div className={styles.cardTitle}>
-            <Text variant="md" as="span" truncate>
+            <Text variant="md" as="span">
               {project.name}
             </Text>
-            <Text variant="sm" as="span" mono truncate>
+            <Text variant="sm" as="span" mono>
               {project.slug}
             </Text>
+            <Tag kind="role" className={styles.role}>
+              {project.role || 'member'}
+            </Tag>
           </div>
-          <Tag kind="role">{project.role || 'member'}</Tag>
         </div>
         <div className={styles.cardMeta}>
           <span>
-            <strong>{project.run_count}</strong> {project.run_count === 1 ? 'run' : 'runs'}
+            {project.run_count} {project.run_count === 1 ? 'run' : 'runs'}
           </span>
           <span>
-            <strong>{project.member_count}</strong> {project.member_count === 1 ? 'member' : 'members'}
+            {project.member_count} {project.member_count === 1 ? 'member' : 'members'}
           </span>
           <span>updated {relativeDate(project.updated_at)}</span>
         </div>

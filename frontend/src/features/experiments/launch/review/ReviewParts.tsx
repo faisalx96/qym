@@ -127,7 +127,7 @@ export function ChangesCard({ rows, base }: { rows: readonly ChangeRow[]; base?:
           {rows.map((r) => (
             <li key={r.key} className={styles.row}>
               <span>{r.label}</span>
-              <Button size="sm" variant="ghost" onPress={r.onEdit} aria-label={`Edit: ${r.label}`}>
+              <Button size="sm" variant="neutral" onPress={r.onEdit} aria-label={`Edit: ${r.label}`}>
                 Edit
               </Button>
             </li>

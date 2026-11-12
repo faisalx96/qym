@@ -168,7 +168,7 @@ test('copy button puts the exact code on the clipboard and says Copied', async (
   const expected = (await block.locator('pre').textContent()) ?? '';
   expect(expected.length).toBeGreaterThan(0);
   await block.getByRole('button', { name: 'Copy code' }).click();
-  await expect(page.getByText('Copied to clipboard')).toBeVisible();
+  await expect(block.getByRole('button', { name: 'Copied' })).toBeVisible();
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   expect(clip).toBe(expected);
 });

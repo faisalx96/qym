@@ -169,7 +169,7 @@ test.describe('experiment detail with several dataset versions', () => {
     await gotoApp(page, page0(f.project.slug, x.id));
     const row = matrix(page).locator('tbody tr').filter({ hasText: 'support-tickets · v2' });
     await row.getByRole('button', { name: /^Retry/ }).click();
-    await expect(row).toContainText('↻ 1 earlier', { timeout: 15_000 });
+    await expect(row).toContainText('1 earlier', { timeout: 15_000 });
     const after: any = await getExperiment(request, f.project.id, x.id);
     const retry = after.jobs.find((j: any) => j.retry_of_job_id === target.id);
     expect(retry).toMatchObject({ combo_index: 0, dataset_index: 1, attempt: 1 });

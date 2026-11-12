@@ -26,6 +26,10 @@
   --tone: var(--accent-tertiary);
   --tone-text: var(--accent-tertiary-soft);
 }
+[data-tone='gold'] {
+  --tone: var(--role-admin);
+  --tone-text: var(--role-admin);
+}
 [data-tone='neutral'] {
   --tone: var(--text-muted);
   --tone-text: var(--text-muted);

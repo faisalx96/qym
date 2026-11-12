@@ -2,7 +2,7 @@ import type { AnalysisScope } from '@/api/analysis';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAnalysisConfig, useRunSummary, type AnalysisJob } from '@/api/analysis';
 import { projectPath } from '@/app/routes';
-import { ErrorState, LinkButton, useToast } from '@/ui';
+import { ErrorState, useToast } from '@/ui';
 import { fullWidth } from '@/features/shell/layout';
 import { AnalyzerFrame } from './AnalyzerFrame';
 import { CompactJobRail } from './blocks/ActionRail';
@@ -57,12 +57,13 @@ export function RunShell({
         <ErrorState
           error={summary.error ?? config.error}
           title="Couldn’t load auto-analysis"
-          notFoundMessage="Run not found. It may have been deleted, or the link is wrong."
+          notFoundTitle="Run not found"
+          notFoundMessage="It may have been deleted, or the link is wrong."
+          parent={{ to: projectPath(slug), label: 'Runs' }}
           onRetry={() => {
             void summary.refetch();
             void config.refetch();
           }}
-          action={<LinkButton to={projectPath(slug)}>Open Runs</LinkButton>}
         />
       </div>
     );

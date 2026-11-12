@@ -97,12 +97,6 @@
   background: var(--success);
 }
 
-.bolt {
-  margin-inline-end: var(--space-xs);
-  color: var(--warning);
-  letter-spacing: 0;
-}
-
 .none {
   color: var(--text-muted);
 }

@@ -3,6 +3,7 @@ import type { LiveMetricSpec } from '@/api/live';
 import {
   Card,
   CopyButton,
+  EmptyState,
   KeyValueGrid,
   ScoreValue,
   StatusMark,
@@ -11,7 +12,8 @@ import {
   TextBlock,
 } from '@/ui';
 import type { SqlPart } from '../../lib/summary';
-import { labelFor, scoreText } from './presentation';
+import { verdictOf } from '../../lib/mix';
+import { labelFor, scoreText, statusWord } from './presentation';
 import styles from '../../turn.module.css';
 
 export function EvidenceCard({
@@ -40,21 +42,8 @@ export function EvidenceCard({
 
 export function DiagnosisLabel({ value, specs }: { value: string | null; specs: LiveMetricSpec[] }) {
   const label = labelFor(value, specs);
-  return (
-    <StatusMark
-      tone="neutral"
-      data-tone={label.tone}
-      shape={
-        label.tone === 'danger'
-          ? 'cross'
-          : label.tone === 'accent' || label.tone === 'success'
-            ? 'check'
-            : 'ring'
-      }
-      label={label.label}
-      dir="auto"
-    />
-  );
+  const v = verdictOf(label.specTone);
+  return <StatusMark tone={v.tone} shape={v.shape} label={label.label} dir="auto" />;
 }
 
 export function ServiceStatus({ status }: { status: string | null }) {
@@ -64,13 +53,24 @@ export function ServiceStatus({ status }: { status: string | null }) {
       shape={
         status === 'failed' ? 'cross' : status === 'ok' ? 'check' : status === 'skipped' ? 'pause' : 'ring'
       }
-      label={status ?? '—'}
+      label={status ? statusWord(status) : '—'}
       dir="auto"
     />
   );
 }
 
+/** A boolean Live score as the run pass mark: 1 = green check 'Pass', 0 = red cross 'Fail', null = '—' (C-19). */
+export function PassFailMark({ value }: { value: number | null }) {
+  if (value === null) return <span>—</span>;
+  return value ? (
+    <StatusMark tone="success" shape="check" label="Pass" />
+  ) : (
+    <StatusMark tone="danger" shape="cross" label="Fail" />
+  );
+}
+
 export function MetricValue({ value, spec }: { value: number | null; spec?: LiveMetricSpec | null }) {
+  if (spec?.score_type === 'boolean') return <PassFailMark value={value} />;
   return (
     <ScoreValue
       value={value}
@@ -84,7 +84,7 @@ export function MetricValue({ value, spec }: { value: number | null; spec?: Live
 
 export function Facts({ value, label }: { value: Record<string, unknown> | null; label: string }) {
   if (!value || Object.keys(value).length === 0)
-    return <Text tone="muted">No {label.toLowerCase()} available for this turn.</Text>;
+    return <EmptyState compact title={`No ${label.toLowerCase()} for this turn`} />;
   return (
     <div className={styles.facts}>
       <KeyValueGrid
@@ -108,7 +108,7 @@ export function Facts({ value, label }: { value: Record<string, unknown> | null;
 }
 
 export function SqlParts({ parts }: { parts: SqlPart[] }) {
-  if (!parts.length) return <Text tone="muted">No SQL available for this turn.</Text>;
+  if (!parts.length) return <EmptyState compact title="No SQL for this turn" />;
   return (
     <div className={styles.sqlParts}>
       {parts.map((part, index) => (
@@ -125,7 +125,7 @@ export function SqlParts({ parts }: { parts: SqlPart[] }) {
                     : 'Execution unknown'
               }
             />
-            <span className={styles.number}>{part.rows ?? '—'} rows</span>
+            <span>{part.rows ?? '—'} rows</span>
             {part.text !== null ? <CopyButton text={part.text} label="Copy SQL" /> : null}
           </div>
           <pre className={styles.sql} dir="ltr">

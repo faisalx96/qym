@@ -15,6 +15,8 @@ import {
   placeConnectionError,
   type ConnectionErrors,
 } from '@/features/shell/settings/ConnectionFields';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
+import { formatDuration } from '@/lib/format';
 import { ApiError } from '@/lib/http';
 import { keyHostChanged } from '@/lib/keyHost';
 import {
@@ -68,6 +70,7 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
     llm_model: model.trim(),
     ...(key ? { llm_api_key: key } : {}),
   });
+  const dirty = url.trim() !== stored.llm_base_url || model.trim() !== stored.llm_model || Boolean(key);
   return (
     <Card
       as="section"
@@ -84,50 +87,51 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
         </div>
       }
       footer={
-        <div className={feedbackStyles.footActions}>
-          {data.configured ? (
-            <Button variant="danger" onPress={() => setRemoving(true)}>
-              Remove connection
-            </Button>
-          ) : null}
-          {/* the button rule (round 11): Test runs something without saving (accent), Save commits (primary) */}
-          <Button
-            variant="accent"
-            icon={<Icon name="play" size={14} />}
-            isDisabled={!canTest}
-            loading={test.isPending}
-            onPress={async () => {
-              setError('');
-              setResult(null);
-              if (!checked()) return;
-              try {
-                setResult(await test.mutateAsync(values()));
-              } catch (e) {
-                place(e, 'The test could not run.');
-              }
-            }}
-          >
-            Test connection
-          </Button>
-          <Button
-            variant="primary"
-            isDisabled={blocked || !complete}
-            loading={save.isPending}
-            onPress={async () => {
-              setError('');
-              if (!checked()) return;
-              try {
-                await save.mutateAsync({ ...values(), ...(key ? {} : { llm_api_key: '__KEEP__' }) });
-                setKey('');
-                toast.show('Connection saved', { tone: 'success' });
-              } catch (e) {
-                place(e, 'Couldn’t save the connection.');
-              }
-            }}
-          >
-            Save connection
-          </Button>
-        </div>
+        <SaveFooter
+          dirty={dirty}
+          isDisabled={!complete || blocked}
+          disabledReason={!complete || blocked ? 'Fill in every field' : undefined}
+          saving={save.isPending}
+          onSave={async () => {
+            setError('');
+            if (!checked()) return;
+            try {
+              await save.mutateAsync({ ...values(), ...(key ? {} : { llm_api_key: '__KEEP__' }) });
+              setKey('');
+              toast.show('Connection saved', { tone: 'success' });
+            } catch (e) {
+              place(e, 'Couldn’t save the connection.');
+            }
+          }}
+          secondary={
+            <>
+              {data.configured ? (
+                <Button variant="danger" onPress={() => setRemoving(true)}>
+                  Remove connection
+                </Button>
+              ) : null}
+              <Button
+                variant="accent"
+                icon={<Icon name="play" size={12} />}
+                isDisabled={!canTest}
+                disabledReason="Fill in every field"
+                loading={test.isPending}
+                onPress={async () => {
+                  setError('');
+                  setResult(null);
+                  if (!checked()) return;
+                  try {
+                    setResult(await test.mutateAsync(values()));
+                  } catch (e) {
+                    place(e, 'The test could not run.');
+                  }
+                }}
+              >
+                Test connection
+              </Button>
+            </>
+          }
+        />
       }
     >
       <div className={feedbackStyles.triageBody}>
@@ -164,7 +168,7 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
         </div>
         {result?.ok ? (
           <Callout tone="success" title="Connected" live>
-            Connected: {result.model} answered in {result.latency_ms} ms and called a test tool.
+            Connected: {result.model} answered in {formatDuration(result.latency_ms)} and called a test tool.
           </Callout>
         ) : null}
         {result && !result.ok ? (
@@ -208,24 +212,20 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
       aria-label="Behaviour"
       header={<Text variant="md">Behaviour</Text>}
       footer={
-        <div className={feedbackStyles.footActions}>
-          <Button
-            variant="primary"
-            loading={save.isPending}
-            onPress={async () => {
-              try {
-                await save.mutateAsync({ draft_retention_days: days, max_user_messages: max });
-                toast.show('Behaviour saved', { tone: 'success' });
-              } catch (e) {
-                toast.show(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save.', {
-                  tone: 'error',
-                });
-              }
-            }}
-          >
-            Save behaviour
-          </Button>
-        </div>
+        <SaveFooter
+          dirty={days !== data.behaviour.draft_retention_days || max !== data.behaviour.max_user_messages}
+          saving={save.isPending}
+          onSave={async () => {
+            try {
+              await save.mutateAsync({ draft_retention_days: days, max_user_messages: max });
+              toast.show('Behaviour saved', { tone: 'success' });
+            } catch (e) {
+              toast.show(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save.', {
+                tone: 'error',
+              });
+            }
+          }}
+        />
       }
     >
       <div className={feedbackStyles.connGrid}>

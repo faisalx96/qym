@@ -91,9 +91,9 @@ test('390 wide: no horizontal scroll, the rail keeps the primary action and an o
     .evaluate((el) => el.getBoundingClientRect().height);
   expect(rowHeight, `390 px target row is ${rowHeight}px tall`).toBeLessThanOrEqual(64);
   await expect(rail(page).getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeVisible();
-  await expect(rail(page).getByRole('button', { name: 'More analysis actions' })).toBeVisible();
+  await expect(rail(page).getByRole('button', { name: 'Actions', exact: true })).toBeVisible();
   await expect(rail(page).getByRole('button', { name: /^Prompt preview/ })).toBeHidden();
-  await rail(page).getByRole('button', { name: 'More analysis actions' }).click();
+  await rail(page).getByRole('button', { name: 'Actions', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: /^Test (selected|the first target)/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Prompt preview' })).toBeVisible();
   await page.keyboard.press('Escape');

@@ -62,11 +62,18 @@ const leaveDialog = (page: Page) =>
 const accessUrl = (slug: string, ds: string, extra = '') =>
   `/projects/${slug}/datasets/${ds}?tab=access&v=v1${extra}`;
 
+/** The SaveFooter: in the People with access card, or in the Access mode card in the Everyone mode (E-10). */
+const saveFooter = (page: Page) =>
+  page
+    .getByTestId('access-people')
+    .locator('[data-save-footer]')
+    .or(page.getByTestId('access-mode-card').locator('[data-save-footer]'));
+
 async function open(page: Page, width: number, slug: string, ds: string, height = 1300) {
   await page.setViewportSize({ width, height });
   await gotoApp(page, accessUrl(slug, ds));
   await expect(page.getByTestId('access-tab')).toBeVisible();
-  await expect(page.getByTestId('access-save-bar').or(page.getByTestId('access-summary'))).toBeVisible();
+  await expect(saveFooter(page).or(page.getByTestId('access-summary'))).toBeVisible();
 }
 
 test.describe('the tab strip (QA5-17 to QA5-23)', () => {
@@ -95,7 +102,7 @@ test.describe('the tab strip (QA5-17 to QA5-23)', () => {
     // QA5-19: settings keeps working without the controls
     await tabs.nth(4).click();
     await expect(page).toHaveURL(/tab=settings/);
-    await expect(page.getByTestId('access-save-bar')).toHaveCount(0);
+    await expect(saveFooter(page)).toHaveCount(0);
     await expect(page.getByTestId('settings-layout')).toBeVisible();
     // an unknown tab still falls back to items
     await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=nope&v=v1`);
@@ -162,7 +169,7 @@ test.describe('the tab strip (QA5-17 to QA5-23)', () => {
     await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=items&v=v1`);
     await expect.poll(() => gets.length, { timeout: 8000 }).toBe(1);
     await page.getByRole('tab', { name: /^Access/ }).click();
-    await expect(page.getByTestId('access-save-bar')).toBeVisible();
+    await expect(saveFooter(page)).toBeVisible();
     // opened from the cache: no skeleton and no second request
     await page.waitForTimeout(600);
     expect(gets).toHaveLength(1);
@@ -171,10 +178,11 @@ test.describe('the tab strip (QA5-17 to QA5-23)', () => {
 
 test.describe('layout and heights (QA5-24 to QA5-37, QA5-59)', () => {
   // [width, mode card (no grants, project), mode group, always, whole tab with twelve, people card twelve, table twelve, add row]
+  // The main values plus the change new app minus old app, both measured with twelve grants (picture check); CI confirms them.
   const NUMBERS = [
-    [1440, 180.9, 53.6, 15.4, 914.8, 649.9, 514, 43.4],
-    [1024, 196.3, 69, 15.4, 930.1, 649.9, 514, 43.4],
-    [390, 319.4, 161.3, 30.8, 2068.7, 1665.3, 1497.4, 75.4],
+    [1440, 188, 53.6, 24.5, 905.5, 703.4, 514, 43.4],
+    [1024, 203.4, 69, 24.5, 920.8, 703.4, 514, 43.4],
+    [390, 327.7, 161.3, 41, 1871.2, 1529.5, 1288.7, 94.8],
   ] as const;
   for (const [width, mode, group, always, whole, people12, table12, add] of NUMBERS) {
     test(`twelve people at ${width}px`, async ({ page, request }) => {
@@ -192,7 +200,6 @@ test.describe('layout and heights (QA5-24 to QA5-37, QA5-59)', () => {
       near((await size(page.getByTestId('access-people'))).h, people12, 0.8);
       near((await size(page.getByTestId('access-grants-table'))).h, table12, 0.8);
       near((await size(page.getByTestId('access-add'))).h, add, 0.8);
-      near((await size(page.getByTestId('access-save-bar'))).h, 56, 0.6);
       await expect(page.getByTestId('access-count')).toHaveText('12 people');
       // the add row sits above the table (QA5-34)
       const ys = await page.evaluate(() =>
@@ -320,8 +327,8 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     const dates = await table.getByTestId('grant-added-at').allInnerTexts();
     expect(dates).toHaveLength(3);
     for (const date of dates) expect(date).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
-    // QA5-39: the level control is named for the person
-    await expect(table.getByRole('radiogroup', { name: `Level for ${list[0]!.name}` })).toBeVisible();
+    // D-28: the level reads as a Tag; the row's edit tile changes it
+    await expect(table.getByRole('row').filter({ hasText: list[0]!.name }).getByText('View', { exact: true })).toBeVisible();
   });
 
   test('a level change keeps the date; remove and re-add is clean again (QA5-41, QA5-47, QA5-51)', async ({
@@ -332,19 +339,19 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     await open(page, 1440, project.slug, d.slug);
     const table = page.getByTestId('access-grants-table');
     const before = await table.getByTestId('grant-added-at').first().innerText();
-    const level = table.getByRole('radiogroup', { name: `Level for ${list[1]!.name}` });
-    await level.locator('label', { hasText: 'Modify' }).click();
-    await expect(page.getByTestId('access-save-bar')).toContainText('Unsaved changes');
+    await table.getByRole('button', { name: `Change the level of ${list[1]!.name}` }).click();
+    await page.getByRole('option', { name: 'Modify' }).click();
+    await expect(saveFooter(page)).toContainText('Unsaved changes');
     expect(await table.getByTestId('grant-added-at').first().innerText()).toBe(before);
     await page.getByRole('button', { name: 'Discard' }).click();
-    await expect(page.getByTestId('access-save-bar')).toContainText('No changes');
+    await expect(saveFooter(page)).toContainText('All changes saved');
     await table.getByRole('button', { name: `Remove ${list[1]!.name}` }).click();
-    await expect(page.getByTestId('access-save-bar')).toContainText('Unsaved changes');
+    await expect(saveFooter(page)).toContainText('Unsaved changes');
     const add = page.getByTestId('access-add');
     await add.getByRole('button', { name: /Choose a project member/ }).click();
     await page.getByRole('option', { name: new RegExp(list[1]!.name) }).click();
     await add.getByRole('button', { name: /^Add person$/ }).click();
-    await expect(page.getByTestId('access-save-bar')).toContainText('No changes');
+    await expect(saveFooter(page)).toContainText('All changes saved');
   });
 
   test('Unknown user for a deleted granter, You and Not saved for a new row (QA5-40, QA5-41)', async ({
@@ -413,64 +420,18 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
 });
 
 test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
-  test('sticky in the page scroll host with twelve people (QA5-44)', async ({ page, request }) => {
-    const { project, d } = await restrictedWith(request, 'stick', 12);
-    for (const width of [1440, 1024, 390]) {
-      await open(page, width, project.slug, d.slug, 900);
-      const gaps = await page.evaluate(() => {
-        const bar = document.querySelector('[data-testid=access-save-bar]') as HTMLElement;
-        let host: HTMLElement | null = bar.parentElement;
-        while (
-          host &&
-          !(
-            host.scrollHeight > host.clientHeight + 1 &&
-            /(auto|scroll)/.test(getComputedStyle(host).overflowY)
-          )
-        )
-          host = host.parentElement;
-        if (!host) return null;
-        const hostBottom = host.getBoundingClientRect().bottom;
-        const out: number[] = [];
-        for (const top of [0, 100, 200]) {
-          host.scrollTop = top;
-          out.push(+(hostBottom - bar.getBoundingClientRect().bottom).toFixed(2));
-        }
-        host.scrollTop = host.scrollHeight;
-        const end = +(hostBottom - bar.getBoundingClientRect().bottom).toFixed(2);
-        return {
-          out,
-          end,
-          position: getComputedStyle(bar).position,
-          height: bar.getBoundingClientRect().height,
-        };
-      });
-      expect(gaps, 'a scroll host exists').not.toBeNull();
-      expect(gaps!.position).toBe('sticky');
-      near(gaps!.height, 56, 0.6);
-      for (const g of gaps!.out) near(g, 0, 0.6);
-      // amended: at the very end of the scroll the bar rests on the content, above the host's bottom padding (31.9 px)
-      near(gaps!.end, 31.9, 1);
-    }
-  });
-
-  test('states: No changes, Unsaved changes, Saving, Couldn’t save access (QA5-45, QA5-46)', async ({
+  test('states: No changes, Unsaved changes, Saving, a failed save (QA5-45, QA5-46, E-10)', async ({
     page,
     request,
   }) => {
     const { project, d } = await restrictedWith(request, 'states', 2);
     await open(page, 1440, project.slug, d.slug);
-    const bar = page.getByTestId('access-save-bar');
-    await expect(bar).toContainText('No changes');
-    await expect(page.getByRole('button', { name: 'Save access' })).toBeDisabled();
+    const bar = saveFooter(page);
+    await expect(bar).toContainText('All changes saved');
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Discard' })).toBeDisabled();
-    near((await size(bar)).h, 56, 0.6);
     await page.getByTestId('access-mode-project').click();
     await expect(bar).toContainText('Unsaved changes');
-    near((await size(bar)).h, 56, 0.6);
-    // QA5-45: primary text colour (rgb(237, 237, 240)), not the secondary grey
-    expect(await bar.locator('[data-part=status]').evaluate((e) => getComputedStyle(e).color)).toBe(
-      'rgb(237, 237, 240)',
-    );
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     let fail = true;
@@ -480,23 +441,23 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
       if (fail) return route.fulfill({ status: 500, json: { detail: 'boom' } });
       return route.continue();
     });
-    await page.getByRole('button', { name: 'Save access' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(bar).toContainText('Saving');
-    near((await size(bar)).h, 56, 0.6);
     release();
-    await expect(bar).toContainText('Couldn’t save access');
-    await expect(page.getByRole('button', { name: 'Save access' })).toBeEnabled();
+    // E-10: a failed save keeps 'Unsaved changes'; the toast carries the error
+    await expect(bar).toContainText('Unsaved changes');
+    await expect(page.locator('[data-toast-container]').getByText(/boom/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
     await expect(page.getByTestId('access-mode-project')).toBeChecked();
-    near((await size(bar)).h, 56, 0.6);
     fail = false;
     const puts: unknown[] = [];
     page.on('request', (r) => {
       if (r.method() === 'PUT' && /access/.test(r.url())) puts.push(r.postDataJSON());
     });
-    await page.getByRole('button', { name: 'Save access' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.locator('[data-toast-container]').getByText('Access saved')).toBeVisible();
     expect(puts).toHaveLength(1);
-    await expect(bar).toContainText('No changes');
+    await expect(bar).toContainText('All changes saved');
   });
 
   test('add a person, save, reload: one PUT and the count in the strip updates (QA5-46, QA5-68, QA5-78)', async ({
@@ -511,11 +472,12 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
       if (r.method() === 'PUT' && r.url().includes('/access')) puts.push(r.postDataJSON());
     });
     const add = page.getByTestId('access-add');
-    await add.locator('label', { hasText: 'Modify' }).click();
+    await add.getByRole('button', { name: /Level/ }).click();
+    await page.getByRole('option', { name: 'Modify' }).click();
     await add.getByRole('button', { name: /Choose a project member/ }).click();
     await page.getByRole('option', { name: /Late Joiner/ }).click();
     await add.getByRole('button', { name: /^Add person$/ }).click();
-    await page.getByRole('button', { name: 'Save access' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.locator('[data-toast-container]').getByText('Access saved')).toBeVisible();
     expect(puts).toHaveLength(1);
     expect(puts[0]).toEqual({
@@ -529,31 +491,6 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     await expect(page.getByTestId('access-count')).toHaveText('2 people');
     await page.reload();
     await expect(page.getByTestId('access-grants-table').getByText('Late Joiner')).toBeVisible();
-  });
-
-  test('at 390 the bar is 56 clean and 65.4 with a wrapping status (QA5-45, QA5-61)', async ({
-    page,
-    request,
-  }) => {
-    const { project, d } = await restrictedWith(request, 'narrow', 2);
-    await open(page, 390, project.slug, d.slug);
-    const bar = page.getByTestId('access-save-bar');
-    near((await size(bar)).h, 56, 0.6);
-    await page.route(/\/v1\/datasets\/[^/?]+\/access\?/, (route) =>
-      route.request().method() === 'PUT'
-        ? route.fulfill({ status: 500, json: { detail: 'boom' } })
-        : route.continue(),
-    );
-    await page.getByTestId('access-mode-project').click();
-    await page.getByRole('button', { name: 'Save access' }).click();
-    await expect(bar).toContainText('Couldn’t save access');
-    const h = (await size(bar)).h;
-    expect(
-      [56, 65.4].some((n) => Math.abs(h - n) < 1),
-      `bar ${h}`,
-    ).toBe(true);
-    for (const name of ['Discard', 'Save access'])
-      near((await size(page.getByRole('button', { name }))).h, 24, 0.6);
   });
 });
 
@@ -622,7 +559,7 @@ test.describe('read only, archived, loading and error (QA5-53 to QA5-58)', () =>
       ).toBeVisible();
       await expect(page.getByTestId('access-mode-card').getByText('Restricted')).toBeVisible();
       await expect(page.getByRole('radiogroup')).toHaveCount(0);
-      await expect(page.getByTestId('access-save-bar')).toHaveCount(0);
+      await expect(saveFooter(page)).toHaveCount(0);
       await expect(page.getByTestId('access-add')).toHaveCount(0);
       const table = page.getByTestId('access-grants-table');
       const headers = (await table.getByRole('columnheader').allInnerTexts()).map((h) =>
@@ -647,7 +584,7 @@ test.describe('read only, archived, loading and error (QA5-53 to QA5-58)', () =>
     await open(page, 1440, project.slug, d.slug);
     await expect(page.getByText('This project is archived.').first()).toBeVisible();
     await expect(page.getByTestId('access-summary')).toBeVisible();
-    await expect(page.getByTestId('access-save-bar')).toHaveCount(0);
+    await expect(saveFooter(page)).toHaveCount(0);
     await expect(page.getByRole('tab', { name: /^Access/ })).toBeVisible(); // QA5-20
   });
 
@@ -695,7 +632,7 @@ test.describe('read only, archived, loading and error (QA5-53 to QA5-58)', () =>
       await gotoApp(page, accessUrl(s.project.slug, d.slug));
       await expect(page.getByText('Couldn’t load access')).toBeVisible();
       await expect(page.getByTestId('access-mode')).toHaveCount(0);
-      await expect(page.getByTestId('access-save-bar')).toHaveCount(0);
+      await expect(saveFooter(page)).toHaveCount(0);
       near((await size(page.getByTestId('access-mode-card'))).h, h, 6);
     }
     fail = false;
