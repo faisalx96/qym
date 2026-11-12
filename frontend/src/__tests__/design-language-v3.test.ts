@@ -1810,18 +1810,18 @@ describe('consistency v3: family E (pages, dialogs, forms, layout)', () => {
     expect(t).not.toContain('function Stat(');
   });
 
-  it('E-42: pages share one width and padding (no narrow container)', () => {
+  it('E-42 (reversed by cv4 F1): pages share one width and padding, and the constrained page is centred', () => {
     const layout = src('features/shell/layout.module.css');
     expect(layout).not.toMatch(/\.narrow\b/);
-    expect(layout).not.toContain('margin: 0 auto');
+    // cv4 F1, owner 2026-11-12: "it should be centered like before" (Projects, Admin, Project settings, Auto-analysis)
+    expect(rule(layout, '.constrained')).toMatch(/margin-inline:\s*auto/);
+    expect(rule(layout, '.fullWidth')).not.toMatch(/margin/);
     const pad = (s: string) => (rule(layout, s).match(/padding[^;]*;/g) ?? []).join(' ');
     expect(pad('.fullWidth')).toBe(pad('.constrained'));
     expect(read(join(SRC, 'styles/tokens.css'))).not.toContain('--page-narrow-w');
     expect(rule(src('features/runs-list/ChartsPage.module.css'), '.screen')).toMatch(
       /padding:\s*var\(--space-lg\)/,
     );
-    expect(src('features/runs-list/OverviewPage.module.css')).not.toContain('margin: 0 auto');
-    expect(src('features/analyzer/analyzer.module.css')).not.toContain('margin-inline: auto');
     // shim: shell/layout.ts keeps a deprecated narrow container until the cv3-shim removal
     expect(src('features/shell/layout.ts')).not.toMatch(/export const narrow\b/);
   });

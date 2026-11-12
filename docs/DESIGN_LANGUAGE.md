@@ -1097,7 +1097,9 @@ page-wide totals between the hero and the tabs; it is the same on every tab, so 
 admin, projects, overview, models) use the `constrained` container, capped at
 `--page-max-w` (1233px, the width the report pages fill at 1440), from
 `@/features/shell/layout`. Every page uses one frame: 20px top and side padding. Constrained pages are capped at
-`--page-max-w` and start at the left edge; profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
+`--page-max-w` and centred in the content area (cv4 F1, owner 2026-11-12, reverses E-42 "start at the left edge"): on a
+screen wider than the cap the free space is equal at both sides. A feature does not set its own `margin` on a
+constrained page. Profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
 `fullWidth` with their own layout. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
 
 - **Title and path.** The page title is the page name that the last crumb shows (Dashboard). Project settings is the
