@@ -32,7 +32,7 @@ test('LLM connection form takes focus on open and returns it to Add when closed'
 test('prompt drafts: leaving the tab with unsaved edits asks first', async ({ page, request }) => {
   const p = await createProject(request, 'UX Prompt Guard', uniqueSlug('uxprm'));
   await gotoApp(page, `/projects/${p.slug}/settings?tab=prompts`);
-  const editor = page.getByRole('textbox', { name: 'LLM analyzer prompt' });
+  const editor = page.getByRole('textbox', { name: 'Prompt', exact: true });
   await editor.fill('A short custom prompt');
   await page.getByRole('tab', { name: 'General' }).click();
   const dlg = page.getByRole('alertdialog', { name: 'Discard unsaved changes?' });
