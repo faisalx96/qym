@@ -106,38 +106,39 @@ test.describe('sample picker (2)', () => {
   });
 });
 
-test.describe('metric chips (3)', () => {
-  test('toggle off updates the target count and note; Clear shows the empty reason; ?metric= preselects', async ({
+// cv4 D3, X13: the metric pills are one MultiSelect ("Metrics · all 2"), with Select all / None in its panel.
+test.describe('metric choice (3)', () => {
+  test('unticking a metric updates the target count; None shows the empty reason; ?metric= preselects', async ({
     page,
     request,
   }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    const metrics = page.getByRole('group', { name: 'Metrics to analyze' });
+    const trigger = page.getByRole('button', { name: /^Metrics\b.*to analyze$/ });
     await expect(analyzeButton(page)).toHaveText('Analyze 4 items');
-    await expect(page.getByText('2 of 2 metrics selected')).toBeVisible();
-    await metrics.getByRole('button', { name: 'exact_match' }).click();
-    await expect(metrics.getByRole('button', { name: 'exact_match' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    await expect(trigger).toHaveAccessibleName('Metrics · all 2 to analyze');
+    await trigger.click();
+    const panel = page.getByRole('dialog', { name: 'Metrics options' });
+    await panel.getByRole('checkbox', { name: 'exact_match' }).click();
+    await expect(panel.getByRole('checkbox', { name: 'exact_match' })).not.toBeChecked();
     await expect(analyzeButton(page)).toHaveText('Analyze 2 items');
-    await expect(page.getByText('1 of 2 metrics selected')).toBeVisible();
-    await metrics.getByRole('button', { name: 'Clear' }).click();
+    await panel.getByRole('button', { name: 'None', exact: true }).click();
     await expect(page.getByText('Select at least one metric').first()).toBeVisible();
     await expect(analyzeButton(page)).toBeDisabled();
-    await metrics.getByRole('button', { name: 'Select all' }).click();
+    await panel.getByRole('button', { name: 'Select all' }).click();
     await expect(analyzeButton(page)).toHaveText('Analyze 4 items');
+    await page.keyboard.press('Escape');
 
     await gotoApp(page, analysisUrl(seed.slug, seed.runId, '&metric=execution_accuracy'));
     await waitWorkspace(page);
-    const m2 = page.getByRole('group', { name: 'Metrics to analyze' });
-    await expect(m2.getByRole('button', { name: 'execution_accuracy' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect(m2.getByRole('button', { name: 'exact_match' })).toHaveAttribute('aria-pressed', 'false');
+    const t2 = page.getByRole('button', { name: /^Metrics\b.*to analyze$/ });
+    await expect(t2).toHaveAccessibleName('Metrics · execution_accuracy to analyze');
+    await t2.click();
+    const p2 = page.getByRole('dialog', { name: 'Metrics options' });
+    await expect(p2.getByRole('checkbox', { name: 'execution_accuracy' })).toBeChecked();
+    await expect(p2.getByRole('checkbox', { name: 'exact_match' })).not.toBeChecked();
+    await page.keyboard.press('Escape');
     await expect(analyzeButton(page)).toHaveText('Analyze 2 items');
   });
 });
@@ -200,18 +201,24 @@ test.describe('prompt preview (4)', () => {
     await expect(rail(page).getByRole('button', { name: /^Prompt preview · [\d,]+ chars$/ })).toBeVisible();
   });
 
-  test('a target chip selects the previewed target', async ({ page, request }) => {
+  // cv4 D2, X13: the target chip is gone; a click on a target row opens the prompt preview of that target.
+  test('a click on a target row previews that target', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    const chip = page.getByRole('button', { name: /exact_match 0.00, preview target of item-2/ });
     const preview = page.waitForRequest(
       (r) =>
         r.url().includes('/analyze-preview') &&
         (r.postDataJSON() as { item_id: string }).item_id === 'item-2',
     );
-    await chip.click();
-    await expect(chip).toHaveAttribute('aria-pressed', 'true');
+    await page
+      .getByRole('grid', { name: 'Targets' })
+      .locator('tbody tr')
+      .filter({ hasText: 'item-2' })
+      .first()
+      .getByText('item-2', { exact: true })
+      .click();
+    await expect(previewDrawer(page)).toBeVisible();
     await preview;
   });
 });
@@ -252,16 +259,14 @@ test.describe('variable mapping (5)', () => {
     expect(sent2.config.custom_variable_mapping.rubric.length).toBeGreaterThan(0);
     await expect(vars.getByRole('button', { name: /^\d+ fields?$/ })).toBeVisible();
 
-    // the Input mapping disclosure holds the standard rows; changing one (Input -> output) (Input -> output) sends field_mapping
+    // the Input mapping rows are always shown (cv4 D4, X13); changing one (Input -> output) sends field_mapping
     const std = page.waitForRequest(
       (r) =>
         r.url().includes('/analyze-preview') &&
         (r.postDataJSON() as { config: { field_mapping?: Record<string, string> } }).config.field_mapping
           ?.input !== undefined,
     );
-    const mapping = page.getByRole('button', { name: /^Input mapping/ });
-    await expect(mapping).toHaveAttribute('aria-expanded', 'false');
-    await mapping.click();
+    await expect(page.getByRole('heading', { name: 'Input mapping' })).toBeVisible();
     await page.getByRole('button', { name: /Input source/ }).click();
     await page.getByRole('option', { name: 'output', exact: true }).click();
     const sent = (await std).postDataJSON() as { config: { field_mapping: Record<string, string> } };

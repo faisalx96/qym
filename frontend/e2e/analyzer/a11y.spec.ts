@@ -28,7 +28,7 @@ async function expectNoSerious(page: Page, label: string): Promise<void> {
 }
 
 test.describe('axe (14)', () => {
-  test('the page, the Input mapping disclosure, the preview drawer, a test result and a finished job', async ({
+  test('the page, the Input mapping rows, the preview drawer, a test result and a finished job', async ({
     page,
     request,
   }) => {
@@ -47,7 +47,7 @@ test.describe('axe (14)', () => {
     await expect(page.getByRole('group', { name: '{rubric} fields' })).toBeVisible();
     await expectNoSerious(page, 'page with a variable and its picker');
 
-    await page.getByRole('button', { name: /^Input mapping/ }).click();
+    // cv4 D4, X13: the Input mapping rows are always shown (no disclosure)
     await expect(page.getByRole('button', { name: /Input source/ })).toBeVisible();
     await page.getByRole('button', { name: /^More options/ }).click();
     await expectNoSerious(page, 'disclosures open');
@@ -139,11 +139,12 @@ test.describe('keyboard (14)', () => {
     await expect(previewDrawer(page)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(previewBtn).toBeFocused();
-    // the Input mapping disclosure toggles with Space
-    const mapping = page.getByRole('button', { name: /^Input mapping/ });
-    await mapping.focus();
+    // cv4 X13: the Input mapping rows are always shown; their first select opens with Space
+    const source = page.getByRole('button', { name: /Input source/ });
+    await source.focus();
     await page.keyboard.press('Space');
-    await expect(mapping).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('option', { name: 'output', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
   });
 
   test('arrow keys move between the guidance tabs; Escape closes dialogs', async ({ page, request }) => {

@@ -5,7 +5,8 @@ import { gotoApp } from '../helpers';
 import { axeSeriousViolations, describeViolations } from '../shell/support';
 import { analysisUrl, rail, seedAnalyzer, waitWorkspace } from './helpers';
 
-// REGRESSION GUARD, NOT A CLUTTER GOAL. With the brief's own definition (any border side, hairlines included)
+// REGRESSION GUARD, NOT A CLUTTER GOAL. cv4 X13: after the D restructure (report sections, one Metrics select, no
+// metric chips) the dev data measures 6 bordered elements and 0 chips at 1280x900; the budgets below still hold. With the brief's own definition (any border side, hairlines included)
 // the 1280x900 fold has 11 bordered elements, 2-6 chips and 50+ controls. That is NOT numerically lighter than the
 // old Configure step (20 controls / 7 boxes / 3 chips): Setup and the first Targets rows now share one screen. The
 // goal met is structural (one tab row, one accent action, the prompt in a drawer, advanced fields in disclosures,
@@ -83,13 +84,11 @@ test('390 wide: no horizontal scroll, the rail keeps the primary action and an o
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
-  // target rows are two lines (id, metric, Preview / tag and input text), not four stacked ones
-  const rowHeight = await page
-    .getByRole('grid', { name: 'Targets' })
-    .locator('tbody tr')
-    .first()
-    .evaluate((el) => el.getBoundingClientRect().height);
-  expect(rowHeight, `390 px target row is ${rowHeight}px tall`).toBeLessThanOrEqual(64);
+  // cv4 D2, X13: at 390 px the Targets DataTable is the shared card list (a list, not the grid); a card stays compact
+  const card = page.getByRole('list', { name: 'Targets' }).locator(':scope > li').first();
+  await expect(card).toBeVisible();
+  const cardHeight = await card.evaluate((el) => el.getBoundingClientRect().height);
+  expect(cardHeight, `390 px target card is ${cardHeight}px tall`).toBeLessThanOrEqual(160);
   await expect(rail(page).getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeVisible();
   await expect(rail(page).getByRole('button', { name: 'Actions', exact: true })).toBeVisible();
   await expect(rail(page).getByRole('button', { name: /^Prompt preview/ })).toBeHidden();
