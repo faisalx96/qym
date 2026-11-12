@@ -4,8 +4,8 @@
 in ``source_version`` order. The table can be large on production (about 2 GB
 measured), so there the index is built CONCURRENTLY by a maintenance job.
 
-Revision ID: 0093
-Revises: 0092
+Revision ID: 0095
+Revises: 0094
 """
 
 import sqlalchemy as sa
@@ -13,8 +13,8 @@ from alembic import op
 
 from qym_platform.db.migration_helpers import enqueue_job, is_large
 
-revision = "0093"
-down_revision = "0092"
+revision = "0095"
+down_revision = "0094"
 branch_labels = None
 depends_on = None
 
@@ -35,7 +35,7 @@ def upgrade():
             bind,
             "create_deferred_indexes",
             {"indexes": INDEXES},
-            note="queued by migration 0093: dashboard_change_events too large to index during startup",
+            note="queued by migration 0095: dashboard_change_events too large to index during startup",
         )
         return
     for spec in INDEXES:

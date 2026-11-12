@@ -5,14 +5,14 @@ route answers 403. Postgres stores the role as the enum type ``projectrole``,
 so the new value is added outside the migration transaction (quick DDL, no
 rewrite). SQLite stores it as text.
 
-Revision ID: 0097
-Revises: 0096
+Revision ID: 0099
+Revises: 0098
 """
 
 from alembic import op
 
-revision = "0097"
-down_revision = "0096"
+revision = "0099"
+down_revision = "0098"
 branch_labels = None
 depends_on = None
 

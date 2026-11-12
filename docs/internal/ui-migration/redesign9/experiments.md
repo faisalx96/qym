@@ -342,7 +342,7 @@ chevron at the name line's end. Shots: `mock-page-environments-table-{1440,390}`
 * **Rules** in `_resolve_priority` generalised to `_resolve_job_priorities(db, principal, project_id, envs, planned, requested, per_job)`: each job's priority must not exceed **its environment's** `max_priority`
   (422 "Priority HIGH exceeds the maximum allowed on: <env>"); HIGH anywhere needs `is_project_manager` (403 as today); `_require_preemption_ack` triggers when **any** job is HIGH
   (acknowledgement is experiment-level; `preemption_acknowledged_at` set when any job is HIGH, today only when `experiment.priority == HIGH`, l.1653 and the retry path l.2128).
-* **Storage**: `eval_experiment_jobs.priority` new nullable `String(10)` column (values LOW/NORMAL/HIGH; NULL = the experiment's), Alembic **0102** (key-scopes' branch took 0101 `api_key_kind`: take
+* **Storage**: `eval_experiment_jobs.priority` new nullable `String(10)` column (values LOW/NORMAL/HIGH; NULL = the experiment's), Alembic **0093** (key-scopes' branch took 0092 `api_key_kind`: take
   the next free revision after the merge, `down_revision` accordingly), backfill from `request_body->>'priority'` in Python (works on SQLite and PostgreSQL), no data change for readers. `_request_body(...)` already writes
   `out["priority"]` per job: pass the job's priority, so what the Evaluation Service receives is unchanged in shape (`POST /evals` already has a per-job `priority`, guide v1.3 section 4).
 * **Reads**: `eval_queue.job_priority(job, experiment)` returns `job.priority` first, then `request_body.priority`, then the experiment's (already the order of the last two); job payloads (`_job_view`, queue items `api/eval_queue.py` l.313,

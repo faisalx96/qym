@@ -1,4 +1,4 @@
-"""Migration 0099 (Live chart images): matches the models and round-trips on SQLite and PostgreSQL."""
+"""Migration 0101 (Live chart images): matches the models and round-trips on SQLite and PostgreSQL."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from alembic.migration import MigrationContext
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = ROOT / "packages/platform/qym_platform/migrations"
-FILE = MIGRATIONS / "versions/0099_live_chart_images.py"
+FILE = MIGRATIONS / "versions/0101_live_chart_images.py"
 
 
 @pytest.fixture(params=["sqlite", "postgres"])
@@ -45,7 +45,7 @@ def engine(request, tmp_path, monkeypatch):
         Base.metadata.create_all(
             eng, tables=[Base.metadata.tables[name] for name in ("users", "projects")]
         )
-        _create_api_keys_before_0101(eng)
+        _create_api_keys_before_0092(eng)
         Base.metadata.create_all(
             eng,
             tables=[
@@ -61,8 +61,8 @@ def engine(request, tmp_path, monkeypatch):
             admin.dispose()
 
 
-def _create_api_keys_before_0101(eng) -> None:
-    """Create api_keys as it was before migration 0101 (no kind, no experiment_id).
+def _create_api_keys_before_0092(eng) -> None:
+    """Create api_keys as it was before migration 0092 (no kind, no experiment_id).
 
     The model now has both columns, and experiment_id points at eval_experiments, which these
     tests do not build. users and projects must already exist.
@@ -84,11 +84,11 @@ def _create_api_keys_before_0101(eng) -> None:
     md.create_all(eng, tables=[md.tables["api_keys"]])
 
 
-def test_revision_chain_names_0098() -> None:
-    spec = importlib.util.spec_from_file_location("migration_0099", FILE)
+def test_revision_chain_names_0100() -> None:
+    spec = importlib.util.spec_from_file_location("migration_0101", FILE)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert (module.revision, module.down_revision) == ("0099", "0098")
+    assert (module.revision, module.down_revision) == ("0101", "0100")
 
 
 def test_matches_models_and_round_trips(engine) -> None:
@@ -101,9 +101,9 @@ def test_matches_models_and_round_trips(engine) -> None:
         table = obj if kind == "table" else getattr(obj, "table", None)
         return table is not None and table.name == "live_chart_images"
 
-    # Seed 0098 prerequisites; older migrations contain PostgreSQL-only DDL.
-    command.stamp(config, "0098")
-    command.upgrade(config, "0099")
+    # Seed 0100 prerequisites; older migrations contain PostgreSQL-only DDL.
+    command.stamp(config, "0100")
+    command.upgrade(config, "0101")
     with engine.connect() as connection:
         inspector = sa.inspect(connection)
         assert "live_chart_images" in inspector.get_table_names()
@@ -126,7 +126,7 @@ def test_matches_models_and_round_trips(engine) -> None:
         )
         assert compare_metadata(context, Base.metadata) == []
 
-    command.downgrade(config, "0098")
+    command.downgrade(config, "0100")
     assert "live_chart_images" not in sa.inspect(engine).get_table_names()
-    command.upgrade(config, "0099")
+    command.upgrade(config, "0101")
     assert "live_chart_images" in sa.inspect(engine).get_table_names()

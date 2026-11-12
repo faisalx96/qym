@@ -2,7 +2,7 @@
 
 A project with no ``production`` alias used to treat its newest published rule
 version as live, so every publish went live. Now the first publish sets the
-alias, later publishes move it only when asked, and migration 0092 pins the
+alias, later publishes move it only when asked, and migration 0094 pins the
 alias of projects that already had published versions.
 """
 
@@ -34,7 +34,7 @@ from sqlalchemy.pool import StaticPool
 
 MIGRATION = (
     Path(__file__).resolve().parents[2]
-    / "packages/platform/qym_platform/migrations/versions/0092_pin_production_rule_alias.py"
+    / "packages/platform/qym_platform/migrations/versions/0094_pin_production_rule_alias.py"
 )
 
 

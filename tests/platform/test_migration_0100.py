@@ -1,4 +1,4 @@
-"""Migration 0100 matches the models and round-trips on SQLite and PostgreSQL."""
+"""Migration 0100 (Live evaluation): matches the models and round-trips on SQLite and PostgreSQL."""
 
 from __future__ import annotations
 
@@ -9,28 +9,31 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
-from alembic import command
 from alembic.autogenerate import compare_metadata
-from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from alembic.script import ScriptDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
-MIGRATIONS = ROOT / "packages/platform/qym_platform/migrations"
-TABLES = {"live_sources", "live_worker_settings", "live_jobs", "live_worker_events"}
-COLUMNS = {
-    "desired_state",
-    "state_changed_at",
-    "state_changed_by_user_id",
-    "worker_key_id",
-    "worker_key_changed_at",
-    "worker_key_changed_by_user_id",
+FILE = ROOT / "packages/platform/qym_platform/migrations/versions/0100_live_evaluation.py"
+LIVE_TABLES = {
+    "live_sources",
+    "live_metric_specs",
+    "live_days",
+    "live_turns",
+    "live_turn_scores",
+    "live_canary_results",
 }
 
 
+def _load():
+    spec = importlib.util.spec_from_file_location("migration_0098", FILE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture(params=["sqlite", "postgres"])
-def engine(request, tmp_path, monkeypatch):
+def engine(request):
     from qym_platform.db import models
     from qym_platform.db.base import Base
 
@@ -39,33 +42,17 @@ def engine(request, tmp_path, monkeypatch):
         url = os.environ.get("QYM_TEST_POSTGRES_URL")
         if not url:
             pytest.skip("QYM_TEST_POSTGRES_URL not configured")
-        schema = "qym_live_worker_" + uuid4().hex
+        schema = "qym_live_" + uuid4().hex
         admin = sa.create_engine(url)
         with admin.begin() as conn:
             conn.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
-        url = sa.engine.make_url(url).update_query_dict(
-            {"options": f"-csearch_path={schema}"}
-        )
+        eng = sa.create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
     else:
-        url = sa.engine.URL.create("sqlite", database=str(tmp_path / "migration.db"))
-    eng = sa.create_engine(url)
-    monkeypatch.setenv("QYM_DATABASE_URL", url.render_as_string(hide_password=False))
-    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
+        eng = sa.create_engine("sqlite://")
+    Base.metadata.create_all(
+        eng, tables=[Base.metadata.tables["users"], Base.metadata.tables["projects"]]
+    )
     try:
-        Base.metadata.create_all(
-            eng, tables=[Base.metadata.tables[name] for name in ("users", "projects")]
-        )
-        _create_api_keys_before_0101(eng)
-        # Build the actual pre-0100 live schema; older migrations have PG-only DDL.
-        with eng.begin() as conn:
-            for filename in ("0098_live_evaluation.py", "0099_live_chart_images.py"):
-                spec = importlib.util.spec_from_file_location(
-                    "live_prerequisite", MIGRATIONS / "versions" / filename
-                )
-                migration = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(migration)
-                migration.op = Operations(MigrationContext.configure(conn))
-                migration.upgrade()
         yield eng
     finally:
         eng.dispose()
@@ -75,92 +62,62 @@ def engine(request, tmp_path, monkeypatch):
             admin.dispose()
 
 
-def _create_api_keys_before_0101(eng) -> None:
-    """Create api_keys as it was before migration 0101 (no kind, no experiment_id).
-
-    The model now has both columns, and experiment_id points at eval_experiments, which these
-    tests do not build. users and projects must already exist.
-    """
-    from qym_platform.db.base import Base
-
-    md = sa.MetaData()
-    for name in ("users", "projects", "api_keys"):
-        skip = {"kind", "experiment_id"} if name == "api_keys" else set()
-        sa.Table(
-            name,
-            md,
-            *[
-                c._copy()
-                for c in Base.metadata.tables[name].columns
-                if c.name not in skip
-            ],
-        )
-    md.create_all(eng, tables=[md.tables["api_keys"]])
-
-
 def test_revision_chain_names_0099() -> None:
-    config = Config()
-    config.set_main_option("script_location", str(MIGRATIONS))
-    script = ScriptDirectory.from_config(config).get_revision("0100")
-    assert (script.revision, script.down_revision) == ("0100", "0099")
+    module = _load()
+    assert (module.revision, module.down_revision) == ("0100", "0099")
 
 
-def test_matches_models_and_round_trips(engine) -> None:
+def test_matches_models_and_round_trips(engine, monkeypatch) -> None:
     from qym_platform.db.base import Base
 
-    config = Config()
-    config.set_main_option("script_location", str(MIGRATIONS))
+    module = _load()
+
+    later_source_columns = {  # added by 0102
+        "desired_state",
+        "state_changed_at",
+        "state_changed_by_user_id",
+        "worker_key_id",
+        "worker_key_changed_at",
+        "worker_key_changed_by_user_id",
+    }
 
     def include(obj, name, kind, reflected, compare_to):
         table = obj if kind == "table" else getattr(obj, "table", None)
-        return table is not None and table.name in TABLES
+        if table is not None and table.name == "live_sources":
+            if kind == "column" and name in later_source_columns:
+                return False
+            if kind in ("foreign_key_constraint", "index") and any(
+                column.name in later_source_columns for column in obj.columns
+            ):
+                return False
+        return table is not None and table.name in LIVE_TABLES
 
-    command.stamp(config, "0099")
-    # Up to 0100 only: 0101 and 0102 change api_keys and eval_experiment_jobs, which this test does not build.
-    command.upgrade(config, "0100")
-    with engine.connect() as connection:
-        inspector = sa.inspect(connection)
-        assert TABLES <= set(inspector.get_table_names())
-        indexes = {index["name"]: index for index in inspector.get_indexes("live_jobs")}
-        active = indexes["uq_live_jobs_active"]
-        assert active["unique"]
-        assert active["column_names"] == ["source_id", "kind"]
-        predicate = str(active["dialect_options"][engine.dialect.name + "_where"])
-        assert (
-            "status" in predicate and "queued" in predicate and "running" in predicate
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            module, "op", Operations(MigrationContext.configure(connection))
         )
-        columns = {
-            column["name"]: column for column in inspector.get_columns("live_sources")
-        }
-        assert COLUMNS <= columns.keys()
-        assert "running" in columns["desired_state"]["default"]
-        foreign_keys = {
-            tuple(fk["constrained_columns"]): fk
-            for fk in inspector.get_foreign_keys("live_sources")
-        }
-        assert foreign_keys[("worker_key_id",)]["options"]["ondelete"] == "SET NULL"
-        for table in TABLES - {"live_sources"}:
-            (source_fk,) = [
-                fk
-                for fk in inspector.get_foreign_keys(table)
-                if fk["constrained_columns"] == ["source_id"]
-            ]
-            assert source_fk["options"]["ondelete"] == "CASCADE"
+        module.upgrade()
+        assert LIVE_TABLES <= set(sa.inspect(connection).get_table_names())
         context = MigrationContext.configure(
-            connection,
-            opts={
-                "compare_type": True,
-                "compare_server_default": True,
-                "include_object": include,
-            },
+            connection, opts={"compare_type": True, "include_object": include}
         )
         assert compare_metadata(context, Base.metadata) == []
+        module.downgrade()
+        assert not LIVE_TABLES & set(sa.inspect(connection).get_table_names())
+        module.upgrade()
+        assert LIVE_TABLES <= set(sa.inspect(connection).get_table_names())
 
-    command.downgrade(config, "0099")
-    inspector = sa.inspect(engine)
-    assert not (TABLES - {"live_sources"}) & set(inspector.get_table_names())
-    assert not COLUMNS & {
-        column["name"] for column in inspector.get_columns("live_sources")
-    }
-    command.upgrade(config, "0100")
-    assert TABLES <= set(sa.inspect(engine).get_table_names())
+
+def test_settings_defaults(monkeypatch) -> None:
+    from qym_platform.settings import PlatformSettings
+
+    for name in list(os.environ):
+        if name.startswith("QYM_LIVE_"):
+            monkeypatch.delenv(name, raising=False)
+
+    settings = PlatformSettings()
+    assert settings.live_retention_days == 180
+    assert settings.live_stale_after_seconds == 300
+    assert settings.live_turn_batch_max == 100
+    assert settings.live_detail_max_bytes == 524288
+    assert settings.live_trend_max_days == 90

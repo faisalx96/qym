@@ -762,8 +762,8 @@ def _is_0090(diff: Any) -> bool:
     return False
 
 
-def _is_0102(diff: Any) -> bool:
-    """0102 adds ``eval_experiment_jobs.priority`` (``test_job_priority_*`` checks it)."""
+def _is_0093(diff: Any) -> bool:
+    """0093 adds ``eval_experiment_jobs.priority`` (``test_job_priority_*`` checks it)."""
     return (
         isinstance(diff, tuple)
         and diff[:1] == ("add_column",)
@@ -776,7 +776,7 @@ def _without_0088(diffs: list[Any]) -> list[Any]:
     return [
         d
         for d in diffs
-        if not _is_0090(d) and not _is_0102(d) and not any(name in repr(d) for name in _REVISION_0088_NAMES)
+        if not _is_0090(d) and not _is_0093(d) and not any(name in repr(d) for name in _REVISION_0088_NAMES)
     ]
 
 
@@ -2271,9 +2271,9 @@ def _job_priority_prerequisites(engine: sa.engine.Engine) -> None:
 
 
 def _run_job_priority_round_trip(connection, monkeypatch) -> None:
-    """0102: ``eval_experiment_jobs.priority`` backfilled from the stored body."""
-    migration = _load_migration("0102_job_priority.py")
-    assert (migration.revision, migration.down_revision) == ("0102", "0101")
+    """0093: ``eval_experiment_jobs.priority`` backfilled from the stored body."""
+    migration = _load_migration("0093_job_priority.py")
+    assert (migration.revision, migration.down_revision) == ("0093", "0092")
     connection.execute(
         sa.text("INSERT INTO eval_experiments (id, priority) VALUES ('e1', 'LOW')")
     )
