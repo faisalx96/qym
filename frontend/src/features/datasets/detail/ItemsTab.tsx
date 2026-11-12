@@ -562,11 +562,10 @@ export function ItemsTab({
         onSortChange={(s) => setQuery({ sort: s ? itemSortKey(s.key, s.direction) : null, page: null })}
         onRowOpen={openItem}
         rowActions={activeKey ? undefined : rowActions}
+        // cv4 E2, X7: with the pane open, the highlighted row is the pane's item, not the row clicked or focused last
+        activeKey={activeKey}
         rowProps={(item) => ({
           'data-state': item.state === 'disabled' ? 'disabled' : undefined,
-          // cv4 E2: with the pane open, the highlighted row is the pane's item, not the row clicked or focused last
-          ...(activeKey ? { 'data-focused': item.item_id === activeKey ? '' : undefined } : {}),
-          'data-pane-row': activeKey && item.item_id === activeKey ? '' : undefined,
         })}
         selection={
           selection

@@ -230,6 +230,12 @@ export interface DataTableProps<R> {
   /** Roving focus, controlled (runs list keeps its own cursor). */
   focusedKey?: Key | null;
   onFocusedKeyChange?: (key: Key | null) => void;
+  /**
+   * The page's current row (cv4 X7), such as the item an open side pane shows: it takes the focused-row highlight
+   * (`data-focused`, plus `data-active` and `aria-current`) and is the Tab stop while no other row was focused. It
+   * never moves DOM focus. null or unset = the focused row is highlighted, as usual.
+   */
+  activeKey?: Key | null;
 
   /**
    * One Tab stop for the body (the grid pattern, runs list C089): the controls inside rows leave the Tab order; arrows
@@ -486,6 +492,7 @@ function DataTableInner<R>({
   groupCollapsed,
   onGroupCollapsedChange,
   focusedKey: focusedProp,
+  activeKey,
   onFocusedKeyChange,
   singleTabStop = false,
   children,
@@ -1839,7 +1846,9 @@ function DataTableInner<R>({
     const rid = `${uid}:${String(d.key)}`;
     const isFocusStop =
       focusedKey === d.key ||
-      ((focusedKey === null || !renderedKeys.has(focusedKey)) && d.key === firstRenderedKey);
+      ((focusedKey === null || !renderedKeys.has(focusedKey)) &&
+        d.key === (activeKey != null && renderedKeys.has(activeKey) ? activeKey : firstRenderedKey));
+    const isActive = activeKey != null && activeKey === d.key;
     bodyRows.push(
       <tr
         key={d.id}
@@ -1855,7 +1864,9 @@ function DataTableInner<R>({
         aria-setsize={isChild ? d.setsize : undefined}
         aria-label={isChild ? childLabel?.(r, d.parentRow) : undefined}
         data-selected={isSel ? '' : undefined}
-        data-focused={focusedKey === d.key ? '' : undefined}
+        data-focused={(activeKey != null ? isActive : focusedKey === d.key) ? '' : undefined}
+        data-active={isActive ? '' : undefined}
+        aria-current={isActive ? 'true' : undefined}
         data-state={st}
         data-href={rowHref?.(r) ? '' : undefined}
         data-clickable={openable || selectOnRowClick || expandOnRowClick ? '' : undefined}
