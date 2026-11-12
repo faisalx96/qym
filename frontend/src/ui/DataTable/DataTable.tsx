@@ -810,13 +810,19 @@ function DataTableInner<R>({
     if (!el) return undefined;
     let sw = 0;
     let cw = 0;
+    let foldW = 0;
     let start = false;
     let end = false;
+    let fold = false;
     const flags = () => {
       const over = sw > cw + 1;
       const abs = Math.abs(el.scrollLeft);
+      const rest = sw - (abs + cw);
       const nStart = over && abs > 1;
-      const nEnd = over && abs + cw < sw - 1;
+      const nEnd = over && rest > 1;
+      // cv4 X8: a fold column folds only while the columns past the end are at least as wide as the column itself.
+      // With less, the see-through cell would show the column's own empty slot (a dark strip), so it stays open.
+      const nFold = nEnd && rest >= foldW - 1;
       if (nStart !== start) {
         start = nStart;
         el.toggleAttribute('data-scrolled-x', nStart);
@@ -825,13 +831,17 @@ function DataTableInner<R>({
       if (nEnd !== end) {
         end = nEnd;
         el.toggleAttribute('data-scrolled-end', nEnd);
-        hostRef.current?.toggleAttribute('data-scroll-end', nEnd);
+      }
+      if (nFold !== fold) {
+        fold = nFold;
+        hostRef.current?.toggleAttribute('data-scroll-end', nFold);
       }
     };
     // Sizes are read where layout is already clean (here and in the ResizeObserver), never per scroll event.
     const measureSizes = () => {
       sw = el.scrollWidth;
       cw = el.clientWidth;
+      foldW = el.querySelector<HTMLElement>('thead th[data-fold]')?.offsetWidth ?? 0;
       setOverflow((p) => (p === sw > cw + 1 ? p : sw > cw + 1));
       flags();
     };

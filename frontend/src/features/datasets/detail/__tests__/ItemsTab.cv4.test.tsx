@@ -1,6 +1,6 @@
 /**
  * cv4 review fixes in the items table: the pane's row is the highlighted row (E2), a double click opens the item page
- * (E3), and no folded row-actions strip while the pane is open (E5).
+ * (E3), and the row actions stay while the pane is open (E5, reversed by X8 after the shared fold fix).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -130,13 +130,12 @@ describe('ItemsTab with the item pane (cv4 E2)', () => {
   });
 });
 
-describe('ItemsTab row actions (cv4 E5)', () => {
-  it('has no row-actions column while the pane is open, and has it with the pane closed', () => {
+describe('ItemsTab row actions (cv4 E5, X8)', () => {
+  it('keeps the row-actions column with the pane open and closed', () => {
     const view = mount(null);
     expect(screen.getAllByRole('button', { name: 'Copy as JSON' }).length).toBe(items.length);
     view.rerenderWith('ct-002');
-    expect(screen.queryByRole('button', { name: 'Copy as JSON' })).not.toBeInTheDocument();
-    expect(document.querySelector('td[data-pseudo="actions"]')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Copy as JSON' }).length).toBe(items.length);
   });
 });
 

@@ -619,14 +619,15 @@
 }
 
 /* Round 10: the handle shows on the row under the pointer, the focused row and an open cell only, so at rest no handle
-   covers the scores scrolling under the column (a touch screen, with no hover, keeps every handle). */
+   covers the scores scrolling under the column (a touch screen, with no hover, keeps every handle). cv4 X8: one row
+   only: the focused row shows its handle while no other row is under the pointer. */
 .bodyHost[data-scroll-end] .foldHandle {
   display: inline-flex;
   pointer-events: auto;
   opacity: 0;
 }
 .bodyHost[data-scroll-end] .tr:hover .foldHandle,
-.bodyHost[data-scroll-end] .tr[data-focused] .foldHandle,
+.bodyHost[data-scroll-end] .tbody:not(:has(> .tr:hover)) > .tr[data-focused] .foldHandle,
 .bodyHost[data-scroll-end] .fold[data-open] .foldHandle,
 .bodyHost[data-scroll-end] .foldHandle:focus-visible {
   opacity: 1;
@@ -685,7 +686,7 @@
 }
 
 .tr:hover .rowMenuHandle,
-.tr[data-focused] .rowMenuHandle,
+.tbody:not(:has(> .tr:hover)) > .tr[data-focused] .rowMenuHandle,
 .card2:hover .rowMenuHandle,
 .card2:focus-within .rowMenuHandle,
 .rowMenuHandle[aria-expanded='true'],
@@ -713,6 +714,13 @@
   background: transparent;
   box-shadow: none;
   pointer-events: none;
+}
+
+/* cv4 X8: the row itself carries its tone, so whatever shows through a folded cell is the row, never the card. */
+.bodyHost[data-scroll-end] .tbody > .tr {
+  background:
+    linear-gradient(var(--row-tint, transparent), var(--row-tint, transparent)),
+    var(--row-base, var(--bg-base));
 }
 
 .tr {

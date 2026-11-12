@@ -89,8 +89,8 @@ export interface ItemsTabProps {
   onBatch?: (action: BatchAction, criteria: BatchCriteria) => void;
   /**
    * The item open in the pane (cv4 E2): its row is the highlighted row and scrolls into view when the pane steps to
-   * another item. While the pane is open the table has no row-actions column (cv4 E5): the pane is the place to act on
-   * the item, and a folded actions column on the narrowed table read as an empty strip.
+   * another item. The row actions stay while the pane is open (cv4 X8): the shared table folds the actions column
+   * only when the columns past the end cover it, so no empty strip shows, and it shows one fold handle at a time.
    */
   activeKey?: string | null;
 }
@@ -561,7 +561,7 @@ export function ItemsTab({
         sort={sort}
         onSortChange={(s) => setQuery({ sort: s ? itemSortKey(s.key, s.direction) : null, page: null })}
         onRowOpen={openItem}
-        rowActions={activeKey ? undefined : rowActions}
+        rowActions={rowActions}
         // cv4 E2, X7: with the pane open, the highlighted row is the pane's item, not the row clicked or focused last
         activeKey={activeKey}
         rowProps={(item) => ({
