@@ -277,7 +277,12 @@ preselected.
   **Links** (Q43 A): a text link to another page or section ends with the 12px `chevron-right` Icon; a button never
   does. The one component is `TextLink` (`ui/TextLink`, cv4 F13): accent text at 600, the end chevron, no underline,
   `--accent-primary-hover` on hover ("Read the guide ›", "Open LLM connections ›"). A link that must look like a button
-  is a `LinkButton`. A control that opens a new tab ends with the `external` Icon (12px); no typed ↗.
+  is a `LinkButton`. A control that opens a new tab ends with the `external` Icon (12px); no typed ↗. A link that stands
+  on its own after a sentence ("Read the guide", "How tracing works", "Open LLM connections") is a `TextLink`; a link
+  inside a sentence ("Unarchive it to make changes") stays a plain link (cv4 Y15).
+  **Focus ring after a pointer (cv4 Y14):** the ring is for keyboard focus only. A React Aria button that gets focus
+  back after a menu closed by a mouse choice shows no ring: `button[data-rac]` follows `data-focus-visible`, not the
+  browser's `:focus-visible`.
   **Back button:** a neutral 24px `LinkButton` with the `prev` Icon (12px) at its start (Q28 A). Editor pages
   (Environment, New experiment, default preset editor) keep one at the end of the title row; an empty or error state
   uses it as its action. No text-only back link, no typed arrow.
@@ -285,6 +290,13 @@ preselected.
   it shows text only for unsaved changes, while saving, or for an error. No divider line above a save row.
   **Sticky bar over a table:** a page's sticky action bar uses `z-index: var(--z-sticky-bar)`, above the sticky header
   and pinned layers of `DataTable` and under every popover; no local z-index number.
+  **Glass section nav (cv4 C1-2, X12, Y10, Y18):** the sticky section nav of the run page and of Compare is glass:
+  `--bg-void` at `--glass-mix` over `backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))`, a
+  hairline at the lower edge and a `--tint-faint` top sheen; opaque without backdrop-filter. The saturation stays near
+  100%, so a strong colour under the bar does not read as a smudge. A nav link travels to its section with an eased
+  scroll (280 to 640 ms by distance, live target); the pressed link stays active; a wheel, touch, pointer or key press
+  stops it; a new travel ends the re-alignment of the last one, so the page never snaps back; no motion under
+  `prefers-reduced-motion`.
   **Fields:** Required is the red * from `isRequired` on every field primitive, `Textarea` included. No field says
   (required), (optional) or Optional. Forms never draw native select, input or textarea; they use the primitives.
   Brand colour
@@ -306,6 +318,10 @@ preselected.
   `--bg-hover` under the pointer; a `Select` marks the chosen row with primary text at 600 and the accent check at its
   end, a `MultiSelect` with its checkboxes. `triggerVariant="bar"` puts the label inside the trigger (no label above it).
   No native `<select>` anywhere, the page size of `Pagination` and the card-mode sort of `DataTable` included.
+  A bar `Select` for a choice that always has a value (a sort order, a view) passes `showValue="always"`, so the
+  trigger reads "Sort · Index" at the default too; a filter whose first item means "all" shows only its label until
+  set (cv4 Y6). A bar trigger takes the accent only when the choice differs from the page default; a `MultiSelect`
+  whose default is a selection (all metrics) says so with `isDefault` (cv4 Y12).
 
 - **Multiselect** (`MultiSelect`): content in fixed order: search, actions
   (Select all and None/Clear, neutral 20px buttons at rest, round 10), then `--dropdown-option-height` option rows.
@@ -406,7 +422,9 @@ preselected.
   Tab kept inside, Escape closing, and focus returned to the trigger (React
   Aria provides this; do not hand-roll). Destructive confirms start on Cancel.
   A closed drawer that stays mounted is `inert`. Never close a modal by toggling
-  `display`. An information dialog is 440px for text and 760px for media. Drawer widths: 360px (sm) or 560px (md);
+  `display`. An information dialog is 440px for text and 760px for media; a full editor or a large value is `wide`
+  (1100px, cv4 X9). A dialog is as high as its content: an editor in it grows with its value from a minimum to a
+  maximum and then scrolls inside, so a 3-line value never opens a tall empty dialog (cv4 Y19). Drawer widths: 360px (sm) or 560px (md);
   trace drawers are wide with the heavy scrim.
 
 ### 3.2 Surfaces and layout
@@ -494,9 +512,13 @@ preselected.
   the last section of General, a card like the others with no red rail; only its Archive and Delete buttons are red
   (round 11). Members show the person, a role tag and an Edit action that changes the role in a dialog, as admin users
   do (round 11). The AI prompt editor is a plain `Textarea` with the visible label "Prompt", the normal green focus ring
-  and spell check off (cv4 A5).
+  and spell check off (cv4 A5). The single-line fields of one card share one field width (320px): a `Select` is not
+  wider than the text field above it (cv4 Y20).
+  **Create action (cv4 A2):** a table section creates its entity from one primary button at the end of its section
+  header; the button opens a dialog. No inline create form above a table.
   **One footer and two title recipes (C145, C235):** a card that saves settings ends with `SaveFooter` (pass `save` to
-  `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "All changes saved"), the 24px
+  `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "Saving"; nothing at rest, the
+  `SaveFooter` default since cv4 X4), the 24px
   primary Save at the end, disabled with the reason "No changes to save" until something changed. Every card and every
   form that saves ends with `SaveFooter`: state text left, Save right (Q34 A). The button reads Save; only the Live
   worker reads "Save as vN": its Settings card uses the save footer with "No changes since vN-1" as its saved state at
@@ -518,6 +540,28 @@ preselected.
   rule): measured on both pages, the old 1.33:1 hairline was as faint as the card borders in the bodies and the compare
   page had 28px and no mark between sections; one framed section replaces two recipes (measured: 20px between panels,
   50px from the last pixel of a body to the next title (14 padding + 1 border + 20 gap + 1 border + 14 padding), first screen of the compare page unchanged within its ceilings).
+
+- **Dataset detail** (cv4 E, X7 to X9, X15, Y8, Y19): **lineage tree:** a child version hangs from its parent with an
+  elbow line (2px `--border-strong`, soft corner) from a trunk under the parent's version name to the child's first
+  line; no indent bars; the card of the version open on the page takes the selected outline (`Card isSelected`, the
+  first qym's green outline, cv4 X15). **Change log:** a timeline in a card: the time (muted, tabular figures), a 20px
+  mark on a 2px `--border-default` rail, the event text and, directly after it, the person (`UserPill`), so one event
+  reads as one line; marks carry meaning only and the accent is for publish and the production alias; no row lines.
+  **JSON while editing:** a JSON field colours its text while it is edited, with the token colours of `JsonViewer` (key
+  `--accent-secondary`, string `--text-primary`, number `--chart-5`, literal `--accent-tertiary-soft`, punctuation
+  `--text-muted`); the read-only view uses the same colours. **Field expand:** the expand button of a field card opens
+  the same editor and state in a `wide` dialog as high as the value (see "Dialog"). **Item pane:** the pane's item is
+  the table's current row (`DataTable activeKey`); the row actions stay while the pane is open.
+
+- **Auto-analysis, Analyze run** (cv4 D, Y1, Y3, Y11, Y12, Y16): Setup, Targets and Results are `ReportSection`s. Setup
+  holds four `Subsection`s in reading order: Run and metrics (the facts, then one `MultiSelect` "Metrics", neutral at
+  its default "all"), Input mapping (always open; the labels take one fixed column, so every select starts at the same
+  x), Prompt contents, Instructions. Targets is a `DataTable` (report stripe, regular rows, the pager in its footer, a
+  row click opens the prompt preview); its count is a `CountTile` right after the section title. A repeat run without
+  a pass lists its passes as rows between hairlines, each with its Analyze action at the row end. **Switch group:** the
+  group label (`--font-sm`, 600, muted) sits above its switches, one switch per line; in a one-row copy (a drawer) the
+  pairs are `--space-xl` apart, so each label reads with its own switch. The sticky rail's notice is shown in full and
+  wraps; it is never cut with "…".
 
 - **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
   body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
@@ -705,6 +749,12 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   underline (Q35 A). An input shows as `promptPreview` (its prompt line, never
   raw JSON) wherever it is a table cell (dataset items, analysis targets, run Items).
 
+- **Dataset with version** (`DatasetVersionTag`, cv4 B1, X2; the first qym's "name | v1 | prod"): the dataset tag
+  shows the name, then the version after a 1px `--border-strong` divider, mono, 600, `--accent-primary`, written "v" +
+  number; each other alias follows after its own divider in muted mono. When the `production` alias points at that
+  version, the success `Flag` "Production" with the `star` icon follows the tag (outside it: a Flag has no fill). The
+  runs table Dataset column and the run header Dataset fact use it. A run with no version shows only the name.
+
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
   (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for
   colour-blind readers) and the name (`run_name`, label as fallback, truncated, full label in the tooltip). A cohort side
@@ -731,8 +781,13 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650 (a
   header's minimum width is measured on the drawn header string, never on its accessible `label`: round 10, D10-8);
   body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
-  Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (two-line
-  and wrapped cells raise the minimum to comfortable); a wrap cell clamps with no block padding. Every table stripes
+  Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (a two-line
+  `secondary` cell raises the minimum to comfortable); a wrap cell clamps with no block padding. **Density and wrap
+  (cv4 E1, X6):** a wrapping column (`Column.wrap`) follows the density: compact one line, regular two, comfortable up
+  to five; a comfortable row of such a table is at least four lines high, so the three densities look different even
+  for short text. A wrapping column never forces one row height for all densities. **Current row (cv4 X7):** a page's
+  current row (the item an open side pane shows) is `activeKey`: it takes the focused-row tone and `aria-current` and
+  never moves DOM focus. Every table stripes
   every second logical row at any row count: a page list mixes `--stripe-step` (2%) of `--text-primary` into the row
   base, a table in a run, compare or experiment report section mixes `--stripe-step-report` (1%); no row lines under
   stripes; the hovered row (`--bg-hover`) is always brighter than a stripe. Every admin table, Maintenance included,
@@ -777,7 +832,10 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   title (`Actions`, end-aligned; the title is hidden while folded). A fold
   column never shows a boundary line or shade, in any state. A row with nothing to act on has no handle. The
   `rowActions` column of every `DataTable` is a fold column: no pinned shade, one handle on the hovered row while
-  columns remain past the end (Q37 A). **Row
+  columns remain past the end (Q37 A). **cv4 X8:** the column folds only while the columns past the end are at least as
+  wide as the column itself (with less, it stays open: a see-through cell would show its own empty slot as a dark
+  strip); the row paints its tone under a folded cell; one handle shows at a time (the focused row's only while no row
+  is hovered). A one-tile action column that must stay whole (the run Items Trace column) is pinned at the end. **Row
   actions** (owner decision, Nov 1: "all action buttons inside >"): the runs Actions column is a `Column.menuColumn`
   (a fold column with no body) whose cell is one `RowMenu`: a borderless 20px handle (`chevron-right`, named
   "Actions for <row>", `--bg-elevated`) on the hovered or focused row (every row on a touch screen) that opens one
@@ -818,6 +876,12 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   **Cells.** Progress is `ProgressCell`: bar, done/total, a red count tag for failures (not on a Failed row). A
   per-row setting shows as a Tag with a pencil tile that turns it into an inline `Select` (Members role, Access level);
   no `SegmentedControl` in a table row.
+
+- **Grouped table and table toolbar** (cv4 B5, C2-1, C2-8): a grouped table draws each group as an ordinary row, with
+  the stripe and hover of every row; a click anywhere on the group row, or Enter, opens or closes it, and the chevron
+  stays as the keyboard toggle; group rows have no fill of their own. A table toolbar is one row in this order: the
+  search box, the toggles and selects (each select with its label inside, `triggerVariant="bar"`), the count, and
+  Export at the right end.
 
 - **Report tables**: a raw table or div grid inside a report section (Trace statistics, Categories Compare, Averages,
   Step latency, sweep tables, experiment View as table, run Step timings) uses the `DataTable` header recipe and the
@@ -880,8 +944,10 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   "no data" is never the loudest cell.
 
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
-  `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
-  of at least 146px that grows with a stretched grid row). A legend sits in the card header at the end, before the
+  `ChartCard` (a `Card fill` that opens with a `CardTitle`: title left, then meta, legend and the card's own controls
+  right; a plot slot of at least 146px that grows with a stretched grid row). **Card header (cv4 C2-3, X1, X16):** the
+  title, its caption directly below; the controls at the end of the title row, a legend at the end of the caption row;
+  no rule under a chart card header (the title row is the first line of the card body). A legend sits in the card header at the end, before the
   card controls; a date window sits muted after the title. Bars use one column recipe (`BarColumns`, round 5 R1 "well and foot"): each bucket is a
   two-row grid, the well (flex column `[spacer][count][bar]`, the spacer taking `1 - p` and the bar `p` of the free
   height, `--p` = count / max) and a foot of one constant height per plot (`--foot` = 4px + 14px per line: axis label,
@@ -910,9 +976,10 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   overlay in tab order. Rows (`BoxTrack`) draw the same glyph per pass and per step. Box plot cards flow in their own grid rows under the
   histograms (`slot="box"`: 80px plot, no 146px minimum).
 
-- **Categories** (run detail, round 10): a control row (a `SegmentedControl` Cards | Compare, stored in
-  `?category_view=`, Cards by default; the metric and its overall average; one Sort button, worst first by default,
-  that orders both views). **Cards** shows up to three keys at first (the widest spread first), turned on and off with
+- **Categories** (run detail, round 10, cv4 C2-4 to C2-6, Y4): a control row (a `SegmentedControl` Cards | Compare,
+  stored in `?category_view=`, Cards by default; in Cards the key checkboxes, each key's value count a `CountTile`, then
+  the "Overall average" tick key directly after them); both views list values best first; no sort button and no
+  "overall N%" text. **Cards** shows up to three keys at first (the widest spread first), turned on and off with
   checkboxes (never pills); each key is a title and a grid of value cards: the value name in its band colour, Average,
   Items and Latency, and a 6px bar with the overall-average tick; a card toggles the item filter (accent outline when
   on). **Compare** ranks one key, chosen with a `SegmentedControl` "Category" (up to 5 keys that fit the column,
@@ -948,35 +1015,43 @@ Recipes that exist only on the run report. They compose the primitives above and
 - **Run page filters**: the run page has one clear control, the red `× Clear n` (`Clear`, then the
   count on its red disc) in the sticky nav; tags and notices below it have no clear of their own.
 
-- **Overview cards** (round 10, the first qym's card; C012): a 40px score ring in the band colour (or plain pass/fail
-  where a threshold applies, C220) and the mean, the metric name under them, the scored count ("N scored", no error
-  count) at the top end, then one full-width line with the error note (a warning glyph and "3 task errors counted as
-  0%") and the key of the hatch the bars draw for errored items, then the plot. Task-errored items count as 0, as
-  declared: an empty `pass_scores` is a plain item row, not a repeat aggregate. No header band, no side rail. Three cards to a row at 1440. A plain
-  number (a numeric metric, tokens per item when the traces carry tokens) is the same frame with the mean, "mean per
-  item", a Total · Min · Median · Max line and the box plot. Cost per item is not shown (a default every attempt reports).
+- **Overview cards** (cv4 C1-3, C1-4, Y9; the first qym's card): one anatomy for every card. Title row: the metric name
+  as the `CardTitle` (it wraps and is never cut), the count Tag ("N scored", "N items") and, for a box plot, the help
+  marker at the end. Number row: a score's 40px ring and mean at `--font-stat` in its band colour (plain green or red
+  against a pass threshold) with the plot's hatch key ("Errored items") at the row's end; a plain number's mean at
+  `--font-stat` in the box plot's tone (`--chart-1`) with the key "◇ mean per item". Then the plot: a histogram, or a
+  strip of equal columns (Total, Min, Median, Max) with hairlines over the box plot. Foot: a hairline, then the error
+  note; when one card of a grid has a note, every card of that grid keeps the foot line, so the plots stay level. When
+  every score card has the same note, the note and the hatch key show once, in one line under the grid, and the cards
+  have no foot (cv4 Y9). Task-errored items count as 0, as declared. No header band, no side rail. Cost per item is not
+  shown.
 
-- **Repeat run analysis** (round 10, the first qym's order): the page metric and the Pass if threshold (an inline
-  `Slider`: dark thumb with an accent ring that glows on hover, the value in the accent), the stat tiles, the By pass
-  table, then the "Repeat performance" subsection: Performance across attempts (Compare / Pass@k / Pass^k / Average,
-  Chart | Table; a line-sample legend with "95% CI" under the head; every point labelled when the plot is at least 640px;
-  y in fifths; "Attempts allowed") beside Pass distribution (one description line, no caption). **By pass** is a
-  `DataTable` with `hoverEdge` (the row under the pointer draws an accent edge), nothing resizable: Pass (a dot and the
-  pass, a link), every metric (the page metric first) centred with a fixed 44px slot for its best / worst tag, Avg
-  latency, Median latency (`zap` Icon), Errors (red above 0), Items. The per-pass score spread lives in Deep analysis, "Across
-  passes".
+- **Repeat run analysis** (round 10, cv4 C1-5 to C1-7, Y13): the stat tiles, the By pass table, then the "Repeat
+  performance" subsection: Performance across attempts (Compare / Pass@k / Pass^k / Average, Chart | Table; a
+  line-sample legend with "95% CI" under the head; every point labelled when the plot is at least 640px; "Attempts
+  allowed") beside Pass distribution. No metric or "Pass if" readout under the title (the sticky nav holds both). The
+  y axis fits the shown series and their band (`curveAxis`: 15% margin, 1/2/5 steps, clamped to 0 to 100%; fifths of 0
+  to 100% when the curves cover 60% of the range or more), so a narrow band does not look flat. **By pass** is a
+  `DataTable` with `hoverEdge`, nothing resizable: Pass (a dot and the pass, a link), every metric (the page metric
+  first) centred, Avg latency, Median latency (`zap` Icon), Errors (red above 0), Items. The best value of each metric
+  column has a `--success` tint (`--tint-soft`) behind it and the worst an `--error` tint, with no word; passes compare
+  on the shown, rounded value, so every tie is tinted (cv4 Y13); a title and a hidden word keep the meaning for screen
+  readers. The per-pass score spread lives in Deep analysis, "Across passes".
 
 - **Deep analysis** (round 10; C221, C167 Nov 1): "Between metrics", the correlation matrix beside the relationship
   scatter from 1000px of column; the scatter's X and Y pickers and r sit in its head, its legend on its own row under the
   head. The matrix is a heatmap of strength only: one `--chart-1` ramp by |r| on a fixed 0 to 1 scale (strength is
   neither good nor bad, and teal and purple are not data), the sign in the number (+0.20, −0.15), a blank diagonal, and
   a small "|r| 0 to 1" key under it. The scatter fits both axes to the data with 5% padding (a threshold line, when the
-  chart draws one, stays inside). For a repeat run, "Across passes": the page metric's box per pass.
+  chart draws one, stays inside). For a repeat run, "Across passes": the page metric's box per pass, on an axis fitted
+  to the passes' whiskers with `curveAxis` (margin, clean steps; the full 0 to 100% only when they cover 90% of it, cv4
+  Y7), so the boxes do not sit in one half of the plot. Both Deep cards follow the card header recipe.
 
-- **Errors** (round 10): one group per kind (Task, Metric, Trace, Analysis): a 24px icon tile and the title in the kind's
-  colour (`--error`, `--metric-error`, `--warning`, `--accent-tertiary`), its total, and one muted line on what the kind
-  means for the numbers; then message cards in a grid (no table, no sideways scroll): the message and its detail, the
-  count in `--font-xl` mono in the kind's colour with "errors · N items", and a 4px bar of its share of the kind. A card
+- **Errors** (round 10, cv4 C2-7, X1): one group per kind (Task, Metric, Trace, Analysis): a 24px icon tile, then a
+  `CardTitle` with the kind in its colour (`--error`, `--metric-error`, `--warning`, `--accent-tertiary`) and its
+  total, and the meaning for the numbers as its caption; then message cards in a grid (no table, no sideways scroll):
+  the message and its detail, the count in `--font-xl` mono in the kind's colour (no "errors · N items" subtext; the
+  item count is in the hover text), and a 4px bar of its share of the kind. A card
   toggles the item filter (`aria-pressed`, an outline in the kind's colour).
 
 - **Items table header and ItemBar** (round 3 P4): the column header sticks at the sticky line only over collapsed rows. For an

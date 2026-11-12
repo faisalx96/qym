@@ -1996,3 +1996,84 @@ describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
     expect(tokens()).toMatch(/--z-sticky-bar:\s*\d+;/);
   });
 });
+
+describe('cv4 family G (fix round after the merge): cross-agent recipes', () => {
+  const css = (p: string) => stripComments(src(p));
+  const tokens = () => read(join(SRC, 'styles/tokens.css'));
+
+  it('X1: run page card titles use CardTitle, no temporary title role', () => {
+    none(grep(under(shippedCss, 'features/run-detail/'), /var\(--font-card-title,/));
+    for (const f of [
+      'features/run-detail/components/latency/StepTimings.tsx',
+      'features/run-detail/components/latency/TimeBudget.tsx',
+      'features/run-detail/components/panels/DeepTab.tsx',
+      'features/run-detail/components/charts/ChartCard.tsx',
+    ])
+      expect(src(f), f).toContain('<CardTitle');
+  });
+
+  it('X4: a save row has no resting state text by default', () => {
+    expect(src('features/shell/settings/SettingsCard.tsx')).toMatch(/savedText = '',/);
+  });
+
+  it('X6: a wrapping column follows the density and does not force the tall row', () => {
+    const dt = src('ui/DataTable/DataTable.tsx');
+    expect(dt).toContain('const tall = visible.some((c) => c.secondary);');
+    expect(dt).toMatch(/WRAP_LINES[^=]*=\s*\{ compact: 1, regular: 2, comfortable: 5 \}/);
+    expect(
+      rule(css('ui/DataTable/DataTable.module.css'), '.table[data-wrap-tall] > .tbody > tr > td'),
+    ).toMatch(/height:/);
+  });
+
+  it('X7, X8: an active row without focus; a fold only when the overflow covers it; one handle', () => {
+    expect(src('ui/DataTable/DataTable.tsx')).toContain('activeKey?: Key | null;');
+    expect(src('ui/DataTable/DataTable.tsx')).toContain('rest >= foldW - 1');
+    const dt = css('ui/DataTable/DataTable.module.css');
+    expect(dt).toContain('.tbody:not(:has(> .tr:hover)) > .tr[data-focused] .foldHandle');
+    expect(dt).not.toMatch(/\n\.tr\[data-focused\] \.rowMenuHandle/);
+  });
+
+  it('X9: the wide Dialog size; no local width override on a dialog', () => {
+    expect(src('ui/Dialog/Dialog.tsx')).toContain("'wide'");
+    none(grep(shippedCss, /\.(\w+)\.\1\[data-size\]/));
+  });
+
+  it('X12, Y10, Y18: the glass of a sticky nav comes from the --glass-* tokens', () => {
+    for (const t of ['--glass-mix:', '--glass-blur:', '--glass-saturate:']) expect(tokens(), t).toContain(t);
+    for (const f of [
+      'features/run-detail/components/SectionNav.module.css',
+      'features/compare/components/CompareBar.module.css',
+    ]) {
+      expect(css(f), f).toContain('blur(var(--glass-blur)) saturate(var(--glass-saturate))');
+      expect(css(f), f).not.toMatch(/^\s*backdrop-filter:\s*blur\(\d/m);
+    }
+  });
+
+  it('X17, X18: centred page rules and the sticky bar layer', () => {
+    expect(rule(css('features/runs-list/OverviewPage.module.css'), '.screen[data-constrained]')).toMatch(
+      /margin-inline:\s*auto/,
+    );
+    expect(rule(css('features/analyzer/blocks/blocks.module.css'), '.rail')).toMatch(
+      /z-index:\s*var\(--z-sticky-bar\)/,
+    );
+  });
+
+  it('Y3: the analyzer rail notice is never cut with an ellipsis', () => {
+    expect(rule(css('features/analyzer/blocks/blocks.module.css'), '.railText')).not.toMatch(/text-overflow/);
+  });
+
+  it('Y5: dataset save rows end the card body, not a card footer', () => {
+    for (const f of ['features/datasets/detail/SettingsTab.tsx', 'features/datasets/detail/AccessTab.tsx'])
+      expect(src(f), f).not.toMatch(/footer=\{[^}]*(SaveFooter|saveFooter)/s);
+  });
+
+  it('Y14: a React Aria button shows no ring after a pointer choice', () => {
+    expect(stripComments(read(join(SRC, 'styles/base.css')))).toContain(
+      'button[data-rac]:focus-visible:not([data-focus-visible])',
+    );
+  });
+
+  it('Y15: a standalone "Read the guide" link is a TextLink', () => {
+    none(grep(shippedTsx, /<Link [^>]*>Read the guide<\/Link>/));
+  });
+});
