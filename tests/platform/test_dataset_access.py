@@ -650,10 +650,14 @@ def test_run_on_a_restricted_dataset_is_listed_but_item_contents_are_redacted(wo
     assert body["run"]["items_restricted_reason"] == "dataset_access"
     row = body["snapshot"]["rows"][0]
     assert row["content_restricted"] is True and row["metric_values"] == [1.0]
+    # The metadata's category labels stay: the run page's breakdown by category
+    # is an aggregate over them, not item content.
+    assert row["item_metadata"] == {"topic": "t"}
     details = client.post(
         "/api/runs/run-1/items/details", json={"item_ids": ["a"]}, headers=MEM
     )
     assert details.status_code == 200 and SECRET not in details.text
+    assert details.json()["rows"][0]["item_metadata"] == {"topic": "t"}
     # F1: the placeholder names the right cause, in the table rows and in the details.
     from qym_platform.permissions import DATASET_ACCESS_PLACEHOLDER
 
@@ -673,6 +677,7 @@ def test_run_on_a_restricted_dataset_is_listed_but_item_contents_are_redacted(wo
     assert compare.status_code == 200
     for word in (SECRET, "the model said answer"):
         assert word not in compare.text
+    assert compare.json()["runs"][0]["snapshot"]["rows"][0]["item_metadata"] == {"topic": "t"}
     # A user with a grant, a manager and an admin see the content.
     for headers in (MEM2, MGR, ADMIN):
         allowed = client.get("/api/runs/run-1", headers=headers)

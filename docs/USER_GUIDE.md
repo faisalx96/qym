@@ -303,7 +303,7 @@ experiment, Duplicate and Rerun carry none, and `POST .../experiments` answers 4
 
 Every launch mints a dataset read token for the experiment. The Evaluation Service uses it to read datasets of the
 project, private test sets and restricted datasets included, so any member who can launch may name any dataset of the
-project; people without access to a restricted dataset still see the run's scores, not its item contents. The token is
+project; people without access to a restricted dataset still see the run's scores and its breakdown by metadata category (short labels such as topic or difficulty), not its item contents. The token is
 sent only to environments whose schema declares `QYM_DATASET_READ_TOKEN`; for the others the experiment page says the
 service reads with its own token. It is revoked when the experiment settles and replaced when you retry a job.
 The launch also tells the service which qym instance to report to: `QYM_BASE_URL` is sent to environments whose
