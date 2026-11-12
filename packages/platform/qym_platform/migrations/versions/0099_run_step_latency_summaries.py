@@ -5,8 +5,8 @@ One new empty table (instant DDL): the run page's step-latency summary of a run
 of every raw span. ``fingerprint`` names the span set it was built from; a late
 span or a removed pass changes it, and the next read builds the summary again.
 
-Revision ID: 0096
-Revises: 0095
+Revision ID: 0099
+Revises: 0098
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0096"
-down_revision = "0095"
+revision = "0099"
+down_revision = "0098"
 branch_labels = None
 depends_on = None
 

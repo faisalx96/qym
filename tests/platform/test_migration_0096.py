@@ -1,4 +1,4 @@
-"""Migration 0102 matches the models and round-trips on SQLite and PostgreSQL."""
+"""Migration 0096 matches the models and round-trips on SQLite and PostgreSQL."""
 
 from __future__ import annotations
 
@@ -56,9 +56,9 @@ def engine(request, tmp_path, monkeypatch):
             eng, tables=[Base.metadata.tables[name] for name in ("users", "projects")]
         )
         _create_api_keys_before_0092(eng)
-        # Build the actual pre-0102 live schema; older migrations have PG-only DDL.
+        # Build the actual pre-0096 live schema; older migrations have PG-only DDL.
         with eng.begin() as conn:
-            for filename in ("0100_live_evaluation.py", "0101_live_chart_images.py"):
+            for filename in ("0094_live_evaluation.py", "0095_live_chart_images.py"):
                 spec = importlib.util.spec_from_file_location(
                     "live_prerequisite", MIGRATIONS / "versions" / filename
                 )
@@ -98,11 +98,11 @@ def _create_api_keys_before_0092(eng) -> None:
     md.create_all(eng, tables=[md.tables["api_keys"]])
 
 
-def test_revision_chain_names_0101() -> None:
+def test_revision_chain_names_0095() -> None:
     config = Config()
     config.set_main_option("script_location", str(MIGRATIONS))
-    script = ScriptDirectory.from_config(config).get_revision("0102")
-    assert (script.revision, script.down_revision) == ("0102", "0101")
+    script = ScriptDirectory.from_config(config).get_revision("0096")
+    assert (script.revision, script.down_revision) == ("0096", "0095")
 
 
 def test_matches_models_and_round_trips(engine) -> None:
@@ -115,8 +115,8 @@ def test_matches_models_and_round_trips(engine) -> None:
         table = obj if kind == "table" else getattr(obj, "table", None)
         return table is not None and table.name in TABLES
 
-    command.stamp(config, "0101")
-    command.upgrade(config, "0102")
+    command.stamp(config, "0095")
+    command.upgrade(config, "0096")
     with engine.connect() as connection:
         inspector = sa.inspect(connection)
         assert TABLES <= set(inspector.get_table_names())
@@ -155,11 +155,11 @@ def test_matches_models_and_round_trips(engine) -> None:
         )
         assert compare_metadata(context, Base.metadata) == []
 
-    command.downgrade(config, "0101")
+    command.downgrade(config, "0095")
     inspector = sa.inspect(engine)
     assert not (TABLES - {"live_sources"}) & set(inspector.get_table_names())
     assert not COLUMNS & {
         column["name"] for column in inspector.get_columns("live_sources")
     }
-    command.upgrade(config, "0102")
+    command.upgrade(config, "0096")
     assert TABLES <= set(sa.inspect(engine).get_table_names())
