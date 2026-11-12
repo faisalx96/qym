@@ -2,18 +2,16 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AnalysisConfig } from '@/api/analysis';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { ConfirmDialog, Disclosure, ErrorState, Skeleton, Tag } from '@/ui';
+import { ConfirmDialog, ErrorState, ReportSection, Skeleton, Subsection, Tag } from '@/ui';
 import { ActionRail } from './blocks/ActionRail';
-import { Card } from './blocks/Card';
 import { FieldsMapping } from './blocks/FieldsMapping';
 import { Instructions } from './blocks/Instructions';
-import { MetricChips } from './blocks/MetricChips';
 import { PreviewDrawer } from './blocks/PreviewDrawer';
 import { ResultsSlot } from './blocks/ResultsSlot';
-import { RunHeader } from './blocks/RunHeader';
+import { PromptContents } from './blocks/PromptContents';
+import { RunActions, RunFacts } from './blocks/RunHeader';
 import { PassPicker } from './blocks/SamplePicker';
 import { TargetFilters, TargetList } from './blocks/Targets';
-import { mappingSummary } from './model/settings';
 import { useAnalysisPhase } from './useAnalysisPhase';
 import type { RunnerState } from './useAnalysisRunner';
 import type { useAnalyzerRoute } from './useAnalyzerRoute';
@@ -34,7 +32,7 @@ interface Common {
 /** Skeleton shaped like the real page (Setup block, then ten target rows) so content lands in place. */
 function LoadingLayout() {
   return (
-    <div className={s.flow} aria-busy="true">
+    <div className={s.loading} aria-busy="true">
       <Skeleton kind="rows" rows={1} rowHeight={220} label="Loading setup" />
       <Skeleton kind="rows" rows={10} rowHeight={40} label="Loading targets" />
     </div>
@@ -55,7 +53,10 @@ function Dimmed({ children }: { children: ReactNode }) {
   );
 }
 
-/** The single-page Analyze-run workspace: Setup, Targets, Results and the sticky action rail. */
+/**
+ * The single-page Analyze-run workspace (cv4 D4), top to bottom: Setup (run and metrics, input mapping, prompt
+ * contents, instructions), Targets, Results, then the sticky action rail.
+ */
 export function RunAnalyze(props: Common) {
   const { runId, route } = props;
   const [bodies, setBodies] = useState(false);
@@ -98,10 +99,10 @@ function Workspace({
   const previewOpen = params.get('preview') === '1';
   const run = data.run!;
   const results = useRef<HTMLDivElement>(null);
-  const [mappingOpen, setMappingOpen] = useState(false);
+  const [pickerOpened, setPickerOpened] = useState(false);
 
-  // Item bodies (JSON field pickers) are only needed once a mapping is on screen.
-  const needsBodies = mappingOpen || ws.customVars.length > 0;
+  // Item bodies (JSON field pickers) are only needed once a field picker opens or a `{variable}` needs a mapping.
+  const needsBodies = pickerOpened || ws.customVars.length > 0;
   useEffect(() => {
     if (needsBodies) onNeedBodies();
   }, [needsBodies, onNeedBodies]);
@@ -134,45 +135,67 @@ function Workspace({
 
   return (
     <div className={s.flow}>
-      <Card title="Setup" id="analysis-setup">
-        <div className={s.setupGrid}>
-          <div className={s.group}>
-            <RunHeader
+      <ReportSection
+        id="analysis-setup"
+        title="Setup"
+        description="The metrics to diagnose, where the item data comes from, and what goes into the prompt."
+      >
+        <Subsection
+          id="analysis-run"
+          title="Run and metrics"
+          aside={
+            <RunActions
               slug={slug}
               runId={runId}
-              run={run}
               passes={data.passes}
               pass={data.pass}
               onPass={route.setPass}
               busy={ws.busy}
             />
-            <MetricChips
-              metrics={data.metricNames}
-              selected={ws.settings.selectedMetrics}
-              onChange={(next) => ws.update({ selectedMetrics: next })}
-            />
-          </div>
-          <div className={s.group}>
-            <Instructions ws={ws} bodiesLoading={data.bodiesLoading} />
-          </div>
-          <div className={s.groupWide}>
-            <Disclosure
-              title="Input mapping"
-              summary={mappingSummary(ws.settings, ws.customVars.length)}
-              open={mappingOpen}
-              onOpenChange={setMappingOpen}
-            >
-              <FieldsMapping ws={ws} bodiesLoading={data.bodiesLoading} onlyStandard />
-            </Disclosure>
-          </div>
-        </div>
-      </Card>
+          }
+        >
+          <RunFacts
+            slug={slug}
+            runId={runId}
+            run={run}
+            metrics={data.metricNames}
+            selected={ws.settings.selectedMetrics}
+            onMetrics={(next) => ws.update({ selectedMetrics: next })}
+          />
+        </Subsection>
+        <Subsection
+          id="analysis-mapping"
+          title="Input mapping"
+          description="The item field that the analyzer reads for each part of the prompt."
+        >
+          <FieldsMapping
+            ws={ws}
+            bodiesLoading={data.bodiesLoading}
+            onlyStandard
+            onPickerOpen={() => setPickerOpened(true)}
+          />
+        </Subsection>
+        <Subsection
+          id="analysis-contents"
+          title="Prompt contents"
+          description="What the analyzer sends with each target. Prompt preview shows the exact messages."
+        >
+          <PromptContents ws={ws} />
+        </Subsection>
+        <Subsection
+          id="analysis-instructions"
+          title="Instructions"
+          description="Optional. Added to the prompt of every target."
+        >
+          <Instructions ws={ws} bodiesLoading={data.bodiesLoading} />
+        </Subsection>
+      </ReportSection>
 
-      <Card
-        title="Targets"
-        description="The limit is applied to the most severe matching item–metric targets. Task and metric errors are never analyzed."
-        aside={<Tag kind="count">{ws.targetCount}</Tag>}
+      <ReportSection
         id="analysis-targets"
+        title="Targets"
+        description="Failed item–metric targets. The limit applies to the most severe. Task and metric errors are never analyzed. Check up to 3 targets to test them together."
+        aside={<Tag kind="count">{ws.targetCount}</Tag>}
       >
         <div className={s.stack}>
           <TargetFilters
@@ -186,7 +209,7 @@ function Workspace({
           />
           <TargetList ws={ws} slug={slug} onPreview={previewTarget} />
         </div>
-      </Card>
+      </ReportSection>
 
       <ResultsSlot ref={results} ws={ws} phase={phase} />
 
