@@ -110,6 +110,7 @@ export function FilterBar({ display, end }: { display: DisplayState; end?: React
           <Select
             label="Show"
             triggerVariant="bar"
+            showValue="always"
             items={showOptions.map((o) => ({ key: o.value, label: o.label }))}
             value={view.show}
             onChange={(k) => k && api.setView({ show: String(k) as ItemShow })}
@@ -118,6 +119,7 @@ export function FilterBar({ display, end }: { display: DisplayState; end?: React
         <Select
           label="Sort"
           triggerVariant="bar"
+          showValue="always"
           items={SORT_VALUES.reduce(
             (acc, v) => [...acc, { key: v, label: SORT_LABELS[v] }],
             [{ key: 'index', label: SORT_LABELS.index }],

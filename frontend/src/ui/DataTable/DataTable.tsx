@@ -2240,6 +2240,7 @@ function CardList<R>({
           <Select
             label="Sort by"
             triggerVariant="bar"
+            showValue="always"
             items={[
               { key: '', label: 'Default' },
               ...sortCols.map((c) => ({ key: sortKeyOf(c) as string, label: headerText(c) })),
