@@ -136,13 +136,13 @@ test('Save changes, status text and the footer (QA5-10, QA5-15)', async ({ page,
   await open(page, s, 1440);
   const save = page.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeDisabled();
-  await expect(page.getByText('All changes saved')).toBeVisible();
+  await expect(page.getByText('Unsaved changes')).toHaveCount(0); // cv4 E12: no text at rest
   near((await size(save)).h, 24, 0.6);
   await page.getByRole('textbox', { name: 'Description' }).fill('A new description.');
   await expect(page.getByText('Unsaved changes')).toBeVisible();
   await save.click();
   await expect(page.locator('[data-toast-container]').getByText('Settings saved')).toBeVisible();
-  await expect(page.getByText('All changes saved')).toBeVisible();
+  await expect(page.getByText('Unsaved changes')).toHaveCount(0); // cv4 E12: no text at rest
 });
 
 test('without the Visibility card the Danger zone holds the side column alone (QA5-13)', async ({
