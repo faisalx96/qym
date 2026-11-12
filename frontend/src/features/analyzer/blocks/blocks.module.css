@@ -167,8 +167,8 @@
 .rail {
   position: sticky;
   bottom: 0;
-  /* Above the targets table's sticky header and frozen cells (DataTable layers go up to 6), below popovers. */
-  z-index: 10;
+  /* The sticky bar layer (--z-sticky-bar): above the targets table's sticky header and frozen cells, below popovers. */
+  z-index: var(--z-sticky-bar);
   display: flex;
   align-items: center;
   gap: var(--space-md);
