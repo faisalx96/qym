@@ -405,7 +405,7 @@ export function ChartsTable(p: ChartsTableProps) {
         empty={`No runs for ${p.dataset} match the current filters`}
         rowProps={(row) =>
           row.kind === 'group'
-            ? { 'data-chart-group': String(row.level), 'aria-expanded': row.open }
+            ? { 'data-chart-group': String(row.level), 'aria-expanded': String(row.open) }
             : { 'data-chart-run': '' }
         }
       />
