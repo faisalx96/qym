@@ -3,7 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAnalysisConfig, useRunSummary, type AnalysisJob } from '@/api/analysis';
 import { projectPath } from '@/app/routes';
 import { ErrorState, useToast } from '@/ui';
-import { fullWidth } from '@/features/shell/layout';
+import { constrained } from '@/features/shell/layout';
 import { AnalyzerFrame } from './AnalyzerFrame';
 import { CompactJobRail } from './blocks/ActionRail';
 import { outcomeText, summarize } from './blocks/JobStatus';
@@ -53,7 +53,7 @@ export function RunShell({
   // The run itself failed to load (unknown id): say so before the run-scoped config error.
   if ((summary.isError || config.isError) && !summary.data?.run) {
     return (
-      <div className={`${fullWidth} ${s.page}`}>
+      <div className={`${constrained} ${s.page}`}>
         <ErrorState
           error={summary.error ?? config.error}
           title="Couldn’t load auto-analysis"

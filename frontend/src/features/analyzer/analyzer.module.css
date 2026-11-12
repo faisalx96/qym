@@ -1,10 +1,9 @@
-/* Auto-analysis workspace: one page (Setup, Targets, Results) and a sticky action rail. */
+/* Auto-analysis workspace: one page (Setup, Targets, Results) and a sticky action rail. The shared constrained
+   container sets the width and centres the page (cv4 D1); this rule only stacks the header and the view. */
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  max-width: var(--analysis-content-width);
-  margin-inline: 0;
 }
 
 /* The tab panel is empty (the view is its content), so it must not add spacing under the strip. */
