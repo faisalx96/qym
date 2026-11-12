@@ -477,14 +477,15 @@ export function ReviewsPage() {
             />
             <SourceControl filters={filters} onChange={setFilters} />
             <span className={styles.grow} />
+            {/* cv4 Y21: the bar trigger of the filters next to it, label inside, the order always shown */}
             <Select
               label="Sort"
-              hideLabel
+              triggerVariant="bar"
+              showValue="always"
               items={SORTS}
               value={filters.sort}
               onChange={(k) => k && setFilters({ sort: String(k) as ReviewSort })}
               searchable={false}
-              width={170}
             />
             <Text as="span" variant="sm" tone="muted" aria-live="polite" data-testid="result-count">
               {first ? `${first.total} ${first.total === 1 ? 'issue' : 'issues'}` : ''}
