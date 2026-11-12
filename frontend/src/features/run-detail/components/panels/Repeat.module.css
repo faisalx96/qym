@@ -1,29 +1,9 @@
-/* Repeat run analysis (round 10): threshold row, tiles strip, By pass table, Repeat performance subsection. */
+/* Repeat run analysis (round 10): tiles strip, By pass table, Repeat performance subsection. */
 .root {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
-}
-
-.control {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm) var(--space-md);
-}
-
-/* The page metric and the Pass if threshold this section shows (both set in the sticky nav, C039). */
-.metricNow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.metricNowLabel {
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-muted);
 }
 
 .curveIntro {
@@ -101,36 +81,35 @@
   color: var(--text-muted);
 }
 
-/* the value and its best / worst tag on one line, centred under the head */
-/* The value and a fixed slot for its best / worst tag, centred as one group: every row of a column has the same slot,
-   so the values line up whether a row has a tag or not, and the column stays as narrow as value + tag. */
+/* The value, centred under the head. cv4 C1-6: the best and the worst pass of a metric are a subtle highlight behind
+   the value (green, red), no word. Every value has the same padding, so a highlighted value does not move. */
 .metricCell {
-  display: inline-grid;
-  grid-template-columns: auto 44px;
-  align-items: center;
-  gap: var(--space-xs);
+  display: inline-block;
+  min-inline-size: 7ch;
+  padding: 2px var(--space-sm);
+  border-radius: var(--control-radius);
   font-family: var(--font-mono);
   font-weight: 650;
+  text-align: center;
   white-space: nowrap;
 }
 
-.extreme {
-  display: inline-flex;
-  justify-content: flex-start;
+.metricCell[data-extreme='best'] {
+  background: color-mix(in srgb, var(--success) var(--tint-soft), transparent);
 }
 
-/* the best and the worst pass of a metric: a coloured word, not a pill (C222) */
-.extremeWord {
-  font-size: var(--font-sm);
-  font-weight: 600;
+.metricCell[data-extreme='worst'] {
+  background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
 }
 
-.extremeWord[data-tone='success'] {
-  color: var(--success);
-}
-
-.extremeWord[data-tone='danger'] {
-  color: var(--error-text);
+/* The word for a screen reader only. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .errors[data-tone='danger'] {

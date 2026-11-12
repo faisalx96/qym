@@ -1,8 +1,9 @@
 /**
- * Repeat-run analysis. Round 10 (the first qym's order): the Pass if threshold, the tiles, the By pass table (every
- * metric), then the "Repeat performance" subsection with Performance across attempts and Pass distribution. The page
- * metric and its Pass if threshold (both in the sticky nav, C039) drive the tiles, the curve and the distribution;
- * the section has no metric picker and no slider of its own. The score spread by pass lives in Deep analysis.
+ * Repeat-run analysis. Round 10 (the first qym's order): the tiles, the By pass table (every metric), then the
+ * "Repeat performance" subsection with Performance across attempts and Pass distribution. The page metric and its
+ * Pass if threshold (both in the sticky nav, C039) drive the tiles, the curve and the distribution; the section has no
+ * metric picker, no slider and no readout of its own (cv4 C1-5: the nav already shows both). The score spread by pass
+ * lives in Deep analysis.
  */
 import { useMemo, useState } from 'react';
 import { useGroupMetricsQuery, usePassesQuery } from '@/api/runs';
@@ -14,7 +15,6 @@ import {
   SegmentedControl,
   Skeleton,
   Subsection,
-  Tag,
   type Column,
 } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
@@ -116,18 +116,6 @@ export function RepeatTab() {
   if (model.metricNames.length === 0) return null;
   return (
     <div className={styles.root} ref={rootRef} data-testid="repeat-analysis" data-step={step}>
-      <div className={styles.control}>
-        <span className={styles.metricNow}>
-          <span className={styles.metricNowLabel}>Metric</span>
-          <Tag kind="data">{metric}</Tag>
-        </span>
-        {!boolean ? (
-          <span className={styles.metricNow} data-testid="repeat-threshold">
-            <span className={styles.metricNowLabel}>Pass if ≥</span>
-            <Tag kind="data">{Math.round(committed * 100)}%</Tag>
-          </span>
-        ) : null}
-      </div>
       {group.isPending && !local ? <Skeleton kind="cards" count={1} label="Loading repeat analysis" /> : null}
       {group.isError ? (
         <ErrorState
