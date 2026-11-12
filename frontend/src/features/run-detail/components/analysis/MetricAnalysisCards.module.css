@@ -27,9 +27,6 @@
 .title {
   flex: 1;
   margin: 0;
-  font-size: var(--font-base);
-  font-weight: 650;
-  color: var(--text-primary);
 }
 
 .issues {

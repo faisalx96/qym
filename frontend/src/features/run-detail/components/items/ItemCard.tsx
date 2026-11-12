@@ -3,7 +3,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { isItemTaskError } from '@/lib/metrics';
 import { textDirAttrs } from '@/lib/text';
 import { keyWithBreaks } from '@/lib/keyBreaks';
-import { Button, CopyButton, FieldRow, StructuredValue, Tag, parseStructured, useStickyShift } from '@/ui';
+import {
+  Button,
+  CopyButton,
+  FieldRow,
+  StructuredValue,
+  Tag,
+  Text,
+  parseStructured,
+  useStickyShift,
+} from '@/ui';
 import { bodyText, formatCompact, itemLink } from '../../lib/itemText';
 import {
   HIDDEN_METADATA_KEYS,
@@ -298,7 +307,9 @@ export function ItemCard({ row }: { row: Row }) {
           <section className={styles.metrics} aria-label="Metrics">
             {run.items_restricted || noVerdict ? (
               <>
-                <h3 className={styles.metricsTitle}>Metrics</h3>
+                <Text variant="md" weight={600} as="h3" className={styles.metricsTitle}>
+                  Metrics
+                </Text>
                 <p className={styles.muted}>
                   {run.items_restricted
                     ? run.items_restricted_reason === 'dataset_access'

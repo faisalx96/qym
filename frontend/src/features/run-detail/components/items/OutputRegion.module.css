@@ -20,9 +20,6 @@
 
 .title {
   margin: 0;
-  font-size: var(--font-md);
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 .meta {
