@@ -31,6 +31,8 @@ export * from './Flag';
 export * from './Tag';
 export * from './EntityTag';
 export * from './Chip';
+export * from './ToggleChips';
+export * from './Timeline';
 export * from './ScoreValue';
 export * from './Identicon';
 export * from './UserName';
