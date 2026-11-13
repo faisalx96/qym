@@ -2089,17 +2089,7 @@ describe('cv4 family G (fix round after the merge): cross-agent recipes', () => 
 
 describe('cv5 family H (owner review 2026-11-13): shared controls and elements', () => {
   it('H6: a button never ends with a chevron; a menu trigger is BarTrigger (the dropdown trigger look)', () => {
-    // Call sites that the cv5 area agents convert (orchestrator: remove each entry after its merge).
-    const pending = [
-      'features/runs-list/ColumnsMenu.tsx',
-      'features/runs-list/FilterBar.tsx',
-      'features/runs-list/FiltersPopover.tsx',
-      'features/run-detail/components/latency/StepTimings.tsx',
-      'features/datasets/detail/ItemsTab.tsx',
-      'features/feedback/FeedbackListPage.tsx',
-      'features/compare/components/items/ItemsToolbar.tsx',
-    ];
-    none(grep(shippedTsx, /iconEnd=\{<Icon name="chevron-down"/, pending));
+    none(grep(shippedTsx, /iconEnd=\{<Icon name="chevron-down"/));
     expect(src('ui/MultiSelect/MultiSelect.tsx')).toContain('export function BarTrigger');
   });
 

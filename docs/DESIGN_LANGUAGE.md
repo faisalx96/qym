@@ -264,7 +264,7 @@ preselected.
   Make live, Send, Start conversation, Add model and Run backfill commit, so they are primary. A dialog footer that
   runs a job reads Cancel (neutral), Preview (accent), the commit (primary). Create draft always carries the plus
   Icon. A confirm that disables, deletes or revokes is danger. An export or download only reads data: on a page it is
-  the accent button with the `download` Icon; a format menu is a menu trigger (`BarTrigger`, cv5 H6). A Download
+  the accent button with the `download` Icon, also when it opens a format menu (no chevron, cv5 Z1). A Download
   in a dialog footer is the primary.
   **Button rules (C049, C234, C136, C166, C232; enforced in `design-language.test.ts`):** Delete, Archive, Disable and
   Revoke are `danger` everywhere; Cancel is neutral; the red `× Clear n` of a filter bar stays red (owner, Oct 26 and
@@ -331,10 +331,12 @@ preselected.
   **Menu trigger (cv5 H6, owner 2026-11-13: "We have these drop-down styles and then we have these. This is
   inconsistent").** A control that opens a menu or a panel of choices and ends with a chevron is a menu trigger, and
   every menu trigger has the one dropdown trigger look (a well). A `Button` never ends with a chevron. A trigger that
-  is not a `Select` or a `MultiSelect` (More filters, Columns, an export format menu, a Popover of filter fields) is
-  `BarTrigger` from `ui`: `<Popover label="Columns" trigger={<BarTrigger label="Columns" />}>…</Popover>`; with a set
+  is not a `Select` or a `MultiSelect` (More filters, a Popover of filter fields) is
+  `BarTrigger` from `ui`: `<Popover label="More filters" trigger={<BarTrigger label="More filters" />}>…</Popover>`; with a set
   value it reads `More filters · 2` and takes the accent (`value`, `active`). Enforced in `design-language-v3.test.ts`
-  (no `Button` with an end `chevron-down`).
+  (no `Button` with an end `chevron-down`). A button with a glyph that opens a menu or a panel stays a
+  button and loses the chevron (cv5 Z1): Export with its `download` glyph, Columns and Density with `list`, Display with
+  `menu`, a menu of actions with `more` ("⋯ Actions", "⋯ All matching").
 
 - **Multiselect** (`MultiSelect`): content in fixed order: search, actions
   (Select all and None/Clear, neutral 20px buttons at rest, round 10), then `--dropdown-option-height` option rows.

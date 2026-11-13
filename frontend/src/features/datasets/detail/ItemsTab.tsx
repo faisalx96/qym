@@ -679,10 +679,11 @@ export function ItemsTab({
                 <DropdownMenu
                   label="Actions on all matching items"
                   trigger={
+                    // cv5 Z1: a menu of actions reads as the header's "⋯ Actions" button, no chevron
                     <Button
                       variant="neutral"
                       size="sm"
-                      iconEnd={<Icon name="chevron-down" size={12} />}
+                      icon={<Icon name="more" size={12} />}
                       data-testid="all-matching"
                     >
                       All matching
