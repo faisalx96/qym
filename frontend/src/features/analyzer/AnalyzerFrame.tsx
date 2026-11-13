@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useAnalysisConfig, type AnalysisScope } from '@/api/analysis';
 import { PageHeader, TabPanel, Tabs } from '@/ui';
-import { constrained } from '@/features/shell/layout';
+import { constrained, fullWidth } from '@/features/shell/layout';
 import type { AnalyzerScope } from './useAnalyzerRoute';
 import s from './analyzer.module.css';
 
@@ -17,6 +17,7 @@ export function AnalyzerFrame({
   description,
   meta,
   live,
+  wide,
   children,
 }: {
   scope: AnalysisScope;
@@ -25,12 +26,14 @@ export function AnalyzerFrame({
   description: string;
   meta?: string[];
   live?: boolean;
+  /** cv5 K3: the run workspace with its prompt pane is a full-width workspace page, not a centred one. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   const config = useAnalysisConfig(scope);
   const c = config.data;
   return (
-    <div className={`${constrained} ${s.page}`}>
+    <div className={`${wide ? fullWidth : constrained} ${s.page}`} data-wide={wide ? '' : undefined}>
       <PageHeader
         title="Auto-analysis"
         description={description}

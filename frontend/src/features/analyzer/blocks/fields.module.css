@@ -7,6 +7,8 @@
 }
 
 .rows {
+  --map-label-w: 136px;
+  --map-arrow-w: 12px;
   display: flex;
   flex-direction: column;
 }
@@ -33,7 +35,7 @@
 
 /* cv4 Y11: one fixed label column, so every row's select starts at the same x ("EXPECTED OUTPUT" is the widest). */
 .label {
-  flex: 0 0 136px;
+  flex: 0 0 var(--map-label-w);
   min-width: 0;
   overflow-wrap: anywhere;
   text-transform: uppercase;
@@ -42,6 +44,18 @@
 
 .arrow {
   color: var(--text-dim);
+}
+
+/* cv5 K2: the key chips of a JSON field (or the one muted "no data" line) start under the field dropdown. */
+.keys {
+  margin: 0;
+  padding-inline-start: calc(var(--map-label-w) + var(--map-arrow-w) + 2 * var(--space-sm));
+}
+
+@media (max-width: 640px) {
+  .keys {
+    padding-inline-start: 0;
+  }
 }
 
 .picker {
