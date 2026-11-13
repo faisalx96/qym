@@ -2206,6 +2206,14 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(doc).toContain('the commit of that view\n  ("Publish") is the accent button');
   });
 
+  it('Y6: no count or value in parentheses on an analyzer control', () => {
+    const rules = src('features/analyzer/guidance/RulesPanel.tsx');
+    expect(rules).not.toMatch(/Project documents \(|Choose examples \(/);
+    expect(rules).toContain('Project documents<CountTile>{enabledDocs}</CountTile>');
+    expect(src('features/analyzer/blocks/PromptContents.tsx')).not.toMatch(/Choose metadata \(/);
+    expect(doc).toContain('a button that opens a picker reads "Label · value"');
+  });
+
   it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
     const t = src('features/analyzer/blocks/PromptPane.tsx');
     expect(t).toContain('No change to the prompt');

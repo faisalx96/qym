@@ -276,7 +276,9 @@ preselected.
   Test) is accent before it. A page's main action is `primary`, 24px, with the `plus`
   `Icon`, named "New <object>" or "Add <part>". A disabled `Button`, `LinkButton` or `IconButton` says why on hover
   through `disabledReason` (C166; "No changes to save", "Select two runs"); a disabled icon in a table row shows its
-  hint as the reason. A count in a control is `CountTile` after the label, centred; never in parentheses. The same
+  hint as the reason. A count in a control is `CountTile` after the label, centred; never in parentheses (cv5 Y6: also in a checkbox
+  label, "Project documents [1]"; a button that opens a picker reads "Label · value": "Choose metadata · All",
+  "Choose examples · 0 of 2"). The same
   action uses the same words in the page button, the switcher and the palette. Labels and placeholders carry no "…"
   (progress words such as "Saving…" stay), and a glyph is always an `Icon`: no typed "+", "×", "←" or "→" in a button.
   The `zap` Icon marks latency and trace columns; the typed ⚡ is not used. The category key marker is the `diamond`

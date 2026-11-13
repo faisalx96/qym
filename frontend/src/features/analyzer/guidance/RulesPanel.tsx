@@ -18,6 +18,7 @@ import {
   Button,
   Checkbox,
   ConfirmDialog,
+  CountTile,
   DropdownMenu,
   EmptyState,
   ErrorState,
@@ -393,10 +394,12 @@ function RulesView({
                 onChange={setIncludeDocs}
                 isDisabled={!canManage || enabledDocs === 0}
               >
-                {`Project documents (${enabledDocs} enabled)`}
+                {/* cv5 Y6: the count after a label is a CountTile (the enabled documents), a trigger reads
+                    "Label · value"; never a count in parentheses */}
+                Project documents<CountTile>{enabledDocs}</CountTile>
               </Checkbox>
               <Button size="sm" isDisabled={!canManage || approved === 0} onPress={() => setPickerOpen(true)}>
-                {`Choose examples (${selectedExamples} of ${approved})`}
+                {`Choose examples · ${selectedExamples} of ${approved}`}
               </Button>
               <span className={s.spacer} />
               <Button

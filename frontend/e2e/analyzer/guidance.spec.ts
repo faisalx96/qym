@@ -129,7 +129,7 @@ test.describe('Rules tab as manager (10)', () => {
     });
     await expect(page.getByRole('list', { name: 'Document library' })).toContainText('policy.txt');
     await page.getByRole('tab', { name: /^Rules/ }).click();
-    await expect(page.getByText('Project documents (1 enabled)')).toBeVisible();
+    await expect(page.locator('label').filter({ hasText: /^Project documents\s*1$/ })).toBeVisible();
     const generate = page.getByRole('button', { name: 'Generate rules' });
     await expect(generate).toBeEnabled();
     await generate.click();

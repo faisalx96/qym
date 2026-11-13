@@ -66,7 +66,8 @@ export function PromptContents({ ws }: { ws: RunWorkspace }) {
                 onPress={() => setMetaOpen((o) => !o)}
                 iconEnd={<Icon name={metaOpen ? 'collapse' : 'expand'} size={12} />}
               >
-                {settings.metaDeselected.length ? 'Choose metadata (custom)' : 'Choose metadata (all)'}
+                {/* cv5 Y6: a trigger reads "Label · value", never a value in parentheses */}
+                {settings.metaDeselected.length ? 'Choose metadata · Custom' : 'Choose metadata · All'}
               </Button>
             ) : null}
           </span>
