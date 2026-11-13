@@ -20,6 +20,31 @@
   background: var(--accent-primary);
 }
 
+/* cv5 K3: on a wide screen the settings column sits on the left and the prompt pane on the right (a workspace page
+   with a side pane, as the dataset items page: full width, not centred). */
+.workspace {
+  min-width: 0;
+}
+
+.workspace[data-pane] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(440px, 36%, 760px);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+/* The guidance tabs inside the wide frame: the constrained page's content width, at the start edge. */
+.guidance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.guidance[data-wide] {
+  max-width: calc(var(--page-max-w) - 2 * var(--space-lg));
+}
+
 .flow {
   /* Block flow: the framed sections keep the ReportSection distance (--space-lg); Results and the rail use the same. */
   display: flow-root;

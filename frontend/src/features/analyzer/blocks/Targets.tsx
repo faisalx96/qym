@@ -119,16 +119,21 @@ interface TargetRow {
 
 /**
  * Failing targets as one standard data table (cv4 D2): check (up to 3 for Test), item, metric, score, diagnosis,
- * input, Preview. A row click opens the prompt preview of that target. 10 per page, the shared pager in the footer.
+ * input. 10 per page, the shared pager in the footer. With the prompt pane (cv5 K4) a row click shows that target in
+ * the pane and the row is the table's current row; without it, a row click and the eye tile open the preview drawer.
  */
 export function TargetList({
   ws,
   slug,
   onPreview,
+  onSelect,
 }: {
   ws: RunWorkspace;
   slug: string;
+  /** Narrow screen: open the preview drawer on this target. */
   onPreview?: (key: string) => void;
+  /** Wide screen: show this target in the prompt pane. */
+  onSelect?: (key: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const targets = useMemo<TargetRow[]>(
@@ -265,7 +270,8 @@ export function TargetList({
       }}
       rowLabel={(t) => `Include ${t.metric} of ${t.row.item_id} in Test Selected`}
       selectAllLabel="Check the targets of this page to test (up to 3)"
-      onRowOpen={onPreview ? (t) => onPreview(t.key) : undefined}
+      onRowOpen={onSelect ? (t) => onSelect(t.key) : onPreview ? (t) => onPreview(t.key) : undefined}
+      activeKey={onSelect ? focusKey : undefined}
       rowActions={
         onPreview
           ? (t) => [

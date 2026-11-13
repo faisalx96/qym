@@ -163,7 +163,8 @@
   gap: var(--space-xs) var(--space-sm);
 }
 
-/* Action rail: sticky, fixed height, always mounted */
+/* Action rail: sticky, fixed height, always mounted. cv5 K5: no rule above it (owner: "this line has no value"); its
+   own void fill covers the page that scrolls under it. */
 .rail {
   position: sticky;
   bottom: 0;
@@ -174,7 +175,6 @@
   gap: var(--space-md);
   min-height: var(--bar-action-h);
   padding-block: var(--space-sm);
-  border-top: 1px solid var(--border-default);
   background: var(--bg-void);
 }
 
@@ -192,13 +192,19 @@
 }
 
 .railLead {
-  flex: 0 1 460px;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
 .railSelect {
-  flex: 1 1 220px;
+  flex: none;
   min-width: 0;
+}
+
+/* cv5 K5: "Analyzer model · <model>" is longer than a filter trigger's 168px cap; it shows in full (Needs from H: a
+   cap for a label-plus-value trigger that is not a filter). */
+.railSelect [data-variant='bar'] {
+  max-width: 320px;
 }
 
 .railPreview {

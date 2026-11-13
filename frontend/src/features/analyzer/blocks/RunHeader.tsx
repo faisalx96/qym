@@ -1,14 +1,13 @@
-import type { Key } from 'react-aria-components';
 import { viewRunTo } from './JobStatus';
 import type { RunPasses, RunSummary } from '@/api/analysis';
 import { useModelIndex } from '@/api/dashboard';
 import { modelSeriesOf } from '@/features/runs-list/model';
-import { DatasetTag, KeyValueGrid, LinkButton, ModelTag, MultiSelect, Select, TaskTag, Text } from '@/ui';
+import { DatasetTag, KeyValueGrid, LinkButton, ModelTag, Select, TaskTag, Text, ToggleChips } from '@/ui';
 import s from './blocks.module.css';
 
 /**
- * The run's facts as label-above-value fields (as the run page hero) and the metric choice (cv4 D3: one platform
- * dropdown, no pill chips). The run name is the page header's meta line, so it is not repeated here.
+ * The run's facts as label-above-value fields (as the run page hero) and the metric choice (cv5 K1: `ToggleChips`,
+ * every metric visible, at least one on). The run name is the page header's meta line, so it is not repeated here.
  */
 export function RunFacts({
   slug,
@@ -26,7 +25,6 @@ export function RunFacts({
   onMetrics: (next: string[]) => void;
 }) {
   const modelIndex = useModelIndex(slug);
-  const value = new Set<Key>(selected);
   return (
     <div className={s.facts}>
       <KeyValueGrid
@@ -47,24 +45,17 @@ export function RunFacts({
           { key: 'run', label: 'Run ID', value: runId, mono: true },
         ]}
       />
+      {/* cv5 K1: every metric is a visible on/off chip (owner: "people might not know that these are all selected"). */}
       <div className={s.metricField}>
-        <MultiSelect
-          label="Metrics"
-          triggerVariant="bar"
-          items={metrics.map((m) => ({ key: m, label: m }))}
-          value={value}
-          onChange={(keys) => onMetrics(metrics.filter((m) => keys.has(m)))}
-          searchable={metrics.length > 8}
-          summary={(keys) =>
-            keys.size === metrics.length
-              ? `all ${metrics.length}`
-              : keys.size === 1
-                ? String([...keys][0])
-                : `${keys.size} of ${metrics.length}`
-          }
-          nameSuffix="to analyze"
-          // cv4 Y12: every metric is the default; neutral until the choice differs
-          isDefault={(keys) => keys.size === metrics.length}
+        <Text variant="sm" weight={600} tone="muted" as="span" aria-hidden="true">
+          Metrics
+        </Text>
+        <ToggleChips
+          aria-label="Metrics to analyze"
+          options={metrics.map((m) => ({ value: m, label: m }))}
+          value={selected}
+          onChange={(next) => onMetrics(metrics.filter((m) => next.includes(m)))}
+          min={1}
         />
         <Text variant="sm" tone={selected.length ? 'muted' : 'warning'} as="span" role="status">
           {selected.length

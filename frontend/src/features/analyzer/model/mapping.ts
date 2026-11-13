@@ -258,10 +258,13 @@ export function slotSource(
   tree: PathNode[],
 ): { source: string | string[]; custom: boolean } | null {
   if (!slot.field) return null;
-  if (slot.full || tree.length === 0 || slot.field === 'metric_metadata') {
+  // cv5 K2: metric metadata takes keys too (`metric_metadata.<path>`: the key of the target's own metric).
+  if (slot.full || tree.length === 0) {
     return { source: slot.field, custom: false };
   }
   const cover = coverPaths(tree, new Set(slot.selected));
+  // Keys that are no longer in the sampled items: send the full value, never an empty selection.
+  if (cover.length === 0) return { source: slot.field, custom: false };
   return { source: cover.map((p) => `${slot.field}.${p}`), custom: true };
 }
 
@@ -286,3 +289,22 @@ export function metadataFields(groups: MetadataGroup[], selection: MetadataSelec
 }
 
 export const metadataKey = (metric: string, leaf: string) => `${metric}\u0000${leaf}`;
+
+/**
+ * The keys a mapping row offers as chips (cv5 K2): the top-level keys of a JSON object, or the item keys of a list
+ * of objects. Empty for a single value (text, number) and for a list of single values: the row then sends the full
+ * value and shows no key choice.
+ */
+export function keyNodes(tree: PathNode[]): PathNode[] {
+  const only = tree.length === 1 ? tree[0] : undefined;
+  if (only && only.label === '[*]') return only.children;
+  return tree;
+}
+
+/** One tree of the metric metadata keys of the given metrics (the mapping row reads the target metric's metadata). */
+export function metadataTree(groups: MetadataGroup[], metrics: readonly string[]): PathNode[] {
+  const wanted = new Set(metrics);
+  const paths = new Set<string>();
+  for (const g of groups) if (wanted.has(g.metric)) g.paths.forEach((p) => paths.add(p));
+  return pathsToTree([...paths].sort());
+}

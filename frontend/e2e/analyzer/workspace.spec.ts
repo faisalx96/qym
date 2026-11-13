@@ -9,7 +9,6 @@ import {
   previewDrawer,
   rail,
   seedAnalyzer,
-  toggleBox,
   trackErrors,
   waitWorkspace,
 } from './helpers';
@@ -106,39 +105,40 @@ test.describe('sample picker (2)', () => {
   });
 });
 
-// cv4 D3, X13: the metric pills are one MultiSelect ("Metrics · all 2"), with Select all / None in its panel.
+// cv5 K1: the metrics are ToggleChips ("Metrics" then one chip per metric, all visible); at least one stays on.
 test.describe('metric choice (3)', () => {
-  test('unticking a metric updates the target count; None shows the empty reason; ?metric= preselects', async ({
+  test('switching a metric off updates the target count; the last one stays on; ?metric= preselects', async ({
     page,
     request,
   }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    const trigger = page.getByRole('button', { name: /^Metrics\b.*to analyze$/ });
+    const chips = page.getByRole('group', { name: 'Metrics to analyze' });
+    const chip = (name: string) => chips.getByRole('button', { name, exact: true });
     await expect(analyzeButton(page)).toHaveText('Analyze 4 items');
-    await expect(trigger).toHaveAccessibleName('Metrics · all 2 to analyze');
-    await trigger.click();
-    const panel = page.getByRole('dialog', { name: 'Metrics options' });
-    await panel.getByRole('checkbox', { name: 'exact_match' }).click();
-    await expect(panel.getByRole('checkbox', { name: 'exact_match' })).not.toBeChecked();
+    await expect(chip('exact_match')).toHaveAttribute('aria-pressed', 'true');
+    await expect(chip('execution_accuracy')).toHaveAttribute('aria-pressed', 'true');
+    await chip('exact_match').click();
+    await expect(chip('exact_match')).toHaveAttribute('aria-pressed', 'false');
     await expect(analyzeButton(page)).toHaveText('Analyze 2 items');
-    await panel.getByRole('button', { name: 'None', exact: true }).click();
-    await expect(page.getByText('Select at least one metric').first()).toBeVisible();
-    await expect(analyzeButton(page)).toBeDisabled();
-    await panel.getByRole('button', { name: 'Select all' }).click();
+    // the last metric on cannot be switched off
+    await chip('execution_accuracy').click();
+    await expect(chip('execution_accuracy')).toHaveAttribute('aria-pressed', 'true');
+    await chip('exact_match').click();
     await expect(analyzeButton(page)).toHaveText('Analyze 4 items');
-    await page.keyboard.press('Escape');
 
     await gotoApp(page, analysisUrl(seed.slug, seed.runId, '&metric=execution_accuracy'));
     await waitWorkspace(page);
-    const t2 = page.getByRole('button', { name: /^Metrics\b.*to analyze$/ });
-    await expect(t2).toHaveAccessibleName('Metrics · execution_accuracy to analyze');
-    await t2.click();
-    const p2 = page.getByRole('dialog', { name: 'Metrics options' });
-    await expect(p2.getByRole('checkbox', { name: 'execution_accuracy' })).toBeChecked();
-    await expect(p2.getByRole('checkbox', { name: 'exact_match' })).not.toBeChecked();
-    await page.keyboard.press('Escape');
+    const c2 = page.getByRole('group', { name: 'Metrics to analyze' });
+    await expect(c2.getByRole('button', { name: 'execution_accuracy', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(c2.getByRole('button', { name: 'exact_match', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
     await expect(analyzeButton(page)).toHaveText('Analyze 2 items');
   });
 });
@@ -224,7 +224,7 @@ test.describe('prompt preview (4)', () => {
 });
 
 test.describe('variable mapping (5)', () => {
-  test('{rubric} adds a variable row; input source shows a JSON path tree; unchecking paths changes the preview config', async ({
+  test('{rubric} adds a variable row; a JSON source shows its keys; a key on changes the preview config', async ({
     page,
     request,
   }) => {
@@ -237,27 +237,24 @@ test.describe('variable mapping (5)', () => {
     // choose source `input`
     await vars.getByRole('button', { name: /\{rubric\} source/ }).click();
     await page.getByRole('option', { name: 'input', exact: true }).click();
-    // the {rubric} row sits by the instructions; open its picker
-    await vars.getByRole('button', { name: 'Full value' }).click();
-    const picker = page.getByRole('group', { name: '{rubric} fields' });
-    await expect(picker.getByRole('checkbox', { name: /question/ })).toBeVisible();
-    await expect(picker.getByRole('checkbox', { name: /^db/ })).toBeVisible();
-    await expect(picker.getByRole('checkbox', { name: /group · 3/ })).toBeVisible(); // nested group renders as a tree
-    // with the full value the mapping is the whole field; unchecking a leaf narrows it to the other paths
-    await toggleBox(picker.getByRole('checkbox', { name: 'Use full value' }));
+    // cv5 K2: the {rubric} row shows the JSON keys at once: "Full value" (on), then one chip per key
+    const keys = page.getByRole('group', { name: '{rubric}: keys to send' });
+    await expect(keys.getByRole('button', { name: 'Full value' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(keys.getByRole('button', { name: 'question', exact: true })).toBeVisible();
+    await expect(keys.getByRole('button', { name: 'db', exact: true })).toBeVisible();
+    // a key on narrows the mapping to that key and switches "Full value" off
     const narrowed = page.waitForRequest((r) => {
       if (!r.url().includes('/analyze-preview')) return false;
       const m = (r.postDataJSON() as { config: { custom_variable_mapping?: Record<string, unknown> } }).config
         .custom_variable_mapping;
       return Array.isArray(m?.rubric);
     });
-    await toggleBox(picker.getByRole('checkbox', { name: /^question$/ }));
+    await keys.getByRole('button', { name: 'db', exact: true }).click();
     const sent2 = (await narrowed).postDataJSON() as {
       config: { custom_variable_mapping: Record<string, string[]> };
     };
-    expect(sent2.config.custom_variable_mapping.rubric.join('|')).not.toContain('question');
-    expect(sent2.config.custom_variable_mapping.rubric.length).toBeGreaterThan(0);
-    await expect(vars.getByRole('button', { name: /^\d+ fields?$/ })).toBeVisible();
+    expect(sent2.config.custom_variable_mapping.rubric).toEqual(['input.db']);
+    await expect(keys.getByRole('button', { name: 'Full value' })).toHaveAttribute('aria-pressed', 'false');
 
     // the Input mapping rows are always shown (cv4 D4, X13); changing one (Input -> output) sends field_mapping
     const std = page.waitForRequest(

@@ -43,8 +43,7 @@ test.describe('axe (14)', () => {
     const vars = page.getByLabel('Detected variables');
     await vars.getByRole('button', { name: /\{rubric\} source/ }).click();
     await page.getByRole('option', { name: 'input', exact: true }).click();
-    await vars.getByRole('button', { name: 'Full value' }).click();
-    await expect(page.getByRole('group', { name: '{rubric} fields' })).toBeVisible();
+    await expect(page.getByRole('group', { name: '{rubric}: keys to send' })).toBeVisible();
     await expectNoSerious(page, 'page with a variable and its picker');
 
     // cv4 D4, X13: the Input mapping rows are always shown (no disclosure)

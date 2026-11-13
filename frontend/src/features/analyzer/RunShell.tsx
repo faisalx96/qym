@@ -4,6 +4,7 @@ import { useAnalysisConfig, useRunSummary, type AnalysisJob } from '@/api/analys
 import { projectPath } from '@/app/routes';
 import { ErrorState, useToast } from '@/ui';
 import { constrained } from '@/features/shell/layout';
+import { useMediaQuery } from '@/features/shell/hooks';
 import { AnalyzerFrame } from './AnalyzerFrame';
 import { CompactJobRail } from './blocks/ActionRail';
 import { outcomeText, summarize } from './blocks/JobStatus';
@@ -13,6 +14,9 @@ import { useAnalysisPhase } from './useAnalysisPhase';
 import { useAnalysisRunner } from './useAnalysisRunner';
 import type { useAnalyzerRoute } from './useAnalyzerRoute';
 import s from './analyzer.module.css';
+
+/** The viewport width from which the run workspace shows the prompt pane (cv5 K3). */
+export const PANE_QUERY = '(min-width: 1500px)';
 
 /** Run scope: the page frame (one tab row), the run workspace (kept mounted) and the guidance tabs. */
 export function RunShell({
@@ -45,6 +49,8 @@ export function RunShell({
     else toast.show(job.error || 'The analysis failed', { tone: 'error' });
   });
   const phase = useAnalysisPhase(runner, false);
+  // cv5 K3: from about 1500 px the prompt preview is a fixed pane next to the settings.
+  const pane = useMediaQuery(PANE_QUERY);
 
   // A run opened under another project's slug lands under its own project (as run detail does).
   const ownSlug = summary.data?.run?.project?.slug;
@@ -83,6 +89,8 @@ export function RunShell({
       }
       meta={run ? [run.run_name || run.run_id] : undefined}
       live={phase.live}
+      // The frame stays wide on every tab, so a tab click never moves the header and the tabs under the pointer.
+      wide={pane}
     >
       <div hidden={!onRun}>
         {config.isError && !config.data ? (
@@ -92,11 +100,19 @@ export function RunShell({
             onRetry={() => config.refetch()}
           />
         ) : config.data ? (
-          <RunAnalyze slug={slug} runId={runId} config={config.data} route={route} runner={runner} />
+          <RunAnalyze
+            slug={slug}
+            runId={runId}
+            config={config.data}
+            route={route}
+            runner={runner}
+            pane={pane}
+          />
         ) : null}
       </div>
       {route.scope !== 'run' ? (
-        <>
+        // In the wide frame the guidance tabs keep the page width, from the same start edge as the header.
+        <div className={s.guidance} data-wide={pane ? '' : undefined}>
           <GuidanceArea scope={scope} slug={slug} canManage={canManage} tab={route.scope} />
           <CompactJobRail
             runner={runner}
@@ -105,7 +121,7 @@ export function RunShell({
             runId={runId}
             onOpen={() => route.setScope('run')}
           />
-        </>
+        </div>
       ) : null}
     </AnalyzerFrame>
   );

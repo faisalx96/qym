@@ -7,6 +7,7 @@ import { ActionRail } from './blocks/ActionRail';
 import { FieldsMapping } from './blocks/FieldsMapping';
 import { Instructions } from './blocks/Instructions';
 import { PreviewDrawer } from './blocks/PreviewDrawer';
+import { PromptPane } from './blocks/PromptPane';
 import { ResultsSlot } from './blocks/ResultsSlot';
 import { PromptContents } from './blocks/PromptContents';
 import { RunActions, RunFacts } from './blocks/RunHeader';
@@ -27,6 +28,8 @@ interface Common {
   config: AnalysisConfig;
   route: Route;
   runner: RunnerState;
+  /** Wide screen (cv5 K3): the prompt preview is a fixed pane on the right, not a drawer. */
+  pane: boolean;
 }
 
 /** Skeleton shaped like the real page (Setup block, then ten target rows) so content lands in place. */
@@ -55,12 +58,13 @@ function Dimmed({ children }: { children: ReactNode }) {
 
 /**
  * The single-page Analyze-run workspace (cv4 D4), top to bottom: Setup (run and metrics, input mapping, prompt
- * contents, instructions), Targets, Results, then the sticky action rail.
+ * contents, instructions), Targets, Results, then the sticky action rail. On a wide screen (cv5 K3) the prompt
+ * preview is a fixed pane on the right of these; on a narrow one it is the drawer.
  */
 export function RunAnalyze(props: Common) {
   const { runId, route } = props;
-  const [bodies, setBodies] = useState(false);
-  const data = useRunData(runId, route.pass, bodies);
+  // cv5 K2: the item bodies of the sample are read at once: each mapping row shows at rest whether its field is JSON.
+  const data = useRunData(runId, route.pass, true);
   const skeleton = useDelayedPending(data.isPending);
   const ready = !data.isPending && Boolean(data.run) && !data.needsPass && !data.isError;
   const [shown, setShown] = useState<{ key: string; data: RunData } | null>(null);
@@ -74,38 +78,23 @@ export function RunAnalyze(props: Common) {
     if (held)
       return (
         <Dimmed>
-          <Workspace key={held.key} {...props} data={held.data} onNeedBodies={() => undefined} />
+          <Workspace key={held.key} {...props} data={held.data} />
         </Dimmed>
       );
     return skeleton ? <LoadingLayout /> : null;
   }
   if (data.needsPass)
     return <PassPicker slug={props.slug} runId={runId} passes={data.passes} onPick={route.setPass} />;
-  return <Workspace key={key} {...props} data={data} onNeedBodies={() => setBodies(true)} />;
+  return <Workspace key={key} {...props} data={data} />;
 }
 
-function Workspace({
-  slug,
-  runId,
-  config,
-  route,
-  runner,
-  data,
-  onNeedBodies,
-}: Common & { data: RunData; onNeedBodies: () => void }) {
+function Workspace({ slug, runId, config, route, runner, data, pane }: Common & { data: RunData }) {
   const ws = useRunWorkspace({ runId, data, config, preselectMetric: route.metric || null }, runner);
   const phase = useAnalysisPhase(runner, ws.test.testing);
   const { params, replaceUrlQuery } = useSearchParamsState();
-  const previewOpen = params.get('preview') === '1';
+  const previewOpen = !pane && params.get('preview') === '1';
   const run = data.run!;
   const results = useRef<HTMLDivElement>(null);
-  const [pickerOpened, setPickerOpened] = useState(false);
-
-  // Item bodies (JSON field pickers) are only needed once a field picker opens or a `{variable}` needs a mapping.
-  const needsBodies = pickerOpened || ws.customVars.length > 0;
-  useEffect(() => {
-    if (needsBodies) onNeedBodies();
-  }, [needsBodies, onNeedBodies]);
 
   // Legacy `?step=`: preview opens the drawer, run / review scroll to Results; then the param is dropped.
   const legacyStep = useRef(params.get('step'));
@@ -134,117 +123,121 @@ function Workspace({
   };
 
   return (
-    <div className={s.flow}>
-      <ReportSection
-        id="analysis-setup"
-        title="Setup"
-        description="The metrics to diagnose, where the item data comes from, and what goes into the prompt."
-      >
-        <Subsection
-          id="analysis-run"
-          title="Run and metrics"
-          aside={
-            <RunActions
+    <div className={s.workspace} data-pane={pane ? '' : undefined}>
+      <div className={s.flow}>
+        <ReportSection
+          id="analysis-setup"
+          title="Setup"
+          description="The metrics to diagnose, where the item data comes from, and what goes into the prompt."
+        >
+          <Subsection
+            id="analysis-run"
+            title="Run and metrics"
+            aside={
+              <RunActions
+                slug={slug}
+                runId={runId}
+                passes={data.passes}
+                pass={data.pass}
+                onPass={route.setPass}
+                busy={ws.busy}
+              />
+            }
+          >
+            <RunFacts
               slug={slug}
               runId={runId}
-              passes={data.passes}
-              pass={data.pass}
-              onPass={route.setPass}
-              busy={ws.busy}
+              run={run}
+              metrics={data.metricNames}
+              selected={ws.settings.selectedMetrics}
+              onMetrics={(next) => ws.update({ selectedMetrics: next })}
             />
+          </Subsection>
+          <Subsection
+            id="analysis-mapping"
+            title="Input mapping"
+            description="The item field that the analyzer reads for each part of the prompt."
+          >
+            <FieldsMapping ws={ws} bodiesLoading={data.bodiesLoading} onlyStandard />
+          </Subsection>
+          <Subsection
+            id="analysis-contents"
+            title="Prompt contents"
+            description="What the analyzer sends with each target. Prompt preview shows the exact messages."
+          >
+            <PromptContents ws={ws} />
+          </Subsection>
+          <Subsection
+            id="analysis-instructions"
+            title="Instructions"
+            description="Optional. Added to the prompt of every target."
+          >
+            <Instructions ws={ws} bodiesLoading={data.bodiesLoading} />
+          </Subsection>
+        </ReportSection>
+
+        <ReportSection
+          id="analysis-targets"
+          // cv4 Y16: the count is the count badge right after the title, not alone at the far end
+          title={
+            <>
+              Targets<CountTile>{ws.targetCount}</CountTile>
+            </>
           }
+          description="Failed item–metric targets. The limit applies to the most severe. Task and metric errors are never analyzed. Check up to 3 targets to test them together."
         >
-          <RunFacts
-            slug={slug}
-            runId={runId}
-            run={run}
-            metrics={data.metricNames}
-            selected={ws.settings.selectedMetrics}
-            onMetrics={(next) => ws.update({ selectedMetrics: next })}
-          />
-        </Subsection>
-        <Subsection
-          id="analysis-mapping"
-          title="Input mapping"
-          description="The item field that the analyzer reads for each part of the prompt."
-        >
-          <FieldsMapping
-            ws={ws}
-            bodiesLoading={data.bodiesLoading}
-            onlyStandard
-            onPickerOpen={() => setPickerOpened(true)}
-          />
-        </Subsection>
-        <Subsection
-          id="analysis-contents"
-          title="Prompt contents"
-          description="What the analyzer sends with each target. Prompt preview shows the exact messages."
-        >
-          <PromptContents ws={ws} />
-        </Subsection>
-        <Subsection
-          id="analysis-instructions"
-          title="Instructions"
-          description="Optional. Added to the prompt of every target."
-        >
-          <Instructions ws={ws} bodiesLoading={data.bodiesLoading} />
-        </Subsection>
-      </ReportSection>
+          <div className={s.stack}>
+            <TargetFilters
+              ws={ws}
+              maxTimeout={config.analysis_defaults.max_timeout_seconds}
+              maxRetries={config.analysis_defaults.max_timeout_retries}
+              defaults={{
+                timeoutSeconds: config.analysis_defaults.request_timeout_seconds || 120,
+                maxIssues: config.max_root_cause_categories || 3,
+              }}
+            />
+            {/* cv5 K4: with the pane, a row click shows that target in the pane (the eye tile is gone) */}
+            <TargetList
+              ws={ws}
+              slug={slug}
+              onPreview={pane ? undefined : previewTarget}
+              onSelect={pane ? ws.setFocusKey : undefined}
+            />
+          </div>
+        </ReportSection>
 
-      <ReportSection
-        id="analysis-targets"
-        // cv4 Y16: the count is the count badge right after the title, not alone at the far end
-        title={
-          <>
-            Targets<CountTile>{ws.targetCount}</CountTile>
-          </>
-        }
-        description="Failed item–metric targets. The limit applies to the most severe. Task and metric errors are never analyzed. Check up to 3 targets to test them together."
-      >
-        <div className={s.stack}>
-          <TargetFilters
-            ws={ws}
-            maxTimeout={config.analysis_defaults.max_timeout_seconds}
-            maxRetries={config.analysis_defaults.max_timeout_retries}
-            defaults={{
-              timeoutSeconds: config.analysis_defaults.request_timeout_seconds || 120,
-              maxIssues: config.max_root_cause_categories || 3,
-            }}
-          />
-          <TargetList ws={ws} slug={slug} onPreview={previewTarget} />
-        </div>
-      </ReportSection>
+        <ResultsSlot ref={results} ws={ws} phase={phase} />
 
-      <ResultsSlot ref={results} ws={ws} phase={phase} />
+        <ActionRail
+          ws={ws}
+          config={config}
+          phase={phase}
+          slug={slug}
+          runId={runId}
+          onPreview={pane ? undefined : () => setPreview(true)}
+        />
+        {pane ? null : <PreviewDrawer ws={ws} open={previewOpen} onOpenChange={setPreview} />}
 
-      <ActionRail
-        ws={ws}
-        config={config}
-        phase={phase}
-        slug={slug}
-        runId={runId}
-        onPreview={() => setPreview(true)}
-      />
-      <PreviewDrawer ws={ws} open={previewOpen} onOpenChange={setPreview} />
-
-      <ConfirmDialog
-        open={ws.humanConfirm !== null}
-        onOpenChange={(open) => !open && ws.cancelHumanConfirm()}
-        title="Overwrite human diagnoses?"
-        description={
-          ws.humanConfirm
-            ? [
-                `This will replace ${ws.humanConfirm.count} human metric ${ws.humanConfirm.count === 1 ? 'diagnosis' : 'diagnoses'} with new AI results.`,
-                `Metrics affected: ${ws.humanConfirm.metrics.join(', ')}.`,
-              ]
-            : undefined
-        }
-        note="Continue only if you intentionally want to replace reviewer corrections."
-        cancelLabel="Keep human labels"
-        confirmLabel="Re-analyze human labels"
-        tone="danger"
-        onConfirm={() => void ws.confirmHuman()}
-      />
+        <ConfirmDialog
+          open={ws.humanConfirm !== null}
+          onOpenChange={(open) => !open && ws.cancelHumanConfirm()}
+          title="Overwrite human diagnoses?"
+          description={
+            ws.humanConfirm
+              ? [
+                  `This will replace ${ws.humanConfirm.count} human metric ${ws.humanConfirm.count === 1 ? 'diagnosis' : 'diagnoses'} with new AI results.`,
+                  `Metrics affected: ${ws.humanConfirm.metrics.join(', ')}.`,
+                ]
+              : undefined
+          }
+          note="Continue only if you intentionally want to replace reviewer corrections."
+          cancelLabel="Keep human labels"
+          confirmLabel="Re-analyze human labels"
+          tone="danger"
+          onConfirm={() => void ws.confirmHuman()}
+        />
+      </div>
+      {pane ? <PromptPane ws={ws} /> : null}
     </div>
   );
 }
