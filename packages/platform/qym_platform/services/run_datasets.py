@@ -236,8 +236,15 @@ def entries_by_run(db: Session, run_ids: Iterable[str]) -> Dict[str, List[RunDat
     return grouped
 
 
+def version_status_value(version: Optional[DatasetVersion]) -> Optional[str]:
+    """``draft``, ``published`` or ``archived`` for a dataset version row; None when the row is gone."""
+    if version is None or version.status is None:
+        return None
+    return str(getattr(version.status, "value", version.status))
+
+
 def dataset_version_info(db: Session, version_ids: Iterable[str]) -> Dict[str, Dict[str, Any]]:
-    """Version label, current aliases and live dataset slug per dataset version id.
+    """Version label, status, current aliases and live dataset slug per dataset version id.
 
     ``dataset_slug`` is set while the managed dataset exists (not soft-deleted), so a
     page can link to it. Aliases reflect what points at the version now.
@@ -269,6 +276,7 @@ def dataset_version_info(db: Session, version_ids: Iterable[str]) -> Dict[str, D
         v = versions.get(vid)
         info[vid] = {
             "dataset_version": v.version if v else None,
+            "dataset_version_status": version_status_value(v),
             "dataset_aliases": sorted(aliases.get(vid, [])),
             "dataset_slug": slugs.get(v.dataset_id) if v else None,
         }
@@ -333,6 +341,7 @@ def datasets_for_runs(
                         "dataset_slug": None if deleted else slug,
                         "dataset_version_id": row.dataset_version_id,
                         "version": row.version,
+                        "status": version_info.get("dataset_version_status"),
                         "aliases": list(version_info.get("dataset_aliases") or []),
                         "alias": row.alias,
                         "items": row.item_count,
@@ -354,6 +363,7 @@ def datasets_for_runs(
                 "dataset_slug": None if deleted else version_info.get("dataset_slug"),
                 "dataset_version_id": run.dataset_version_id,
                 "version": version_info.get("dataset_version"),
+                "status": version_info.get("dataset_version_status"),
                 "aliases": list(version_info.get("dataset_aliases") or []),
                 "alias": None,
                 "items": None,

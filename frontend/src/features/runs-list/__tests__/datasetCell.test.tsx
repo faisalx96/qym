@@ -31,21 +31,67 @@ describe('DatasetCell', () => {
     expect(tag).toHaveAttribute('title', 'support-tickets v3 · support-tickets v4 · billing-faq v7');
   });
 
-  it('writes a single dataset as name, divider, version and the Production flag (cv4 B1)', () => {
-    render(<DatasetCell row={row({ dataset_count: 1, dataset_aliases: ['production', 'staging'] })} />);
+  const versionOf = () => screen.getByTestId('dataset-version-tag').querySelector('[data-part="version"]');
+
+  it('writes a single dataset as name, divider and version; the production version is green, with no word (cv4 B1)', () => {
+    render(
+      <DatasetCell
+        row={row({
+          dataset_count: 1,
+          dataset_version_status: 'published',
+          dataset_aliases: ['production', 'staging'],
+        })}
+      />,
+    );
     expect(screen.queryByTestId('dataset-count-tag')).toBeNull();
     const tag = screen.getByTestId('dataset-version-tag');
     expect(screen.getByText('support-tickets')).toBeInTheDocument();
-    expect(tag.querySelector('[data-part="version"]')).toHaveTextContent('v3');
+    expect(versionOf()).toHaveTextContent('v3');
+    expect(versionOf()).toHaveAttribute('data-status', 'production');
     expect(tag.querySelector('[data-part="alias"]')).toHaveTextContent('staging');
-    expect(screen.getByText('Production')).toBeInTheDocument();
+    // the status is the version's colour and the tooltip, never a word after the tag
+    expect(screen.queryByText('Production')).toBeNull();
     expect(screen.queryByText('production')).toBeNull();
+    expect(tag.querySelector('[title]')).toHaveAttribute(
+      'title',
+      'support-tickets · version v3 · production · aliases: staging',
+    );
   });
 
-  it('shows no Production flag for a version that is not the production version', () => {
-    render(<DatasetCell row={row({ dataset_count: 1, dataset_version: '2', dataset_aliases: ['previous'] })} />);
-    expect(screen.getByTestId('dataset-version-tag').querySelector('[data-part="version"]')).toHaveTextContent('v2');
-    expect(screen.queryByText('Production')).toBeNull();
+  it('colours a published version blue and a draft version amber by its status', () => {
+    const { unmount } = render(
+      <DatasetCell
+        row={row({
+          dataset_count: 1,
+          dataset_version: '2',
+          dataset_version_status: 'published',
+          dataset_aliases: ['previous'],
+        })}
+      />,
+    );
+    expect(versionOf()).toHaveTextContent('v2');
+    expect(versionOf()).toHaveAttribute('data-status', 'published');
+    unmount();
+    render(
+      <DatasetCell
+        row={row({
+          dataset_count: 1,
+          dataset_version: 'v4',
+          dataset_version_status: 'draft',
+          dataset_aliases: [],
+        })}
+      />,
+    );
+    expect(versionOf()).toHaveAttribute('data-status', 'draft');
+    expect(screen.getByTestId('dataset-version-tag').querySelector('[title]')).toHaveAttribute(
+      'title',
+      'support-tickets · version v4 · draft',
+    );
+  });
+
+  it('keeps the version neutral when the payload has no status', () => {
+    render(<DatasetCell row={row({ dataset_count: 1, dataset_version: '2', dataset_aliases: [] })} />);
+    expect(versionOf()).toHaveAttribute('data-status', 'none');
   });
 
   it('shows the name alone for a run with no dataset version', () => {

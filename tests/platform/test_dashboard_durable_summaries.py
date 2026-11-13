@@ -33,6 +33,7 @@ from qym_platform.db.models import (
     Dataset,
     DatasetAlias,
     DatasetVersion,
+    DatasetVersionStatus,
     Run,
     RunItem,
     RunItemAttempt,
@@ -982,12 +983,34 @@ def test_dataset_alias_repoint_refreshes_both_old_and_new_dimensions(database):
         db.commit()
     drain(database)
     assert projected(database)["dataset_aliases"] == ["production"]
+    # The version's status goes with the row: the runs list colours the version by it.
+    assert projected(database)["dataset_version_status"] == "draft"
+    with Session(database) as db:
+        db.get(DatasetVersion, "v1").status = DatasetVersionStatus.PUBLISHED
+        db.commit()
+    drain(database)
+    assert projected(database)["dataset_version_status"] == "published"
+    assert projected(database, "second")["dataset_version_status"] == "draft"
     with Session(database) as db:
         db.scalar(select(DatasetAlias)).dataset_version_id = "v2"
         db.commit()
     drain(database)
     assert projected(database)["dataset_aliases"] == []
     assert projected(database, "second")["dataset_aliases"] == ["production"]
+    # A row published before the status existed is stale: the worker publishes it again.
+    with Session(database) as db:
+        dimension = db.get(Dimension, "r")
+        dimension.descriptor = {
+            k: v for k, v in dimension.descriptor.items() if k != "dataset_version_status"
+        }
+        db.commit()
+    with Session(database) as db:
+        assert service.reconcile_summary_shapes(db) == 1
+        db.commit()
+    drain(database)
+    assert projected(database)["dataset_version_status"] == "published"
+    with Session(database) as db:
+        assert service.reconcile_summary_shapes(db) == 0
     with Session(database) as db:
         assert db.get(Dimension, "r").dataset == "dataset␟v1"
         assert db.get(Dimension, "second").dataset == "dataset␟v2"

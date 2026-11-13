@@ -81,7 +81,14 @@ export function DatasetCell({ row }: { row: RunRow }) {
         testId="dataset-count-tag"
       />
     );
-  return <DatasetVersionTag name={row.dataset_name} version={row.dataset_version} aliases={row.dataset_aliases} />;
+  return (
+    <DatasetVersionTag
+      name={row.dataset_name}
+      version={row.dataset_version}
+      status={row.dataset_version_status}
+      aliases={row.dataset_aliases}
+    />
+  );
 }
 
 export function VersionCell({ row }: { row: RunRow }) {

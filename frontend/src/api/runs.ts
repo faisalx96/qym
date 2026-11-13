@@ -121,6 +121,7 @@ export function runFromListRow(row: RunRow, project?: RunPayload['run']['project
     task_name: row.task_name,
     dataset_name: row.dataset_name,
     dataset_version: row.dataset_version,
+    dataset_version_status: row.dataset_version_status,
     dataset_aliases: row.dataset_aliases,
     dataset_slug: row.dataset_slug,
     // The count reserves the hero's Datasets group before the summary arrives.

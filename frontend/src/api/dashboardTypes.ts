@@ -92,6 +92,8 @@ export interface RunRow {
   model_key: string;
   dataset_name: string;
   dataset_version: string | null;
+  /** The version's status now; the tag colours the version by it. */
+  dataset_version_status?: 'draft' | 'published' | 'archived' | null;
   dataset_aliases: string[];
   dataset_slug: string | null;
   /** Dataset versions the run evaluated (absent = 1); `datasets` lists them for a union run only. */

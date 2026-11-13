@@ -1,18 +1,21 @@
 /**
- * A dataset and its version, written as the first qym wrote it (cv4 B1): the name, a thin divider, the version in
- * green, other aliases after their own divider, and the green star Production Flag when that version is the
- * production version. `DatasetVersionTag` is the one-line tag (runs table, run header); `DatasetChip` is one dataset
- * of a union run in the hero (name wraps, never cut; item count).
+ * A dataset and its version, written as the first qym wrote it (cv4 B1): the name, a thin divider, the version, then
+ * other aliases after their own divider. The version's colour is its status (owner, 13 Nov): green = production,
+ * blue = published, amber = draft. No "Production" word follows the tag: the colour and the tooltip say it.
+ * `DatasetVersionTag` is the one-line tag (runs table, run header); `DatasetChip` is one dataset of a union run in
+ * the hero (name wraps, never cut; item count).
  */
 import { Link } from 'react-router-dom';
-import { Flag, Icon, Tag } from '@/ui';
+import { Icon, Tag } from '@/ui';
 import { datasetEntryLink } from '../lib/heroModel';
 import type { RunDatasetEntry } from '../types';
 import styles from './DatasetChip.module.css';
 
 export function datasetEntryTitle(e: RunDatasetEntry): string {
   const count = e.items != null ? `, ${e.items} items` : '';
-  return `${e.dataset}${e.version ? ` ${e.version}` : ''}${e.alias ? ` (${e.alias})` : ''}${count}${
+  const tone = e.version ? versionTone(e.status, e.aliases) : null;
+  const status = tone ? `, ${VERSION_TONE_WORD[tone].toLowerCase()}` : '';
+  return `${e.dataset}${e.version ? ` ${e.version}` : ''}${status}${e.alias ? ` (${e.alias})` : ''}${count}${
     e.deleted ? ', dataset deleted' : ''
   }`;
 }
@@ -30,48 +33,66 @@ export function versionLabel(version: string | number | null | undefined): strin
   return `v${String(version).replace(/^v/i, '')}`;
 }
 
-/** The green star Production Flag of a dataset version (as the datasets VersionSwitcher draws it). */
-export function ProductionFlag({ className }: { className?: string }) {
-  return (
-    <Flag tone="success" icon="star" className={className} title="This version is the production version">
-      Production
-    </Flag>
-  );
+export type VersionStatus = 'draft' | 'published' | 'archived';
+/** The colour of a version label: its status. `none` = status not known (older payload) or archived. */
+export type VersionTone = 'production' | 'published' | 'draft' | 'none';
+
+export const VERSION_TONE_WORD: Record<Exclude<VersionTone, 'none'>, string> & { none: string } = {
+  production: 'Production',
+  published: 'Published',
+  draft: 'Draft',
+  none: '',
+};
+
+/** Production wins (the production alias points at the version); then the version's own status. */
+export function versionTone(
+  status: VersionStatus | string | null | undefined,
+  aliases: readonly string[] | null | undefined,
+): VersionTone {
+  if (isProductionVersion(aliases)) return 'production';
+  if (status === 'published') return 'published';
+  if (status === 'draft') return 'draft';
+  return 'none';
 }
 
-/** A dataset with its version: database glyph, name, divider, version in green, other aliases; then Production. */
+/** A dataset with its version: database glyph, name, divider, version in its status colour, other aliases. */
 export function DatasetVersionTag({
   name,
   version,
+  status,
   aliases,
   className,
 }: {
   name: string | null | undefined;
   version?: string | number | null;
+  status?: VersionStatus | null;
   aliases?: string[] | null;
   className?: string;
 }) {
   if (!name) return <span className={styles.none}>—</span>;
   const v = versionLabel(version);
-  const prod = v !== null && isProductionVersion(aliases);
+  const tone = v !== null ? versionTone(status, aliases) : 'none';
   const others = (aliases ?? []).filter((a) => a !== PRODUCTION);
   const title = [
     name,
     v ? `version ${v}` : null,
-    prod ? 'production' : null,
+    tone !== 'none' ? VERSION_TONE_WORD[tone].toLowerCase() : null,
     others.length ? `aliases: ${others.join(', ')}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
   return (
-    <span className={[styles.versioned, className].filter(Boolean).join(' ')} data-testid="dataset-version-tag">
+    <span
+      className={[styles.versioned, className].filter(Boolean).join(' ')}
+      data-testid="dataset-version-tag"
+    >
       <Tag kind="dataset" title={title} className={styles.tag}>
         <Icon name="database" size={12} />
         <span className={styles.tagName} dir="auto">
           {name}
         </span>
         {v ? (
-          <span className={styles.segment} data-part="version">
+          <span className={styles.segment} data-part="version" data-status={tone}>
             {v}
           </span>
         ) : null}
@@ -81,27 +102,25 @@ export function DatasetVersionTag({
           </span>
         ))}
       </Tag>
-      {prod ? <ProductionFlag className={styles.prod} /> : null}
     </span>
   );
 }
 
 export function DatasetChip({ entry, slug }: { entry: RunDatasetEntry; slug: string | undefined }) {
   const v = versionLabel(entry.version);
-  const prod = v !== null && isProductionVersion(entry.aliases);
-  // the alias the run resolved by, unless it is production (the Flag says that)
-  const alias = entry.alias && !(prod && entry.alias === PRODUCTION) ? entry.alias : null;
+  const tone = v !== null ? versionTone(entry.status, entry.aliases) : 'none';
+  // the alias the run resolved by, unless it is production (the green version says that)
+  const alias = entry.alias && !(tone === 'production' && entry.alias === PRODUCTION) ? entry.alias : null;
   const body = (
     <>
       <Icon name="database" size={12} />
       <span className={styles.name}>{entry.dataset}</span>
       {v ? (
-        <span className={styles.version} data-part="version">
+        <span className={styles.version} data-part="version" data-status={tone}>
           {v}
         </span>
       ) : null}
       {alias ? <span className={styles.alias}>{alias}</span> : null}
-      {prod ? <ProductionFlag className={styles.chipProd} /> : null}
       {entry.items != null ? (
         <span className={styles.count}>{entry.items.toLocaleString('en-US')} items</span>
       ) : null}

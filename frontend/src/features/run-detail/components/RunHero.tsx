@@ -469,6 +469,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
                 <DatasetVersionTag
                   name={run.dataset_name}
                   version={run.dataset_version}
+                  status={run.dataset_version_status}
                   aliases={run.dataset_aliases}
                 />
               </MetaLink>

@@ -750,10 +750,13 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   raw JSON) wherever it is a table cell (dataset items, analysis targets, run Items).
 
 - **Dataset with version** (`DatasetVersionTag`, cv4 B1, X2; the first qym's "name | v1 | prod"): the dataset tag
-  shows the name, then the version after a 1px `--border-strong` divider, mono, 600, `--accent-primary`, written "v" +
-  number; each other alias follows after its own divider in muted mono. When the `production` alias points at that
-  version, the success `Flag` "Production" with the `star` icon follows the tag (outside it: a Flag has no fill). The
-  runs table Dataset column and the run header Dataset fact use it. A run with no version shows only the name.
+  shows the name, then the version after a 1px `--border-strong` divider, mono, 600, written "v" + number; each other
+  alias follows after its own divider in muted mono. The version's colour is its status (owner, 13 Nov), with the
+  tones of the datasets `VersionBadge`: `--success` when the `production` alias points at that version, `--info` for a
+  published version, `--warning` for a draft, `--text-secondary` when the status is not known. No "Production" word or
+  Flag follows the tag: the tooltip names the status. The API sends the status as `dataset_version_status` (and
+  `status` in each `datasets` entry). The runs table Dataset column, the run header Dataset fact and the hero dataset
+  chip of a union run use it. A run with no version shows only the name.
 
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
   (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for

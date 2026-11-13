@@ -103,7 +103,7 @@ from qym_platform.services.run_lifecycle import (
     stop_requested_job_ids,
 )
 from qym_platform.services.eval_run_linking import strip_launch_token
-from qym_platform.services.run_datasets import datasets_for_runs
+from qym_platform.services.run_datasets import datasets_for_runs, version_status_value
 from qym_platform.services.run_experiment_panel import run_experiment_panel
 from qym_platform.services.run_origin import (
     experiment_refs_and_versioning,
@@ -1611,9 +1611,11 @@ def _dataset_version_info_map(
     """Resolve the dataset version label and aliases for a batch of runs.
 
     Keyed by ``dataset_version_id``; returns ``{"dataset_version": "v4",
-    "dataset_aliases": ["production"], "dataset_slug": "ragbench"}``. Aliases reflect
+    "dataset_aliases": ["production"], "dataset_slug": "ragbench",
+    "dataset_version_status": "published"}``. Aliases reflect
     what currently points at that version, so a run shows ``production`` when its
-    version is the live production one. ``dataset_slug`` is set while the managed
+    version is the live production one. ``dataset_version_status`` is the version's
+    status now (``draft``, ``published`` or ``archived``): the UI colours the version by it. ``dataset_slug`` is set while the managed
     dataset exists, so the run page can link to it. Runs with no
     ``dataset_version_id`` simply aren't in the map.
     """
@@ -1649,6 +1651,7 @@ def _dataset_version_info_map(
         v = versions.get(vid)
         info[vid] = {
             "dataset_version": v.version if v else None,
+            "dataset_version_status": version_status_value(v),
             "dataset_aliases": sorted(aliases_by_version.get(vid, [])),
             "dataset_slug": dataset_slugs.get(v.dataset_id) if v else None,
         }
@@ -1668,6 +1671,7 @@ def _union_dataset_summary(
             {
                 "dataset": e["dataset"],
                 "version": e["version"],
+                "status": e.get("status"),
                 "aliases": e["aliases"],
                 "items": e["items"],
                 "deleted": e["deleted"],
@@ -1685,6 +1689,7 @@ def _dataset_version_fields(
     entry = info_map.get(run.dataset_version_id) if run.dataset_version_id else None
     return {
         "dataset_version": entry["dataset_version"] if entry else None,
+        "dataset_version_status": entry.get("dataset_version_status") if entry else None,
         "dataset_aliases": entry["dataset_aliases"] if entry else [],
         "dataset_slug": entry.get("dataset_slug") if entry else None,
     }
@@ -1885,6 +1890,7 @@ def _live_run_summary(
         "task_name": run.task,
         "dataset_name": run.dataset,
         "dataset_version": (dataset_fields or {}).get("dataset_version"),
+        "dataset_version_status": (dataset_fields or {}).get("dataset_version_status"),
         "dataset_aliases": (dataset_fields or {}).get("dataset_aliases", []),
         "model_name": _strip_model_provider(run.model or ""),
         "status": run.status.value
@@ -2587,6 +2593,9 @@ def legacy_list_runs(
             "dataset_version": _dataset_version_fields(r, dataset_info)[
                 "dataset_version"
             ],
+            "dataset_version_status": _dataset_version_fields(r, dataset_info)[
+                "dataset_version_status"
+            ],
             "dataset_aliases": _dataset_version_fields(r, dataset_info)[
                 "dataset_aliases"
             ],
@@ -2988,6 +2997,7 @@ def _build_models_runs_data(
                 "task_name": run.task,
                 "dataset_name": run.dataset,
                 "dataset_version": _dsv["dataset_version"],
+                "dataset_version_status": _dsv["dataset_version_status"],
                 "dataset_aliases": _dsv["dataset_aliases"],
                 "model_name": _strip_model_provider(run.model or ""),
                 "samples": int(getattr(run, "samples", 1) or 1),
@@ -4325,6 +4335,7 @@ def _run_payloads(
                     "task_name": run.task,
                     "dataset_name": run.dataset,
                     "dataset_version": _dsv["dataset_version"],
+                    "dataset_version_status": _dsv["dataset_version_status"],
                     "dataset_aliases": _dsv["dataset_aliases"],
                     # Managed dataset behind the run (None for a label-only run).
                     "dataset_slug": _dsv["dataset_slug"],
@@ -4596,6 +4607,7 @@ def list_deleted_runs(
                 "task": r.task,
                 "dataset": r.dataset,
                 "dataset_version": _dsv["dataset_version"],
+                "dataset_version_status": _dsv["dataset_version_status"],
                 "dataset_aliases": _dsv["dataset_aliases"],
                 "model": r.model,
                 "trace_stats": r.run_metadata.get("trace_stats")

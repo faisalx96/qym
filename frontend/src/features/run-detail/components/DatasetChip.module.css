@@ -53,13 +53,8 @@ a.chip:focus-visible {
 .version {
   padding-inline-start: 6px;
   border-inline-start: 1px solid var(--border-strong);
-  color: var(--accent-primary);
-}
-
-.chipProd {
-  flex: none;
-  min-block-size: 0;
-  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .alias {
@@ -84,8 +79,9 @@ a.chip:focus-visible {
 }
 
 /* DatasetVersionTag (cv4 B1, the first qym's "contracts-gold | v1 | prod"): the version and every other alias are
-   segments inside the dataset tag, each after a thin divider; the version is green. The production version adds the
-   star Production Flag after the tag. The name wraps inside its column, never cut (C218). */
+   segments inside the dataset tag, each after a thin divider. The version's colour is its status: green production,
+   blue published, amber draft (the tones of the datasets VersionBadge); no word follows the tag. The name wraps
+   inside its column, never cut (C218). */
 .versioned {
   display: inline-flex;
   flex-wrap: wrap;
@@ -118,11 +114,23 @@ a.chip:focus-visible {
 
 .segment[data-part='version'] {
   font-weight: 600;
-  color: var(--accent-primary);
+  color: var(--text-secondary);
 }
 
-.prod {
-  flex: none;
+/* The version's status colour, in the tag and in the hero chip. */
+.segment[data-status='production'],
+.version[data-status='production'] {
+  color: var(--success);
+}
+
+.segment[data-status='published'],
+.version[data-status='published'] {
+  color: var(--info);
+}
+
+.segment[data-status='draft'],
+.version[data-status='draft'] {
+  color: var(--warning);
 }
 
 .none {
