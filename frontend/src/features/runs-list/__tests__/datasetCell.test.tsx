@@ -48,7 +48,12 @@ describe('DatasetCell', () => {
     expect(screen.getByText('support-tickets')).toBeInTheDocument();
     expect(versionOf()).toHaveTextContent('v3');
     expect(versionOf()).toHaveAttribute('data-status', 'production');
-    expect(tag.querySelector('[data-part="alias"]')).toHaveTextContent('staging');
+    // cv5 M3: an alias reads as an alias (the at-sign of the run label) and its tooltip says what it is
+    expect(tag.querySelector('[data-part="alias"]')).toHaveTextContent('@staging');
+    expect(tag.querySelector('[data-part="alias"]')).toHaveAttribute(
+      'title',
+      'Alias staging: a name that points at v3',
+    );
     // the status is the version's colour and the tooltip, never a word after the tag
     expect(screen.queryByText('Production')).toBeNull();
     expect(screen.queryByText('production')).toBeNull();

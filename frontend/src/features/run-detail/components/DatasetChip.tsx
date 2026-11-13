@@ -55,6 +55,27 @@ export function versionTone(
   return 'none';
 }
 
+/**
+ * The tooltip of an alias segment (cv5 M3): an alias is a name that points at a version, so the person can tell
+ * "baseline" from a version or a status.
+ */
+export function aliasTitle(alias: string, version: string | null): string {
+  return `Alias ${alias}: a name that points at ${version ?? 'a version'}`;
+}
+
+/**
+ * An alias segment: the at-sign of the run label (`name@alias`, for example `retail-text2sql@baseline`), then the
+ * alias, with the tooltip that says what an alias is.
+ */
+function AliasText({ alias }: { alias: string }) {
+  return (
+    <>
+      <span className={styles.at}>@</span>
+      {alias}
+    </>
+  );
+}
+
 /** A dataset with its version: database glyph, name, divider, version in its status colour, other aliases. */
 export function DatasetVersionTag({
   name,
@@ -97,8 +118,8 @@ export function DatasetVersionTag({
           </span>
         ) : null}
         {others.map((a) => (
-          <span key={a} className={styles.segment} data-part="alias">
-            {a}
+          <span key={a} className={styles.segment} data-part="alias" title={aliasTitle(a, v)}>
+            <AliasText alias={a} />
           </span>
         ))}
       </Tag>
@@ -120,7 +141,11 @@ export function DatasetChip({ entry, slug }: { entry: RunDatasetEntry; slug: str
           {v}
         </span>
       ) : null}
-      {alias ? <span className={styles.alias}>{alias}</span> : null}
+      {alias ? (
+        <span className={styles.alias} data-part="alias" title={aliasTitle(alias, v)}>
+          <AliasText alias={alias} />
+        </span>
+      ) : null}
       {entry.items != null ? (
         <span className={styles.count}>{entry.items.toLocaleString('en-US')} items</span>
       ) : null}
