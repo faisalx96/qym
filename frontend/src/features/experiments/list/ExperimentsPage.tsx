@@ -136,6 +136,8 @@ export function ExperimentsPage() {
             </span>
           }
           secondary={x.description}
+          // cv5 Z8: the description wraps to two lines, no "…" cut
+          secondaryLines={2}
         />
       ),
     },
@@ -158,6 +160,11 @@ export function ExperimentsPage() {
       id: 'environments',
       header: 'Environments',
       width: 200,
+      // cv5 Z8: the list of environment names wraps and gives width back (flex, down to 160px), so at 1440px the Name
+      // column keeps room for its description
+      flex: true,
+      minWidth: 160,
+      wrap: true,
       priority: 2,
       cell: (x) => <EnvironmentNames ids={x.environment_ids} envById={envById} />,
     },
@@ -416,9 +423,8 @@ function EnvironmentNames({ ids, envById }: { ids: string[]; envById: Map<string
     })
     .join(', ');
   return (
-    <span className={styles.truncate} title={text}>
-      {text}
-    </span>
+    // the column wraps (cv5 Z8); the title keeps the full list for a clamped cell
+    <span title={text}>{text}</span>
   );
 }
 
