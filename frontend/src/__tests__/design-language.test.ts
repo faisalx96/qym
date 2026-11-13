@@ -339,11 +339,18 @@ describe('primitive module contracts', () => {
     );
   });
 
-  it('IconButton tile (row actions) is the strong tint at rest and the tile hover tint on hover (cv4 F9)', () => {
+  it('IconButton tile (row actions) is the tile tint at rest and the tile hover tint on hover (cv4 F9, cv5 H2)', () => {
     const css = ui('IconButton');
     const rest = css.split('.iconAction[data-tile] {')[1]?.split('}')[0] ?? '';
-    expect(rest).toContain('color-mix(in srgb, var(--tile-tone) var(--tint-strong), transparent)');
-    expect(rest).toContain('width: var(--control-height)');
+    expect(rest).toContain('color-mix(in srgb, var(--tile-tone) var(--tint-tile), transparent)');
+    expect(rest).toContain('width: var(--tile-size)');
+    // one small step back from cv4 (24px, 14px glyph), still over before cv4 (20px, 12px glyph)
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    const px = (t: string) => Number(tokens.match(new RegExp(`${t}:\\s*(\\d+)px`))?.[1]);
+    expect(px('--tile-size')).toBeGreaterThan(20);
+    expect(px('--tile-size')).toBeLessThan(24);
+    expect(px('--tile-glyph')).toBeGreaterThan(12);
+    expect(px('--tile-glyph')).toBeLessThan(14);
     expect(css).toMatch(/\.iconAction\[data-tile\]\[data-hovered\],[^{]*\{[^}]*var\(--tint-tile-hover\)/);
     // a disabled tile stays readable: no fade
     const off = css.split('.iconAction[data-tile][data-disabled] {')[1]?.split('}')[0] ?? '';

@@ -15,7 +15,7 @@ export interface IconButtonProps extends Omit<
   tone?: 'default' | 'danger' | 'approve' | 'reject' | 'meta';
   /** Shows the "copied" green glyph state. */
   active?: boolean;
-  /** Row action tile: a 24px square (`--control-height`, 14px glyph, cv4 F9), the tone's strong tint at rest and a stronger tint on
+  /** Row action tile: a 22px square (`--tile-size`, 13px glyph, cv5 H2), the tone's tile tint at rest and a stronger tint on
    * hover (the runs Actions column). */
   tile?: boolean;
   /** Why the button is locked: shown on hover and read with the button (A-22, the Button recipe). */

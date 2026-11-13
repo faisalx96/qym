@@ -34,11 +34,11 @@
   transform: rotate(180deg);
 }
 
-/* cv4 F5: one dropdown look. Hover and open are the Runs filter trigger's (BarTrigger): a brighter fill on hover, the
-   accent edge while the menu is open. */
+/* cv4 F5: one dropdown look, the Runs filter trigger's (BarTrigger). cv5 H1: a well. Hover = the edge one step
+   stronger and the fill one step up; the accent edge while the menu is open. */
 .trigger[data-hovered] {
   border-color: var(--control-edge-hover);
-  background: var(--bg-active);
+  background: var(--control-fill-hover);
 }
 
 .trigger[aria-expanded='true'] {

@@ -337,7 +337,7 @@ export function JsonHighlight({ text }: { text: string }) {
         if (m[2]) out.push(m[2]);
       } else if (m[3] !== undefined)
         out.push(
-          <span key={i++} className={styles.tokLit}>
+          <span key={i++} className={m[3] === 'null' ? styles.tokNull : styles.tokLit}>
             {m[3]}
           </span>,
         );

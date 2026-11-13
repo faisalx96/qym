@@ -936,7 +936,7 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
   });
 
   it('C-06: history times are sans', () => {
-    expect(rule(src('features/datasets/detail/LineageTab.module.css'), '.logTime')).not.toContain(
+    expect(rule(src('ui/Timeline/Timeline.module.css'), '.when')).not.toContain(
       '--font-mono',
     );
     expect(rule(src('features/datasets/item/ItemHistoryTab.module.css'), '.when')).not.toContain(
@@ -1930,34 +1930,42 @@ describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
     expect(rule(ui('Select'), ".trigger[aria-expanded='true']")).toMatch(
       /border-color:\s*var\(--accent-primary\)/,
     );
-    expect(rule(ui('Select'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--bg-active\)/);
-    expect(rule(ui('MultiSelect'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--bg-active\)/);
+    expect(rule(ui('Select'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--control-fill-hover\)/);
+    expect(rule(ui('MultiSelect'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--control-fill-hover\)/);
   });
 
-  it('F6: a neutral button has a fill, an edge and a softer label at rest; hover brightens all three', () => {
+  it('F6, cv5 H1: a neutral button is raised by fill and a top highlight, never outlined; hover lightens it', () => {
     for (const t of [
       '--button-fill:',
       '--button-fill-hover:',
-      '--button-edge:',
-      '--button-edge-hover:',
+      '--button-fill-pressed:',
+      '--button-highlight:',
+      '--button-depth:',
       '--button-text:',
     ])
       expect(tokens(), t).toContain(t);
-    const rest = rule(ui('Button'), '.button');
+    const css = ui('Button');
+    const rest = rule(css, '.button');
     expect(rest).toMatch(/background:\s*var\(--button-fill\)/);
-    expect(rest).toMatch(/box-shadow:\s*inset 0 0 0 1px var\(--button-edge\)/);
+    expect(rest).toMatch(/box-shadow:\s*var\(--button-depth\)/);
     expect(rest).toMatch(/color:\s*var\(--button-text\)/);
-    const hover = rules(ui('Button'), '.button[data-hovered]').join('\n');
-    expect(hover).toMatch(/var\(--button-fill-hover\)/);
-    expect(hover).toMatch(/var\(--button-edge-hover\)/);
+    expect(rules(css, '.button[data-hovered]').join('\n')).toMatch(/var\(--button-fill-hover\)/);
+    // depth by fill, not by outline (owner 2026-11-13): no variant draws a 1px edge ring
+    expect(css).not.toMatch(/inset 0 0 0 1px/);
+    expect(tokens()).not.toContain('--button-edge');
   });
 
-  it('F7/F8: field-like controls share --control-fill; a report body lifts it', () => {
+  it('F7/F8, cv5 H1: wells share --control-fill and a translucent hairline; a report body makes the fills relative', () => {
     for (const n of ['Select', 'MultiSelect', 'TextField', 'SegmentedControl', 'Textarea'])
       expect(ui(n), n).not.toMatch(/background:\s*var\(--bg-elevated\)/);
     expect(rule(ui('SegmentedControl'), '.segmented')).toMatch(/background:\s*var\(--control-fill\)/);
     expect(rule(ui('TextField'), '.control')).toMatch(/background:\s*var\(--control-fill\)/);
-    expect(rule(ui('ReportSection'), '.body')).toMatch(/--control-fill:\s*var\(--bg-hover\)/);
+    expect(tokens()).toMatch(/--control-fill:\s*var\(--bg-elevated\)/);
+    expect(tokens()).toMatch(/--control-edge:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
+    const body = rule(ui('ReportSection'), '.body');
+    expect(body).toMatch(/--control-fill:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
+    expect(body).toMatch(/--button-fill:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
+    expect(body).not.toMatch(/--control-edge/);
   });
 
   it('F10: three report title roles in three steps (section > subsection > card title)', () => {
@@ -2076,5 +2084,64 @@ describe('cv4 family G (fix round after the merge): cross-agent recipes', () => 
 
   it('Y15: a standalone "Read the guide" link is a TextLink', () => {
     none(grep(shippedTsx, /<Link [^>]*>Read the guide<\/Link>/));
+  });
+});
+
+describe('cv5 family H (owner review 2026-11-13): shared controls and elements', () => {
+  it('H6: a button never ends with a chevron; a menu trigger is BarTrigger (the dropdown trigger look)', () => {
+    // Call sites that the cv5 area agents convert (orchestrator: remove each entry after its merge).
+    const pending = [
+      'features/runs-list/ColumnsMenu.tsx',
+      'features/runs-list/FilterBar.tsx',
+      'features/runs-list/FiltersPopover.tsx',
+      'features/run-detail/components/latency/StepTimings.tsx',
+      'features/datasets/detail/ItemsTab.tsx',
+      'features/feedback/FeedbackListPage.tsx',
+      'features/compare/components/items/ItemsToolbar.tsx',
+    ];
+    none(grep(shippedTsx, /iconEnd=\{<Icon name="chevron-down"/, pending));
+    expect(src('ui/MultiSelect/MultiSelect.tsx')).toContain('export function BarTrigger');
+  });
+
+  it('H4: ToggleChips are wells with the control radius (not pills) and a check box for the on state', () => {
+    const css = stripComments(src('ui/ToggleChips/ToggleChips.module.css'));
+    const chip = rule(css, '.chip');
+    expect(chip).toMatch(/border-radius:\s*var\(--control-radius\)/);
+    expect(chip).toMatch(/background:\s*var\(--control-fill\)/);
+    expect(css).not.toContain('--radius-pill');
+    expect(src('ui/ToggleChips/ToggleChips.tsx')).toContain('aria-pressed={pressed}');
+  });
+
+  it('H5: the Change log is the shared Timeline; no local timeline markup', () => {
+    const tsx = src('features/datasets/detail/LineageTab.tsx');
+    expect(tsx).toContain('<Timeline');
+    expect(tsx).not.toContain('styles.rail');
+    const css = src('features/datasets/detail/LineageTab.module.css');
+    expect(css).not.toMatch(/\.rail\b|\.mark\b/);
+  });
+
+  it('H3: every JSON view takes the --json-* syntax colours (strings green, keys blue)', () => {
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    expect(tokens).toMatch(/--json-string:\s*var\(--accent-primary\)/);
+    expect(tokens).toMatch(/--json-key:\s*var\(--accent-secondary\)/);
+    const viewer = stripComments(src('ui/JsonViewer/JsonViewer.module.css'));
+    for (const [cls, t] of [
+      ['.key', 'key'],
+      ['.string', 'string'],
+      ['.number', 'number'],
+      ['.boolean', 'boolean'],
+      ['.null', 'null'],
+      ['.punct', 'punct'],
+    ] as const)
+      expect(rule(viewer, cls), cls).toContain(`var(--json-${t})`);
+    const editor = stripComments(src('features/datasets/components/FieldEditor.module.css'));
+    for (const [cls, t] of [
+      ['.tokKey', 'key'],
+      ['.tokStr', 'string'],
+      ['.tokNum', 'number'],
+      ['.tokLit', 'boolean'],
+      ['.tokNull', 'null'],
+    ] as const)
+      expect(rule(editor, cls), cls).toContain(`var(--json-${t})`);
   });
 });

@@ -5,7 +5,6 @@ import { useDelayedPending } from '@/lib/pending';
 import {
   EmptyState,
   ErrorState,
-  Icon,
   type IconName,
   LinkButton,
   Section,
@@ -13,6 +12,7 @@ import {
   Tag,
   Text,
   Card,
+  Timeline,
 } from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
@@ -142,27 +142,22 @@ export function LineageTab({
       </Section>
       <Section title="Change log" description="Every change to this dataset’s versions, oldest first.">
         {changes.length ? (
-          // cv4 E10: a timeline, one mark on the rail for each event, then the time, what happened and who did it
+          // cv4 E10, cv5 H5: the shared Timeline, one mark on the rail for each event, then the time, what happened
+          // and, directly after it (cv4 Y8), who did it
           <Card>
-            <ol className={styles.log}>
-              {changes.map((c) => (
-                <li key={c.id} className={styles.event} data-kind={c.change_summary.type}>
-                  <time className={styles.when} dateTime={c.created_at} title={formatDate(c.created_at)}>
-                    {formatTableDate(c.created_at)}
-                  </time>
-                  <span className={styles.rail} aria-hidden="true">
-                    <span className={styles.mark} data-tone={changeTone(c)}>
-                      <Icon name={CHANGE_ICON[c.change_summary.type] ?? 'edit'} size={12} />
-                    </span>
-                  </span>
-                  {/* cv4 Y8: the person follows the event text, so one event reads as one line */}
-                  <span className={styles.what}>
-                    <span>{withVersions(describeChange(c, byId))}</span>
-                    <UserPill user={c.actor} />
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <Timeline
+              aria-label="Change log"
+              items={changes.map((c) => ({
+                key: c.id,
+                time: formatTableDate(c.created_at),
+                timeTitle: formatDate(c.created_at),
+                dateTime: c.created_at,
+                icon: CHANGE_ICON[c.change_summary.type] ?? 'edit',
+                tone: changeTone(c) ?? 'neutral',
+                title: withVersions(describeChange(c, byId)),
+                meta: <UserPill user={c.actor} />,
+              }))}
+            />
           </Card>
         ) : (
           <Text variant="sm" tone="muted">

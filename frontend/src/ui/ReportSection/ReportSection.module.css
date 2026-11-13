@@ -61,11 +61,14 @@
 .body {
   --card-bg: var(--bg-elevated);
   --card-edge: transparent;
-  /* cv4 F7/F8: controls on an inset card are one step brighter than the card, with the stronger edge, so a search
-     field, a select or a segmented control looks the same as on the page ground (the sticky nav reference). */
-  --control-fill: var(--bg-hover);
-  --control-edge: var(--border-default);
-  --control-edge-hover: var(--border-strong);
+  /* cv5 H1: depth by fill. A body holds controls on its own ground (--bg-surface) and on inset cards (--bg-elevated):
+     translucent fills put a well one step and a button two steps over whichever ground it sits on, so a control never
+     melts into a card and is never brighter on the section ground than before cv4. */
+  --control-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --control-fill-hover: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --button-fill: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --button-fill-hover: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --button-fill-pressed: color-mix(in srgb, var(--text-primary) 4%, transparent);
 
   /* The containing block for visually hidden (absolute) text, which must never widen the page. */
   position: relative;
