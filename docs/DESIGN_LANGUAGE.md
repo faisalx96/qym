@@ -246,7 +246,9 @@ preselected.
     well and `--button-depth` (a 1px highlight on its top inner edge, `--button-highlight` at 9% so that it is
     visible, and a 1px dark line under it). On the page ground it is at least as defined as a well beside it. It
     has no edge ring. Its label is `--button-text`, a step under `--text-primary` (cv4 F6: "this white text is too
-    bright"). Hover = `--button-fill-hover` and the primary label; pressed = `--button-fill-pressed` and no highlight;
+    bright"). Hover = `--button-fill-hover` and the primary label; a button whose panel is open (`aria-expanded`,
+    for example Columns, Density, Display) keeps that hover look while the panel is open, in every variant (cv5 Y14);
+    pressed = `--button-fill-pressed` and no highlight;
     never the reverse (a resting fill brighter than its hover reads as already pressed, round 8). A neutral button
     next to a dropdown still reads as a button: by its fill, its highlight and its label weight, not by an outline.
   - **Tinted** buttons (accent, meta, danger) are a tint fill only: `--tint-soft` at rest, `--tint-strong` on hover; no
