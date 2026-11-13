@@ -1,6 +1,7 @@
 /**
  * Categories. Round 10 (the first qym's two views): Cards (the default) shows up to three metadata keys at once, each
- * value a small card (average, items, latency, a bar with the overall average tick); checkboxes turn keys on and off.
+ * value a small card (average, items, latency, a bar with the overall average tick); toggle chips turn keys on and
+ * off (cv5 M1).
  * Compare ranks the values of one key in rows. Both views list the best value first (cv4 C2-5: no sort control).
  * Clicking a value filters the page.
  */
@@ -8,7 +9,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatLatency, formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
 import { applyQueryUpdates } from '@/lib/url-state';
-import { Button, Card, CardTitle, Checkbox, CountTile, EmptyState, SegmentedControl, Select } from '@/ui';
+import { Button, Card, CardTitle, CountTile, EmptyState, SegmentedControl, Select, ToggleChips } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   barFraction,
@@ -53,7 +54,7 @@ export function CategoriesTab() {
   }, [keyList, metric, model.rows]);
   const asked = params.get('category');
   const selectedKey = asked && keys.some((k) => k.key === asked) ? asked : fallbackKey;
-  // Cards show up to three keys at first (the widest spread first); the checkboxes add or remove keys.
+  // Cards show up to three keys at first (the widest spread first); the toggle chips add or remove keys.
   const [shownKeysState, setShownKeys] = useState<string[] | null>(null);
   const shownKeys = useMemo(() => {
     if (shownKeysState) return shownKeysState;
@@ -128,19 +129,14 @@ export function CategoriesTab() {
           )
         ) : null}
         {view === 'cards' && keys.length > 1 ? (
-          <span className={styles.keyToggles} role="group" aria-label="Categories shown">
-            {keys.map((k) => (
-              <Checkbox
-                key={k.key}
-                isSelected={shownKeys.includes(k.key)}
-                onChange={(on) =>
-                  setShownKeys(on ? [...shownKeys, k.key] : shownKeys.filter((x) => x !== k.key))
-                }
-              >
-                {keyLabel(k)}
-              </Checkbox>
-            ))}
-          </span>
+          // cv5 M1: the keys are on/off chips, all visible, each with its number of values; one stays on
+          <ToggleChips
+            aria-label="Categories shown"
+            options={keys.map((k) => ({ value: k.key, label: k.key, count: k.count }))}
+            value={shownKeys}
+            onChange={setShownKeys}
+            min={1}
+          />
         ) : null}
         {view === 'cards' && shownKeys.length ? (
           // cv4 Y4: the key sits right after the field toggles, next to what it explains
@@ -165,7 +161,7 @@ export function CategoriesTab() {
                 fmt={fmt}
               />
             ))}
-          {!shownKeys.length ? <p className={panel.note}>Tick a category to show its values.</p> : null}
+          {!shownKeys.length ? <p className={panel.note}>Turn on a category to show its values.</p> : null}
         </div>
       ) : breakdown ? (
         <KeyCard
