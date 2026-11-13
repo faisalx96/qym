@@ -45,7 +45,6 @@ import {
   type RunStatus,
   type Column,
   Flag,
-  StatusMark,
   ModelTag,
   TaskTag,
   DatasetTag,
@@ -266,7 +265,9 @@ export function TrashPage() {
         <span className={styles.stack}>
           <span>{r.project_name}</span>
           {r.project_archived ? (
-            <StatusMark tone="warning" shape="pause" label="Project archived" data-status="archived" />
+            <Flag icon="archive" data-status="archived">
+              Project archived
+            </Flag>
           ) : null}
         </span>
       ),

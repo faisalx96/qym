@@ -1,5 +1,5 @@
 import type { LiveMetricSpec } from '@/api/live';
-import type { CardTone, StatusShape } from '@/ui';
+import type { CardTone } from '@/ui';
 
 interface MixSegment {
   value: string;
@@ -14,28 +14,27 @@ interface MixSegment {
 }
 
 /**
- * A diagnosis value's colour and status mark by meaning (B-07): success or accent = green check, warning = orange dot,
- * danger = red cross, info (Refused) = grey pause, meta (Unanswerable) = darker grey ring.
+ * A diagnosis value's colour by meaning (B-07), for its StateTag and its mix swatch: success or accent = green,
+ * warning = orange, danger = red, info (Refused) = grey, meta (Unanswerable) = grey (a darker swatch).
  */
 export function verdictOf(specTone: unknown): {
   tone: 'success' | 'warning' | 'danger' | 'neutral';
-  shape: StatusShape;
   dark: boolean;
 } {
   switch (specTone) {
     case 'success':
     case 'accent':
-      return { tone: 'success', shape: 'check', dark: false };
+      return { tone: 'success', dark: false };
     case 'warning':
-      return { tone: 'warning', shape: 'dot', dark: false };
+      return { tone: 'warning', dark: false };
     case 'danger':
-      return { tone: 'danger', shape: 'cross', dark: false };
+      return { tone: 'danger', dark: false };
     case 'info':
-      return { tone: 'neutral', shape: 'pause', dark: false };
+      return { tone: 'neutral', dark: false };
     case 'meta':
-      return { tone: 'neutral', shape: 'ring', dark: true };
+      return { tone: 'neutral', dark: true };
     default:
-      return { tone: 'neutral', shape: 'ring', dark: false };
+      return { tone: 'neutral', dark: false };
   }
 }
 

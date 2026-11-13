@@ -44,7 +44,7 @@ import {
   useToast,
   type Column,
   type RowAction,
-  StatusMark,
+  Flag,
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
 import { cellPreviewText, type RowDensity } from '../lib/cellPreview';
@@ -394,7 +394,9 @@ export function ItemsTab({
                   {item.item_id}
                 </span>
                 {item.state === 'disabled' ? (
-                  <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+                  <Flag icon="ban" data-status="disabled">
+                    Disabled
+                  </Flag>
                 ) : null}
               </span>
             ),

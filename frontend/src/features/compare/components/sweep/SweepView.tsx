@@ -14,7 +14,7 @@ import {
   Select,
   Tag,
   Text,
-  StatusMark,
+  StateTag,
 } from '@/ui';
 import { useSearchParamsState } from '@/lib/url-state';
 import { getMetadataCategoryValues } from '@/features/run-detail/lib/rowMeta';
@@ -316,11 +316,11 @@ export function SweepView() {
           role="status"
         >
           {basis.stat.verdict === 'improved' ? (
-            <StatusMark tone="success" shape="full" label="Improved" />
+            <StateTag tone="success">Improved</StateTag>
           ) : basis.stat.verdict === 'regressed' ? (
-            <StatusMark tone="danger" shape="cross" label="Regressed" />
+            <StateTag tone="danger">Regressed</StateTag>
           ) : (
-            <StatusMark tone="neutral" shape="ring" label="Within noise" />
+            <StateTag tone="neutral">Within noise</StateTag>
           )}
           <div>
             <Text variant="md" weight={650} data-part="sweep-verdict-title">

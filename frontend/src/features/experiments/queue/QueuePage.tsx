@@ -49,11 +49,12 @@ import {
   useToast,
   type Column,
   Card,
-  StatusMark,
+  Flag,
   SearchField,
   StatStrip,
 } from '@/ui';
 import { DataTable } from '@/ui';
+import { HealthTag } from '@/features/environments/cells';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { experimentPath } from '../paths';
 import { CancelSplitDialog, type CancelSplitDialogProps } from './CancelSplitDialog';
@@ -264,11 +265,7 @@ export function QueuePage() {
           <span className={styles.envCell}>
             {j.environment_name}
             {env && env.health_status && env.health_status !== 'ok' ? (
-              env.health_status === 'error' ? (
-                <StatusMark tone="danger" shape="cross" label="Error" />
-              ) : (
-                <StatusMark tone="neutral" shape="ring" label="Unknown" />
-              )
+              <HealthTag status={env.health_status} />
             ) : null}
           </span>
         );
@@ -610,15 +607,11 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
             {env.name}
           </Text>
           {!env.is_active ? (
-            <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+            <Flag icon="ban" data-status="disabled">
+              Disabled
+            </Flag>
           ) : null}
-          {healthy ? (
-            <StatusMark tone="success" shape="check" label="Healthy" />
-          ) : env.health_status === 'error' ? (
-            <StatusMark tone="danger" shape="cross" label="Error" />
-          ) : (
-            <StatusMark tone="neutral" shape="ring" label="Unknown" />
-          )}
+          <HealthTag status={env.health_status} />
         </div>
         <StatStrip
           aria-label={`Jobs on ${env.name}`}

@@ -6,7 +6,7 @@ export const CONTROL_HINT = 'Only the experiment’s creator or a project manage
 export interface JobSplit {
   /** Queued or blocked here: removed immediately, nothing reaches the service. */
   here: QueueJob[];
-  /** Submitted or running on the service: hard-stopped there. */
+  /** Sent to or running on the service: hard-stopped there. */
   remote: QueueJob[];
   /** Not allowed, or already stopping: left alone. */
   skipped: QueueJob[];
@@ -54,7 +54,7 @@ export function jobSections(split: JobSplit): SplitSection[] {
     },
     {
       key: 'remote',
-      title: 'Submitted or running on the service',
+      title: 'Sent or running on the service',
       body: 'Will be hard-stopped; partial results stay on the linked run.',
       items: split.remote.map(jobLabel),
     },

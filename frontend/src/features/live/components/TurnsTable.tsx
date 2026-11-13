@@ -3,10 +3,10 @@ import type { LiveFilters, LiveMetricSpec, LiveTurnRow, LiveTurnsPage } from '@/
 import { formatHeaderDate, formatTableDate } from '@/lib/dates';
 import { formatDuration, formatPercentValue } from '@/lib/format';
 import { applyQueryUpdates, useSearchParamsState } from '@/lib/url-state';
-import { DataTable, EmptyState, ScoreValue, StatusMark, Tag, type Column, type SortState } from '@/ui';
+import { DataTable, EmptyState, ScoreValue, StateTag, Tag, type Column, type SortState } from '@/ui';
 import { listedScoreColumns } from '../lib/filters';
 import { diagnosisSpec, mixSegments, verdictOf } from '../lib/mix';
-import { PassFailMark } from './turn/Evidence';
+import { PassFailTag } from './turn/Evidence';
 import styles from '../turns.module.css';
 
 interface TurnsTableProps {
@@ -93,7 +93,9 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
             className={styles.diagnosisCell}
             title={[label?.label ?? row.label, row.label_reason].filter(Boolean).join(' · ')}
           >
-            <StatusMark tone={v.tone} shape={v.shape} label={label?.label ?? row.label ?? '—'} dir="auto" />
+            <StateTag tone={v.tone} dir="auto">
+              {label?.label ?? row.label ?? '—'}
+            </StateTag>
             {row.label_reason ? (
               <span className={styles.reason} dir="auto" title={row.label_reason}>
                 {row.label_reason}
@@ -112,7 +114,7 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
       sort: { key: `metric:${spec.metric_name}`, first: 'desc' },
       cell: (row) =>
         spec.score_type === 'boolean' ? (
-          <PassFailMark
+          <PassFailTag
             value={
               row.scores[spec.metric_name]?.skipped ? null : (row.scores[spec.metric_name]?.score_numeric ?? null)
             }

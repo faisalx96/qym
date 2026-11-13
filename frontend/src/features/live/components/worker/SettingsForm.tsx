@@ -19,7 +19,7 @@ import {
   ModelTag,
   NumberField,
   Select,
-  StatusMark,
+  StateTag,
   Switch,
   Text,
   TextField,
@@ -72,21 +72,17 @@ function SettingsSection({
         title={
           <span className={styles.inline}>
             {title}
-            <StatusMark
-              tone={status === 'running' ? 'info' : status === 'failed' ? 'danger' : 'neutral'}
-              shape={status === 'running' ? 'orbit' : status === 'failed' ? 'cross' : 'ring'}
-              label={
-                status === 'running'
-                  ? 'Running'
-                  : status === 'pending'
-                    ? 'Pending'
-                    : status === 'failed'
-                      ? 'Failed'
-                      : status === 'waiting'
-                        ? 'Waiting for version 1'
-                        : status
-              }
-            />
+            <StateTag tone={status === 'running' ? 'info' : status === 'failed' ? 'danger' : 'neutral'}>
+              {status === 'running'
+                ? 'Running'
+                : status === 'pending'
+                  ? 'Pending'
+                  : status === 'failed'
+                    ? 'Failed'
+                    : status === 'waiting'
+                      ? 'Waiting for version 1'
+                      : status}
+            </StateTag>
           </span>
         }
         summary={

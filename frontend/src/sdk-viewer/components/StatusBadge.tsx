@@ -1,15 +1,19 @@
-import { StatusMark, type StatusShape, type StatusTone } from '@/ui/StatusMark';
+import { StateTag, type StateTagTone } from '@/ui/Tag';
 import type { RowStatus } from '../types';
 import { STATUS_LABEL } from './format';
 
-const FIGURE: Record<RowStatus, [StatusTone, StatusShape]> = {
-  completed: ['success', 'full'],
-  in_progress: ['info', 'orbit'],
-  pending: ['neutral', 'ring'],
-  error: ['danger', 'cross'],
+/** An item's result or progress as a StateTag: Done green, Running blue, Pending grey, Error red. */
+const TONE: Record<RowStatus, StateTagTone> = {
+  completed: 'success',
+  in_progress: 'info',
+  pending: 'neutral',
+  error: 'danger',
 };
 
 export function StatusBadge({ status }: { status: RowStatus }) {
-  const [tone, shape] = FIGURE[status];
-  return <StatusMark tone={tone} shape={shape} label={STATUS_LABEL[status]} data-status={status} />;
+  return (
+    <StateTag tone={TONE[status]} data-status={status}>
+      {STATUS_LABEL[status]}
+    </StateTag>
+  );
 }

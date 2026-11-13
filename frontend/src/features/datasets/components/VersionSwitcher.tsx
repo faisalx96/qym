@@ -100,6 +100,10 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
   );
 }
 
+/**
+ * A version's mark: Production is the success star Flag, Draft is the warning dot StatusMark. A published version that
+ * is not in use shows nothing (status rules, 2026-11-12), so callers must not wrap the badge in a separator of its own.
+ */
 export function VersionBadge({ version }: { version: DatasetVersion }) {
   if (isProduction(version))
     return (
@@ -108,7 +112,7 @@ export function VersionBadge({ version }: { version: DatasetVersion }) {
       </Flag>
     );
   if (version.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
-  return <StatusMark tone="info" shape="full" label="Published" />;
+  return null;
 }
 
 export function AliasTags({ version }: { version: DatasetVersion }) {

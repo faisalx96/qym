@@ -24,7 +24,7 @@ vi.mock('@/features/shell/ProjectContext', () => ({
 }));
 
 it.each([
-  ['running', true, 'Cancelling', 'warning'],
+  ['running', true, 'Cancelling', 'info'],
   ['running', false, 'Running', 'info'],
   ['cancelled', true, 'Cancelled', 'warning'],
 ] as const)('shows job status %s with cancel_requested=%s', async (status, cancel_requested, label, tone) => {
@@ -82,7 +82,7 @@ it('confirms cancelling a job and shows cancelling after the worker refresh', as
   await user.click(within(dialog).getByRole('button', { name: 'Cancel job' }));
   expect((await screen.findByText('Cancelling')).closest('[data-shape]')).toHaveAttribute(
     'data-tone',
-    'warning',
+    'info',
   );
   expect(writes(view.fetch)).toHaveLength(1);
   expect(writes(view.fetch)[0]![0]).toContain(`/jobs/${job.id}/cancel?source=`);

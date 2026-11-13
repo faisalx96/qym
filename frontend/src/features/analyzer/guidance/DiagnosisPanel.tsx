@@ -33,9 +33,7 @@ import {
   TextField,
   useToast,
   Flag,
-  StatusMark,
-  type StatusShape,
-  type StatusTone,
+  type TextTone,
 } from '@/ui';
 import {
   approvalSignature,
@@ -60,7 +58,8 @@ interface Draft {
   value: CatalogDraft;
 }
 
-type SaveBadge = { tone: StatusTone; shape: StatusShape; label: string };
+/** A save state is plain text (status rules 2026-11-12): muted, the error colour only for a failed save. */
+type SaveBadge = { tone: TextTone; label: string };
 
 const clone = (draft: CatalogDraft): CatalogDraft => ({
   ...draft,
@@ -225,16 +224,14 @@ function DiagnosisEditor({
   }
 
   const badge: SaveBadge = save.isPending
-    ? { tone: 'info', shape: 'orbit', label: 'Saving…' }
+    ? { tone: 'muted', label: 'Saving…' }
     : conflict
-      ? { tone: 'danger', shape: 'cross', label: 'Conflict' }
+      ? { tone: 'danger', label: 'Conflict' }
       : failure
-        ? { tone: 'danger', shape: 'cross', label: 'Save failed' }
+        ? { tone: 'danger', label: 'Save failed' }
         : showProblems && hasProblems
-          ? { tone: 'warning', shape: 'dot', label: 'Taxonomy required' }
-          : dirty
-            ? { tone: 'warning', shape: 'dot', label: 'Unsaved changes' }
-            : { tone: 'success', shape: 'full', label: 'Saved' };
+          ? { tone: 'warning', label: 'Taxonomy required' }
+          : { tone: 'muted', label: dirty ? 'Unsaved changes' : 'Saved' };
 
   function addCategory() {
     const name = newName.trim();
@@ -306,13 +303,9 @@ function DiagnosisEditor({
         hideSave={!canManage}
         meta={
           conflict || failure || (showProblems && hasProblems) ? (
-            <StatusMark
-              tone={badge.tone}
-              shape={badge.shape}
-              label={badge.label}
-              role="status"
-              data-testid="catalog-save-state"
-            />
+            <Text variant="sm" as="span" tone={badge.tone} role="status" data-testid="catalog-save-state">
+              {badge.label}
+            </Text>
           ) : undefined
         }
       />

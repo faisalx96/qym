@@ -49,9 +49,9 @@ describe('mixSegments', () => {
     ]);
   });
 
-  it('maps Refused and Unanswerable to grey status marks', () => {
-    expect(verdictOf('info')).toEqual({ tone: 'neutral', shape: 'pause', dark: false });
-    expect(verdictOf('meta')).toEqual({ tone: 'neutral', shape: 'ring', dark: true });
+  it('maps Refused and Unanswerable to grey state tags', () => {
+    expect(verdictOf('info')).toEqual({ tone: 'neutral', dark: false });
+    expect(verdictOf('meta')).toEqual({ tone: 'neutral', dark: true });
   });
 
   it('puts unknown labels last with neutral tone and includes them in the denominator', () => {

@@ -15,12 +15,15 @@ import {
 import { formatDateTime } from '../format';
 import styles from './maintenance.module.css';
 
-/** status → tone and figure. Paused waits for Start (hourglass), so it reads apart from Cancelled (pause). */
+/**
+ * status → tone and figure. Paused waits for an admin to press Start (hourglass), so it reads apart from Cancelled
+ * (pause). Cancel requested is still working (info orbit) until the job stops.
+ */
 const FIGURE: Record<JobStatus, [StatusTone, StatusShape]> = {
   queued: ['neutral', 'ring'],
   running: ['info', 'orbit'],
   paused: ['warning', 'hourglass'],
-  cancel_requested: ['warning', 'orbit'],
+  cancel_requested: ['info', 'orbit'],
   cancelled: ['warning', 'pause'],
   succeeded: ['success', 'full'],
   failed: ['danger', 'cross'],

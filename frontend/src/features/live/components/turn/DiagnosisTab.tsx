@@ -1,7 +1,7 @@
 import type { LiveTurnDetail } from '@/api/live';
 import { formatDurationMs } from '@/lib/format';
 import { modelSeriesOf } from '@/features/runs-list/model';
-import { Disclosure, EmptyState, Icon, KeyValueGrid, ModelTag, StatusMark, Tag, Text, TextBlock } from '@/ui';
+import { Disclosure, EmptyState, Icon, KeyValueGrid, ModelTag, StateTag, Tag, Text, TextBlock } from '@/ui';
 import {
   booleanOf,
   chartsOf,
@@ -122,12 +122,9 @@ export function DiagnosisTab({
               {(['dialect_ok', 'validator_ok'] as const).map((key) => {
                 const ok = booleanOf(notes[key]);
                 return ok === null ? null : (
-                  <StatusMark
-                    key={key}
-                    tone={ok ? 'success' : 'danger'}
-                    shape={ok ? 'check' : 'cross'}
-                    label={`${key === 'dialect_ok' ? 'Dialect' : 'Validator'} ${ok ? 'OK' : 'failed'}`}
-                  />
+                  <StateTag key={key} tone={ok ? 'success' : 'danger'}>
+                    {`${key === 'dialect_ok' ? 'Dialect' : 'Validator'} ${ok ? 'OK' : 'failed'}`}
+                  </StateTag>
                 );
               })}
             </div>

@@ -34,7 +34,7 @@ import {
   Tag,
   Text,
   useToast,
-  StatusMark,
+  Flag,
 } from '@/ui';
 import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
@@ -402,14 +402,19 @@ function plural(n: number) {
   return `${n} item${n === 1 ? '' : 's'}`;
 }
 
-/** An item whose state differs between the two versions: Active → Disabled (spec A2-46). */
+/**
+ * An item whose state differs between the two versions: Active → Disabled (spec A2-46). Both sides are grey Flags
+ * (status rules: an on/off state is a grey Flag). Disabled carries the ban glyph, Active has no glyph.
+ */
 function StateDiff({ before, after }: { before?: 'active' | 'disabled'; after?: 'active' | 'disabled' }) {
   const name = (v?: string) => (v === 'disabled' ? 'Disabled' : 'Active');
   const badge = (v?: string) =>
     v === 'disabled' ? (
-      <StatusMark tone="warning" shape="pause" label={name(v)} data-status="disabled" />
+      <Flag icon="ban" data-status="disabled">
+        {name(v)}
+      </Flag>
     ) : (
-      <StatusMark tone="success" shape="full" label={name(v)} />
+      <Flag data-status="active">{name(v)}</Flag>
     );
   return (
     <div

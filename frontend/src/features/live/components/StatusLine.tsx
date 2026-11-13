@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { modelSeriesOf } from '@/features/runs-list/model';
 import { formatRelative } from '@/lib/format';
-import { Card, ModelTag, StatusMark, Tag, Text } from '@/ui';
+import { Card, ModelTag, StateTag, Tag, Text } from '@/ui';
 import { staleText, statusTime } from '../lib/stale';
-import { workerStateMark } from './worker/format';
+import { workerStateTag } from './worker/format';
 import styles from '../live.module.css';
 
 export function StatusLine({
@@ -34,6 +34,7 @@ export function StatusLine({
       ? Object.values(worker.judges).filter((judge): judge is string => typeof judge === 'string')
       : [];
   const lastTurn = status.last_turn_at ? statusTime(status.last_turn_at, now) : '—';
+  const workerState = control ? workerStateTag(control.state, control.settings_version_applied) : null;
   return (
     <Card
       compact
@@ -41,25 +42,17 @@ export function StatusLine({
       data-live-stale={stale ? 'true' : 'false'}
     >
       <div className={styles.status} data-stale={stale ? '' : undefined}>
-        <StatusMark
-          tone={stale ? 'danger' : 'info'}
-          shape={stale ? 'cross' : 'orbit'}
-          label={stale ? 'Stale' : 'Running'}
-        />
+        {stale ? <StateTag tone="danger">Stale</StateTag> : <StateTag tone="info">Running</StateTag>}
         {stale ? null : <span>{staleText(status, now)}</span>}
         <span title={formatRelative(status.last_turn_at, now)}>
           Last turn <span className={styles.time}>{lastTurn}</span>
         </span>
-        {control ? (
+        {workerState ? (
           <span className={styles.inline}>
             <Text as="span" tone="muted">
               Worker
             </Text>
-            <StatusMark
-              tone={workerStateMark(control.state)[0]}
-              shape={workerStateMark(control.state)[1]}
-              label={`${control.state}${control.settings_version_applied != null ? ` v${control.settings_version_applied}` : ''}`}
-            />
+            <StateTag tone={workerState.tone}>{workerState.label}</StateTag>
           </span>
         ) : null}
         {errors > 0 ? (

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDialog';
 import { SlotEditorDialog } from '@/features/environments/SlotEditor';
-import { Button, Checkbox, Icon, LinkButton, StatusMark, Tag } from '@/ui';
+import { HealthTag } from '@/features/environments/cells';
+import { Button, Checkbox, Icon, LinkButton, Tag } from '@/ui';
 import { titleCase } from '../../lib/format';
 import { environmentPath } from '../../paths';
 import { pairCount, PSEUDO, pointerToFieldName, unitsFor } from '../model';
@@ -37,13 +38,10 @@ function EnvironmentTags({
 }) {
   return (
     <span className={styles.envTags}>
-      {env.health_status === 'ok' ? (
-        <StatusMark tone="success" shape="check" label="Healthy" />
-      ) : env.health_status === 'error' ? (
-        <StatusMark tone="danger" shape="cross" label="Error" title={env.health_error ?? undefined} />
-      ) : (
-        <StatusMark tone="neutral" shape="ring" label="Unknown" />
-      )}
+      <HealthTag
+        status={env.health_status}
+        title={env.health_status === 'error' ? (env.health_error ?? undefined) : undefined}
+      />
       {!env.current_schema_id ? <Tag tone="warning">No schema</Tag> : null}
       {env.model_slots?.needs_confirmation ? <Tag tone="warning">Needs LLM grouping</Tag> : null}
       {checking ? <Tag tone="info">Checking schema…</Tag> : null}

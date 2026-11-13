@@ -5,7 +5,7 @@ import type { Project } from '@/api/types';
 import { canCreateProject } from '@/api/me';
 import { projectPath } from '@/app/routes';
 import { KEYS, writeLocal } from '@/lib/storage';
-import { Icon, Identicon, SearchField, StatusMark, Text } from '@/ui';
+import { Flag, Icon, Identicon, SearchField, Text } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { CreateProjectDialog } from '../dialogs';
 import styles from './ProjectSwitcher.module.css';
@@ -60,7 +60,9 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
           {current ? <Identicon seed={current.slug} cell={3} gap={1} /> : <Icon name="folder" size={14} />}
           <span className={styles.triggerName}>{current ? current.name : 'Projects'}</span>
           {current && !current.is_active ? (
-            <StatusMark tone="warning" shape="pause" label="Archived" data-status="archived" />
+            <Flag icon="archive" data-status="archived">
+              Archived
+            </Flag>
           ) : null}
           <Icon name="chevron-down" size={12} />
         </AriaButton>
@@ -106,7 +108,9 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
                       </Text>
                     </span>
                     {!p.is_active ? (
-                      <StatusMark tone="warning" shape="pause" label="Archived" data-status="archived" />
+                      <Flag icon="archive" data-status="archived">
+                        Archived
+                      </Flag>
                     ) : null}
                     {current?.id === p.id ? <Icon name="check" size={12} /> : null}
                   </button>

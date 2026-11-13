@@ -113,7 +113,7 @@ describe('overview service and history blocks', () => {
     expect(marks[0]).toHaveTextContent('Failed Failed120ms');
     expect(marks[1]).toHaveTextContent('Search OK0ms');
     expect(marks[2]).toHaveTextContent('Other Skipped—');
-    expect(marks[2]?.querySelector('[data-shape="pause"][data-tone="neutral"]')).not.toBeNull();
+    expect(marks[2]?.querySelector('[data-kind="state"]:not([data-tone])')).not.toBeNull();
     expect(canaries[0]?.canary).toBe('search');
     expect(screen.queryByText('No canary results for this day')).toBeNull();
   });
@@ -257,14 +257,16 @@ describe('overview service and history blocks', () => {
       </MemoryRouter>,
     );
     const open = container.querySelector('[data-live-day="2026-10-28"]')!;
-    expect(open.querySelector('[data-tone="danger"][data-shape="cross"]')).toHaveAttribute(
+    expect(open.querySelector('[data-kind="state"][data-tone="danger"]')).toHaveAttribute(
       'title',
       'Open day, worker not heard from',
     );
     expect(open).toHaveTextContent('Stale');
-    expect(container.querySelector('[data-live-day="2026-10-30"] [data-shape="full"]')).not.toBeNull();
     expect(
-      container.querySelector('[data-live-day="2026-10-29"] [data-tone="warning"][data-shape="hourglass"]'),
+      container.querySelector('[data-live-day="2026-10-30"] [data-kind="state"][data-tone="success"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-live-day="2026-10-29"] [data-kind="state"][data-tone="warning"]'),
     ).not.toBeNull();
   });
 
@@ -277,14 +279,16 @@ describe('overview service and history blocks', () => {
     );
     expect(screen.getByRole('columnheader', { name: 'Quality' })).toBeInTheDocument();
     const gap = container.querySelector('[data-live-day="2026-10-29"]')!;
-    expect(gap.querySelector('[data-tone="warning"][data-shape="hourglass"]')).toHaveAttribute(
+    expect(gap.querySelector('[data-kind="state"][data-tone="warning"]')).toHaveAttribute(
       'title',
       'Worker gap: 7200s between heartbeats',
     );
     const running = container.querySelector('[data-live-day="2026-10-28"]')!;
-    expect(running.querySelector('[data-shape="orbit"]')).not.toBeNull();
+    expect(running.querySelector('[data-kind="state"][data-tone="info"]')).toHaveTextContent('Running');
     expect(running.querySelector('[data-mark][data-tone="danger"]')).not.toBeNull();
-    expect(container.querySelector('[data-live-day="2026-10-30"] [data-shape="full"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-live-day="2026-10-30"] [data-kind="state"][data-tone="success"]'),
+    ).toHaveTextContent('Closed');
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'days pagination' })).getByRole('button', {
         name: 'Next page',

@@ -4,9 +4,9 @@ import styles from './badges.module.css';
 
 const STATUS_FIGURE: Record<FeedbackStatus, [StatusTone, StatusShape]> = {
   draft: ['warning', 'dot'],
-  new: ['neutral', 'hourglass'],
+  new: ['warning', 'hourglass'],
   accepted: ['success', 'check'],
-  planned: ['neutral', 'hourglass'],
+  planned: ['neutral', 'ring'],
   done: ['success', 'full'],
   declined: ['danger', 'cross'],
 };
@@ -30,7 +30,7 @@ export const KIND_LABEL: Record<RelatedKind, string> = {
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function StatusBadge({ status }: { status: FeedbackStatus }) {
-  const [tone, shape] = STATUS_FIGURE[status];
+  const [tone, shape] = STATUS_FIGURE[status] ?? ['neutral', 'ring'];
   return <StatusMark tone={tone} shape={shape} label={status} data-status={status} />;
 }
 

@@ -8,7 +8,7 @@ import { projectPath, runPath } from '@/app/routes';
 import { fetchRunsPage } from '@/api/dashboard';
 import { api } from '@/lib/http';
 import { KEYS, writeLocal } from '@/lib/storage';
-import { Icon, Identicon, StatusMark, type IconName } from '@/ui';
+import { Flag, Icon, Identicon, type IconName } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { CreateProjectDialog } from '../dialogs';
 import { GLOBAL_NAV, PLATFORM_NAV, projectNav } from './nav';
@@ -349,12 +349,9 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
                           )}
                           <span className={styles.optionLabel}>{e.label}</span>
                           {e.archived ? (
-                            <StatusMark
-                              tone="warning"
-                              shape="pause"
-                              label="Archived"
-                              data-status="archived"
-                            />
+                            <Flag icon="archive" data-status="archived">
+                              Archived
+                            </Flag>
                           ) : null}
                           {e.hint ? <span className={styles.hint}>{e.hint}</span> : null}
                         </li>
