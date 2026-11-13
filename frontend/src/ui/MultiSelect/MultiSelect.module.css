@@ -273,6 +273,10 @@
     background var(--transition-fast),
     border-color var(--transition-fast);
 }
+/* cv5 Z2: a bar Select with `showValue="always"` reads "label · value" at rest; its cap fits both on one line. */
+.trigger[data-variant='bar'][data-show-value] {
+  max-width: 320px;
+}
 .trigger[data-variant='bar'] .triggerLabel {
   font-weight: 500;
 }

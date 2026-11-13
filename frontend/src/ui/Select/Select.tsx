@@ -153,6 +153,9 @@ export function Select<T extends SelectItem>({
           label={label}
           value={isSet || (showValue === 'always' && selected) ? selected?.label : undefined}
           active={isSet}
+          // cv5 Z2: a trigger that always shows its value ("Sort · Index", "Analyzer model · gpt-4o-mini") takes the
+          // wider label-and-value cap, so the pair stays on one line without a cut
+          data-show-value={showValue === 'always' ? '' : undefined}
         />
       ) : (
         <AriaButton className={styles.trigger} data-wrap={wrapValue ? '' : undefined}>

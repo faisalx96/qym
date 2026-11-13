@@ -249,7 +249,6 @@ export const StepTimings = forwardRef<
                   <Button
                     variant="accent"
                     icon={<Icon name="download" size={12} />}
-                    iconEnd={<Icon name="chevron-down" size={12} />}
                   >
                     Export
                   </Button>

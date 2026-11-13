@@ -264,7 +264,7 @@ preselected.
   Make live, Send, Start conversation, Add model and Run backfill commit, so they are primary. A dialog footer that
   runs a job reads Cancel (neutral), Preview (accent), the commit (primary). Create draft always carries the plus
   Icon. A confirm that disables, deletes or revokes is danger. An export or download only reads data: on a page it is
-  the accent button with the `download` Icon; a format menu is a menu trigger (`BarTrigger`, cv5 H6). A Download
+  the accent button with the `download` Icon, also when it opens a format menu (no chevron, cv5 Z1). A Download
   in a dialog footer is the primary.
   **Button rules (C049, C234, C136, C166, C232; enforced in `design-language.test.ts`):** Delete, Archive, Disable and
   Revoke are `danger` everywhere; Cancel is neutral; the red `× Clear n` of a filter bar stays red (owner, Oct 26 and
@@ -325,16 +325,19 @@ preselected.
   end, a `MultiSelect` with its checkboxes. `triggerVariant="bar"` puts the label inside the trigger (no label above it).
   No native `<select>` anywhere, the page size of `Pagination` and the card-mode sort of `DataTable` included.
   A bar `Select` for a choice that always has a value (a sort order, a view) passes `showValue="always"`, so the
-  trigger reads "Sort · Index" at the default too; a filter whose first item means "all" shows only its label until
+  trigger reads "Sort · Index" at the default too, and its cap is 320px (a filter trigger stays at 168px) so the label
+  and the value stay on one line ("Analyzer model · gpt-4o-mini", cv5 Z2); a filter whose first item means "all" shows only its label until
   set (cv4 Y6). A bar trigger takes the accent only when the choice differs from the page default; a `MultiSelect`
   whose default is a selection (all metrics) says so with `isDefault` (cv4 Y12).
   **Menu trigger (cv5 H6, owner 2026-11-13: "We have these drop-down styles and then we have these. This is
   inconsistent").** A control that opens a menu or a panel of choices and ends with a chevron is a menu trigger, and
   every menu trigger has the one dropdown trigger look (a well). A `Button` never ends with a chevron. A trigger that
-  is not a `Select` or a `MultiSelect` (More filters, Columns, an export format menu, a Popover of filter fields) is
-  `BarTrigger` from `ui`: `<Popover label="Columns" trigger={<BarTrigger label="Columns" />}>…</Popover>`; with a set
+  is not a `Select` or a `MultiSelect` (More filters, a Popover of filter fields) is
+  `BarTrigger` from `ui`: `<Popover label="More filters" trigger={<BarTrigger label="More filters" />}>…</Popover>`; with a set
   value it reads `More filters · 2` and takes the accent (`value`, `active`). Enforced in `design-language-v3.test.ts`
-  (no `Button` with an end `chevron-down`).
+  (no `Button` with an end `chevron-down`). A button with a glyph that opens a menu or a panel stays a
+  button and loses the chevron (cv5 Z1): Export with its `download` glyph, Columns and Density with `list`, Display with
+  `menu`, a menu of actions with `more` ("⋯ Actions", "⋯ All matching").
 
 - **Multiselect** (`MultiSelect`): content in fixed order: search, actions
   (Select all and None/Clear, neutral 20px buttons at rest, round 10), then `--dropdown-option-height` option rows.
@@ -350,7 +353,10 @@ preselected.
   radius; never a pill) with a 14px check box at its start: an empty box is off, the accent box with a check is on, so
   the state reads without colour. On adds an accent wash (`--tint-soft`, `--tint-strong` on hover) and the primary
   label; off keeps the secondary label and reads as a control you can switch on. Each chip is a button with
-  `aria-pressed`; `min` keeps the last options on (the chip says "Keep at least one on"). It is not a `Tag` (static, no
+  `aria-pressed`; `min` keeps the last options on (the chip says "Keep at least one on"). A visible label before the
+  chips names the group through `aria-labelledby` (cv5 Z4); `aria-label` only when no label is on screen. Uses (cv5):
+  analyzer metrics (`min={1}`), input mapping keys ("Full value" first, it excludes the key chips), run page
+  Categories keys (`count`, `min={1}`). It is not a `Tag` (static, no
   box) and not a `SegmentedControl` (one track, one choice). More options, or a filter, is a `MultiSelect`.
 
 - **Timeline** (`Timeline`, cv5 H5, owner 2026-11-13 on the dataset Change log: "I really like this. I want this to be
@@ -361,7 +367,16 @@ preselected.
   `meta` (the person, a count); no row lines, the rail starts at the first mark and ends at the last. Selectable
   (`onSelect`, `activeKey`): the whole row is the hit area, hover is `--row-hover`, the open row `--row-selected` with
   a primary title and `aria-current`; row `actions` stay above the hit area. Do not build a local event list with
-  its own rail.
+  its own rail. Options (cv5 Z3): `revealActions` shows a row's actions only on row hover, on focus inside the row,
+  for the selected row and while its menu is open (always on touch); a caller never hides them with its own
+  selectors. `markAlign="start"` puts the mark, the time and the actions on the title line of a two-line row (a
+  version with its meta under the title). A toned dot is solid in its tone; on the selected fill a toned mark keeps
+  an 80% edge and an opaque ground, so a success or accent mark stays visible on the accent wash. `rowData` puts
+  `data-*` hooks on a row. Users (cv5 Z6): the dataset Change log, the rule versions, the item History tab (one
+  timeline newest first: each revision with its diff in `detail` and Revert in `actions`, then the event that drafted
+  its version), the feedback request History, the run review log (the state words stay `StateTag`s), the Live worker
+  settings versions (Restore in `actions`) and the review revision history. A list with two lines per row uses
+  `markAlign="start"`.
 
 - **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
   underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and
@@ -402,7 +417,9 @@ preselected.
 - **Action rail** (auto-analysis, `features/analyzer/blocks/ActionRail`): a page-level sticky bottom bar of
   `--action-rail-height`, always mounted, with a fixed primary-button width (`--action-primary-width`) so
   label changes never move neighbours. Exactly one accent button per state. The sections above it reserve
-  their space (`--results-slot-min-height`) so state changes insert nothing above existing content.
+  their space (`--results-slot-min-height`) so state changes insert nothing above existing content. No rule above
+  the bar (cv5 K5). The analyzer model is a labelled bar `Select` with `showValue="always"` ("Analyzer model ·
+  gpt-4o-mini"); with the prompt pane on screen the bar has no Prompt preview button.
 
 - **Pagination** (`Pagination`): every paginated view uses it. Borderless
   rounded-square icon buttons for First, Previous, Next, Last around a direct
@@ -591,14 +608,27 @@ preselected.
   the table's current row (`DataTable activeKey`); the row actions stay while the pane is open.
 
 - **Auto-analysis, Analyze run** (cv4 D, Y1, Y3, Y11, Y12, Y16): Setup, Targets and Results are `ReportSection`s. Setup
-  holds four `Subsection`s in reading order: Run and metrics (the facts, then one `MultiSelect` "Metrics", neutral at
-  its default "all"), Input mapping (always open; the labels take one fixed column, so every select starts at the same
+  holds four `Subsection`s in reading order: Run and metrics (the facts, then the metrics as `ToggleChips` after a muted
+  "Metrics" label that names the group, `min={1}`, cv5 K1), Input mapping (always open; the labels take one fixed column, so every select starts at the same
   x), Prompt contents, Instructions. Targets is a `DataTable` (report stripe, regular rows, the pager in its footer, a
   row click opens the prompt preview); its count is a `CountTile` right after the section title. A repeat run without
   a pass lists its passes as rows between hairlines, each with its Analyze action at the row end. **Switch group:** the
   group label (`--font-sm`, 600, muted) sits above its switches, one switch per line; in a one-row copy (a drawer) the
   pairs are `--space-xl` apart, so each label reads with its own switch. The sticky rail's notice is shown in full and
-  wraps; it is never cut with "…".
+  wraps; it is never cut with "…". **Input mapping keys (cv5 K2):** a field with a single value shows only its
+  dropdown; a JSON field shows a `ToggleChips` row under it, "Full value" first (on by default), then one chip for each
+  top-level key; a key on switches Full value off, and the reverse.
+  **Prompt pane (cv5 K3):** the panel surface of the report sections, sticky at `--space-md`, its height measured to
+  the viewport bottom, with its own scroll. The head shows the title, the char count `Tag kind="count"`, a quiet status
+  text (Updating / N lines added · M removed / No change to the prompt) and Copy. Lines added by the last change get
+  the accent at `--tint-soft` behind the text, with no motion. With the pane on screen a target row click shows that
+  target in the pane (`DataTable activeKey`); the eye tile is only for the narrow layout (drawer).
+  **Rule versions (cv5 L2, L3, Z5):** the Rules tab's versions are a selectable `Timeline`, newest first, with
+  `revealActions` (the row menu) and `markAlign="start"`. Each version has an icon mark: draft `edit` (warning),
+  production `star` (success), another released version `check` (neutral). A released version is read-only: the
+  header shows the grey lock Flag "Read-only" and one action, "Create draft from vN" (primary), or "Open draft vN"
+  (neutral) when a draft exists. A draft header shows only Publish. Generate rules and its sources show only on an
+  editable draft.
 
 - **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
   body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
@@ -680,7 +710,8 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   `info` active now (the word Running is always `info`, also Live and Checking), `success` good (Healthy, OK, Pass,
   Configured, Approved in a review log), `warning` needs a look (Not configured, Not received, Gap), `danger` bad
   (Error, Fail, Stale, Rejected in a review log), neutral unknown, skipped, not yet or no verdict. A priority keeps its
-  own scale.
+  own scale. The environment of a live source is a StateTag (cv5 M2): production `success`, staging or another
+  pre-production environment `info`, an unknown name neutral (`features/live/lib/environment.ts`).
 
 - **Flag** (`Flag`): a fact attached to an item that is not a lifecycle (Private test set, Restricted, View only,
   Duplicate, Needs examples, Irreversible, a purge due date). An optional 12px glyph and the word in the tone
@@ -711,7 +742,10 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   **Counts.** A count that describes a block sits right after its title as `Tag kind="count"` (danger for failures);
   never muted text at the far end. A signed change count (+5, −1, ~2) is `Tag kind="count"` in its tone; a phrase with
   a count stays sans. Inside a meta line or a sentence, a count is plain text; no bold number. AI confidence is the
-  phrase N% confidence in muted text.
+  phrase N% confidence in muted text. A problem count in a line of counts is a count tag in its tone, the neutral
+  counts stay text (cv5 M5, Z7): the Experiments Jobs cell reads "ok/total", then "N failed" (danger) and "N cancelled"
+  (warning); the experiment Queue strip "N queued · N running" then "N blocked" (warning); a remote queue head "N
+  orphans" and "N stale" (warning). A problem count of 0 is not shown: no colour on a count that is not a problem.
   **Overflow** (`MoreTag`; Q02 C, Q49 C): hidden tags in a row end with a "+N more" count-tag button (run header
   settings with a chevron, table tag cells); in the run scope bar it is a passive `Tag kind="count"`. A list that
   grows says "Show N more" (`Button`, see "Show more"). A dialog list ends with plain "and N more".
@@ -803,7 +837,8 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   published version, `--warning` for a draft, `--text-secondary` when the status is not known. No "Production" word or
   Flag follows the tag: the tooltip names the status. The API sends the status as `dataset_version_status` (and
   `status` in each `datasets` entry). The runs table Dataset column, the run header Dataset fact and the hero dataset
-  chip of a union run use it. A run with no version shows only the name.
+  chip of a union run use it. A run with no version shows only the name. An alias segment is written `@alias` (the
+  at-sign of the run label, in `--text-dim`), with the tooltip "Alias X: a name that points at vN" (cv5 M3).
 
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
   (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for
@@ -851,7 +886,8 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   first priority-1 column, or any element with `data-row-primary`, `RunName` links included) turns `--accent-primary`
   while the row is hovered or holds keyboard focus, never underlined; **flush corner (cv4 F2):** under a toolbar (or
   over a footer) the body is square at that edge, so the header row and the rows sit flush with the card edge; `rowState` draws a 3px rail (error, warn, live,
-  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are centred, header and values, in every
+  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table; `live` is
+  not drawn when a Status column already shows the live step (Experiments, cv5 M4). Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are centred, header and values, in every
   table (C236: the default for numeric column types in `ui/DataTable/model.ts`; `align` overrides it); a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
   `--table-group-height` band above the header unless the table passes `groupBand={false}` (the runs, run Items,
@@ -1272,7 +1308,14 @@ admin, projects, overview, models) use the `constrained` container, capped at
 `--page-max-w` and centred in the content area (cv4 F1, owner 2026-11-12, reverses E-42 "start at the left edge"): on a
 screen wider than the cap the free space is equal at both sides. A feature does not set its own `margin` on a
 constrained page. Profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
-`fullWidth` with their own layout. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
+`fullWidth` with their own layout. Auto-analysis with a run open, viewport ≥ 1500 px, is one stable workspace with a
+side pane (cv5 K3, Z11): `fullWidth`, two columns on every tab, the tab content at `minmax(0,1fr)` and the prompt pane
+at `clamp(440px, 36%, 760px)`, with a `--space-lg` gap. The pane column belongs to the page shell, so a tab change never
+moves, remounts or scrolls the pane, and the header and the tabs never move. Categories, rules and documents are part
+of the prompt: a save on a guidance tab reloads the pane, which marks the change. On the Rules tab a draft adds one
+quiet line under the pane's target ("The prompt uses the production rules (vN). A draft changes it when you
+publish."), not a banner. Before the run loads, the pane column holds a placeholder pane, so the columns do not move.
+No run open (the project guidance page) or a narrower screen: centred page, no pane, prompt preview in the drawer. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
 
 - **Title and path.** The page title is the page name that the last crumb shows (Dashboard). Project settings is the
   one sanctioned exception: it shows the project name (30-05b). Tabs of one page share one crumb parent: Experiments,

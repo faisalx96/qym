@@ -53,7 +53,7 @@ describe('ReviewHistory', () => {
     const { container } = render(<ReviewLogList events={events} />);
     const entries = within(screen.getByTestId('review-log')).getAllByRole('listitem');
     expect(entries).toHaveLength(3);
-    expect(entries.map((e) => e.querySelector('[class*="entryHead"] > :first-child')?.textContent)).toEqual([
+    expect(entries.map((e) => e.querySelector('[data-action] > :first-child')?.textContent)).toEqual([
       'Submitted',
       'Approved',
       'Approval withdrawn',

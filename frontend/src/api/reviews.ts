@@ -83,8 +83,8 @@ export interface CorrectionRow {
 }
 
 export interface CorrectionHistoryEntry {
-  revision_id: string;
-  revision_number: number;
+  revision_id: string | null;
+  revision_number: number | null;
   actor_source: string;
   actor_user: DsUser | null;
   before_state: Record<string, unknown> | null;

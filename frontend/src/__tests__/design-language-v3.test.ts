@@ -2089,17 +2089,7 @@ describe('cv4 family G (fix round after the merge): cross-agent recipes', () => 
 
 describe('cv5 family H (owner review 2026-11-13): shared controls and elements', () => {
   it('H6: a button never ends with a chevron; a menu trigger is BarTrigger (the dropdown trigger look)', () => {
-    // Call sites that the cv5 area agents convert (orchestrator: remove each entry after its merge).
-    const pending = [
-      'features/runs-list/ColumnsMenu.tsx',
-      'features/runs-list/FilterBar.tsx',
-      'features/runs-list/FiltersPopover.tsx',
-      'features/run-detail/components/latency/StepTimings.tsx',
-      'features/datasets/detail/ItemsTab.tsx',
-      'features/feedback/FeedbackListPage.tsx',
-      'features/compare/components/items/ItemsToolbar.tsx',
-    ];
-    none(grep(shippedTsx, /iconEnd=\{<Icon name="chevron-down"/, pending));
+    none(grep(shippedTsx, /iconEnd=\{<Icon name="chevron-down"/));
     expect(src('ui/MultiSelect/MultiSelect.tsx')).toContain('export function BarTrigger');
   });
 
@@ -2143,5 +2133,114 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
       ['.tokNull', 'null'],
     ] as const)
       expect(rule(editor, cls), cls).toContain(`var(--json-${t})`);
+  });
+});
+
+describe('cv5 family G (fix round after the merge): area recipes', () => {
+  const doc = read(join(SRC, '../../docs/DESIGN_LANGUAGE.md'));
+
+  it('Z3: Timeline reveals row actions and aligns the mark through props, not caller selectors', () => {
+    const css = stripComments(src('ui/Timeline/Timeline.module.css'));
+    expect(css).toContain('.timeline[data-reveal-actions]');
+    expect(css).toContain(".timeline[data-mark-align='start'] .rail");
+    expect(css).toContain(".event[data-active] .mark:not([data-tone='neutral'], [data-dot])");
+    expect(stripComments(src('features/analyzer/guidance/rules.module.css'))).not.toMatch(/\[data-key\]|\[data-active\]/);
+  });
+
+  it('Z6: dated event lists about one entity are the shared Timeline (no local list CSS)', () => {
+    for (const p of [
+      'features/datasets/item/ItemHistoryTab.tsx',
+      'features/feedback/RequestPage.tsx',
+      'features/run-detail/components/RunPanels.tsx',
+      'features/live/components/worker/HistoryBlock.tsx',
+      'features/reviews/DetailPane.tsx',
+    ])
+      expect(src(p), p).toContain('<Timeline');
+    expect(src('features/datasets/item/ItemHistoryTab.module.css')).not.toMatch(/\.versionCard\b|\.revision\b/);
+    expect(src('features/feedback/feedback.module.css')).not.toMatch(/\.eventHead\b|\.events\b/);
+    expect(src('features/run-detail/components/RunPanels.module.css')).not.toMatch(/\.entryHead\b/);
+    expect(src('features/live/worker.module.css')).not.toMatch(/\.versionMeta\b/);
+    expect(src('features/reviews/DetailPane.module.css')).not.toMatch(/\.histWhen\b/);
+  });
+
+  it('Z2: a bar Select that always shows its value has the label-and-value cap; no local stopgap', () => {
+    expect(src('ui/Select/Select.tsx')).toContain("data-show-value={showValue === 'always'");
+    expect(stripComments(src('ui/MultiSelect/MultiSelect.module.css'))).toContain(
+      ".trigger[data-variant='bar'][data-show-value]",
+    );
+    expect(stripComments(src('features/analyzer/blocks/blocks.module.css'))).not.toContain("[data-variant='bar']");
+  });
+
+  it('Z4 / K1: the analyzer metrics are ToggleChips named by the visible Metrics label', () => {
+    const t = src('features/analyzer/blocks/RunHeader.tsx');
+    expect(t).toContain('<ToggleChips');
+    expect(t).toContain('aria-labelledby={metricsLabelId}');
+    expect(t).not.toContain('MultiSelect');
+  });
+
+  it('K5: the analyzer model is a labelled bar Select that always shows its value', () => {
+    const t = src('features/analyzer/blocks/ActionRail.tsx');
+    expect(t).toContain('label="Analyzer model"');
+    expect(t).toContain('showValue="always"');
+    expect(doc).toContain('No rule above\n  the bar (cv5 K5)');
+  });
+
+  it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
+    const t = src('features/analyzer/blocks/PromptPane.tsx');
+    expect(t).toContain('No change to the prompt');
+    expect(t).not.toContain('<Spinner');
+    expect(doc).toContain('**Prompt pane (cv5 K3):**');
+  });
+
+  it('L2 / L3 / Z5: rule versions are a Timeline with icon marks; a released version is read-only', () => {
+    const t = src('features/analyzer/guidance/RulesPanel.tsx');
+    expect(t).toContain('<Timeline');
+    expect(t).toContain("icon: live ? 'star' : v.status === 'draft' ? 'edit' : 'check'");
+    expect(t).toContain('markAlign="start"');
+    expect(t).toContain('Read-only');
+    expect(t).toContain('Create draft from v');
+    expect(doc).toContain('**Rule versions (cv5 L2, L3, Z5):**');
+  });
+
+  it('M2: a live source environment is a StateTag in the environment tone', () => {
+    expect(src('features/live/components/EnvironmentTag.tsx')).toContain('<StateTag');
+    expect(src('features/live/lib/environment.ts')).toContain('export function environmentTone');
+    expect(doc).toContain('The environment of a live source is a StateTag (cv5 M2)');
+  });
+
+  it('M3: a dataset alias reads @alias with its tooltip', () => {
+    expect(src('features/run-detail/components/DatasetChip.tsx')).toContain('Alias ${alias}: a name that points at');
+    expect(doc).toContain('An alias segment is written `@alias`');
+  });
+
+  it('M4: the Experiments table draws no live rail (the Status column shows the step)', () => {
+    expect(src('features/experiments/list/ExperimentsPage.tsx')).not.toContain('rowState');
+    expect(doc).toContain('`live` is\n  not drawn when a Status column already shows the live step');
+  });
+
+  it('M5 / Z7: a problem count in a line of counts is a count tag in its tone; neutral counts stay text', () => {
+    const jobs = src('features/experiments/list/ExperimentsPage.tsx');
+    expect(jobs).toContain('<Tag kind="count" tone="danger" data-count="failed">');
+    expect(jobs).toContain('<Tag kind="count" tone="warning" data-count="cancelled">');
+    const strip = src('features/experiments/detail/QueueStrip.tsx');
+    expect(strip).toContain('<Tag kind="count" tone="warning">');
+    expect(strip).not.toContain('{row.blocked} blocked\n                {row.position');
+    const remote = src('features/experiments/queue/RemoteQueueSection.tsx');
+    expect(remote).not.toContain("· {plural(env.orphan_count, 'orphan')} · {env.stale_count} stale");
+    expect(remote.match(/<Tag kind="count" tone="warning">/g)?.length).toBe(2);
+  });
+
+  it('Z11: with a run open the prompt pane column belongs to the shell, on every tab', () => {
+    const shell = src('features/analyzer/RunShell.tsx');
+    expect(shell).toContain('className={s.paneSlot}');
+    expect(src('features/analyzer/RunAnalyze.tsx')).toContain('createPortal(');
+    expect(stripComments(src('features/analyzer/analyzer.module.css'))).toContain('.shell[data-pane]');
+    expect(src('api/analysis.ts')).toContain('qc.invalidateQueries({ queryKey: PREVIEW_KEY })');
+    expect(doc).toContain('two columns on every tab');
+  });
+
+  it('Z8: the Experiments description wraps to two lines, no cut', () => {
+    expect(src('features/experiments/list/ExperimentsPage.tsx')).toContain('secondaryLines={2}');
+    expect(stripComments(src('ui/DataTable/cells/cells.module.css'))).toContain('.secondary[data-lines]');
   });
 });

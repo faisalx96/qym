@@ -209,8 +209,19 @@ function RemoteEnv({
         </Text>
         <span className={styles.meta}>
           {env.fetched_at ? `fetched ${relTime(env.fetched_at)}` : 'never fetched'}
-          {env.stale ? ' · refreshing' : ''} · {plural(env.orphan_count, 'orphan')} · {env.stale_count} stale
+          {env.stale ? ' · refreshing' : ''}
         </span>
+        {/* cv5 Z7: orphans and stale jobs are problems: count tags in the warning tone, none when the count is 0 */}
+        {env.orphan_count ? (
+          <Tag kind="count" tone="warning">
+            {plural(env.orphan_count, 'orphan')}
+          </Tag>
+        ) : null}
+        {env.stale_count ? (
+          <Tag kind="count" tone="warning">
+            {env.stale_count} stale
+          </Tag>
+        ) : null}
         {env.fetch_error ? <span className={styles.err}>Last refresh failed: {env.fetch_error}</span> : null}
       </div>
       <DataTable

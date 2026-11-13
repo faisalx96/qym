@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { AnalysisConfig } from '@/api/analysis';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
@@ -7,7 +8,7 @@ import { ActionRail } from './blocks/ActionRail';
 import { FieldsMapping } from './blocks/FieldsMapping';
 import { Instructions } from './blocks/Instructions';
 import { PreviewDrawer } from './blocks/PreviewDrawer';
-import { PromptPane } from './blocks/PromptPane';
+import { PromptPane, PromptPanePlaceholder } from './blocks/PromptPane';
 import { ResultsSlot } from './blocks/ResultsSlot';
 import { PromptContents } from './blocks/PromptContents';
 import { RunActions, RunFacts } from './blocks/RunHeader';
@@ -30,6 +31,10 @@ interface Common {
   runner: RunnerState;
   /** Wide screen (cv5 K3): the prompt preview is a fixed pane on the right, not a drawer. */
   pane: boolean;
+  /** cv5 Z11: the shell's pane column; the pane renders into it, so it stays in place on every tab. */
+  paneSlot?: HTMLElement | null;
+  /** cv5 Z11: one quiet line for the pane head (the Rules tab's draft note). */
+  paneNote?: string | null;
 }
 
 /** Skeleton shaped like the real page (Setup block, then ten target rows) so content lands in place. */
@@ -71,8 +76,16 @@ export function RunAnalyze(props: Common) {
   const key = `${runId}:${data.pass ?? ''}`;
   // Remember the last loaded sample (set during render: it is derived from `data`, not a side effect).
   if (ready && (shown?.key !== key || shown.data.rows !== data.rows)) setShown({ key, data });
+  // Before the workspace exists the pane column holds a quiet placeholder, so the columns never move (cv5 Z11).
+  const placeholder = (state: 'loading' | 'pass' | 'error') =>
+    props.pane && props.paneSlot ? createPortal(<PromptPanePlaceholder state={state} />, props.paneSlot) : null;
   if (data.isError)
-    return <ErrorState error={data.error} title="Couldn’t load this run" onRetry={data.refetch} />;
+    return (
+      <>
+        <ErrorState error={data.error} title="Couldn’t load this run" onRetry={data.refetch} />
+        {placeholder('error')}
+      </>
+    );
   if (data.isPending || !data.run) {
     const held = shown;
     if (held)
@@ -81,14 +94,34 @@ export function RunAnalyze(props: Common) {
           <Workspace key={held.key} {...props} data={held.data} />
         </Dimmed>
       );
-    return skeleton ? <LoadingLayout /> : null;
+    return (
+      <>
+        {skeleton ? <LoadingLayout /> : null}
+        {placeholder('loading')}
+      </>
+    );
   }
   if (data.needsPass)
-    return <PassPicker slug={props.slug} runId={runId} passes={data.passes} onPick={route.setPass} />;
+    return (
+      <>
+        <PassPicker slug={props.slug} runId={runId} passes={data.passes} onPick={route.setPass} />
+        {placeholder('pass')}
+      </>
+    );
   return <Workspace key={key} {...props} data={data} />;
 }
 
-function Workspace({ slug, runId, config, route, runner, data, pane }: Common & { data: RunData }) {
+function Workspace({
+  slug,
+  runId,
+  config,
+  route,
+  runner,
+  data,
+  pane,
+  paneSlot,
+  paneNote,
+}: Common & { data: RunData }) {
   const ws = useRunWorkspace({ runId, data, config, preselectMetric: route.metric || null }, runner);
   const phase = useAnalysisPhase(runner, ws.test.testing);
   const { params, replaceUrlQuery } = useSearchParamsState();
@@ -123,7 +156,7 @@ function Workspace({ slug, runId, config, route, runner, data, pane }: Common & 
   };
 
   return (
-    <div className={s.workspace} data-pane={pane ? '' : undefined}>
+    <div className={s.workspace}>
       <div className={s.flow}>
         <ReportSection
           id="analysis-setup"
@@ -237,7 +270,13 @@ function Workspace({ slug, runId, config, route, runner, data, pane }: Common & 
           onConfirm={() => void ws.confirmHuman()}
         />
       </div>
-      {pane ? <PromptPane ws={ws} /> : null}
+      {pane && paneSlot
+        ? createPortal(
+            // the note is true only while the prompt carries the project rules
+            <PromptPane ws={ws} note={ws.settings.useRules ? paneNote : null} />,
+            paneSlot,
+          )
+        : null}
     </div>
   );
 }
