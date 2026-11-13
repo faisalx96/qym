@@ -31,12 +31,14 @@ import {
   UserName,
   useToast,
   StatusMark,
+  Timeline,
   type StatusShape,
   type StatusTone,
+  type TimelineItem,
 } from '@/ui';
-import { formatAgo } from '@/lib/dates';
+import { APP_LOCALE, formatAgo } from '@/lib/dates';
 import { formatDateParts } from '@/lib/format';
-import { useDraftRules } from '../useDraftRules';
+import { estimateTokens, useDraftRules } from '../useDraftRules';
 import { useRuleGenerator } from '../useRuleGenerator';
 import { RuleEditor } from './RuleEditor';
 import { CompareDialog, MergeDialog, PublishDialog } from './VersionDialogs';
@@ -81,9 +83,14 @@ export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canMana
   );
 }
 
+/** The version that the analyzer uses now. */
+function isLive(v: RuleVersion, productionId: string | null): boolean {
+  return v.id === productionId || v.is_active;
+}
+
 /** The version in use is the green star Flag, a draft is a StatusMark; a published version not in use shows nothing. */
 function stateBadge(v: RuleVersion, productionId: string | null) {
-  if (v.id === productionId || v.is_active) return <ProductionFlag />;
+  if (isLive(v, productionId)) return <ProductionFlag />;
   if (v.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
   return null;
 }
@@ -139,12 +146,13 @@ function RulesView({
   const [menuTarget, setMenuTarget] = useState<string | null>(null);
 
   const versions = data.versions.filter((v) => !v.is_deleted);
+  /** Newest first (cv5 L2). */
+  const ordered = [...versions].sort((a, b) => b.version - a.version);
   const productionId = data.production_version_id;
-  const fallback =
-    versions.find((v) => v.status === 'draft') ??
-    versions.find((v) => v.id === productionId) ??
-    versions[0] ??
-    null;
+  const canPromote = data.can_activate && canManage;
+  /** The draft to continue: a released version offers it instead of a second "Create draft" (cv5 L3). */
+  const latestDraft = ordered.find((v) => v.status === 'draft') ?? null;
+  const fallback = latestDraft ?? versions.find((v) => v.id === productionId) ?? ordered[0] ?? null;
   const open = versions.find((v) => v.id === openId) ?? fallback;
 
   const generator = useRuleGenerator(scope, (job) => {
@@ -226,7 +234,7 @@ function RulesView({
 
   function onMenu(id: string) {
     const v = menuVersion;
-    if (id === 'draft') void onCreateDraft(v);
+    if (id === 'live') void onPromote(v);
     else if (id === 'download') {
       const blob = new Blob(
         [JSON.stringify({ version: v.version, name: v.name, status: v.status, rules: v.rules }, null, 2)],
@@ -247,128 +255,131 @@ function RulesView({
     } else if (id === 'delete') setDeleting(v);
   }
 
+  async function onPromote(v: RuleVersion) {
+    try {
+      await promote.mutateAsync(v.id);
+      toast.show(`v${v.version} is now live`, { tone: 'success' });
+    } catch (e) {
+      toast.show(
+        e instanceof ApiError
+          ? e.detail || 'Couldn’t make this version live'
+          : 'Couldn’t make this version live',
+        { tone: 'error' },
+      );
+    }
+  }
+
+  const timeline: TimelineItem[] = ordered.map((v) => {
+    const live = isLive(v, productionId);
+    return {
+      key: v.id,
+      tone: live ? 'success' : v.status === 'draft' ? 'warning' : 'neutral',
+      title: (
+        <span className={s.versionTop}>
+          <Text variant="base" weight={600} mono>
+            {`v${v.version}`}
+          </Text>
+          {v.name && v.name !== `v${v.version}` ? <span dir="auto">{v.name}</span> : null}
+          {stateBadge(v, productionId)}
+        </span>
+      ),
+      meta: (
+        <span className={s.versionMeta}>
+          <span>{`${v.rule_count} ${v.rule_count === 1 ? 'rule' : 'rules'}`}</span>
+          <span aria-hidden="true">·</span>
+          <UserName id={v.created_by?.id} name={v.created_by?.display_name ?? 'unknown'} />
+          <span aria-hidden="true">·</span>
+          <span>{relative(v.updated_at ?? v.created_at)}</span>
+        </span>
+      ),
+      actions: (
+        // shown on row hover, on focus and for the selected row (rules.module.css)
+        <span className={s.rowMenu}>
+          <DropdownMenu
+            label={`Actions for v${v.version}`}
+            trigger={
+              <IconButton
+                label={`Actions for v${v.version}`}
+                icon="more"
+                onPress={() => setMenuTarget(v.id)}
+              />
+            }
+            onAction={onMenu}
+            items={[
+              ...(canPromote && v.status === 'published' && !live
+                ? [{ id: 'live', label: 'Make live', icon: <ActionTile icon="star" /> }]
+                : []),
+              { id: 'download', label: 'Download JSON', icon: <ActionTile icon="braces" /> },
+              { id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> },
+              ...(canManage
+                ? [{ id: 'merge', label: 'Merge versions', icon: <ActionTile icon="swap" /> }]
+                : []),
+              ...(data.can_delete && !live
+                ? [
+                    {
+                      id: 'delete',
+                      label: 'Delete version',
+                      icon: <ActionTile icon="trash" tone="danger" />,
+                      tone: 'danger' as const,
+                      separatorBefore: true,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </span>
+      ),
+    };
+  });
+
   return (
     <div className={s.layout}>
       <aside className={s.versions} aria-label="Rule versions">
-        <div className={s.versionsHead}>
-          <Text variant="md" weight={600}>
-            Versions
-          </Text>
-          {canManage ? (
-            <Button
-              size="sm"
-              variant="primary"
-              icon={<Icon name="plus" size={12} />}
-              loading={createDraft.isPending}
-              onPress={() => void onCreateDraft(open)}
-            >
-              Create draft
-            </Button>
-          ) : null}
-        </div>
-        <ul className={s.versionList}>
-          {versions.map((v) => (
-            <li key={v.id} className={s.versionItem}>
-              <button
-                type="button"
-                className={s.versionBtn}
-                aria-current={v.id === open.id ? 'true' : undefined}
-                onClick={() => setOpenId(v.id)}
-              >
-                <span className={s.versionTop}>
-                  <Text variant="base" weight={600} mono>
-                    {`v${v.version}`}
-                  </Text>
-                  {stateBadge(v, productionId)}
-                </span>
-                <Text variant="sm" tone="muted" className={s.metaLine}>
-                  <span>{`${v.rule_count} ${v.rule_count === 1 ? 'rule' : 'rules'}`}</span>
-                  <span>·</span>
-                  <UserName id={v.created_by?.id} name={v.created_by?.display_name ?? 'unknown'} />
-                  <span>·</span>
-                  <span>{relative(v.updated_at ?? v.created_at)}</span>
-                </Text>
-              </button>
-              <DropdownMenu
-                label={`Actions for v${v.version}`}
-                trigger={
-                  <IconButton
-                    label={`Actions for v${v.version}`}
-                    icon="more"
-                    onPress={() => setMenuTarget(v.id)}
-                  />
-                }
-                onAction={onMenu}
-                items={[
-                  ...(canManage
-                    ? [
-                        {
-                          id: 'draft',
-                          label: 'Create draft from this version',
-                          icon: <ActionTile icon="plus" />,
-                        },
-                      ]
-                    : []),
-                  { id: 'download', label: 'Download JSON', icon: <ActionTile icon="braces" /> },
-                  { id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> },
-                  ...(canManage
-                    ? [{ id: 'merge', label: 'Merge versions', icon: <ActionTile icon="swap" /> }]
-                    : []),
-                  ...(data.can_delete && v.id !== productionId && !v.is_active
-                    ? [
-                        {
-                          id: 'delete',
-                          label: 'Delete version',
-                          icon: <ActionTile icon="trash" tone="danger" />,
-                          tone: 'danger' as const,
-                          separatorBefore: true,
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </li>
-          ))}
-        </ul>
+        <Text variant="md" weight={600} as="h3" className={s.versionsTitle}>
+          Versions
+        </Text>
+        {/* cv5 L2: the versions read as a timeline, newest first, like the dataset Change log */}
+        <Timeline
+          aria-label="Versions"
+          className={s.versionTimeline}
+          activeKey={open.id}
+          onSelect={setOpenId}
+          items={timeline}
+        />
       </aside>
 
       <VersionWorkspace
         key={`${open.id}:${epoch}`}
         scope={scope}
         version={open}
-        isProduction={open.id === productionId || open.is_active}
         canManage={canManage}
-        canPromote={data.can_activate && canManage}
+        draft={latestDraft}
+        onOpenDraft={setOpenId}
+        onCreateDraft={() => void onCreateDraft(open)}
+        creating={createDraft.isPending}
         onPublish={() => setPublishing(true)}
-        onPromote={async () => {
-          try {
-            await promote.mutateAsync(open.id);
-            toast.show(`v${open.version} is now live`, { tone: 'success' });
-          } catch (e) {
-            toast.show(
-              e instanceof ApiError
-                ? e.detail || 'Couldn’t make this version live'
-                : 'Couldn’t make this version live',
-              { tone: 'error' },
-            );
-          }
-        }}
-        promoting={promote.isPending}
         sources={
-          <div className={s.sources}>
-            <Text variant="md" weight={600}>
-              Rule sources
-            </Text>
+          // cv5 L3: one block on a draft: what Generate rules does, its sources, then the button
+          <section className={s.sources} aria-labelledby="rule-sources-title">
+            <div className={s.sourcesHead}>
+              <Text variant="md" weight={600} as="h3" id="rule-sources-title">
+                Rule sources
+              </Text>
+              <Text variant="sm" tone="muted" as="p">
+                Generate rules asks the LLM to write new rules into this draft from the sources that you
+                choose.
+              </Text>
+            </div>
             <div className={s.sourceRow}>
               <Checkbox
                 isSelected={includeDocs && enabledDocs > 0}
                 onChange={setIncludeDocs}
                 isDisabled={!canManage || enabledDocs === 0}
               >
-                {`Add documents (${enabledDocs} enabled)`}
+                {`Project documents (${enabledDocs} enabled)`}
               </Checkbox>
               <Button size="sm" isDisabled={!canManage || approved === 0} onPress={() => setPickerOpen(true)}>
-                {`Add examples (${selectedExamples} of ${approved})`}
+                {`Choose examples (${selectedExamples} of ${approved})`}
               </Button>
               <span className={s.spacer} />
               <Button
@@ -376,6 +387,7 @@ function RulesView({
                 variant="accent"
                 loading={generator.busy}
                 isDisabled={!canManage || !usable}
+                disabledReason={usable ? undefined : 'Choose a source first'}
                 onPress={() =>
                   void generator.start({
                     include_documents: includeDocs,
@@ -409,7 +421,7 @@ function RulesView({
                 </TextLink>
               </Text>
             )}
-          </div>
+          </section>
         }
         generation={
           generator.job ? (
@@ -557,71 +569,85 @@ const PHASE_PCT: Record<string, number> = {
 function VersionWorkspace({
   scope,
   version,
-  isProduction,
   canManage,
-  canPromote,
+  draft: latestDraft,
+  onOpenDraft,
+  onCreateDraft,
+  creating,
   onPublish,
-  onPromote,
-  promoting,
   sources,
   generation,
 }: {
   scope: AnalysisScope;
   version: RuleVersion;
-  isProduction: boolean;
   canManage: boolean;
-  canPromote: boolean;
+  /** The newest draft of the project, if one exists. */
+  draft: RuleVersion | null;
+  onOpenDraft: (id: string) => void;
+  onCreateDraft: () => void;
+  creating: boolean;
   onPublish: () => void;
-  onPromote: () => void;
-  promoting: boolean;
   sources: React.ReactNode;
   generation: React.ReactNode;
 }) {
   const editable = version.status === 'draft' && canManage;
   const draft = useDraftRules(scope, version, editable);
   const settled = draft.state === 'idle' || draft.state === 'saved';
+  /**
+   * cv5 L3: one state and one action in the header. A draft says nothing more than its Draft mark in the list and
+   * offers Publish; anything else is read-only and offers the way to an editable draft.
+   */
+  let aside: React.ReactNode;
+  if (editable) {
+    aside = (
+      <Button
+        variant="primary"
+        size="sm"
+        isDisabled={!settled || draft.rules.length === 0}
+        disabledReason={draft.rules.length === 0 ? 'Add a rule first' : 'Wait until the draft is saved'}
+        onPress={onPublish}
+      >
+        Publish
+      </Button>
+    );
+  } else {
+    const otherDraft = latestDraft && latestDraft.id !== version.id ? latestDraft : null;
+    aside = (
+      <div className={s.sourceRow}>
+        <Flag tone="neutral" icon="lock">
+          Read-only
+        </Flag>
+        {otherDraft ? (
+          <Button size="sm" onPress={() => onOpenDraft(otherDraft.id)}>
+            {`Open draft v${otherDraft.version}`}
+          </Button>
+        ) : canManage && version.status !== 'draft' ? (
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Icon name="plus" size={12} />}
+            loading={creating}
+            onPress={onCreateDraft}
+          >
+            {`Create draft from v${version.version}`}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div className={s.main}>
-      <SectionHeader
-        title={`Rules in v${version.version}`}
-        aside={
-          <div className={s.sourceRow}>
-            <Flag tone={editable ? 'warning' : 'neutral'} icon={editable ? 'edit' : 'lock'}>
-              {editable ? 'Editable draft' : version.status === 'draft' ? 'Draft (read-only)' : 'Read-only'}
-            </Flag>
-            {isProduction ? <ProductionFlag /> : null}
-            {editable ? (
-              <Button
-                variant="primary"
-                size="sm"
-                isDisabled={!settled || draft.rules.length === 0}
-                onPress={onPublish}
-              >
-                Publish
-              </Button>
-            ) : version.status === 'published' && !isProduction && canPromote ? (
-              <Button variant="primary" size="sm" loading={promoting} onPress={onPromote}>
-                Make live
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
+      <SectionHeader title={`Rules in v${version.version}`} aside={aside} />
       <Text variant="sm" tone="muted" as="p" data-testid="version-meta" className={s.metaLine}>
         <span>{`Created ${formatDateParts(version.created_at).full || '—'}`}</span>
         <span>·</span>
         <span>{`Updated ${formatDateParts(version.updated_at).full || '—'}`}</span>
         <span>·</span>
-        <span>By</span>
-        {version.created_by ? (
-          <UserName id={version.created_by.id} name={version.created_by.display_name} />
-        ) : (
-          <span>—</span>
-        )}
+        <span>{`~${estimateTokens(draft.rules).toLocaleString(APP_LOCALE)} prompt tokens`}</span>
       </Text>
       {generation}
       <RuleEditor draft={draft} editable={editable} />
-      {sources}
+      {editable ? sources : null}
     </div>
   );
 }

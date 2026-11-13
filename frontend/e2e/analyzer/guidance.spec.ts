@@ -30,7 +30,7 @@ test.describe('Rules tab as manager (10)', () => {
     const t = trackErrors(page);
     await gotoApp(page, guidanceUrl(seed.slug, 'rules'));
     await expect(page.getByRole('heading', { name: 'Rules in v1' })).toBeVisible();
-    await expect(page.getByText('Editable draft')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Rule sources' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Publish' })).toBeDisabled(); // no rules yet
 
     // edit -> debounced PATCH (~700 ms after the last keystroke)
@@ -64,7 +64,7 @@ test.describe('Rules tab as manager (10)', () => {
     await expect(page.getByText('Read-only', { exact: true })).toBeVisible();
 
     // create a draft from the live version, change the rule
-    await page.getByRole('button', { name: 'Create draft', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Create draft from v1' }).click();
     await expect(page.getByText('Draft v2 created from v1').first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Rules in v2' })).toBeVisible();
     await page.getByRole('button', { name: 'Cite the context', exact: true }).click();
@@ -129,7 +129,7 @@ test.describe('Rules tab as manager (10)', () => {
     });
     await expect(page.getByRole('list', { name: 'Document library' })).toContainText('policy.txt');
     await page.getByRole('tab', { name: /^Rules/ }).click();
-    await expect(page.getByText('Add documents (1 enabled)')).toBeVisible();
+    await expect(page.getByText('Project documents (1 enabled)')).toBeVisible();
     const generate = page.getByRole('button', { name: 'Generate rules' });
     await expect(generate).toBeEnabled();
     await generate.click();
@@ -360,11 +360,12 @@ test.describe('read-only view (13)', () => {
     await expect(page.getByRole('textbox', { name: /^Use when/ })).toHaveAttribute('readonly', '');
 
     await page.getByRole('tab', { name: /^Rules/ }).click();
-    await expect(page.getByText('Draft (read-only)')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create draft', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Read-only', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Create draft/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Publish' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add rule' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Generate rules' })).toBeDisabled();
+    // cv5 L3: Rule sources and Generate rules show only on an editable draft
+    await expect(page.getByRole('button', { name: 'Generate rules' })).toHaveCount(0);
 
     await page.getByRole('tab', { name: /^Documents/ }).click();
     await expect(page.getByText('Only project managers can add, remove or exclude documents.')).toBeVisible();
