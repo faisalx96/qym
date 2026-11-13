@@ -842,7 +842,10 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   Flag follows the tag: the tooltip names the status. The API sends the status as `dataset_version_status` (and
   `status` in each `datasets` entry). The runs table Dataset column, the run header Dataset fact and the hero dataset
   chip of a union run use it. A run with no version shows only the name. An alias segment is written `@alias` (the
-  at-sign of the run label, in `--text-dim`), with the tooltip "Alias X: a name that points at vN" (cv5 M3).
+  at-sign of the run label, in `--text-dim`), with the tooltip "Alias X: a name that points at vN" (cv5 M3). One alias
+  form everywhere (cv5 Y5): `@alias` in the dataset tag, in the hero chip, in the version switcher (each version row
+  shows its aliases) and in the Lineage alias tags; each place keeps its own surface. The hint of the alias segment is
+  the shared `Tooltip` (hover and keyboard focus open it), and the tag's title does not repeat the alias.
 
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
   (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for

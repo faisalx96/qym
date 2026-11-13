@@ -6,7 +6,8 @@
  * the hero (name wraps, never cut; item count).
  */
 import { Link } from 'react-router-dom';
-import { Icon, Tag } from '@/ui';
+import { Focusable } from 'react-aria-components';
+import { Icon, Tag, Tooltip } from '@/ui';
 import { datasetEntryLink } from '../lib/heroModel';
 import type { RunDatasetEntry } from '../types';
 import styles from './DatasetChip.module.css';
@@ -15,7 +16,7 @@ export function datasetEntryTitle(e: RunDatasetEntry): string {
   const count = e.items != null ? `, ${e.items} items` : '';
   const tone = e.version ? versionTone(e.status, e.aliases) : null;
   const status = tone ? `, ${VERSION_TONE_WORD[tone].toLowerCase()}` : '';
-  return `${e.dataset}${e.version ? ` ${e.version}` : ''}${status}${e.alias ? ` (${e.alias})` : ''}${count}${
+  return `${e.dataset}${e.version ? ` ${e.version}` : ''}${status}${e.alias ? `, alias @${e.alias}` : ''}${count}${
     e.deleted ? ', dataset deleted' : ''
   }`;
 }
@@ -76,6 +77,23 @@ function AliasText({ alias }: { alias: string }) {
   );
 }
 
+/**
+ * cv5 Y5: the alias segment of a dataset tag. Its hint is the shared `Tooltip`, so hover and keyboard focus open it
+ * (not a native title).
+ */
+function AliasSegment({ alias, version }: { alias: string; version: string | null }) {
+  return (
+    <Tooltip content={aliasTitle(alias, version)}>
+      <Focusable>
+        {/* title="" keeps the tag's own native title from showing under the Tooltip */}
+        <span className={styles.segment} data-part="alias" role="img" aria-label={`alias @${alias}`} title="">
+          <AliasText alias={alias} />
+        </span>
+      </Focusable>
+    </Tooltip>
+  );
+}
+
 /** A dataset with its version: database glyph, name, divider, version in its status colour, other aliases. */
 export function DatasetVersionTag({
   name,
@@ -98,7 +116,6 @@ export function DatasetVersionTag({
     name,
     v ? `version ${v}` : null,
     tone !== 'none' ? VERSION_TONE_WORD[tone].toLowerCase() : null,
-    others.length ? `aliases: ${others.join(', ')}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -118,9 +135,7 @@ export function DatasetVersionTag({
           </span>
         ) : null}
         {others.map((a) => (
-          <span key={a} className={styles.segment} data-part="alias" title={aliasTitle(a, v)}>
-            <AliasText alias={a} />
-          </span>
+          <AliasSegment key={a} alias={a} version={v} />
         ))}
       </Tag>
     </span>
@@ -142,7 +157,8 @@ export function DatasetChip({ entry, slug }: { entry: RunDatasetEntry; slug: str
         </span>
       ) : null}
       {alias ? (
-        <span className={styles.alias} data-part="alias" title={aliasTitle(alias, v)}>
+        // inside a link: no focus stop of its own, the link title says the alias (datasetEntryTitle)
+        <span className={styles.alias} data-part="alias">
           <AliasText alias={alias} />
         </span>
       ) : null}

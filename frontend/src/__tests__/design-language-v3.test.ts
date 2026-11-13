@@ -2232,6 +2232,16 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
   it('M3: a dataset alias reads @alias with its tooltip', () => {
     expect(src('features/run-detail/components/DatasetChip.tsx')).toContain('Alias ${alias}: a name that points at');
     expect(doc).toContain('An alias segment is written `@alias`');
+    // cv5 Y5: one alias form; the dataset tag hint is the shared Tooltip; the switcher rows show the aliases
+    const chip = src('features/run-detail/components/DatasetChip.tsx');
+    expect(chip).toContain('<Tooltip content={aliasTitle(alias, version)}>');
+    expect(chip).not.toContain('title={aliasTitle(');
+    expect(chip).not.toContain('`aliases: ${');
+    const sw = src('features/datasets/components/VersionSwitcher.tsx');
+    expect(sw).toContain('<AliasTags version={v} />');
+    expect(sw).toContain('{`@${a}`}');
+    expect(src('ui/EntityTag/EntityTag.tsx')).toContain('{`@${a}`}');
+    expect(doc).toContain('One alias\n  form everywhere (cv5 Y5)');
   });
 
   it('M4: the Experiments table draws no live rail (the Status column shows the step)', () => {
