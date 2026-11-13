@@ -339,6 +339,15 @@
   --tint-tile: 16%; /* the rest fill of a row action tile */
   --tile-glyph-mix: 88%; /* the rest glyph: the tone at this share, the rest the surface */
   --tint-tile-hover: 30%; /* hover/pressed on a row action tile */
+  /* cv5 H3 (owner 2026-11-13, on the dataset item pane: "this blue is okay, this white is not okay"): one set of JSON
+     syntax colours, the roles of the first qym dataset view (.dsx-jtok-*): keys blue, strings green, numbers purple,
+     true/false blue, null quiet, punctuation secondary. ui/JsonViewer and the dataset FieldEditor use only these. */
+  --json-key: var(--accent-secondary);
+  --json-string: var(--accent-primary);
+  --json-number: var(--accent-tertiary-soft);
+  --json-boolean: var(--accent-secondary);
+  --json-null: var(--text-muted);
+  --json-punct: var(--text-secondary);
   --tint-gold: 17%; /* the admin role fill: at 12% gold reads brown on the dark surface (Q16) */
   --role-admin: #e0bc4a; /* admin role tag (Q16 B) */
   --stripe-step: 2%; /* page list stripe: --text-primary mixed into the row base (resolution 14, owner tunes) */

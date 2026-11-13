@@ -71,7 +71,7 @@
   border: 1px solid transparent;
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
-  color: var(--text-muted); /* punctuation, as the shared JSON viewer */
+  color: var(--json-punct); /* punctuation, as the shared JSON viewer (cv5 H3) */
   font-family: var(--font-mono);
   font-size: var(--font-base);
   line-height: 1.6;
@@ -93,7 +93,8 @@
 }
 
 .editorWrap[data-coloured] .textarea::selection {
-  background: color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  /* blue, as the first qym editor: the strings are green now (cv5 H3) */
+  background: color-mix(in srgb, var(--accent-secondary) 28%, transparent);
   color: transparent;
 }
 
@@ -221,30 +222,34 @@
   max-height: 180px;
 }
 
-/* JSON punctuation is muted, as in the shared JSON viewer; the tokens carry the colour */
+/* JSON punctuation, as in the shared JSON viewer; the tokens carry the colour (cv5 H3) */
 .pre:not([data-kind='text']) {
-  color: var(--text-muted);
+  color: var(--json-punct);
 }
 
 .pre[dir='rtl'] {
   line-height: 1.7;
 }
 
-/* Token colours of the shared JSON viewer (ui/JsonViewer), in the read-only view and while editing (cv4 E6). */
+/* Token colours of the shared JSON viewer (ui/JsonViewer), in the read-only view and while editing (cv4 E6, cv5 H3). */
 .tokKey {
-  color: var(--accent-secondary);
+  color: var(--json-key);
 }
 
 .tokStr {
-  color: var(--text-primary);
+  color: var(--json-string);
 }
 
 .tokNum {
-  color: var(--chart-5);
+  color: var(--json-number);
 }
 
 .tokLit {
-  color: var(--accent-tertiary-soft);
+  color: var(--json-boolean);
+}
+
+.tokNull {
+  color: var(--json-null);
 }
 
 /* Item text in the sans face (design-language rule 4): Text mode and a string value; JSON stays mono (C153). */

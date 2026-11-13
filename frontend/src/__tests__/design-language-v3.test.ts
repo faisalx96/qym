@@ -2102,4 +2102,29 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     none(grep(shippedTsx, /iconEnd=\{<Icon name="chevron-down"/, pending));
     expect(src('ui/MultiSelect/MultiSelect.tsx')).toContain('export function BarTrigger');
   });
+
+  it('H3: every JSON view takes the --json-* syntax colours (strings green, keys blue)', () => {
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    expect(tokens).toMatch(/--json-string:\s*var\(--accent-primary\)/);
+    expect(tokens).toMatch(/--json-key:\s*var\(--accent-secondary\)/);
+    const viewer = stripComments(src('ui/JsonViewer/JsonViewer.module.css'));
+    for (const [cls, t] of [
+      ['.key', 'key'],
+      ['.string', 'string'],
+      ['.number', 'number'],
+      ['.boolean', 'boolean'],
+      ['.null', 'null'],
+      ['.punct', 'punct'],
+    ])
+      expect(rule(viewer, cls), cls).toContain(`var(--json-${t})`);
+    const editor = stripComments(src('features/datasets/components/FieldEditor.module.css'));
+    for (const [cls, t] of [
+      ['.tokKey', 'key'],
+      ['.tokStr', 'string'],
+      ['.tokNum', 'number'],
+      ['.tokLit', 'boolean'],
+      ['.tokNull', 'null'],
+    ])
+      expect(rule(editor, cls), cls).toContain(`var(--json-${t})`);
+  });
 });

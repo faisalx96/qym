@@ -562,9 +562,12 @@ preselected.
   first qym's green outline, cv4 X15). **Change log:** a timeline in a card: the time (muted, tabular figures), a 20px
   mark on a 2px `--border-default` rail, the event text and, directly after it, the person (`UserPill`), so one event
   reads as one line; marks carry meaning only and the accent is for publish and the production alias; no row lines.
-  **JSON while editing:** a JSON field colours its text while it is edited, with the token colours of `JsonViewer` (key
-  `--accent-secondary`, string `--text-primary`, number `--chart-5`, literal `--accent-tertiary-soft`, punctuation
-  `--text-muted`); the read-only view uses the same colours. **Field expand:** the expand button of a field card opens
+  **JSON while editing:** a JSON field colours its text while it is edited, with the token colours of `JsonViewer`; the read-only view uses the same colours.
+  **JSON syntax colours (cv5 H3, owner 2026-11-13: "this blue is okay, this white is not okay"):** one token set,
+  `--json-*`, the roles of the first qym dataset view: key `--json-key` (blue), string `--json-string` (green, the
+  accent), number `--json-number` (purple), true/false `--json-boolean` (blue), null `--json-null` (muted), punctuation
+  `--json-punct` (secondary). `JsonViewer`, the dataset item pane, item page, expand dialog and edit mode use only these;
+  a string value is never plain white. **Field expand:** the expand button of a field card opens
   the same editor and state in a `wide` dialog as high as the value (see "Dialog"). **Item pane:** the pane's item is
   the table's current row (`DataTable activeKey`); the row actions stay while the pane is open.
 
