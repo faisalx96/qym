@@ -656,14 +656,20 @@ function VersionWorkspace({
   }
   return (
     <div className={s.main}>
-      <SectionHeader title={`Rules in v${version.version}`} aside={aside} />
-      <Text variant="sm" tone="muted" as="p" data-testid="version-meta" className={s.metaLine}>
-        <span>{`Created ${formatDateParts(version.created_at).full || '—'}`}</span>
-        <span>·</span>
-        <span>{`Updated ${formatDateParts(version.updated_at).full || '—'}`}</span>
-        <span>·</span>
-        <span>{`~${estimateTokens(draft.rules).toLocaleString(APP_LOCALE)} prompt tokens`}</span>
-      </Text>
+      {/* cv5 Y3: the Created / Updated line is the header description, directly under the title as on other headers */}
+      <SectionHeader
+        title={`Rules in v${version.version}`}
+        aside={aside}
+        description={
+          <span data-testid="version-meta">
+            {[
+              `Created ${formatDateParts(version.created_at).full || '—'}`,
+              `Updated ${formatDateParts(version.updated_at).full || '—'}`,
+              `~${estimateTokens(draft.rules).toLocaleString(APP_LOCALE)} prompt tokens`,
+            ].join(' · ')}
+          </span>
+        }
+      />
       {generation}
       <RuleEditor draft={draft} editable={editable} />
       {editable ? sources : null}
