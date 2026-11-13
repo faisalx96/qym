@@ -2226,6 +2226,11 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(doc).toContain('a button that opens a picker reads "Label · value"');
   });
 
+  it('Y11: an input mapping row has no chevron between the label and the dropdown', () => {
+    expect(src('features/analyzer/blocks/FieldsMapping.tsx')).not.toMatch(/<Icon name="next"/);
+    expect(doc).toContain('no chevron between them (cv5 Y11');
+  });
+
   it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
     const t = src('features/analyzer/blocks/PromptPane.tsx');
     expect(t).toContain('No change to the prompt');

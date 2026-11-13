@@ -626,7 +626,8 @@ preselected.
   pairs are `--space-xl` apart, so each label reads with its own switch. The sticky rail's notice is shown in full and
   wraps; it is never cut with "…". **Input mapping keys (cv5 K2):** a field with a single value shows only its
   dropdown; a JSON field shows a `ToggleChips` row under it, "Full value" first (on by default), then one chip for each
-  top-level key; a key on switches Full value off, and the reverse.
+  top-level key; a key on switches Full value off, and the reverse. A mapping row is the label column, then the
+  dropdown; no chevron between them (cv5 Y11: it read as a link).
   **Prompt pane (cv5 K3):** the panel surface of the report sections, sticky at `--space-md`, its height measured to
   the viewport bottom, with its own scroll. The head shows the title, the char count `Tag kind="count"`, a quiet status
   text (Updating / N lines added · M removed / No change to the prompt) and Copy. Lines added by the last change get
