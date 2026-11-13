@@ -3,6 +3,7 @@ import { parseLiveFilters, useLiveSources, useLiveTurns, type LiveTurnDetail } f
 import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
 import { Card, Icon, IconButton, PageHeader, Tag } from '@/ui';
+import { EnvironmentTag } from '../EnvironmentTag';
 import { DiagnosisLabel } from './Evidence';
 import { labelFor, liveTime, traceHref, turnHref } from './presentation';
 import styles from '../../turn.module.css';
@@ -118,9 +119,7 @@ export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug:
             : []),
           ...(environment
             ? [
-                <Tag key="environment" kind="data" dir="auto">
-                  {environment}
-                </Tag>,
+                <EnvironmentTag key="environment" environment={environment} />,
               ]
             : []),
           ...(productTrace
