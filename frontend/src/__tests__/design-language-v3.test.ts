@@ -2132,7 +2132,7 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
       ['.boolean', 'boolean'],
       ['.null', 'null'],
       ['.punct', 'punct'],
-    ])
+    ] as const)
       expect(rule(viewer, cls), cls).toContain(`var(--json-${t})`);
     const editor = stripComments(src('features/datasets/components/FieldEditor.module.css'));
     for (const [cls, t] of [
@@ -2141,7 +2141,7 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
       ['.tokNum', 'number'],
       ['.tokLit', 'boolean'],
       ['.tokNull', 'null'],
-    ])
+    ] as const)
       expect(rule(editor, cls), cls).toContain(`var(--json-${t})`);
   });
 });

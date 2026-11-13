@@ -5,7 +5,6 @@ import { useDelayedPending } from '@/lib/pending';
 import {
   EmptyState,
   ErrorState,
-  Icon,
   type IconName,
   LinkButton,
   Section,

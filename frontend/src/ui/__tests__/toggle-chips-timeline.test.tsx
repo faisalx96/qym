@@ -86,9 +86,10 @@ describe('Timeline (cv5 H5)', () => {
     render(<Timeline aria-label="Versions" items={items} activeKey="v2" onSelect={onSelect} />);
     const rows = screen.getAllByRole('button');
     expect(rows).toHaveLength(2);
-    expect(rows[1].getAttribute('aria-current')).toBe('true');
-    expect(rows[0].getAttribute('aria-current')).toBeNull();
-    await user.click(rows[0]);
+    const [first, second] = rows as [HTMLElement, HTMLElement];
+    expect(second.getAttribute('aria-current')).toBe('true');
+    expect(first.getAttribute('aria-current')).toBeNull();
+    await user.click(first);
     expect(onSelect).toHaveBeenCalledWith('v1');
   });
 });
