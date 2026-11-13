@@ -2110,6 +2110,35 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     expect(css).not.toMatch(/\.rail\b|\.mark\b/);
   });
 
+  it('H3: every JSON view takes the --json-* syntax colours (strings green, keys blue)', () => {
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    expect(tokens).toMatch(/--json-string:\s*var\(--accent-primary\)/);
+    expect(tokens).toMatch(/--json-key:\s*var\(--accent-secondary\)/);
+    const viewer = stripComments(src('ui/JsonViewer/JsonViewer.module.css'));
+    for (const [cls, t] of [
+      ['.key', 'key'],
+      ['.string', 'string'],
+      ['.number', 'number'],
+      ['.boolean', 'boolean'],
+      ['.null', 'null'],
+      ['.punct', 'punct'],
+    ] as const)
+      expect(rule(viewer, cls), cls).toContain(`var(--json-${t})`);
+    const editor = stripComments(src('features/datasets/components/FieldEditor.module.css'));
+    for (const [cls, t] of [
+      ['.tokKey', 'key'],
+      ['.tokStr', 'string'],
+      ['.tokNum', 'number'],
+      ['.tokLit', 'boolean'],
+      ['.tokNull', 'null'],
+    ] as const)
+      expect(rule(editor, cls), cls).toContain(`var(--json-${t})`);
+  });
+});
+
+describe('cv5 family G (fix round after the merge): area recipes', () => {
+  const doc = read(join(SRC, '../../docs/DESIGN_LANGUAGE.md'));
+
   it('Z3: Timeline reveals row actions and aligns the mark through props, not caller selectors', () => {
     const css = stripComments(src('ui/Timeline/Timeline.module.css'));
     expect(css).toContain('.timeline[data-reveal-actions]');
@@ -2134,28 +2163,75 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     expect(src('features/reviews/DetailPane.module.css')).not.toMatch(/\.histWhen\b/);
   });
 
-  it('H3: every JSON view takes the --json-* syntax colours (strings green, keys blue)', () => {
-    const tokens = read(join(SRC, 'styles/tokens.css'));
-    expect(tokens).toMatch(/--json-string:\s*var\(--accent-primary\)/);
-    expect(tokens).toMatch(/--json-key:\s*var\(--accent-secondary\)/);
-    const viewer = stripComments(src('ui/JsonViewer/JsonViewer.module.css'));
-    for (const [cls, t] of [
-      ['.key', 'key'],
-      ['.string', 'string'],
-      ['.number', 'number'],
-      ['.boolean', 'boolean'],
-      ['.null', 'null'],
-      ['.punct', 'punct'],
-    ] as const)
-      expect(rule(viewer, cls), cls).toContain(`var(--json-${t})`);
-    const editor = stripComments(src('features/datasets/components/FieldEditor.module.css'));
-    for (const [cls, t] of [
-      ['.tokKey', 'key'],
-      ['.tokStr', 'string'],
-      ['.tokNum', 'number'],
-      ['.tokLit', 'boolean'],
-      ['.tokNull', 'null'],
-    ] as const)
-      expect(rule(editor, cls), cls).toContain(`var(--json-${t})`);
+  it('Z2: a bar Select that always shows its value has the label-and-value cap; no local stopgap', () => {
+    expect(src('ui/Select/Select.tsx')).toContain("data-show-value={showValue === 'always'");
+    expect(stripComments(src('ui/MultiSelect/MultiSelect.module.css'))).toContain(
+      ".trigger[data-variant='bar'][data-show-value]",
+    );
+    expect(stripComments(src('features/analyzer/blocks/blocks.module.css'))).not.toContain("[data-variant='bar']");
+  });
+
+  it('Z4 / K1: the analyzer metrics are ToggleChips named by the visible Metrics label', () => {
+    const t = src('features/analyzer/blocks/RunHeader.tsx');
+    expect(t).toContain('<ToggleChips');
+    expect(t).toContain('aria-labelledby={metricsLabelId}');
+    expect(t).not.toContain('MultiSelect');
+  });
+
+  it('K5: the analyzer model is a labelled bar Select that always shows its value', () => {
+    const t = src('features/analyzer/blocks/ActionRail.tsx');
+    expect(t).toContain('label="Analyzer model"');
+    expect(t).toContain('showValue="always"');
+    expect(doc).toContain('No rule above\n  the bar (cv5 K5)');
+  });
+
+  it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
+    const t = src('features/analyzer/blocks/PromptPane.tsx');
+    expect(t).toContain('No change to the prompt');
+    expect(t).not.toContain('<Spinner');
+    expect(doc).toContain('**Prompt pane (cv5 K3):**');
+  });
+
+  it('L2 / L3 / Z5: rule versions are a Timeline with icon marks; a released version is read-only', () => {
+    const t = src('features/analyzer/guidance/RulesPanel.tsx');
+    expect(t).toContain('<Timeline');
+    expect(t).toContain("icon: live ? 'star' : v.status === 'draft' ? 'edit' : 'check'");
+    expect(t).toContain('markAlign="start"');
+    expect(t).toContain('Read-only');
+    expect(t).toContain('Create draft from v');
+    expect(doc).toContain('**Rule versions (cv5 L2, L3, Z5):**');
+  });
+
+  it('M2: a live source environment is a StateTag in the environment tone', () => {
+    expect(src('features/live/components/EnvironmentTag.tsx')).toContain('<StateTag');
+    expect(src('features/live/lib/environment.ts')).toContain('export function environmentTone');
+    expect(doc).toContain('The environment of a live source is a StateTag (cv5 M2)');
+  });
+
+  it('M3: a dataset alias reads @alias with its tooltip', () => {
+    expect(src('features/run-detail/components/DatasetChip.tsx')).toContain('Alias ${alias}: a name that points at');
+    expect(doc).toContain('An alias segment is written `@alias`');
+  });
+
+  it('M4: the Experiments table draws no live rail (the Status column shows the step)', () => {
+    expect(src('features/experiments/list/ExperimentsPage.tsx')).not.toContain('rowState');
+    expect(doc).toContain('`live` is\n  not drawn when a Status column already shows the live step');
+  });
+
+  it('M5 / Z7: a problem count in a line of counts is a count tag in its tone; neutral counts stay text', () => {
+    const jobs = src('features/experiments/list/ExperimentsPage.tsx');
+    expect(jobs).toContain('<Tag kind="count" tone="danger" data-count="failed">');
+    expect(jobs).toContain('<Tag kind="count" tone="warning" data-count="cancelled">');
+    const strip = src('features/experiments/detail/QueueStrip.tsx');
+    expect(strip).toContain('<Tag kind="count" tone="warning">');
+    expect(strip).not.toContain('{row.blocked} blocked\n                {row.position');
+    const remote = src('features/experiments/queue/RemoteQueueSection.tsx');
+    expect(remote).not.toContain("· {plural(env.orphan_count, 'orphan')} · {env.stale_count} stale");
+    expect(remote.match(/<Tag kind="count" tone="warning">/g)?.length).toBe(2);
+  });
+
+  it('Z8: the Experiments description wraps to two lines, no cut', () => {
+    expect(src('features/experiments/list/ExperimentsPage.tsx')).toContain('secondaryLines={2}');
+    expect(stripComments(src('ui/DataTable/cells/cells.module.css'))).toContain('.secondary[data-lines]');
   });
 });
