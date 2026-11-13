@@ -234,21 +234,27 @@ preselected.
   (ghost) tone: a show-more, expand or earlier toggle is a neutral button, also in a table cell (Q44 B). A button that
   grows a list says "Show N more"; hidden tags in a row show a "+N more" count tag (Q49 C, resolution 4). A danger
   action states what will be deleted. No button draws an outline ring at rest (round 10), also the Analyze done and
-  running states. **Button ladder (cv4 F6, owner 2026-11-12: "this white text is too bright ... the background is too
-  dim. It's not clear they are buttons").** A neutral button reads as a button at rest: the `--button-fill` fill
-  (`--bg-hover`), a 1px inner edge `--button-edge` drawn with an inset box-shadow (the size does not change) and the
-  `--button-text` label, a step under `--text-primary` and brighter than a dropdown's muted label. Hover brightens all
-  three (`--button-fill-hover`, `--button-edge-hover`, `--text-primary`); press goes one step back; never the reverse (a
-  resting fill brighter than its hover reads as already pressed, round 8). Accent, meta and danger use the same ladder
-  in their tone: `--tint-soft` fill and a 30% tone edge at rest, `--tint-strong` and a 55% edge on hover. Primary is
-  the solid accent with no edge, `--accent-primary-hover` on hover. The menu actions Select all and None are the same
-  neutral recipe at `--control-height-sm`. Field-like controls (text field, select, filter trigger, segmented control,
-  date and time field) share the `--control-fill` fill with a soft `--control-edge`. **One look on every surface (cv4
-  F7, F8):** a `ReportSection` body (inset cards at `--bg-elevated`) lifts `--control-fill` to `--bg-hover` and the
-  edge to `--border-default`, so a search field, a select or a segmented control on an inset card looks the same as
-  on the page ground; a feature never sets a control's fill, edge, height or font size. A disabled neutral button
-  keeps the flat shape at half its fill with muted text and no edge (round 10: an outline made a locked button look
-  like another, louder style).
+  running states. **Depth by fill, not by outline (cv5 H1, owner 2026-11-13: "I don't like this border for every button").** Two
+  kinds of control and three steps of visual weight at rest: well < neutral button < primary. No control draws an
+  outline ring to say what it is.
+  - A **well** is a control that you type in or pick a value from: `TextField`, `SearchField`, `Textarea`, the
+    `Select` and `MultiSelect` trigger (field and bar), the `SegmentedControl` track, the date and time field. It has
+    the `--control-fill` fill (`--bg-elevated`, one step over the ground) and the `--control-edge` hairline (the text
+    colour at 5%, so it reads the same on every ground). Hover = `--control-edge-hover` (a trigger also takes
+    `--control-fill-hover`); focus or open = the accent edge.
+  - A **neutral button** is a raised surface: the `--button-fill` fill one step lighter than a well and
+    `--button-depth` (a 1px highlight on its top inner edge, `--button-highlight`, and a 1px dark line under it). It
+    has no edge ring. Its label is `--button-text`, a step under `--text-primary` (cv4 F6: "this white text is too
+    bright"). Hover = `--button-fill-hover` and the primary label; pressed = `--button-fill-pressed` and no highlight;
+    never the reverse (a resting fill brighter than its hover reads as already pressed, round 8). A neutral button
+    next to a dropdown still reads as a button: by its fill, its highlight and its label weight, not by an outline.
+  - **Tinted** buttons (accent, meta, danger) are a tint fill only: `--tint-soft` at rest, `--tint-strong` on hover; no
+    edge and no highlight. **Primary** is the solid accent, `--accent-primary-hover` on hover.
+  - **On an inset card:** a `ReportSection` body (inset cards at `--bg-elevated`) makes the well and button fills
+    translucent (the text colour at 4% and 8%), so a well is one step and a button two steps over whichever ground it
+    sits on: a control never melts into a card. A feature never sets a control's fill, edge, height or font size.
+  The menu actions Select all and None are the same neutral recipe at `--control-height-sm`. A disabled neutral button
+  keeps the flat shape at half its fill with muted text and no depth.
   **Which button** (round 11, owner: "one unified rule set"): `primary` (solid green) is the one action that commits a
   card or form: Save, Create, Add, New project. `accent` (green tint) runs something useful without saving: Test
   connection, Run preset, Unarchive. `neutral` cancels, discards, compares or navigates: Cancel, Discard, View diff.
@@ -258,7 +264,7 @@ preselected.
   Make live, Send, Start conversation, Add model and Run backfill commit, so they are primary. A dialog footer that
   runs a job reads Cancel (neutral), Preview (accent), the commit (primary). Create draft always carries the plus
   Icon. A confirm that disables, deletes or revokes is danger. An export or download only reads data: on a page it is
-  the accent button with the `download` Icon, and a format menu trigger ends with `chevron-down` (Q27 A). A Download
+  the accent button with the `download` Icon; a format menu is a menu trigger (`BarTrigger`, cv5 H6). A Download
   in a dialog footer is the primary.
   **Button rules (C049, C234, C136, C166, C232; enforced in `design-language.test.ts`):** Delete, Archive, Disable and
   Revoke are `danger` everywhere; Cancel is neutral; the red `× Clear n` of a filter bar stays red (owner, Oct 26 and
@@ -311,8 +317,8 @@ preselected.
   categories.
 
 - **One dropdown (cv4 F5, owner 2026-11-12: "I need all drop-downs to be this").** `Select` (one choice) and
-  `MultiSelect` (many) are the only dropdowns; their reference is the Runs filter trigger. Closed: 24px, `--control-fill`,
-  1px `--control-edge`, `--font-sm`, the chevron at the end in `--text-muted`; hover = `--bg-active` fill and the
+  `MultiSelect` (many) are the only dropdowns; their reference is the Runs filter trigger. Closed: a well (cv5 H1): 24px, `--control-fill`,
+  1px `--control-edge`, `--font-sm`, the chevron at the end in `--text-muted`; hover = `--control-fill-hover` and the
   hover edge; open = the accent edge and the chevron turned up in the accent. Open: one panel (`--card-bg`, 1px
   `--border-default`, `--dropdown-radius`, `--shadow-popover`), 32px option rows in `--font-base` secondary text,
   `--bg-hover` under the pointer; a `Select` marks the chosen row with primary text at 600 and the accent check at its
@@ -322,6 +328,13 @@ preselected.
   trigger reads "Sort · Index" at the default too; a filter whose first item means "all" shows only its label until
   set (cv4 Y6). A bar trigger takes the accent only when the choice differs from the page default; a `MultiSelect`
   whose default is a selection (all metrics) says so with `isDefault` (cv4 Y12).
+  **Menu trigger (cv5 H6, owner 2026-11-13: "We have these drop-down styles and then we have these. This is
+  inconsistent").** A control that opens a menu or a panel of choices and ends with a chevron is a menu trigger, and
+  every menu trigger has the one dropdown trigger look (a well). A `Button` never ends with a chevron. A trigger that
+  is not a `Select` or a `MultiSelect` (More filters, Columns, an export format menu, a Popover of filter fields) is
+  `BarTrigger` from `ui`: `<Popover label="Columns" trigger={<BarTrigger label="Columns" />}>…</Popover>`; with a set
+  value it reads `More filters · 2` and takes the accent (`value`, `active`). Enforced in `design-language-v3.test.ts`
+  (no `Button` with an end `chevron-down`).
 
 - **Multiselect** (`MultiSelect`): content in fixed order: search, actions
   (Select all and None/Clear, neutral 20px buttons at rest, round 10), then `--dropdown-option-height` option rows.

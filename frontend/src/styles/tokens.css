@@ -81,24 +81,30 @@
   /* Canonical interactive component geometry.
      One aligned density is used across forms and analysis toolbars. */
   --control-height: 24px;
-  /* cv4 F6 (owner 2026-11-12): a neutral button reads as a button: a visible fill and edge at rest, a label a step
-     under --text-primary (brighter than a dropdown's muted label), and a brighter fill, edge and label on hover. */
-  --button-fill: var(--bg-hover);
-  --button-fill-hover: var(--bg-active);
-  --button-edge: var(--border-default);
-  --button-edge-hover: var(--border-strong);
-  --button-text: #cdcdd8; /* 11.6:1 on --bg-hover */
   --control-height-sm: 20px; /* cv4 F3: a small box inside a control row (the pager's page number) */
   --control-radius: 5px;
-  /* A field-like control's edge (text field, select, filter trigger, segmented control): a soft hairline at rest over
-     the --bg-elevated fill, one step stronger on hover; focus and an active filter use the accent (round 10: the
-     --border-default outlines read as too bold next to the borderless buttons). */
-  --control-edge: var(--border-subtle);
-  --control-edge-hover: var(--border-default);
-  /* cv4 F7/F8: the fill of a field-like control (text and search field, select, filter trigger, segmented control).
-     A surface that is itself --bg-elevated (the inset cards of a report section) lifts it one step (ReportSection),
-     so a control never melts into its card: one look on every page. */
+  /* cv5 H1 (owner 2026-11-13: "I don't like this border for every button"): depth by fill, not by outline.
+     Two kinds of control, three steps of visual weight at rest: well < neutral button < primary.
+     - A well is a control you type in or pick a value from (text and search field, Select and MultiSelect trigger,
+       the SegmentedControl track, date and time field): the --control-fill fill (one step over the ground) and a
+       hairline edge with low contrast. Hover = the edge one step stronger (a trigger also lifts its fill one step);
+       focus or open = the accent edge.
+     - A neutral button is a raised surface with no outline: a fill one step lighter than a well, a 1px highlight on
+       its top inner edge and a 1px dark line under it. Hover = a lighter fill and the primary label; pressed = a darker
+       fill and no highlight. Its label stays a step under --text-primary (cv4 F6).
+     The edges and the highlight are translucent, so they read the same on every ground. A ReportSection body
+     redefines the fills translucent too: a control on an inset card (--bg-elevated) still separates from the card. */
   --control-fill: var(--bg-elevated);
+  --control-fill-hover: var(--bg-hover);
+  --control-edge: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --control-edge-hover: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --button-fill: var(--bg-hover);
+  --button-fill-hover: var(--bg-active);
+  --button-fill-pressed: var(--bg-elevated);
+  --button-highlight: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --button-lowlight: color-mix(in srgb, var(--bg-void) 55%, transparent);
+  --button-depth: inset 0 1px 0 var(--button-highlight), 0 1px 0 var(--button-lowlight);
+  --button-text: #cdcdd8; /* 11.6:1 on --bg-hover */
   --analysis-action-gap: 5px;
   --analysis-icon-optical-offset: 0.25px;
   --analysis-action-padding-start: 9px;

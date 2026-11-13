@@ -27,10 +27,11 @@
 .trigger > svg:last-child {
   margin-inline-start: auto;
 }
-/* cv4 F5: every dropdown trigger (field or bar, Select or MultiSelect) brightens its fill on hover. */
+/* cv4 F5, cv5 H1: every dropdown trigger (field or bar, Select or MultiSelect) is a well: on hover the edge is one
+   step stronger and the fill one step up. */
 .trigger[data-hovered] {
   border-color: var(--control-edge-hover);
-  background: var(--bg-active);
+  background: var(--control-fill-hover);
 }
 .trigger[aria-expanded='true'] {
   border-color: var(--accent-primary);
@@ -113,12 +114,12 @@
   background: var(--card-bg);
 }
 
-/* Select all / None are buttons at rest (round 10): the neutral button recipe at 20px (cv4 F6: fill, edge and label of
-   ui/Button), brighter on hover. */
+/* Select all / None are buttons at rest (round 10): the neutral button recipe at 20px (cv5 H1: the raised fill, the
+   top highlight and the label of ui/Button, no outline), brighter on hover. */
 .action {
   border: 0;
   background: var(--button-fill);
-  box-shadow: inset 0 0 0 1px var(--button-edge);
+  box-shadow: var(--button-depth);
   color: var(--button-text);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
@@ -135,7 +136,11 @@
 .action:hover {
   color: var(--text-primary);
   background: var(--button-fill-hover);
-  box-shadow: inset 0 0 0 1px var(--button-edge-hover);
+}
+
+.action:active {
+  background: var(--button-fill-pressed);
+  box-shadow: none;
 }
 
 .action:focus-visible {
@@ -280,7 +285,7 @@
   font-weight: 600;
 }
 .trigger[data-variant='bar'][data-hovered] {
-  background: var(--bg-active);
+  background: var(--control-fill-hover);
 }
 .trigger[data-variant='bar'][data-active][data-hovered] {
   background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
