@@ -11,18 +11,31 @@ export interface ToggleChipOption<T extends string = string> {
   title?: string;
 }
 
-export interface ToggleChipsProps<T extends string = string> {
+interface ToggleChipsBaseProps<T extends string = string> {
   options: ToggleChipOption<T>[];
   /** The options that are on. */
   value: readonly T[];
   onChange: (next: T[]) => void;
-  /** Names the group for assistive technology (for example "Metrics"). */
-  'aria-label': string;
   /** The smallest number of options that stay on (default 0). The last ones on cannot be switched off. */
   min?: number;
   size?: 'sm' | 'md';
   className?: string;
 }
+
+/** The group needs a name: `aria-label`, or `aria-labelledby` with the id of the visible label. */
+export type ToggleChipsProps<T extends string = string> = ToggleChipsBaseProps<T> &
+  (
+    | {
+        /** Names the group for assistive technology (for example "Metrics to analyze"). */
+        'aria-label': string;
+        'aria-labelledby'?: undefined;
+      }
+    | {
+        'aria-label'?: undefined;
+        /** The id of the visible label that names the group (cv5 Z4). */
+        'aria-labelledby': string;
+      }
+  );
 
 /**
  * ToggleChips (cv5 H4): a small set of options that are each on or off, all visible at one time. Use it in place of
@@ -37,6 +50,7 @@ export function ToggleChips<T extends string = string>({
   size = 'md',
   className,
   'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
 }: ToggleChipsProps<T>) {
   const on = new Set(value);
   const toggle = (v: T) => {
@@ -50,7 +64,8 @@ export function ToggleChips<T extends string = string>({
   return (
     <div
       role="group"
-      aria-label={ariaLabel}
+      aria-label={ariaLabelledBy ? undefined : ariaLabel}
+      aria-labelledby={ariaLabelledBy}
       className={[styles.group, className].filter(Boolean).join(' ')}
       data-size={size}
       data-toggle-chips=""

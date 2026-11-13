@@ -114,7 +114,7 @@ test.describe('metric choice (3)', () => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    const chips = page.getByRole('group', { name: 'Metrics to analyze' });
+    const chips = page.getByRole('group', { name: 'Metrics' });
     const chip = (name: string) => chips.getByRole('button', { name, exact: true });
     await expect(analyzeButton(page)).toHaveText('Analyze 4 items');
     await expect(chip('exact_match')).toHaveAttribute('aria-pressed', 'true');
@@ -130,7 +130,7 @@ test.describe('metric choice (3)', () => {
 
     await gotoApp(page, analysisUrl(seed.slug, seed.runId, '&metric=execution_accuracy'));
     await waitWorkspace(page);
-    const c2 = page.getByRole('group', { name: 'Metrics to analyze' });
+    const c2 = page.getByRole('group', { name: 'Metrics' });
     await expect(c2.getByRole('button', { name: 'execution_accuracy', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',

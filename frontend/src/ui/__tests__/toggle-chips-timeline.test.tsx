@@ -65,6 +65,25 @@ describe('ToggleChips (cv5 H4)', () => {
   });
 });
 
+describe('ToggleChips label (cv5 Z4)', () => {
+  it('a visible label names the group through aria-labelledby', () => {
+    render(
+      <>
+        <span id="metrics-label">Metrics</span>
+        <ToggleChips
+          aria-labelledby="metrics-label"
+          options={[{ value: 'a', label: 'accuracy' }]}
+          value={['a']}
+          onChange={() => {}}
+        />
+      </>,
+    );
+    const group = screen.getByRole('group', { name: 'Metrics' });
+    expect(group.getAttribute('aria-labelledby')).toBe('metrics-label');
+    expect(group.hasAttribute('aria-label')).toBe(false);
+  });
+});
+
 describe('Timeline (cv5 H5)', () => {
   const items = [
     { key: 'v1', time: 'Sep 4 · 01:51', dateTime: '2026-09-04T01:51:00Z', title: 'v1 created', meta: 'Dev User' },

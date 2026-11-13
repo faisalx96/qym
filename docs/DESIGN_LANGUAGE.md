@@ -353,7 +353,8 @@ preselected.
   radius; never a pill) with a 14px check box at its start: an empty box is off, the accent box with a check is on, so
   the state reads without colour. On adds an accent wash (`--tint-soft`, `--tint-strong` on hover) and the primary
   label; off keeps the secondary label and reads as a control you can switch on. Each chip is a button with
-  `aria-pressed`; `min` keeps the last options on (the chip says "Keep at least one on"). It is not a `Tag` (static, no
+  `aria-pressed`; `min` keeps the last options on (the chip says "Keep at least one on"). A visible label before the
+  chips names the group through `aria-labelledby` (cv5 Z4); `aria-label` only when no label is on screen. It is not a `Tag` (static, no
   box) and not a `SegmentedControl` (one track, one choice). More options, or a filter, is a `MultiSelect`.
 
 - **Timeline** (`Timeline`, cv5 H5, owner 2026-11-13 on the dataset Change log: "I really like this. I want this to be

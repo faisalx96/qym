@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { viewRunTo } from './JobStatus';
 import type { RunPasses, RunSummary } from '@/api/analysis';
 import { useModelIndex } from '@/api/dashboard';
@@ -25,6 +26,7 @@ export function RunFacts({
   onMetrics: (next: string[]) => void;
 }) {
   const modelIndex = useModelIndex(slug);
+  const metricsLabelId = useId();
   return (
     <div className={s.facts}>
       <KeyValueGrid
@@ -47,11 +49,11 @@ export function RunFacts({
       />
       {/* cv5 K1: every metric is a visible on/off chip (owner: "people might not know that these are all selected"). */}
       <div className={s.metricField}>
-        <Text variant="sm" weight={600} tone="muted" as="span" aria-hidden="true">
+        <Text variant="sm" weight={600} tone="muted" as="span" id={metricsLabelId}>
           Metrics
         </Text>
         <ToggleChips
-          aria-label="Metrics to analyze"
+          aria-labelledby={metricsLabelId}
           options={metrics.map((m) => ({ value: m, label: m }))}
           value={selected}
           onChange={(next) => onMetrics(metrics.filter((m) => next.includes(m)))}
