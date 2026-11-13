@@ -936,7 +936,7 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
   });
 
   it('C-06: history times are sans', () => {
-    expect(rule(src('features/datasets/detail/LineageTab.module.css'), '.logTime')).not.toContain(
+    expect(rule(src('ui/Timeline/Timeline.module.css'), '.when')).not.toContain(
       '--font-mono',
     );
     expect(rule(src('features/datasets/item/ItemHistoryTab.module.css'), '.when')).not.toContain(
@@ -2101,6 +2101,23 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     ];
     none(grep(shippedTsx, /iconEnd=\{<Icon name="chevron-down"/, pending));
     expect(src('ui/MultiSelect/MultiSelect.tsx')).toContain('export function BarTrigger');
+  });
+
+  it('H4: ToggleChips are wells with the control radius (not pills) and a check box for the on state', () => {
+    const css = stripComments(src('ui/ToggleChips/ToggleChips.module.css'));
+    const chip = rule(css, '.chip');
+    expect(chip).toMatch(/border-radius:\s*var\(--control-radius\)/);
+    expect(chip).toMatch(/background:\s*var\(--control-fill\)/);
+    expect(css).not.toContain('--radius-pill');
+    expect(src('ui/ToggleChips/ToggleChips.tsx')).toContain('aria-pressed={pressed}');
+  });
+
+  it('H5: the Change log is the shared Timeline; no local timeline markup', () => {
+    const tsx = src('features/datasets/detail/LineageTab.tsx');
+    expect(tsx).toContain('<Timeline');
+    expect(tsx).not.toContain('styles.rail');
+    const css = src('features/datasets/detail/LineageTab.module.css');
+    expect(css).not.toMatch(/\.rail\b|\.mark\b/);
   });
 
   it('H3: every JSON view takes the --json-* syntax colours (strings green, keys blue)', () => {

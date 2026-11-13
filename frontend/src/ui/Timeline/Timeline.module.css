@@ -1,4 +1,6 @@
-/* Timeline (cv5 H5): time, a mark on a rail, the event, a quiet second part. Ported from the dataset Change log. */
+/* Timeline (cv5 H5): time, a mark on a rail, the event, a quiet second part. The look is the dataset Change log's (cv4
+   E10, owner 2026-11-13: "I really like this. I want this to be a standard element"): the event text in secondary,
+   the words that matter in primary (the caller marks them), the person or count directly after it, no row lines. */
 .timeline {
   list-style: none;
   margin: 0;
@@ -8,6 +10,7 @@
 }
 
 .event {
+  position: relative;
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
@@ -113,20 +116,32 @@
   font: inherit;
   color: inherit;
   text-align: start;
+  overflow-wrap: anywhere;
 }
 
+/* Selectable: the whole row is the hit area (the button's ::after covers the row); the actions stay above it. */
 button.what {
+  position: static;
   cursor: pointer;
+  outline: none;
+}
+
+button.what::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   border-radius: var(--control-radius);
 }
 
-button.what:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 1px;
+button.what:focus-visible::after {
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
 }
 
 .title {
   min-inline-size: 0;
+}
+
+.event[data-active] .title {
   color: var(--text-primary);
 }
 
@@ -144,6 +159,8 @@ button.what:focus-visible {
 }
 
 .actions {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);

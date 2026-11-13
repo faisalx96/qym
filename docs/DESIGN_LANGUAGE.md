@@ -344,6 +344,25 @@ preselected.
   value narrows to the rest, ticking them all again is no filter, and None (or unticking the last one) matches
   nothing (`noneKey`). No hint line explains it; filter lists always have the search.
 
+- **On/off chips** (`ToggleChips`, cv5 H4, owner 2026-11-13: "we need a new UI element for toggling things"): a
+  small set (about 8 or fewer) of options that are each on or off and that the person must see at one time (the
+  Auto-analysis metrics, the run page categories). Each chip is a well (`--control-fill`, `--control-edge`, the control
+  radius; never a pill) with a 14px check box at its start: an empty box is off, the accent box with a check is on, so
+  the state reads without colour. On adds an accent wash (`--tint-soft`, `--tint-strong` on hover) and the primary
+  label; off keeps the secondary label and reads as a control you can switch on. Each chip is a button with
+  `aria-pressed`; `min` keeps the last options on (the chip says "Keep at least one on"). It is not a `Tag` (static, no
+  box) and not a `SegmentedControl` (one track, one choice). More options, or a filter, is a `MultiSelect`.
+
+- **Timeline** (`Timeline`, cv5 H5, owner 2026-11-13 on the dataset Change log: "I really like this. I want this to be
+  a standard element"): the one element for a dated list of events about one entity, and for a list of versions in
+  order. A row is the time (muted, tabular figures, optional), a mark on a 2px `--border-default` rail (a 20px circle
+  with an Icon, or a 10px dot; the tone only when the event matters: accent, success, info, warning, danger), the
+  event text in secondary with its key words in primary (the caller marks them), and, directly after it, a quiet
+  `meta` (the person, a count); no row lines, the rail starts at the first mark and ends at the last. Selectable
+  (`onSelect`, `activeKey`): the whole row is the hit area, hover is `--row-hover`, the open row `--row-selected` with
+  a primary title and `aria-current`; row `actions` stay above the hit area. Do not build a local event list with
+  its own rail.
+
 - **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
   underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and
   Left/Right/Home/End from React Aria). There is one tab look. A vertical tab list shows the selected item as a green
@@ -559,9 +578,9 @@ preselected.
 - **Dataset detail** (cv4 E, X7 to X9, X15, Y8, Y19): **lineage tree:** a child version hangs from its parent with an
   elbow line (2px `--border-strong`, soft corner) from a trunk under the parent's version name to the child's first
   line; no indent bars; the card of the version open on the page takes the selected outline (`Card isSelected`, the
-  first qym's green outline, cv4 X15). **Change log:** a timeline in a card: the time (muted, tabular figures), a 20px
-  mark on a 2px `--border-default` rail, the event text and, directly after it, the person (`UserPill`), so one event
-  reads as one line; marks carry meaning only and the accent is for publish and the production alias; no row lines.
+  first qym's green outline, cv4 X15). **Change log:** the shared `Timeline` in a card (cv5 H5, see "Timeline"): the
+  person (`UserPill`) is the event's `meta`; marks carry meaning only and the accent is for publish and the production
+  alias.
   **JSON while editing:** a JSON field colours its text while it is edited, with the token colours of `JsonViewer`; the read-only view uses the same colours.
   **JSON syntax colours (cv5 H3, owner 2026-11-13: "this blue is okay, this white is not okay"):** one token set,
   `--json-*`, the roles of the first qym dataset view: key `--json-key` (blue), string `--json-string` (green, the
