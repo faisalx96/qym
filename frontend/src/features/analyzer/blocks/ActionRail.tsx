@@ -20,9 +20,28 @@ function notice(config: AnalysisConfig, ws: RunWorkspace): string | null {
 }
 
 /**
- * Sticky action rail: connection, prompt preview, Test, and exactly one primary
- * action per phase (Analyze N / Cancel analysis / View run). Always mounted with a
- * fixed height; every phase renders into the same three slots.
+ * The analyzer model's options (cv5 K5): the model name first, the connection under it. The default connection is
+ * the first option, so the trigger takes the "changed" tint only when the person picks another one.
+ */
+function modelItems(config: AnalysisConfig) {
+  const conns = [...config.llm_connections].sort(
+    (a, b) => Number(b.id === config.default_connection_id) - Number(a.id === config.default_connection_id),
+  );
+  const models = conns.map((c) => c.llm_model);
+  return conns.map((c) => ({
+    key: c.id,
+    // Two connections with one model: the connection name tells them apart in the closed control too.
+    label: models.filter((m) => m === c.llm_model).length > 1 ? `${c.llm_model} (${c.name})` : c.llm_model,
+    description: c.llm_api_key_set ? c.name : `${c.name} · key missing`,
+    disabled: !c.llm_api_key_set,
+  }));
+}
+
+/**
+ * Sticky action rail (cv5 K5): one calm row. The analyzer model (labelled, the one dropdown look), the prompt preview
+ * button only when there is no prompt pane, the status, then the actions at the end: Test (neutral) and exactly one
+ * primary action per phase (Analyze N / Cancel analysis / View run). Always mounted with a fixed height; every phase
+ * renders into the same three slots.
  */
 export function ActionRail({
   ws,
@@ -37,7 +56,8 @@ export function ActionRail({
   phase: PhaseView;
   slug: string;
   runId: string;
-  onPreview: () => void;
+  /** Opens the preview drawer; absent while the prompt pane shows the preview (no button then). */
+  onPreview?: () => void;
 }) {
   const { runner, test, preview } = ws;
   const job = runner.job;
@@ -156,26 +176,24 @@ export function ActionRail({
     <section className={s.rail} aria-label="Analysis actions" data-phase={phase.phase}>
       <div className={s.railLead}>
         <Select
-          label="LLM connection"
-          hideLabel
-          items={config.llm_connections.map((c) => ({
-            key: c.id,
-            label: `${c.name} · ${c.llm_model}${c.llm_api_key_set ? '' : ' · key missing'}`,
-            disabled: !c.llm_api_key_set,
-          }))}
+          label="Analyzer model"
+          triggerVariant="bar"
+          showValue="always"
+          placement="top"
+          items={modelItems(config)}
           value={ws.connectionId}
           onChange={(k) => k != null && ws.setConnectionId(String(k))}
           isDisabled={locked || config.llm_connections.length === 0}
-          width="100%"
           className={s.railSelect}
           searchable={false}
-          placeholder="No connection"
         />
-        <Button size="sm" onPress={onPreview} isDisabled={!preview.hasTarget} className={s.railPreview}>
-          {preview.characters != null
-            ? `Prompt preview · ${preview.characters.toLocaleString(APP_LOCALE)} chars`
-            : 'Prompt preview'}
-        </Button>
+        {onPreview ? (
+          <Button size="sm" onPress={onPreview} isDisabled={!preview.hasTarget} className={s.railPreview}>
+            {preview.characters != null
+              ? `Prompt preview · ${preview.characters.toLocaleString(APP_LOCALE)} chars`
+              : 'Prompt preview'}
+          </Button>
+        ) : null}
       </div>
       <div className={s.railStatus}>
         {phase.live && phase.phase !== 'starting' ? (
@@ -223,15 +241,19 @@ export function ActionRail({
                   icon: <ActionTile icon="play" />,
                   disabled: test.testing ? false : locked || !ws.llmReady || noTargets,
                 },
-                {
-                  id: 'preview',
-                  label: 'Prompt preview',
-                  icon: <ActionTile icon="eye" />,
-                  disabled: !preview.hasTarget,
-                },
+                ...(onPreview
+                  ? [
+                      {
+                        id: 'preview',
+                        label: 'Prompt preview',
+                        icon: <ActionTile icon="eye" />,
+                        disabled: !preview.hasTarget,
+                      },
+                    ]
+                  : []),
               ]}
               onAction={(id) => {
-                if (id === 'preview') onPreview();
+                if (id === 'preview') onPreview?.();
                 else if (test.testing) test.cancel();
                 else void test.run();
               }}

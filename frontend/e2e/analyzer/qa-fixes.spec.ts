@@ -212,15 +212,15 @@ test.describe('connection without a key (11)', () => {
     });
     await openRun(page, seed.slug, seed.runId);
     await rail(page)
-      .getByRole('button', { name: /LLM connection/ })
+      .getByRole('button', { name: /Analyzer model/ })
       .click();
-    const option = page.getByRole('option', { name: /key missing/ });
+    const option = page.getByRole('option', { name: /nokey/ });
     await expect(option).toHaveAttribute('aria-disabled', 'true');
     await option.click({ force: true });
     await page.keyboard.press('Escape');
     await expect(
       rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }),
     ).toBeEnabled();
-    await expect(rail(page).getByRole('button', { name: /LLM connection/ })).not.toContainText('nokey');
+    await expect(rail(page).getByRole('button', { name: /Analyzer model/ })).not.toContainText('nokey');
   });
 });
