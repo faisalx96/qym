@@ -59,7 +59,11 @@ describe('ToggleChips (cv5 H4)', () => {
     render(<Chips initial={['a']} min={1} />);
     const accuracy = screen.getByRole('button', { name: /accuracy/ });
     expect(accuracy.getAttribute('aria-disabled')).toBe('true');
-    expect(accuracy.getAttribute('title')).toBe('Keep at least one on');
+    // cv5 Y9: the reason is the shared Tooltip (no native title); keyboard focus opens it
+    expect(accuracy.getAttribute('title')).toBeNull();
+    await user.tab();
+    expect(accuracy).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Keep at least one on');
     await user.click(accuracy);
     expect(accuracy.getAttribute('aria-pressed')).toBe('true');
   });

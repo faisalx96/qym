@@ -359,7 +359,8 @@ preselected.
   the state reads without colour. The accent is on the check box only (cv5 Y8): the chip body stays the neutral well
   in both states, so an on chip never reads as the selected segment of a `SegmentedControl` beside it. On = the
   accent box and the primary label; off = the empty box and the muted label. Each chip is a button with
-  `aria-pressed`; `min` keeps the last options on (the chip says "Keep at least one on"). A visible label before the
+  `aria-pressed`; `min` keeps the last options on (the shared `Tooltip` of the chip says "Keep at least one on"; hover and keyboard
+  focus open it, no native title, cv5 Y9). A visible label before the
   chips names the group through `aria-labelledby` (cv5 Z4); `aria-label` only when no label is on screen. Uses (cv5):
   analyzer metrics (`min={1}`), input mapping keys ("Full value" first, it excludes the key chips), run page
   Categories keys (`count`, `min={1}`). It is not a `Tag` (static, no

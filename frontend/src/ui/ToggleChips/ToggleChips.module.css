@@ -61,7 +61,7 @@
   cursor: not-allowed;
 }
 
-/* The last options that must stay on (min): no hover change, the default cursor; the title says why. */
+/* The last options that must stay on (min): no hover change, the default cursor; the Tooltip says why (cv5 Y9). */
 .chip[aria-disabled='true'],
 .chip[aria-disabled='true']:hover {
   cursor: default;

@@ -2112,6 +2112,10 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     for (const sel of [".chip[aria-pressed='true']", ".chip[aria-disabled='true']"])
       expect(rules(css, sel).join('\n'), sel).not.toMatch(/background:[^;]*accent/);
     expect(rule(css, ".chip[aria-pressed='true'] .check")).toMatch(/background:\s*var\(--accent-primary\)/);
+    // cv5 Y9: the chip hint is the shared Tooltip, not a native title
+    const tsx = src('ui/ToggleChips/ToggleChips.tsx');
+    expect(tsx).toContain('<Tooltip key={o.value} content={hint} isDisabled={!hint}>');
+    expect(tsx).not.toMatch(/\btitle=\{/);
   });
 
   it('H5: the Change log is the shared Timeline; no local timeline markup', () => {
