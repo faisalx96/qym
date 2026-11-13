@@ -273,6 +273,8 @@ function RulesView({
     const live = isLive(v, productionId);
     return {
       key: v.id,
+      // cv5 Z5: an icon mark as on the dataset Change log: draft `edit`, production `star`, other released `check`
+      icon: live ? 'star' : v.status === 'draft' ? 'edit' : 'check',
       tone: live ? 'success' : v.status === 'draft' ? 'warning' : 'neutral',
       title: (
         <span className={s.versionTop}>
@@ -342,6 +344,7 @@ function RulesView({
           activeKey={open.id}
           onSelect={setOpenId}
           revealActions
+          markAlign="start"
           items={timeline}
         />
       </aside>
