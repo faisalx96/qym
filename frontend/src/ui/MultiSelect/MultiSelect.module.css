@@ -59,6 +59,12 @@
   font-weight: 600;
 }
 
+/* cv5 Y13: "Label · value": the separator is a flex item, so the trigger gap is the space on both sides of it. */
+.triggerSep {
+  flex: none;
+  color: var(--text-muted);
+}
+
 .triggerValue {
   overflow: hidden;
   text-overflow: ellipsis;

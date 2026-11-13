@@ -40,6 +40,11 @@
   gap: var(--space-sm);
 }
 
+/* cv5 Y13: the count sets its line as the buttons beside it do (line-height 1), so its text sits on their centre line. */
+.count {
+  line-height: 1;
+}
+
 .chipList {
   display: contents;
 }

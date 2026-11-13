@@ -992,7 +992,7 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   "+N more" count tag (Q02 C, Q49 C).
 
 - **Filter bar** (`features/runs-list/FilterBar`, `MultiSelect triggerVariant="bar"`, toolbar `rows` slot): row 1 is search,
-  Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint when active),
+  Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, the dot its own flex item with the same gap on both sides (cv5 Y13), accent tint when active),
   `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset, User, Version)
   and, right after them, one `× Clear n` in the danger tone, the count on its own red disc. There is no chip line (round 8: each trigger already names
   its value, and the status-bar sentence lists every filter). The table controls (Select, Columns, Density) centre on

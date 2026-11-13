@@ -2239,6 +2239,15 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(rule(css, '.timeline[data-selectable] .event[data-active]')).toMatch(/background:\s*var\(--row-selected\)/);
   });
 
+  it('Y13: the bar trigger dot has equal space on both sides; the items count sits on the control centre line', () => {
+    const ms = src('ui/MultiSelect/MultiSelect.tsx');
+    expect(ms).toContain('<span className={styles.triggerSep}>·</span>');
+    expect(ms).not.toContain('>· {value}<');
+    expect(rule(stripComments(src('features/run-detail/components/items/FilterBar.module.css')), '.count')).toMatch(
+      /line-height:\s*1;/,
+    );
+  });
+
   it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
     const t = src('features/analyzer/blocks/PromptPane.tsx');
     expect(t).toContain('No change to the prompt');

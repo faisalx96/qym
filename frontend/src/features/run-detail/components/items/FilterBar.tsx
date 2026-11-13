@@ -192,7 +192,7 @@ export function FilterBar({ display, end }: { display: DisplayState; end?: React
         </Popover>
       </div>
       <div className={styles.chips}>
-        <Text variant="sm" tone="muted" aria-live="polite" data-testid="items-count">
+        <Text variant="sm" tone="muted" aria-live="polite" data-testid="items-count" className={styles.count}>
           {union
             ? `${items.length.toLocaleString('en-US')} items`
             : `${items.length.toLocaleString('en-US')} of ${payload.snapshot.rows.length.toLocaleString('en-US')} items`}
