@@ -911,7 +911,7 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
 
   it('C-03: a stale live page shows one notice, not a tinted status card', () => {
     const line = src('features/live/components/StatusLine.tsx');
-    // the red Stale StatusMark stays; the card itself takes no stale tone or wash
+    // the card takes no stale tone or wash (and no Stale tag: the notice above it says Stale, cv5 Y17)
     none(
       elements(line, ['[A-Z][A-Za-z.]*'])
         .filter((e) => e.name !== 'StatusMark' && /tone=\{stale/.test(e.attrs))
@@ -926,6 +926,8 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
       expect(before, 'staleText renders only under stale ? null :').toMatch(/stale \? null :/);
     }
     expect(src('features/live/LiveOverviewPage.tsx')).toContain('live-stale-notice');
+    // cv5 Y17: the notice says Stale with its detail; the status card has no second Stale tag
+    expect(line).not.toMatch(/>\s*Stale\s*</);
   });
 
   it('C-04: relative times come from lib/dates', () => {

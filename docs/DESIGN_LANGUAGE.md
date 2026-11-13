@@ -1238,7 +1238,7 @@ browser or server text as is, and a 422 lands on its field (`fieldErrorsOf`; `Fo
   `--font-sm`. A link to the details (See Errors) ends the line in the tone's
   text colour. No border box, no title, never a banner or a toast. A filter has one Clear: the red `Clear n` of the
   bar or sticky nav. A stale Live source is one `danger` InlineNotice above the neutral status card (lead `Stale.`),
-  never a red card. Compare notes are InlineNotice lines (warning, danger, info); no bordered note boxes. `Callout`
+  never a red card; the status card then shows no Stale tag (the notice says it with its detail, cv5 Y17). Compare notes are InlineNotice lines (warning, danger, info); no bordered note boxes. `Callout`
   uses the same recipe (rail, glyph, wash, lead in tone text); there is no bordered callout box. The dataset Note is
   one line: tone-coloured title, then the reason.
 

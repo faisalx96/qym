@@ -42,7 +42,9 @@ export function StatusLine({
       data-live-stale={stale ? 'true' : 'false'}
     >
       <div className={styles.status} data-stale={stale ? '' : undefined}>
-        {stale ? <StateTag tone="danger">Stale</StateTag> : <StateTag tone="info">Running</StateTag>}
+        {/* cv5 Y17: a stale source says "Stale." once, in the notice above this card (it carries the detail); the card
+            shows no second Stale tag */}
+        {stale ? null : <StateTag tone="info">Running</StateTag>}
         {stale ? null : <span>{staleText(status, now)}</span>}
         <span title={formatRelative(status.last_turn_at, now)}>
           Last turn <span className={styles.time}>{lastTurn}</span>
