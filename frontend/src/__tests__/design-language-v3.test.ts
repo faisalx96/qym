@@ -1957,6 +1957,10 @@ describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
     // depth by fill, not by outline (owner 2026-11-13): no variant draws a 1px edge ring
     expect(css).not.toMatch(/inset 0 0 0 1px/);
     expect(tokens()).not.toContain('--button-edge');
+    // cv5 Y7: a button reads as a button on the page ground: one fill step up and a visible top highlight
+    expect(tokens()).toMatch(/--button-fill:\s*var\(--bg-active\)/);
+    expect(tokens()).toMatch(/--button-highlight:\s*color-mix\(in srgb, var\(--text-primary\) (8|9|10)%, transparent\)/);
+    expect(tokens()).toMatch(/--control-edge:\s*color-mix\(in srgb, var\(--text-primary\) 7%, transparent\)/);
   });
 
   it('F7/F8, cv5 H1: wells share --control-fill and a translucent hairline; a report body makes the fills relative', () => {

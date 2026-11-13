@@ -240,10 +240,11 @@ preselected.
   - A **well** is a control that you type in or pick a value from: `TextField`, `SearchField`, `Textarea`, the
     `Select` and `MultiSelect` trigger (field and bar), the `SegmentedControl` track, the date and time field. It has
     the `--control-fill` fill (`--bg-elevated`, one step over the ground) and the `--control-edge` hairline (the text
-    colour at 5%, so it reads the same on every ground). Hover = `--control-edge-hover` (a trigger also takes
+    colour at 7%, so it reads the same on every ground and is never weaker than the border before cv4, cv5 Y7). Hover = `--control-edge-hover` (a trigger also takes
     `--control-fill-hover`); focus or open = the accent edge.
-  - A **neutral button** is a raised surface: the `--button-fill` fill one step lighter than a well and
-    `--button-depth` (a 1px highlight on its top inner edge, `--button-highlight`, and a 1px dark line under it). It
+  - A **neutral button** is a raised surface: the `--button-fill` fill (`--bg-active`, cv5 Y7) two steps lighter than a
+    well and `--button-depth` (a 1px highlight on its top inner edge, `--button-highlight` at 9% so that it is
+    visible, and a 1px dark line under it). On the page ground it is at least as defined as a well beside it. It
     has no edge ring. Its label is `--button-text`, a step under `--text-primary` (cv4 F6: "this white text is too
     bright"). Hover = `--button-fill-hover` and the primary label; pressed = `--button-fill-pressed` and no highlight;
     never the reverse (a resting fill brighter than its hover reads as already pressed, round 8). A neutral button
@@ -251,7 +252,7 @@ preselected.
   - **Tinted** buttons (accent, meta, danger) are a tint fill only: `--tint-soft` at rest, `--tint-strong` on hover; no
     edge and no highlight. **Primary** is the solid accent, `--accent-primary-hover` on hover.
   - **On an inset card:** a `ReportSection` body (inset cards at `--bg-elevated`) makes the well and button fills
-    translucent (the text colour at 4% and 8%), so a well is one step and a button two steps over whichever ground it
+    translucent (the text colour at 4% and 10%), so a well is one step and a button two steps over whichever ground it
     sits on: a control never melts into a card. A feature never sets a control's fill, edge, height or font size.
   The menu actions Select all and None are the same neutral recipe at `--control-height-sm`. A disabled neutral button
   keeps the flat shape at half its fill with muted text and no depth.
