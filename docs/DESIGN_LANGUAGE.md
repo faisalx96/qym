@@ -356,8 +356,9 @@ preselected.
   small set (about 8 or fewer) of options that are each on or off and that the person must see at one time (the
   Auto-analysis metrics, the run page categories). Each chip is a well (`--control-fill`, `--control-edge`, the control
   radius; never a pill) with a 14px check box at its start: an empty box is off, the accent box with a check is on, so
-  the state reads without colour. On adds an accent wash (`--tint-soft`, `--tint-strong` on hover) and the primary
-  label; off keeps the secondary label and reads as a control you can switch on. Each chip is a button with
+  the state reads without colour. The accent is on the check box only (cv5 Y8): the chip body stays the neutral well
+  in both states, so an on chip never reads as the selected segment of a `SegmentedControl` beside it. On = the
+  accent box and the primary label; off = the empty box and the muted label. Each chip is a button with
   `aria-pressed`; `min` keeps the last options on (the chip says "Keep at least one on"). A visible label before the
   chips names the group through `aria-labelledby` (cv5 Z4); `aria-label` only when no label is on screen. Uses (cv5):
   analyzer metrics (`min={1}`), input mapping keys ("Full value" first, it excludes the key chips), run page

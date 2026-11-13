@@ -1,6 +1,8 @@
 /* ToggleChips (cv5 H4): a small set of on/off options, all visible. Each chip is a well (cv5 H1: --control-fill and the
    --control-edge hairline, the control radius, not a pill) with a check box at its start, so on and off read at a
-   glance without colour: an empty box is off, a filled accent box with a check is on. Apart from a Tag (static, no
+   glance: an empty box and a muted label is off, a filled accent box with a check and the primary label is on. The
+   accent is on the box only (cv5 Y8): the chip body stays the neutral well, so an on chip never reads as the selected
+   segment of a SegmentedControl beside it. Apart from a Tag (static, no
    box, 20px) and from a SegmentedControl (one track, one choice): separate chips, any number on. */
 .group {
   display: inline-flex;
@@ -23,7 +25,7 @@
   font-size: var(--font-sm);
   font-weight: 500;
   line-height: 1.3;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
   user-select: none;
   transition:
@@ -44,15 +46,9 @@
   color: var(--text-primary);
 }
 
-/* On: an accent wash over the well (no accent outline, cv5 H1) and the primary label; the box is filled and carries the
-   check. */
+/* On: the primary label; the box is filled and carries the check. No wash on the body (cv5 Y8). */
 .chip[aria-pressed='true'] {
-  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--control-fill));
   color: var(--text-primary);
-}
-
-.chip[aria-pressed='true']:hover {
-  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), var(--control-fill));
 }
 
 .chip:focus-visible {
@@ -70,7 +66,7 @@
 .chip[aria-disabled='true']:hover {
   cursor: default;
   border-color: var(--control-edge);
-  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--control-fill));
+  background: var(--control-fill);
 }
 
 .check {

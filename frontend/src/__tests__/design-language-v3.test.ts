@@ -2108,6 +2108,10 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     expect(chip).toMatch(/background:\s*var\(--control-fill\)/);
     expect(css).not.toContain('--radius-pill');
     expect(src('ui/ToggleChips/ToggleChips.tsx')).toContain('aria-pressed={pressed}');
+    // cv5 Y8: the accent is on the check box only; the on chip body is not washed (it is not a selected segment)
+    for (const sel of [".chip[aria-pressed='true']", ".chip[aria-disabled='true']"])
+      expect(rules(css, sel).join('\n'), sel).not.toMatch(/background:[^;]*accent/);
+    expect(rule(css, ".chip[aria-pressed='true'] .check")).toMatch(/background:\s*var\(--accent-primary\)/);
   });
 
   it('H5: the Change log is the shared Timeline; no local timeline markup', () => {
