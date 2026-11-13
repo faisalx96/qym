@@ -378,7 +378,8 @@ preselected.
   for the selected row and while its menu is open (always on touch); a caller never hides them with its own
   selectors. `markAlign="start"` puts the mark, the time and the actions on the title line of a two-line row (a
   version with its meta under the title). A toned dot is solid in its tone; on the selected fill a toned mark keeps
-  an 80% edge and an opaque ground, so a success or accent mark stays visible on the accent wash. `rowData` puts
+  an 80% edge and a solid dark base (`--bg-void`) under a 12% tint, so a success or accent mark stays visible on the
+  accent wash (cv5 Y12); a green `Flag` on `--row-selected` measures 5.8:1, so the selected row keeps that token. `rowData` puts
   `data-*` hooks on a row. Users (cv5 Z6): the dataset Change log, the rule versions, the item History tab (one
   timeline newest first: each revision with its diff in `detail` and Revert in `actions`, then the event that drafted
   its version), the feedback request History, the run review log (the state words stay `StateTag`s), the Live worker

@@ -2231,6 +2231,14 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(doc).toContain('no chevron between them (cv5 Y11');
   });
 
+  it('Y12: a toned mark on the selected Timeline row sits on a solid dark base', () => {
+    const css = stripComments(src('ui/Timeline/Timeline.module.css'));
+    expect(css).toMatch(
+      /\.event\[data-active\] \.mark:not\(\[data-tone='neutral'\], \[data-dot\]\) \{[^}]*background:\s*color-mix\(in srgb, var\(--mark\) \d+%, var\(--bg-void\)\)/,
+    );
+    expect(rule(css, '.timeline[data-selectable] .event[data-active]')).toMatch(/background:\s*var\(--row-selected\)/);
+  });
+
   it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
     const t = src('features/analyzer/blocks/PromptPane.tsx');
     expect(t).toContain('No change to the prompt');
