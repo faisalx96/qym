@@ -6,6 +6,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as AnalysisModule from '@/api/analysis';
 import type { AnalysisConfig, RuleVersion, RuleVersionsResponse } from '@/api/analysis';
 import { ToastProvider } from '@/ui';
 
@@ -14,7 +15,7 @@ const createDraft = vi.fn();
 let versions: RuleVersionsResponse;
 
 vi.mock('@/api/analysis', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/api/analysis')>();
+  const real = await importOriginal<typeof AnalysisModule>();
   return {
     ...real,
     useRuleVersions: () => ({ data: versions, isPending: false, isError: false }),
