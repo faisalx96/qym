@@ -201,12 +201,6 @@
   min-width: 0;
 }
 
-/* cv5 K5: "Analyzer model · <model>" is longer than a filter trigger's 168px cap; it shows in full (Needs from H: a
-   cap for a label-plus-value trigger that is not a filter). */
-.railSelect [data-variant='bar'] {
-  max-width: 320px;
-}
-
 .railPreview {
   flex: none;
   font-variant-numeric: tabular-nums;

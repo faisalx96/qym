@@ -325,7 +325,8 @@ preselected.
   end, a `MultiSelect` with its checkboxes. `triggerVariant="bar"` puts the label inside the trigger (no label above it).
   No native `<select>` anywhere, the page size of `Pagination` and the card-mode sort of `DataTable` included.
   A bar `Select` for a choice that always has a value (a sort order, a view) passes `showValue="always"`, so the
-  trigger reads "Sort · Index" at the default too; a filter whose first item means "all" shows only its label until
+  trigger reads "Sort · Index" at the default too, and its cap is 320px (a filter trigger stays at 168px) so the label
+  and the value stay on one line ("Analyzer model · gpt-4o-mini", cv5 Z2); a filter whose first item means "all" shows only its label until
   set (cv4 Y6). A bar trigger takes the accent only when the choice differs from the page default; a `MultiSelect`
   whose default is a selection (all metrics) says so with `isDefault` (cv4 Y12).
   **Menu trigger (cv5 H6, owner 2026-11-13: "We have these drop-down styles and then we have these. This is
