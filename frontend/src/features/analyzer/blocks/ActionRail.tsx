@@ -113,6 +113,7 @@ export function ActionRail({
   );
 
   const analyzeLabel = `Analyze ${ws.targetCount} ${ws.targetCount === 1 ? 'item' : 'items'}`;
+  // cv5 Y1: the one main action of each state is the solid primary button; the other start action is neutral.
   let primary;
   if (phase.phase === 'running' || phase.phase === 'cancelling') {
     primary = (
@@ -134,7 +135,7 @@ export function ActionRail({
         </Button>
         <LinkButton
           size="sm"
-          variant="accent"
+          variant="primary"
           to={viewRunTo(slug, runId, job?.pass_number)}
           className={s.railPrimary}
         >
@@ -148,7 +149,7 @@ export function ActionRail({
         <LinkButton size="sm" to={viewRunTo(slug, runId, job?.pass_number)} className={s.railSecondary}>
           View run
         </LinkButton>
-        <Button size="sm" variant="accent" onPress={runner.dismiss} className={s.railPrimary}>
+        <Button size="sm" variant="primary" onPress={runner.dismiss} className={s.railPrimary}>
           Analyze again
         </Button>
       </>
@@ -159,7 +160,7 @@ export function ActionRail({
         <span className={s.railTest}>{testButton}</span>
         <Button
           size="sm"
-          variant="accent"
+          variant="primary"
           onPress={() => void ws.analyze()}
           isDisabled={locked || !ws.llmReady || noTargets}
           loading={phase.phase === 'starting'}
@@ -327,6 +328,8 @@ export function CompactJobRail({
             <Button size="sm" onPress={onOpen} className={s.railSecondary}>
               Open results
             </Button>
+            {/* cv5 Y1: the compact rail sits on a guidance tab, which has its own primary create action, so View run is
+                the accent button there (one solid green button in a view) */}
             <LinkButton
               size="sm"
               variant="accent"

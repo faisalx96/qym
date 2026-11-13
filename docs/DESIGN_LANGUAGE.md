@@ -416,7 +416,9 @@ preselected.
 
 - **Action rail** (auto-analysis, `features/analyzer/blocks/ActionRail`): a page-level sticky bottom bar of
   `--action-rail-height`, always mounted, with a fixed primary-button width (`--action-primary-width`) so
-  label changes never move neighbours. Exactly one accent button per state. The sections above it reserve
+  label changes never move neighbours. Exactly one primary button per state (cv5 Y1: "Analyze N items", "View run",
+  "Analyze again"); the other start action of the state ("Test the first target") is neutral. The compact job rail of a
+  guidance tab uses the accent button, because that tab has its own primary create action. The sections above it reserve
   their space (`--results-slot-min-height`) so state changes insert nothing above existing content. No rule above
   the bar (cv5 K5). The analyzer model is a labelled bar `Select` with `showValue="always"` ("Analyzer model ·
   gpt-4o-mini"); with the prompt pane on screen the bar has no Prompt preview button.

@@ -2185,6 +2185,17 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(doc).toContain('No rule above\n  the bar (cv5 K5)');
   });
 
+  it('Y1: the main action of the action rail is the primary button', () => {
+    const t = src('features/analyzer/blocks/ActionRail.tsx');
+    // the Analyze start button, View run (done) and Analyze again (failed) are primary
+    expect(t).toMatch(/variant="primary"\s+onPress=\{\(\) => void ws\.analyze\(\)\}/);
+    expect(t).toContain('<Button size="sm" variant="primary" onPress={runner.dismiss} className={s.railPrimary}>');
+    const full = t.slice(0, t.indexOf('export function CompactJobRail'));
+    expect(full).not.toContain('variant="accent"');
+    expect(doc).toContain('Exactly one primary button per state');
+    expect(doc).not.toContain('Exactly one accent button per state');
+  });
+
   it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
     const t = src('features/analyzer/blocks/PromptPane.tsx');
     expect(t).toContain('No change to the prompt');
