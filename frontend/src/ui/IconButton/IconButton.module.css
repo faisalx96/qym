@@ -44,15 +44,16 @@
   color: var(--error-hover);
 }
 
-/* Row action tile (`tile`), cv4 F9 (owner: "too dim, too small"): a 24px square (the control height) with a 14px glyph,
-   the tone's strong tint at rest and a stronger one on hover; the glyph is the full tone at rest and the tone lifted
-   toward white on hover. The 20px / 12px tile is the static glyph of a row menu item (ActionTile, below). */
+/* Row action tile (`tile`), cv4 F9 then cv5 H2 (owner: "too dim, too small", then "a teeny tiny bit less bold, smaller,
+   less bright"): a --tile-size (22px) square with a --tile-glyph (13px) glyph, the tone's --tint-tile at rest and a
+   stronger tint on hover; the glyph is the tone a little toward the surface at rest and the tone lifted toward white on
+   hover. The 20px / 12px tile is the static glyph of a row menu item (ActionTile, below). */
 .iconAction[data-tile] {
   --tile-tone: var(--accent-primary);
-  width: var(--control-height);
-  height: var(--control-height);
-  background: color-mix(in srgb, var(--tile-tone) var(--tint-strong), transparent);
-  color: var(--tile-tone);
+  width: var(--tile-size);
+  height: var(--tile-size);
+  background: color-mix(in srgb, var(--tile-tone) var(--tint-tile), transparent);
+  color: color-mix(in srgb, var(--tile-tone) var(--tile-glyph-mix), var(--bg-surface));
   transition:
     background var(--transition-fast),
     color var(--transition-fast);
@@ -64,6 +65,11 @@
 /* auto-analysis keeps its purple (owner decision, Nov 1) */
 .iconAction[data-tile][data-tone='meta'] {
   --tile-tone: var(--accent-tertiary);
+}
+/* The Icon component draws 12, 14 or 16px: the tile scales its 14px glyph to --tile-glyph. */
+.iconAction[data-tile]:not([data-static]) > svg {
+  width: var(--tile-glyph);
+  height: var(--tile-glyph);
 }
 /* ActionTile: the glyph of a row menu item, not a control: the 20px tile with the 12px glyph */
 .iconAction[data-static] {

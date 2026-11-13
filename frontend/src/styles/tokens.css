@@ -332,7 +332,13 @@
   --tint-faint: 6%; /* row/section wash (danger and live only) */
   --tint-soft: 12%; /* Badge, Tag, Chip selected, score pill, icon tile fill */
   --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
-  --tint-tile-hover: 32%; /* cv4 F9: hover/pressed on a row action tile (its rest fill is --tint-strong) */
+  /* cv5 H2 (owner 2026-11-13: "a teeny tiny bit less bold ... smaller ... less bright"): the row action tile one small
+     step back from cv4 F9 (24px, 14px glyph, --tint-strong), still brighter than before cv4 (20px, 12px, 0.6 opacity). */
+  --tile-size: 22px;
+  --tile-glyph: 13px;
+  --tint-tile: 16%; /* the rest fill of a row action tile */
+  --tile-glyph-mix: 88%; /* the rest glyph: the tone at this share, the rest the surface */
+  --tint-tile-hover: 30%; /* hover/pressed on a row action tile */
   --tint-gold: 17%; /* the admin role fill: at 12% gold reads brown on the dark surface (Q16) */
   --role-admin: #e0bc4a; /* admin role tag (Q16 B) */
   --stripe-step: 2%; /* page list stripe: --text-primary mixed into the row base (resolution 14, owner tunes) */

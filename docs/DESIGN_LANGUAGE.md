@@ -408,8 +408,10 @@ preselected.
   exception is `tile`: every row action of a table or a row list (rules, diagnosis subcategories, documents) is a
   tile; a harmful action (archive, revoke, remove, cancel, delete, force stop, disable) is a red tile, every other
   action a green tile (Q26 A). A tile is the
-  tone's `--tint-strong` 24px square (`--control-height`) with a 14px glyph at rest and `--tint-tile-hover` on hover,
-  focus and press (cv4 F9, owner: "too dim, too small"), the row's action group at full opacity at rest (no 0.6 rest
+  tone's `--tint-tile` (16%) square of `--tile-size` (22px) with a `--tile-glyph` (13px) glyph, the tone at
+  `--tile-glyph-mix` toward the surface, at rest, and `--tint-tile-hover` with the glyph lifted toward white on hover,
+  focus and press (cv4 F9, owner: "too dim, too small"; cv5 H2, owner: "a teeny tiny bit less bold, smaller, less
+  bright"), the row's action group at full opacity at rest (no 0.6 rest
   fade), a disabled tile at full opacity with a neutral fill and the `--text-muted` glyph (readable, not missing),
   the glyph in the tone (accent, `--error` for danger, `--accent-tertiary` for `meta`, the auto-analysis purple).
   Cancel of a Live worker job uses `ban`. A per-row action in a form (sweep, reset, remove) is an `IconButton`, not a
