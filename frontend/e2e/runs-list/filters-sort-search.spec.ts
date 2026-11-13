@@ -247,7 +247,7 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     const summary = filterSummary(page);
     await expect(summary).toContainText('Prompt version: v2, v3');
     await expect(summary).toContainText('Agent: alpha');
-    await expect(page.getByTestId('filters-trigger')).toContainText('More filters · 3');
+    await expect(page.getByTestId('filters-trigger')).toContainText(/More filters\s*· 3/);
     // the URL keeps the keys (sorted) and the values
     const sp = urlParams(page);
     expect(sp.getAll('v.prompt_version')).toEqual(['v2', 'v3']);

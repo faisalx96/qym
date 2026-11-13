@@ -112,6 +112,13 @@ a.chip:focus-visible {
   color: var(--text-muted);
 }
 
+/* An alias segment (cv5 M3): the at-sign of the run label (name@alias) marks the name as an alias. It is a glyph,
+   so it is dim and the alias stays the readable word; the tooltip says what an alias is. */
+.at {
+  margin-inline-end: 1px;
+  color: var(--text-dim);
+}
+
 .segment[data-part='version'] {
   font-weight: 600;
   color: var(--text-secondary);

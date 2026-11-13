@@ -52,7 +52,8 @@ export function ColumnsMenu({
     <Popover
       label="Columns"
       trigger={
-        <Button variant="neutral" iconEnd={<Icon name="chevron-down" size={12} />}>
+        // cv5 M6: the same control as the Runs table's Columns (list glyph, no chevron): one look for one function
+        <Button variant="neutral" icon={<Icon name="list" size={12} />}>
           Columns
         </Button>
       }

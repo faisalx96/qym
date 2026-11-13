@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import type { Key } from 'react-aria-components';
 import type { Facets } from '@/api/dashboardTypes';
-import { Button, ClearFiltersButton, Drawer, Icon, MultiSelect, Popover, SearchField } from '@/ui';
+import { BarTrigger, Button, ClearFiltersButton, Drawer, Icon, MultiSelect, Popover, SearchField } from '@/ui';
 import { FACET_SINGULAR, inlineFacets } from './filterBarModel';
 import { buildFacetDefs, FiltersPanel, TimeOriginControls, type FacetDef } from './FiltersPopover';
 import {
@@ -142,14 +142,15 @@ function FacetRow({
           label="More filters"
           placement="bottom start"
           trigger={
-            <Button
-              variant={moreActive ? 'accent' : 'neutral'}
-              iconEnd={<Icon name="chevron-down" size={12} />}
+            // cv5 M6 (H6): it opens a panel of choices and ends with a chevron, so it is a menu trigger with the one
+            // dropdown trigger look of the facets next to it, not a button
+            <BarTrigger
+              label="More filters"
+              value={moreActive ? String(moreActive) : undefined}
+              active={moreActive > 0}
               data-testid="filters-trigger"
               className={styles.more}
-            >
-              More filters{moreActive ? ` · ${moreActive}` : ''}
-            </Button>
+            />
           }
         >
           <div className={styles.morePanel} data-testid="filters-panel">

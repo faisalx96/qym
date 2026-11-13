@@ -51,7 +51,7 @@ test('one facet per versioning key; choosing a value filters, is summarised and 
     .poll(() => listRequests(cap).at(-1)?.body.filters.versioning)
     .toEqual({ agent_version: ['v1'] });
   await expect(filterSummary(page)).toContainText('Agent version: v1');
-  await expect(page.getByTestId('filters-trigger')).toContainText('More filters · 1');
+  await expect(page.getByTestId('filters-trigger')).toContainText(/More filters\s*· 1/);
   expect(urlParams(page).getAll('v.agent_version')).toEqual(['v1']);
   // The other key's values narrow to what the selection leaves.
   await openFacet(page, 'Kb version');
@@ -66,7 +66,7 @@ test('one facet per versioning key; choosing a value filters, is summarised and 
     .click();
   await expect.poll(() => urlParams(page).has('v.agent_version')).toBe(false);
   await expect(filterSummary(page)).not.toContainText('Agent version');
-  await expect(page.getByTestId('filters-trigger')).not.toContainText('More filters ·');
+  await expect(page.getByTestId('filters-trigger')).not.toContainText(/More filters\s*·/);
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 

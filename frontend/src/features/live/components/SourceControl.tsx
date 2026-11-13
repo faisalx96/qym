@@ -2,6 +2,7 @@ import { useLiveSources, type LiveSourceInfo } from '@/api/live';
 import { useSearchParamsState } from '@/lib/url-state';
 import { Select, Tag } from '@/ui';
 import styles from '../live.module.css';
+import { EnvironmentTag } from './EnvironmentTag';
 
 /** The source and environment have the same page-level control on both live pages. */
 export function SourceControl({
@@ -41,11 +42,7 @@ export function SourceControl({
           {current?.name ?? source}
         </Tag>
       )}
-      {current?.environment ? (
-        <Tag kind="data" dir="auto">
-          {current.environment}
-        </Tag>
-      ) : null}
+      {current?.environment ? <EnvironmentTag environment={current.environment} /> : null}
     </span>
   );
 }
