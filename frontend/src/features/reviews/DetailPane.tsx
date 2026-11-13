@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useModelIndex } from '@/api/dashboard';
-import { useCorrection, type CorrectionRow } from '@/api/reviews';
+import { useCorrection, type CorrectionHistoryEntry, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
 import { formatTableDate } from '@/lib/dates';
 import { textDirAttrs } from '@/lib/text';
@@ -21,6 +21,7 @@ import {
   DatasetTag,
   ModelTag,
   UserName,
+  Timeline,
 } from '@/ui';
 import { formatDate } from '../datasets/lib/itemValue';
 import { modelSeriesOf } from '@/features/runs-list/model';
@@ -342,6 +343,15 @@ function Snapshot({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+/**
+ * A revision's name (cv5 Z6). Rows from before revision numbers (legacy) have none: when no row has one, the list
+ * order (newest first) numbers them; next to numbered rows a legacy row is an "Earlier revision".
+ */
+function revisionName(n: number | null | undefined, all: CorrectionHistoryEntry[], i: number): string {
+  if (n != null) return `Revision ${n}`;
+  return all.every((h) => h.revision_number == null) ? `Revision ${all.length - i}` : 'Earlier revision';
+}
+
 function FullDetail({ id }: { id: number }) {
   const q = useCorrection(id);
   if (q.isPending) return <Skeleton kind="lines" rows={4} label="Loading details" />;
@@ -376,27 +386,31 @@ function FullDetail({ id }: { id: number }) {
           <Text variant="sm" tone="muted" weight={650}>
             REVISION HISTORY
           </Text>
-          <ol className={styles.history}>
-            {d.history.map((h) => (
-              <li key={h.revision_id}>
-                <span className={styles.histWhen}>{formatTableDate(h.created_at)}</span>
-                <span>
-                  Revision {h.revision_number} by{' '}
-                  {h.actor_user ? (
-                    <UserName
-                      id={h.actor_user.id}
-                      name={h.actor_user.display_name}
-                      email={h.actor_user.email}
-                    />
-                  ) : (
-                    h.actor_source
-                  )}
+          {/* cv5 Z6: the shared Timeline, as the dataset Change log */}
+          <Timeline
+            aria-label="Revisions"
+            className={styles.history}
+            markAlign="start"
+            items={d.history.map((h, i, all) => ({
+              key: `${h.revision_id ?? 'legacy'}-${i}`,
+              time: formatTableDate(h.created_at),
+              dateTime: h.created_at,
+              // newest first: the last row is the first revision (a legacy row has no number of its own)
+              icon: i === all.length - 1 ? 'plus' : 'edit',
+              title: (
+                <span className={styles.histTitle}>
+                  <span>{revisionName(h.revision_number, all, i)}</span>
+                  {h.review ? <ReviewStatusMark status={h.review.status} /> : null}
                 </span>
-                {h.review ? <ReviewStatusMark status={h.review.status} /> : null}
-                {h.review?.review_comment ? <span>“{h.review.review_comment}”</span> : null}
-              </li>
-            ))}
-          </ol>
+              ),
+              meta: h.actor_user ? (
+                <UserName id={h.actor_user.id} name={h.actor_user.display_name} email={h.actor_user.email} />
+              ) : (
+                h.actor_source
+              ),
+              detail: h.review?.review_comment ? <span dir="auto">“{h.review.review_comment}”</span> : undefined,
+            }))}
+          />
         </section>
       ) : null}
       {d.item_metadata && Object.keys(d.item_metadata).length ? (

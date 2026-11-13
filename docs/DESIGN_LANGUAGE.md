@@ -369,7 +369,12 @@ preselected.
   for the selected row and while its menu is open (always on touch); a caller never hides them with its own
   selectors. `markAlign="start"` puts the mark, the time and the actions on the title line of a two-line row (a
   version with its meta under the title). A toned dot is solid in its tone; on the selected fill a toned mark keeps
-  an 80% edge and an opaque ground, so a success or accent mark stays visible on the accent wash.
+  an 80% edge and an opaque ground, so a success or accent mark stays visible on the accent wash. `rowData` puts
+  `data-*` hooks on a row. Users (cv5 Z6): the dataset Change log, the rule versions, the item History tab (one
+  timeline newest first: each revision with its diff in `detail` and Revert in `actions`, then the event that drafted
+  its version), the feedback request History, the run review log (the state words stay `StateTag`s), the Live worker
+  settings versions (Restore in `actions`) and the review revision history. A list with two lines per row uses
+  `markAlign="start"`.
 
 - **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
   underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and

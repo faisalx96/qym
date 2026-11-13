@@ -11,9 +11,12 @@ import {
   LinkButton,
   StateTag,
   Tag,
+  Timeline,
   UserName,
   type StateTagTone,
+  type TimelineItem,
 } from '@/ui';
+import { formatTableDate } from '@/lib/dates';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
@@ -42,53 +45,71 @@ export function selfApprovals(events: ReviewHistoryEvent[]): Set<number> {
   return out;
 }
 
-function HistoryEntry({ event, selfApproved }: { event: ReviewHistoryEvent; selfApproved: boolean }) {
+/** The rail mark of each review event (cv5 Z6): the glyph names the step, the tone repeats only a decision. */
+const MARKS: Record<string, Pick<TimelineItem, 'icon' | 'tone'>> = {
+  submit: { icon: 'send' },
+  approve: { icon: 'check', tone: 'success' },
+  reject: { icon: 'close', tone: 'danger' },
+  unapprove: { icon: 'retry' },
+  unreject: { icon: 'retry' },
+};
+
+function reviewItem(event: ReviewHistoryEvent, i: number, selfApproved: boolean): TimelineItem {
   const action = ACTIONS[event.action] ?? {
     label: String(event.action || 'Changed'),
     tone: 'neutral' as const,
   };
-  return (
-    <li className={styles.entry} data-action={event.action}>
-      <div className={styles.entryHead}>
+  return {
+    key: String(i),
+    time: event.at ? formatTableDate(event.at) : undefined,
+    timeTitle: event.at ? formatIsoDateTime(event.at) : undefined,
+    dateTime: event.at ?? undefined,
+    ...(MARKS[event.action] ?? { icon: 'edit' }),
+    title: (
+      <span className={styles.entryTitle} data-action={event.action}>
         <StateTag tone={action.tone}>{action.label}</StateTag>
+        {event.on_behalf_of ? <span>on behalf of {who(event.on_behalf_of)}</span> : null}
+        {event.to_status && (event.action === 'unapprove' || event.action === 'unreject') ? (
+          <span>returned the run to {String(event.to_status).toLowerCase()}</span>
+        ) : null}
+      </span>
+    ),
+    meta: (
+      <>
         <UserName id={event.actor?.id} name={who(event.actor)} email={event.actor?.email} />
         {selfApproved ? (
           <Flag tone="warning" icon="user" title="The same person submitted and approved this run">
             Self-approved
           </Flag>
         ) : null}
-        {event.on_behalf_of ? <span>on behalf of {who(event.on_behalf_of)}</span> : null}
-        {event.to_status && (event.action === 'unapprove' || event.action === 'unreject') ? (
-          <span>returned the run to {String(event.to_status).toLowerCase()}</span>
-        ) : null}
-        {event.at ? (
-          <time className={styles.when} dateTime={event.at}>
-            {formatIsoDateTime(event.at)}
-          </time>
-        ) : null}
-      </div>
-      {event.comment ? <div className={styles.comment}>“{event.comment}”</div> : null}
-      {event.recorded === false ? (
-        <div className={styles.note}>
-          Reconstructed from the approval record; earlier changes were not kept.
-        </div>
-      ) : null}
-    </li>
-  );
+      </>
+    ),
+    detail:
+      event.comment || event.recorded === false ? (
+        <>
+          {event.comment ? <span className={styles.comment}>“{event.comment}”</span> : null}
+          {event.recorded === false ? (
+            <span className={styles.note}>Reconstructed from the approval record; earlier changes were not kept.</span>
+          ) : null}
+        </>
+      ) : undefined,
+  };
 }
 
 /**
  * The run's review log, oldest first (C027: it opens from the hero's History button; there is no Review history
- * card). Comments render as text, never HTML.
+ * card), as the shared Timeline (cv5 Z6). Comments render as text, never HTML.
  */
 export function ReviewLogList({ events }: { events: ReviewHistoryEvent[] }) {
   const self = selfApprovals(events);
   return (
-    <ol className={styles.list} data-testid="review-log">
-      {events.map((event, i) => (
-        <HistoryEntry key={i} event={event} selfApproved={self.has(i)} />
-      ))}
-    </ol>
+    <div data-testid="review-log">
+      <Timeline
+        aria-label="Review history"
+        markAlign="start"
+        items={events.map((event, i) => reviewItem(event, i, self.has(i)))}
+      />
+    </div>
   );
 }
 

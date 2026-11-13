@@ -24,6 +24,8 @@ export interface TimelineItem {
   detail?: ReactNode;
   /** Controls at the end of the row (a row menu, an action tile). */
   actions?: ReactNode;
+  /** `data-*` attributes for the row element (a test hook or a caller's row id, for example `data-worker-version`). */
+  rowData?: { [key: `data-${string}`]: string | undefined };
 }
 
 export interface TimelineProps {
@@ -85,7 +87,13 @@ export function Timeline({
           </>
         );
         return (
-          <li key={it.key} className={styles.event} data-active={active ? '' : undefined} data-key={it.key}>
+          <li
+            key={it.key}
+            {...it.rowData}
+            className={styles.event}
+            data-active={active ? '' : undefined}
+            data-key={it.key}
+          >
             {hasTime ? (
               <time className={styles.when} dateTime={it.dateTime} title={it.timeTitle}>
                 {it.time}

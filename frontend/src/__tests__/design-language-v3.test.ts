@@ -2118,6 +2118,22 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     expect(stripComments(src('features/analyzer/guidance/rules.module.css'))).not.toMatch(/\[data-key\]|\[data-active\]/);
   });
 
+  it('Z6: dated event lists about one entity are the shared Timeline (no local list CSS)', () => {
+    for (const p of [
+      'features/datasets/item/ItemHistoryTab.tsx',
+      'features/feedback/RequestPage.tsx',
+      'features/run-detail/components/RunPanels.tsx',
+      'features/live/components/worker/HistoryBlock.tsx',
+      'features/reviews/DetailPane.tsx',
+    ])
+      expect(src(p), p).toContain('<Timeline');
+    expect(src('features/datasets/item/ItemHistoryTab.module.css')).not.toMatch(/\.versionCard\b|\.revision\b/);
+    expect(src('features/feedback/feedback.module.css')).not.toMatch(/\.eventHead\b|\.events\b/);
+    expect(src('features/run-detail/components/RunPanels.module.css')).not.toMatch(/\.entryHead\b/);
+    expect(src('features/live/worker.module.css')).not.toMatch(/\.versionMeta\b/);
+    expect(src('features/reviews/DetailPane.module.css')).not.toMatch(/\.histWhen\b/);
+  });
+
   it('H3: every JSON view takes the --json-* syntax colours (strings green, keys blue)', () => {
     const tokens = read(join(SRC, 'styles/tokens.css'));
     expect(tokens).toMatch(/--json-string:\s*var\(--accent-primary\)/);
