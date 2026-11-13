@@ -35,6 +35,16 @@ export interface TimelineProps {
   onSelect?: (key: string) => void;
   /** Width of the time column in px (default 112). Ignored when no item has a time. */
   timeWidth?: number;
+  /**
+   * Shows each row's `actions` only on row hover, on focus inside the row, for the active row and while a menu in the
+   * row is open (cv5 Z3). A touch screen has no hover: there the actions always show.
+   */
+  revealActions?: boolean;
+  /**
+   * Where the mark sits on a row of two lines (cv5 Z3): `center` (default) on the middle of the row, `start` on the
+   * title line, with the time and the actions on that line too.
+   */
+  markAlign?: 'center' | 'start';
   className?: string;
 }
 
@@ -48,6 +58,8 @@ export function Timeline({
   activeKey,
   onSelect,
   timeWidth = 112,
+  revealActions,
+  markAlign = 'center',
   className,
   'aria-label': ariaLabel,
 }: TimelineProps) {
@@ -59,6 +71,8 @@ export function Timeline({
       data-timeline=""
       data-has-time={hasTime ? '' : undefined}
       data-selectable={onSelect ? '' : undefined}
+      data-reveal-actions={revealActions ? '' : undefined}
+      data-mark-align={markAlign}
       style={hasTime ? ({ '--timeline-time': `${timeWidth}px` } as CSSProperties) : undefined}
     >
       {items.map((it) => {

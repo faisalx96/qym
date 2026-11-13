@@ -92,4 +92,14 @@ describe('Timeline (cv5 H5)', () => {
     await user.click(first);
     expect(onSelect).toHaveBeenCalledWith('v1');
   });
+
+  it('cv5 Z3: revealActions and markAlign are list options (centre by default)', () => {
+    const { rerender } = render(<Timeline aria-label="Versions" items={items} />);
+    const list = screen.getByRole('list', { name: 'Versions' });
+    expect(list.getAttribute('data-mark-align')).toBe('center');
+    expect(list.hasAttribute('data-reveal-actions')).toBe(false);
+    rerender(<Timeline aria-label="Versions" items={items} revealActions markAlign="start" />);
+    expect(list.getAttribute('data-mark-align')).toBe('start');
+    expect(list.hasAttribute('data-reveal-actions')).toBe(true);
+  });
 });

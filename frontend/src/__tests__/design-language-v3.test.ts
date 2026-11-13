@@ -2110,6 +2110,14 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     expect(css).not.toMatch(/\.rail\b|\.mark\b/);
   });
 
+  it('Z3: Timeline reveals row actions and aligns the mark through props, not caller selectors', () => {
+    const css = stripComments(src('ui/Timeline/Timeline.module.css'));
+    expect(css).toContain('.timeline[data-reveal-actions]');
+    expect(css).toContain(".timeline[data-mark-align='start'] .rail");
+    expect(css).toContain(".event[data-active] .mark:not([data-tone='neutral'], [data-dot])");
+    expect(stripComments(src('features/analyzer/guidance/rules.module.css'))).not.toMatch(/\[data-key\]|\[data-active\]/);
+  });
+
   it('H3: every JSON view takes the --json-* syntax colours (strings green, keys blue)', () => {
     const tokens = read(join(SRC, 'styles/tokens.css'));
     expect(tokens).toMatch(/--json-string:\s*var\(--accent-primary\)/);

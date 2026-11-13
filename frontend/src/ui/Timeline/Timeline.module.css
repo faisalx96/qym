@@ -79,6 +79,12 @@
   height: 10px;
 }
 
+/* a toned dot is a solid dot of its tone: a 14% tint at 10px is too faint to read as a state */
+.mark[data-dot]:not([data-tone='neutral']) {
+  border-color: var(--mark);
+  background: var(--mark);
+}
+
 .mark[data-tone='accent'] {
   --mark: var(--accent-primary);
 }
@@ -99,7 +105,7 @@
   --mark: var(--error);
 }
 
-.mark:not([data-tone='neutral']) {
+.mark:not([data-tone='neutral'], [data-dot]) {
   border-color: color-mix(in srgb, var(--mark) 45%, transparent);
   background: color-mix(in srgb, var(--mark) 14%, var(--bg-elevated));
 }
@@ -164,6 +170,13 @@ button.what:focus-visible::after {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
+  transition: opacity var(--transition-fast);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actions {
+    transition: none;
+  }
 }
 
 .timeline[data-selectable] .event {
@@ -177,4 +190,68 @@ button.what:focus-visible::after {
 
 .timeline[data-selectable] .event[data-active] {
   background: var(--row-selected);
+}
+
+/* cv5 Z3: on the selected fill (an accent wash) a success or accent mark keeps its edge and an opaque ground, so it
+   does not melt into the row */
+.event[data-active] .mark:not([data-tone='neutral'], [data-dot]) {
+  border-color: color-mix(in srgb, var(--mark) 80%, transparent);
+  background: color-mix(in srgb, var(--mark) 18%, var(--bg-base));
+}
+
+.event[data-active] .mark[data-tone='neutral'] {
+  border-color: var(--border-strong);
+  background: var(--bg-base);
+}
+
+/* cv5 Z3 `revealActions`: the row actions show on row hover, on focus inside the row, for the selected row and while
+   a menu of the row is open. A touch screen has no hover, so they always show there. */
+@media (hover: hover) {
+  .timeline[data-reveal-actions] .event:not(:hover, :focus-within, [data-active]) .actions:not(:has([aria-expanded='true'])) {
+    opacity: 0;
+  }
+}
+
+/* cv5 Z3 `markAlign="start"`: on a row of two lines the mark, the time and the actions sit on the title line. The
+   title line is at least as tall as the 20px mark, so the mark's top is the line's top; the row padding centres a
+   one-line row's 20px line in the 34px row height. */
+.timeline[data-mark-align='start'] {
+  --timeline-line-top: calc((34px - 20px) / 2);
+}
+
+.timeline[data-mark-align='start'] .event {
+  align-items: start;
+}
+
+.timeline[data-mark-align='start'] .what {
+  padding-block: var(--timeline-line-top);
+}
+
+.timeline[data-mark-align='start'] .rail {
+  align-items: flex-start;
+  padding-block-start: var(--timeline-line-top);
+}
+
+.timeline[data-mark-align='start'] .title {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 20px;
+}
+
+.timeline[data-mark-align='start'] .when {
+  padding-block-start: var(--timeline-line-top);
+  line-height: 20px;
+}
+
+.timeline[data-mark-align='start'] .actions {
+  margin-block-start: calc(var(--timeline-line-top) - 1px);
+}
+
+.timeline[data-mark-align='start'] .event:first-child .rail::before {
+  top: calc(var(--timeline-line-top) + 10px);
+}
+
+.timeline[data-mark-align='start'] .event:last-child .rail::before {
+  bottom: auto;
+  height: calc(var(--timeline-line-top) + 10px);
 }

@@ -364,7 +364,11 @@ preselected.
   `meta` (the person, a count); no row lines, the rail starts at the first mark and ends at the last. Selectable
   (`onSelect`, `activeKey`): the whole row is the hit area, hover is `--row-hover`, the open row `--row-selected` with
   a primary title and `aria-current`; row `actions` stay above the hit area. Do not build a local event list with
-  its own rail.
+  its own rail. Options (cv5 Z3): `revealActions` shows a row's actions only on row hover, on focus inside the row,
+  for the selected row and while its menu is open (always on touch); a caller never hides them with its own
+  selectors. `markAlign="start"` puts the mark, the time and the actions on the title line of a two-line row (a
+  version with its meta under the title). A toned dot is solid in its tone; on the selected fill a toned mark keeps
+  an 80% edge and an opaque ground, so a success or accent mark stays visible on the accent wash.
 
 - **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
   underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and

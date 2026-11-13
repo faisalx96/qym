@@ -293,41 +293,39 @@ function RulesView({
         </span>
       ),
       actions: (
-        // shown on row hover, on focus and for the selected row (rules.module.css)
-        <span className={s.rowMenu}>
-          <DropdownMenu
-            label={`Actions for v${v.version}`}
-            trigger={
-              <IconButton
-                label={`Actions for v${v.version}`}
-                icon="more"
-                onPress={() => setMenuTarget(v.id)}
-              />
-            }
-            onAction={onMenu}
-            items={[
-              ...(canPromote && v.status === 'published' && !live
-                ? [{ id: 'live', label: 'Make live', icon: <ActionTile icon="star" /> }]
-                : []),
-              { id: 'download', label: 'Download JSON', icon: <ActionTile icon="braces" /> },
-              { id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> },
-              ...(canManage
-                ? [{ id: 'merge', label: 'Merge versions', icon: <ActionTile icon="swap" /> }]
-                : []),
-              ...(data.can_delete && !live
-                ? [
-                    {
-                      id: 'delete',
-                      label: 'Delete version',
-                      icon: <ActionTile icon="trash" tone="danger" />,
-                      tone: 'danger' as const,
-                      separatorBefore: true,
-                    },
-                  ]
-                : []),
-            ]}
-          />
-        </span>
+        // shown on row hover, on focus and for the selected row (Timeline revealActions)
+        <DropdownMenu
+          label={`Actions for v${v.version}`}
+          trigger={
+            <IconButton
+              label={`Actions for v${v.version}`}
+              icon="more"
+              onPress={() => setMenuTarget(v.id)}
+            />
+          }
+          onAction={onMenu}
+          items={[
+            ...(canPromote && v.status === 'published' && !live
+              ? [{ id: 'live', label: 'Make live', icon: <ActionTile icon="star" /> }]
+              : []),
+            { id: 'download', label: 'Download JSON', icon: <ActionTile icon="braces" /> },
+            { id: 'compare', label: 'Compare versions', icon: <ActionTile icon="split" /> },
+            ...(canManage
+              ? [{ id: 'merge', label: 'Merge versions', icon: <ActionTile icon="swap" /> }]
+              : []),
+            ...(data.can_delete && !live
+              ? [
+                  {
+                    id: 'delete',
+                    label: 'Delete version',
+                    icon: <ActionTile icon="trash" tone="danger" />,
+                    tone: 'danger' as const,
+                    separatorBefore: true,
+                  },
+                ]
+              : []),
+          ]}
+        />
       ),
     };
   });
@@ -341,9 +339,9 @@ function RulesView({
         {/* cv5 L2: the versions read as a timeline, newest first, like the dataset Change log */}
         <Timeline
           aria-label="Versions"
-          className={s.versionTimeline}
           activeKey={open.id}
           onSelect={setOpenId}
+          revealActions
           items={timeline}
         />
       </aside>
