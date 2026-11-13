@@ -2254,6 +2254,13 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     );
   });
 
+  it('Y15: the field expand dialog is as high as the value (a low editor floor)', () => {
+    const css = stripComments(src('features/datasets/components/FieldEditor.module.css'));
+    for (const sel of ['.expandBody .textarea', '.expandBody > .pre'])
+      expect(rule(css, sel), sel).toMatch(/min-height:\s*96px/);
+    expect(doc).toContain('so a 3-line value opens a short dialog');
+  });
+
   it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
     const t = src('features/analyzer/blocks/PromptPane.tsx');
     expect(t).toContain('No change to the prompt');

@@ -616,7 +616,8 @@ preselected.
   accent), number `--json-number` (purple), true/false `--json-boolean` (blue), null `--json-null` (muted), punctuation
   `--json-punct` (secondary). `JsonViewer`, the dataset item pane, item page, expand dialog and edit mode use only these;
   a string value is never plain white. **Field expand:** the expand button of a field card opens
-  the same editor and state in a `wide` dialog as high as the value (see "Dialog"). **Item pane:** the pane's item is
+  the same editor and state in a `wide` dialog as high as the value (see "Dialog"): the editor floor is the card's
+  96px, so a 3-line value opens a short dialog; up to 640px, then it scrolls (cv5 Y15). **Item pane:** the pane's item is
   the table's current row (`DataTable activeKey`); the row actions stay while the pane is open.
 
 - **Auto-analysis, Analyze run** (cv4 D, Y1, Y3, Y11, Y12, Y16): Setup, Targets and Results are `ReportSection`s. Setup
