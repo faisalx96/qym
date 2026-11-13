@@ -43,12 +43,11 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
           title="Live evaluation"
           description="Every real user turn, evaluated as it happens"
           meta={[
-            <SourceControl key="source" slug={slug} source={source} status={overview?.status} />,
-            <DaySwitcher
-              key="day"
-              day={day}
-              today={overview?.status.today ?? new Date().toISOString().slice(0, 10)}
-            />,
+            // cv5 Y4: the source and the day are controls side by side, one meta item: no "·" separator between them
+            <span key="controls" className={styles.headerControls}>
+              <SourceControl slug={slug} source={source} status={overview?.status} />
+              <DaySwitcher day={day} today={overview?.status.today ?? new Date().toISOString().slice(0, 10)} />
+            </span>,
           ]}
           actions={
             <LinkButton to={`${projectPath(slug, 'live/worker')}?${new URLSearchParams({ source })}`}>
