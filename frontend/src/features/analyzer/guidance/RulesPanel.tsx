@@ -616,9 +616,11 @@ function VersionWorkspace({
    */
   let aside: React.ReactNode;
   if (editable) {
+    // cv5 Y2: "Add rule" is the primary create action of this view, so the commit is the accent button (one solid
+    // green button in a view, design language "Which button")
     aside = (
       <Button
-        variant="primary"
+        variant="accent"
         size="sm"
         isDisabled={!settled || draft.rules.length === 0}
         disabledReason={draft.rules.length === 0 ? 'Add a rule first' : 'Wait until the draft is saved'}

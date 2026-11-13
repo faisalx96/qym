@@ -186,7 +186,9 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
     for (const f of shippedTsx) {
       if (rel(f) === 'features/experiments/launch/settings/SweepChips.tsx') continue;
       for (const b of buttons(read(f))) {
-        if (commit.has(b.text) && !/variant="primary"/.test(b.attrs))
+        // cv5 Y2: a view with a primary section create action makes its commit the accent button (one solid green)
+        const createInView = rel(f) === 'features/analyzer/guidance/RulesPanel.tsx' && b.text === 'Publish';
+        if (commit.has(b.text) && !/variant="primary"/.test(b.attrs) && !(createInView && /variant="accent"/.test(b.attrs)))
           problems.push(`${rel(f)}:${b.line}: ${b.text}`);
         if (/Disable item|Disable \$\{/.test(b.inner) && !/variant="danger"/.test(b.attrs))
           problems.push(`${rel(f)}:${b.line}: Disable item is not danger`);
@@ -2194,6 +2196,12 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(full).not.toContain('variant="accent"');
     expect(doc).toContain('Exactly one primary button per state');
     expect(doc).not.toContain('Exactly one accent button per state');
+  });
+
+  it('Y2: the Rules draft has one solid green button: Add rule primary, Publish accent', () => {
+    expect(src('features/analyzer/guidance/RuleEditor.tsx')).toMatch(/variant="primary"[\s\S]{0,400}?Add rule/);
+    expect(src('features/analyzer/guidance/RulesPanel.tsx')).toMatch(/variant="accent"[\s\S]{0,300}?Publish\s*<\/Button>/);
+    expect(doc).toContain('the commit of that view\n  ("Publish") is the accent button');
   });
 
   it('K3: the prompt pane shows a quiet change status, not a spinner', () => {

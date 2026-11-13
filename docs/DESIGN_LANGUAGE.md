@@ -261,7 +261,9 @@ preselected.
   `danger` (red tint) deletes or replaces: Delete, Archive, Revoke, Restore default. A disabled primary, accent or
   danger button keeps its own colour at 45% opacity, so a locked Save is still the green Save and a locked Restore
   default is still red. A creating action carries the plus glyph (New project, Add connection, Add environment).
-  Make live, Send, Start conversation, Add model and Run backfill commit, so they are primary. A dialog footer that
+  Make live, Send, Start conversation, Add model and Run backfill commit, so they are primary. Exception (cv5 Y2): when
+  the view has a section create action (primary, for example "Add rule" in the Rules draft), the commit of that view
+  ("Publish") is the accent button, so that the view has one solid green button. A dialog footer that
   runs a job reads Cancel (neutral), Preview (accent), the commit (primary). Create draft always carries the plus
   Icon. A confirm that disables, deletes or revokes is danger. An export or download only reads data: on a page it is
   the accent button with the `download` Icon, also when it opens a format menu (no chevron, cv5 Z1). A Download
