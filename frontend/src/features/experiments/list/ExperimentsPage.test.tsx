@@ -136,3 +136,36 @@ describe('ExperimentsPage versioning facets', () => {
     expect(requests.at(-1)!.searchParams.getAll('versioning')).toEqual(['kb_version=381']);
   });
 });
+
+describe('ExperimentsPage rows (cv5 M4, M5)', () => {
+  it('shows the failed and cancelled jobs as count tags and no live rail on a running row', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://platform.test');
+        if (/\/eval-environments/.test(url.pathname)) return json({ environments: [] });
+        return json({
+          experiments: [
+            {
+              ...experiment('Sweep'),
+              status: 'RUNNING',
+              job_counts: { SUCCEEDED: 1, FAILED: 1, CANCELLED: 2, RUNNING: 1 },
+            },
+          ],
+          total: 1,
+          versioning_facets: {},
+        });
+      }),
+    );
+    mount('/projects/demo/experiments');
+    await waitFor(() => expect(names()).toHaveLength(1));
+    const row = within(screen.getByRole('grid', { name: 'Experiments' })).getAllByRole('row')[1]!;
+    // the Status column says Running; the row draws no second live mark
+    expect(row).not.toHaveAttribute('data-state');
+    expect(row.querySelector('[data-count="failed"]')).toHaveTextContent('1 failed');
+    expect(row.querySelector('[data-count="failed"]')).toHaveAttribute('data-tone', 'danger');
+    expect(row.querySelector('[data-count="cancelled"]')).toHaveTextContent('2 cancelled');
+    expect(row.querySelector('[data-count="cancelled"]')).toHaveAttribute('data-tone', 'warning');
+    expect(row).toHaveTextContent('1/5');
+  });
+});
