@@ -167,20 +167,20 @@ test.describe('guidance (2, 3, 9)', () => {
     await page.getByRole('button', { name: 'Delete rule Rule 1' }).click();
     const dialog = page.getByRole('alertdialog', { name: 'Delete this rule?' });
     await dialog.getByRole('button', { name: 'Keep' }).click();
-    await expect(page.getByTestId('rule-count')).toContainText('2 rules');
+    await expect(page.getByRole('list', { name: 'Rules' }).getByRole('listitem')).toHaveCount(2);
     await page.getByRole('button', { name: 'Delete rule Rule 1' }).click();
     await page
       .getByRole('alertdialog', { name: 'Delete this rule?' })
       .getByRole('button', { name: 'Delete' })
       .click();
-    await expect(page.getByTestId('rule-count')).toContainText('1 rule ');
+    await expect(page.getByRole('list', { name: 'Rules' }).getByRole('listitem')).toHaveCount(1);
     await toggleBox(page.getByRole('checkbox', { name: 'Select Rule 2' }));
     await page.getByRole('button', { name: /^Delete selected/ }).click();
     await page
       .getByRole('alertdialog', { name: 'Delete this rule?' })
       .getByRole('button', { name: 'Delete' })
       .click();
-    await expect(page.getByTestId('rule-count')).toContainText('0 rules');
+    await expect(page.getByRole('list', { name: 'Rules' }).getByRole('listitem')).toHaveCount(0);
   });
 
   test('diagnosis search keeps list and editor on the same category', async ({ page, request }) => {

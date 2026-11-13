@@ -163,7 +163,8 @@ export function DocumentsPanel({
             data-testid="document-input"
             onChange={(e) => void onFiles(e.target.files)}
           />
-          <Button size="sm" loading={uploading} onPress={() => input.current?.click()}>
+          {/* cv5 L1: adding documents is the tab's create action, so it is the primary button */}
+          <Button size="sm" variant="primary" loading={uploading} onPress={() => input.current?.click()}>
             Choose files
           </Button>
         </div>

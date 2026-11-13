@@ -387,7 +387,13 @@ function DiagnosisEditor({
               </Button>
             </form>
           ) : (
-            <Button size="sm" icon={<Icon name="plus" size={12} />} onPress={() => setAdding(true)}>
+            // cv5 L1: the section creates its entity from one primary button (design language "Create action")
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Icon name="plus" size={12} />}
+              onPress={() => setAdding(true)}
+            >
               Add category
             </Button>
           )
