@@ -66,7 +66,7 @@ export function ToggleChips<T extends string = string>({
             aria-pressed={pressed}
             aria-disabled={locked || undefined}
             disabled={o.disabled}
-            title={o.title}
+            title={o.title ?? (locked ? (min === 1 ? 'Keep at least one on' : `Keep at least ${min} on`) : undefined)}
             data-value={o.value}
             onClick={() => toggle(o.value)}
           >
