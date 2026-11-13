@@ -103,3 +103,8 @@
   background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
   color: var(--text-primary);
 }
+
+/* cv5 Z11: the pane's one quiet line (the Rules tab's draft note); no banner */
+.note {
+  margin: 0;
+}

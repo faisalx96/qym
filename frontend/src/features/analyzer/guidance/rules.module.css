@@ -1,7 +1,9 @@
 /* Recipe: DESIGN_LANGUAGE §3 list rows + side list. */
 .layout {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  /* cv5 Z11: with the prompt pane on every tab the left column is about 780px at 1500px, so the versions take 220px
+     there (the rule toolbar wraps below the search, nothing is cut) */
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   gap: var(--space-lg);
   align-items: start;
 }

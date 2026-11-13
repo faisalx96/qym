@@ -101,7 +101,7 @@ function MessageBody({ content, added }: { content: string; added: ReadonlySet<n
  * setting on the left; while an update is on its way the text stays in place, slightly dimmed, and the head says
  * "Updating". The lines that the last change added are marked, and the head counts what it added and removed.
  */
-export function PromptPane({ ws }: { ws: RunWorkspace }) {
+export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | null }) {
   const ref = useFitHeight();
   const scroller = useRef<HTMLDivElement>(null);
   const { preview } = ws;
@@ -162,6 +162,12 @@ export function PromptPane({ ws }: { ws: RunWorkspace }) {
             width={320}
           />
         </div>
+        {/* cv5 Z11: an honest, quiet line when the open tab shows something the prompt does not use (a draft) */}
+        {note ? (
+          <Text variant="sm" tone="muted" as="p" className={s.note} data-testid="prompt-pane-note">
+            {note}
+          </Text>
+        ) : null}
       </header>
       <div
         ref={scroller}
@@ -212,4 +218,38 @@ function changeText(change: LineChange): string {
   if (change.removedCount)
     parts.push(`${change.removedCount} ${change.removedCount === 1 ? 'line' : 'lines'} removed`);
   return parts.join(' · ');
+}
+
+/**
+ * The pane's place before the run workspace exists (cv5 Z11): the same surface and size, so the columns do not move
+ * when the run loads. A loading run shows the skeleton; a run that needs a pass or failed to load says why.
+ */
+export function PromptPanePlaceholder({ state }: { state: 'loading' | 'pass' | 'error' }) {
+  const ref = useFitHeight();
+  return (
+    <aside ref={ref} className={s.pane} aria-label="Prompt preview" data-testid="prompt-pane">
+      <header className={s.head}>
+        <div className={s.titleRow}>
+          <Text as="h2" variant="md" weight={650}>
+            Prompt preview
+          </Text>
+        </div>
+      </header>
+      <div className={s.scroll}>
+        {state === 'loading' ? (
+          <Skeleton kind="lines" rows={12} label="Building prompt preview" />
+        ) : (
+          <EmptyState
+            compact
+            title="Nothing to preview"
+            body={
+              state === 'pass'
+                ? 'Choose a pass of this run to see the prompt.'
+                : 'The run did not load, so there is no prompt to show.'
+            }
+          />
+        )}
+      </div>
+    </aside>
+  );
 }

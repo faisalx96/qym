@@ -429,7 +429,11 @@ export function useSaveCategoryCatalog(slug: string, scope: AnalysisScope) {
         `/api/projects/${encodeURIComponent(slug)}/analysis-category-catalog`,
         body,
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: analysisConfigKey(scope) }),
+    onSuccess: () => {
+      // categories are part of the prompt: the open prompt pane reloads and marks the change (cv5 Z11)
+      void qc.invalidateQueries({ queryKey: PREVIEW_KEY });
+      return qc.invalidateQueries({ queryKey: analysisConfigKey(scope) });
+    },
   });
 }
 
@@ -448,6 +452,7 @@ export function useAnalysisDocuments(scope: AnalysisScope, enabled = true) {
 function invalidateDocs(qc: QueryClient, scope: AnalysisScope) {
   void qc.invalidateQueries({ queryKey: documentsKey(scope) });
   void qc.invalidateQueries({ queryKey: analysisConfigKey(scope) });
+  void qc.invalidateQueries({ queryKey: PREVIEW_KEY });
 }
 
 export function useUploadDocument(scope: AnalysisScope) {
@@ -515,6 +520,8 @@ function invalidateRules(qc: QueryClient, scope: AnalysisScope): Promise<unknown
   return Promise.all([
     qc.invalidateQueries({ queryKey: ruleVersionsKey(scope) }),
     qc.invalidateQueries({ queryKey: analysisConfigKey(scope) }),
+    // the production rules are part of the prompt (publish, make live): the prompt pane reloads (cv5 Z11)
+    qc.invalidateQueries({ queryKey: PREVIEW_KEY }),
   ]);
 }
 
@@ -774,9 +781,12 @@ export interface PreviewRequest extends PassGuard {
   connection_id: string | null;
 }
 
+/** Every prompt preview; a guidance save that changes the prompt invalidates them all (cv5 Z11). */
+export const PREVIEW_KEY = ['analysis', 'preview'] as const;
+
 export function usePromptPreview(runId: string, body: PreviewRequest | null) {
   return useQuery({
-    queryKey: ['analysis', 'preview', runId, body],
+    queryKey: [...PREVIEW_KEY, runId, body],
     queryFn: ({ signal }) =>
       api.post<PreviewResponse>(`/api/runs/${enc(runId)}/analyze-preview`, body, { signal }),
     enabled: body != null,

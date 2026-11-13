@@ -1,5 +1,5 @@
 import { projectPath } from '@/app/routes';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useAnalysisConfig,
   useCreateDraft,
@@ -49,7 +49,16 @@ function relative(iso: string | null | undefined): string {
   return iso ? formatAgo(iso) : '';
 }
 
-export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canManage: boolean }) {
+export function RulesPanel({
+  scope,
+  canManage,
+  onOpenVersion,
+}: {
+  scope: AnalysisScope;
+  canManage: boolean;
+  /** The version open in the panel (cv5 Z11: the prompt pane says when a draft is not the prompt's rules). */
+  onOpenVersion?: (version: RuleVersion | null) => void;
+}) {
   const versions = useRuleVersions(scope);
   const config = useAnalysisConfig(scope);
   const pending = useDelayedPending(versions.isPending || config.isPending);
@@ -79,6 +88,7 @@ export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canMana
       data={versions.data}
       config={config.data}
       canManage={canManage && config.data.can_manage_analysis_rules}
+      onOpenVersion={onOpenVersion}
     />
   );
 }
@@ -124,11 +134,13 @@ function RulesView({
   data,
   config,
   canManage,
+  onOpenVersion,
 }: {
   scope: AnalysisScope;
   data: RuleVersionsResponse;
   config: AnalysisConfig;
   canManage: boolean;
+  onOpenVersion?: (version: RuleVersion | null) => void;
 }) {
   const toast = useToast();
   const createDraft = useCreateDraft(scope);
@@ -154,6 +166,10 @@ function RulesView({
   const latestDraft = ordered.find((v) => v.status === 'draft') ?? null;
   const fallback = latestDraft ?? versions.find((v) => v.id === productionId) ?? ordered[0] ?? null;
   const open = versions.find((v) => v.id === openId) ?? fallback;
+  useEffect(() => {
+    onOpenVersion?.(open);
+  }, [onOpenVersion, open]);
+  useEffect(() => () => onOpenVersion?.(null), [onOpenVersion]);
 
   const generator = useRuleGenerator(scope, (job) => {
     setEpoch((n) => n + 1);

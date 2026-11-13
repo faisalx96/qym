@@ -1308,10 +1308,14 @@ admin, projects, overview, models) use the `constrained` container, capped at
 `--page-max-w` and centred in the content area (cv4 F1, owner 2026-11-12, reverses E-42 "start at the left edge"): on a
 screen wider than the cap the free space is equal at both sides. A feature does not set its own `margin` on a
 constrained page. Profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
-`fullWidth` with their own layout. Auto-analysis with a run open, viewport ≥ 1500 px, is a workspace page with a side
-pane (cv5 K3): `fullWidth` on every tab. The Analyze run tab is two columns: settings at `minmax(0,1fr)` and the prompt
-pane at `clamp(440px, 36%, 760px)`, with a `--space-lg` gap. The guidance tabs keep the page content width at the start
-edge. Narrower screens: centred page, prompt preview in the drawer. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
+`fullWidth` with their own layout. Auto-analysis with a run open, viewport ≥ 1500 px, is one stable workspace with a
+side pane (cv5 K3, Z11): `fullWidth`, two columns on every tab, the tab content at `minmax(0,1fr)` and the prompt pane
+at `clamp(440px, 36%, 760px)`, with a `--space-lg` gap. The pane column belongs to the page shell, so a tab change never
+moves, remounts or scrolls the pane, and the header and the tabs never move. Categories, rules and documents are part
+of the prompt: a save on a guidance tab reloads the pane, which marks the change. On the Rules tab a draft adds one
+quiet line under the pane's target ("The prompt uses the production rules (vN). A draft changes it when you
+publish."), not a banner. Before the run loads, the pane column holds a placeholder pane, so the columns do not move.
+No run open (the project guidance page) or a narrower screen: centred page, no pane, prompt preview in the drawer. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
 
 - **Title and path.** The page title is the page name that the last crumb shows (Dashboard). Project settings is the
   one sanctioned exception: it shows the project name (30-05b). Tabs of one page share one crumb parent: Experiments,

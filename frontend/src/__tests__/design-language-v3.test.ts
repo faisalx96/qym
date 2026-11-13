@@ -2230,6 +2230,15 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(remote.match(/<Tag kind="count" tone="warning">/g)?.length).toBe(2);
   });
 
+  it('Z11: with a run open the prompt pane column belongs to the shell, on every tab', () => {
+    const shell = src('features/analyzer/RunShell.tsx');
+    expect(shell).toContain('className={s.paneSlot}');
+    expect(src('features/analyzer/RunAnalyze.tsx')).toContain('createPortal(');
+    expect(stripComments(src('features/analyzer/analyzer.module.css'))).toContain('.shell[data-pane]');
+    expect(src('api/analysis.ts')).toContain('qc.invalidateQueries({ queryKey: PREVIEW_KEY })');
+    expect(doc).toContain('two columns on every tab');
+  });
+
   it('Z8: the Experiments description wraps to two lines, no cut', () => {
     expect(src('features/experiments/list/ExperimentsPage.tsx')).toContain('secondaryLines={2}');
     expect(stripComments(src('ui/DataTable/cells/cells.module.css'))).toContain('.secondary[data-lines]');
