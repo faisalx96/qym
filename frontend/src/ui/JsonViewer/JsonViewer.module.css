@@ -88,23 +88,24 @@
   outline-offset: 1px;
 }
 
+/* cv5 H3: the JSON syntax colours (--json-*), the same in every JSON view and editor */
 .key {
-  color: var(--accent-secondary);
+  color: var(--json-key);
 }
 .string {
-  color: var(--text-primary);
+  color: var(--json-string);
 }
 .number {
-  color: var(--chart-5);
+  color: var(--json-number);
 }
 .boolean {
-  color: var(--accent-tertiary-soft);
+  color: var(--json-boolean);
 }
 .null {
-  color: var(--text-muted);
+  color: var(--json-null);
 }
 .punct {
-  color: var(--text-muted);
+  color: var(--json-punct);
 }
 
 .summary {

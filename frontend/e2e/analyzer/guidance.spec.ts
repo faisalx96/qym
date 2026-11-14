@@ -30,7 +30,7 @@ test.describe('Rules tab as manager (10)', () => {
     const t = trackErrors(page);
     await gotoApp(page, guidanceUrl(seed.slug, 'rules'));
     await expect(page.getByRole('heading', { name: 'Rules in v1' })).toBeVisible();
-    await expect(page.getByText('Editable draft')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Rule sources' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Publish' })).toBeDisabled(); // no rules yet
 
     // edit -> debounced PATCH (~700 ms after the last keystroke)
@@ -64,7 +64,7 @@ test.describe('Rules tab as manager (10)', () => {
     await expect(page.getByText('Read-only', { exact: true })).toBeVisible();
 
     // create a draft from the live version, change the rule
-    await page.getByRole('button', { name: 'Create draft', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Create draft from v1' }).click();
     await expect(page.getByText('Draft v2 created from v1').first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Rules in v2' })).toBeVisible();
     await page.getByRole('button', { name: 'Cite the context', exact: true }).click();
@@ -129,7 +129,7 @@ test.describe('Rules tab as manager (10)', () => {
     });
     await expect(page.getByRole('list', { name: 'Document library' })).toContainText('policy.txt');
     await page.getByRole('tab', { name: /^Rules/ }).click();
-    await expect(page.getByText('Add documents (1 enabled)')).toBeVisible();
+    await expect(page.locator('label').filter({ hasText: /^Project documents\s*1$/ })).toBeVisible();
     const generate = page.getByRole('button', { name: 'Generate rules' });
     await expect(generate).toBeEnabled();
     await generate.click();
@@ -235,7 +235,7 @@ test.describe('Diagnosis (12)', () => {
     await expect(page.getByRole('tab', { name: /^Hallucination/ })).toBeVisible();
     await expect(page.getByRole('tab', { name: /^Hallucination/ })).not.toContainText('Needs examples');
     await page.getByRole('button', { name: 'Add category' }).click();
-    await page.getByRole('textbox', { name: 'New category name' }).fill('Brand Voice');
+    await page.getByRole('textbox', { name: /^Category name/ }).fill('Brand Voice');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('tab', { name: /^Brand Voice/ })).toBeVisible();
     await expect(page.locator('[data-save-footer]')).toContainText('Unsaved changes');
@@ -265,7 +265,8 @@ test.describe('Diagnosis (12)', () => {
     expect('base_revision' in body).toBe(true);
     expect(JSON.stringify(body)).toContain('Brand Voice');
     await expect(page.getByText('Categories saved').first()).toBeVisible();
-    await expect(page.locator('[data-save-footer]')).toContainText('All changes saved');
+    // cv4 X4: a clean save row shows no state text
+    await expect(page.locator('[data-save-footer]')).not.toContainText('Unsaved changes');
     await expect(page.getByRole('tab', { name: /^Brand Voice/ })).toBeVisible();
   });
 
@@ -297,7 +298,7 @@ test.describe('Diagnosis (12)', () => {
       return route.continue();
     });
     await page.getByRole('button', { name: 'Add category' }).click();
-    await page.getByRole('textbox', { name: 'New category name' }).fill('Brand Voice');
+    await page.getByRole('textbox', { name: /^Category name/ }).fill('Brand Voice');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await page.getByRole('textbox', { name: /^Description/ }).fill('Tone and wording.');
     await page.getByRole('textbox', { name: /^Use when/ }).fill('Off-brand wording.');
@@ -318,7 +319,7 @@ test.describe('Diagnosis (12)', () => {
 
     // second conflict, then Reload latest discards the edits
     await page.getByRole('button', { name: 'Add category' }).click();
-    await page.getByRole('textbox', { name: 'New category name' }).fill('Tone Drift');
+    await page.getByRole('textbox', { name: /^Category name/ }).fill('Tone Drift');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await page.getByRole('textbox', { name: /^Description/ }).fill('Drifts in tone.');
     await page.getByRole('textbox', { name: /^Use when/ }).fill('The tone changes mid answer.');
@@ -327,7 +328,8 @@ test.describe('Diagnosis (12)', () => {
     await alert.getByRole('button', { name: 'Reload latest' }).click();
     await expect(alert).toBeHidden();
     await expect(page.getByRole('tab', { name: /^Tone Drift/ })).toHaveCount(0);
-    await expect(page.locator('[data-save-footer]')).toContainText('All changes saved');
+    // cv4 X4: a clean save row shows no state text
+    await expect(page.locator('[data-save-footer]')).not.toContainText('Unsaved changes');
   });
 });
 
@@ -358,11 +360,12 @@ test.describe('read-only view (13)', () => {
     await expect(page.getByRole('textbox', { name: /^Use when/ })).toHaveAttribute('readonly', '');
 
     await page.getByRole('tab', { name: /^Rules/ }).click();
-    await expect(page.getByText('Draft (read-only)')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create draft', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Read-only', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Create draft/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Publish' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add rule' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Generate rules' })).toBeDisabled();
+    // cv5 L3: Rule sources and Generate rules show only on an editable draft
+    await expect(page.getByRole('button', { name: 'Generate rules' })).toHaveCount(0);
 
     await page.getByRole('tab', { name: /^Documents/ }).click();
     await expect(page.getByText('Only project managers can add, remove or exclude documents.')).toBeVisible();

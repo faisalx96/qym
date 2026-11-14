@@ -9,7 +9,7 @@
 
 .screen[data-constrained] {
   max-width: var(--page-max-w);
-  margin: 0;
+  margin-inline: auto; /* cv4 X17: centred as the shared constrained container (F1) */
 }
 
 .cardHead {

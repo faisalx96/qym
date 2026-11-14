@@ -2,11 +2,19 @@
   max-height: 90vh;
 }
 
+/* cv5 Q7: one tidy row of filters (labels inside the controls, as the Runs filters) */
 .filters {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-sm);
+}
+
+/* "Confidence [min] – [max] %": one compact range control */
+.range {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .fields {
@@ -23,6 +31,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  margin-block: var(--space-sm);
 }
 
 .budgetHead {
@@ -49,7 +58,6 @@
 }
 
 .tableWrap {
-  max-height: 40vh;
   overflow: auto;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -97,6 +105,11 @@
 
 .mono {
   font-family: var(--font-mono);
+}
+
+/* a number column is centred, header and values */
+.table .num {
+  text-align: center;
 }
 
 .srOnly {

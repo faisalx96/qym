@@ -1922,6 +1922,8 @@ def _descriptor_origin_stale(run, dimension):
     fills the descriptor and the run's ``dashboard_run_versions`` rows (0078).
     The experiment reference gained ``latency_sensitive`` (QA3-3); a descriptor with
     no experiment reference at all is not stale (nothing to fill).
+    A run on a dataset version gained ``dataset_version_status`` (the runs list
+    colours the version by it); a run with no dataset version has nothing to fill.
     """
     from qym_platform.db.models import RunOrigin
 
@@ -1936,6 +1938,10 @@ def _descriptor_origin_stale(run, dimension):
             run.experiment_job_id is not None
             and isinstance(experiment, dict)
             and "latency_sensitive" not in experiment
+        )
+        or (
+            run.dataset_version_id is not None
+            and "dataset_version_status" not in descriptor
         )
     )
 
@@ -2214,7 +2220,7 @@ def bootstrap_partitions(db, *, limit=100):
 
 def reconcile_summary_shapes(db, *, limit=100):
     """Recover upgrades consumed by an older worker during rolling deployment."""
-    from qym_platform.db.models import Run, RunOrigin
+    from qym_platform.db.models import DatasetVersion, Run, RunOrigin
 
     # Official runs published before descriptors carried ``origin`` would list
     # as local, and runs linked to an experiment job published before
@@ -2237,6 +2243,15 @@ def reconcile_summary_shapes(db, *, limit=100):
                     Run.experiment_job_id.isnot(None),
                     Dimension.descriptor[("experiment", "id")].as_string().isnot(None),
                     Dimension.descriptor[("experiment", "latency_sensitive")]
+                    .as_string()
+                    .is_(None),
+                ),
+                # Runs on a dataset version published before descriptors carried
+                # the version's status (``dataset_version_id`` is indexed). The
+                # version row must exist, or the status stays null for ever.
+                and_(
+                    Run.dataset_version_id.in_(select(DatasetVersion.id)),
+                    Dimension.descriptor["dataset_version_status"]
                     .as_string()
                     .is_(None),
                 ),

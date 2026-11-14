@@ -14,6 +14,16 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* cv4 Y10: the glass surface of the run page nav (tokens --glass-*): the page ground over a blur of what scrolls
+   under it, a hairline and a faint top sheen; opaque without backdrop-filter. */
+@supports (backdrop-filter: blur(1px)) {
+  .bar {
+    background: color-mix(in srgb, var(--bg-void) var(--glass-mix), transparent);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) var(--tint-faint), transparent);
+  }
+}
+
 .bar > nav {
   flex: 1;
   min-width: 0;

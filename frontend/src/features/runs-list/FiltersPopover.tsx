@@ -8,6 +8,7 @@ import { lazy, Suspense, useId, useMemo, useRef, useState, type ReactNode } from
 import { Button as AriaButton } from 'react-aria-components';
 import type { Facets } from '@/api/dashboardTypes';
 import {
+  BarTrigger,
   Button,
   Checkbox,
   Icon,
@@ -272,14 +273,13 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
         label="Filters"
         placement="bottom start"
         trigger={
-          <Button
-            variant={count ? 'accent' : 'neutral'}
-            icon={<Icon name="list" size={12} />}
-            iconEnd={<Icon name="chevron-down" size={12} />}
+          // cv5 M6 (H6): a control that opens a panel of choices with a chevron is a menu trigger, not a button
+          <BarTrigger
+            label="Filters"
+            value={count ? String(count) : undefined}
+            active={count > 0}
             data-testid="filters-trigger"
-          >
-            Filters{count ? ` · ${count}` : ''}
-          </Button>
+          />
         }
       >
         {({ close }) => (

@@ -78,7 +78,7 @@ describe('DatasetsCard', () => {
     const trigger = within(b).getByRole('button', { name: /^Versions.* of support-tickets$/ });
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     expect(trigger).toHaveTextContent('Versions');
-    expect(trigger).toHaveTextContent('· 2');
+    expect(trigger).toHaveTextContent(/·\s?2/); // cv5 Y13: the dot is its own flex item
     expect(within(b).getByText('v3')).toBeInTheDocument();
     expect(within(b).getByText('v4')).toBeInTheDocument();
     expect(within(b).getByRole('button', { name: 'Remove support-tickets' })).toBeInTheDocument();

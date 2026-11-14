@@ -1,14 +1,15 @@
 /**
  * Categories. Round 10 (the first qym's two views): Cards (the default) shows up to three metadata keys at once, each
- * value a small card (average, items, latency, a bar with the overall average tick); checkboxes turn keys on and off.
- * Compare ranks the values of one key in rows. One Sort button orders both (worst or best first). Clicking a value
- * filters the page.
+ * value a small card (average, items, latency, a bar with the overall average tick); toggle chips turn keys on and
+ * off (cv5 M1).
+ * Compare ranks the values of one key in rows. Both views list the best value first (cv4 C2-5: no sort control).
+ * Clicking a value filters the page.
  */
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatLatency, formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
 import { applyQueryUpdates } from '@/lib/url-state';
-import { Button, Card, Checkbox, EmptyState, Icon, SegmentedControl, Select, Text } from '@/ui';
+import { Button, Card, CardTitle, CountTile, EmptyState, SegmentedControl, Select, ToggleChips } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   barFraction,
@@ -18,7 +19,6 @@ import {
   spreadOf,
   switcherKind,
   visibleValues,
-  type CategoryOrder,
 } from '../../lib/categoryModel';
 import {
   categoryBreakdown,
@@ -54,8 +54,7 @@ export function CategoriesTab() {
   }, [keyList, metric, model.rows]);
   const asked = params.get('category');
   const selectedKey = asked && keys.some((k) => k.key === asked) ? asked : fallbackKey;
-  const [order, setOrder] = useState<CategoryOrder>('worst');
-  // Cards show up to three keys at first (the widest spread first); the checkboxes add or remove keys.
+  // Cards show up to three keys at first (the widest spread first); the toggle chips add or remove keys.
   const [shownKeysState, setShownKeys] = useState<string[] | null>(null);
   const shownKeys = useMemo(() => {
     if (shownKeysState) return shownKeysState;
@@ -81,26 +80,20 @@ export function CategoriesTab() {
       replace: true,
       preventScrollReset: true,
     });
-  const items2 = keys.map((k) => ({ key: k.key, label: `${k.key} · ${k.count}` }));
-  const overall = breakdown?.overallAverage ?? null;
+  // cv4 C2-4: the number of values of a key is the shared count badge, not plain text
+  const items2 = keys.map((k) => ({ key: k.key, label: k.key, count: k.count }));
+  const keyLabel = (k: { key: string; count: number }) => (
+    <>
+      {k.key}
+      <CountTile>{k.count}</CountTile>
+    </>
+  );
   const view = params.get('category_view') === 'compare' ? 'compare' : 'cards';
   const setViewParam = (v: 'cards' | 'compare') =>
     setParams((prev) => applyQueryUpdates(prev, { category_view: v === 'cards' ? null : v }), {
       replace: true,
       preventScrollReset: true,
     });
-  const sortButton = (
-    <Button
-      size="sm"
-      variant="neutral"
-      icon={<Icon name={order === 'worst' ? 'chevron-up' : 'chevron-down'} size={12} />}
-      onPress={() => setOrder(order === 'worst' ? 'best' : 'worst')}
-      aria-label={`Sort: ${order === 'worst' ? 'worst first' : 'best first'}. Press to reverse.`}
-      data-testid="category-sort"
-    >
-      {order === 'worst' ? 'Worst first' : 'Best first'}
-    </Button>
-  );
   return (
     <div className={styles.root} ref={rootRef}>
       <div className={styles.control}>
@@ -117,7 +110,7 @@ export function CategoriesTab() {
           switcherKind(keys, width) === 'segmented' ? (
             <SegmentedControl
               label="Category"
-              options={items2.map((i) => ({ value: i.key, label: i.label }))}
+              options={items2.map((i) => ({ value: i.key, label: keyLabel(i) }))}
               value={selectedKey}
               onChange={choose}
             />
@@ -128,32 +121,30 @@ export function CategoriesTab() {
               items={items2}
               value={selectedKey}
               onChange={(k) => k && choose(String(k))}
+              renderItem={keyLabel}
+              renderValue={(i) => i.label}
               width={240}
               searchable
             />
           )
         ) : null}
         {view === 'cards' && keys.length > 1 ? (
-          <span className={styles.keyToggles} role="group" aria-label="Categories shown">
-            {keys.map((k) => (
-              <Checkbox
-                key={k.key}
-                isSelected={shownKeys.includes(k.key)}
-                onChange={(on) =>
-                  setShownKeys(on ? [...shownKeys, k.key] : shownKeys.filter((x) => x !== k.key))
-                }
-              >
-                {k.key} <span className={styles.keyCount}>{k.count}</span>
-              </Checkbox>
-            ))}
+          // cv5 M1: the keys are on/off chips, all visible, each with its number of values; one stays on
+          <ToggleChips
+            aria-label="Categories shown"
+            options={keys.map((k) => ({ value: k.key, label: k.key, count: k.count }))}
+            value={shownKeys}
+            onChange={setShownKeys}
+            min={1}
+          />
+        ) : null}
+        {view === 'cards' && shownKeys.length ? (
+          // cv4 Y4: the key sits right after the field toggles, next to what it explains
+          <span className={styles.legend}>
+            <span className={styles.tickKey} aria-hidden="true" />
+            Overall average
           </span>
         ) : null}
-        <span className={styles.controlEnd}>
-          <Text variant="sm" tone="muted" className={styles.metricNote}>
-            {metric} · overall <b className={styles.overall}>{fmt(overall)}</b>
-          </Text>
-          {sortButton}
-        </span>
       </div>
       {view === 'cards' ? (
         <div className={styles.cardsView}>
@@ -164,19 +155,17 @@ export function CategoriesTab() {
                 key={k.key}
                 categoryKey={k.key}
                 metric={metric}
-                order={order}
                 numeric={numeric}
                 direction={direction}
                 metricType={model.metricTypes[metric]}
                 fmt={fmt}
               />
             ))}
-          {!shownKeys.length ? <p className={panel.note}>Tick a category to show its values.</p> : null}
+          {!shownKeys.length ? <p className={panel.note}>Turn on a category to show its values.</p> : null}
         </div>
       ) : breakdown ? (
         <KeyCard
           b={breakdown}
-          order={order}
           numeric={numeric}
           direction={direction}
           metricType={model.metricTypes[metric]}
@@ -221,7 +210,6 @@ function useValueFilter(key: string) {
 function KeyCards({
   categoryKey,
   metric,
-  order,
   numeric,
   direction,
   metricType,
@@ -229,7 +217,6 @@ function KeyCards({
 }: {
   categoryKey: string;
   metric: string;
-  order: CategoryOrder;
   numeric: boolean;
   direction: 'maximize' | 'minimize' | null;
   metricType: string | undefined;
@@ -243,15 +230,13 @@ function KeyCards({
     [api.ctx, rows, categoryKey, metric, filters.domain],
   );
   const { isOn, toggle } = useValueFilter(categoryKey);
-  const ordered = useMemo(() => (b ? orderValues(b.groups, order, direction) : []), [b, order, direction]);
+  const ordered = useMemo(() => (b ? orderValues(b.groups, direction) : []), [b, direction]);
   if (!b || !ordered.length) return null;
   const max = numeric ? Math.max(...b.groups.map((g) => g.avgScore ?? 0), b.overallAverage ?? 0, 1e-9) : null;
   const tick = barFraction(b.overallAverage, max);
   return (
     <section className={styles.keyBlock} aria-label={categoryKey}>
-      <h4 className={styles.keyTitle}>
-        {categoryKey} <span className={styles.sub}>{b.groups.length} values</span>
-      </h4>
+      <CardTitle as="h4" title={categoryKey} />
       <div className={styles.valueGrid} role="group" aria-label={`Values of ${categoryKey}`}>
         {ordered.map((g) => {
           const on = isOn(g.value);
@@ -302,21 +287,19 @@ function KeyCards({
 
 function KeyCard({
   b,
-  order,
   numeric,
   direction,
   metricType,
   fmt,
 }: {
   b: CategoryBreakdown;
-  order: CategoryOrder;
   numeric: boolean;
   direction: 'maximize' | 'minimize' | null;
   metricType: string | undefined;
   fmt: (v: number | null) => string;
 }) {
   const [all, setAll] = useState(false);
-  const ordered = useMemo(() => orderValues(b.groups, order, direction), [b.groups, order, direction]);
+  const ordered = useMemo(() => orderValues(b.groups, direction), [b.groups, direction]);
   const shown = visibleValues(ordered, DEFAULT_VISIBLE_VALUES, all);
   const max = numeric ? Math.max(...b.groups.map((g) => g.avgScore ?? 0), b.overallAverage ?? 0, 1e-9) : null;
   const tick = barFraction(b.overallAverage, max);
@@ -329,17 +312,16 @@ function KeyCard({
       aria-label={b.key}
       className={styles.catCard}
       header={
-        <div className={styles.head}>
-          <span className={styles.title}>
-            {b.key} <span className={styles.sub}>{b.groups.length} values</span>
-          </span>
-          <span className={styles.headRight}>
+        <CardTitle
+          as="h4"
+          title={b.key}
+          aside={
             <span className={styles.legend}>
               <span className={styles.tickKey} aria-hidden="true" />
               Overall average
             </span>
-          </span>
-        </div>
+          }
+        />
       }
     >
       <div className={styles.cols} aria-hidden="true">
@@ -349,10 +331,7 @@ function KeyCard({
         <span className={styles.num}>Pass</span>
         <span className={styles.num}>Latency</span>
       </div>
-      <div
-        role="group"
-        aria-label={`Values of ${b.key}, ${order === 'worst' ? 'worst first' : 'best first'}`}
-      >
+      <div role="group" aria-label={`Values of ${b.key}, best first`}>
         {shown.map((g) => {
           const on = isOn(g);
           const band =

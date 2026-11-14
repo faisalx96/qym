@@ -1,0 +1,123 @@
+/* cv5 K3: the prompt preview pane next to the settings. The same panel surface as the report sections on its left;
+   sticky under the page top (the shell's pane column holds it sticky with the splitter, cv5 Q3), as tall as the
+   viewport allows (measured, --pane-height), its own scroll. Tokens only. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  height: var(--pane-height, calc(100vh - 160px));
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-md) var(--space-sm);
+}
+
+/* One line: title, char count, the quiet status, then the copy action at the end. Fixed slots, so nothing moves. */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 28px;
+}
+
+.titleRow h2 {
+  margin: 0;
+}
+
+.chars {
+  display: inline-flex;
+  min-width: var(--chars-tag-width);
+}
+
+.status {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* cv5 Q1, Q2: the target line, then the Rendered | Raw switch at the end */
+.targetRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* cv5 Q1: the target of the prompt, one quiet line (the selected row at the left says the same, so no control) */
+.target {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  --outline-stick: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+  transition: opacity var(--transition-fast);
+}
+
+/* An update on its way: the text stays where it is, a little dimmed (no spinner, no swap). */
+.scroll[data-pending] {
+  opacity: 0.7;
+}
+
+.scroll:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.message {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+}
+
+.messageHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.body {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+/* A line that the last settings change added: a soft accent wash behind the text, no motion. */
+.line[data-added] {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  color: var(--text-primary);
+}
+
+/* cv5 Z11: the pane's one quiet line (the Rules tab's draft note); no banner */
+.note {
+  margin: 0;
+}

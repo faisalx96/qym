@@ -1,0 +1,123 @@
+/* ToggleChips (cv5 H4): a small set of on/off options, all visible. Each chip is a well (cv5 H1: --control-fill and the
+   --control-edge hairline, the control radius, not a pill) with a check box at its start, so on and off read at a
+   glance: an empty box and a muted label is off, a filled accent box with a check and the primary label is on. The
+   accent is on the box only (cv5 Y8): the chip body stays the neutral well, so an on chip never reads as the selected
+   segment of a SegmentedControl beside it. Apart from a Tag (static, no
+   box, 20px) and from a SegmentedControl (one track, one choice): separate chips, any number on. */
+.group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: var(--control-height);
+  padding: 0 var(--space-sm) 0 6px;
+  border: 1px solid var(--control-edge);
+  border-radius: var(--control-radius);
+  background: var(--control-fill);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.group[data-size='sm'] .chip {
+  min-block-size: var(--control-height-sm);
+  gap: var(--space-xs);
+  padding: 0 6px 0 var(--space-xs);
+}
+
+.chip:hover {
+  border-color: var(--control-edge-hover);
+  background: var(--control-fill-hover);
+  color: var(--text-primary);
+}
+
+/* On: the primary label; the box is filled and carries the check. No wash on the body (cv5 Y8). */
+.chip[aria-pressed='true'] {
+  color: var(--text-primary);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The last options that must stay on (min): no hover change, the default cursor; the Tooltip says why (cv5 Y9). */
+.chip[aria-disabled='true'],
+.chip[aria-disabled='true']:hover {
+  cursor: default;
+  border-color: var(--control-edge);
+  background: var(--control-fill);
+}
+
+.check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: 3px; /* the Checkbox box */
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--bg-void);
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.group[data-size='sm'] .check {
+  inline-size: 12px;
+  block-size: 12px;
+}
+
+.group[data-size='sm'] .check > svg {
+  inline-size: 10px;
+  block-size: 10px;
+}
+
+.chip:hover .check {
+  box-shadow: inset 0 0 0 1px var(--text-muted);
+}
+
+.chip[aria-pressed='true'] .check {
+  background: var(--accent-primary);
+  box-shadow: none;
+}
+
+.label {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip,
+  .check {
+    transition: none;
+  }
+}

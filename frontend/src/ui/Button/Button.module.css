@@ -15,11 +15,15 @@
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  color: var(--text-primary);
-  /* quiet at rest (no border), brighter on hover and press: a resting fill brighter than its hover read as already active */
-  background: var(--bg-elevated);
+  /* cv5 H1: depth by fill, not by outline. Rest = a raised fill one step over a well, a 1px highlight on the top inner
+     edge and a 1px dark line under it (--button-depth), a label a step under --text-primary (cv4 F6); hover = a lighter
+     fill and the primary label; pressed = a darker fill and no highlight. */
+  color: var(--button-text);
+  background: var(--button-fill);
+  box-shadow: var(--button-depth);
   transition:
     background var(--transition-fast),
+    box-shadow var(--transition-fast),
     color var(--transition-fast);
   text-decoration: none;
 }
@@ -75,28 +79,36 @@
 
 .button[data-hovered],
 a.button:hover:not([data-disabled]) {
-  background: var(--bg-active);
+  color: var(--text-primary);
+  background: var(--button-fill-hover);
 }
 .button[data-pressed],
 a.button:active:not([data-disabled]) {
-  background: var(--bg-hover);
+  background: var(--button-fill-pressed);
+  box-shadow: none;
 }
 
+/* Tinted variants (cv5 H1): the tone's soft tint at rest, the strong tint on hover; a tint fill only, no edge and no
+   highlight. */
 .button[data-variant='accent'] {
   color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  box-shadow: none;
 }
 .button[data-variant='accent'][data-hovered],
 a.button[data-variant='accent']:hover:not([data-disabled]) {
+  color: var(--accent-primary-hover);
   background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
 }
 
 .button[data-variant='meta'] {
   color: var(--accent-tertiary-soft);
   background: color-mix(in srgb, var(--accent-tertiary) var(--tint-soft), transparent);
+  box-shadow: none;
 }
 .button[data-variant='meta'][data-hovered],
 a.button[data-variant='meta']:hover:not([data-disabled]) {
+  color: var(--accent-tertiary-soft);
   background: color-mix(in srgb, var(--accent-tertiary) var(--tint-strong), transparent);
 }
 .button[data-variant='meta'][data-pressed],
@@ -104,21 +116,48 @@ a.button[data-variant='meta']:active:not([data-disabled]) {
   background: color-mix(in srgb, var(--accent-tertiary) var(--tint-strong), var(--bg-elevated));
 }
 
+/* Primary: the solid accent, no edge; hover = the brighter accent. */
 .button[data-variant='primary'] {
   color: var(--bg-void);
   background: var(--accent-primary);
+  box-shadow: none;
 }
 .button[data-variant='primary'][data-hovered],
 a.button[data-variant='primary']:hover:not([data-disabled]) {
+  color: var(--bg-void);
   background: var(--accent-primary-hover);
 }
 
 .button[data-variant='danger'] {
   color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
   background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
+  box-shadow: none;
 }
 .button[data-variant='danger'][data-hovered],
 a.button[data-variant='danger']:hover:not([data-disabled]) {
+  color: color-mix(in srgb, var(--error) 55%, var(--text-primary));
+  background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
+}
+
+/* cv5 Y14: a button whose panel is open (aria-expanded; React Aria also marks the trigger pressed while its overlay is
+   open) keeps its hover look, so the person sees which button the open panel belongs to. */
+.button[data-variant='neutral'][aria-expanded='true'] {
+  color: var(--text-primary);
+  background: var(--button-fill-hover);
+  box-shadow: var(--button-depth);
+}
+.button[data-variant='accent'][aria-expanded='true'] {
+  color: var(--accent-primary-hover);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
+}
+.button[data-variant='meta'][aria-expanded='true'] {
+  background: color-mix(in srgb, var(--accent-tertiary) var(--tint-strong), transparent);
+}
+.button[data-variant='primary'][aria-expanded='true'] {
+  background: var(--accent-primary-hover);
+}
+.button[data-variant='danger'][aria-expanded='true'] {
+  color: color-mix(in srgb, var(--error) 55%, var(--text-primary));
   background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
 }
 
@@ -129,6 +168,7 @@ a.button[data-variant='danger']:hover:not([data-disabled]) {
 .button[data-disabled] {
   color: var(--text-muted);
   background: color-mix(in srgb, var(--bg-elevated) 50%, transparent);
+  box-shadow: none;
   cursor: not-allowed;
 }
 

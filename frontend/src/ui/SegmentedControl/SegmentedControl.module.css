@@ -8,7 +8,7 @@
   padding: 2px;
   border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   isolation: isolate;
 }
 

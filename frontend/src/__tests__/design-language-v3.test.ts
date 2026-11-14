@@ -186,7 +186,9 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
     for (const f of shippedTsx) {
       if (rel(f) === 'features/experiments/launch/settings/SweepChips.tsx') continue;
       for (const b of buttons(read(f))) {
-        if (commit.has(b.text) && !/variant="primary"/.test(b.attrs))
+        // cv5 Y2: a view with a primary section create action makes its commit the accent button (one solid green)
+        const createInView = rel(f) === 'features/analyzer/guidance/RulesPanel.tsx' && b.text === 'Publish';
+        if (commit.has(b.text) && !/variant="primary"/.test(b.attrs) && !(createInView && /variant="accent"/.test(b.attrs)))
           problems.push(`${rel(f)}:${b.line}: ${b.text}`);
         if (/Disable item|Disable \$\{/.test(b.inner) && !/variant="danger"/.test(b.attrs))
           problems.push(`${rel(f)}:${b.line}: Disable item is not danger`);
@@ -395,8 +397,9 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
       for (const b of buttons(read(f)))
         if (/iconEnd=\{<Icon name="chevron-right"/.test(b.attrs)) problems.push(`${rel(f)}:${b.line}`);
     none(problems);
-    const empty = src('ui/EmptyState/EmptyState.tsx');
-    expect(empty).toContain('chevron-right');
+    // cv4 F13: the one text link to another page is ui/TextLink (accent text, end chevron); EmptyState uses it
+    expect(src('ui/TextLink/TextLink.tsx')).toContain('name="chevron-right"');
+    expect(src('ui/EmptyState/EmptyState.tsx')).toContain('<TextLink');
     // E-28 / D-13: no JSX text ends with a typed →
     none(grep(shippedTsx, /→\s*(<\/|$)/m));
     expect(src('features/runs-list/OverviewPage.tsx')).not.toContain('→');
@@ -908,7 +911,7 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
 
   it('C-03: a stale live page shows one notice, not a tinted status card', () => {
     const line = src('features/live/components/StatusLine.tsx');
-    // the red Stale StatusMark stays; the card itself takes no stale tone or wash
+    // the card takes no stale tone or wash (and no Stale tag: the notice above it says Stale, cv5 Y17)
     none(
       elements(line, ['[A-Z][A-Za-z.]*'])
         .filter((e) => e.name !== 'StatusMark' && /tone=\{stale/.test(e.attrs))
@@ -923,6 +926,8 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
       expect(before, 'staleText renders only under stale ? null :').toMatch(/stale \? null :/);
     }
     expect(src('features/live/LiveOverviewPage.tsx')).toContain('live-stale-notice');
+    // cv5 Y17: the notice says Stale with its detail; the status card has no second Stale tag
+    expect(line).not.toMatch(/>\s*Stale\s*</);
   });
 
   it('C-04: relative times come from lib/dates', () => {
@@ -935,7 +940,7 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
   });
 
   it('C-06: history times are sans', () => {
-    expect(rule(src('features/datasets/detail/LineageTab.module.css'), '.logTime')).not.toContain(
+    expect(rule(src('ui/Timeline/Timeline.module.css'), '.when')).not.toContain(
       '--font-mono',
     );
     expect(rule(src('features/datasets/item/ItemHistoryTab.module.css'), '.when')).not.toContain(
@@ -1408,14 +1413,16 @@ describe('consistency v3: family D (tables, bars, tabs, stats)', () => {
   });
 
   it('D-15: a page header holds no search', () => {
-    for (const p of [
-      'features/shell/projects/ProjectsPage.tsx',
-      'features/datasets/catalog/CatalogPage.tsx',
-    ]) {
+    // cv4 A1 reverses this for the Projects card grid: its search sits in the header row, before New project.
+    for (const p of ['features/datasets/catalog/CatalogPage.tsx']) {
       const t = src(p);
       for (const e of elements(t, ['PageHeader']))
         expect(propValue(e.attrs, 'actions') ?? '', p).not.toContain('<SearchField');
     }
+    const projects = elements(src('features/shell/projects/ProjectsPage.tsx'), ['PageHeader']);
+    const actions = propValue(projects[0]!.attrs, 'actions') ?? '';
+    expect(actions.indexOf('<SearchField')).toBeGreaterThan(-1);
+    expect(actions.indexOf('<SearchField')).toBeLessThan(actions.indexOf('data-new-project'));
   });
 
   it('D-16: list toolbars use bar Selects and the shared clear button', () => {
@@ -1811,18 +1818,18 @@ describe('consistency v3: family E (pages, dialogs, forms, layout)', () => {
     expect(t).not.toContain('function Stat(');
   });
 
-  it('E-42: pages share one width and padding (no narrow container)', () => {
+  it('E-42 (reversed by cv4 F1): pages share one width and padding, and the constrained page is centred', () => {
     const layout = src('features/shell/layout.module.css');
     expect(layout).not.toMatch(/\.narrow\b/);
-    expect(layout).not.toContain('margin: 0 auto');
+    // cv4 F1, owner 2026-11-12: "it should be centered like before" (Projects, Admin, Project settings, Auto-analysis)
+    expect(rule(layout, '.constrained')).toMatch(/margin-inline:\s*auto/);
+    expect(rule(layout, '.fullWidth')).not.toMatch(/margin/);
     const pad = (s: string) => (rule(layout, s).match(/padding[^;]*;/g) ?? []).join(' ');
     expect(pad('.fullWidth')).toBe(pad('.constrained'));
     expect(read(join(SRC, 'styles/tokens.css'))).not.toContain('--page-narrow-w');
     expect(rule(src('features/runs-list/ChartsPage.module.css'), '.screen')).toMatch(
       /padding:\s*var\(--space-lg\)/,
     );
-    expect(src('features/runs-list/OverviewPage.module.css')).not.toContain('margin: 0 auto');
-    expect(src('features/analyzer/analyzer.module.css')).not.toContain('margin-inline: auto');
     // shim: shell/layout.ts keeps a deprecated narrow container until the cv3-shim removal
     expect(src('features/shell/layout.ts')).not.toMatch(/export const narrow\b/);
   });
@@ -1897,5 +1904,538 @@ describe('consistency v3: family E (pages, dialogs, forms, layout)', () => {
     const css = src('features/live/live.module.css');
     expect(rule(css, '.tiles a:hover')).toMatch(/color:\s*var\(--accent-primary\)/);
     expect(css).not.toMatch(/\.tiles a\[data-tone/);
+  });
+});
+
+describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
+  const ui = (name: string) => stripComments(src(`ui/${name}/${name}.module.css`));
+  const tokens = () => read(join(SRC, 'styles/tokens.css'));
+
+  it('F2: the table body is square under a toolbar and over a footer (flush corner)', () => {
+    const css = ui('DataTable');
+    expect(rule(css, '.toolbar ~ .bodyHost')).toMatch(/border-start-start-radius:\s*0/);
+    expect(rule(css, '.bodyHost:has(~ .footer)')).toMatch(/border-end-start-radius:\s*0/);
+  });
+
+  it('F4: row primary text turns accent on row hover or keyboard focus, never underlined', () => {
+    const base = stripComments(read(join(SRC, 'styles/base.css')));
+    expect(base).toMatch(/:is\(tr, \[role='row'\]\):is\(:hover, :focus-visible, :has\(:focus-visible\)\)/);
+    expect(base).toMatch(
+      /\[data-row-primary\][^{]*\{\s*color:\s*var\(--accent-primary\);\s*text-decoration:\s*none;/,
+    );
+    expect(src('ui/DataTable/DataTable.tsx')).toContain('data-row-primary=');
+    expect(src('ui/DataTable/types.ts')).toContain('primary?: boolean');
+    expect(src('ui/EntityTag/EntityTag.tsx')).toContain('data-row-primary=""');
+  });
+
+  it('F5: one dropdown, no native <select> in ui; the open trigger takes the accent edge', () => {
+    none(grep(under(shippedTsx, 'ui/'), /<select\b/));
+    expect(src('ui/Pagination/Pagination.tsx')).toContain('<Select');
+    expect(rule(ui('Select'), ".trigger[aria-expanded='true']")).toMatch(
+      /border-color:\s*var\(--accent-primary\)/,
+    );
+    expect(rule(ui('Select'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--control-fill-hover\)/);
+    expect(rule(ui('MultiSelect'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--control-fill-hover\)/);
+  });
+
+  it('F6, cv5 H1: a neutral button is raised by fill and a top highlight, never outlined; hover lightens it', () => {
+    for (const t of [
+      '--button-fill:',
+      '--button-fill-hover:',
+      '--button-fill-pressed:',
+      '--button-highlight:',
+      '--button-depth:',
+      '--button-text:',
+    ])
+      expect(tokens(), t).toContain(t);
+    const css = ui('Button');
+    const rest = rule(css, '.button');
+    expect(rest).toMatch(/background:\s*var\(--button-fill\)/);
+    expect(rest).toMatch(/box-shadow:\s*var\(--button-depth\)/);
+    expect(rest).toMatch(/color:\s*var\(--button-text\)/);
+    expect(rules(css, '.button[data-hovered]').join('\n')).toMatch(/var\(--button-fill-hover\)/);
+    // depth by fill, not by outline (owner 2026-11-13): no variant draws a 1px edge ring
+    expect(css).not.toMatch(/inset 0 0 0 1px/);
+    expect(tokens()).not.toContain('--button-edge');
+    // cv5 Y14: an open panel's button keeps the hover look (React Aria also marks it pressed, so the rule comes after)
+    const open = css.indexOf(".button[data-variant='neutral'][aria-expanded='true']");
+    expect(open).toBeGreaterThan(css.indexOf('.button[data-pressed]'));
+    expect(rule(css, ".button[data-variant='neutral'][aria-expanded='true']")).toMatch(/var\(--button-fill-hover\)/);
+    for (const v of ['accent', 'meta', 'primary', 'danger'])
+      expect(css, v).toContain(`.button[data-variant='${v}'][aria-expanded='true']`);
+    // cv5 Y7: a button reads as a button on the page ground: one fill step up and a visible top highlight
+    expect(tokens()).toMatch(/--button-fill:\s*var\(--bg-active\)/);
+    expect(tokens()).toMatch(/--button-highlight:\s*color-mix\(in srgb, var\(--text-primary\) (8|9|10)%, transparent\)/);
+    expect(tokens()).toMatch(/--control-edge:\s*color-mix\(in srgb, var\(--text-primary\) 4%, transparent\)/);
+  });
+
+  it('F7/F8, cv5 H1: wells share --control-fill and a translucent hairline; a report body makes the fills relative', () => {
+    for (const n of ['Select', 'MultiSelect', 'TextField', 'SegmentedControl', 'Textarea'])
+      expect(ui(n), n).not.toMatch(/background:\s*var\(--bg-elevated\)/);
+    expect(rule(ui('SegmentedControl'), '.segmented')).toMatch(/background:\s*var\(--control-fill\)/);
+    expect(rule(ui('TextField'), '.control')).toMatch(/background:\s*var\(--control-fill\)/);
+    expect(tokens()).toMatch(/--control-fill:\s*var\(--bg-elevated\)/);
+    expect(tokens()).toMatch(/--control-edge:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
+    const body = rule(ui('ReportSection'), '.body');
+    expect(body).toMatch(/--control-fill:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
+    expect(body).toMatch(/--button-fill:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
+    expect(body).not.toMatch(/--control-edge/);
+  });
+
+  it('F10: three report title roles in three steps (section > subsection > card title)', () => {
+    const px = (t: string) => Number(tokens().match(new RegExp(`${t}:\\s*(\\d+)px`))?.[1]);
+    expect(px('--font-section')).toBeGreaterThan(px('--font-subsection'));
+    expect(px('--font-subsection')).toBeGreaterThan(px('--font-card-title'));
+    expect(px('--font-card-title')).toBeGreaterThan(px('--font-md'));
+    expect(ui('ReportSection')).toMatch(/\.section \.head \.title \{[^}]*var\(--font-section\)/);
+    expect(ui('Subsection')).toMatch(/\.sub \.head \.title \{[^}]*var\(--font-subsection\)/);
+    expect(rule(stripComments(src('ui/Card/CardTitle.module.css')), '.title')).toMatch(
+      /var\(--font-card-title\)/,
+    );
+  });
+
+  it('F11: one row ladder, and first-cell rails survive a collapsed select column', () => {
+    const css = ui('DataTable');
+    expect(tokens()).toContain('--row-hover:');
+    expect(tokens()).toContain('--row-selected:');
+    expect(rule(css, '.tr:hover')).toMatch(/--row-base:\s*var\(--row-hover\)/);
+    expect(rule(css, '.childRow:hover')).toMatch(/--row-base:\s*var\(--row-hover\)/);
+    expect(rule(css, '.tr[data-selected]')).toMatch(/var\(--row-selected/);
+    // every first-cell rail also names the first visible cell after a collapsed (0px) select cell
+    expect(css).not.toMatch(/td:first-child(?!:not\(\[data-collapsed\]\))/);
+    expect(rule(css, '.rowActions')).not.toMatch(/opacity/);
+  });
+
+  it('F12: CountTile is the one count badge, with a danger tone', () => {
+    expect(src('ui/CountTile/CountTile.tsx')).toContain("tone?: 'danger'");
+    expect(ui('CountTile')).toContain(".tile[data-tone='danger']");
+  });
+
+  it('F14: no shared component prints a resting "All changes saved"', () => {
+    none(grep(under(shippedTsx, 'ui/'), /All changes saved/));
+  });
+
+  it('sticky bars over a table use the --z-sticky-bar token', () => {
+    expect(tokens()).toMatch(/--z-sticky-bar:\s*\d+;/);
+  });
+});
+
+describe('cv4 family G (fix round after the merge): cross-agent recipes', () => {
+  const css = (p: string) => stripComments(src(p));
+  const tokens = () => read(join(SRC, 'styles/tokens.css'));
+
+  it('X1: run page card titles use CardTitle, no temporary title role', () => {
+    none(grep(under(shippedCss, 'features/run-detail/'), /var\(--font-card-title,/));
+    for (const f of [
+      'features/run-detail/components/latency/StepTimings.tsx',
+      'features/run-detail/components/latency/TimeBudget.tsx',
+      'features/run-detail/components/panels/DeepTab.tsx',
+      'features/run-detail/components/charts/ChartCard.tsx',
+    ])
+      expect(src(f), f).toContain('<CardTitle');
+  });
+
+  it('X4: a save row has no resting state text by default', () => {
+    expect(src('features/shell/settings/SettingsCard.tsx')).toMatch(/savedText = '',/);
+  });
+
+  it('X6: a wrapping column follows the density and does not force the tall row', () => {
+    const dt = src('ui/DataTable/DataTable.tsx');
+    expect(dt).toContain('const tall = visible.some((c) => c.secondary);');
+    expect(dt).toMatch(/WRAP_LINES[^=]*=\s*\{ compact: 1, regular: 2, comfortable: 5 \}/);
+    expect(
+      rule(css('ui/DataTable/DataTable.module.css'), '.table[data-wrap-tall] > .tbody > tr > td'),
+    ).toMatch(/height:/);
+  });
+
+  it('X7, X8: an active row without focus; a fold only when the overflow covers it; one handle', () => {
+    expect(src('ui/DataTable/DataTable.tsx')).toContain('activeKey?: Key | null;');
+    expect(src('ui/DataTable/DataTable.tsx')).toContain('rest >= foldW - 1');
+    const dt = css('ui/DataTable/DataTable.module.css');
+    expect(dt).toContain('.tbody:not(:has(> .tr:hover)) > .tr[data-focused] .foldHandle');
+    expect(dt).not.toMatch(/\n\.tr\[data-focused\] \.rowMenuHandle/);
+  });
+
+  it('X9: the wide Dialog size; no local width override on a dialog', () => {
+    expect(src('ui/Dialog/Dialog.tsx')).toContain("'wide'");
+    none(grep(shippedCss, /\.(\w+)\.\1\[data-size\]/));
+  });
+
+  it('X12, Y10, Y18: the glass of a sticky nav comes from the --glass-* tokens', () => {
+    for (const t of ['--glass-mix:', '--glass-blur:', '--glass-saturate:']) expect(tokens(), t).toContain(t);
+    for (const f of [
+      'features/run-detail/components/SectionNav.module.css',
+      'features/compare/components/CompareBar.module.css',
+    ]) {
+      expect(css(f), f).toContain('blur(var(--glass-blur)) saturate(var(--glass-saturate))');
+      expect(css(f), f).not.toMatch(/^\s*backdrop-filter:\s*blur\(\d/m);
+    }
+  });
+
+  it('X17, X18: centred page rules and the sticky bar layer', () => {
+    expect(rule(css('features/runs-list/OverviewPage.module.css'), '.screen[data-constrained]')).toMatch(
+      /margin-inline:\s*auto/,
+    );
+    expect(rule(css('features/analyzer/blocks/blocks.module.css'), '.rail')).toMatch(
+      /z-index:\s*var\(--z-sticky-bar\)/,
+    );
+  });
+
+  it('Y3: the analyzer rail notice is never cut with an ellipsis', () => {
+    expect(rule(css('features/analyzer/blocks/blocks.module.css'), '.railText')).not.toMatch(/text-overflow/);
+  });
+
+  it('Y5: dataset save rows end the card body, not a card footer', () => {
+    for (const f of ['features/datasets/detail/SettingsTab.tsx', 'features/datasets/detail/AccessTab.tsx'])
+      expect(src(f), f).not.toMatch(/footer=\{[^}]*(SaveFooter|saveFooter)/s);
+  });
+
+  it('Y14: a React Aria button shows no ring after a pointer choice', () => {
+    expect(stripComments(read(join(SRC, 'styles/base.css')))).toContain(
+      'button[data-rac]:focus-visible:not([data-focus-visible])',
+    );
+  });
+
+  it('Y15: a standalone "Read the guide" link is a TextLink', () => {
+    none(grep(shippedTsx, /<Link [^>]*>Read the guide<\/Link>/));
+  });
+});
+
+describe('cv5 family H (owner review 2026-11-13): shared controls and elements', () => {
+  it('H6: a button never ends with a chevron; a menu trigger is BarTrigger (the dropdown trigger look)', () => {
+    none(grep(shippedTsx, /iconEnd=\{<Icon name="chevron-down"/));
+    expect(src('ui/MultiSelect/MultiSelect.tsx')).toContain('export function BarTrigger');
+  });
+
+  it('H4: ToggleChips are wells with the control radius (not pills) and a check box for the on state', () => {
+    const css = stripComments(src('ui/ToggleChips/ToggleChips.module.css'));
+    const chip = rule(css, '.chip');
+    expect(chip).toMatch(/border-radius:\s*var\(--control-radius\)/);
+    expect(chip).toMatch(/background:\s*var\(--control-fill\)/);
+    expect(css).not.toContain('--radius-pill');
+    expect(src('ui/ToggleChips/ToggleChips.tsx')).toContain('aria-pressed={pressed}');
+    // cv5 Y8: the accent is on the check box only; the on chip body is not washed (it is not a selected segment)
+    for (const sel of [".chip[aria-pressed='true']", ".chip[aria-disabled='true']"])
+      expect(rules(css, sel).join('\n'), sel).not.toMatch(/background:[^;]*accent/);
+    expect(rule(css, ".chip[aria-pressed='true'] .check")).toMatch(/background:\s*var\(--accent-primary\)/);
+    // cv5 Y9: the chip hint is the shared Tooltip, not a native title
+    const tsx = src('ui/ToggleChips/ToggleChips.tsx');
+    expect(tsx).toContain('<Tooltip key={o.value} content={hint} isDisabled={!hint}>');
+    expect(tsx).not.toMatch(/\btitle=\{/);
+  });
+
+  it('H5: the Change log is the shared Timeline; no local timeline markup', () => {
+    const tsx = src('features/datasets/detail/LineageTab.tsx');
+    expect(tsx).toContain('<Timeline');
+    expect(tsx).not.toContain('styles.rail');
+    const css = src('features/datasets/detail/LineageTab.module.css');
+    expect(css).not.toMatch(/\.rail\b|\.mark\b/);
+  });
+
+  it('H3: every JSON view takes the --json-* syntax colours (strings green, keys blue)', () => {
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    expect(tokens).toMatch(/--json-string:\s*var\(--accent-primary\)/);
+    expect(tokens).toMatch(/--json-key:\s*var\(--accent-secondary\)/);
+    const viewer = stripComments(src('ui/JsonViewer/JsonViewer.module.css'));
+    for (const [cls, t] of [
+      ['.key', 'key'],
+      ['.string', 'string'],
+      ['.number', 'number'],
+      ['.boolean', 'boolean'],
+      ['.null', 'null'],
+      ['.punct', 'punct'],
+    ] as const)
+      expect(rule(viewer, cls), cls).toContain(`var(--json-${t})`);
+    const editor = stripComments(src('features/datasets/components/FieldEditor.module.css'));
+    for (const [cls, t] of [
+      ['.tokKey', 'key'],
+      ['.tokStr', 'string'],
+      ['.tokNum', 'number'],
+      ['.tokLit', 'boolean'],
+      ['.tokNull', 'null'],
+    ] as const)
+      expect(rule(editor, cls), cls).toContain(`var(--json-${t})`);
+  });
+});
+
+describe('cv5 family G (fix round after the merge): area recipes', () => {
+  const doc = read(join(SRC, '../../docs/DESIGN_LANGUAGE.md'));
+
+  it('Z3: Timeline reveals row actions and aligns the mark through props, not caller selectors', () => {
+    const css = stripComments(src('ui/Timeline/Timeline.module.css'));
+    expect(css).toContain('.timeline[data-reveal-actions]');
+    expect(css).toContain(".timeline[data-mark-align='start'] .rail");
+    expect(css).toContain(".event[data-active] .mark:not([data-tone='neutral'], [data-dot])");
+    expect(stripComments(src('features/analyzer/guidance/rules.module.css'))).not.toMatch(/\[data-key\]|\[data-active\]/);
+  });
+
+  it('Z6: dated event lists about one entity are the shared Timeline (no local list CSS)', () => {
+    for (const p of [
+      'features/datasets/item/ItemHistoryTab.tsx',
+      'features/feedback/RequestPage.tsx',
+      'features/run-detail/components/RunPanels.tsx',
+      'features/live/components/worker/HistoryBlock.tsx',
+      'features/reviews/DetailPane.tsx',
+    ])
+      expect(src(p), p).toContain('<Timeline');
+    expect(src('features/datasets/item/ItemHistoryTab.module.css')).not.toMatch(/\.versionCard\b|\.revision\b/);
+    expect(src('features/feedback/feedback.module.css')).not.toMatch(/\.eventHead\b|\.events\b/);
+    expect(src('features/run-detail/components/RunPanels.module.css')).not.toMatch(/\.entryHead\b/);
+    expect(src('features/live/worker.module.css')).not.toMatch(/\.versionMeta\b/);
+    expect(src('features/reviews/DetailPane.module.css')).not.toMatch(/\.histWhen\b/);
+  });
+
+  it('Z2: a bar Select that always shows its value has the label-and-value cap; no local stopgap', () => {
+    expect(src('ui/Select/Select.tsx')).toContain("data-show-value={showValue === 'always'");
+    expect(stripComments(src('ui/MultiSelect/MultiSelect.module.css'))).toContain(
+      ".trigger[data-variant='bar'][data-show-value]",
+    );
+    expect(stripComments(src('features/analyzer/blocks/blocks.module.css'))).not.toContain("[data-variant='bar']");
+  });
+
+  it('Z4 / K1: the analyzer metrics are ToggleChips named by the visible Metrics label', () => {
+    const t = src('features/analyzer/blocks/RunHeader.tsx');
+    expect(t).toContain('<ToggleChips');
+    expect(t).toContain('aria-labelledby={metricsLabelId}');
+    expect(t).not.toContain('MultiSelect');
+  });
+
+  it('K5: the analyzer model is a labelled bar Select that always shows its value', () => {
+    const t = src('features/analyzer/blocks/ActionRail.tsx');
+    expect(t).toContain('label="Analyzer model"');
+    expect(t).toContain('showValue="always"');
+    expect(doc).toContain('No rule above\n  the bar (cv5 K5)');
+  });
+
+  it('Y1: the main action of the action rail is the primary button', () => {
+    const t = src('features/analyzer/blocks/ActionRail.tsx');
+    // the Analyze start button, View run (done) and Analyze again (failed) are primary
+    expect(t).toMatch(/variant="primary"\s+onPress=\{\(\) => void ws\.analyze\(\)\}/);
+    expect(t).toContain('<Button size="sm" variant="primary" onPress={runner.dismiss} className={s.railPrimary}>');
+    const full = t.slice(0, t.indexOf('export function CompactJobRail'));
+    expect(full).not.toContain('variant="accent"');
+    expect(doc).toContain('Exactly one primary button per state');
+    expect(doc).not.toContain('Exactly one accent button per state');
+  });
+
+  it('Y2: the Rules draft has one solid green button: Add rule primary, Publish accent', () => {
+    expect(src('features/analyzer/guidance/RuleEditor.tsx')).toMatch(/variant="primary"[\s\S]{0,400}?Add rule/);
+    expect(src('features/analyzer/guidance/RulesPanel.tsx')).toMatch(/variant="accent"[\s\S]{0,300}?Publish\s*<\/Button>/);
+    expect(doc).toContain('the commit of that view\n  ("Publish") is the accent button');
+  });
+
+  it('Y6: no count or value in parentheses on an analyzer control', () => {
+    const rules = src('features/analyzer/guidance/RulesPanel.tsx');
+    expect(rules).not.toMatch(/Project documents \(|Choose examples \(/);
+    expect(rules).toContain('Project documents<CountTile>{enabledDocs}</CountTile>');
+    expect(src('features/analyzer/blocks/PromptContents.tsx')).not.toMatch(/Choose metadata \(/);
+    expect(doc).toContain('a button that opens a picker reads "Label · value"');
+  });
+
+  it('Y11: an input mapping row has no chevron between the label and the dropdown', () => {
+    expect(src('features/analyzer/blocks/FieldsMapping.tsx')).not.toMatch(/<Icon name="next"/);
+    expect(doc).toContain('no chevron between them (cv5 Y11');
+  });
+
+  it('Y12: a toned mark on the selected Timeline row sits on a solid dark base', () => {
+    const css = stripComments(src('ui/Timeline/Timeline.module.css'));
+    expect(css).toMatch(
+      /\.event\[data-active\] \.mark:not\(\[data-tone='neutral'\], \[data-dot\]\) \{[^}]*background:\s*color-mix\(in srgb, var\(--mark\) \d+%, var\(--bg-void\)\)/,
+    );
+    expect(rule(css, '.timeline[data-selectable] .event[data-active]')).toMatch(/background:\s*var\(--row-selected\)/);
+  });
+
+  it('Y13: the bar trigger dot has equal space on both sides; the items count sits on the control centre line', () => {
+    const ms = src('ui/MultiSelect/MultiSelect.tsx');
+    expect(ms).toContain('<span className={styles.triggerSep}>·</span>');
+    expect(ms).not.toContain('>· {value}<');
+    expect(rule(stripComments(src('features/run-detail/components/items/FilterBar.module.css')), '.count')).toMatch(
+      /line-height:\s*1;/,
+    );
+  });
+
+  it('Y15: the field expand dialog is as high as the value (a low editor floor)', () => {
+    const css = stripComments(src('features/datasets/components/FieldEditor.module.css'));
+    for (const sel of ['.expandBody .textarea', '.expandBody > .pre'])
+      expect(rule(css, sel), sel).toMatch(/min-height:\s*96px/);
+    expect(doc).toContain('so a 3-line value opens a short dialog');
+  });
+
+  it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
+    const t = src('features/analyzer/blocks/PromptPane.tsx');
+    expect(t).toContain('No change to the prompt');
+    expect(t).not.toContain('<Spinner');
+    expect(doc).toContain('**Prompt pane (cv5 K3):**');
+  });
+
+  it('L2 / L3 / Z5: rule versions are a Timeline with icon marks; a released version is read-only', () => {
+    const t = src('features/analyzer/guidance/RulesPanel.tsx');
+    expect(t).toContain('<Timeline');
+    expect(t).toContain("icon: live ? 'star' : v.status === 'draft' ? 'edit' : 'check'");
+    expect(t).toContain('markAlign="start"');
+    expect(t).toContain('Read-only');
+    expect(t).toContain('Create draft from v');
+    expect(doc).toContain('**Rule versions (cv5 L2, L3, Z5):**');
+  });
+
+  it('M2: a live source environment is a StateTag in the environment tone', () => {
+    expect(src('features/live/components/EnvironmentTag.tsx')).toContain('<StateTag');
+    expect(src('features/live/lib/environment.ts')).toContain('export function environmentTone');
+    expect(doc).toContain('The environment of a live source is a StateTag (cv5 M2)');
+  });
+
+  it('M3: a dataset alias reads @alias with its tooltip', () => {
+    expect(src('features/run-detail/components/DatasetChip.tsx')).toContain('Alias ${alias}: a name that points at');
+    expect(doc).toContain('An alias segment is written `@alias`');
+    // cv5 Y5: one alias form; the dataset tag hint is the shared Tooltip; the switcher rows show the aliases
+    const chip = src('features/run-detail/components/DatasetChip.tsx');
+    expect(chip).toContain('<Tooltip content={aliasTitle(alias, version)}>');
+    expect(chip).not.toContain('title={aliasTitle(');
+    expect(chip).not.toContain('`aliases: ${');
+    const sw = src('features/datasets/components/VersionSwitcher.tsx');
+    expect(sw).toContain('<AliasTags version={v} />');
+    expect(sw).toContain('{`@${a}`}');
+    expect(src('ui/EntityTag/EntityTag.tsx')).toContain('{`@${a}`}');
+    expect(doc).toContain('One alias\n  form everywhere (cv5 Y5)');
+  });
+
+  it('M4: the Experiments table draws no live rail (the Status column shows the step)', () => {
+    expect(src('features/experiments/list/ExperimentsPage.tsx')).not.toContain('rowState');
+    expect(doc).toContain('`live` is\n  not drawn when a Status column already shows the live step');
+  });
+
+  it('M5 / Z7: a problem count in a line of counts is a count tag in its tone; neutral counts stay text', () => {
+    const jobs = src('features/experiments/list/ExperimentsPage.tsx');
+    expect(jobs).toContain('<Tag kind="count" tone="danger" data-count="failed">');
+    expect(jobs).toContain('<Tag kind="count" tone="warning" data-count="cancelled">');
+    const strip = src('features/experiments/detail/QueueStrip.tsx');
+    expect(strip).toContain('<Tag kind="count" tone="warning">');
+    expect(strip).not.toContain('{row.blocked} blocked\n                {row.position');
+    const remote = src('features/experiments/queue/RemoteQueueSection.tsx');
+    expect(remote).not.toContain("· {plural(env.orphan_count, 'orphan')} · {env.stale_count} stale");
+    expect(remote.match(/<Tag kind="count" tone="warning">/g)?.length).toBe(2);
+  });
+
+  it('Z11: with a run open the prompt pane column belongs to the shell, on every tab', () => {
+    const shell = src('features/analyzer/RunShell.tsx');
+    expect(shell).toContain('className={s.paneSlot}');
+    expect(src('features/analyzer/RunAnalyze.tsx')).toContain('createPortal(');
+    expect(stripComments(src('features/analyzer/analyzer.module.css'))).toContain('.shell[data-pane]');
+    expect(src('api/analysis.ts')).toContain('qc.invalidateQueries({ queryKey: PREVIEW_KEY })');
+    expect(doc).toContain('two columns on every tab');
+  });
+
+  it('Z8: the Experiments description wraps to two lines, no cut', () => {
+    expect(src('features/experiments/list/ExperimentsPage.tsx')).toContain('secondaryLines={2}');
+    expect(stripComments(src('ui/DataTable/cells/cells.module.css'))).toContain('.secondary[data-lines]');
+  });
+});
+
+describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
+  const doc = read(join(SRC, '../../docs/DESIGN_LANGUAGE.md'));
+
+  it('Q1: with the pane on screen the target is a quiet line, not a dropdown', () => {
+    const pane = src('features/analyzer/blocks/PromptPane.tsx');
+    expect(pane).not.toContain('<Select');
+    expect(pane).toContain('data-testid="prompt-pane-target"');
+    expect(src('features/analyzer/blocks/PreviewDrawer.tsx')).toContain('label="Previewed target"');
+    expect(doc).toContain('with the pane on screen there is no target\n  dropdown');
+  });
+
+  it('Q2: the prompt is rendered from the builder markers, with a Raw view and the JSON colours', () => {
+    const messages = src('features/analyzer/blocks/PromptMessages.tsx');
+    expect(messages).toContain('<SegmentedControl');
+    expect(messages).toContain("'qym:prompt-view'");
+    expect(src('features/analyzer/blocks/PromptDocument.tsx')).toContain('<JsonText');
+    expect(src('features/analyzer/model/promptDoc.ts')).toContain('EVALUATION ITEM DATA');
+    const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
+    expect(css).toContain("border-inline-start: 3px solid var(--accent-primary)");
+    expect(css).toContain('max-width: var(--field-measure)');
+    expect(css).toContain('background: var(--bg-elevated)');
+    expect(stripComments(src('ui/JsonViewer/JsonViewer.module.css'))).toContain('var(--json-key)');
+    expect(doc).toContain('The rendered\n  view hides and changes no character');
+  });
+
+  it('Q4: each Prompt contents switch is named as its prompt section and marks it; no Error switch', () => {
+    const contents = src('features/analyzer/blocks/PromptContents.tsx');
+    expect(contents).toContain('onHoverChange={peek}');
+    expect(contents).toContain('onFocusChange={peek}');
+    expect(contents).not.toMatch(/>\s*Error\s*</);
+    const map = src('features/analyzer/model/contents.ts');
+    expect(map).toContain("label: 'Metric metadata'");
+    expect(map).toContain("key: 'SELECTED METRIC METADATA'");
+    expect(src('features/analyzer/model/mapping.ts')).toContain('`metric_metadata.${path}`');
+    const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
+    expect(css).toContain('.section[data-peek]');
+    // cv5 N: the outline row and the document's note line say it (model/outline.ts)
+    expect(css).toContain('.noteLine');
+    expect(src('features/analyzer/model/outline.ts')).toContain("'not sent'");
+    expect(doc).toContain('A\n  switched-off section is never silently missing');
+  });
+
+  it('N (owner 2026-11-14: "this navbar sucks!!"): the outline is one tree, a rail when wide, a location menu when narrow', () => {
+    const messages = src('features/analyzer/blocks/PromptMessages.tsx');
+    // wide: a list of buttons, the section in view aria-current
+    expect(messages).toContain("aria-current={active === rowKey(r) ? 'location' : undefined}");
+    // narrow and the drawer: the one dropdown trigger look and the shared menu, the current row checked
+    expect(messages).toContain('<BarTrigger');
+    expect(messages).toContain('<DropdownMenu');
+    expect(messages).toContain('selectedId={rowKey(active)}');
+    expect(src('features/analyzer/blocks/PromptPreview.tsx')).toContain('form="menu"');
+    const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
+    expect(css).toMatch(/\.railRow\[aria-current\] \{[^}]*border-inline-start-color: var\(--accent-primary\)/);
+    expect(css).toMatch(/\.railRow\[data-depth='1'\] \{[^}]*padding-inline-start/);
+    // the wrapped rows of words are gone
+    expect(css).not.toContain('.outlineGroup');
+    // a section that is not sent: one quiet line in the document, interface text that no copy takes
+    expect(css).toMatch(/\.noteLine \{[^}]*user-select: none/);
+    expect(src('features/analyzer/blocks/PromptDocument.tsx')).toContain('data-ui-note');
+    expect(doc).toContain('The outline (cv5 N');
+  });
+
+  it('Q5: a slider never spans a section', () => {
+    const css = stripComments(src('ui/Slider/Slider.module.css'));
+    expect(css).toContain('.slider:not([data-layout]) {\n  max-width: 360px;');
+    expect(css).toContain('flex: 0 0 var(--slider-track-w)');
+    const targets = src('features/analyzer/blocks/Targets.tsx');
+    expect(targets).toContain('trackWidth={280}');
+    expect(targets).not.toContain('width="100%"');
+    expect(doc).toContain('this slider is too wide');
+  });
+
+  it('Q6: Add category ends the section header row and opens a dialog; search heads the list column', () => {
+    const panel = src('features/analyzer/guidance/DiagnosisPanel.tsx');
+    expect(panel).toMatch(/<SectionHeader\s+title="Diagnosis categories"[\s\S]*?aside=\{[\s\S]*?Add category/);
+    expect(panel).toContain('<FormDialog');
+    expect(panel).not.toContain('label="New category name"');
+    expect(stripComments(src('features/analyzer/guidance/diagnosis.module.css'))).toContain(
+      'grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);',
+    );
+    expect(doc).toContain('why is add category there?');
+  });
+
+  it('Q7: the approved examples picker is an xl dialog with one filter row and a compact confidence range', () => {
+    expect(stripComments(src('ui/Dialog/Dialog.module.css'))).toContain(".modal[data-size='xl'] {\n  width: 1200px;");
+    const picker = src('features/analyzer/guidance/ExamplePicker.tsx');
+    expect(picker).toContain('size="xl"');
+    expect(picker).toContain('triggerVariant="bar"');
+    expect(picker).toContain('className={s.range}');
+    expect(picker).not.toContain('<SegmentedControl');
+    expect(stripComments(src('features/analyzer/guidance/examples.module.css'))).not.toContain('max-height: 40vh');
+    expect(doc).toContain('the modal needs more\n  space!');
+  });
+
+  it('Q3: a splitter sets the pane width, remembered, the same on every tab', () => {
+    const shell = src('features/analyzer/RunShell.tsx');
+    expect(shell).toContain('<PaneResizer');
+    expect(shell).toContain("'--pane-w'");
+    const resizer = src('features/analyzer/PaneResizer.tsx');
+    expect(resizer).toContain('role="separator"');
+    expect(resizer).toContain('aria-valuenow=');
+    expect(resizer).toContain("'qym:analyzer-pane-width'");
+    const css = stripComments(src('features/analyzer/analyzer.module.css'));
+    expect(css).toContain('var(--pane-w, min(36%, 760px))');
+    expect(css).toContain('.resizer:hover::before');
+    expect(doc).toContain('a size slider between it and the\nmain section');
   });
 });

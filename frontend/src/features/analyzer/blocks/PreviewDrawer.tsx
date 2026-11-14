@@ -1,12 +1,17 @@
-import { Drawer, Select, Switch, Text } from '@/ui';
+import { useState } from 'react';
+import { Drawer, Select } from '@/ui';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
+import { ContextRow } from './PromptContents';
 import { PromptPreview } from './PromptPreview';
 import s from './blocks.module.css';
 
+/** Wide enough for an 80-column prompt line next to the page (cv4 D6: was 560). */
+const PREVIEW_DRAWER_WIDTH = 760;
+
 /**
  * Prompt preview in a right drawer (opened from the action rail or a target row, `?preview=1`):
- * previewed-target select, the three context switches, then the messages in the drawer's single
- * scroller. The field mapping is edited on the page; the drawer shows what is sent, read-only.
+ * previewed-target select, the Context switches (the same page state as "Prompt contents", cv4 D7), then the
+ * messages in the drawer's single scroller. The field mapping is edited on the page.
  */
 export function PreviewDrawer({
   ws,
@@ -17,7 +22,8 @@ export function PreviewDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { settings, update } = ws;
+  // cv5 N: hover or focus of a Context switch marks its section in the prompt, as on the page
+  const [peek, setPeek] = useState<string[] | null>(null);
   const items = ws.allKeys.map((k) => {
     const [itemId = '', metric = ''] = k.split('\u0000');
     const score = ws.rowById.get(itemId)?.metric_scores[metric];
@@ -29,7 +35,7 @@ export function PreviewDrawer({
       onOpenChange={onOpenChange}
       title="Prompt preview"
       subtitle="The exact messages the analyzer would send. No LLM call is made."
-      width={560}
+      width={PREVIEW_DRAWER_WIDTH}
     >
       <div className={s.stack}>
         <Select
@@ -41,21 +47,8 @@ export function PreviewDrawer({
           isDisabled={items.length === 0}
           placeholder="No targets"
         />
-        <div className={s.contextRow} role="group" aria-label="Prompt context">
-          <Text variant="sm" weight={600} tone="muted">
-            Context
-          </Text>
-          <Switch isSelected={settings.useRules} onChange={(v) => update({ useRules: v })}>
-            Rules
-          </Switch>
-          <Switch isSelected={settings.useDocuments} onChange={(v) => update({ useDocuments: v })}>
-            Project documents
-          </Switch>
-          <Switch isSelected={settings.useTrace} onChange={(v) => update({ useTrace: v })}>
-            Trace evidence
-          </Switch>
-        </div>
-        <PromptPreview ws={ws} maxHeight={false} />
+        <ContextRow ws={ws} onPeek={setPeek} />
+        <PromptPreview ws={ws} maxHeight={false} peek={peek} />
       </div>
     </Drawer>
   );

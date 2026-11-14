@@ -1,8 +1,20 @@
 import { useState } from 'react';
 import type { LiveWorkerVersion } from '@/api/liveWorker';
+import { formatHeaderDate, formatTableDate } from '@/lib/dates';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
-import { Button, ConfirmDialog, EmptyState, ErrorState, StateTag, Text, UserName, useToast } from '@/ui';
+import {
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  StateTag,
+  Text,
+  Timeline,
+  UserName,
+  useToast,
+  type TimelineItem,
+} from '@/ui';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
@@ -22,34 +34,44 @@ export function HistoryBlock({
   return (
     <WorkerBlock name="history" title="Versions">
       {versions.length ? (
-        <ul className={styles.versions} aria-label="Settings history">
-          {versions.map((version) => (
-            <li key={version.version} className={styles.version} data-worker-version={version.version}>
-              <Text as="div" variant="md" weight={600} tone="primary" className={styles.inline}>
-                v{version.version}
-                {version.version === runningVersion ? <StateTag tone="info">Running</StateTag> : null}
-              </Text>
-              <Text dir="auto" className={styles.wrap}>
-                {version.note ?? '—'}
-              </Text>
-              <div className={`${styles.inline} ${styles.versionMeta}`}>
-                <time dateTime={version.created_at} title={version.created_at}>
-                  {formatRelative(version.created_at)}
-                </time>
-                {version.created_by ? (
-                  <UserName id={version.created_by_user_id} name={version.created_by} />
-                ) : (
-                  <Text as="span">—</Text>
-                )}
-                {version.version !== runningVersion ? (
-                  <Button isDisabled={busy} onPress={() => setRestore(version.version)}>
-                    Restore
-                  </Button>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
+        // cv5 Z6: the shared Timeline, newest first: the version and its state, the person, the note, Restore
+        <Timeline
+          aria-label="Settings history"
+          markAlign="start"
+          items={versions.map((version): TimelineItem => {
+            const running = version.version === runningVersion;
+            return {
+              key: String(version.version),
+              rowData: { 'data-worker-version': String(version.version) },
+              time: formatTableDate(version.created_at),
+              timeTitle: `${formatHeaderDate(version.created_at)} (${formatRelative(version.created_at)})`,
+              dateTime: version.created_at,
+              icon: running ? 'play' : 'settings',
+              tone: running ? 'info' : 'neutral',
+              title: (
+                <span className={styles.inline}>
+                  <Text as="span" variant="base" weight={600} tone="primary">
+                    v{version.version}
+                  </Text>
+                  {running ? <StateTag tone="info">Running</StateTag> : null}
+                </span>
+              ),
+              meta: version.created_by ? (
+                <UserName id={version.created_by_user_id} name={version.created_by} />
+              ) : undefined,
+              detail: version.note ? (
+                <span dir="auto" className={styles.wrap}>
+                  {version.note}
+                </span>
+              ) : undefined,
+              actions: running ? undefined : (
+                <Button isDisabled={busy} onPress={() => setRestore(version.version)}>
+                  Restore
+                </Button>
+              ),
+            };
+          })}
+        />
       ) : (
         <EmptyState title="No versions yet" />
       )}

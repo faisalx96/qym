@@ -1,19 +1,16 @@
-import { useState } from 'react';
-import { Button, Checkbox, Icon, Select, Switch, Text } from '@/ui';
+import { Select, Text, ToggleChips } from '@/ui';
 import {
   SOURCE_FIELDS,
   STD_VARIABLES,
-  leafPaths,
-  metadataKey,
+  formatPathLabel,
+  keyNodes,
   nodeLeaves,
-  pathsToTree,
-  toggleNode,
+  nodeState,
   type FieldSlot,
   type PathNode,
   type SourceField,
 } from '../model/mapping';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
-import { PathTree } from './PathTree';
 import s from './fields.module.css';
 
 const SOURCE_LABEL: Record<SourceField, string> = {
@@ -23,6 +20,9 @@ const SOURCE_LABEL: Record<SourceField, string> = {
   error: 'error',
   metric_metadata: 'metric metadata',
 };
+
+/** The "Full value" chip's value: it cannot be a JSON key path (paths never hold a NUL). */
+const FULL = '\u0000full';
 
 interface RowDef {
   id: string;
@@ -35,9 +35,45 @@ interface RowDef {
 }
 
 /**
- * Variable mapping: INPUT / EXPECTED / OUTPUT and every `{variable}` of the
- * instructions map to a source field (with a JSON-path picker), plus the
- * Error / Scores / Metric metadata include toggles and the metadata picker.
+ * The key choice of one mapping row (cv5 K2): "Full value" first, on by default, then one chip for each key. Keys on
+ * switch "Full value" off; "Full value" on switches the keys off. At least one chip stays on.
+ */
+function KeyChips({ row, keys }: { row: RowDef; keys: PathNode[] }) {
+  const { slot } = row;
+  const selected = new Set(slot.selected);
+  const value = slot.full ? [FULL] : keys.filter((k) => nodeState(k, selected) !== 'none').map((k) => k.path);
+  return (
+    <ToggleChips
+      aria-label={`${row.label}: keys to send`}
+      size="sm"
+      min={1}
+      options={[
+        { value: FULL, label: 'Full value', title: 'Send the whole value' },
+        ...keys.map((k) => ({
+          value: k.path,
+          label: <span className={s.mono}>{formatPathLabel(k.label)}</span>,
+          title: k.children.length ? `${nodeLeaves(k).length} nested fields` : undefined,
+        })),
+      ]}
+      value={value}
+      onChange={(next) => {
+        if (!slot.full && next.includes(FULL)) {
+          row.set({ ...slot, full: true, selected: [] });
+          return;
+        }
+        const on = keys.filter((k) => next.includes(k.path));
+        if (!on.length) row.set({ ...slot, full: true, selected: [] });
+        else row.set({ ...slot, full: false, selected: on.flatMap((k) => nodeLeaves(k)) });
+      }}
+    />
+  );
+}
+
+/**
+ * Variable mapping: INPUT / EXPECTED / OUTPUT and every `{variable}` of the instructions map to a source field. A
+ * field whose sampled value is a JSON object shows its keys right under the row (cv5 K2), so the person sees at once
+ * that it is JSON and what it holds; a single value (text, number) shows the dropdown only. The include switches and
+ * the metadata picker are in `PromptContents`.
  */
 export function FieldsMapping({
   ws,
@@ -49,12 +85,10 @@ export function FieldsMapping({
   bodiesLoading?: boolean;
   /** Render only the `{variable}` rows (next to the instructions). */
   onlyCustom?: boolean;
-  /** Render only INPUT / EXPECTED / OUTPUT and the include toggles (`{variable}` rows sit by the instructions). */
+  /** Render only INPUT / EXPECTED / OUTPUT (`{variable}` rows sit by the instructions). */
   onlyStandard?: boolean;
 }) {
   const { settings, update, trees, customVars } = ws;
-  const [open, setOpen] = useState<string | null>(null);
-  const [metaOpen, setMetaOpen] = useState(false);
 
   const rows: RowDef[] = [
     ...(onlyCustom
@@ -79,145 +113,44 @@ export function FieldsMapping({
     })),
   ];
 
+  if (rows.length === 0 && onlyCustom) return null;
   return (
-    <div className={s.stack}>
-      {rows.length === 0 && onlyCustom ? null : (
-        <div className={s.rows}>
-          {rows.map((r) => {
-            const isOpen = open === r.id;
-            const canPick = r.slot.field !== '' && r.slot.field !== 'metric_metadata';
-            const items = [
-              ...(r.clearable ? [{ key: '', label: '— select source —' }] : []),
-              ...SOURCE_FIELDS.map((f) => ({ key: f, label: SOURCE_LABEL[f] })),
-            ];
-            const selectedLeaves = new Set(r.slot.selected);
-            const summary = r.slot.full
-              ? 'Full value'
-              : `${r.slot.selected.length} ${r.slot.selected.length === 1 ? 'field' : 'fields'}`;
-            return (
-              <div key={r.id} className={s.row} data-open={isOpen ? '' : undefined}>
-                <div className={s.line}>
-                  <Text variant="sm" weight={600} tone="muted" mono={r.mono} className={s.label}>
-                    {r.label}
-                  </Text>
-                  <Icon name="next" size={12} className={s.arrow} aria-hidden="true" />
-                  <Select
-                    label={`${r.label} source`}
-                    hideLabel
-                    items={items}
-                    value={r.slot.field}
-                    onChange={(k) =>
-                      r.set({ field: (k ? String(k) : '') as SourceField | '', full: true, selected: [] })
-                    }
-                    width={170}
-                    searchable={false}
-                  />
-                  {canPick ? (
-                    <Button
-                      size="sm"
-                      aria-expanded={isOpen}
-                      onPress={() => setOpen(isOpen ? null : r.id)}
-                      iconEnd={<Icon name={isOpen ? 'collapse' : 'expand'} size={12} />}
-                    >
-                      {summary}
-                    </Button>
-                  ) : null}
-                </div>
-                {isOpen && canPick ? (
-                  <div className={s.picker} role="group" aria-label={`${r.label} fields`}>
-                    {r.tree.length === 0 ? (
-                      <Text variant="sm" tone="muted" role="status">
-                        {bodiesLoading
-                          ? 'Reading the first items to discover JSON fields…'
-                          : 'This field is not JSON in the first items, so the full value is sent.'}
-                      </Text>
-                    ) : (
-                      <>
-                        <Checkbox
-                          isSelected={r.slot.full}
-                          onChange={(on) =>
-                            r.set({ ...r.slot, full: on, selected: on ? [] : leafPaths(r.tree) })
-                          }
-                        >
-                          Use full value
-                        </Checkbox>
-                        <PathTree
-                          nodes={r.tree}
-                          selected={selectedLeaves}
-                          disabled={r.slot.full}
-                          onToggle={(node) => {
-                            const next = toggleNode(node, selectedLeaves);
-                            r.set({ ...r.slot, full: false, selected: [...next] });
-                          }}
-                        />
-                      </>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {onlyCustom ? null : (
-        <>
-          <div className={s.includeRow} role="group" aria-label="Include in prompt">
-            <Text variant="sm" weight={600} tone="muted">
-              Include in prompt
-            </Text>
-            <Switch isSelected={settings.includeError} onChange={(v) => update({ includeError: v })}>
-              Error
-            </Switch>
-            <Switch isSelected={settings.includeScores} onChange={(v) => update({ includeScores: v })}>
-              Scores
-            </Switch>
-            <Switch isSelected={settings.includeMetadata} onChange={(v) => update({ includeMetadata: v })}>
-              Metric metadata
-            </Switch>
-            {trees.metadata.length ? (
-              <Button
-                size="sm"
-                isDisabled={!settings.includeMetadata}
-                aria-expanded={metaOpen}
-                onPress={() => setMetaOpen((o) => !o)}
-                iconEnd={<Icon name={metaOpen ? 'collapse' : 'expand'} size={12} />}
-              >
-                {settings.metaDeselected.length ? 'Choose metadata (custom)' : 'Choose metadata (all)'}
-              </Button>
-            ) : null}
-          </div>
-          {metaOpen && settings.includeMetadata ? <MetadataPicker ws={ws} /> : null}
-        </>
-      )}
-    </div>
-  );
-}
-
-function MetadataPicker({ ws }: { ws: RunWorkspace }) {
-  const { settings, update, trees } = ws;
-  const off = new Set(settings.metaDeselected);
-  return (
-    <div className={s.picker} role="group" aria-label="Metric metadata fields">
-      {trees.metadata.map((group) => {
-        const tree = pathsToTree(group.paths);
-        const selected = new Set(leafPaths(tree).filter((l) => !off.has(metadataKey(group.metric, l))));
+    <div className={s.rows}>
+      {rows.map((r) => {
+        const items = [
+          ...(r.clearable ? [{ key: '', label: '— select source —' }] : []),
+          ...SOURCE_FIELDS.map((f) => ({ key: f, label: SOURCE_LABEL[f] })),
+        ];
+        const keys = keyNodes(r.tree);
+        const emptyMetadata = r.slot.field === 'metric_metadata' && keys.length === 0 && !bodiesLoading;
         return (
-          <div key={group.metric} className={s.metaGroup}>
-            <Text variant="md" weight={600} mono>
-              {group.metric}
-            </Text>
-            <PathTree
-              nodes={tree}
-              selected={selected}
-              onToggle={(node) => {
-                const leaves = nodeLeaves(node).map((l) => metadataKey(group.metric, l));
-                const allOn = leaves.every((k) => !off.has(k));
-                const next = new Set(off);
-                leaves.forEach((k) => (allOn ? next.add(k) : next.delete(k)));
-                update({ metaDeselected: [...next] });
-              }}
-            />
+          <div key={r.id} className={s.row} data-mapping-row={r.id}>
+            <div className={s.line}>
+              <Text variant="sm" weight={600} tone="muted" mono={r.mono} className={s.label}>
+                {r.label}
+              </Text>
+              {/* cv5 Y11: no chevron between the label and the dropdown (it read as a link) */}
+              <Select
+                label={`${r.label} source`}
+                hideLabel
+                items={items}
+                value={r.slot.field}
+                onChange={(k) =>
+                  r.set({ field: (k ? String(k) : '') as SourceField | '', full: true, selected: [] })
+                }
+                width={170}
+                searchable={false}
+              />
+            </div>
+            {r.slot.field && keys.length ? (
+              <div className={s.keys}>
+                <KeyChips row={r} keys={keys} />
+              </div>
+            ) : emptyMetadata ? (
+              <Text variant="sm" tone="muted" as="p" className={s.keys}>
+                No metric metadata in the sampled items.
+              </Text>
+            ) : null}
           </div>
         );
       })}

@@ -5,7 +5,7 @@
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-base);
@@ -27,11 +27,6 @@
 .textarea[data-focused] {
   border-color: var(--accent-primary);
   box-shadow: var(--focus-ring);
-}
-
-.textarea[data-quiet-focus][data-focused]:not([data-focus-visible]) {
-  border-color: var(--border-strong);
-  box-shadow: none;
 }
 
 .textarea[data-invalid] {

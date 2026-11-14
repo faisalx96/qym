@@ -27,11 +27,10 @@ describe('categoryModel', () => {
     expect(defaultKey([], () => 0)).toBeNull();
   });
 
-  it('orderValues is worst first or best first, direction aware, unscored last', () => {
+  it('orderValues is best first, direction aware, unscored last', () => {
     const groups = [g('a', 0.5), g('b', 0.2), g('c', null), g('d', 0.9)];
-    expect(orderValues(groups, 'worst', 'maximize').map((x) => x.value)).toEqual(['b', 'a', 'd', 'c']);
-    expect(orderValues(groups, 'best', 'maximize').map((x) => x.value)).toEqual(['d', 'a', 'b', 'c']);
-    expect(orderValues(groups, 'worst', 'minimize').map((x) => x.value)).toEqual(['d', 'a', 'b', 'c']);
+    expect(orderValues(groups, 'maximize').map((x) => x.value)).toEqual(['d', 'a', 'b', 'c']);
+    expect(orderValues(groups, 'minimize').map((x) => x.value)).toEqual(['b', 'a', 'd', 'c']);
   });
 
   it('insightLine needs two scored values', () => {

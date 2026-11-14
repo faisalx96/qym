@@ -4,9 +4,9 @@
  * (brief 07 §3): strings are never coerced; switching to JSON mode is the
  * only way a value changes type, and the tag shows `string → number`.
  */
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { textDirAttrs } from '@/lib/text';
-import { CopyButton, IconButton, SegmentedControl, Tag, Text } from '@/ui';
+import { CopyButton, Dialog, IconButton, SegmentedControl, Tag, Text } from '@/ui';
 import {
   defaultMode,
   editorTextToValue,
@@ -62,6 +62,20 @@ export interface FieldEditorProps {
   onChange?: (state: FieldState) => void;
   compact?: boolean;
   actions?: ReactNode;
+  /**
+   * The docked pane (cv4 E7): the field takes a share of the parent's free height (a flex column), and its editor grows
+   * into it. The share follows the length of the stored value.
+   */
+  fill?: boolean;
+}
+
+/** Above this size the editor shows plain text: colouring every keystroke of a very large value costs too much. */
+const HIGHLIGHT_MAX = 200_000;
+
+/** Share of the free height for a field in fill mode: its line count (wrapped at about 60 characters), 2 to 8. */
+export function fillWeight(text: string): number {
+  const lines = text.split('\n').reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 60)), 0);
+  return Math.min(8, Math.max(2, lines));
 }
 
 export function FieldEditor({
@@ -73,8 +87,10 @@ export function FieldEditor({
   onChange,
   compact,
   actions,
+  fill,
 }: FieldEditorProps) {
   const id = useId();
+  // cv4 E4: Expand opens the field in a large dialog (it only lifted a height cap before, so it did nothing visible)
   const [expanded, setExpanded] = useState(false);
   const local = state ?? initialFieldState(value, jsonOnly);
   const status = useMemo(() => fieldStatus(value, local, jsonOnly), [value, local, jsonOnly]);
@@ -83,6 +99,10 @@ export function FieldEditor({
     [value, local.text],
   );
   const copyText = () => (typeof value === 'string' ? value : formatJson(value));
+  const weight = useMemo(
+    () => (fill ? fillWeight(typeof value === 'string' ? value : formatJson(value)) : undefined),
+    [fill, value],
+  );
 
   const typeTag = (
     <Tag
@@ -96,11 +116,71 @@ export function FieldEditor({
     </Tag>
   );
 
+  // One body for the field card and the expanded dialog; `big` is the dialog (its own ids, no height cap).
+  const body = (big: boolean) => {
+    const sfx = big ? '-expanded' : '';
+    if (!editable) return <ReadOnlyValue value={value} dir={dir} compact={compact && !big} />;
+    return (
+      <>
+        <CodeArea
+          id={`${id}-input${sfx}`}
+          text={local.text}
+          json={jsonOnly || local.mode === 'json'}
+          dir={dir}
+          rows={big ? 20 : compact ? 4 : 8}
+          big={big}
+          invalid={!status.ok}
+          labelledBy={big ? undefined : `${id}-label`}
+          ariaLabel={big ? label : undefined}
+          describedBy={`${id}-status${sfx}`}
+          onText={(text) => onChange?.({ ...local, text })}
+        />
+        <footer className={styles.foot}>
+          {!jsonOnly ? (
+            <SegmentedControl<EditorMode>
+              label={`${label} mode`}
+              value={local.mode}
+              options={[
+                { value: 'text', label: 'Text' },
+                { value: 'json', label: 'JSON' },
+              ]}
+              onChange={(mode) => {
+                if (mode === local.mode) return;
+                // Text → JSON keeps the typed text (so `42` becomes a number); JSON → Text keeps the text as-is.
+                onChange?.({ mode, text: local.text });
+              }}
+            />
+          ) : (
+            <span />
+          )}
+          <span
+            id={`${id}-status${sfx}`}
+            className={styles.status}
+            data-state={!status.ok ? 'error' : status.touched ? 'changed' : 'same'}
+            aria-live="polite"
+          >
+            <span className={styles.dot} aria-hidden="true" />
+            {!status.ok
+              ? status.error === METADATA_SHAPE_ERROR
+                ? METADATA_SHAPE_ERROR
+                : `Not valid JSON${!jsonOnly ? '. Switch to Text to save it as a string.' : ''}${status.error ? ` (${status.error})` : ''}`
+              : status.touched
+                ? status.toType !== status.fromType
+                  ? `will be saved as ${status.toType}`
+                  : 'changed'
+                : 'unchanged'}
+          </span>
+        </footer>
+      </>
+    );
+  };
+
   return (
     <section
       className={styles.panel}
       data-compact={compact ? '' : undefined}
-      data-expanded={expanded ? '' : undefined}
+      data-fill={fill ? '' : undefined}
+      style={weight ? { flexGrow: weight } : undefined}
       aria-labelledby={`${id}-label`}
     >
       <header className={styles.head}>
@@ -112,72 +192,95 @@ export function FieldEditor({
         </div>
         <div className={styles.headActions}>
           {actions}
-          <IconButton
-            label={expanded ? `Collapse ${label}` : `Expand ${label}`}
-            icon={expanded ? 'collapse' : 'expand'}
-            onPress={() => setExpanded((e) => !e)}
-          />
+          <IconButton label={`Expand ${label}`} icon="expand" onPress={() => setExpanded(true)} />
           <CopyButton text={copyText} label={`Copy ${label}`} />
         </div>
       </header>
-      {editable ? (
-        <>
-          <div className={styles.editorWrap}>
-            <textarea
-              id={`${id}-input`}
-              className={styles.textarea}
-              data-mode={jsonOnly ? 'json' : local.mode}
-              aria-labelledby={`${id}-label`}
-              aria-describedby={`${id}-status`}
-              aria-invalid={!status.ok || undefined}
-              value={local.text}
-              spellCheck={false}
-              rows={compact ? 4 : 8}
-              {...dir}
-              onChange={(e) => onChange?.({ ...local, text: e.target.value })}
-            />
+      {body(false)}
+      <Dialog
+        open={expanded}
+        onOpenChange={setExpanded}
+        title={label}
+        size="wide"
+        data-testid="field-expanded"
+      >
+        <div className={styles.expandBody}>
+          <div className={styles.expandBar}>
+            {typeTag}
+            <CopyButton text={copyText} label={`Copy ${label}`} />
           </div>
-          <footer className={styles.foot}>
-            {!jsonOnly ? (
-              <SegmentedControl<EditorMode>
-                label={`${label} mode`}
-                value={local.mode}
-                options={[
-                  { value: 'text', label: 'Text' },
-                  { value: 'json', label: 'JSON' },
-                ]}
-                onChange={(mode) => {
-                  if (mode === local.mode) return;
-                  // Text → JSON keeps the typed text (so `42` becomes a number); JSON → Text keeps the text as-is.
-                  onChange?.({ mode, text: local.text });
-                }}
-              />
-            ) : (
-              <span />
-            )}
-            <span
-              id={`${id}-status`}
-              className={styles.status}
-              data-state={!status.ok ? 'error' : status.touched ? 'changed' : 'same'}
-              aria-live="polite"
-            >
-              <span className={styles.dot} aria-hidden="true" />
-              {!status.ok
-                ? status.error === METADATA_SHAPE_ERROR
-                  ? METADATA_SHAPE_ERROR
-                  : `Not valid JSON${!jsonOnly ? '. Switch to Text to save it as a string.' : ''}${status.error ? ` (${status.error})` : ''}`
-                : status.touched
-                  ? status.toType !== status.fromType
-                    ? `will be saved as ${status.toType}`
-                    : 'changed'
-                  : 'unchanged'}
-            </span>
-          </footer>
-        </>
-      ) : (
-        <ReadOnlyValue value={value} dir={dir} compact={compact} />
-      )}
+          {body(true)}
+        </div>
+      </Dialog>
     </section>
+  );
+}
+
+/**
+ * The field textarea. In JSON mode the text is coloured while it is edited (cv4 E6): a token-coloured copy of the text
+ * lies under a textarea with see-through text, with the same box, font and wrapping, and scrolls with it.
+ */
+function CodeArea({
+  id,
+  text,
+  json,
+  dir,
+  rows,
+  big,
+  invalid,
+  labelledBy,
+  ariaLabel,
+  describedBy,
+  onText,
+}: {
+  id: string;
+  text: string;
+  json: boolean;
+  dir: ReturnType<typeof textDirAttrs>;
+  rows: number;
+  big: boolean;
+  invalid: boolean;
+  labelledBy?: string;
+  ariaLabel?: string;
+  describedBy: string;
+  onText: (text: string) => void;
+}) {
+  const under = useRef<HTMLPreElement>(null);
+  const coloured = json && text.length <= HIGHLIGHT_MAX;
+  const sync = (el: HTMLTextAreaElement) => {
+    if (!under.current) return;
+    under.current.scrollTop = el.scrollTop;
+    under.current.scrollLeft = el.scrollLeft;
+  };
+  return (
+    <div
+      className={styles.editorWrap}
+      data-coloured={coloured ? '' : undefined}
+      data-big={big ? '' : undefined}
+    >
+      {coloured ? (
+        <pre ref={under} className={styles.under} aria-hidden="true" data-testid="json-colour" {...dir}>
+          {/* a final newline needs a character after it, or the copy is one line shorter than the textarea */}
+          <JsonHighlight text={text.endsWith('\n') ? `${text} ` : text} />
+        </pre>
+      ) : null}
+      <textarea
+        id={id}
+        className={styles.textarea}
+        data-mode={json ? 'json' : 'text'}
+        aria-labelledby={labelledBy}
+        aria-label={ariaLabel}
+        aria-describedby={describedBy}
+        aria-invalid={invalid || undefined}
+        value={text}
+        spellCheck={false}
+        rows={rows}
+        {...dir}
+        onChange={(e) => onText(e.target.value)}
+        onScroll={(e) => sync(e.currentTarget)}
+        onSelect={(e) => sync(e.currentTarget)}
+      />
+    </div>
   );
 }
 
@@ -234,7 +337,7 @@ export function JsonHighlight({ text }: { text: string }) {
         if (m[2]) out.push(m[2]);
       } else if (m[3] !== undefined)
         out.push(
-          <span key={i++} className={styles.tokLit}>
+          <span key={i++} className={m[3] === 'null' ? styles.tokNull : styles.tokLit}>
             {m[3]}
           </span>,
         );

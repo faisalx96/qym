@@ -50,6 +50,8 @@ export interface RunDatasetEntry {
   dataset_slug: string | null;
   dataset_version_id?: string | null;
   version: string | null;
+  /** The version's status now (absent on an older payload). */
+  status?: 'draft' | 'published' | 'archived' | null;
   /** Aliases that point at the version now. */
   aliases?: string[];
   /** The alias used to resolve the version at run time. */
@@ -97,6 +99,7 @@ export interface Run {
   task_name?: string;
   dataset_name?: string;
   dataset_version?: string | number | null;
+  dataset_version_status?: 'draft' | 'published' | 'archived' | null;
   dataset_aliases?: string[];
   dataset_slug?: string | null;
   model_name?: string;

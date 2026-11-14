@@ -575,7 +575,9 @@ describe('LiveTurnsPage', () => {
     expect(await screen.findByText('2 of 12 turns on Nov 1, 2026')).toBeVisible();
     expect(document.title).toBe('Turns · Live · Demo project · قيِّم');
     expect(screen.getByText(liveOverview.status.name)).toBeVisible();
-    expect(screen.getByText(liveOverview.status.environment)).toBeVisible();
+    // cv5 M2: the environment is a state tag in sentence case (preprod -> Preprod, a pre-production tone)
+    expect(screen.getByTestId('live-environment')).toHaveTextContent(/^preprod$/i);
+    expect(screen.getByTestId('live-environment')).toHaveAttribute('data-tone', 'info');
     const csv = screen.getByRole('link', { name: 'Export CSV' });
     const csvUrl = new URL(csv.getAttribute('href')!, 'http://localhost');
     expect(csv).toHaveAttribute('download');

@@ -587,50 +587,6 @@
   min-inline-size: 0;
 }
 
-.events {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.event {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-block: var(--space-sm);
-  border-block-start: 1px solid var(--border-subtle);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.event:first-child {
-  border-block-start: 0;
-  padding-block-start: 0;
-}
-
-.eventHead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-xs) var(--space-sm);
-}
-
-.actor {
-  color: var(--text-primary);
-}
-
-.eventHead time {
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.eventNote {
-  color: var(--text-muted);
-}
-
 .transcriptNote {
   display: flex;
   align-items: center;

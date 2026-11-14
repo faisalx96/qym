@@ -337,7 +337,6 @@ function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (f: Expor
       variant="accent"
       size="sm"
       icon={<Icon name="download" size={12} />}
-      iconEnd={<Icon name="chevron-down" size={12} />}
       isDisabled={disabled}
       data-testid="export-menu"
     >

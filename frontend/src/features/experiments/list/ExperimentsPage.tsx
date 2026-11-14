@@ -29,13 +29,14 @@ import {
   UserCell,
   type Column,
   SearchField,
+  Tag,
 } from '@/ui';
 import { LATENCY_FILTER_LABEL } from '../copy';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { ConnectFirst } from '../components/ConnectFirst';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
-import { baseSourceLabel, jobsText, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
+import { baseSourceLabel, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
 import { loadLaunchPage } from '../lazy';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
@@ -135,6 +136,8 @@ export function ExperimentsPage() {
             </span>
           }
           secondary={x.description}
+          // cv5 Z8: the description wraps to two lines, no "…" cut
+          secondaryLines={2}
         />
       ),
     },
@@ -157,6 +160,11 @@ export function ExperimentsPage() {
       id: 'environments',
       header: 'Environments',
       width: 200,
+      // cv5 Z8: the list of environment names wraps and gives width back (flex, down to 160px), so at 1440px the Name
+      // column keeps room for its description
+      flex: true,
+      minWidth: 160,
+      wrap: true,
       priority: 2,
       cell: (x) => <EnvironmentNames ids={x.environment_ids} envById={envById} />,
     },
@@ -321,7 +329,6 @@ export function ExperimentsPage() {
                   },
                 ]),
           ]}
-          rowState={(x) => (LIVE_EXPERIMENT_STATUSES.includes(x.status) ? 'live' : undefined)}
           minWidth={1000}
           density="regular"
           loading={tableLoading(query.isPending, showSkeleton)}
@@ -416,15 +423,16 @@ function EnvironmentNames({ ids, envById }: { ids: string[]; envById: Map<string
     })
     .join(', ');
   return (
-    <span className={styles.truncate} title={text}>
-      {text}
-    </span>
+    // the column wraps (cv5 Z8); the title keeps the full list for a clamped cell
+    <span title={text}>{text}</span>
   );
 }
 
 /**
  * One Jobs column (C139): a bar split by outcome (succeeded green, failed red, cancelled amber, running blue; queued
- * jobs leave the track empty) and "5/6 · 1 failed". A failed experiment no longer shows a full green bar.
+ * jobs leave the track empty), then "5/6" and the failed and cancelled counts as count tags (cv5 M5, design language
+ * §3.3: a failure count is danger; cancelled is a stop by a person, the warning tone of the status rules). A failed
+ * experiment no longer shows a full green bar.
  */
 function JobsCell({ counts }: { counts: Experiment['job_counts'] }) {
   const t = tallyJobCounts(counts);
@@ -458,7 +466,19 @@ function JobsCell({ counts }: { counts: Experiment['job_counts'] }) {
             ))
           : null}
       </span>
-      <span className={styles.jobsText}>{jobsText(t)}</span>
+      <span className={styles.jobsText}>
+        {t.ok}/{total}
+      </span>
+      {t.failed ? (
+        <Tag kind="count" tone="danger" data-count="failed">
+          {t.failed} failed
+        </Tag>
+      ) : null}
+      {t.cancelled ? (
+        <Tag kind="count" tone="warning" data-count="cancelled">
+          {t.cancelled} cancelled
+        </Tag>
+      ) : null}
     </span>
   );
 }

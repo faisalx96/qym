@@ -234,6 +234,21 @@
   color: var(--text-muted);
 }
 
+/* cv5 Z8 `secondaryLines`: the second line wraps (at most --lines lines) instead of a one-line cut; a cell of three
+   lines keeps the row's breathing room above and below */
+.twoLine[data-lines] {
+  padding-block: var(--space-xs);
+}
+
+.secondary[data-lines] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--lines, 2);
+  line-clamp: var(--lines, 2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .id {
   display: inline-flex;
   align-items: center;

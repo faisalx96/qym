@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { formatDurationMs, formatNumericValue, formatRelative } from '@/lib/format';
 import { metricBand, type MetricDirection, type MetricType } from '@/lib/metrics';
 import { CopyButton } from '../../CopyButton';
@@ -181,11 +181,32 @@ export function DeltaCell({ value, direction, noise = 0, format, emphasis }: Del
 
 /* ── TwoLine ───────────────────────────────────────────────────────────── */
 
-export function TwoLine({ primary, secondary }: { primary: ReactNode; secondary?: ReactNode }) {
+export function TwoLine({
+  primary,
+  secondary,
+  secondaryLines,
+}: {
+  primary: ReactNode;
+  secondary?: ReactNode;
+  /**
+   * The second line wraps to at most this many lines instead of a one-line cut (cv5 Z8: a description reads in full
+   * when the column has room for it). The full text is its tooltip when it is a string.
+   */
+  secondaryLines?: number;
+}) {
   return (
-    <span className={styles.twoLine}>
+    <span className={styles.twoLine} data-lines={secondaryLines && secondary ? '' : undefined}>
       <span className={styles.primary}>{primary}</span>
-      {secondary ? <span className={styles.secondary}>{secondary}</span> : null}
+      {secondary ? (
+        <span
+          className={styles.secondary}
+          data-lines={secondaryLines ? '' : undefined}
+          style={secondaryLines ? ({ '--lines': secondaryLines } as CSSProperties) : undefined}
+          title={secondaryLines && typeof secondary === 'string' ? secondary : undefined}
+        >
+          {secondary}
+        </span>
+      ) : null}
     </span>
   );
 }

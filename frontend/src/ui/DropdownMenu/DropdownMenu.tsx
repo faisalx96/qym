@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import {
+  Header,
   Menu,
   MenuItem,
+  MenuSection,
   MenuTrigger,
   Popover as AriaPopover,
   Separator,
@@ -28,6 +30,14 @@ export interface MenuItemSpec {
   target?: '_blank';
   separatorBefore?: boolean;
   description?: string;
+  /** The text for typeahead and the accessible name when `label` is not a string. */
+  textValue?: string;
+  /** cv5 N: items with the same group sit under one quiet group label (consecutive items only). */
+  group?: string;
+  /** cv5 N: a two-level list (a section and its parts): 0 = a section (600), 1 = a part, indented under it. */
+  level?: 0 | 1;
+  /** cv5 N: quiet text at the row end (a state such as "not sent"). */
+  end?: ReactNode;
 }
 
 export interface DropdownMenuProps {
@@ -40,6 +50,11 @@ export interface DropdownMenuProps {
   header?: ReactNode;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /**
+   * cv5 N: a menu that also shows where the person is (a jump-to menu): the item with this id is checked (the accent
+   * check at its row end, `aria-checked`). An action still runs `onAction`.
+   */
+  selectedId?: string | null;
 }
 
 /** Action menu: arrow keys, typeahead, Escape, focus return (React Aria Menu). */
@@ -52,7 +67,16 @@ export function DropdownMenu({
   header,
   isOpen,
   onOpenChange,
+  selectedId,
 }: DropdownMenuProps) {
+  const checks = selectedId !== undefined;
+  const groups: { name: string | undefined; items: MenuItemSpec[] }[] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last && last.name === item.group) last.items.push(item);
+    else groups.push({ name: item.group, items: [item] });
+  }
+  const grouped = items.some((i) => i.group);
   return (
     <MenuTrigger isOpen={isOpen} onOpenChange={onOpenChange}>
       {trigger}
@@ -61,12 +85,22 @@ export function DropdownMenu({
         <Menu
           aria-label={label}
           className={styles.menu}
+          data-grouped={grouped ? '' : undefined}
           onAction={(key: Key) => onAction(String(key))}
           disabledKeys={items.filter((i) => i.disabled).map((i) => i.id)}
+          selectionMode={checks ? 'single' : undefined}
+          selectedKeys={checks ? (selectedId != null ? [selectedId] : []) : undefined}
         >
-          {items.map((item) => (
-            <MenuItemWithSeparator key={item.id} item={item} />
-          ))}
+          {grouped
+            ? groups.map((g, n) => (
+                <MenuSection key={`${g.name ?? ''}-${n}`} className={styles.section}>
+                  {g.name ? <Header className={styles.groupLabel}>{g.name}</Header> : null}
+                  {g.items.map((item) => (
+                    <MenuItemWithSeparator key={item.id} item={item} />
+                  ))}
+                </MenuSection>
+              ))
+            : items.map((item) => <MenuItemWithSeparator key={item.id} item={item} />)}
         </Menu>
       </AriaPopover>
     </MenuTrigger>
@@ -92,22 +126,33 @@ function MenuItemWithSeparator({ item }: { item: MenuItemSpec }) {
         target={item.target}
         className={styles.item}
         data-tone={item.tone}
-        textValue={typeof item.label === 'string' ? item.label : item.id}
+        data-level={item.level !== undefined ? String(item.level) : undefined}
+        textValue={item.textValue ?? (typeof item.label === 'string' ? item.label : item.id)}
       >
-        {item.icon ? <span className={styles.icon}>{item.icon}</span> : null}
-        {reason ? (
-          <span
-            className={[buttonStyles.reasonWrap, styles.reasonItem].join(' ')}
-            data-reason={reason}
-            data-disabled-reason=""
-            data-reason-beside=""
-          >
-            {text}
-          </span>
-        ) : (
-          text
+        {({ isSelected, selectionMode }) => (
+          <>
+            {item.icon ? <span className={styles.icon}>{item.icon}</span> : null}
+            {reason ? (
+              <span
+                className={[buttonStyles.reasonWrap, styles.reasonItem].join(' ')}
+                data-reason={reason}
+                data-disabled-reason=""
+                data-reason-beside=""
+              >
+                {text}
+              </span>
+            ) : (
+              text
+            )}
+            {item.end != null ? <span className={styles.end}>{item.end}</span> : null}
+            {item.target === '_blank' ? <Icon name="external" size={12} /> : null}
+            {selectionMode !== 'none' ? (
+              <span className={styles.check} aria-hidden="true">
+                {isSelected ? <Icon name="check" size={12} /> : null}
+              </span>
+            ) : null}
+          </>
         )}
-        {item.target === '_blank' ? <Icon name="external" size={12} /> : null}
       </MenuItem>
     </>
   );

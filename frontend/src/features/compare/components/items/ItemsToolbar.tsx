@@ -87,7 +87,6 @@ export function ItemsToolbar({
               size="sm"
               variant="neutral"
               icon={<Icon name="menu" size={12} />}
-              iconEnd={<Icon name="chevron-down" size={12} />}
               data-part="items-display-btn"
             >
               Display

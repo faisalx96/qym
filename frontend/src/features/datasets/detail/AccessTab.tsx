@@ -382,7 +382,6 @@ function AccessBody({
         as="section"
         aria-labelledby="ds-access-mode"
         data-testid="access-mode-card"
-        footer={shownRestricted ? undefined : saveFooter}
         header={
           <CardHead
             id="ds-access-mode"
@@ -434,6 +433,8 @@ function AccessBody({
           <InlineNotice tone="neutral" icon="lock" data-testid="access-always">
             Project managers, admins and the creator always have full access.
           </InlineNotice>
+          {/* cv4 Y5 (A4 rule): the save row ends the card body, with no divider above it */}
+          {shownRestricted ? null : saveFooter}
         </div>
       </Card>
 
@@ -442,7 +443,6 @@ function AccessBody({
           as="section"
           aria-labelledby="ds-access-people"
           data-testid="access-people"
-          footer={saveFooter}
           header={
             <CardHead
               id="ds-access-people"
@@ -460,13 +460,18 @@ function AccessBody({
               pool.length ? (
                 <div className={styles.addPerson} data-testid="access-add" ref={addRef}>
                   <div className={styles.addSelect}>
+                    {/* cv4 E11: each member (and the chosen one) shows as the shared user view: avatar, name, email */}
                     <Select
                       label="Add person"
-                      items={pool.map((p) => ({ key: p.id, label: p.name, description: p.email }))}
+                      items={pool.map((p) => ({ key: p.id, label: p.name, email: p.email }))}
                       value={who}
                       onChange={setWho}
                       placeholder="Choose a project member"
                       width="100%"
+                      renderItem={(p) => (
+                        <UserName id={String(p.key)} name={p.label} email={p.email} showEmail />
+                      )}
+                      renderValue={(p) => <UserName id={String(p.key)} name={p.label} email={p.email} />}
                     />
                   </div>
                   <Select
@@ -501,6 +506,7 @@ function AccessBody({
                 <span>Only project managers, admins and the creator can open this dataset.</span>
               </Note>
             )}
+            {saveFooter}
           </div>
         </Card>
       ) : null}

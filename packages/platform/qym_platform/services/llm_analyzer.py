@@ -1982,6 +1982,16 @@ def _format_item_context(
         if organized_trace:
             parts.append("TRACE EVIDENCE:\n" + _prompt_dump(organized_trace))
 
+    # The selected metric's metadata has its own switch. Payloads without
+    # the key keep the earlier coupling to the item-metadata switch.
+    include_metric_metadata = bool(
+        fields.get("metric_metadata", fields.get("metadata", True))
+    )
+    # A payload that names the switch gets the metric metadata as its own
+    # block in every case, so the block does not depend on the metric-result
+    # switch. Older payloads keep the metadata inside the metric result.
+    metric_metadata_block = "metric_metadata" in fields
+
     # Include only the selected metric result. Other metrics are separate
     # evaluation targets and tend to bias or duplicate this diagnosis.
     if fields.get("scores", True):
@@ -2004,7 +2014,14 @@ def _format_item_context(
                 result["label"] = score.label
             if score.explanation:
                 result["explanation"] = score.explanation
-            if score.meta and metadata_fields is None:
+            # The metric's own metadata goes with its result unless a key
+            # selection (metadata_fields) gives it its own block below.
+            if (
+                score.meta
+                and metadata_fields is None
+                and include_metric_metadata
+                and not metric_metadata_block
+            ):
                 result["metadata"] = score.meta
             metric_results[selected_name] = result
         if metric_results:
@@ -2043,19 +2060,23 @@ def _format_item_context(
             }
             if useful_metadata:
                 parts.append("ITEM METADATA:\n" + _prompt_dump(useful_metadata))
-        if metadata_fields is not None:
-            metric_meta = (
-                _resolve_source(
-                    item, metadata_fields, scores=scores, metric_name=metric_name
-                )
-                or {}
-            )
-            if metric_meta:
-                selected_score = scores.get(metric_name) if metric_name else None
-                if selected_score is None or metric_meta != (selected_score.meta or {}):
-                    parts.append(
-                        "SELECTED METADATA:\n" + _prompt_dump(metric_meta)
-                    )
+    # A key selection of the metric metadata is its own block, independent of
+    # the item metadata. The metric result above leaves the metadata out
+    # whenever a selection exists, so this block never repeats it.
+    if metadata_fields is None and metric_metadata_block and include_metric_metadata:
+        # Every key: the whole metadata of the selected metric.
+        names = [metric_name] if metric_name in scores else list(scores)
+        whole = {name: scores[name].meta for name in names if scores[name].meta}
+        metric_meta = whole[metric_name] if list(whole) == [metric_name] else whole
+        if metric_meta:
+            parts.append("SELECTED METRIC METADATA:\n" + _prompt_dump(metric_meta))
+    elif metadata_fields is not None and include_metric_metadata:
+        metric_meta = (
+            _resolve_source(item, metadata_fields, scores=scores, metric_name=metric_name)
+            or {}
+        )
+        if metric_meta:
+            parts.append("SELECTED METRIC METADATA:\n" + _prompt_dump(metric_meta))
 
     return "\n\n".join(parts)
 

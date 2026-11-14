@@ -1,8 +1,9 @@
 /**
  * "By pass" (round 10, the first qym's table): the main table of the repeat analysis, right under the tiles. One row
  * per pass, every metric as a column (no picker), then Avg latency and Median latency (with the zap Icon), Errors and
- * Items. Values are centred; the best and the worst pass of each metric carry a tag on the same line. A row
- * lights its edge on hover (`hoverEdge`); nothing resizes or reorders.
+ * Items. Values are centred; the best and the worst pass of each metric are a subtle green and red highlight behind the
+ * value, with no word (cv4 C1-6; the title and a hidden word keep the meaning for a screen reader). A row lights its
+ * edge on hover (`hoverEdge`); nothing resizes or reorders.
  */
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
@@ -14,20 +15,32 @@ import { latencyLabel } from '../../lib/rowDisplay';
 import type { PassSummary } from '../../types';
 import styles from './Repeat.module.css';
 
-/** Best and worst pass on one metric (null when fewer than two differ, or the metric has no direction). */
+/**
+ * Best and worst passes on one metric (empty when the metric has no direction or every shown value is the same).
+ * cv4 Y13: passes compare on the value as shown (`shown`, the rounded cell text), so every pass that ties for the best
+ * or the worst shown value is marked, not only one of them.
+ */
 export function passExtremes(
   passes: Array<{ pass_number: number; metric_means?: Record<string, number | null> | null }>,
   metric: string,
   direction: string | null,
-): { best: number | null; worst: number | null } {
-  if (!direction) return { best: null, worst: null };
+  shown: (v: number) => string = (v) => v.toFixed(3),
+): { best: number[]; worst: number[] } {
+  const none = { best: [], worst: [] };
+  if (!direction) return none;
   const vals = passes
     .map((p) => ({ n: p.pass_number, v: p.metric_means?.[metric] }))
-    .filter((p): p is { n: number; v: number } => typeof p.v === 'number');
-  if (vals.length < 2) return { best: null, worst: null };
+    .filter((p): p is { n: number; v: number } => typeof p.v === 'number')
+    .map((p) => ({ ...p, s: shown(p.v) }));
+  if (vals.length < 2) return none;
   const sorted = [...vals].sort((a, b) => (direction === 'minimize' ? a.v - b.v : b.v - a.v));
-  if (sorted[0]!.v === sorted[sorted.length - 1]!.v) return { best: null, worst: null };
-  return { best: sorted[0]!.n, worst: sorted[sorted.length - 1]!.n };
+  const top = sorted[0]!.s;
+  const bottom = sorted[sorted.length - 1]!.s;
+  if (top === bottom) return none;
+  return {
+    best: vals.filter((p) => p.s === top).map((p) => p.n),
+    worst: vals.filter((p) => p.s === bottom).map((p) => p.n),
+  };
 }
 
 export interface PassTableProps {
@@ -51,8 +64,16 @@ export function PassTable({ passes, model, metric, basePath, medianHint, queued 
   );
   const extremes = useMemo(
     () =>
-      new Map(metrics.map((m) => [m, passExtremes(passes, m, model.metricDirections[m] ?? null)] as const)),
-    [metrics, passes, model.metricDirections],
+      new Map(
+        metrics.map(
+          (m) =>
+            [
+              m,
+              passExtremes(passes, m, model.metricDirections[m] ?? null, (v) => metricText(model, m, v)),
+            ] as const,
+        ),
+      ),
+    [metrics, passes, model],
   );
   const columns: Column<PassSummary>[] = [
     {
@@ -82,8 +103,20 @@ export function PassTable({ passes, model, metric, basePath, medianHint, queued 
         const v = p.metric_means?.[m];
         const ext = extremes.get(m);
         const dir: MetricDirection = model.metricDirections[m] ?? null;
+        const extreme = ext?.best.includes(p.pass_number)
+          ? 'best'
+          : ext?.worst.includes(p.pass_number)
+            ? 'worst'
+            : null;
         return (
-          <span className={styles.metricCell} data-selected={m === metric ? '' : undefined}>
+          <span
+            className={styles.metricCell}
+            data-selected={m === metric ? '' : undefined}
+            data-extreme={v == null ? undefined : (extreme ?? undefined)}
+            title={
+              v != null && extreme ? `${extreme === 'best' ? 'Best' : 'Worst'} pass for ${m}` : undefined
+            }
+          >
             {v == null ? (
               <span className={styles.none}>—</span>
             ) : (
@@ -96,18 +129,7 @@ export function PassTable({ passes, model, metric, basePath, medianHint, queued 
                 text={metricText(model, m, v)}
               />
             )}
-            <span className={styles.extreme}>
-              {ext?.best === p.pass_number ? (
-                <span className={styles.extremeWord} data-tone="success">
-                  best
-                </span>
-              ) : null}
-              {ext?.worst === p.pass_number ? (
-                <span className={styles.extremeWord} data-tone="danger">
-                  worst
-                </span>
-              ) : null}
-            </span>
+            {v != null && extreme ? <span className={styles.srOnly}>, {extreme} pass</span> : null}
           </span>
         );
       },

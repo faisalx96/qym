@@ -262,7 +262,7 @@ test.describe('AI prompts', () => {
     await page.keyboard.press('Home');
     await expect(rail.getByRole('tab', { name: /LLM analyzer/ })).toHaveAttribute('aria-selected', 'true');
 
-    const editor = panel.getByRole('textbox', { name: 'LLM analyzer prompt' });
+    const editor = panel.getByRole('textbox', { name: 'Prompt', exact: true });
     const shipped = await editor.inputValue();
     expect(shipped.length).toBeGreaterThan(0);
     await expect(panel.getByRole('button', { name: 'Save' })).toBeDisabled();

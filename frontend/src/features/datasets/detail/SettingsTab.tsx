@@ -129,17 +129,6 @@ export function SettingsTab({
           aria-labelledby={ids.general}
           data-testid="settings-general"
           header={<CardHead id={ids.general} title="General" />}
-          footer={
-            readOnly ? undefined : (
-              <SaveFooter
-                dirty={dirty}
-                isDisabled={!name.trim()}
-                disabledReason={!name.trim() ? 'Enter a dataset name' : undefined}
-                saving={patch.isPending}
-                onSave={() => void save()}
-              />
-            )
-          }
         >
           <div className={styles.fields}>
             <TextField
@@ -193,6 +182,16 @@ export function SettingsTab({
                 </div>
               ) : null}
             </div>
+            {/* cv4 Y5 (A4 rule): the save row ends the card body, with no divider above it */}
+            {readOnly ? null : (
+              <SaveFooter
+                dirty={dirty}
+                isDisabled={!name.trim()}
+                disabledReason={!name.trim() ? 'Enter a dataset name' : undefined}
+                saving={patch.isPending}
+                onSave={() => void save()}
+              />
+            )}
           </div>
         </Card>
 

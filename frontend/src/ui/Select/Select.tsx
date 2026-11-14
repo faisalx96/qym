@@ -57,6 +57,12 @@ export interface SelectProps<T extends SelectItem> {
   /** 'bar' = the filter-bar trigger (BarTrigger of ui/MultiSelect): the label inside the button, then ' · <value label>'
    * when the value is not the first (default) item; accent tint when set. */
   triggerVariant?: 'field' | 'bar';
+  /**
+   * Bar trigger only (cv4 Y6): 'always' shows ' · <value label>' for every value, for a choice that always has one
+   * (a sort order, a view). 'set' (default) shows it only when the value is not the first item, for a filter whose
+   * first item means "all". The accent tint is the same in both: only a value that is not the first item.
+   */
+  showValue?: 'set' | 'always';
   /** Marks the field invalid without an error message (a form that shows its errors elsewhere). */
   isInvalid?: boolean;
   'aria-describedby'?: string;
@@ -86,6 +92,7 @@ export function Select<T extends SelectItem>({
   autoFocus,
   onOpenChange,
   triggerVariant = 'field',
+  showValue = 'set',
   isInvalid,
   'aria-describedby': ariaDescribedBy,
 }: SelectProps<T>) {
@@ -142,7 +149,14 @@ export function Select<T extends SelectItem>({
         {label}
       </Label>
       {bar ? (
-        <BarTrigger label={label} value={isSet ? selected.label : undefined} active={isSet} />
+        <BarTrigger
+          label={label}
+          value={isSet || (showValue === 'always' && selected) ? selected?.label : undefined}
+          active={isSet}
+          // cv5 Z2: a trigger that always shows its value ("Sort · Index", "Analyzer model · gpt-4o-mini") takes the
+          // wider label-and-value cap, so the pair stays on one line without a cut
+          data-show-value={showValue === 'always' ? '' : undefined}
+        />
       ) : (
         <AriaButton className={styles.trigger} data-wrap={wrapValue ? '' : undefined}>
           {renderValue ? (

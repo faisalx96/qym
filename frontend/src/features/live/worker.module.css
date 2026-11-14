@@ -80,27 +80,6 @@
   overflow-wrap: anywhere;
 }
 
-.versions {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.version {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding-block: var(--space-md);
-}
-
-.version + .version {
-  border-block-start: 1px solid var(--border-subtle);
-}
-
-.versionMeta {
-  min-block-size: var(--control-height);
-}
-
 .problemsFilters {
   display: flex;
   flex-wrap: wrap;

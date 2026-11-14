@@ -20,12 +20,17 @@ export interface AnalyzerSettings {
   useDocuments: boolean;
   useTrace: boolean;
   maxIssues: number;
+  /** Sent always: a target is never an item with a task error, so no switch (cv5 Q4). */
   includeError: boolean;
+  /** "Metric result": SELECTED METRIC RESULT. */
   includeScores: boolean;
+  /** "Metric metadata": the target metric's metadata (in the metric result, or its own block for chosen keys). */
+  includeMetricMetadata: boolean;
+  /** "Item metadata": ITEM METADATA. */
   includeMetadata: boolean;
   std: Record<StdVariable, FieldSlot>;
   custom: Record<string, FieldSlot>;
-  /** metadataKey(metric, leaf) entries the user unchecked. */
+  /** Metric metadata key paths the user unchecked (the union over the analysed metrics). */
   metaDeselected: string[];
   maxScorePct: number;
   skipAnalyzed: boolean;
@@ -50,6 +55,7 @@ export function defaultSettings(init: {
     maxIssues: init.maxIssues,
     includeError: true,
     includeScores: true,
+    includeMetricMetadata: true,
     includeMetadata: true,
     std: {
       input: defaultSlot('input'),
@@ -88,14 +94,15 @@ export function buildConfigPayload(s: AnalyzerSettings, trees: FieldTrees): Play
       output: true,
       error: s.includeError,
       scores: s.includeScores,
+      metric_metadata: s.includeMetricMetadata,
       metadata: s.includeMetadata,
       trace: s.useTrace,
     },
   };
   const instructions = s.instructions.trim();
   if (instructions) cfg.additional_instructions = instructions;
-  if (s.includeMetadata) {
-    const fields = metadataFields(trees.metadata, { deselected: s.metaDeselected });
+  if (s.includeMetricMetadata) {
+    const fields = metadataFields(trees.metadata, s.selectedMetrics, { deselected: s.metaDeselected });
     if (fields) cfg.metadata_fields = fields;
   }
   const mapping: Record<string, string | string[]> = {};
@@ -124,10 +131,10 @@ export function fieldsSent(cfg: PlaygroundConfigPayload): string[] {
   if (inc.input) out.push('Input');
   if (inc.expected) out.push('Expected');
   if (inc.output) out.push('Output');
-  if (inc.error) out.push('Error');
-  if (inc.scores) out.push('Scores');
-  if (inc.metadata) out.push('Metric metadata');
-  if (inc.trace) out.push('Trace');
+  if (inc.scores) out.push('Metric result');
+  if (inc.metric_metadata) out.push('Metric metadata');
+  if (inc.metadata) out.push('Item metadata');
+  if (inc.trace) out.push('Trace evidence');
   return out;
 }
 
@@ -195,13 +202,14 @@ export type { SourceField };
 export function mappingSummary(
   settings: Pick<
     AnalyzerSettings,
-    'std' | 'includeError' | 'includeScores' | 'includeMetadata' | 'metaDeselected'
+    'std' | 'includeError' | 'includeScores' | 'includeMetricMetadata' | 'includeMetadata' | 'metaDeselected'
   >,
   variableCount: number,
 ): string {
   const customStd =
     !settings.includeError ||
     !settings.includeScores ||
+    !settings.includeMetricMetadata ||
     !settings.includeMetadata ||
     settings.metaDeselected.length > 0 ||
     (Object.keys(settings.std) as StdVariable[]).some((k) => {

@@ -1,18 +1,30 @@
-import type { AnalysisScope } from '@/api/analysis';
+import { useId, useRef, useState, type CSSProperties } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAnalysisConfig, useRunSummary, type AnalysisJob } from '@/api/analysis';
+import {
+  useAnalysisConfig,
+  useRuleVersions,
+  useRunSummary,
+  type AnalysisJob,
+  type AnalysisScope,
+  type RuleVersion,
+} from '@/api/analysis';
 import { projectPath } from '@/app/routes';
 import { ErrorState, useToast } from '@/ui';
-import { fullWidth } from '@/features/shell/layout';
+import { constrained } from '@/features/shell/layout';
+import { useMediaQuery } from '@/features/shell/hooks';
 import { AnalyzerFrame } from './AnalyzerFrame';
 import { CompactJobRail } from './blocks/ActionRail';
 import { outcomeText, summarize } from './blocks/JobStatus';
 import { GuidanceArea } from './GuidanceArea';
+import { PaneResizer, usePaneWidth } from './PaneResizer';
 import { RunAnalyze } from './RunAnalyze';
 import { useAnalysisPhase } from './useAnalysisPhase';
 import { useAnalysisRunner } from './useAnalysisRunner';
 import type { useAnalyzerRoute } from './useAnalyzerRoute';
 import s from './analyzer.module.css';
+
+/** The viewport width from which the run workspace shows the prompt pane (cv5 K3). */
+export const PANE_QUERY = '(min-width: 1500px)';
 
 /** Run scope: the page frame (one tab row), the run workspace (kept mounted) and the guidance tabs. */
 export function RunShell({
@@ -45,6 +57,19 @@ export function RunShell({
     else toast.show(job.error || 'The analysis failed', { tone: 'error' });
   });
   const phase = useAnalysisPhase(runner, false);
+  // cv5 K3: from about 1500 px the prompt preview is a fixed pane next to the settings.
+  const pane = useMediaQuery(PANE_QUERY);
+  // cv5 Z11: the pane stays on every tab, in one slot that this shell owns, so a tab change never remounts or moves
+  // it. The run workspace (kept mounted on every tab) renders the pane into the slot.
+  const [paneSlot, setPaneSlot] = useState<HTMLDivElement | null>(null);
+  // cv5 Q3: the pane width, set with the splitter and remembered for the person; one value for all four tabs
+  const [paneWidth, setPaneWidth] = usePaneWidth();
+  const shellRef = useRef<HTMLDivElement>(null);
+  const paneCol = useRef<HTMLDivElement>(null);
+  const slotId = useId();
+  const [openRule, setOpenRule] = useState<RuleVersion | null>(null);
+  const rules = useRuleVersions(scope, pane && route.scope === 'rules');
+  const paneNote = rulesNote(route.scope === 'rules' ? openRule : null, rules.data?.versions ?? [], rules.data);
 
   // A run opened under another project's slug lands under its own project (as run detail does).
   const ownSlug = summary.data?.run?.project?.slug;
@@ -53,7 +78,7 @@ export function RunShell({
   // The run itself failed to load (unknown id): say so before the run-scoped config error.
   if ((summary.isError || config.isError) && !summary.data?.run) {
     return (
-      <div className={`${fullWidth} ${s.page}`}>
+      <div className={`${constrained} ${s.page}`}>
         <ErrorState
           error={summary.error ?? config.error}
           title="Couldn’t load auto-analysis"
@@ -83,30 +108,88 @@ export function RunShell({
       }
       meta={run ? [run.run_name || run.run_id] : undefined}
       live={phase.live}
+      // The frame stays wide on every tab, so a tab click never moves the header, the tabs or the pane.
+      wide={pane}
     >
-      <div hidden={!onRun}>
-        {config.isError && !config.data ? (
-          <ErrorState
-            error={config.error}
-            title="Couldn’t load the analyzer configuration"
-            onRetry={() => config.refetch()}
-          />
-        ) : config.data ? (
-          <RunAnalyze slug={slug} runId={runId} config={config.data} route={route} runner={runner} />
+      <div
+        ref={shellRef}
+        className={s.shell}
+        data-pane={pane ? '' : undefined}
+        style={paneWidth != null ? ({ '--pane-w': `${paneWidth}px` } as CSSProperties) : undefined}
+      >
+        <div className={s.main}>
+          <div hidden={!onRun}>
+            {config.isError && !config.data ? (
+              <ErrorState
+                error={config.error}
+                title="Couldn’t load the analyzer configuration"
+                onRetry={() => config.refetch()}
+              />
+            ) : config.data ? (
+              <RunAnalyze
+                slug={slug}
+                runId={runId}
+                config={config.data}
+                route={route}
+                runner={runner}
+                pane={pane}
+                paneSlot={pane ? paneSlot : null}
+                paneNote={paneNote}
+              />
+            ) : null}
+          </div>
+          {route.scope !== 'run' ? (
+            // The guidance tabs are the left column, as the settings are on Analyze run (cv5 Z11).
+            <div className={s.guidance} data-wide={pane ? '' : undefined}>
+              <GuidanceArea
+                scope={scope}
+                slug={slug}
+                canManage={canManage}
+                tab={route.scope}
+                onRuleVersion={setOpenRule}
+              />
+              <CompactJobRail
+                runner={runner}
+                phase={phase}
+                slug={slug}
+                runId={runId}
+                onOpen={() => route.setScope('run')}
+              />
+            </div>
+          ) : null}
+        </div>
+        {pane ? (
+          <div ref={paneCol} className={s.paneCol}>
+            {/* the splitter and the pane are sticky together, so the handle is as tall as the pane */}
+            <div className={s.paneStick}>
+              <PaneResizer
+                shell={shellRef}
+                pane={paneCol}
+                width={paneWidth}
+                onWidth={setPaneWidth}
+                controls={slotId}
+              />
+              <div ref={setPaneSlot} id={slotId} className={s.paneSlot} data-testid="prompt-pane-slot" />
+            </div>
+          </div>
         ) : null}
       </div>
-      {route.scope !== 'run' ? (
-        <>
-          <GuidanceArea scope={scope} slug={slug} canManage={canManage} tab={route.scope} />
-          <CompactJobRail
-            runner={runner}
-            phase={phase}
-            slug={slug}
-            runId={runId}
-            onOpen={() => route.setScope('run')}
-          />
-        </>
-      ) : null}
     </AnalyzerFrame>
   );
+}
+
+/**
+ * The pane's honest line on the Rules tab (cv5 Z11): the prompt reads the production rules, so a draft open in the
+ * panel does not change it until it is published. No line when the production version has no rules.
+ */
+export function rulesNote(
+  open: RuleVersion | null,
+  versions: RuleVersion[],
+  data: { production_version_id: string | null } | undefined,
+): string | null {
+  if (!open || open.status !== 'draft' || !data) return null;
+  const production =
+    versions.find((v) => v.id === data.production_version_id) ?? versions.find((v) => v.is_active) ?? null;
+  if (!production || !production.rule_count) return null;
+  return `The prompt uses the production rules (v${production.version}). A draft changes it when you publish.`;
 }

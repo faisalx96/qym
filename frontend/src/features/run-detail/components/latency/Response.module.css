@@ -33,26 +33,6 @@
   padding-block: var(--space-xs);
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-height: var(--chip-height);
-}
-
-.titles {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.title,
-.desc {
-  margin: 0;
-}
-
 /* The page metric, named quietly: it is set in the sticky section nav. */
 .metricName {
   flex: none;

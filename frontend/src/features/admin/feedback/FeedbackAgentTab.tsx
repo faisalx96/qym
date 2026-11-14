@@ -86,53 +86,6 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
           )}
         </div>
       }
-      footer={
-        <SaveFooter
-          dirty={dirty}
-          isDisabled={!complete || blocked}
-          disabledReason={!complete || blocked ? 'Fill in every field' : undefined}
-          saving={save.isPending}
-          onSave={async () => {
-            setError('');
-            if (!checked()) return;
-            try {
-              await save.mutateAsync({ ...values(), ...(key ? {} : { llm_api_key: '__KEEP__' }) });
-              setKey('');
-              toast.show('Connection saved', { tone: 'success' });
-            } catch (e) {
-              place(e, 'Couldn’t save the connection.');
-            }
-          }}
-          secondary={
-            <>
-              {data.configured ? (
-                <Button variant="danger" onPress={() => setRemoving(true)}>
-                  Remove connection
-                </Button>
-              ) : null}
-              <Button
-                variant="accent"
-                icon={<Icon name="play" size={12} />}
-                isDisabled={!canTest}
-                disabledReason="Fill in every field"
-                loading={test.isPending}
-                onPress={async () => {
-                  setError('');
-                  setResult(null);
-                  if (!checked()) return;
-                  try {
-                    setResult(await test.mutateAsync(values()));
-                  } catch (e) {
-                    place(e, 'The test could not run.');
-                  }
-                }}
-              >
-                Test connection
-              </Button>
-            </>
-          }
-        />
-      }
     >
       <div className={feedbackStyles.triageBody}>
         {blocked ? (
@@ -181,6 +134,52 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
             {error}
           </Callout>
         ) : null}
+        {/* The save row ends the body, no divider line above it (cv4 A4). */}
+        <SaveFooter
+          dirty={dirty}
+          isDisabled={!complete || blocked}
+          disabledReason={!complete || blocked ? 'Fill in every field' : undefined}
+          saving={save.isPending}
+          onSave={async () => {
+            setError('');
+            if (!checked()) return;
+            try {
+              await save.mutateAsync({ ...values(), ...(key ? {} : { llm_api_key: '__KEEP__' }) });
+              setKey('');
+              toast.show('Connection saved', { tone: 'success' });
+            } catch (e) {
+              place(e, 'Couldn’t save the connection.');
+            }
+          }}
+          secondary={
+            <>
+              {data.configured ? (
+                <Button variant="danger" onPress={() => setRemoving(true)}>
+                  Remove connection
+                </Button>
+              ) : null}
+              <Button
+                variant="accent"
+                icon={<Icon name="play" size={12} />}
+                isDisabled={!canTest}
+                disabledReason="Fill in every field"
+                loading={test.isPending}
+                onPress={async () => {
+                  setError('');
+                  setResult(null);
+                  if (!checked()) return;
+                  try {
+                    setResult(await test.mutateAsync(values()));
+                  } catch (e) {
+                    place(e, 'The test could not run.');
+                  }
+                }}
+              >
+                Test connection
+              </Button>
+            </>
+          }
+        />
       </div>
       <ConfirmDialog
         open={removing}
@@ -207,11 +206,27 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
   const [days, setDays] = useState(data.behaviour.draft_retention_days);
   const [max, setMax] = useState(data.behaviour.max_user_messages);
   return (
-    <Card
-      as="section"
-      aria-label="Behaviour"
-      header={<Text variant="md">Behaviour</Text>}
-      footer={
+    <Card as="section" aria-label="Behaviour" header={<Text variant="md">Behaviour</Text>}>
+      <div className={feedbackStyles.triageBody}>
+        <div className={feedbackStyles.connGrid}>
+          <NumberField
+            label="Keep drafts for (days)"
+            value={days}
+            onChange={setDays}
+            minValue={1}
+            maxValue={365}
+            help="A draft nobody submitted is deleted after this many days."
+          />
+          <NumberField
+            label="Most messages per request"
+            value={max}
+            onChange={setMax}
+            minValue={6}
+            maxValue={100}
+            help="After this many of the person’s messages the assistant must propose."
+          />
+        </div>
+        {/* The save row ends the body, no divider line above it (cv4 A4). */}
         <SaveFooter
           dirty={days !== data.behaviour.draft_retention_days || max !== data.behaviour.max_user_messages}
           saving={save.isPending}
@@ -225,25 +240,6 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
               });
             }
           }}
-        />
-      }
-    >
-      <div className={feedbackStyles.connGrid}>
-        <NumberField
-          label="Keep drafts for (days)"
-          value={days}
-          onChange={setDays}
-          minValue={1}
-          maxValue={365}
-          help="A draft nobody submitted is deleted after this many days."
-        />
-        <NumberField
-          label="Most messages per request"
-          value={max}
-          onChange={setMax}
-          minValue={6}
-          maxValue={100}
-          help="After this many of the person’s messages the assistant must propose."
         />
       </div>
     </Card>

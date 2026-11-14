@@ -39,6 +39,14 @@
 .modal[data-size='data'] {
   width: 760px;
 }
+/* cv4 X9: a full editor or a large value (the dataset field expand dialog) */
+.modal[data-size='wide'] {
+  width: 1100px;
+}
+/* cv5 Q7: a picker with a filter row and a 12-row table (the rule writer's approved examples) */
+.modal[data-size='xl'] {
+  width: 1200px;
+}
 
 .modal[data-entering] {
   animation: rise 180ms ease;

@@ -65,6 +65,7 @@ def test_run_payload_lists_datasets(env):
     )
     assert first["dataset_slug"] == "support-tickets" and first["deleted"] is False
     assert first["aliases"] == ["production"]
+    assert first["status"] == "published"
     assert first["items"] == 8 and second["items"] == 5
     assert run["dataset_version"] == "v3"  # the first entry's
 

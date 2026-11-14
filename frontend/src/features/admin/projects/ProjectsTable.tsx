@@ -41,7 +41,8 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         cell: (p) => (
           <span className={styles.nameCell}>
             <Identicon seed={p.slug} cell={5} gap={2} chip />
-            <Link to={projectPath(p.slug)} data-link="name">
+            {/* The row's primary text turns green while the row is hovered or focused (cv4 A3). */}
+            <Link to={projectPath(p.slug)} data-link="name" data-row-primary="">
               {p.name}
             </Link>
             {/* on/off state: only the exception shows, after the name (no Status column) */}

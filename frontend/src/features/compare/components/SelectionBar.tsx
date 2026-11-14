@@ -152,7 +152,10 @@ export function BaselineSelect() {
         }}
         items={items}
         searchable="auto"
-        width="14rem"
+        // cv5 Y16: the trigger takes the width of its value (a run name is never cut); on a narrow screen it is capped
+        // by its row and the value wraps
+        width="max-content"
+        wrapValue
       />
     </span>
   );

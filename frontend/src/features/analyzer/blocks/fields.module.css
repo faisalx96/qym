@@ -7,6 +7,7 @@
 }
 
 .rows {
+  --map-label-w: 136px;
   display: flex;
   flex-direction: column;
 }
@@ -31,14 +32,25 @@
   gap: var(--space-sm);
 }
 
+/* cv4 Y11: one fixed label column, so every row's select starts at the same x ("EXPECTED OUTPUT" is the widest). */
 .label {
-  min-width: 108px;
+  flex: 0 0 var(--map-label-w);
+  min-width: 0;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.arrow {
-  color: var(--text-dim);
+/* cv5 K2: the key chips of a JSON field (or the one muted "no data" line) start under the field dropdown. */
+.keys {
+  margin: 0;
+  padding-inline-start: calc(var(--map-label-w) + var(--space-sm));
+}
+
+@media (max-width: 640px) {
+  .keys {
+    padding-inline-start: 0;
+  }
 }
 
 .picker {
@@ -86,9 +98,38 @@
   font-family: var(--font-mono);
 }
 
-.includeRow {
+/* Prompt contents (cv4 D7): two switch groups side by side; the group label above, one switch per line. */
+.contentsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, max-content));
+  gap: var(--space-md) var(--space-xl);
+}
+
+.switchGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.switchList {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+/* The drawer's one-row copy: a wide gap between pairs, so each label reads with its own switch. */
+.switchRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--space-sm) var(--space-xl);
+}
+
+.switchWith {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
 }

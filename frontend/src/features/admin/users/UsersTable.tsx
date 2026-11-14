@@ -90,6 +90,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
             className={styles.userCell}
             data-user-row={u.id}
             data-highlight={highlightId === u.id || undefined}
+            data-row-primary=""
           >
             <UserName id={u.id} name={u.display_name} email={u.email} />
             {u.id === meId ? (
@@ -133,6 +134,9 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         columns={columns}
         rows={shown}
         rowKey={(u) => u.id}
+        // A row opens its Edit dialog, so the row is clickable and the shared table makes its name the row's
+        // primary text: green while the row is hovered or focused (cv4 A3).
+        onRowOpen={onEdit}
         storageKey="admin-users"
         density="comfortable"
         densityLocked

@@ -1,17 +1,17 @@
 /**
  * Deep analysis (brief 04 J3). Round 10: "Between metrics", the correlation matrix beside the relationship scatter
- * (the first qym's pair, its teal-and-purple scale, X and Y in the scatter's head and the legend on its own row); and,
- * for a repeat run, "Across passes", the page metric's score spread in each pass (moved here from Repeat).
+ * (the first qym's pair, X and Y in the scatter's head); and, for a repeat run, "Across passes", the page metric's
+ * score spread in each pass (moved here from Repeat). cv4 C2-3: both cards share one header (title, its caption
+ * directly below, controls on the title row, the legend on the caption row), with no rule under it.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePassesQuery } from '@/api/runs';
-import { Select, Subsection } from '@/ui';
+import { Card, CardTitle, Select, Subsection, Text } from '@/ui';
 import { useRunPage } from '../../RunContext';
 import { PassDistribution } from './PassDistribution';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { correlationMatrix, strongestPair } from '../../lib/overviewModel';
 import { Scatter, ScatterLegend, useMeasuredWidth } from '../charts/Charts';
-import { ChartCard } from '../charts/ChartCard';
 import { MATRIX_NUMBER_MIN, matrixCellSide } from '../charts/chartLabels';
 import chart from '../charts/Charts.module.css';
 import styles from './Panels.module.css';
@@ -91,14 +91,9 @@ export function DeepTab() {
           description="How the metric results relate across the same items."
         >
           <div className={styles.deepPair}>
-            <ChartCard
+            <DeepCard
               title="Metric correlation"
-              slot={false}
-              intro={
-                <p className={styles.note}>
-                  Pearson r across matched item scores. Select a cell to plot the pair.
-                </p>
-              }
+              caption="Pearson r across matched item scores. Select a cell to plot the pair."
             >
               <CorrelationMatrix
                 names={names}
@@ -116,11 +111,12 @@ export function DeepTab() {
                   );
                 }}
               />
-            </ChartCard>
+            </DeepCard>
             <div ref={relationRef} className={styles.deepCell}>
-              <ChartCard
+              <DeepCard
                 title="Metric relationship"
-                slot={false}
+                caption={`${names[xi]} versus ${names[yi]}, one dot per item.`}
+                legend={<ScatterLegend points={points} />}
                 controls={
                   <span className={styles.controls}>
                     <span className={styles.axisPick} aria-hidden="true">
@@ -150,14 +146,6 @@ export function DeepTab() {
                     </span>
                   </span>
                 }
-                intro={
-                  <div className={styles.relationIntro}>
-                    <p className={styles.note}>
-                      {names[xi]} versus {names[yi]}, one dot per item.
-                    </p>
-                    <ScatterLegend points={points} />
-                  </div>
-                }
               >
                 <Scatter
                   fit
@@ -172,7 +160,7 @@ export function DeepTab() {
                           Math.abs(v) >= 100 ? String(Math.round(v)) : String(Math.round(v * 100) / 100)
                   }
                 />
-              </ChartCard>
+              </DeepCard>
             </div>
           </div>
         </Subsection>
@@ -186,6 +174,36 @@ export function DeepTab() {
         </Subsection>
       ) : null}
     </div>
+  );
+}
+
+/** A Deep analysis card: the title row (title, controls at the end), the caption row (caption, legend), the plot. */
+function DeepCard({
+  title,
+  caption,
+  controls,
+  legend,
+  children,
+}: {
+  title: string;
+  caption: string;
+  controls?: ReactNode;
+  legend?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card as="section" fill aria-label={title} className={styles.deepCard}>
+      <div className={styles.deepHead}>
+        <CardTitle as="h4" title={title} aside={controls} />
+        <div className={styles.deepRow}>
+          <Text variant="sm" tone="muted" as="p" className={styles.deepCaption}>
+            {caption}
+          </Text>
+          {legend}
+        </div>
+      </div>
+      <div className={styles.deepPlot}>{children}</div>
+    </Card>
   );
 }
 

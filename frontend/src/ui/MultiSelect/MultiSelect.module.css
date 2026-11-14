@@ -8,12 +8,15 @@
   padding: 0 var(--space-sm);
   border: 1px solid var(--control-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
   line-height: 1;
   cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .trigger svg {
@@ -24,8 +27,11 @@
 .trigger > svg:last-child {
   margin-inline-start: auto;
 }
+/* cv4 F5, cv5 H1: every dropdown trigger (field or bar, Select or MultiSelect) is a well: on hover the edge is one
+   step stronger and the fill one step up. */
 .trigger[data-hovered] {
   border-color: var(--control-edge-hover);
+  background: var(--control-fill-hover);
 }
 .trigger[aria-expanded='true'] {
   border-color: var(--accent-primary);
@@ -51,6 +57,12 @@
 .triggerLabel {
   color: var(--text-muted);
   font-weight: 600;
+}
+
+/* cv5 Y13: "Label · value": the separator is a flex item, so the trigger gap is the space on both sides of it. */
+.triggerSep {
+  flex: none;
+  color: var(--text-muted);
 }
 
 .triggerValue {
@@ -108,23 +120,33 @@
   background: var(--card-bg);
 }
 
-/* Select all / None are buttons at rest (round 10): the neutral button recipe at 20px, brighter on hover. */
+/* Select all / None are buttons at rest (round 10): the neutral button recipe at 20px (cv5 H1: the raised fill, the
+   top highlight and the label of ui/Button, no outline), brighter on hover. */
 .action {
   border: 0;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
+  background: var(--button-fill);
+  box-shadow: var(--button-depth);
+  color: var(--button-text);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
   padding: 0 var(--space-sm);
-  height: 20px;
+  height: var(--control-height-sm);
   border-radius: var(--control-radius);
-  transition: background var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .action:hover {
-  background: var(--bg-active);
+  color: var(--text-primary);
+  background: var(--button-fill-hover);
+}
+
+.action:active {
+  background: var(--button-fill-pressed);
+  box-shadow: none;
 }
 
 .action:focus-visible {
@@ -252,10 +274,14 @@
 .trigger[data-variant='bar'] {
   min-width: 96px;
   max-width: 168px;
-  background: var(--bg-elevated);
+  background: var(--control-fill);
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast);
+}
+/* cv5 Z2: a bar Select with `showValue="always"` reads "label · value" at rest; its cap fits both on one line. */
+.trigger[data-variant='bar'][data-show-value] {
+  max-width: 320px;
 }
 .trigger[data-variant='bar'] .triggerLabel {
   font-weight: 500;
@@ -269,7 +295,7 @@
   font-weight: 600;
 }
 .trigger[data-variant='bar'][data-hovered] {
-  background: var(--bg-active);
+  background: var(--control-fill-hover);
 }
 .trigger[data-variant='bar'][data-active][data-hovered] {
   background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
@@ -279,7 +305,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .trigger[data-variant='bar'] {
+  .trigger {
     transition: none;
   }
 }

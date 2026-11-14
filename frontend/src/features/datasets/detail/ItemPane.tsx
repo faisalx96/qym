@@ -1,5 +1,5 @@
 /** Docked (non-modal) item editor beside the items table: Text/JSON fields, sticky footer, Prev/Next. */
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
 import { actionErrorMessage } from '@/lib/http';
 import {
@@ -22,6 +22,11 @@ import { datasetPath } from '../lib/route';
 import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import styles from './ItemPane.module.css';
 import { APP_LOCALE } from '@/lib/dates';
+
+/** The pane never gets shorter than this, on a short window it scrolls inside. */
+const PANE_MIN_HEIGHT = 360;
+/** Room between the pane and the bottom of the viewport. */
+const PANE_BOTTOM_GAP = 16;
 
 export interface ItemPaneProps {
   slug: string;
@@ -93,8 +98,37 @@ export function ItemPane({
   };
   onDirtyChange(editor.dirty, saveAll, editor.reset);
 
+  // cv4 E7: the pane reaches down to the bottom of the viewport, and the field editors grow into the free height.
+  const paneRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const el = paneRef.current;
+    if (!el) return undefined;
+    let frame = 0;
+    let last = -1;
+    const fit = () => {
+      frame = 0;
+      const top = Math.max(0, el.getBoundingClientRect().top);
+      const height = Math.max(PANE_MIN_HEIGHT, Math.floor(window.innerHeight - top - PANE_BOTTOM_GAP));
+      if (height === last) return;
+      last = height;
+      el.style.setProperty('--pane-height', `${height}px`);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(fit);
+    };
+    fit();
+    window.addEventListener('resize', schedule);
+    // the page scrolls in a layout element, not the window: listen in the capture phase
+    document.addEventListener('scroll', schedule, { capture: true, passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', schedule);
+      document.removeEventListener('scroll', schedule, { capture: true });
+    };
+  }, []);
+
   return (
-    <aside className={styles.pane} aria-label={`Item ${itemId}`} data-item-pane={itemId}>
+    <aside ref={paneRef} className={styles.pane} aria-label={`Item ${itemId}`} data-item-pane={itemId}>
       <header className={styles.head}>
         <div className={styles.headMain}>
           <Text as="span" variant="md" weight={650} mono>
@@ -165,6 +199,7 @@ export function ItemPane({
           <div className={styles.fields} data-disabled={disabled ? '' : undefined}>
             <FieldEditor
               compact
+              fill
               label="Input"
               value={item.input}
               editable={editable}
@@ -173,6 +208,7 @@ export function ItemPane({
             />
             <FieldEditor
               compact
+              fill
               label="Expected output"
               value={item.expected_output}
               editable={editable}
@@ -181,6 +217,7 @@ export function ItemPane({
             />
             <FieldEditor
               compact
+              fill
               label="Metadata"
               value={item.metadata}
               editable={editable}
@@ -196,6 +233,7 @@ export function ItemPane({
           <SaveFooter
             dirty={editor.dirty}
             saving={editor.saving}
+            // cv4 E12: no state text while nothing changed; the disabled Save already says so
             onSave={() => void saveAll()}
             isDisabled={!editor.valid}
             disabledReason={editor.dirty && !editor.valid ? 'Fix the invalid field to save' : undefined}

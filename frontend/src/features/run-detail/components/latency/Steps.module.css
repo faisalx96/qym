@@ -12,32 +12,24 @@
   padding-block: var(--space-xs);
 }
 
+/* The title and its caption, then the table toolbar on its own row (cv4 C2-1). */
 .head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-}
-
-.titles {
-  display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.title,
-.desc {
-  margin: 0;
+  gap: var(--space-md);
 }
 
 .tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+/* Export: the right end of the toolbar, as the CSV button of the Items bar. */
+.toolsEnd {
+  display: inline-flex;
+  margin-inline-start: auto;
 }
 
 .scroller {
@@ -236,12 +228,9 @@ button.label:focus-visible {
   color: inherit;
 }
 
+/* cv4 X16: the group's leaf count is the one count badge (CountTile, with its own start margin), as the tab counts. */
 .count {
-  margin-left: 6px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  font-weight: 600;
+  vertical-align: middle;
 }
 
 .chev {

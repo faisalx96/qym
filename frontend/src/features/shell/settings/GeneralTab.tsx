@@ -96,6 +96,8 @@ export function GeneralTab() {
             value={approvers}
             onChange={(k) => setApprovers((k as 'members' | 'managers') ?? 'members')}
             isDisabled={readOnly || !canManage}
+            // cv4 Y20: the field width of the card (the Name input is 320px)
+            width={320}
           />
         </div>
         <Checkbox

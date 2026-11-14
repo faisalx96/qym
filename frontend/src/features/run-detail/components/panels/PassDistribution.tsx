@@ -1,8 +1,9 @@
 /** "{metric} by pass" (round 3 P7): one box row per completed pass on a shared axis; a row opens that pass. */
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Tag } from '@/ui';
-import { boxAxis } from '../../lib/boxAxis';
+import { Card, CardTitle, Tag } from '@/ui';
+import { boxAxis, type BoxAxis } from '../../lib/boxAxis';
+import { curveAxis } from '../../lib/curveAxis';
 import { boxFormatter, boxTickFormatter, type BoxKind } from '../../lib/boxFormat';
 import { boxStats, type BoxStats } from '../../lib/boxStats';
 import { axisPosition } from '../../lib/boxAxis';
@@ -57,29 +58,34 @@ export function PassDistribution({
     () => boxStats(perPass.flatMap((p) => passValues(rows, metric, p.pass))),
     [perPass, rows, metric],
   );
-  const axis = useMemo(
-    () => boxAxis(all, kind === 'percent' ? { fixed: [0, 1], maxTicks: 5 } : { values: [] }),
-    [all, kind],
-  );
+  // cv4 Y7: a score axis fits the whiskers of the passes with a margin (curveAxis, as the attempts curve), so the
+  // boxes do not sit in one half of a fixed 0 to 100% axis; a dot beyond it rests on the edge.
+  const axis = useMemo<BoxAxis>(() => {
+    if (kind !== 'percent') return boxAxis(all, { values: [] });
+    const fit = curveAxis(
+      perPass.flatMap((p) => (p.stats.n ? [p.stats.p5, p.stats.p95] : [])),
+      { fullAt: 0.9 },
+    );
+    return { ...fit, clipped: false, beyond: 0 };
+  }, [all, kind, perPass]);
   if (passes.length < 2 || !hasPassScores(rows, metric) || perPass.every((p) => !p.stats.n)) return null;
   const fmt = boxFormatter(kind);
   const tick = boxTickFormatter(kind);
   const x = (v: number) => axisPosition(v, axis.domain);
   const each = Math.max(...perPass.map((p) => p.stats.n));
   return (
-    <Card
-      as="section"
-      aria-label={`${metric} by pass`}
-      className={styles.passDist}
-      header={
-        <div className={styles.passHead}>
-          <span className={styles.title}>{metric} by pass</span>
+    <Card as="section" aria-label={`${metric} by pass`} className={styles.passDist}>
+      {/* cv4 X16: the card header recipe of C2-3 (CardTitle in the body, no rule under it) */}
+      <CardTitle
+        as="h4"
+        className={styles.passHead}
+        title={`${metric} by pass`}
+        aside={
           <Tag kind="count">
             {passes.length} passes · {each} items each
           </Tag>
-        </div>
-      }
-    >
+        }
+      />
       <div className={styles.passRows} role="group" aria-label={`${metric} distribution by pass`}>
         {perPass.map(({ pass, stats }: { pass: number; stats: BoxStats }) => (
           <button

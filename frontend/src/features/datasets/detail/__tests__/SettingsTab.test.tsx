@@ -70,7 +70,8 @@ describe('Settings tab (QA5-3 to QA5-16)', () => {
     const user = userEvent.setup();
     renderTab();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-    expect(screen.getByText('All changes saved')).toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    expect(screen.queryByText('All changes saved')).not.toBeInTheDocument(); // cv4 E12: no text while nothing changed
     await user.type(screen.getByRole('textbox', { name: 'Name' }), 'x');
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();

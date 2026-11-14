@@ -1,8 +1,9 @@
 /**
- * Repeat-run analysis. Round 10 (the first qym's order): the Pass if threshold, the tiles, the By pass table (every
- * metric), then the "Repeat performance" subsection with Performance across attempts and Pass distribution. The page
- * metric and its Pass if threshold (both in the sticky nav, C039) drive the tiles, the curve and the distribution;
- * the section has no metric picker and no slider of its own. The score spread by pass lives in Deep analysis.
+ * Repeat-run analysis. Round 10 (the first qym's order): the tiles, the By pass table (every metric), then the
+ * "Repeat performance" subsection with Performance across attempts and Pass distribution. The page metric and its
+ * Pass if threshold (both in the sticky nav, C039) drive the tiles, the curve and the distribution; the section has no
+ * metric picker, no slider and no readout of its own (cv4 C1-5: the nav already shows both). The score spread by pass
+ * lives in Deep analysis.
  */
 import { useMemo, useState } from 'react';
 import { useGroupMetricsQuery, usePassesQuery } from '@/api/runs';
@@ -14,10 +15,10 @@ import {
   SegmentedControl,
   Skeleton,
   Subsection,
-  Tag,
   type Column,
 } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
+import { curveAxis, percentTick } from '../../lib/curveAxis';
 import { queuedLabel, repeatCopy, statisticOptions, type RepeatStatistic } from '../../lib/repeatCopy';
 import { localRepeatStats, repeatStatsView } from '../../lib/repeatStats';
 import { useRunPage } from '../../RunContext';
@@ -96,13 +97,10 @@ export function RepeatTab() {
     .flatMap((sr) => sr.points.flatMap((p) => [p.value, p.low, p.high]))
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
   const hasCurve = curveValues.length > 0;
-  const domain: [number, number] = (() => {
-    if (!numericAverage || !curveValues.length) return [0, 1];
-    const lo = Math.min(...curveValues);
-    const hi = Math.max(...curveValues);
-    const pad = Math.max(1, Math.abs(hi) * 0.1, (hi - lo) * 0.25);
-    return [lo - pad / 2, hi + pad / 2];
-  })();
+  // C1-7: the y axis fits the shown series and their band (a score stays inside 0 to 100%)
+  const axis = numericAverage
+    ? curveAxis(curveValues, { range: null, minSpan: Math.max(1, Math.abs(Math.max(...curveValues, 0)) * 0.1) })
+    : curveAxis(curveValues);
   const stats = g?.group;
   const allPasses = passes.data?.passes ?? [];
   const donePasses = allPasses.filter((p) => p.status !== 'pending' && !p.queued);
@@ -116,18 +114,6 @@ export function RepeatTab() {
   if (model.metricNames.length === 0) return null;
   return (
     <div className={styles.root} ref={rootRef} data-testid="repeat-analysis" data-step={step}>
-      <div className={styles.control}>
-        <span className={styles.metricNow}>
-          <span className={styles.metricNowLabel}>Metric</span>
-          <Tag kind="data">{metric}</Tag>
-        </span>
-        {!boolean ? (
-          <span className={styles.metricNow} data-testid="repeat-threshold">
-            <span className={styles.metricNowLabel}>Pass if ≥</span>
-            <Tag kind="data">{Math.round(committed * 100)}%</Tag>
-          </span>
-        ) : null}
-      </div>
       {group.isPending && !local ? <Skeleton kind="cards" count={1} label="Loading repeat analysis" /> : null}
       {group.isError ? (
         <ErrorState
@@ -213,7 +199,9 @@ export function RepeatTab() {
                   <Curve
                     series={shownSeries}
                     label={`${selected.label} for ${metric}`}
-                    domain={domain}
+                    domain={axis.domain}
+                    ticks={axis.ticks}
+                    tickFormat={numericAverage ? undefined : (t) => percentTick(t, axis.ticks)}
                     format={numericAverage ? (v) => String(Math.round(v * 100) / 100) : undefined}
                     xLabel={selected.key === 'cumulative_avg' ? 'n' : 'k'}
                   />

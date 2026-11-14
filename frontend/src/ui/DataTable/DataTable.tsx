@@ -30,6 +30,7 @@ import { Icon } from '../Icon';
 import { Tooltip } from '../Tooltip';
 import { ActionTile, IconButton } from '../IconButton';
 import { ScoreValue } from '../ScoreValue';
+import { Select } from '../Select';
 import { Button } from '../Button';
 import { EnterContext, ENTER_MS } from '../motion';
 import { DataTableContext } from './context';
@@ -229,6 +230,12 @@ export interface DataTableProps<R> {
   /** Roving focus, controlled (runs list keeps its own cursor). */
   focusedKey?: Key | null;
   onFocusedKeyChange?: (key: Key | null) => void;
+  /**
+   * The page's current row (cv4 X7), such as the item an open side pane shows: it takes the focused-row highlight
+   * (`data-focused`, plus `data-active` and `aria-current`) and is the Tab stop while no other row was focused. It
+   * never moves DOM focus. null or unset = the focused row is highlighted, as usual.
+   */
+  activeKey?: Key | null;
 
   /**
    * One Tab stop for the body (the grid pattern, runs list C089): the controls inside rows leave the Tab order; arrows
@@ -271,6 +278,10 @@ const VIRTUAL_AFTER = 200;
 /** Rows read for the content fit of a column set (C020): enough for a fair width, few enough for one cheap layout. */
 const FIT_SAMPLE_ROWS = 20;
 const ROW_PX: Record<Density, number> = { compact: 32, regular: 40, comfortable: 52 };
+/** Text lines of a wrapping column (`Column.wrap`) at each density (cv4 X6). */
+const WRAP_LINES: Record<Density, number> = { compact: 1, regular: 2, comfortable: 5 };
+const wrapLines = (wrap: boolean | number | undefined, density: Density): number | undefined =>
+  wrap ? Math.min(WRAP_LINES[density], typeof wrap === 'number' ? wrap : Infinity) : undefined;
 /** First-guess height of a display row before it is measured: the density height, 45 for a full-width block. */
 const estimateHeight = (kind: DisplayRow<unknown>['kind'] | undefined, density: Density): number =>
   kind === 'detail' ? 45 : ROW_PX[density];
@@ -312,6 +323,8 @@ interface DataCellProps<R> {
   offset: number | undefined;
   edge: 'start' | 'end' | undefined;
   header: boolean;
+  /** The row's primary text column (cv4 F4): the cell carries `data-row-primary`. */
+  primary: boolean;
 }
 
 /**
@@ -329,9 +342,11 @@ const DataCell = memo(function DataCell<R>({
   offset,
   edge,
   header,
+  primary,
 }: DataCellProps<R>) {
   const ctx: CellCtx = { index, density, card: false };
   const cellContent = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
+  const lines = wrapLines(col.wrap, density);
   const fold = pin === 'end' && col.foldLabel ? col.foldLabel(row) : null;
   const content = fold !== null ? <FoldCell label={fold}>{cellContent}</FoldCell> : cellContent;
   const menuFold = pin === 'end' && col.menuColumn === true;
@@ -355,9 +370,10 @@ const DataCell = memo(function DataCell<R>({
       <div
         className={styles.cell}
         data-cell=""
-        data-wrap={col.wrap ? '' : undefined}
+        data-row-primary={primary ? '' : undefined}
+        data-wrap={lines ? '' : undefined}
         data-truncate={col.truncate}
-        style={col.wrap ? ({ '--lines': col.wrap } as React.CSSProperties) : undefined}
+        style={lines ? ({ '--lines': lines } as React.CSSProperties) : undefined}
       >
         {sec ? (
           <span className={styles.twoLine}>
@@ -476,6 +492,7 @@ function DataTableInner<R>({
   groupCollapsed,
   onGroupCollapsedChange,
   focusedKey: focusedProp,
+  activeKey,
   onFocusedKeyChange,
   singleTabStop = false,
   children,
@@ -648,7 +665,9 @@ function DataTableInner<R>({
   );
   const pseudoOf = (c: Column<R>) => (c as unknown as PseudoColumn).pseudo;
   const hasBands = groupBand && visible.some((c) => c.group);
-  const tall = visible.some((c) => c.secondary || c.wrap);
+  // A two-line (secondary) cell needs the comfortable height; a wrapping column follows the density instead (cv4 X6).
+  const tall = visible.some((c) => c.secondary);
+  const wrapTall = model.density === 'comfortable' && visible.some((c) => c.wrap);
   const cardMode =
     useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
 
@@ -791,13 +810,19 @@ function DataTableInner<R>({
     if (!el) return undefined;
     let sw = 0;
     let cw = 0;
+    let foldW = 0;
     let start = false;
     let end = false;
+    let fold = false;
     const flags = () => {
       const over = sw > cw + 1;
       const abs = Math.abs(el.scrollLeft);
+      const rest = sw - (abs + cw);
       const nStart = over && abs > 1;
-      const nEnd = over && abs + cw < sw - 1;
+      const nEnd = over && rest > 1;
+      // cv4 X8: a fold column folds only while the columns past the end are at least as wide as the column itself.
+      // With less, the see-through cell would show the column's own empty slot (a dark strip), so it stays open.
+      const nFold = nEnd && rest >= foldW - 1;
       if (nStart !== start) {
         start = nStart;
         el.toggleAttribute('data-scrolled-x', nStart);
@@ -806,13 +831,17 @@ function DataTableInner<R>({
       if (nEnd !== end) {
         end = nEnd;
         el.toggleAttribute('data-scrolled-end', nEnd);
-        hostRef.current?.toggleAttribute('data-scroll-end', nEnd);
+      }
+      if (nFold !== fold) {
+        fold = nFold;
+        hostRef.current?.toggleAttribute('data-scroll-end', nFold);
       }
     };
     // Sizes are read where layout is already clean (here and in the ResizeObserver), never per scroll event.
     const measureSizes = () => {
       sw = el.scrollWidth;
       cw = el.clientWidth;
+      foldW = el.querySelector<HTMLElement>('thead th[data-fold]')?.offsetWidth ?? 0;
       setOverflow((p) => (p === sw > cw + 1 ? p : sw > cw + 1));
       flags();
     };
@@ -980,6 +1009,14 @@ function DataTableInner<R>({
     return false;
   };
   const openable = Boolean(rowHref || onRowOpen);
+  // cv4 F4: the column whose text turns accent on row hover or keyboard focus (Column.primary)
+  const primaryCol = useMemo(() => {
+    const chosen = visible.find((c) => c.primary === true);
+    if (chosen) return chosen.id;
+    if (!openable && !selectOnRowClick && !expandOnRowClick) return null;
+    const lead = visible.find((c) => c.cardTitle) ?? visible.find((c) => c.priority === 1);
+    return lead && lead.primary !== false ? lead.id : null;
+  }, [visible, openable, selectOnRowClick, expandOnRowClick]);
 
   /* keyboard */
   const pendingNav = useRef<number | null>(null);
@@ -1709,6 +1746,7 @@ function DataTableInner<R>({
         offset={pin === 'start' || pin === 'end' ? offsets[col.id] : undefined}
         edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}
         header={ci === 0 && !selection && !renderExpanded && !childRows}
+        primary={col.id === primaryCol}
       />
     );
   };
@@ -1818,7 +1856,9 @@ function DataTableInner<R>({
     const rid = `${uid}:${String(d.key)}`;
     const isFocusStop =
       focusedKey === d.key ||
-      ((focusedKey === null || !renderedKeys.has(focusedKey)) && d.key === firstRenderedKey);
+      ((focusedKey === null || !renderedKeys.has(focusedKey)) &&
+        d.key === (activeKey != null && renderedKeys.has(activeKey) ? activeKey : firstRenderedKey));
+    const isActive = activeKey != null && activeKey === d.key;
     bodyRows.push(
       <tr
         key={d.id}
@@ -1834,7 +1874,9 @@ function DataTableInner<R>({
         aria-setsize={isChild ? d.setsize : undefined}
         aria-label={isChild ? childLabel?.(r, d.parentRow) : undefined}
         data-selected={isSel ? '' : undefined}
-        data-focused={focusedKey === d.key ? '' : undefined}
+        data-focused={(activeKey != null ? isActive : focusedKey === d.key) ? '' : undefined}
+        data-active={isActive ? '' : undefined}
+        aria-current={isActive ? 'true' : undefined}
         data-state={st}
         data-href={rowHref?.(r) ? '' : undefined}
         data-clickable={openable || selectOnRowClick || expandOnRowClick ? '' : undefined}
@@ -1917,6 +1959,7 @@ function DataTableInner<R>({
       data-sticky={stickyHeader && !embedded && !headParent ? '' : undefined}
       data-shift={stickyHeader && !embedded && headParent ? '' : undefined}
       data-tall={tall ? '' : undefined}
+      data-wrap-tall={wrapTall ? '' : undefined}
       data-fit={fitWidths ? '' : undefined}
       style={{ minWidth: fitWidths ? undefined : Math.max(minWidth ?? 0, minTotal) || undefined }}
     >
@@ -2194,24 +2237,20 @@ function CardList<R>({
     <div className={styles.cardsHost}>
       {sortCols.length ? (
         <div className={styles.cardSort}>
-          <label className={styles.cardSortLabel}>
-            Sort by
-            <select
-              className={styles.cardSortSelect}
-              value={sort?.key ?? ''}
-              onChange={(e) => {
-                const col = sortCols.find((c) => sortKeyOf(c) === e.target.value);
-                setSort(col ? nextSort(null, col, unsortedOk) : null);
-              }}
-            >
-              <option value="">Default</option>
-              {sortCols.map((c) => (
-                <option key={c.id} value={sortKeyOf(c)}>
-                  {headerText(c)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            label="Sort by"
+            triggerVariant="bar"
+            showValue="always"
+            items={[
+              { key: '', label: 'Default' },
+              ...sortCols.map((c) => ({ key: sortKeyOf(c) as string, label: headerText(c) })),
+            ]}
+            value={sort?.key ?? ''}
+            onChange={(k) => {
+              const col = sortCols.find((c) => sortKeyOf(c) === k);
+              setSort(col ? nextSort(null, col, unsortedOk) : null);
+            }}
+          />
           {sort ? (
             <Button
               variant="neutral"

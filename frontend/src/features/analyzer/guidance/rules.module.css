@@ -1,7 +1,9 @@
 /* Recipe: DESIGN_LANGUAGE §3 list rows + side list. */
 .layout {
   display: grid;
-  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  /* cv5 Z11: with the prompt pane on every tab the left column is about 780px at 1500px, so the versions take 220px
+     there (the rule toolbar wraps below the search, nothing is cut) */
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   gap: var(--space-lg);
   align-items: start;
 }
@@ -13,7 +15,6 @@
   min-width: 0;
 }
 
-.versionsHead,
 .versionTop,
 .footer,
 .ruleTools,
@@ -26,65 +27,17 @@
   flex-wrap: wrap;
 }
 
-.metaLine {
+.versionsTitle {
+  margin: 0;
+}
+
+/* each meta part stays on one line; the parts wrap as a whole */
+.versionMeta {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs);
-}
-
-.versionsHead {
-  justify-content: space-between;
-}
-
-.versionList {
-  display: flex;
-  flex-direction: column;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
-.versionItem {
-  display: flex;
-  align-items: flex-start;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.versionItem:last-child {
-  border-bottom: 0;
-}
-
-.versionBtn {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 0;
-  padding: var(--space-sm) var(--space-md);
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.versionBtn:hover {
-  background: var(--bg-hover);
-}
-
-.versionBtn[aria-current='true'] {
-  background: var(--bg-active);
-  box-shadow: inset 2px 0 0 var(--accent-primary);
-}
-
-.versionBtn:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: -2px;
+  white-space: nowrap;
 }
 
 .main {
@@ -162,6 +115,16 @@
 .footer {
   padding-top: var(--space-sm);
   border-top: 1px solid var(--border-subtle);
+}
+
+.sourcesHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.sourcesHead > * {
+  margin: 0;
 }
 
 .sources {

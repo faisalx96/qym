@@ -1,4 +1,7 @@
-/* Sticky section nav under the shell topbar; the filter bar sticks right below it. */
+/* Sticky section nav under the shell topbar; the filter bar sticks right below it.
+   cv4 C1-2, glass (tokens --glass-*, cv4 X12): the page ground at --glass-mix opacity over a blur of what scrolls under it, so a chart or a table
+   shows through as soft colour, never as shapes that compete with the links. A hairline and a faint top sheen draw
+   the edges. Without backdrop-filter support the bar is opaque, as before. */
 .nav {
   position: sticky;
   top: 0;
@@ -12,6 +15,14 @@
   padding: var(--space-xs) 0;
   background: var(--bg-void);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .nav {
+    background: color-mix(in srgb, var(--bg-void) var(--glass-mix), transparent);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) var(--tint-faint), transparent);
+  }
 }
 
 .identity {

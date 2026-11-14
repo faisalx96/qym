@@ -36,6 +36,13 @@
   margin: 0;
 }
 
+/* cv4 F10: the biggest of the three report title roles (section > subsection > card title). Three classes: it must
+   beat the Text variant rule (0,2,0). */
+.section .head .title {
+  font-size: var(--font-section);
+  line-height: 1.2;
+}
+
 .desc {
   margin-block-start: var(--space-xs);
 }
@@ -54,6 +61,14 @@
 .body {
   --card-bg: var(--bg-elevated);
   --card-edge: transparent;
+  /* cv5 H1: depth by fill. A body holds controls on its own ground (--bg-surface) and on inset cards (--bg-elevated):
+     translucent fills put a well one step and a button two steps over whichever ground it sits on, so a control never
+     melts into a card and is never brighter on the section ground than before cv4. */
+  --control-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --control-fill-hover: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --button-fill: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --button-fill-hover: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  --button-fill-pressed: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
   /* The containing block for visually hidden (absolute) text, which must never widen the page. */
   position: relative;

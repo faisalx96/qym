@@ -15,11 +15,42 @@
   gap: var(--space-sm);
 }
 
+/* cv4 E9: connector lines from a parent version to each child, as the lineage before the React UI. A trunk drops from
+   under the parent's version name and turns into each child card at its first line (an elbow with a soft corner); a
+   child that has a younger sibling below it keeps the trunk running on. */
+.node {
+  --lineage-line: var(--border-strong);
+  --elbow-y: calc(var(--space-md) + 0.85em);
+  position: relative;
+}
+
 .children {
-  margin-top: var(--space-sm);
-  margin-inline-start: var(--space-xl);
-  padding-inline-start: var(--space-md);
-  border-inline-start: 2px solid var(--border-default);
+  margin-block-start: var(--space-sm);
+  margin-inline-start: var(--space-lg);
+  padding-inline-start: var(--space-xl);
+}
+
+.children > .node::before,
+.children > .node:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: calc(-1 * var(--space-xl));
+  pointer-events: none;
+}
+
+.children > .node::before {
+  top: calc(-1 * var(--space-sm));
+  width: calc(var(--space-xl) - var(--space-xs));
+  height: calc(var(--space-sm) + var(--elbow-y));
+  border-inline-start: 2px solid var(--lineage-line);
+  border-block-end: 2px solid var(--lineage-line);
+  border-end-start-radius: var(--radius-md);
+}
+
+.children > .node:not(:last-child)::after {
+  top: var(--elbow-y);
+  bottom: calc(-1 * var(--space-sm));
+  border-inline-start: 2px solid var(--lineage-line);
 }
 
 .grid {
@@ -79,32 +110,9 @@
   color: var(--text-muted);
 }
 
-.log {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.logRow {
-  display: grid;
-  grid-template-columns: 170px 1fr auto;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-xs) 0;
-  border-top: 1px solid var(--border-subtle);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.logTime {
-  font-size: var(--font-sm);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--text-muted);
-}
-
-.logText {
-  min-width: 0;
+/* cv4 E10, cv5 H5: the change log is the shared ui/Timeline; a version name in its event text is in the version face. */
+.logVersion {
+  font-family: var(--font-mono);
+  font-weight: 650;
+  color: var(--text-primary);
 }

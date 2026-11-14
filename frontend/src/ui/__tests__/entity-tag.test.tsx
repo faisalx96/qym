@@ -15,10 +15,11 @@ describe('entity tags', () => {
       </div>,
     );
     expect(screen.getByTitle('text2sql')).toHaveAttribute('data-kind', 'task');
-    const ds = screen.getByTitle('spider-dev · version 3 · aliases: golden');
+    // cv5 Y5: the title does not repeat the alias; the alias tag reads `@golden`
+    const ds = screen.getByTitle('spider-dev · version 3');
     expect(ds).toHaveAttribute('data-kind', 'dataset');
     expect(ds).toHaveTextContent('v3');
-    expect(screen.getByText('golden')).toBeInTheDocument();
+    expect(screen.getByText('@golden')).toBeInTheDocument();
     const model = screen.getByTitle('gpt-4o');
     expect(model).toHaveAttribute('data-series', '2');
     expect(model).toHaveTextContent('reasoning');
