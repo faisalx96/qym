@@ -18,6 +18,7 @@ import {
   EmptyState,
   Disclosure,
   ErrorState,
+  FormDialog,
   Icon,
   IconButton,
   InlineNotice,
@@ -114,7 +115,6 @@ function DiagnosisEditor({
   const [query, setQuery] = useState('');
   const [section, setSection] = useState('guidance');
   const [subFilter, setSubFilter] = useState<'all' | 'approved'>('all');
-  const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
   const [newSub, setNewSub] = useState('');
   const [removing, setRemoving] = useState<string | null>(null);
@@ -233,13 +233,12 @@ function DiagnosisEditor({
           ? { tone: 'warning', label: 'Taxonomy required' }
           : { tone: 'muted', label: dirty ? 'Unsaved changes' : 'Saved' };
 
-  function addCategory() {
-    const name = newName.trim();
-    if (!name) return;
-    if (categories.some((c) => c.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
-      toast.show(`“${name}” already exists`, { tone: 'error' });
-      return;
-    }
+  /** cv5 Q6: from the Add category dialog; a name in use is the dialog's error, the dialog stays open. */
+  function addCategory(raw: string): string | void {
+    const name = raw.trim();
+    if (!name) return 'Enter a category name';
+    if (categories.some((c) => c.name.toLocaleLowerCase() === name.toLocaleLowerCase()))
+      return `“${name}” already exists`;
     edit((v) => ({
       ...v,
       categories: [
@@ -249,7 +248,6 @@ function DiagnosisEditor({
     }));
     setSelected(name);
     setSection('guidance');
-    setNewName('');
     setAdding(false);
   }
 
@@ -314,9 +312,31 @@ function DiagnosisEditor({
 
   return (
     <div className={s.diag}>
+      {/* cv5 Q6 (owner: "why is add category there?"): the section's create action ends its header row */}
       <SectionHeader
         title="Diagnosis categories"
         description={`${categories.length} ${categories.length === 1 ? 'category' : 'categories'} · ${totalExamples} approved ${totalExamples === 1 ? 'example' : 'examples'}`}
+        aside={
+          canManage ? (
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Icon name="plus" size={12} />}
+              onPress={() => setAdding(true)}
+            >
+              Add category
+            </Button>
+          ) : null
+        }
+      />
+      <FormDialog
+        open={adding}
+        onOpenChange={setAdding}
+        title="Add category"
+        description="The category joins the catalog with its guidance to fill in. Save the catalog to use it."
+        fields={[{ name: 'name', label: 'Category name', required: true, autoFocus: true }]}
+        confirmLabel="Add"
+        onSubmit={(values) => addCategory(String(values.name ?? ''))}
       />
       {!canManage ? (
         <InlineNotice tone="neutral" icon="info">
@@ -347,6 +367,7 @@ function DiagnosisEditor({
         </InlineNotice>
       ) : null}
 
+      {/* the search box heads the list column, at the list's width */}
       <div className={d.tools}>
         <SearchField
           label="Search categories"
@@ -354,50 +375,8 @@ function DiagnosisEditor({
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}
-          width="var(--search-width)"
+          width="100%"
         />
-        {canManage ? (
-          adding ? (
-            <form
-              className={d.addForm}
-              onSubmit={(e) => {
-                e.preventDefault();
-                addCategory();
-              }}
-            >
-              <TextField
-                label="New category name"
-                hideLabel
-                placeholder="New category"
-                value={newName}
-                onChange={setNewName}
-                autoFocus
-              />
-              <Button
-                size="sm"
-                variant="primary"
-                type="submit"
-                isDisabled={!newName.trim()}
-                disabledReason="Enter a category name"
-              >
-                Add
-              </Button>
-              <Button size="sm" variant="neutral" onPress={() => setAdding(false)}>
-                Cancel
-              </Button>
-            </form>
-          ) : (
-            // cv5 L1: the section creates its entity from one primary button (design language "Create action")
-            <Button
-              size="sm"
-              variant="primary"
-              icon={<Icon name="plus" size={12} />}
-              onPress={() => setAdding(true)}
-            >
-              Add category
-            </Button>
-          )
-        ) : null}
       </div>
 
       {categories.length === 0 ? (

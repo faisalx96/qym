@@ -583,7 +583,11 @@ preselected.
   and spell check off (cv4 A5). The single-line fields of one card share one field width (320px): a `Select` is not
   wider than the text field above it (cv4 Y20).
   **Create action (cv4 A2):** a table section creates its entity from one primary button at the end of its section
-  header; the button opens a dialog. No inline create form above a table.
+  header; the button opens a dialog. No inline create form above a table. The same for a list with an editor beside it
+  (cv5 Q6, owner: "why is add category there?"): Diagnosis categories ends its header row with "Add category" (a
+  one-field `FormDialog`), and the search box heads the list column at the list's width. A list whose toolbar spans
+  the list (the Rules draft: search, then "Add rule" at the list's end) keeps the action there; the Documents tab
+  creates from its drop zone.
   **One footer and two title recipes (C145, C235):** a card that saves settings ends with `SaveFooter` (pass `save` to
   `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "Saving"; nothing at rest, the
   `SaveFooter` default since cv4 X4), the 24px

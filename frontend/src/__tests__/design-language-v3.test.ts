@@ -2382,6 +2382,17 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(doc).toContain('this slider is too wide');
   });
 
+  it('Q6: Add category ends the section header row and opens a dialog; search heads the list column', () => {
+    const panel = src('features/analyzer/guidance/DiagnosisPanel.tsx');
+    expect(panel).toMatch(/<SectionHeader\s+title="Diagnosis categories"[\s\S]*?aside=\{[\s\S]*?Add category/);
+    expect(panel).toContain('<FormDialog');
+    expect(panel).not.toContain('label="New category name"');
+    expect(stripComments(src('features/analyzer/guidance/diagnosis.module.css'))).toContain(
+      'grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);',
+    );
+    expect(doc).toContain('why is add category there?');
+  });
+
   it('Q3: a splitter sets the pane width, remembered, the same on every tab', () => {
     const shell = src('features/analyzer/RunShell.tsx');
     expect(shell).toContain('<PaneResizer');
