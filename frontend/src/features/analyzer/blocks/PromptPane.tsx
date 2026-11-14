@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Select, Skeleton, Tag, Text } from '@/ui';
+import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Skeleton, Tag, Text } from '@/ui';
 import { APP_LOCALE } from '@/lib/dates';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import { changedLines, type LineChange } from '../model/promptDiff';
@@ -9,13 +9,32 @@ import s from './pane.module.css';
 const PANE_BOTTOM_GAP = 12;
 const PANE_MIN_HEIGHT = 360;
 
-/** The options of the previewed-target select: "item · metric score" for each target in the list. */
-export function targetItems(ws: RunWorkspace) {
-  return ws.allKeys.map((k) => {
-    const [itemId = '', metric = ''] = k.split('\u0000');
-    const score = ws.rowById.get(itemId)?.metric_scores[metric];
-    return { key: k, label: `${itemId} · ${metric}${score != null ? ` ${score.toFixed(2)}` : ''}` };
-  });
+/**
+ * The target that the prompt is for, as one quiet line (cv5 Q1): item id, metric and score. A row click at the left
+ * chooses it (the row stays highlighted); the guidance tabs keep the last choice, else the first target.
+ */
+function TargetLine({ ws }: { ws: RunWorkspace }) {
+  const focus = ws.focus;
+  if (!focus)
+    return (
+      <Text variant="sm" tone="muted" as="p" className={s.target}>
+        No target
+      </Text>
+    );
+  const score = ws.rowById.get(focus.itemId)?.metric_scores[focus.metric];
+  return (
+    <Text variant="sm" tone="muted" as="p" className={s.target} data-testid="prompt-pane-target">
+      <span className={s.mono}>{focus.itemId}</span>
+      {' · '}
+      <span className={s.mono}>{focus.metric}</span>
+      {score != null ? (
+        <>
+          {' · '}
+          <span className={s.mono}>{score.toFixed(2)}</span>
+        </>
+      ) : null}
+    </Text>
+  );
 }
 
 /** The pane reaches from its top to the bottom of the viewport (as the dataset item pane, cv4 E7). */
@@ -105,7 +124,6 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
   const ref = useFitHeight();
   const scroller = useRef<HTMLDivElement>(null);
   const { preview } = ws;
-  const items = targetItems(ws);
   const change = useChanges(ws.focusKey, preview.messages, preview.pending);
   const firstAdded = change?.added.findIndex((set) => set.size > 0) ?? -1;
 
@@ -145,23 +163,7 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
             />
           ) : null}
         </div>
-        {/* The label before the control, as "Metrics" before its chips; a target has no default, so no "changed" tint. */}
-        <div className={s.targetRow}>
-          <Text variant="sm" weight={600} tone="muted" as="span" aria-hidden="true">
-            Target
-          </Text>
-          <Select
-            label="Previewed target"
-            hideLabel
-            items={items}
-            value={ws.focusKey}
-            onChange={(k) => k != null && ws.setFocusKey(String(k))}
-            isDisabled={items.length === 0}
-            placeholder="No targets"
-            searchable="auto"
-            width={320}
-          />
-        </div>
+        <TargetLine ws={ws} />
         {/* cv5 Z11: an honest, quiet line when the open tab shows something the prompt does not use (a draft) */}
         {note ? (
           <Text variant="sm" tone="muted" as="p" className={s.note} data-testid="prompt-pane-note">
