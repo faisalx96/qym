@@ -236,7 +236,15 @@ function MetricChips({
   );
 }
 
-function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metricIdsOnly?: undefined }) {
+export function Issues({
+  run,
+  row,
+  metricIdsOnly,
+}: {
+  run: CompareRun;
+  row: Row;
+  metricIdsOnly?: undefined;
+}) {
   const { model, slug } = useCompare();
   const patch = useRowPatch();
   const [dialog, setDialog] = useState<{ metric: string; issue: RootCauseIssue | null } | null>(null);

@@ -227,3 +227,9 @@
     margin-inline-start: 0;
   }
 }
+
+/* the item in the pane reads as selected: the selected fill and the 2px accent bar, as the open row of the run page */
+.item[data-open] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}

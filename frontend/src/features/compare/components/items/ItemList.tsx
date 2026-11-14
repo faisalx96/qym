@@ -1,4 +1,4 @@
-/** The aligned item list (round 8): a card per item with one score chip per run; a row opens into the side-by-side detail. */
+/** The aligned item list (round 8): a card per item with one score chip per run; a row opens its item in the pane at the side. */
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { Icon, Pagination } from '@/ui';
 import { metricBand } from '@/lib/metrics';
@@ -9,7 +9,7 @@ import { runShortName } from '../../lib/labels';
 import { chipDelta, deltaKind } from '../../lib/baseline';
 import type { FilteredItem } from '../../lib/filters';
 import { useRunMark } from '../RunTag';
-import { ItemDetail } from './ItemDetail';
+import { ComparePaneHost } from './pane/ComparePane';
 import { useItemsUi } from './ItemsUi';
 import styles from './ItemList.module.css';
 
@@ -146,7 +146,8 @@ export function ItemList() {
                 className={styles.head}
                 role="button"
                 tabIndex={0}
-                aria-expanded={open}
+                // the row opens its item in the pane at the side (ComparePane); it does not expand in place
+                aria-pressed={open}
                 data-part="item-head"
                 onClick={() => onToggle(it.itemId)}
                 onKeyDown={(e) => {
@@ -157,9 +158,6 @@ export function ItemList() {
                   }
                 }}
               >
-                <span className={styles.chev} data-part="item-chevron" aria-hidden>
-                  <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
-                </span>
                 <span className={styles.no} data-part="item-index">
                   #{index}
                 </span>
@@ -172,11 +170,6 @@ export function ItemList() {
                   ))}
                 </span>
               </div>
-              {open ? (
-                <div className={styles.detailHold}>
-                  <ItemDetail itemId={it.itemId} />
-                </div>
-              ) : null}
             </li>
           );
         })}
@@ -190,6 +183,7 @@ export function ItemList() {
           onPageChange={(p) => c.setView({ page: p }, { keepPage: true })}
         />
       </div>
+      <ComparePaneHost pageSize={PAGE_SIZE} />
     </div>
   );
 }

@@ -17,7 +17,6 @@ import {
   StateTag,
   Tooltip,
   type Column,
-  type Key,
   type SortState,
 } from '@/ui';
 import { readLocal, writeLocal } from '@/lib/storage';
@@ -31,7 +30,6 @@ import type { Row } from '../../types';
 import { defaultPageSize } from '../../lib/itemsPaging';
 import { isUnionRun } from '../../lib/heroModel';
 import { datasetKeyParts, rowDatasetKey, rowRawItemId } from '../../lib/datasetFilter';
-import { ItemCard } from './ItemCard';
 import { useItemsUi } from './ItemsUi';
 import styles from './ItemsTable.module.css';
 
@@ -281,14 +279,9 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
           if (!s || s.key === 'index') onSort('index');
           else onSort(`${s.key}_${s.direction}` as SortBy);
         }}
-        expanded={ui.expanded as Set<Key>}
-        onExpandedChange={(next) => {
-          for (const id of next) if (!ui.expanded.has(String(id))) ui.toggleExpanded(String(id), true);
-          for (const id of ui.expanded) if (!next.has(id)) ui.toggleExpanded(id, false);
-        }}
-        expandOnRowClick
-        expandLabel={(it, open) => `${open ? 'Close' : 'Open'} item #${it.row.index + 1}`}
-        renderExpanded={(it) => <ItemCard row={it.row as Row} />}
+        // a row opens its item in the pane at the side (ItemPane); the same row closes it. No row expands in place,
+        // so the table has no chevron column.
+        onRowOpen={(it) => ui.toggleExpanded(it.row.item_id)}
         rowState={(it) => (rowStatus(ctx, it.row, selectedMetric).kind === 'error' ? 'error' : undefined)}
         rowProps={(it) => ({
           'data-item-id': it.row.item_id,

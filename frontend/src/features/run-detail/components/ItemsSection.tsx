@@ -18,6 +18,9 @@ import styles from './ItemsSection.module.css';
 const HIGHLIGHT_MS = 2600;
 void PAGE_SIZES;
 
+import { ItemPane } from './items/pane/ItemPane';
+import type { Row } from '../types';
+
 export function ItemsSection() {
   const { runId, model, api, items, payload } = useRunPage();
   const { view } = api;
@@ -125,6 +128,8 @@ export function ItemsSection() {
   const bannerKinds: Record<string, string> = { failed: 'fail', passed: 'pass', metric_errors: 'error on' };
   const showBanner = view.show === 'passed' || view.show === 'failed' || view.show === 'metric_errors';
 
+  const paneOpen = [...expanded].pop();
+  const paneRows = useMemo(() => items.map((it) => it.row as Row), [items]);
   return (
     <ItemsUi.Provider value={ui}>
       <ReportSection
@@ -166,6 +171,8 @@ export function ItemsSection() {
               sectionRef={sectionRef}
             />
           )}
+          {/* the item opened last, in the pane at the side of the table */}
+          {paneOpen ? <ItemPane openId={paneOpen} rows={paneRows} /> : null}
           <span className={styles.srOnly} aria-live="polite">
             {payload.snapshot.rows.length ? '' : 'This run has no items yet.'}
           </span>

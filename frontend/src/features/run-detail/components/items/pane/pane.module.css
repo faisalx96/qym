@@ -1,0 +1,1005 @@
+/* Item pane recipe: one frame over the page, inset blocks with a tone rail, the JSON fields recipe, one metrics table. Tokens only. */
+
+/* ---------- frame ---------- */
+/* the Drawer's surface with no scrim, from the sticky nav down, so the table and the page controls stay in reach */
+.pane {
+  position: fixed;
+  inset-block-end: 0;
+  inset-inline-end: 0;
+  z-index: calc(var(--z-dropdown) - 1);
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100vw;
+  border-inline-start: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-dialog);
+  outline: none;
+  animation: pane-in var(--motion-step) var(--ease-standard);
+}
+
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane {
+    animation: none;
+  }
+}
+
+.resizer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -4px;
+  z-index: 3;
+  width: 8px;
+  cursor: col-resize;
+  outline: none;
+  touch-action: none;
+}
+
+.resizer::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 3px;
+  width: 2px;
+  background: transparent;
+  content: '';
+  transition: background var(--transition-fast);
+}
+
+.resizer:hover::after,
+.resizer:active::after,
+.resizer:focus-visible::after {
+  background: var(--accent-primary);
+}
+
+/* ---------- header ---------- */
+.head {
+  display: grid;
+  flex: none;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* the identity keeps its width; the actions go under it when the pane is narrow */
+.headRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+}
+
+.ident {
+  display: flex;
+  flex: 0 1 auto;
+  gap: var(--space-sm);
+  align-items: center;
+  min-width: 0;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.itemId {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.headActions {
+  display: flex;
+  flex: none;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+.title {
+  display: -webkit-box;
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-lg);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.stepBtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.peekHead {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.peekNum {
+  font-family: var(--font-mono);
+  font-weight: 650;
+}
+
+.peekPrompt {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* ---------- body ---------- */
+.body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-auto-rows: max-content;
+  gap: var(--space-md);
+  align-content: start;
+  min-height: 0;
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.skeleton,
+.loadError {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* two blocks that read side by side (Expected beside Output) */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+  min-width: 0;
+}
+
+.pair > :only-child {
+  grid-column: 1 / -1;
+}
+
+@container (max-width: 700px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- block: an inset fill, the meaning of the part on a 3px start rail ---------- */
+.block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-inline-start: var(--rail-width) solid var(--tone);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.block[data-tone='neutral'] {
+  border-inline-start-color: transparent;
+}
+
+.block[data-fill] {
+  height: 100%;
+}
+
+.blockHead {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  align-items: center;
+  min-height: 36px;
+  padding-inline: var(--space-md) var(--space-sm);
+}
+
+/* fixed UI labels keep the uppercase tracked eyebrow; Input, Expected and Output carry their tone */
+.eyebrow {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.block:not([data-tone='neutral']) > .blockHead > .eyebrow {
+  color: var(--tone-text);
+}
+
+.blockAfter {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+  min-width: 0;
+}
+
+.blockActions {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+.blockBody {
+  min-width: 0;
+  padding: 0 var(--space-md) var(--space-md);
+}
+
+/* a block with no head of its own (the section title is above it) */
+.blockBody[data-top] {
+  padding-block-start: var(--space-md);
+}
+
+/* ---------- a named section under the texts: the page's subsection head, then its content ---------- */
+.section {
+  min-width: 0;
+  margin-block-start: var(--space-sm);
+}
+
+.section [data-part='subsection-head'] {
+  margin-block-end: var(--space-sm);
+}
+
+/* the platform's stat strip on the block fill */
+.stats {
+  min-width: 0;
+}
+
+.block[data-fill] > .blockBody {
+  flex: 1 1 auto;
+}
+
+.passName {
+  font-size: var(--font-base);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.passStep {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.metaNum {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* ---------- values ---------- */
+/* the app's prose recipe: as wide as its text up to the reading measure, anchored at the start whatever its direction */
+.prose {
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+}
+
+.prose > div {
+  font-size: var(--font-md);
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* right-to-left text takes the line and starts at its right edge */
+.prose[data-rtl] {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  direction: rtl;
+  text-align: start;
+}
+
+.marked {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* a word that differs between Expected and Output: one quiet wash, the same on both sides */
+.mark {
+  padding-block: 1px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--warning) 26%, transparent);
+  color: inherit;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* code and raw JSON: the one deeper fill inside a block */
+.code {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  overflow-wrap: anywhere;
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  color: var(--text-primary);
+  tab-size: 2;
+}
+
+/* one line of code: where it wraps, it continues one step in from its own start */
+.codeLine {
+  display: block;
+  text-indent: -2ch;
+}
+
+/* the JSON viewer's palette: a key and a keyword are the structure of the text */
+.code [data-t='keyword'],
+.code [data-t='key'] {
+  color: var(--accent-secondary);
+}
+
+.code [data-t='number'] {
+  color: var(--chart-5);
+}
+
+.code [data-t='boolean'] {
+  color: var(--accent-tertiary-soft);
+}
+
+.code [data-t='null'],
+.code [data-t='punct'] {
+  color: var(--text-muted);
+}
+
+/* ---------- the fields of a JSON value: each key above its value ---------- */
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-xl);
+  min-width: 0;
+  margin: 0;
+}
+
+.field {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-width: 0;
+}
+
+/* short values share a line on one rhythm; long text, a group, a table or code takes the line */
+.field[data-flow='inline'] {
+  flex: 0 1 auto;
+  max-inline-size: 100%;
+}
+
+.field[data-flow='block'] {
+  flex: 1 1 100%;
+}
+
+/* a data key: mono, as written, never cut, in the key colour of the JSON viewer so a key never reads as a value */
+.key {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--accent-secondary) 62%, var(--text-secondary));
+}
+
+.fieldValue {
+  min-width: 0;
+  margin: 0;
+}
+
+/* a nested object: a tile of its own under its key, one step lighter than what it is in (it works at any depth) */
+.fields[data-nested] {
+  margin-block-start: var(--space-xs);
+  padding: var(--space-md);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.field[data-shape='group'] > .key,
+.field[data-shape='table'] > .key,
+.field[data-shape='items'] > .key {
+  font-size: var(--font-base);
+}
+
+.scalar {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* the JSON viewer's palette for the kind of a value */
+.scalar[data-kind='number'] {
+  color: color-mix(in srgb, var(--chart-5) 70%, var(--text-primary));
+}
+
+.scalar[data-kind='boolean'] {
+  color: var(--accent-tertiary-soft);
+}
+
+.scalar[data-kind='null'] {
+  color: var(--text-muted);
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list > li:not(:last-child)::after {
+  margin-inline-end: 0.7ch;
+  color: var(--text-muted);
+  content: ',';
+}
+
+.list[data-long] {
+  display: grid;
+  gap: 2px;
+}
+
+.list[data-long] > li::after {
+  content: none;
+}
+
+/* a table value: the app's embedded table, drawn for a block's fill. The title row is one clear band; the rows are
+   the block's own fill with a soft stripe (the page table's dark base is too hard a step inside a block). */
+.tableWrap {
+  display: grid;
+  gap: var(--space-sm);
+  justify-items: start;
+  min-width: 0;
+  max-inline-size: 100%;
+  margin-block-start: var(--space-xs);
+}
+
+.tableWrap > [data-stripe] {
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+}
+
+.tableWrap thead th {
+  border-block-end: 0;
+  background: var(--bg-active);
+  color: var(--text-secondary);
+}
+
+.tableWrap tbody tr {
+  --row-base: color-mix(in srgb, var(--text-primary) 2%, transparent);
+}
+
+.tableWrap tbody tr[data-zebra] {
+  --row-base: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.tableWrap > :first-child {
+  inline-size: 100%;
+  min-width: 0;
+}
+
+/* a neutral button on a block's fill takes the next fill up, so it reads as a button */
+.tableWrap > .moreRows {
+  background: var(--bg-active);
+}
+
+.tableWrap > .moreRows[data-hovered] {
+  background: var(--border-default);
+}
+
+.tableNote {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* the row count of a table, beside its key */
+.keyCount {
+  margin-inline-start: var(--space-sm);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* the details of a metric: a small table is as wide as its columns, so two small tables stand side by side */
+.fields[data-detail] > .field[data-fit] {
+  flex: 0 1 auto;
+  max-inline-size: 100%;
+}
+
+.detailStack {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.items {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-sm);
+  align-items: baseline;
+}
+
+.index {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.itemBody {
+  min-width: 0;
+}
+
+.taskError {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.taskErrorLead {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--error-text);
+}
+
+.taskError .errorText {
+  background: var(--bg-surface);
+}
+
+/* ---------- execution facts: equal centred cells, a label above its value ---------- */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  margin: 0;
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  align-items: center;
+  min-width: 0;
+  padding-inline: var(--space-xs);
+  text-align: center;
+}
+
+.fact + .fact {
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.fact dt {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fact dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-lg);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.fact[data-bad] dd {
+  color: var(--error-text);
+}
+
+@container (max-width: 520px) {
+  .facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: var(--space-md);
+  }
+
+  .fact:nth-child(3n + 1) {
+    border-inline-start: 0;
+  }
+}
+
+/* ---------- metrics: one table ---------- */
+.block[data-part='metrics'] {
+  container: metrics / inline-size;
+}
+
+.mgrid {
+  --cols: minmax(148px, 0.8fr) repeat(var(--scores), 68px) var(--c-passif) var(--c-reason) 52px;
+
+  display: grid;
+}
+
+.mhead,
+.mrow {
+  display: grid;
+  grid-template-columns: var(--cols);
+  column-gap: var(--space-md);
+  padding-inline: var(--space-md) var(--space-sm);
+}
+
+/* one line: the block title in the name column, then the column titles */
+.mhead {
+  align-items: center;
+  min-height: 36px;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.mtitle {
+  min-width: 0;
+}
+
+/* no metric has a reason: the score edit takes a line of its own under the row */
+.mgrid[data-noreason] .reasonCell {
+  grid-column: 1 / -1;
+}
+
+.mrow {
+  align-items: start;
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.mrow:last-child {
+  border-end-start-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+}
+
+/* the one wash: a metric below its threshold */
+.mrow[data-failing] {
+  background: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
+}
+
+/* the row whose score is in edit: the selected fill */
+.mrow[data-editing] {
+  background: var(--bg-selected);
+}
+
+.mrow > [role='cell'] {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 24px;
+}
+
+.mhead > [data-center],
+.mrow > [data-center] {
+  justify-content: center;
+  text-align: center;
+}
+
+.mnone {
+  margin: 0;
+  padding: 0 var(--space-md) var(--space-md);
+  font-size: var(--font-base);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* a pass column title is the control that picks the pass in view: the tab look (accent label, 2px underline) */
+.passHead {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+  height: 24px;
+  padding: 0 2px;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.passHead:hover {
+  color: var(--text-primary);
+}
+
+.passHead[aria-pressed='true'] {
+  border-block-end-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.passHead:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.mrow > .nameCell {
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+/* a metric name is a key: mono, as written, it wraps and is never cut; the page metric takes the selected colour */
+.metricName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.metricName[data-page] {
+  color: var(--accent-primary);
+}
+
+.score {
+  font-size: var(--font-md);
+  font-weight: 650;
+}
+
+.cellScore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 24px;
+  border-radius: var(--control-radius);
+}
+
+/* the pass in view: the selected fill */
+.cellScore[data-focus] {
+  background: var(--bg-selected);
+}
+
+.passIf {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+/* the reason and, under it, the details of the metric */
+.mrow > .reasonCell {
+  display: grid;
+  gap: var(--space-sm);
+  align-content: center;
+  align-items: start;
+}
+
+.reason {
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+  margin: 0;
+  font-size: var(--font-md);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.reason[data-strong] {
+  color: var(--text-primary);
+}
+
+.reason[data-empty] {
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+/* what the scorer recorded for a metric: one deeper tile under the row, over the full width of the table */
+.mrow > .mdetail {
+  display: block;
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-block-start: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+.mrow > .actionCell,
+.mhead > .actionCell {
+  display: flex;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+}
+
+/* a pane too narrow for a reason column: the reason goes under its metric, on the name's edge */
+@container metrics (max-width: 599px) {
+  .mgrid:not([data-multi]) {
+    --cols: minmax(0, 1fr) repeat(var(--scores), 68px) var(--c-passif) 52px;
+  }
+
+  .mgrid:not([data-multi]) .reasonHead {
+    display: none;
+  }
+
+  .mgrid:not([data-multi]) .reasonCell {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    padding-block-start: var(--space-xs);
+  }
+
+  .mgrid:not([data-multi]) .reasonCell:empty {
+    display: none;
+  }
+}
+
+@container metrics (max-width: 819px) {
+  .mgrid[data-multi] {
+    --cols: minmax(0, 1fr) repeat(var(--scores), 68px) var(--c-passif) 52px;
+  }
+
+  .mgrid[data-multi] .reasonHead {
+    display: none;
+  }
+
+  .mgrid[data-multi] .reasonCell {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    padding-block-start: var(--space-xs);
+  }
+
+  .mgrid[data-multi] .reasonCell:empty {
+    display: none;
+  }
+}
+
+/* narrower still: a multi-pass metric puts its name on one line and its score columns on the next */
+@container metrics (max-width: 519px) {
+  .mgrid[data-multi] {
+    --cols: repeat(var(--scores), minmax(0, 1fr)) var(--c-passif) 52px;
+  }
+
+  .mgrid[data-multi] .mtitle,
+  .mgrid[data-multi] .nameCell {
+    grid-column: 1 / -1;
+  }
+
+  .mgrid[data-multi] .reasonCell {
+    grid-row: 3;
+  }
+
+  .mgrid[data-multi] > .mhead {
+    padding-block: var(--space-xs);
+  }
+}
+
+/* ---------- score edit ---------- */
+.edit {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.editRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+/* a neutral button on the block's fill takes the next fill up, so it reads as a button */
+.editRow .onFill {
+  background: var(--bg-active);
+}
+
+.editRow .onFill[data-hovered] {
+  background: var(--border-default);
+}
+
+.hint,
+.editError {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.editError {
+  color: var(--error-text);
+}
+
+/* ---------- pass switch ---------- */
+.passOpt {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.passGlyph {
+  display: inline-flex;
+  color: var(--error);
+}
+
+.passGlyph[data-kind='pass'] {
+  color: var(--success);
+}
+
+/* ---------- root cause (the app's own cards) ---------- */
+/* on the pane's own surface, so the fields of the issue form keep their fill */
+.rootCause {
+  min-width: 0;
+  margin-block-start: var(--space-sm);
+}
+
+/* the block's fill replaces the component's own lead-in line */
+.rootCause > * {
+  border-block-start: 0;
+}
+
+.rootCause:empty {
+  display: none;
+}
+
+/* ---------- the table beside the pane ---------- */
+/* the open row reads as selected: the selected fill and the 2px accent bar */
+:global(body[data-item-pane]) tr[data-item-id][data-open='true'] {
+  --row-tint: var(--bg-selected);
+}
+
+:global(body[data-item-pane]) tr[data-item-id][data-open='true'] > td:first-child {
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+/* the issue form: its fields and its plain buttons take a fill, so each one reads as a control on the dark card */
+.rootCause input,
+.rootCause textarea,
+.rootCause button[aria-haspopup] {
+  background: var(--bg-elevated);
+}
+
+.rootCause button[data-variant='neutral'] {
+  background: var(--bg-active);
+}
