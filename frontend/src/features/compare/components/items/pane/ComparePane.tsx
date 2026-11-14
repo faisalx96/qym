@@ -1035,7 +1035,12 @@ export function ComparePane({
                     min={1}
                     options={cols.map((col) => ({
                       value: String(col.i),
-                      label: <RunTag index={col.i} showName={false} bare />,
+                      // the chip shows the run's colour and letter; its name is the accessible name
+                      label: (
+                        <span role="img" aria-label={col.run.label}>
+                          <RunTag index={col.i} showName={false} bare />
+                        </span>
+                      ),
                       title: col.run.label,
                     }))}
                     value={cols.filter((col) => !hidden.has(col.i)).map((col) => String(col.i))}

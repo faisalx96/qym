@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import { seedCustomRun, type CustomItem } from '../run-detail/cutover-support';
 import { seedProject, type Seeded } from '../run-detail/support';
-import { compareUrl, waitLoaded, goSection } from './support';
+import { compareUrl, itemPane, paneOutputs, waitLoaded, goSection } from './support';
 
 let s: Seeded;
 test.beforeAll(async () => {
@@ -30,10 +30,14 @@ test('without a direction Compare is neutral and says why', async ({ page }) => 
   await expect(
     page.getByText('Winners, passes and Max@K need a declared direction on this metric.'),
   ).toBeVisible();
-  await page
-    .locator('[data-part="item-head"]')
-    .first()
-    .click();
-  await expect(page.getByText(/✓ PASS|✗ FAIL/)).toHaveCount(0);
+  await page.locator('[data-part="item-head"]').first().click();
+  // the item pane: without a direction no output has a verdict (no Pass or Fail tag, the neutral tone)
+  const pane = itemPane(page);
+  await expect(paneOutputs(pane)).toHaveCount(2);
+  for (const out of await paneOutputs(pane).all()) {
+    await expect(out).toHaveAttribute('data-tone', 'neutral');
+    await expect(out.locator('header')).not.toContainText(/Pass|Fail/i);
+  }
+  await expect(pane.locator('[data-count="failed"]')).toHaveCount(0);
   await expect(page.getByRole('slider', { name: /threshold/i })).toHaveCount(0);
 });

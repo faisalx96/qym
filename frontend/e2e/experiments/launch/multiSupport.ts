@@ -19,7 +19,11 @@ export interface MultiFixture extends Seeded {
 }
 
 const items = (n: number, prefix: string) =>
-  Array.from({ length: n }, (_, i) => ({ item_id: `${prefix}-${i}`, input: `question ${i}`, expected_output: `answer ${i}` }));
+  Array.from({ length: n }, (_, i) => ({
+    item_id: `${prefix}-${i}`,
+    input: `question ${i}`,
+    expected_output: `answer ${i}`,
+  }));
 
 /** A dataset with `versions` published versions; `production` is the alias of the last one. */
 export async function createVersionedDataset(
@@ -28,7 +32,9 @@ export async function createVersionedDataset(
   name: string,
   versions: number,
 ): Promise<void> {
-  const created = await request.post('/v1/datasets', { data: { project_slug: slug, name, description: 'e2e' } });
+  const created = await request.post('/v1/datasets', {
+    data: { project_slug: slug, name, description: 'e2e' },
+  });
   expect(created.ok(), await created.text()).toBeTruthy();
   for (let v = 1; v <= versions; v++) {
     const nv = await request.post(`/v1/datasets/${name}/versions?project_slug=${slug}`, {
@@ -99,7 +105,8 @@ export function overflowing(root: Locator): Promise<string[]> {
 export const datasetSelect = (page: Page) => page.getByRole('button', { name: /^Choose a dataset/ });
 export const datasetsCard = (page: Page) => page.getByTestId('datasets-fieldset');
 export const dsBox = (page: Page, name: string) => page.locator(`li[data-dataset-box="${name}"]`);
-export const envBox = (page: Page, name: string) => page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name }) });
+export const envBox = (page: Page, name: string) =>
+  page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name }) });
 
 /** Choose a dataset in the empty card (2 clicks), then tick its references. */
 export async function chooseDataset(page: Page, name: string): Promise<void> {
@@ -109,10 +116,18 @@ export async function chooseDataset(page: Page, name: string): Promise<void> {
 }
 
 /** Makes `versions` (e.g. `v3`) the dataset's references: ticks them, and unticks Latest unless `latest` is asked for. */
-export async function setVersions(page: Page, dataset: string, versions: string[], latest = false): Promise<void> {
-  await dsBox(page, dataset).getByRole('button', { name: new RegExp(`^Versions.* of ${dataset}$`) }).click();
+export async function setVersions(
+  page: Page,
+  dataset: string,
+  versions: string[],
+  latest = false,
+): Promise<void> {
+  await dsBox(page, dataset)
+    .getByRole('button', { name: new RegExp(`^Versions.* of ${dataset}$`) })
+    .click();
   const panel = page.getByRole('dialog', { name: /Versions options/ });
-  for (const v of versions) await panel.getByRole('checkbox', { name: new RegExp(`Version ${v}\\b`) }).click({ force: true });
+  for (const v of versions)
+    await panel.getByRole('checkbox', { name: new RegExp(`Version ${v}\\b`) }).click({ force: true });
   if (!latest) await panel.getByRole('checkbox', { name: /Latest version/ }).click({ force: true });
   await page.keyboard.press('Escape');
 }

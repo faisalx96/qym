@@ -56,14 +56,21 @@ test.describe('versions on the home view', () => {
       image_version: 'img-20261101',
       kb_version: 'kb-80',
     });
-    await page.getByRole('listitem').filter({ hasText: 'Alpha' }).getByRole('button', { name: 'Refresh versions of Alpha' }).click();
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Alpha' })
+      .getByRole('button', { name: 'Refresh versions of Alpha' })
+      .click();
     await expect(lineOf(page, 'Alpha')).toContainText('agent-2.0.0');
     // Unticking removes the line from the box.
     await page.getByRole('listitem').filter({ hasText: 'Alpha' }).getByText('Alpha', { exact: true }).click();
     await expect(lines(page)).toHaveCount(0);
   });
 
-  test('several ticked environments each show their own versions in their own box', async ({ page, request }) => {
+  test('several ticked environments each show their own versions in their own box', async ({
+    page,
+    request,
+  }) => {
     const other = await createEnvironment(request, f.project.id, 'Other', { port: FAKE_B });
     await setFakeVersioning(request, FAKE_B, {
       agent_version: 'agent-9.9.9',
@@ -81,7 +88,12 @@ test.describe('versions on the home view', () => {
     page,
   }) => {
     await openHome(page, f.project.slug, `?env=${f.env.id}`);
-    await expect(page.getByRole('listitem').filter({ hasText: 'Alpha' }).getByRole('button', { name: 'Refresh versions of Alpha' })).toHaveText('Refresh');
+    await expect(
+      page
+        .getByRole('listitem')
+        .filter({ hasText: 'Alpha' })
+        .getByRole('button', { name: 'Refresh versions of Alpha' }),
+    ).toHaveText('Refresh');
     await expect(page.getByText('Add versioning details')).toHaveCount(0);
     await page.getByRole('button', { name: 'Customize' }).click();
     await expect(page).toHaveURL(/step=where/);

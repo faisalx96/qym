@@ -33,10 +33,14 @@ export async function removeAgent(request: APIRequestContext): Promise<void> {
 /** Eight requests (one confirmed duplicate pair) and `drafts` drafts: idempotent by title. */
 export function seedFeedback(drafts = 0): void {
   const python = process.env.QYM_PYTHON ?? 'python';
-  execFileSync(python, [path.resolve(here, '..', '..', 'scripts', 'seed_feedback.py'), BASE_URL, '--drafts', String(drafts)], {
-    stdio: 'pipe',
-    timeout: 120_000,
-  });
+  execFileSync(
+    python,
+    [path.resolve(here, '..', '..', 'scripts', 'seed_feedback.py'), BASE_URL, '--drafts', String(drafts)],
+    {
+      stdio: 'pipe',
+      timeout: 120_000,
+    },
+  );
 }
 
 export async function setViewport(page: Page, width: number, height = 900): Promise<void> {
@@ -105,5 +109,9 @@ export function countCalls(page: Page, prefix: string): { count: () => number; u
 
 /** The requests table: a treegrid (rows can hold duplicate children) or a grid. */
 export function tableOf(page: Page): Locator {
-  return page.locator('[aria-label="Feedback requests"][role="treegrid"], [aria-label="Feedback requests"][role="grid"], table[aria-label="Feedback requests"], ul[aria-label="Feedback requests"]').first();
+  return page
+    .locator(
+      '[aria-label="Feedback requests"][role="treegrid"], [aria-label="Feedback requests"][role="grid"], table[aria-label="Feedback requests"], ul[aria-label="Feedback requests"]',
+    )
+    .first();
 }

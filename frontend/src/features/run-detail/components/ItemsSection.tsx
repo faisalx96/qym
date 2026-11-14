@@ -33,22 +33,29 @@ export function ItemsSection() {
   const { itemParam, setItemParam, setTraceParam } = api;
 
   const handled = useRef<string | null>(null);
+  // The item that ?item names now. A ref, not `itemParam`: the URL arrives a render after a fast open, close or switch,
+  // and a stale value dropped ?item on a switch to a second row and ignored an Escape right after an open.
+  const named = useRef<string | null>(itemParam);
+  // the open item as of the last change (the state arrives a render later)
+  const openNow = useRef<Set<string>>(new Set());
   const toggleExpanded = useCallback(
     (itemId: string, open?: boolean) => {
-      setExpanded((prev) => {
-        const next = new Set(prev);
-        const willOpen = open ?? !next.has(itemId);
-        if (willOpen) next.add(itemId);
-        else next.delete(itemId);
-        return next;
-      });
-      const willOpen = open ?? !expanded.has(itemId);
-      // A click is not a deep link: don't scroll or highlight the row the reader just opened.
-      if (willOpen) handled.current = itemId;
-      if (willOpen) setItemParam(itemId);
-      else if (itemParam === itemId) setItemParam(null);
+      const willOpen = open ?? !openNow.current.has(itemId);
+      // one item is open at a time (the pane shows one item): an item that opens replaces the open one
+      const next = willOpen ? new Set([itemId]) : new Set([...openNow.current].filter((id) => id !== itemId));
+      openNow.current = next;
+      setExpanded(next);
+      if (willOpen) {
+        // A click is not a deep link: don't scroll or highlight the row the reader just opened.
+        handled.current = itemId;
+        named.current = itemId;
+        setItemParam(itemId);
+      } else if (named.current === itemId) {
+        named.current = null;
+        setItemParam(null);
+      }
     },
-    [expanded, itemParam, setItemParam],
+    [setItemParam],
   );
 
   // A pass switch (the 'Pass N' links of a repeat item, C127) keeps ?item: treat it as a deep link again, so the item
@@ -78,8 +85,9 @@ export function ItemsSection() {
     const pageSize = Number(localStorage.getItem('qym:run-page-size')) || defaultPageSize(items.length);
     const page = Math.floor(idx / pageSize) + 1;
     if (page !== view.page) api.setView({ page });
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setExpanded((prev) => new Set(prev).add(itemParam));
+    named.current = itemParam;
+    openNow.current = new Set([itemParam]);
+    setExpanded(openNow.current);
     setScrollTarget(itemParam);
     setHighlight(itemParam);
   }, [itemParam, items, model.rows, view, api]);
@@ -156,7 +164,9 @@ export function ItemsSection() {
               onOpen={(itemId, pass) => {
                 // The cell's own pass opens: that item as that pass produced it.
                 api.replaceView({ ...view, view: 'cards', page: 1 }, { item: itemId, pass: String(pass) });
-                setExpanded((prev) => new Set(prev).add(itemId));
+                named.current = itemId;
+                openNow.current = new Set([itemId]);
+                setExpanded(openNow.current);
               }}
             />
           ) : (

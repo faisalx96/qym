@@ -53,10 +53,10 @@ test('a full deep link restores metric, filters, search, sort, page and the open
   await expect(
     page.locator('[data-part="items-toolbar"]').getByRole('button', { name: /Score, high to low/ }),
   ).toBeVisible();
-  // the item: on its page, expanded, scrolled into view
+  // the item: on its page, open in the pane (its row is the current row), scrolled into view
   const row = page.locator('[data-testid="item-row"][data-item-id="cmp-040"]');
   await expect(row).toBeVisible();
-  await expect(row.getByRole('button', { expanded: true }).first()).toBeVisible();
+  await expect(row.locator('[data-part="item-head"]')).toHaveAttribute('aria-current', 'true');
   await expect(itemDetail(page, 'cmp-040')).toBeVisible();
   // the page param follows the item (score_desc moves cmp-040 off page 2); the rest of the link is kept
   expect(urlParams(page).get('item')).toBe('cmp-040');
@@ -72,7 +72,9 @@ test('a full deep link restores metric, filters, search, sort, page and the open
   expect(urlParams(page).get('item')).toBe('cmp-040');
 });
 
-test("?item= lands on the item's page, expands it and scrolls it into view once", async ({ page }) => {
+test("?item= lands on the item's page, opens it in the pane and scrolls its row into view once", async ({
+  page,
+}) => {
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c], { page: '2', item: 'cmp-040' }));
   await waitLoaded(page);
@@ -129,5 +131,5 @@ test('an out-of-range page and an unknown item id do not break the page', async 
   await page.goto(compareUrl([base, a, b, c], { page: '99', item: 'does-not-exist' }));
   await waitLoaded(page);
   await expect(page.getByTestId('item-row')).not.toHaveCount(0);
-  await expect(page.getByTestId('item-detail')).toHaveCount(0);
+  await expect(page.getByTestId('item-pane')).toHaveCount(0);
 });

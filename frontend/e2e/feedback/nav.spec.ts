@@ -8,7 +8,9 @@ test.beforeAll(async ({ request }) => {
   await configureAgent(request);
 });
 
-test('QE-1 to QE-3: Feedback is the third global entry, 32 px high, active on every feedback page', async ({ page }) => {
+test('QE-1 to QE-3: Feedback is the third global entry, 32 px high, active on every feedback page', async ({
+  page,
+}) => {
   const expected = { 1440: 175, 1024: 175, 390: 39 } as const;
   for (const w of WIDTHS) {
     await setViewport(page, w);
@@ -16,7 +18,9 @@ test('QE-1 to QE-3: Feedback is the third global entry, 32 px high, active on ev
     const entry = page.locator('[data-nav="feedback"]');
     await expect(entry).toBeVisible();
     const global = page.getByRole('navigation', { name: /Global|Main/i }).first();
-    const ids = await page.locator('[data-nav]').evaluateAll((els) => els.map((e) => e.getAttribute('data-nav')));
+    const ids = await page
+      .locator('[data-nav]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-nav')));
     expect(ids.slice(0, 3)).toEqual(['projects', 'docs', 'feedback']);
     await expect(entry).toHaveAttribute('aria-current', 'page');
     const b = await box(entry);

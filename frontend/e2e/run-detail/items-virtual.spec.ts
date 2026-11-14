@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   axeSeriousViolations,
   describeViolations,
+  itemPane,
   itemsCount,
   openRun,
   seedClassic,
@@ -31,7 +32,7 @@ test('a 500-row page mounts only the visible window and keeps the full height', 
   await bigPage(page);
   await expect(rows(page).first()).toBeVisible();
   expect(await rows(page).count()).toBeLessThan(60);
-  const grid = page.getByRole('treegrid', { name: 'Items' });
+  const grid = page.getByRole('grid', { name: 'Items' });
   await expect(grid).toHaveAttribute('aria-rowcount', '501');
   const height = await grid.evaluate((el) => el.getBoundingClientRect().height);
   expect(height).toBeGreaterThan(500 * 40);
@@ -42,7 +43,7 @@ test('scrolling brings later rows in and unmounts the first ones', async ({ page
   await expect(rows(page).first()).toBeVisible();
   await page.evaluate(() => {
     const host = document.getElementById('shell-content')!;
-    const grid = document.querySelector('[role=treegrid][aria-label=Items]')!;
+    const grid = document.querySelector('[role=grid][aria-label=Items]')!;
     host.scrollTop += grid.getBoundingClientRect().top - host.getBoundingClientRect().top + 400 * 52;
   });
   await expect(page.locator('tbody tr[data-item-id="item-0400"]')).toHaveCount(1);
@@ -50,11 +51,13 @@ test('scrolling brings later rows in and unmounts the first ones', async ({ page
   expect(await rows(page).count()).toBeLessThan(80);
 });
 
-test('?item= far down the page lands on its row, expanded', async ({ page }) => {
+test('?item= far down the page lands on its row and opens the item in the pane', async ({ page }) => {
   await bigPage(page, 'item=item-0450');
-  const card = page.locator('[data-testid=item-card][data-item-id="item-0450"]');
-  await expect(card).toBeVisible();
-  await expect(card).toBeInViewport();
+  await expect(itemPane(page, 'item-0450')).toBeVisible();
+  // the row of the open item is mounted, in view, and it is the current row of the table
+  const row = page.locator('tbody tr[data-item-id="item-0450"]');
+  await expect(row).toBeInViewport();
+  await expect(row).toHaveAttribute('aria-current', 'true');
 });
 
 test('ArrowDown walks the rows across the window edge and End reaches the last row', async ({ page }) => {
@@ -68,8 +71,9 @@ test('ArrowDown walks the rows across the window edge and End reaches the last r
   await expect
     .poll(() => page.evaluate(() => document.activeElement?.getAttribute('data-item-id')))
     .toBe('item-0500');
-  await page.keyboard.press('ArrowRight');
-  await expect(page.locator('[data-testid=item-card][data-item-id="item-0500"]')).toBeVisible();
+  // Enter on the focused row opens its item in the pane (no row expands, so ArrowRight opens nothing)
+  await page.keyboard.press('Enter');
+  await expect(itemPane(page, 'item-0500')).toBeVisible();
 });
 
 test('390px: items are cards and a card opens its item', async ({ page }) => {
@@ -77,10 +81,15 @@ test('390px: items are cards and a card opens its item', async ({ page }) => {
   await openRun(page, s.slug, big);
   const card = page.locator('li[data-item-id]').first();
   await expect(card).toBeVisible();
-  await card.getByRole('button', { name: /^Open item #/ }).click();
-  await expect(page.locator('[data-testid=item-card]').first()).toBeVisible();
-  const violations = await axeSeriousViolations(page, '#shell-content');
-  expect(violations, describeViolations(violations)).toEqual([]);
+  // the card itself opens the item (it has no "Open item" button); at this width the pane takes the full page width
+  await card.click();
+  await expect(itemPane(page)).toBeVisible();
+  await expect(itemPane(page).getByRole('table', { name: 'Metrics' })).toBeVisible();
+  // the pane is in a portal on the body: scan it and the page
+  for (const context of ['[data-testid=item-pane]', '#shell-content']) {
+    const violations = await axeSeriousViolations(page, context);
+    expect(violations, `${context}\n${describeViolations(violations)}`).toEqual([]);
+  }
 });
 
 test('metric names stay visible under the sticky bars after scrolling 20 screens (1440, sidebar open)', async ({
@@ -90,12 +99,12 @@ test('metric names stay visible under the sticky bars after scrolling 20 screens
   await expect(rows(page).first()).toBeVisible();
   await page.evaluate(() => {
     const host = document.getElementById('shell-content')!;
-    const grid = document.querySelector('[role=treegrid][aria-label=Items]')!;
+    const grid = document.querySelector('[role=grid][aria-label=Items]')!;
     const r = grid.getBoundingClientRect();
     host.scrollTop += r.top - host.getBoundingClientRect().top + Math.min(20 * 900, r.height - 800);
   });
   const head = page
-    .getByRole('treegrid', { name: 'Items' })
+    .getByRole('grid', { name: 'Items' })
     .getByRole('columnheader', { name: 'quality', exact: true });
   await expect(head).toBeInViewport();
   const covered = await head.evaluate((el) => {

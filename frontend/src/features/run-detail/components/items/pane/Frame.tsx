@@ -487,11 +487,8 @@ function PaneItem({
   const ui = useItemsUi();
   const { api, payload } = useRunPage();
 
-  // ---- one item at a time: a new row replaces the open one
-  const { expanded, toggleExpanded, details, requestScroll } = ui;
-  useEffect(() => {
-    for (const other of expanded) if (other !== row.item_id) toggleExpanded(other, false);
-  }, [expanded, row.item_id, toggleExpanded]);
+  // one item is open at a time: `toggleExpanded` replaces the open item (ItemsSection)
+  const { toggleExpanded, details, requestScroll } = ui;
 
   // ---- the pass in view belongs to one item: a new item opens on its own first failed pass
   const [pick, setPick] = useState<{ id: string; pass: number } | null>(null);
@@ -514,11 +511,10 @@ function PaneItem({
         api.setItemParam(target.item_id);
         return;
       }
-      toggleExpanded(row.item_id, false);
       toggleExpanded(target.item_id, true);
       requestScroll(target.item_id);
     },
-    [rows, row.item_id, next, prev, toggleExpanded, requestScroll, api],
+    [rows, next, prev, toggleExpanded, requestScroll, api],
   );
   const close = useCallback(() => {
     toggleExpanded(row.item_id, false);

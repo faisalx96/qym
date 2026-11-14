@@ -1,17 +1,23 @@
 /**
- * Redesign 2, items: expanded item on an Arabic multi-pass JSON run. The detail stays inside the visible scroller
- * (detailFit), labels sit next to their text, JSON becomes per-key sections, an opened metric reads at the full width,
- * pass columns carry an accent and a labelled Trace button.
+ * Redesign 2, items, on the item pane: an item of an Arabic multi-pass JSON run. The pane stays inside the viewport
+ * with one pass in view, the block titles stay at the left of right-to-left text, a JSON value is a list of fields with
+ * a raw JSON switch for its own block, and the details of a metric open under the metric over the full table width.
+ *
+ * The old item view expanded in the table (three pass columns side by side, one collapsed row for each JSON key, a
+ * metric matrix with a detail panel). Those tests are deleted or written again for the pane.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   axeSeriousViolations,
   describeViolations,
+  itemPane,
+  metricTable,
+  openMetric,
   openRun,
+  paneBlock,
   seedArabic,
   seedClassic,
   seedProject,
-  showItems,
   type Seeded,
 } from './support';
 
@@ -25,168 +31,158 @@ test.beforeAll(async () => {
   classic = await seedClassic(s, { items: 24 });
 });
 
-async function expandFirst(page: Page) {
-  await showItems(page);
-  const grid = page.getByRole('treegrid', { name: /Items|by item/ });
-  if (await grid.count()) await grid.locator('tr[data-row-key]').first().click();
-  else await page.getByRole('button', { name: /^Open item #1$/ }).click();
-  await expect(page.getByTestId('item-card').first()).toBeVisible();
+/**
+ * Open the item of row n (0-based) in the pane. A row is a `tr[data-item-id]`; below 640 px the rows are cards
+ * (`li[data-item-id]`), so the locator takes both.
+ */
+async function openNth(page: Page, n: number): Promise<Locator> {
+  await page.locator('#run-items').scrollIntoViewIfNeeded();
+  const rows = page.locator('#run-items [data-item-id]');
+  await expect(rows.first()).toBeVisible();
+  await rows.nth(n).click();
+  const pane = itemPane(page);
+  await expect(pane).toBeVisible();
+  // the blocks arrive after the item texts load
+  await expect(paneBlock(pane, 'input')).toBeVisible();
+  return pane;
+}
+
+/** The key of a field in a JSON value of the pane (a `<dt>`; a table or a group adds a count after the name). */
+function fieldKey(block: Locator, key: string): Locator {
+  return block.locator('dt[data-part="key"]').filter({ hasText: new RegExp(`^${key}`) });
 }
 
 for (const width of [1280, 1440]) {
-  test(`the expanded Arabic item stays inside the visible table at ${width}px`, async ({ page }) => {
+  test(`the pane of an Arabic multi-pass item stays inside the viewport at ${width}px, one pass in view`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width, height: 900 });
     await openRun(page, s.slug, arabic);
-    await expandFirst(page);
-    const hold = page.locator('[data-detail-hold]').first();
-    await expect(hold).toBeVisible();
-    const box = await hold.boundingBox();
-    const scroller = await page.locator('[data-dt-scroller]').first().boundingBox();
-    expect(box && scroller).toBeTruthy();
-    expect(box!.x + box!.width).toBeLessThanOrEqual(scroller!.x + scroller!.width + 1);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
-    // all three pass columns are inside the viewport
-    const cols = page.locator('section[aria-label=Output] [data-pass]');
-    await expect(cols).toHaveCount(3);
-    for (let i = 0; i < 3; i++) {
-      const c = await cols.nth(i).boundingBox();
-      expect(c!.x + c!.width).toBeLessThanOrEqual(width);
-    }
+    const pane = await openNth(page, 0);
+    const box = (await pane.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    // one output at a time: the pass switch of the Output block picks the pass (3 passes in this run)
+    const outputs = pane.getByRole('region', { name: /^Output of pass \d+$/ });
+    await expect(outputs).toHaveCount(1);
+    const out = (await outputs.boundingBox())!;
+    expect(out.x + out.width).toBeLessThanOrEqual(width);
+    const passes = pane.getByRole('radiogroup', { name: 'Pass in view' });
+    await expect(passes.getByRole('radio')).toHaveCount(3);
+    // each pass has its own score column in the Metrics table, and the table is inside the pane
+    await expect(metricTable(pane).getByRole('button', { name: /^Pass \d/ })).toHaveCount(3);
+    const table = (await metricTable(pane).boundingBox())!;
+    expect(table.x + table.width).toBeLessThanOrEqual(box.x + box.width + 1);
   });
 }
 
-test('an Arabic input keeps its label at the left, next to its text (round 3 P5: labels never move)', async ({
-  page,
-}) => {
+test('an Arabic input keeps its block title at the left; the text reads right to left', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRun(page, s.slug, arabic);
   // item 2 has a plain Arabic prose input
-  await showItems(page);
-  await page
-    .getByRole('treegrid', { name: /Items|by item/ })
-    .locator('tr[data-row-key]')
-    .nth(1)
-    .click();
-  const row = page.getByTestId('item-card').getByRole('group', { name: 'Input', exact: true }).first();
-  await expect(row).toHaveAttribute('dir', 'ltr');
-  const label = await row.locator('> div').first().boundingBox();
-  const text = await row.locator('[data-kind="input"]').boundingBox();
-  // the label is at the left and the text begins within a column gap of it; the text measure is capped (76ch)
-  expect(label!.x).toBeLessThan(text!.x);
-  expect(text!.x - (label!.x + label!.width)).toBeLessThan(40);
-  expect(text!.width).toBeLessThan(760);
-  await expect(row.locator('[dir="rtl"]').first()).toBeVisible();
+  const pane = await openNth(page, 1);
+  const input = paneBlock(pane, 'input');
+  await expect(input).not.toHaveAttribute('dir', 'rtl');
+  const block = (await input.boundingBox())!;
+  const title = (await input.getByRole('heading', { name: 'Input', exact: true }).boundingBox())!;
+  // the title is at the start (left) edge of the block: it does not move to the far edge for right-to-left text
+  expect(title.x - block.x).toBeLessThan(40);
+  const text = input.locator('[data-rtl]').first();
+  await expect(text).toBeVisible();
+  expect(await text.evaluate((e) => getComputedStyle(e).direction)).toBe('rtl');
+  const t = (await text.boundingBox())!;
+  expect(t.x + t.width).toBeLessThanOrEqual(block.x + block.width + 1);
 });
 
-test('an RTL value keeps its key header left-anchored in the same column as the LTR keys', async ({
-  page,
-}) => {
+test('an RTL value keeps its key at the left, in the same column as the LTR keys', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRun(page, s.slug, arabic);
-  await expandFirst(page);
-  const expected = page.getByTestId('item-card').getByRole('group', { name: 'Expected', exact: true });
-  const answer = expected.getByRole('group', { name: 'answer', exact: true });
-  const topics = expected.getByRole('group', { name: 'topics', exact: true });
+  // item 1 has a JSON Expected: { answer: Arabic text, topics: ['ml', 'dl'] }
+  const pane = await openNth(page, 0);
+  const expected = paneBlock(pane, 'expected');
+  const answer = fieldKey(expected, 'answer');
+  const topics = fieldKey(expected, 'topics');
   await expect(answer).toBeVisible();
-  const a = await answer.getByRole('button').first().boundingBox();
-  const t = await topics.getByRole('button').first().boundingBox();
-  // same left edge for the RTL value's key and the LTR key: the header never jumps to the far edge
-  expect(Math.abs(a!.x - t!.x)).toBeLessThan(4);
-  // the section itself is not mirrored; only the value text runs right to left inside its column
+  const a = (await answer.boundingBox())!;
+  const t = (await topics.boundingBox())!;
+  // same left edge for the key of the RTL value and the LTR key: right-to-left text takes its own line
+  expect(Math.abs(a.x - t.x)).toBeLessThan(4);
+  // the key itself is not mirrored; only the value text runs right to left
   await expect(answer).not.toHaveAttribute('dir', 'rtl');
-  const text = answer.locator('[dir="rtl"]').first();
-  await expect(text).toBeVisible();
+  await expect(expected.locator('[data-rtl], [dir="rtl"]').first()).toBeVisible();
 });
 
-test('JSON output is one collapsed row per key, with a Raw view (round 3 P5)', async ({ page }) => {
+test('a JSON output is a list of fields; the raw JSON switch changes its own block only', async ({
+  page,
+}) => {
   await openRun(page, s.slug, arabic, 'pass=1');
-  await expandFirst(page);
-  const out = page.getByRole('region', { name: 'Output', exact: true }).first();
+  const pane = await openNth(page, 0);
+  const out = paneBlock(pane, 'output');
   for (const key of ['answer', 'reasoning', 'citations', 'confidence', 'sql', 'followups'])
-    await expect(out.getByRole('button', { name: new RegExp(`^${key}`) })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
-  // open a key
-  const answer = out.getByRole('button', { name: /^answer/ });
-  await answer.click();
-  await expect(answer).toHaveAttribute('aria-expanded', 'true');
-  // Raw keeps the whole payload
-  await out.getByRole('radio', { name: 'Raw' }).click({ force: true });
-  await expect(out).toContainText('"citations"');
-  await out.getByRole('radio', { name: 'Sections' }).click({ force: true });
+    await expect(fieldKey(out, key)).toBeVisible();
+  // the raw view keeps the whole payload
+  await out.getByRole('button', { name: 'Show the raw JSON', exact: true }).click();
+  await expect(out.locator('pre[data-lang="json"]')).toContainText('"citations"');
+  await expect(out.locator('dt[data-part="key"]')).toHaveCount(0);
+  // Expected is a JSON value too: its block keeps the fields
+  const expected = paneBlock(pane, 'expected');
+  await expect(fieldKey(expected, 'answer')).toBeVisible();
+  await expect(expected.locator('pre[data-lang="json"]')).toHaveCount(0);
+  await out.getByRole('button', { name: 'Show the fields', exact: true }).click();
+  await expect(fieldKey(out, 'answer')).toBeVisible();
 });
 
-test('an opened metric reads at the full width under the matrix, one at a time (round 3 P5)', async ({
+test('the details of a metric are closed at first and open under the metric over the full table width', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRun(page, s.slug, classic);
-  await expandFirst(page);
-  const card = page.getByTestId('item-card');
-  const grid = card.getByRole('grid', { name: 'Metrics by pass' });
-  const matrix = await grid.boundingBox();
-  const cells = grid.getByRole('button', { name: /^[a-z_]+, pass \d+:/ });
-  expect(await cells.count()).toBeGreaterThan(0);
-  await cells.first().click();
-  const panel = card.locator('section[data-metric]').first();
-  await expect(panel).toBeVisible();
-  const p = await panel.boundingBox();
-  expect(p!.width).toBeGreaterThan(matrix!.width * 0.9);
-  if ((await cells.count()) > 1) {
-    await cells.nth(1).click();
-    await expect(card.getByTestId('metric-detail')).toHaveCount(1);
-  }
-});
-
-test('pass columns carry no colour of their own, a labelled Trace button and no fills (round 3 P5)', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await openRun(page, s.slug, arabic);
-  await expandFirst(page);
-  const cols = page.locator('section[aria-label=Output] [data-pass]');
-  const colors = await cols.evaluateAll((els) =>
-    els.slice(1).map((e) => getComputedStyle(e).borderInlineStartColor),
-  );
-  // only the hairline separates columns: every separator has the same colour
-  expect(new Set(colors).size).toBe(1);
-  const bg = await cols.first().evaluate((e) => getComputedStyle(e).backgroundColor);
-  expect(bg).toBe('rgba(0, 0, 0, 0)');
-  await expect(cols.first().getByRole('button', { name: 'Open trace of pass 1' })).toContainText('Trace');
+  const pane = await openNth(page, 0);
+  const table = metricTable(pane);
+  await expect(table).toBeVisible();
+  // closed until the reader opens them
+  await expect(pane.locator('[data-part="metric-details"]')).toHaveCount(0);
+  const grid = (await table.boundingBox())!;
+  // item 1: the quality judge recorded judge_model and confidence beside the reason
+  const details = await openMetric(pane, 'quality');
+  const d = (await details.boundingBox())!;
+  expect(d.width).toBeGreaterThan(grid.width * 0.9);
+  await expect(details.locator('dt[data-part="key"]').filter({ hasText: /^confidence$/ })).toBeVisible();
+  // a second metric opens beside the first one: each metric has its own switch
+  await openMetric(pane, 'hallucination');
+  await expect(pane.locator('[data-part="metric-details"]')).toHaveCount(2);
+  // the header switch closes them all
+  await table.getByRole('button', { name: 'Hide the details of every metric', exact: true }).click();
+  await expect(pane.locator('[data-part="metric-details"]')).toHaveCount(0);
 });
 
 for (const width of [390, 1280]) {
-  test(`expanded Arabic item has no serious axe violations at ${width}px`, async ({ page }) => {
+  test(`the pane of an Arabic item has no serious axe violations at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await openRun(page, s.slug, arabic);
-    await expandFirst(page);
-    const violations = await axeSeriousViolations(page, '[data-testid=item-card]');
+    await openNth(page, 0);
+    const violations = await axeSeriousViolations(page, '[data-testid=item-pane]');
     const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
     expect(bad, describeViolations(bad)).toEqual([]);
   });
 }
 
 for (const width of [1280, 1440]) {
-  test(`an RTL value in a key row keeps its key left-anchored at ${width}px; the text measure is capped`, async ({
+  test(`an RTL value in an output field keeps its key at the left at ${width}px; the text stays in the block`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 });
     await openRun(page, s.slug, arabic, 'pass=1');
-    await expandFirst(page);
-    const out = page.getByRole('region', { name: 'Output', exact: true }).first();
-    const answer = out.getByRole('button', { name: /^answer/ });
-    await answer.click();
-    const row = answer.locator('xpath=ancestor::div[contains(@data-depth, "0")][1]');
-    const box = (await row.boundingBox())!;
-    // the key is a data-part="key" span with the direction of its own script (round 7, D2)
-    const key = (await answer.locator('[data-part=key]').first().boundingBox())!;
+    const pane = await openNth(page, 0);
+    const out = paneBlock(pane, 'output');
+    const box = (await out.boundingBox())!;
+    const key = (await fieldKey(out, 'answer').boundingBox())!;
     expect(key.x - box.x).toBeLessThan(40);
-    // the value text reads right to left inside its own block, capped at the reading measure
-    const text = row.locator('[dir="rtl"]').first();
+    // the value text reads right to left inside its own block
+    const text = out.locator('[data-rtl]').first();
     await expect(text).toBeVisible();
     const t = (await text.boundingBox())!;
-    expect(t.width).toBeLessThan(760);
     expect(t.x + t.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    expect(t.x).toBeGreaterThanOrEqual(box.x - 1);
   });
 }

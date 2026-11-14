@@ -22,7 +22,9 @@ test('a manager changes the role and it persists; the options are the two copy l
   await expect(select).toContainText('Anyone in the project');
   expect((await select.boundingBox())!.height).toBeCloseTo(24, 0);
   await expect(
-    page.getByText('Latency-sensitive runs make other jobs on this environment wait. Project managers and admins can change this.'),
+    page.getByText(
+      'Latency-sensitive runs make other jobs on this environment wait. Project managers and admins can change this.',
+    ),
   ).toBeVisible();
   await select.click();
   await expect(page.getByRole('option')).toHaveText(['Anyone in the project', 'Project managers only']);

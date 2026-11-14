@@ -1,7 +1,7 @@
 /** Scenario 12: a 20-run comparison must not scroll the page sideways; the run key and every row's chips show all 20 runs. */
 import { expect, test } from '@playwright/test';
 import { uniqueSlug } from '../helpers';
-import { client, compareUrl, waitLoaded } from './support';
+import { client, compareUrl, itemPane, paneOutputs, waitLoaded } from './support';
 import { noSidewaysScroll, part } from './r8';
 import { createApiKey, ensureProject, seedCompareRun } from './seed';
 
@@ -50,7 +50,9 @@ for (const width of [1440, 1024]) {
     // the run key above the list names every run with its letter A..T; each row has one score chip per run
     const key = page.locator('[data-part="run-key"] [data-part="run-letter"]');
     expect(await key.allTextContents()).toEqual(LETTERS);
-    await expect(page.getByTestId('item-row').first().locator('[data-part="item-score-chip"]')).toHaveCount(20);
+    await expect(page.getByTestId('item-row').first().locator('[data-part="item-score-chip"]')).toHaveCount(
+      20,
+    );
     // the Averages table scrolls inside its own region, never the page
     const [sw, cw] = await part(page, 'averages-table').evaluate((el) => [el.scrollWidth, el.clientWidth]);
     expect(sw).toBeGreaterThan(cw);
@@ -59,15 +61,21 @@ for (const width of [1440, 1024]) {
   });
 }
 
-test('20 runs: an expanded item shows 8 cards and "Show all 20 runs" reveals the rest without horizontal page scroll', async ({
+test('20 runs: the item pane shows the output of every run, a chip for each, without horizontal page scroll', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(compareUrl(ids));
   await waitLoaded(page);
   await page.locator('[data-part="item-head"]').first().click();
-  await expect(page.getByTestId('output-card')).toHaveCount(8);
-  await page.getByRole('button', { name: 'Show 12 more' }).click();
-  await expect(page.getByTestId('output-card')).toHaveCount(20);
+  const pane = itemPane(page);
+  // above three runs the pane has one on/off chip for each output; all are on at the start (no "Show N more")
+  await expect(paneOutputs(pane)).toHaveCount(20);
+  const chips = pane.getByRole('group', { name: 'Outputs' }).getByRole('button');
+  await expect(chips).toHaveCount(20);
+  await chips.nth(19).click();
+  await expect(paneOutputs(pane)).toHaveCount(19);
+  await pane.getByRole('button', { name: 'All', exact: true }).click();
+  await expect(paneOutputs(pane)).toHaveCount(20);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
 });

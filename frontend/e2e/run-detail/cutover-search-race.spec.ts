@@ -4,7 +4,7 @@
  * The first search request is held until the second search has been answered.
  */
 import { test, expect, type Route } from '@playwright/test';
-import { itemsCount, openRun, params, seedClassic, seedProject, type Seeded } from './support';
+import { itemRow, itemsCount, openRun, params, seedClassic, seedProject, type Seeded } from './support';
 
 let s: Seeded;
 let classic: string;
@@ -31,12 +31,12 @@ test('the run page keeps the newest search results when an older request answers
   await search.fill('Question 18:');
   await expect.poll(() => params(page).get('q')).toBe('Question 18:');
   await expect.poll(async () => itemsCount(page)).toEqual([1, 240]);
-  await expect(page.getByRole('button', { name: 'Open item #18', exact: true })).toBeVisible();
+  await expect(itemRow(page, 18)).toBeVisible();
   // Now the stale answer arrives.
   await held[0]!();
   await page.waitForTimeout(500);
   expect(await itemsCount(page)).toEqual([1, 240]);
-  await expect(page.getByRole('button', { name: 'Open item #18', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open item #17', exact: true })).toHaveCount(0);
+  await expect(itemRow(page, 18)).toBeVisible();
+  await expect(itemRow(page, 17)).toHaveCount(0);
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });

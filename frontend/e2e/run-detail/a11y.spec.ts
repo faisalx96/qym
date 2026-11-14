@@ -6,6 +6,8 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   axeSeriousViolations,
   describeViolations,
+  itemPane,
+  metricTable,
   openRootCause,
   openRun,
   seedArabic,
@@ -58,10 +60,13 @@ test.describe('axe', () => {
     }
   });
 
-  test('an opened item with metric strip and root-cause card', async ({ page }) => {
+  test('an opened item: the item pane with the metrics table and the root-cause cards', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0003');
-    await expect(page.locator('[data-testid=item-card][data-item-id="item-0003"]')).toBeVisible();
-    await audit(page, 'opened item', '#shell-content');
+    const pane = itemPane(page, 'item-0003');
+    await expect(metricTable(pane)).toBeVisible();
+    await openRootCause(pane);
+    // the pane is in a portal on the body, not in #shell-content
+    await audit(page, 'opened item', '[data-testid=item-pane]');
   });
 
   test('filter rules popover', async ({ page }) => {
@@ -96,9 +101,9 @@ test.describe('axe', () => {
 
   test('issue form', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0003');
-    const card = page.locator('[data-testid=item-card][data-item-id="item-0003"]');
-    await openRootCause(card);
-    await card.getByRole('button', { name: 'Add issue' }).first().click();
+    const pane = itemPane(page, 'item-0003');
+    await openRootCause(pane);
+    await pane.getByRole('button', { name: 'Add issue' }).first().click();
     await expect(page.getByTestId('issue-form')).toBeVisible();
     await audit(page, 'issue form', '[data-testid=issue-form]');
   });
@@ -131,17 +136,18 @@ test.describe('axe', () => {
     }
   }
 
-  // Round 3 P5-16: expanded items (Arabic and the 10-pass x 24-metric item) have no serious violation at both widths.
+  // Round 3 P5-16: the item pane of big items (Arabic and the 10-pass x 24-metric item) have no serious violation at both widths.
   for (const [label, item] of [
     ['Arabic 10-pass item', 'big-002'],
     ['wide repeat item', 'big-001'],
   ] as const) {
     for (const width of [1440, 390]) {
-      test(`${label} expanded has no serious violation at ${width}px`, async ({ page }) => {
+      test(`the item pane of the ${label} has no serious violation at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
         await openRun(page, s.slug, wide, `item=${item}`);
-        await expect(page.locator(`[data-testid=item-card][data-item-id="${item}"]`)).toBeVisible();
-        const violations = await axeSeriousViolations(page, '#shell-content');
+        await expect(metricTable(itemPane(page, item))).toBeVisible();
+        // the pane is in a portal on the body, not in #shell-content
+        const violations = await axeSeriousViolations(page, '[data-testid=item-pane]');
         const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
         expect(bad, describeViolations(bad)).toEqual([]);
       });

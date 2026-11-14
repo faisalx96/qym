@@ -34,20 +34,26 @@ test('QE-174, QE-177, QE-182: CSV and JSON downloads carry the current filter', 
   await setViewport(page, 1440);
   await gotoApp(page, '/feedback?priority=high');
   await expect(tableOf(page)).toBeVisible();
-  const [csv] = await Promise.all([page.waitForEvent('download'), (async () => {
-    await page.getByTestId('export-menu').click();
-    await page.getByRole('menuitem', { name: 'CSV' }).click();
-  })()]);
+  const [csv] = await Promise.all([
+    page.waitForEvent('download'),
+    (async () => {
+      await page.getByTestId('export-menu').click();
+      await page.getByRole('menuitem', { name: 'CSV' }).click();
+    })(),
+  ]);
   expect(csv.suggestedFilename()).toMatch(/^feedback-\d{4}-\d{2}-\d{2}\.csv$/);
   const text = fs.readFileSync((await csv.path())!, 'utf8');
   expect(text.charCodeAt(0)).toBe(0xfeff);
   expect(text.replace(/^\uFEFF/, '').split('\r\n')[0]).toBe(
     'id,title,subject,project,target_kind,target_id,priority,complexity,status,submitter,created_at,confirmed_at,duplicate_of,conflicts,summary,description,business_need,justification,agent_priority,agent_complexity',
   );
-  const [json] = await Promise.all([page.waitForEvent('download'), (async () => {
-    await page.getByTestId('export-menu').click();
-    await page.getByRole('menuitem', { name: 'JSON', exact: true }).click();
-  })()]);
+  const [json] = await Promise.all([
+    page.waitForEvent('download'),
+    (async () => {
+      await page.getByTestId('export-menu').click();
+      await page.getByRole('menuitem', { name: 'JSON', exact: true }).click();
+    })(),
+  ]);
   const rows = JSON.parse(fs.readFileSync((await json.path())!, 'utf8')) as { priority: string }[];
   expect(rows.length).toBeGreaterThan(0);
   expect(new Set(rows.map((r) => r.priority))).toEqual(new Set(['high']));

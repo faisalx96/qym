@@ -1,7 +1,18 @@
 /** J2 + scenario 2: follow a RUNNING run; plus the incomplete-ingest warning banner. */
 import { test, expect } from '@playwright/test';
 import { EventStream, completeRun, createRun, pushLiveItem, seedRunningRun } from './seed';
-import { client, itemButton, itemsCount, openRun, scrollTop, seedProject, type Seeded } from './support';
+import {
+  client,
+  itemPane,
+  itemRow,
+  itemsCount,
+  metricRow,
+  openRun,
+  paneBlock,
+  scrollTop,
+  seedProject,
+  type Seeded,
+} from './support';
 
 let s: Seeded;
 
@@ -13,7 +24,7 @@ test.describe('live run (scenario 2, J2)', () => {
   // a RUNNING run with no events for 180 s is marked STOPPED: seed and finish inside each test
   test.setTimeout(75_000);
 
-  test('count and cards update in place, the expanded card and scroll survive, completion removes the indicator', async ({
+  test('count and cards update in place, the item pane and scroll survive, completion removes the indicator', async ({
     page,
   }) => {
     const { runId, stream, next } = await seedRunningRun(client, s.token, 30);
@@ -27,13 +38,13 @@ test.describe('live run (scenario 2, J2)', () => {
       .catch(() => undefined);
     expect(await itemsCount(page)).toEqual([30, 30]);
 
-    // expand a card and move the page, then ingest more items
-    await itemButton(page, 2).click();
-    const card = page.locator('[data-testid=item-card][data-item-id="live-002"]');
+    // open an item in the pane and move the page, then ingest more items
+    await itemRow(page, 2).click();
+    const card = itemPane(page, 'live-002');
     await expect(card).toBeVisible();
-    await expect(card.locator('tr[data-metric=quality]')).toBeVisible();
-    await expect(card.locator('[data-kind=output]')).toContainText('Live answer 2');
-    // let opening the card finish its own scroll-into-view, then move the page by hand
+    await expect(metricRow(card, 'quality')).toBeVisible();
+    await expect(paneBlock(card, 'output')).toContainText('Live answer 2');
+    // let the open step settle, then move the page by hand
     await page.waitForTimeout(1200);
     await page.evaluate(() => {
       const el = document.getElementById('shell-content');
@@ -54,9 +65,9 @@ test.describe('live run (scenario 2, J2)', () => {
     // ... and the metric card is rebuilt from the new rows
     await expect(page.locator('[data-testid=metric-card][data-metric=quality]')).toContainText('34 scored');
     expect(mean0).toContain('30 scored');
-    // the opened card is still open and the scroll did not move
+    // the pane is still open on the same item and the scroll did not move
     await expect(card).toBeVisible();
-    await expect(card.locator('[data-kind=output]')).toContainText('Live answer 2');
+    await expect(paneBlock(card, 'output')).toContainText('Live answer 2');
     expect(await scrollTop(page)).toBe(before);
 
     // finish: indicator disappears and the status flips

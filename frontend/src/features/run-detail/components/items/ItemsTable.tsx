@@ -293,6 +293,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         // so the table has no chevron column. The item in the pane is the current row: the focused-row tone and
         // aria-current, as the dataset items table (cv4 X7). The # column is the row's primary text (cv4 F4).
         onRowOpen={(it) => ui.toggleExpanded(it.row.item_id)}
+        rowOpenNow
         activeKey={openId}
         rowState={(it) => (rowStatus(ctx, it.row, selectedMetric).kind === 'error' ? 'error' : undefined)}
         rowProps={(it) => ({

@@ -163,7 +163,7 @@ test.describe('items table: sticky header', () => {
             ? filters.getBoundingClientRect().bottom
             : 0,
         );
-        const th = document.querySelector('[role=treegrid][aria-label=Items] thead th') as HTMLElement;
+        const th = document.querySelector('[role=grid][aria-label=Items] thead th') as HTMLElement;
         const table = th.closest('table') as HTMLElement;
         return table.hasAttribute('data-stuck') ? Math.abs(th.getBoundingClientRect().top - line) : 0;
       });

@@ -1,7 +1,7 @@
 /** Scenario 11: keyboard operation, visible focus, accessible names and an axe-core scan. */
 import { expect, test, type Page } from '@playwright/test';
 import { axeSeriousViolations } from '../shell/support';
-import { compareUrl, itemHead, seedScenario, waitLoaded } from './support';
+import { compareUrl, itemHead, itemPane, paneOutputs, seedScenario, waitLoaded } from './support';
 import type { CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -60,7 +60,9 @@ test('keyboard: Tab reaches the toolbar; Enter toggles Filters; Display popover 
   await expect(csv).toBeFocused();
 });
 
-test('item rows: visible keyboard focus ring; Enter expands and collapses', async ({ page }) => {
+test('item rows: visible keyboard focus ring; Enter opens the item pane and Enter on the row closes it', async ({
+  page,
+}) => {
   await open4(page);
   const rowBtn = itemHead(page, 'cmp-001');
   // focus by keyboard so :focus-visible applies
@@ -83,16 +85,22 @@ test('item rows: visible keyboard focus ring; Enter expands and collapses', asyn
   expect(hasOutline || hasShadow, `row focus indicator: ${JSON.stringify(ring)}`).toBe(true);
   expect(hasOutline, `row has no outline (computed ${JSON.stringify(ring)})`).toBe(true);
 
-  await expect(rowBtn).toHaveAttribute('aria-expanded', 'false');
+  // the row opens its item in the pane at the side: it is the current row (aria-current), it never has aria-expanded
+  await expect(rowBtn).not.toHaveAttribute('aria-current');
   await page.keyboard.press('Enter');
-  await expect(rowBtn).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByTestId('item-detail')).toBeVisible();
-  // collapsing right after the expand must not be undone when the ?item= URL catches up
+  await expect(rowBtn).toHaveAttribute('aria-current', 'true');
+  await expect(rowBtn).not.toHaveAttribute('aria-expanded');
+  const pane = itemPane(page);
+  await expect(pane).toBeVisible();
+  await expect(pane).toHaveAttribute('data-item-id', 'cmp-001');
+  // closing right after the open must not be undone when the ?item= URL catches up
   await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBe('cmp-001');
-  await expect(page.getByTestId('output-card')).toHaveCount(4); // bodies loaded
+  await expect(paneOutputs(pane)).toHaveCount(4); // bodies loaded
+  // the focus stays on the row: Enter on it closes the pane
+  await expect(rowBtn).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(rowBtn).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByTestId('item-detail')).toHaveCount(0);
+  await expect(rowBtn).not.toHaveAttribute('aria-current');
+  await expect(pane).toHaveCount(0);
 });
 
 test('every control has an accessible name; remove buttons say what they remove', async ({ page }) => {
@@ -134,6 +142,9 @@ test('every control has an accessible name; remove buttons say what they remove'
 
 const axeScan = async (page: Page) => {
   const v = await axeSeriousViolations(page, '[data-testid="compare-page"]');
+  // an open item pane is in a portal on the body, outside the page element: scan it too
+  if (await itemPane(page).count())
+    v.push(...(await axeSeriousViolations(page, '[data-testid="item-pane"]')));
   return v.map(
     (x) => `${x.id} (${x.impact}): ${x.help} x${x.nodes.length} e.g. ${x.nodes[0]?.target.join(' ')}`,
   );
@@ -144,10 +155,10 @@ test('axe: no serious or critical violations on the loaded Compare page', async 
   expect(await axeScan(page)).toEqual([]);
 });
 
-test('axe: no serious or critical violations with an expanded item', async ({ page }) => {
+test('axe: no serious or critical violations with an open item pane', async ({ page }) => {
   await open4(page);
   await itemHead(page, 'cmp-001').click();
-  await expect(page.getByTestId('output-card')).toHaveCount(4);
+  await expect(paneOutputs(itemPane(page))).toHaveCount(4);
   expect(await axeScan(page)).toEqual([]);
 });
 
@@ -158,22 +169,22 @@ test('axe: no serious or critical violations in the Sweep view', async ({ page }
   expect(await axeScan(page)).toEqual([]);
 });
 
-test('phone width: no horizontal page scroll, with and without an expanded item', async ({ page }) => {
+test('phone width: no horizontal page scroll, with and without an open item pane', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await open4(page);
   const width = () => page.evaluate(() => document.documentElement.scrollWidth);
   expect(await width()).toBeLessThanOrEqual(390);
   await itemHead(page, 'cmp-001').click();
-  await expect(page.getByTestId('output-card')).toHaveCount(4);
+  await expect(paneOutputs(itemPane(page))).toHaveCount(4);
   expect(await width()).toBeLessThanOrEqual(390);
 });
 
 test.describe('light theme', () => {
   test.use({ colorScheme: 'light' });
-  test('axe: no serious or critical violations with an expanded item', async ({ page }) => {
+  test('axe: no serious or critical violations with an open item pane', async ({ page }) => {
     await open4(page);
     await itemHead(page, 'cmp-001').click();
-    await expect(page.getByTestId('output-card')).toHaveCount(4);
+    await expect(paneOutputs(itemPane(page))).toHaveCount(4);
     expect(await axeScan(page)).toEqual([]);
   });
 });

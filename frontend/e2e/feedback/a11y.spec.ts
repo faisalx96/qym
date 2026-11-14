@@ -12,12 +12,20 @@ test.beforeAll(async ({ request }) => {
   test.setTimeout(180_000);
   await configureAgent(request);
   seedFeedback(1);
-  const mk = async (message: string) => ((await (await request.post('/v1/feedback', { data: { subject: 'platform', message } })).json()) as { id: string }).id;
+  const mk = async (message: string) =>
+    (
+      (await (await request.post('/v1/feedback', { data: { subject: 'platform', message } })).json()) as {
+        id: string;
+      }
+    ).id;
   draftId = await mk('A draft for the axe pass.');
   await request.post(`/v1/feedback/${draftId}/turn`, { headers: { Accept: 'application/json' } });
   proposalId = await mk('A draft with a proposal for the axe pass.');
   await request.post(`/v1/feedback/${proposalId}/turn`, { headers: { Accept: 'application/json' } });
-  await request.post(`/v1/feedback/${proposalId}/messages`, { data: { content: 'Five analysts, weekly. A PDF is enough.' }, headers: { Accept: 'application/json' } });
+  await request.post(`/v1/feedback/${proposalId}/messages`, {
+    data: { content: 'Five analysts, weekly. A PDF is enough.' },
+    headers: { Accept: 'application/json' },
+  });
 });
 
 async function axe(page: Page, label: string) {
@@ -46,14 +54,23 @@ for (const w of [1440, 390]) {
   }
 }
 
-test('QE-142, QE-72: the proposal card heading takes focus and tab order follows the card', async ({ page }) => {
+test('QE-142, QE-72: the proposal card heading takes focus and tab order follows the card', async ({
+  page,
+}) => {
   await setViewport(page, 1440);
   await gotoApp(page, `/feedback/${proposalId}`);
   const card = page.getByTestId('proposal');
   await expect(card).toBeVisible();
   const order = await card.evaluate((el) => {
-    const fields = Array.from(el.querySelectorAll<HTMLElement>('input, textarea, button')).filter((e) => !(e as HTMLButtonElement).disabled);
-    return fields.map((f) => f.getAttribute('aria-label') || f.textContent?.trim() || f.closest('label')?.textContent || f.id).slice(0, 12);
+    const fields = Array.from(el.querySelectorAll<HTMLElement>('input, textarea, button')).filter(
+      (e) => !(e as HTMLButtonElement).disabled,
+    );
+    return fields
+      .map(
+        (f) =>
+          f.getAttribute('aria-label') || f.textContent?.trim() || f.closest('label')?.textContent || f.id,
+      )
+      .slice(0, 12);
   });
   expect(order.length).toBeGreaterThan(4);
 });

@@ -1,7 +1,7 @@
 /** The item-by-item list (round 8): a card per item, one self-describing chip per run, a run key above, expansion, widths, axe. */
 import { expect, test, type Page } from '@playwright/test';
 import { axeSeriousViolations } from '../shell/support';
-import { compareUrl, itemDetail, itemHead, seedScenario, waitLoaded } from './support';
+import { compareUrl, itemDetail, itemHead, paneOutputs, seedScenario, waitLoaded } from './support';
 import type { CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -50,17 +50,23 @@ test('K3 (C029): the baseline chip is neutral, a run chip shows its change; a ta
   await expect(chip).toContainText('task error');
 });
 
-test('expanding a row opens its detail inside the card; the head reports aria-expanded', async ({ page }) => {
+test('a click on a row opens its item in the pane at the side; the head is the current row; a second click closes it', async ({
+  page,
+}) => {
   await open4(page);
   const head = itemHead(page, 'cmp-001');
-  await expect(head).toHaveAttribute('aria-expanded', 'false');
+  await expect(head).not.toHaveAttribute('aria-current');
   await head.click();
-  await expect(head).toHaveAttribute('aria-expanded', 'true');
+  // nothing expands in place: the row never has aria-expanded
+  await expect(head).toHaveAttribute('aria-current', 'true');
+  await expect(head).not.toHaveAttribute('aria-expanded');
   const detail = itemDetail(page, 'cmp-001');
   await expect(detail).toBeVisible();
-  await expect(detail.getByTestId('output-card')).toHaveCount(4);
-  await head.click();
+  await expect(paneOutputs(detail)).toHaveCount(4);
+  // the pane covers most of the row: click the start of the row, which stays in view
+  await head.click({ position: { x: 24, y: 16 } });
   await expect(detail).toHaveCount(0);
+  await expect(head).not.toHaveAttribute('aria-current');
 });
 
 for (const width of [390, 1280, 1920]) {
@@ -68,7 +74,7 @@ for (const width of [390, 1280, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await open4(page);
     await itemHead(page, 'cmp-001').click();
-    await expect(itemDetail(page, 'cmp-001').getByTestId('output-card')).toHaveCount(4);
+    await expect(paneOutputs(itemDetail(page, 'cmp-001'))).toHaveCount(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await expect(page.getByTestId('item-row').first()).toBeVisible();
     const box = await itemDetail(page, 'cmp-001').boundingBox();
@@ -76,11 +82,13 @@ for (const width of [390, 1280, 1920]) {
   });
 }
 
-test('axe: the list with an expanded row has no serious violations', async ({ page }) => {
+test('axe: the list with an open item and the item pane have no serious violations', async ({ page }) => {
   await open4(page);
   await itemHead(page, 'cmp-001').click();
-  await expect(itemDetail(page, 'cmp-001').getByTestId('output-card')).toHaveCount(4);
+  await expect(paneOutputs(itemDetail(page, 'cmp-001'))).toHaveCount(4);
   expect(await axeSeriousViolations(page, '[data-testid="compare-page"]')).toEqual([]);
+  // the pane is in a portal on the body, outside the page element: scan it too
+  expect(await axeSeriousViolations(page, '[data-testid="item-pane"]')).toEqual([]);
 });
 
 test('the run key is part of the list head: it scrolls with the page and is never covered (1440)', async ({
