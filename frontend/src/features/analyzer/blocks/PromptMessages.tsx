@@ -76,7 +76,7 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
 export type OutlineForm = 'rail' | 'menu';
 
 /** The width of the messages area (the pane less its padding) from which the outline is a rail (a pane of about 720px). */
-export const RAIL_FROM = 680;
+export const RAIL_FROM = 600;
 /** Space between the sticky outline (or the scroller's top) and a section that a jump brings into view. */
 const JUMP_GAP = 8;
 

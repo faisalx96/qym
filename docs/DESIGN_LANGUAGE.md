@@ -685,7 +685,7 @@ preselected.
   on but finds nothing for this target says "none".
   **The outline (cv5 N, owner 2026-11-14: "this navbar sucks!!"):** one tree with two levels under each message:
   message (System, User) → section → part of the item data (`model/outline.ts`). It is never wrapped rows of words.
-  *Wide pane* (messages area 680px and more, a pane of about 720px): a rail at the start of the pane body, sticky, its
+  *Wide pane* (messages area 600px and more, so the default pane on a 2048px window shows it): a rail at the start of the pane body, sticky, its
   own scroll when taller than the pane, `clamp(196px, 27%, 212px)` wide (one line for "Reference documents  not sent"),
   the document takes the rest. The message name is the switch-group label (`--font-sm`, 600, muted, sentence case)
   above the rows, not a row. The sections are a list of buttons on one 1px `--border-subtle` track: a section
