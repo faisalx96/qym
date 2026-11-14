@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from 'react';
 import { Button, Icon, Switch, Text } from '@/ui';
-import { leafPaths, metadataKey, nodeLeaves, pathsToTree } from '../model/mapping';
+import { CONTENT_SWITCHES, peekKeys, type SwitchId } from '../model/contents';
+import { leafPaths, metadataTree, nodeLeaves } from '../model/mapping';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import { PathTree } from './PathTree';
 import s from './fields.module.css';
@@ -18,65 +19,83 @@ function SwitchGroup({ label, children, row }: { label: string; children: ReactN
   );
 }
 
-/** The three context switches (project rules, project documents, trace evidence). */
-function ContextSwitches({ ws }: { ws: RunWorkspace }) {
+/** Hover and focus of a switch mark its section in the prompt pane (cv5 Q4); null when it leaves. */
+export type PeekHandler = (keys: string[] | null) => void;
+
+/** One Prompt contents switch, named as its section of the prompt. */
+function ContentToggle({ id, ws, onPeek }: { id: SwitchId; ws: RunWorkspace; onPeek?: PeekHandler }) {
+  const sw = CONTENT_SWITCHES.find((c) => c.id === id)!;
   const { settings, update } = ws;
+  const peek = (active: boolean) => onPeek?.(active ? peekKeys(id, settings) : null);
+  return (
+    <Switch
+      isSelected={sw.on(settings)}
+      onChange={(v) => update(SET[id](v))}
+      onHoverChange={peek}
+      onFocusChange={peek}
+    >
+      {sw.label}
+    </Switch>
+  );
+}
+
+const SET: Record<SwitchId, (v: boolean) => Partial<RunWorkspace['settings']>> = {
+  scores: (v) => ({ includeScores: v }),
+  metricMeta: (v) => ({ includeMetricMetadata: v }),
+  itemMeta: (v) => ({ includeMetadata: v }),
+  trace: (v) => ({ useTrace: v }),
+  rules: (v) => ({ useRules: v }),
+  docs: (v) => ({ useDocuments: v }),
+};
+
+/** The context switches (analysis rules, reference documents, trace evidence). */
+function ContextSwitches({ ws, onPeek }: { ws: RunWorkspace; onPeek?: PeekHandler }) {
   return (
     <>
-      <Switch isSelected={settings.useRules} onChange={(v) => update({ useRules: v })}>
-        Rules
-      </Switch>
-      <Switch isSelected={settings.useDocuments} onChange={(v) => update({ useDocuments: v })}>
-        Project documents
-      </Switch>
-      <Switch isSelected={settings.useTrace} onChange={(v) => update({ useTrace: v })}>
-        Trace evidence
-      </Switch>
+      <ContentToggle id="rules" ws={ws} onPeek={onPeek} />
+      <ContentToggle id="docs" ws={ws} onPeek={onPeek} />
+      <ContentToggle id="trace" ws={ws} onPeek={onPeek} />
     </>
   );
 }
 
 /**
- * What goes into the prompt (cv4 D7): item data (Error, Scores, Metric metadata and its field picker) and the
- * Context (Rules, Project documents, Trace evidence). Every switch reads and writes `ws.settings`, the one owner of
- * this state, so the page, the prompt preview drawer and the character count always agree.
+ * What goes into the prompt (cv4 D7, cv5 Q4): item data (Metric result, Metric metadata and its key picker, Item
+ * metadata) and the Context (Analysis rules, Reference documents, Trace evidence). Each switch sends one section of
+ * the prompt and has that section's name; hover or focus marks the section in the pane. Every switch reads and writes
+ * `ws.settings`, the one owner of this state, so the page, the prompt preview and the character count always agree.
+ * There is no Error switch: a target is never an item with a task error, so the switch could change nothing.
  */
-export function PromptContents({ ws }: { ws: RunWorkspace }) {
-  const { settings, update, trees } = ws;
+export function PromptContents({ ws, onPeek }: { ws: RunWorkspace; onPeek?: PeekHandler }) {
+  const { settings, trees } = ws;
   const [metaOpen, setMetaOpen] = useState(false);
   return (
     <div className={s.stack}>
       <div className={s.contentsGrid}>
         <SwitchGroup label="Item data">
-          <Switch isSelected={settings.includeError} onChange={(v) => update({ includeError: v })}>
-            Error
-          </Switch>
-          <Switch isSelected={settings.includeScores} onChange={(v) => update({ includeScores: v })}>
-            Scores
-          </Switch>
+          <ContentToggle id="scores" ws={ws} onPeek={onPeek} />
           <span className={s.switchWith}>
-            <Switch isSelected={settings.includeMetadata} onChange={(v) => update({ includeMetadata: v })}>
-              Metric metadata
-            </Switch>
+            <ContentToggle id="metricMeta" ws={ws} onPeek={onPeek} />
             {trees.metadata.length ? (
               <Button
                 size="sm"
-                isDisabled={!settings.includeMetadata}
+                isDisabled={!settings.includeMetricMetadata}
                 aria-expanded={metaOpen}
                 onPress={() => setMetaOpen((o) => !o)}
                 iconEnd={<Icon name={metaOpen ? 'collapse' : 'expand'} size={12} />}
               >
                 {/* cv5 Y6: a trigger reads "Label · value", never a value in parentheses */}
-                {settings.metaDeselected.length ? 'Choose metadata · Custom' : 'Choose metadata · All'}
+                {settings.metaDeselected.length ? 'Keys · Custom' : 'Keys · All'}
               </Button>
             ) : null}
           </span>
+          <ContentToggle id="itemMeta" ws={ws} onPeek={onPeek} />
         </SwitchGroup>
         <SwitchGroup label="Context">
-          <ContextSwitches ws={ws} />
+          <ContextSwitches ws={ws} onPeek={onPeek} />
         </SwitchGroup>
       </div>
-      {metaOpen && settings.includeMetadata ? <MetadataPicker ws={ws} /> : null}
+      {metaOpen && settings.includeMetricMetadata ? <MetadataPicker ws={ws} /> : null}
     </div>
   );
 }
@@ -90,33 +109,33 @@ export function ContextRow({ ws }: { ws: RunWorkspace }) {
   );
 }
 
+/**
+ * The keys of the target metric's metadata (cv5 Q4): one tree, the union over the analysed metrics; each target sends
+ * the chosen keys of its own metric, never another metric's metadata.
+ */
 function MetadataPicker({ ws }: { ws: RunWorkspace }) {
   const { settings, update, trees } = ws;
   const off = new Set(settings.metaDeselected);
+  const tree = metadataTree(trees.metadata, settings.selectedMetrics);
+  const selected = new Set(leafPaths(tree).filter((l) => !off.has(l)));
   return (
-    <div className={s.picker} role="group" aria-label="Metric metadata fields">
-      {trees.metadata.map((group) => {
-        const tree = pathsToTree(group.paths);
-        const selected = new Set(leafPaths(tree).filter((l) => !off.has(metadataKey(group.metric, l))));
-        return (
-          <div key={group.metric} className={s.metaGroup}>
-            <Text variant="md" weight={600} mono>
-              {group.metric}
-            </Text>
-            <PathTree
-              nodes={tree}
-              selected={selected}
-              onToggle={(node) => {
-                const leaves = nodeLeaves(node).map((l) => metadataKey(group.metric, l));
-                const allOn = leaves.every((k) => !off.has(k));
-                const next = new Set(off);
-                leaves.forEach((k) => (allOn ? next.add(k) : next.delete(k)));
-                update({ metaDeselected: [...next] });
-              }}
-            />
-          </div>
-        );
-      })}
+    <div className={s.picker} role="group" aria-label="Metric metadata keys">
+      <div className={s.metaGroup}>
+        <Text variant="sm" tone="muted">
+          Keys of the metadata of each target&rsquo;s own metric
+        </Text>
+        <PathTree
+          nodes={tree}
+          selected={selected}
+          onToggle={(node) => {
+            const leaves = nodeLeaves(node);
+            const allOn = leaves.every((k) => !off.has(k));
+            const next = new Set(off);
+            leaves.forEach((k) => (allOn ? next.add(k) : next.delete(k)));
+            update({ metaDeselected: [...next] });
+          }}
+        />
+      </div>
     </div>
   );
 }

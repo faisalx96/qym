@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CopyButton, Eyebrow, SegmentedControl } from '@/ui';
+import type { SectionNote } from '../model/contents';
 import type { LineChange } from '../model/promptDiff';
 import { outline, parsePrompt, type PromptDoc } from '../model/promptDoc';
 import { PromptDocument } from './PromptDocument';
@@ -61,6 +62,59 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
 
 const roleName = (role: string) => role.charAt(0).toUpperCase() + role.slice(1);
 
+/** The builder's order of the sections (`build_analysis_prompt`), to place a section that is not sent. */
+const ORDER = [
+  'ANALYSIS RULES',
+  'EVALUATION ITEM DATA',
+  'INPUT',
+  'EXPECTED OUTPUT',
+  'ACTUAL OUTPUT',
+  'ERROR',
+  'TRACE EVIDENCE',
+  'SELECTED METRIC RESULT',
+  'ITEM METADATA',
+  'SELECTED METRIC METADATA',
+  'SELECTED METADATA',
+  'RESPONSE FORMAT',
+  'REFERENCE DOCUMENTS',
+];
+
+const NO_NOTES: SectionNote[] = [];
+
+interface Entry {
+  id: string;
+  label: string;
+  key: string | null;
+  depth: 0 | 1;
+  path: string[];
+  /** cv5 Q4: "off" = its switch is off (not sent); "empty" = on, but this target has none. */
+  state?: 'off' | 'empty';
+}
+
+/** The outline entries of a message, with the switched-off and empty sections at their place (cv5 Q4). */
+function withNotes(list: Entry[], notes: SectionNote[]): Entry[] {
+  const present = new Set(list.map((e) => e.key));
+  const out = list.map((e) => {
+    const note = notes.find((n) => n.key === e.key || (n.key === 'SELECTED METRIC METADATA' && e.key === 'SELECTED METADATA'));
+    return note?.state === 'off' ? { ...e, state: 'off' as const } : e;
+  });
+  // rank: the builder's order; a section of a custom template keeps its place after the one before it
+  let last = -1;
+  const ranked = out.map((e) => {
+    const r = e.key ? ORDER.indexOf(e.key) : -1;
+    last = r >= 0 ? r : e.id === 'top' ? -1 : last + 0.001;
+    return { e, rank: last };
+  });
+  for (const n of notes) {
+    if (present.has(n.key) || (n.key === 'SELECTED METRIC METADATA' && present.has('SELECTED METADATA'))) continue;
+    ranked.push({
+      e: { id: `note-${n.key}`, label: n.label, key: n.key, depth: n.parent ? 1 : 0, path: [], state: n.state },
+      rank: ORDER.indexOf(n.key),
+    });
+  }
+  return ranked.sort((a, b) => a.rank - b.rank).map((r) => r.e);
+}
+
 /**
  * The prompt messages, Rendered (a document with an outline to jump through) or Raw (the exact text, mono). The Copy
  * actions always copy the exact raw text. The change marks of the last settings change show in both views.
@@ -69,10 +123,16 @@ export function PromptMessages({
   messages,
   view,
   change,
+  peek = null,
+  notes = NO_NOTES,
 }: {
   messages: Message[];
   view: PromptView;
   change: LineChange | null;
+  /** cv5 Q4: the section keys of a hovered or focused Prompt contents switch (marked, and brought into view). */
+  peek?: string[] | null;
+  /** cv5 Q4: the sections of the switches, to say "not sent" or "none" in the outline. */
+  notes?: SectionNote[];
 }) {
   const base = useId().replace(/:/g, '');
   const docs = useMemo<PromptDoc[]>(() => messages.map((m) => parsePrompt(m.content)), [messages]);
@@ -86,14 +146,32 @@ export function PromptMessages({
       docs.map((doc, i) => {
         const list = outline(doc);
         const lead = doc.blocks.find((b) => b.kind !== 'blank');
-        const first =
-          lead && lead.kind !== 'section'
-            ? [{ id: 'top', label: i === 0 ? 'Instructions' : 'Message', key: null, depth: 0 as const, path: [] }]
+        const first: Entry[] =
+          // the system message's opening prose; the user message's closing line needs no entry
+          i === 0 && lead && lead.kind !== 'section'
+            ? [{ id: 'top', label: 'Instructions', key: null, depth: 0, path: [] }]
             : [];
-        return [...first, ...list.map((e, n) => ({ ...e, path: pathOf(list, n) }))];
+        const own = notes.filter((n) => n.message === Math.min(i, 1));
+        return withNotes([...first, ...list.map((e, n) => ({ ...e, path: pathOf(list, n) }))], own);
       }),
-    [docs],
+    [docs, notes],
   );
+  const peekSet = useMemo(() => (peek ? new Set(peek) : null), [peek]);
+
+  // cv5 Q4: a peeked section that is out of view comes into view (no animation)
+  useEffect(() => {
+    if (!peekSet || view !== 'rendered') return;
+    const root = scrollParent(nav.current);
+    if (!root) return;
+    const el = [...root.querySelectorAll<HTMLElement>('section[data-key]')].find((n) =>
+      peekSet.has(n.dataset.key ?? ''),
+    );
+    if (!el) return;
+    const box = root.getBoundingClientRect();
+    const top = box.top + (nav.current?.offsetHeight ?? 0) + 8;
+    const r = el.getBoundingClientRect();
+    if (r.top < top || r.top > box.bottom - 48) root.scrollTop += r.top - top;
+  }, [peekSet, view]);
 
   const go = (i: number, id: string, path: string[]) => {
     setJump((j) => ({ ids: new Set(path), n: (j?.n ?? 0) + 1 }));
@@ -122,6 +200,7 @@ export function PromptMessages({
       let current: string | null = null;
       entries.forEach((list, i) =>
         list.forEach((e) => {
+          if (e.id.startsWith('note-')) return;
           const el = document.getElementById(`${prefix(i)}${e.id}`);
           if (el && el.getBoundingClientRect().top <= line) current = `${i}:${e.id}`;
         }),
@@ -148,18 +227,33 @@ export function PromptMessages({
           {entries.map((list, i) => (
             <div key={i} className={s.outlineGroup}>
               <span className={s.outlineRole}>{roleName(messages[i]?.role ?? '')}</span>
-              {list.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  className={s.outlineLink}
-                  data-depth={e.depth}
-                  aria-current={active === `${i}:${e.id}` ? 'location' : undefined}
-                  onClick={() => go(i, e.id, e.path)}
-                >
-                  {e.label}
-                </button>
-              ))}
+              {list.map((e) =>
+                e.state && e.id.startsWith('note-') ? (
+                  // a section that is not in this prompt: said, not silently missing (cv5 Q4)
+                  <span
+                    key={e.id}
+                    className={s.outlineNote}
+                    data-depth={e.depth}
+                    data-peek={e.key && peekSet?.has(e.key) ? '' : undefined}
+                  >
+                    {e.label}
+                    <span className={s.outlineState}>{e.state === 'off' ? 'not sent' : 'none'}</span>
+                  </span>
+                ) : (
+                  <button
+                    key={e.id}
+                    type="button"
+                    className={s.outlineLink}
+                    data-depth={e.depth}
+                    data-peek={e.key && peekSet?.has(e.key) ? '' : undefined}
+                    aria-current={active === `${i}:${e.id}` ? 'location' : undefined}
+                    onClick={() => go(i, e.id, e.path)}
+                  >
+                    {e.label}
+                    {e.state === 'off' ? <span className={s.outlineState}>not sent</span> : null}
+                  </button>
+                ),
+              )}
             </div>
           ))}
         </nav>
@@ -171,7 +265,14 @@ export function PromptMessages({
             <CopyButton text={m.content} label={`Copy ${m.role} message`} />
           </header>
           {view === 'rendered' ? (
-            <PromptDocument doc={docs[i]!} added={change?.added[i]} change={change} jump={jump} prefix={prefix(i)} />
+            <PromptDocument
+              doc={docs[i]!}
+              added={change?.added[i]}
+              change={change}
+              jump={jump}
+              prefix={prefix(i)}
+              peek={peekSet}
+            />
           ) : (
             <RawBody content={m.content} added={change?.added[i]} />
           )}

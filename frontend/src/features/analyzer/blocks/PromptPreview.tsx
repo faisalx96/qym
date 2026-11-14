@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button, CopyButton, EmptyState, ErrorState, Skeleton, Tag, Text } from '@/ui';
 import { PromptMessages, PromptViewSwitch, usePromptView } from './PromptMessages';
+import { sectionNotes } from '../model/contents';
 import { fieldsSent } from '../model/settings';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import s from './blocks.module.css';
@@ -14,6 +15,7 @@ import { APP_LOCALE } from '@/lib/dates';
 export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxHeight?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = usePromptView();
+  const notes = useMemo(() => sectionNotes(ws.settings), [ws.settings]);
   const { preview, focus } = ws;
   const fields = fieldsSent(ws.cfg);
   return (
@@ -66,7 +68,7 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
             role="region"
             aria-label="Prompt messages"
           >
-            <PromptMessages messages={preview.messages} view={view} change={null} />
+            <PromptMessages messages={preview.messages} view={view} change={null} notes={notes} />
           </div>
           <div className={s.previewFoot}>
             <Text variant="sm" tone="muted" as="span">

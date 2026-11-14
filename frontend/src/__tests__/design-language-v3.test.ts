@@ -2356,6 +2356,22 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(doc).toContain('The rendered\n  view hides and changes no character');
   });
 
+  it('Q4: each Prompt contents switch is named as its prompt section and marks it; no Error switch', () => {
+    const contents = src('features/analyzer/blocks/PromptContents.tsx');
+    expect(contents).toContain('onHoverChange={peek}');
+    expect(contents).toContain('onFocusChange={peek}');
+    expect(contents).not.toMatch(/>\s*Error\s*</);
+    const map = src('features/analyzer/model/contents.ts');
+    expect(map).toContain("label: 'Metric metadata'");
+    expect(map).toContain("key: 'SELECTED METRIC METADATA'");
+    expect(src('features/analyzer/model/mapping.ts')).toContain('`metric_metadata.${path}`');
+    const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
+    expect(css).toContain('.section[data-peek]');
+    expect(css).toContain('.outlineNote');
+    expect(src('features/analyzer/blocks/PromptMessages.tsx')).toContain("'not sent'");
+    expect(doc).toContain('A\n  switched-off section is never silently missing');
+  });
+
   it('Q3: a splitter sets the pane width, remembered, the same on every tab', () => {
     const shell = src('features/analyzer/RunShell.tsx');
     expect(shell).toContain('<PaneResizer');

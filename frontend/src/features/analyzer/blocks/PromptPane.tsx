@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, CopyButton, EmptyState, ErrorState, Skeleton, Tag, Text } from '@/ui';
 import { APP_LOCALE } from '@/lib/dates';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import { changedLines, type LineChange } from '../model/promptDiff';
 import { PromptMessages, PromptViewSwitch, usePromptView } from './PromptMessages';
+import { sectionNotes } from '../model/contents';
 import s from './pane.module.css';
 
 /** Space between the pane and the bottom of the viewport (the action rail's button line). */
@@ -101,11 +102,21 @@ function useChanges(key: string | null, messages: Messages['messages'], pending:
  * setting on the left; while an update is on its way the text stays in place, slightly dimmed, and the head says
  * "Updating". The lines that the last change added are marked, and the head counts what it added and removed.
  */
-export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | null }) {
+export function PromptPane({
+  ws,
+  note,
+  peek = null,
+}: {
+  ws: RunWorkspace;
+  note?: string | null;
+  /** cv5 Q4: the section keys of a hovered or focused Prompt contents switch. */
+  peek?: string[] | null;
+}) {
   const ref = useFitHeight();
   const scroller = useRef<HTMLDivElement>(null);
   const { preview } = ws;
   const [view, setView] = usePromptView();
+  const notes = useMemo(() => sectionNotes(ws.settings), [ws.settings]);
   const change = useChanges(ws.focusKey, preview.messages, preview.pending);
   const firstAdded = change?.added.findIndex((set) => set.size > 0) ?? -1;
 
@@ -184,7 +195,13 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
         ) : preview.messages.length === 0 ? (
           <Skeleton kind="lines" rows={12} label="Building prompt preview" />
         ) : (
-          <PromptMessages messages={preview.messages} view={view} change={change} />
+          <PromptMessages
+            messages={preview.messages}
+            view={view}
+            change={change}
+            peek={peek}
+            notes={notes}
+          />
         )}
       </div>
     </aside>

@@ -420,3 +420,31 @@
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
+
+/* cv5 Q4: the section of a hovered or focused Prompt contents switch: an accent edge around it, no motion */
+.section[data-peek] {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+.outlineLink[data-peek],
+.outlineNote[data-peek] {
+  color: var(--accent-primary);
+}
+
+/* a section that is not in this prompt: its name, then "not sent" or "none", quiet */
+.outlineNote {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.outlineNote[data-depth='0'] {
+  font-weight: 600;
+}
+
+.outlineState {
+  margin-inline-start: var(--space-xs);
+  font-weight: 450;
+  color: var(--text-muted);
+}

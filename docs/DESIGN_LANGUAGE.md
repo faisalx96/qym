@@ -661,6 +661,16 @@ preselected.
   (muted), and a unit test checks that the page text equals the raw text. Change marks work in both views: an added
   line is marked inside its section, and a closed section that holds one opens. Text that matches no known structure
   is clean paragraphs; a parser failure is plain text, never an error.
+  **Prompt contents (cv5 Q4, owner: "there is a big bug to which thing these map to"):** one switch sends one section
+  of the prompt and has that section's name, the name the pane's outline uses: Item data = Metric result (SELECTED
+  METRIC RESULT), Metric metadata with its "Keys · All / Custom" picker (the target metric's own metadata: inside the
+  metric result for all keys, its own SELECTED METRIC METADATA block for chosen keys; the keys are the union over the
+  analysed metrics and each target reads its own metric's keys, never another metric's), Item metadata (ITEM
+  METADATA); Context = Analysis rules, Reference documents, Trace evidence. There is no Error switch: a target is never
+  an item with a task error, so it could change nothing. Hover or focus of a switch marks its section in the pane (a
+  1px accent outline at `--space-xs` offset, brought into view, no motion) and its outline entry in the accent. A
+  switched-off section is never silently missing: the outline keeps its entry with a muted "not sent"; a switch that is
+  on but finds nothing for this target says "none".
   **Rule versions (cv5 L2, L3, Z5):** the Rules tab's versions are a selectable `Timeline`, newest first, with
   `revealActions` (the row menu) and `markAlign="start"`. Each version has an icon mark: draft `edit` (warning),
   production `star` (success), another released version `check` (neutral). A released version is read-only: the

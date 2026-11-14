@@ -16,9 +16,11 @@ interface DocState {
   jump: { ids: ReadonlySet<string>; n: number } | null;
   /** DOM id prefix of this message's sections. */
   prefix: string;
+  /** cv5 Q4: section keys to mark (the Prompt contents switch under the pointer or the focus). */
+  peek: ReadonlySet<string> | null;
 }
 
-const Ctx = createContext<DocState>({ added: undefined, change: null, jump: null, prefix: '' });
+const Ctx = createContext<DocState>({ added: undefined, change: null, jump: null, prefix: '', peek: null });
 
 const leading = (text: string) => text.length - text.trimStart().length;
 /** The line without its layout indent (the leading spaces that the structure already shows). */
@@ -95,6 +97,7 @@ function Collapsible({ section, level }: { section: Section; level: 1 | 2 }) {
       data-level={level}
       data-role={section.role}
       data-key={section.key ?? undefined}
+      data-peek={section.key && ctx.peek?.has(section.key) ? '' : undefined}
     >
       <Heading className={s.heading}>
         <button
@@ -320,15 +323,17 @@ export function PromptDocument({
   change,
   jump,
   prefix,
+  peek = null,
 }: {
   doc: PromptDoc;
   added?: ReadonlySet<number>;
   change: object | null;
   jump: DocState['jump'];
   prefix: string;
+  peek?: ReadonlySet<string> | null;
 }) {
   return (
-    <Ctx.Provider value={{ added, change, jump, prefix }}>
+    <Ctx.Provider value={{ added, change, jump, prefix, peek }}>
       <div className={s.doc} data-structured={doc.structured ? '' : undefined}>
         <Blocks blocks={doc.blocks} />
       </div>

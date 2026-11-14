@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { RunWorkspace } from '../../workspace/useRunWorkspace';
+import { defaultSettings } from '../../model/settings';
 import { PromptPane } from '../PromptPane';
 
 const KEY = 'sql-002\u0000result_similarity';
@@ -9,6 +10,7 @@ function fakeWs(messages: { role: string; content: string }[], pending: boolean)
   return {
     allKeys: [KEY],
     rowById: new Map([['sql-002', { metric_scores: { result_similarity: 0.66 } }]]),
+    settings: defaultSettings({ metrics: ['result_similarity'], maxIssues: 3, timeoutSeconds: 120 }),
     focusKey: KEY,
     focus: { itemId: 'sql-002', metric: 'result_similarity' },
     setFocusKey: vi.fn(),

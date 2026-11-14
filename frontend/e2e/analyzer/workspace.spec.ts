@@ -196,7 +196,7 @@ test.describe('prompt preview (4)', () => {
     const drawer = previewDrawer(page);
     await expect(drawer).toBeVisible();
     await expect(drawer.getByRole('region', { name: 'Prompt messages' })).toContainText('q 3');
-    await expect(drawer.getByRole('switch', { name: 'Rules' })).toBeVisible();
+    await expect(drawer.getByRole('switch', { name: 'Analysis rules' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(rail(page).getByRole('button', { name: /^Prompt preview · [\d,]+ chars$/ })).toBeVisible();
   });

@@ -24,7 +24,7 @@ describe('buildConfigPayload', () => {
     expect(cfg.custom_variable_mapping).toBeUndefined();
     expect(cfg.additional_instructions).toBeUndefined();
     expect(cfg.include_fields).toMatchObject({ input: true, error: true, trace: true });
-    expect(fieldsSent(cfg)).toContain('Trace');
+    expect(fieldsSent(cfg)).toContain('Trace evidence');
   });
 
   it('includes a custom field mapping and {var} mapping', () => {

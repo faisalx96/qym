@@ -99,7 +99,8 @@ const FIELD_KNOWN: { re: RegExp; key: string; label: string }[] = [
   { re: /^TRACE EVIDENCE:\s*$/, key: 'TRACE EVIDENCE', label: 'Trace evidence' },
   { re: /^SELECTED METRIC RESULT:\s*$/, key: 'SELECTED METRIC RESULT', label: 'Metric result' },
   { re: /^ITEM METADATA:\s*$/, key: 'ITEM METADATA', label: 'Item metadata' },
-  { re: /^SELECTED METADATA:\s*$/, key: 'SELECTED METADATA', label: 'Selected metadata' },
+  { re: /^SELECTED METRIC METADATA:\s*$/, key: 'SELECTED METRIC METADATA', label: 'Metric metadata' },
+  { re: /^SELECTED METADATA:\s*$/, key: 'SELECTED METADATA', label: 'Metric metadata' },
 ];
 
 /** Any other all-caps heading line of a custom template ("CONTEXT:", "OUTPUT RULES (strict):"). */
