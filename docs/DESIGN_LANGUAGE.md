@@ -433,6 +433,11 @@ preselected.
   the bar (cv5 K5). The analyzer model is a labelled bar `Select` with `showValue="always"` ("Analyzer model ·
   gpt-4o-mini"); with the prompt pane on screen the bar has no Prompt preview button.
 
+- **Slider** (`Slider`): a threshold control, accent fill, 14px thumb, the value in mono accent. It never spans a
+  section (cv5 Q5, owner: "this slider is too wide"): a stacked slider is capped at 360px, and an `inline` slider
+  (label, track, value on one control line) takes `trackWidth` for a fixed track (the auto-analysis "Max score" uses
+  280px, beside its switches on one line).
+
 - **Pagination** (`Pagination`): every paginated view uses it. Borderless
   rounded-square icon buttons for First, Previous, Next, Last around a direct
   page entry (cv4 F3: `--control-height-sm` 20px high, 22px wide, growing only with the digit count, a soft
@@ -486,7 +491,11 @@ preselected.
   Aria provides this; do not hand-roll). Destructive confirms start on Cancel.
   A closed drawer that stays mounted is `inert`. Never close a modal by toggling
   `display`. An information dialog is 440px for text and 760px for media; a full editor or a large value is `wide`
-  (1100px, cv4 X9). A dialog is as high as its content: an editor in it grows with its value from a minimum to a
+  (1100px, cv4 X9). A picker with a filter row and a table is `xl` (1200px, cv5 Q7, owner: "the modal needs more
+  space!"): the rule writer's Approved examples dialog puts its filters on one row with the labels inside the controls
+  (search, Source, Task, Dataset, Model, Run, Reviewer as bar triggers, then "Confidence [min] – [max] %" as one
+  compact range), the selection summary, Select all filtered, View selected and Choose prompt fields on the next line,
+  and the 12 rows of a page without an inner scroll; the confidence column is centred. A dialog is as high as its content: an editor in it grows with its value from a minimum to a
   maximum and then scrolls inside, so a 3-line value never opens a tall empty dialog (cv4 Y19). Drawer widths: 360px (sm) or 560px (md);
   trace drawers are wide with the heavy scrim.
 
@@ -578,7 +587,11 @@ preselected.
   and spell check off (cv4 A5). The single-line fields of one card share one field width (320px): a `Select` is not
   wider than the text field above it (cv4 Y20).
   **Create action (cv4 A2):** a table section creates its entity from one primary button at the end of its section
-  header; the button opens a dialog. No inline create form above a table.
+  header; the button opens a dialog. No inline create form above a table. The same for a list with an editor beside it
+  (cv5 Q6, owner: "why is add category there?"): Diagnosis categories ends its header row with "Add category" (a
+  one-field `FormDialog`), and the search box heads the list column at the list's width. A list whose toolbar spans
+  the list (the Rules draft: search, then "Add rule" at the list's end) keeps the action there; the Documents tab
+  creates from its drop zone.
   **One footer and two title recipes (C145, C235):** a card that saves settings ends with `SaveFooter` (pass `save` to
   `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "Saving"; nothing at rest, the
   `SaveFooter` default since cv4 X4), the 24px
@@ -637,6 +650,40 @@ preselected.
   text (Updating / N lines added · M removed / No change to the prompt) and Copy. Lines added by the last change get
   the accent at `--tint-soft` behind the text, with no motion. With the pane on screen a target row click shows that
   target in the pane (`DataTable activeKey`); the eye tile is only for the narrow layout (drawer).
+  **Pane target (cv5 Q1, owner 2026-11-14: "what's the point of this?"):** with the pane on screen there is no target
+  dropdown: the head names the target in one quiet `--font-sm` muted line, the ids and the score mono
+  ("sql-003 · result_similarity · 0.71"); the target row at the left stays the active row. The guidance tabs show the
+  same line and no "Change" control (the last row chosen, else the first target). The drawer keeps its target `Select`,
+  because the drawer covers the table.
+  **Rendered prompt (cv5 Q2, owner: "rendered and structured ... rather than some text dump"):** the head's second line
+  ends with a `SegmentedControl` Rendered | Raw (default Rendered, remembered per viewer in `localStorage
+  qym:prompt-view`, shared with the drawer). Raw is the exact text, mono; Copy always copies the exact raw text.
+  Rendered is a document: `model/promptDoc.ts` reads the markers of the platform's prompt builder
+  (`services/llm_analyzer.py`): the top-level blocks (ANALYSIS RULES, EVALUATION ITEM DATA, REFERENCE DOCUMENTS,
+  Respond ONLY ..., Additional Instructions, any all-caps heading line after a blank line), the item data parts (INPUT,
+  EXPECTED OUTPUT, ACTUAL OUTPUT, ERROR, TRACE EVIDENCE, SELECTED METRIC RESULT, ITEM METADATA, SELECTED METADATA), the
+  trace (Agent trace / Evaluation trace, "Step N — name", CALL / OUTPUT / THINKING), the response fields ("1. category -
+  ..."), lists with their "Description / Use when / Approved examples" facts (a definition grid), numbered rules,
+  documents, JSON and Markdown tables. A top-level heading is `--font-md` 650 primary with the Subsection's 3px accent
+  bar and a hairline under it (the one accent role); a part of the item data is the small tracked label (`--font-sm`
+  650 muted); the body is sans `--font-base` at `--field-measure`; JSON, code and item values sit in a `--bg-elevated`
+  well, JSON in the `--json-*` colours (`ui/JsonText`). Each heading toggles its section; a part or a document longer
+  than 80 lines starts closed and shows "N lines". A sticky outline at the top of the scroll region (role, then the
+  sections as `--font-sm` text links; the section in view in the accent) jumps to a section and opens it. The rendered
+  view hides and changes no character: a closed section is `hidden`, not removed, trailing colons and list markers stay
+  (muted), and a unit test checks that the page text equals the raw text. Change marks work in both views: an added
+  line is marked inside its section, and a closed section that holds one opens. Text that matches no known structure
+  is clean paragraphs; a parser failure is plain text, never an error.
+  **Prompt contents (cv5 Q4, owner: "there is a big bug to which thing these map to"):** one switch sends one section
+  of the prompt and has that section's name, the name the pane's outline uses: Item data = Metric result (SELECTED
+  METRIC RESULT), Metric metadata with its "Keys · All / Custom" picker (the target metric's own metadata: inside the
+  metric result for all keys, its own SELECTED METRIC METADATA block for chosen keys; the keys are the union over the
+  analysed metrics and each target reads its own metric's keys, never another metric's), Item metadata (ITEM
+  METADATA); Context = Analysis rules, Reference documents, Trace evidence. There is no Error switch: a target is never
+  an item with a task error, so it could change nothing. Hover or focus of a switch marks its section in the pane (a
+  1px accent outline at `--space-xs` offset, brought into view, no motion) and its outline entry in the accent. A
+  switched-off section is never silently missing: the outline keeps its entry with a muted "not sent"; a switch that is
+  on but finds nothing for this target says "none".
   **Rule versions (cv5 L2, L3, Z5):** the Rules tab's versions are a selectable `Timeline`, newest first, with
   `revealActions` (the row menu) and `markAlign="start"`. Each version has an icon mark: draft `edit` (warning),
   production `star` (success), another released version `check` (neutral). A released version is read-only: the
@@ -1327,7 +1374,12 @@ screen wider than the cap the free space is equal at both sides. A feature does 
 constrained page. Profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
 `fullWidth` with their own layout. Auto-analysis with a run open, viewport ≥ 1500 px, is one stable workspace with a
 side pane (cv5 K3, Z11): `fullWidth`, two columns on every tab, the tab content at `minmax(0,1fr)` and the prompt pane
-at `clamp(440px, 36%, 760px)`, with a `--space-lg` gap. The pane column belongs to the page shell, so a tab change never
+at 36% up to 760px, with a `--space-lg` gap. A splitter in the gap (cv5 Q3, owner: "a size slider between it and the
+main section") sets the pane width: `role="separator"`, pointer drag, Left / Right 16px (Shift 64px), Home / End to the
+limits, double click or Enter back to the default; the `ui/SplitPane` look (an accent line on hover, drag and focus),
+with a short `--border-strong` grip at rest, sticky with the pane and as tall as it. The pane keeps at least 440px and
+the tab content 600px (the grid clamps a remembered width). The width is the person's (`localStorage
+qym:analyzer-pane-width`) and one value for the four tabs; the shell owns it, so a tab change never moves the pane. The pane column belongs to the page shell, so a tab change never
 moves, remounts or scrolls the pane, and the header and the tabs never move. Categories, rules and documents are part
 of the prompt: a save on a guidance tab reloads the pane, which marks the change. On the Rules tab a draft adds one
 quiet line under the pane's target ("The prompt uses the production rules (vN). A draft changes it when you

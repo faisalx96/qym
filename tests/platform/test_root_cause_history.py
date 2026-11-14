@@ -6215,10 +6215,10 @@ def test_build_analysis_prompt_projects_nested_metric_metadata() -> None:
     system_content = next(
         message["content"] for message in messages if message["role"] == "system"
     )
-    assert "SELECTED METADATA:" in system_content
+    assert "SELECTED METRIC METADATA:" in system_content
     assert '"reason": "bad join"' in system_content
     assert '"missing": [' in system_content
-    selected_metadata = system_content.split("SELECTED METADATA:\n", 1)[1]
+    selected_metadata = system_content.split("SELECTED METRIC METADATA:\n", 1)[1]
     assert '"unused": true' not in selected_metadata
 
 
@@ -6264,7 +6264,7 @@ def test_build_analysis_prompt_projects_metric_metadata_by_metric_name() -> None
     assert '"reason": "bad join"' in system_content
     assert '"format": {' in system_content
     assert '"reason": "valid json"' in system_content
-    selected_metadata = system_content.split("SELECTED METADATA:\n", 1)[1]
+    selected_metadata = system_content.split("SELECTED METRIC METADATA:\n", 1)[1]
     assert '"missing": "city"' not in selected_metadata
 
 
@@ -6305,6 +6305,63 @@ def test_build_analysis_prompt_includes_only_selected_metric_metadata_by_default
     assert '"format": {' not in system_content
     assert '"reason": "bad join"' in system_content
     assert '"reason": "valid json"' not in system_content
+
+
+def _metadata_prompt(include_fields: dict, metadata_fields: list | None) -> str:
+    item = RunItem(
+        run_id="run-1",
+        item_id="item-1",
+        index=0,
+        input={"question": "q"},
+        output={"answer": "actual"},
+        item_metadata={"difficulty": "hard"},
+    )
+    score = RunItemScore(
+        run_id="run-1",
+        item_id="item-1",
+        metric_name="accuracy",
+        score_numeric=0.2,
+        meta={"judge": "gpt", "reason": "bad join"},
+    )
+    config: dict = {"include_fields": include_fields}
+    if metadata_fields is not None:
+        config["metadata_fields"] = metadata_fields
+    messages = build_analysis_prompt(
+        item, {"accuracy": score}, config=config, metric_name="accuracy"
+    )
+    return next(m["content"] for m in messages if m["role"] == "system")
+
+
+def test_metric_metadata_switch_is_not_the_item_metadata_switch() -> None:
+    """cv5 Q4: each Prompt contents switch removes its own block only."""
+    # metric metadata off: the metric result loses its metadata, the item metadata stays
+    off = _metadata_prompt({"metric_metadata": False}, None)
+    assert '"reason": "bad join"' not in off
+    assert "ITEM METADATA:" in off
+    assert "SELECTED METRIC RESULT:" in off
+    # item metadata off: the metric metadata stays
+    item_off = _metadata_prompt({"metadata": False, "metric_metadata": True}, None)
+    assert "ITEM METADATA:" not in item_off
+    assert '"reason": "bad join"' in item_off
+
+
+def test_selected_metric_metadata_does_not_need_the_item_metadata_switch() -> None:
+    prompt = _metadata_prompt(
+        {"metadata": False, "metric_metadata": True},
+        ["metric_metadata.judge", "metric_metadata.reason"],
+    )
+    assert "ITEM METADATA:" not in prompt
+    block = prompt.split("SELECTED METRIC METADATA:\n", 1)[1]
+    # every key chosen: the block is the whole metadata, and it is not dropped as a repeat
+    assert '"judge": "gpt"' in block
+    assert '"reason": "bad join"' in block
+    result = prompt.split("SELECTED METRIC RESULT:\n", 1)[1].split("\n\n", 1)[0]
+    assert "bad join" not in result
+
+
+def test_metric_metadata_keeps_the_old_coupling_without_its_own_key() -> None:
+    prompt = _metadata_prompt({"metadata": False}, ["metric_metadata.reason"])
+    assert "SELECTED METRIC METADATA:" not in prompt
 
 
 def test_task_root_cause_catalog_includes_defaults_and_task_history(

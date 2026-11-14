@@ -235,7 +235,7 @@ test.describe('Diagnosis (12)', () => {
     await expect(page.getByRole('tab', { name: /^Hallucination/ })).toBeVisible();
     await expect(page.getByRole('tab', { name: /^Hallucination/ })).not.toContainText('Needs examples');
     await page.getByRole('button', { name: 'Add category' }).click();
-    await page.getByRole('textbox', { name: 'New category name' }).fill('Brand Voice');
+    await page.getByRole('textbox', { name: /^Category name/ }).fill('Brand Voice');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('tab', { name: /^Brand Voice/ })).toBeVisible();
     await expect(page.locator('[data-save-footer]')).toContainText('Unsaved changes');
@@ -298,7 +298,7 @@ test.describe('Diagnosis (12)', () => {
       return route.continue();
     });
     await page.getByRole('button', { name: 'Add category' }).click();
-    await page.getByRole('textbox', { name: 'New category name' }).fill('Brand Voice');
+    await page.getByRole('textbox', { name: /^Category name/ }).fill('Brand Voice');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await page.getByRole('textbox', { name: /^Description/ }).fill('Tone and wording.');
     await page.getByRole('textbox', { name: /^Use when/ }).fill('Off-brand wording.');
@@ -319,7 +319,7 @@ test.describe('Diagnosis (12)', () => {
 
     // second conflict, then Reload latest discards the edits
     await page.getByRole('button', { name: 'Add category' }).click();
-    await page.getByRole('textbox', { name: 'New category name' }).fill('Tone Drift');
+    await page.getByRole('textbox', { name: /^Category name/ }).fill('Tone Drift');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await page.getByRole('textbox', { name: /^Description/ }).fill('Drifts in tone.');
     await page.getByRole('textbox', { name: /^Use when/ }).fill('The tone changes mid answer.');

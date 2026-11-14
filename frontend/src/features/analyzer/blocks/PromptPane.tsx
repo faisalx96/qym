@@ -1,21 +1,42 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Select, Skeleton, Tag, Text } from '@/ui';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Button, CopyButton, EmptyState, ErrorState, Skeleton, Tag, Text } from '@/ui';
 import { APP_LOCALE } from '@/lib/dates';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import { changedLines, type LineChange } from '../model/promptDiff';
+import { PromptMessages, PromptViewSwitch, usePromptView } from './PromptMessages';
+import { sectionNotes } from '../model/contents';
 import s from './pane.module.css';
 
 /** Space between the pane and the bottom of the viewport (the action rail's button line). */
 const PANE_BOTTOM_GAP = 12;
 const PANE_MIN_HEIGHT = 360;
 
-/** The options of the previewed-target select: "item · metric score" for each target in the list. */
-export function targetItems(ws: RunWorkspace) {
-  return ws.allKeys.map((k) => {
-    const [itemId = '', metric = ''] = k.split('\u0000');
-    const score = ws.rowById.get(itemId)?.metric_scores[metric];
-    return { key: k, label: `${itemId} · ${metric}${score != null ? ` ${score.toFixed(2)}` : ''}` };
-  });
+/**
+ * The target that the prompt is for, as one quiet line (cv5 Q1): item id, metric and score. A row click at the left
+ * chooses it (the row stays highlighted); the guidance tabs keep the last choice, else the first target.
+ */
+function TargetLine({ ws }: { ws: RunWorkspace }) {
+  const focus = ws.focus;
+  if (!focus)
+    return (
+      <Text variant="sm" tone="muted" as="p" className={s.target}>
+        No target
+      </Text>
+    );
+  const score = ws.rowById.get(focus.itemId)?.metric_scores[focus.metric];
+  return (
+    <Text variant="sm" tone="muted" as="p" className={s.target} data-testid="prompt-pane-target">
+      <span className={s.mono}>{focus.itemId}</span>
+      {' · '}
+      <span className={s.mono}>{focus.metric}</span>
+      {score != null ? (
+        <>
+          {' · '}
+          <span className={s.mono}>{score.toFixed(2)}</span>
+        </>
+      ) : null}
+    </Text>
+  );
 }
 
 /** The pane reaches from its top to the bottom of the viewport (as the dataset item pane, cv4 E7). */
@@ -75,37 +96,27 @@ function useChanges(key: string | null, messages: Messages['messages'], pending:
   return state.change;
 }
 
-function MessageBody({ content, added }: { content: string; added: ReadonlySet<number> | undefined }) {
-  if (!added?.size) {
-    return (
-      <pre className={s.body} dir="auto">
-        {content}
-      </pre>
-    );
-  }
-  return (
-    <pre className={s.body} dir="auto">
-      {content.split('\n').map((line, i) => (
-        <span key={i} className={s.line} data-added={added.has(i) ? '' : undefined}>
-          {line}
-          {'\n'}
-        </span>
-      ))}
-    </pre>
-  );
-}
-
 /**
  * The prompt preview as a fixed pane next to the settings (cv5 K3, owner: "the prompt is always open on the right
  * ... because I want to see what these impact"). Sticky under the page header with its own scroll. It follows every
  * setting on the left; while an update is on its way the text stays in place, slightly dimmed, and the head says
  * "Updating". The lines that the last change added are marked, and the head counts what it added and removed.
  */
-export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | null }) {
+export function PromptPane({
+  ws,
+  note,
+  peek = null,
+}: {
+  ws: RunWorkspace;
+  note?: string | null;
+  /** cv5 Q4: the section keys of a hovered or focused Prompt contents switch. */
+  peek?: string[] | null;
+}) {
   const ref = useFitHeight();
   const scroller = useRef<HTMLDivElement>(null);
   const { preview } = ws;
-  const items = targetItems(ws);
+  const [view, setView] = usePromptView();
+  const notes = useMemo(() => sectionNotes(ws.settings), [ws.settings]);
   const change = useChanges(ws.focusKey, preview.messages, preview.pending);
   const firstAdded = change?.added.findIndex((set) => set.size > 0) ?? -1;
 
@@ -113,7 +124,9 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
     const root = scroller.current;
     const line = root?.querySelector<HTMLElement>('[data-added]');
     if (!root || !line) return;
-    root.scrollTop += line.getBoundingClientRect().top - root.getBoundingClientRect().top - 48;
+    // below the sticky outline of the rendered view
+    const offset = (root.querySelector('nav')?.getBoundingClientRect().height ?? 0) + 48;
+    root.scrollTop += line.getBoundingClientRect().top - root.getBoundingClientRect().top - offset;
   };
 
   return (
@@ -145,22 +158,9 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
             />
           ) : null}
         </div>
-        {/* The label before the control, as "Metrics" before its chips; a target has no default, so no "changed" tint. */}
         <div className={s.targetRow}>
-          <Text variant="sm" weight={600} tone="muted" as="span" aria-hidden="true">
-            Target
-          </Text>
-          <Select
-            label="Previewed target"
-            hideLabel
-            items={items}
-            value={ws.focusKey}
-            onChange={(k) => k != null && ws.setFocusKey(String(k))}
-            isDisabled={items.length === 0}
-            placeholder="No targets"
-            searchable="auto"
-            width={320}
-          />
+          <TargetLine ws={ws} />
+          <PromptViewSwitch view={view} onView={setView} />
         </div>
         {/* cv5 Z11: an honest, quiet line when the open tab shows something the prompt does not use (a draft) */}
         {note ? (
@@ -195,15 +195,13 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
         ) : preview.messages.length === 0 ? (
           <Skeleton kind="lines" rows={12} label="Building prompt preview" />
         ) : (
-          preview.messages.map((m, i) => (
-            <article key={i} className={s.message}>
-              <header className={s.messageHead}>
-                <Eyebrow tone={m.role === 'system' ? 'accent' : 'muted'}>{m.role}</Eyebrow>
-                <CopyButton text={m.content} label={`Copy ${m.role} message`} />
-              </header>
-              <MessageBody content={m.content} added={change?.added[i]} />
-            </article>
-          ))
+          <PromptMessages
+            messages={preview.messages}
+            view={view}
+            change={change}
+            peek={peek}
+            notes={notes}
+          />
         )}
       </div>
     </aside>

@@ -55,12 +55,12 @@
 .filterLine {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-sm) var(--space-xl);
 }
 
 .sliderSlot {
-  flex: 1 1 280px;
+  flex: none;
   min-width: 0;
 }
 
@@ -123,6 +123,15 @@
 
 .messages[data-expanded] {
   max-height: none;
+}
+
+/* cv5 Q2: in the drawer the messages are not a scroller of their own; the rendered prompt's outline sticks to the
+   drawer body, on the ground of this frame */
+.messages[data-fill] {
+  overflow: visible;
+  --outline-bg: var(--bg-base);
+  /* the drawer body's top padding */
+  --outline-stick: var(--space-md);
 }
 
 .messages:focus-visible {

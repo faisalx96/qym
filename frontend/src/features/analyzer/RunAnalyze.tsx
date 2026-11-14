@@ -149,6 +149,8 @@ function Workspace({
       results.current?.scrollIntoView?.({ block: 'nearest' });
   }, [phaseName]);
 
+  // cv5 Q4: the section of the prompt that a hovered or focused Prompt contents switch sends, marked in the pane
+  const [peek, setPeek] = useState<string[] | null>(null);
   const setPreview = (open: boolean) => replaceUrlQuery({ preview: open ? 1 : null });
   const previewTarget = (key: string) => {
     ws.setFocusKey(key);
@@ -198,7 +200,7 @@ function Workspace({
             title="Prompt contents"
             description="What the analyzer sends with each target. Prompt preview shows the exact messages."
           >
-            <PromptContents ws={ws} />
+            <PromptContents ws={ws} onPeek={pane ? setPeek : undefined} />
           </Subsection>
           <Subsection
             id="analysis-instructions"
@@ -274,7 +276,7 @@ function Workspace({
       {pane && paneSlot
         ? createPortal(
             // the note is true only while the prompt carries the project rules
-            <PromptPane ws={ws} note={ws.settings.useRules ? paneNote : null} />,
+            <PromptPane ws={ws} note={ws.settings.useRules ? paneNote : null} peek={peek} />,
             paneSlot,
           )
         : null}

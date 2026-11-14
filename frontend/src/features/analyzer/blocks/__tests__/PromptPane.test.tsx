@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { RunWorkspace } from '../../workspace/useRunWorkspace';
+import { defaultSettings } from '../../model/settings';
 import { PromptPane } from '../PromptPane';
 
 const KEY = 'sql-002\u0000result_similarity';
@@ -9,7 +10,9 @@ function fakeWs(messages: { role: string; content: string }[], pending: boolean)
   return {
     allKeys: [KEY],
     rowById: new Map([['sql-002', { metric_scores: { result_similarity: 0.66 } }]]),
+    settings: defaultSettings({ metrics: ['result_similarity'], maxIssues: 3, timeoutSeconds: 120 }),
     focusKey: KEY,
+    focus: { itemId: 'sql-002', metric: 'result_similarity' },
     setFocusKey: vi.fn(),
     preview: {
       messages,
@@ -30,9 +33,9 @@ describe('PromptPane (cv5 K3)', () => {
     ];
     const { rerender, container } = render(<PromptPane ws={fakeWs(first, false)} />);
     expect(screen.getByRole('status')).toHaveTextContent('');
-    expect(screen.getByRole('button', { name: /Previewed target/ })).toHaveTextContent(
-      'sql-002 · result_similarity 0.66',
-    );
+    // cv5 Q1: the target is one quiet line, no control (a row click at the left chooses it)
+    expect(screen.getByTestId('prompt-pane-target')).toHaveTextContent('sql-002 · result_similarity · 0.66');
+    expect(screen.queryByRole('button', { name: /Previewed target/ })).toBeNull();
 
     // a setting changed: the old text stays (dimmed) and the head says so
     rerender(<PromptPane ws={fakeWs(first, true)} />);

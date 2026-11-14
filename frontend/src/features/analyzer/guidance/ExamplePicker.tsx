@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useExamples, type AnalysisScope, type ExampleQuery } from '@/api/analysis';
 import {
   Button,
@@ -11,7 +11,7 @@ import {
   NumberField,
   Pagination,
   SearchField,
-  SegmentedControl,
+  Select,
   Skeleton,
   Text,
   Flag,
@@ -37,6 +37,13 @@ export const allExampleFields = (): ExampleFields =>
   Object.fromEntries(EXAMPLE_FIELDS.map((f) => [f.key, true]));
 
 type Source = 'all' | 'ai_only' | 'human_only' | 'corrected';
+
+const SOURCES: { key: Source; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'ai_only', label: 'AI only' },
+  { key: 'human_only', label: 'Human only' },
+  { key: 'corrected', label: 'Corrected' },
+];
 const PAGE_SIZE = 25;
 
 export interface ExampleSelection {
@@ -93,6 +100,7 @@ function PickerBody({
   const [run, setRun] = useState<Set<string>>(new Set());
   const [user, setUser] = useState<Set<string>>(new Set());
   const [source, setSource] = useState<Source>('all');
+  const rangeId = useId();
   const [confMin, setConfMin] = useState<number | undefined>();
   const [confMax, setConfMax] = useState<number | undefined>();
   const [selectedOnly, setSelectedOnly] = useState(false);
@@ -144,7 +152,7 @@ function PickerBody({
       onOpenChange={onOpenChange}
       title="Approved examples"
       description="Choose corrected diagnoses the rule writer should learn from."
-      size="data"
+      size="xl"
       className={s.dialog}
       footer={
         <>
@@ -165,6 +173,7 @@ function PickerBody({
         </>
       }
     >
+      {/* cv5 Q7: the filters on one row, labels inside the controls as the Runs filters */}
       <div className={s.filters}>
         <SearchField
           label="Search examples"
@@ -173,6 +182,14 @@ function PickerBody({
           onChange={reset(setSearch)}
           onClear={() => setSearch('')}
           width="var(--search-width)"
+        />
+        <Select
+          label="Source"
+          triggerVariant="bar"
+          showValue="always"
+          items={SOURCES}
+          value={source}
+          onChange={(k) => k != null && reset(setSource)(String(k) as Source)}
         />
         <MultiSelect
           label="Task"
@@ -204,55 +221,41 @@ function PickerBody({
           value={user}
           onChange={(k) => reset(setUser)(asStrings(k))}
         />
-      </div>
-      <div className={s.filters}>
-        <SegmentedControl<Source>
-          label="Source"
-          value={source}
-          onChange={reset(setSource)}
-          options={[
-            { value: 'all', label: 'All sources' },
-            { value: 'ai_only', label: 'AI only' },
-            { value: 'human_only', label: 'Human only' },
-            { value: 'corrected', label: 'Corrected' },
-          ]}
-        />
-        <NumberField
-          label="Min confidence %"
-          minValue={0}
-          maxValue={100}
-          value={confMin ?? NaN}
-          onChange={(v) => reset(setConfMin)(Number.isFinite(v) ? v : undefined)}
-          width={110}
-          steppers={false}
-        />
-        <NumberField
-          label="Max confidence %"
-          minValue={0}
-          maxValue={100}
-          value={confMax ?? NaN}
-          onChange={(v) => reset(setConfMax)(Number.isFinite(v) ? v : undefined)}
-          width={110}
-          steppers={false}
-        />
-        <Button size="sm" onPress={() => setShowFields((v) => !v)} aria-expanded={showFields}>
-          Choose prompt fields
-        </Button>
-      </div>
-      {showFields ? (
-        <div className={s.fields} role="group" aria-label="Prompt fields">
-          {EXAMPLE_FIELDS.map((f) => (
-            <Checkbox
-              key={f.key}
-              isSelected={fields[f.key] ?? false}
-              onChange={(v) => setFields((cur) => ({ ...cur, [f.key]: v }))}
-            >
-              {f.label}
-            </Checkbox>
-          ))}
+        {/* one compact range: "Confidence [min] – [max] %" */}
+        <div className={s.range} role="group" aria-labelledby={rangeId}>
+          <Text variant="sm" tone="muted" id={rangeId}>
+            Confidence
+          </Text>
+          <NumberField
+            label="Min confidence %"
+            hideLabel
+            minValue={0}
+            maxValue={100}
+            value={confMin ?? NaN}
+            onChange={(v) => reset(setConfMin)(Number.isFinite(v) ? v : undefined)}
+            width={56}
+            placeholder="0"
+            steppers={false}
+          />
+          <Text variant="sm" tone="muted" aria-hidden="true">
+            –
+          </Text>
+          <NumberField
+            label="Max confidence %"
+            hideLabel
+            minValue={0}
+            maxValue={100}
+            value={confMax ?? NaN}
+            onChange={(v) => reset(setConfMax)(Number.isFinite(v) ? v : undefined)}
+            width={56}
+            placeholder="100"
+            steppers={false}
+          />
+          <Text variant="sm" tone="muted" aria-hidden="true">
+            %
+          </Text>
         </div>
-      ) : null}
-
+      </div>
       <div className={s.budget}>
         <div className={s.budgetHead}>
           <Text variant="sm" tone="muted" role="status">
@@ -264,6 +267,7 @@ function PickerBody({
             </Flag>
           ) : null}
           <span className={s.spacer} />
+          {/* cv5 Q7: the selection summary, Select all filtered and View selected on one line */}
           <Checkbox
             isSelected={allFilteredSelected}
             isDisabled={!data || data.matching_ids.length === 0}
@@ -280,6 +284,9 @@ function PickerBody({
           <Checkbox isSelected={selectedOnly} onChange={reset(setSelectedOnly)}>
             View selected
           </Checkbox>
+          <Button size="sm" onPress={() => setShowFields((v) => !v)} aria-expanded={showFields}>
+            Choose prompt fields
+          </Button>
         </div>
         {characterLimit ? (
           <div
@@ -294,6 +301,20 @@ function PickerBody({
           </div>
         ) : null}
       </div>
+
+      {showFields ? (
+        <div className={s.fields} role="group" aria-label="Prompt fields">
+          {EXAMPLE_FIELDS.map((f) => (
+            <Checkbox
+              key={f.key}
+              isSelected={fields[f.key] ?? false}
+              onChange={(v) => setFields((cur) => ({ ...cur, [f.key]: v }))}
+            >
+              {f.label}
+            </Checkbox>
+          ))}
+        </div>
+      ) : null}
 
       {examples.isError ? (
         <ErrorState
@@ -323,7 +344,9 @@ function PickerBody({
                   <th scope="col">Root causes</th>
                   <th scope="col">Run</th>
                   <th scope="col">Source</th>
-                  <th scope="col">Confidence</th>
+                  <th scope="col" className={s.num}>
+                    Confidence
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -351,7 +374,7 @@ function PickerBody({
                     </td>
                     <td>{[e.task, e.model].filter(Boolean).join(' · ')}</td>
                     <td>{e.source ?? '—'}</td>
-                    <td className={s.mono}>
+                    <td className={`${s.mono} ${s.num}`}>
                       {e.confidence != null ? `${Math.round(e.confidence * 100)}%` : '—'}
                     </td>
                   </tr>

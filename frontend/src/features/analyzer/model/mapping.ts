@@ -269,26 +269,27 @@ export function slotSource(
 }
 
 export interface MetadataSelection {
-  /** Unchecked leaves (selection is "all except these" so new metrics default to included). */
+  /** Unchecked key paths (selection is "all except these" so new keys default to included). */
   deselected: string[];
 }
 
-const metaPrefix = (metric: string) => `metric_metadata:${encodeURIComponent(metric).replace(/\./g, '%2E')}.`;
-
-/** `metadata_fields` when a custom subset is chosen; null = send all metadata. */
-export function metadataFields(groups: MetadataGroup[], selection: MetadataSelection): string[] | null {
+/**
+ * `metadata_fields` when a custom subset of the metric metadata keys is chosen; null = all keys (the metadata stays in
+ * the metric result). cv5 Q4: the keys are the union over the analysed metrics, sent as `metric_metadata.<path>`, so
+ * each target reads the keys of its own metric (one config serves targets of several metrics) and never the metadata
+ * of another metric.
+ */
+export function metadataFields(
+  groups: MetadataGroup[],
+  metrics: readonly string[],
+  selection: MetadataSelection,
+): string[] | null {
   const off = new Set(selection.deselected);
   if (off.size === 0) return null;
-  const fields: string[] = [];
-  for (const group of groups) {
-    const tree = pathsToTree(group.paths);
-    const selected = new Set(leafPaths(tree).filter((l) => !off.has(`${group.metric}\u0000${l}`)));
-    for (const path of coverPaths(tree, selected)) fields.push(`${metaPrefix(group.metric)}${path}`);
-  }
-  return fields;
+  const tree = metadataTree(groups, metrics);
+  const selected = new Set(leafPaths(tree).filter((l) => !off.has(l)));
+  return coverPaths(tree, selected).map((path) => `metric_metadata.${path}`);
 }
-
-export const metadataKey = (metric: string, leaf: string) => `${metric}\u0000${leaf}`;
 
 /**
  * The keys a mapping row offers as chips (cv5 K2): the top-level keys of a JSON object, or the item keys of a list

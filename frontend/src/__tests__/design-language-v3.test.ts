@@ -2330,3 +2330,91 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(stripComments(src('ui/DataTable/cells/cells.module.css'))).toContain('.secondary[data-lines]');
   });
 });
+
+describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
+  const doc = read(join(SRC, '../../docs/DESIGN_LANGUAGE.md'));
+
+  it('Q1: with the pane on screen the target is a quiet line, not a dropdown', () => {
+    const pane = src('features/analyzer/blocks/PromptPane.tsx');
+    expect(pane).not.toContain('<Select');
+    expect(pane).toContain('data-testid="prompt-pane-target"');
+    expect(src('features/analyzer/blocks/PreviewDrawer.tsx')).toContain('label="Previewed target"');
+    expect(doc).toContain('with the pane on screen there is no target\n  dropdown');
+  });
+
+  it('Q2: the prompt is rendered from the builder markers, with a Raw view and the JSON colours', () => {
+    const messages = src('features/analyzer/blocks/PromptMessages.tsx');
+    expect(messages).toContain('<SegmentedControl');
+    expect(messages).toContain("'qym:prompt-view'");
+    expect(src('features/analyzer/blocks/PromptDocument.tsx')).toContain('<JsonText');
+    expect(src('features/analyzer/model/promptDoc.ts')).toContain('EVALUATION ITEM DATA');
+    const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
+    expect(css).toContain("border-inline-start: 3px solid var(--accent-primary)");
+    expect(css).toContain('max-width: var(--field-measure)');
+    expect(css).toContain('background: var(--bg-elevated)');
+    expect(stripComments(src('ui/JsonViewer/JsonViewer.module.css'))).toContain('var(--json-key)');
+    expect(doc).toContain('The rendered\n  view hides and changes no character');
+  });
+
+  it('Q4: each Prompt contents switch is named as its prompt section and marks it; no Error switch', () => {
+    const contents = src('features/analyzer/blocks/PromptContents.tsx');
+    expect(contents).toContain('onHoverChange={peek}');
+    expect(contents).toContain('onFocusChange={peek}');
+    expect(contents).not.toMatch(/>\s*Error\s*</);
+    const map = src('features/analyzer/model/contents.ts');
+    expect(map).toContain("label: 'Metric metadata'");
+    expect(map).toContain("key: 'SELECTED METRIC METADATA'");
+    expect(src('features/analyzer/model/mapping.ts')).toContain('`metric_metadata.${path}`');
+    const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
+    expect(css).toContain('.section[data-peek]');
+    expect(css).toContain('.outlineNote');
+    expect(src('features/analyzer/blocks/PromptMessages.tsx')).toContain("'not sent'");
+    expect(doc).toContain('A\n  switched-off section is never silently missing');
+  });
+
+  it('Q5: a slider never spans a section', () => {
+    const css = stripComments(src('ui/Slider/Slider.module.css'));
+    expect(css).toContain('.slider:not([data-layout]) {\n  max-width: 360px;');
+    expect(css).toContain('flex: 0 0 var(--slider-track-w)');
+    const targets = src('features/analyzer/blocks/Targets.tsx');
+    expect(targets).toContain('trackWidth={280}');
+    expect(targets).not.toContain('width="100%"');
+    expect(doc).toContain('this slider is too wide');
+  });
+
+  it('Q6: Add category ends the section header row and opens a dialog; search heads the list column', () => {
+    const panel = src('features/analyzer/guidance/DiagnosisPanel.tsx');
+    expect(panel).toMatch(/<SectionHeader\s+title="Diagnosis categories"[\s\S]*?aside=\{[\s\S]*?Add category/);
+    expect(panel).toContain('<FormDialog');
+    expect(panel).not.toContain('label="New category name"');
+    expect(stripComments(src('features/analyzer/guidance/diagnosis.module.css'))).toContain(
+      'grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);',
+    );
+    expect(doc).toContain('why is add category there?');
+  });
+
+  it('Q7: the approved examples picker is an xl dialog with one filter row and a compact confidence range', () => {
+    expect(stripComments(src('ui/Dialog/Dialog.module.css'))).toContain(".modal[data-size='xl'] {\n  width: 1200px;");
+    const picker = src('features/analyzer/guidance/ExamplePicker.tsx');
+    expect(picker).toContain('size="xl"');
+    expect(picker).toContain('triggerVariant="bar"');
+    expect(picker).toContain('className={s.range}');
+    expect(picker).not.toContain('<SegmentedControl');
+    expect(stripComments(src('features/analyzer/guidance/examples.module.css'))).not.toContain('max-height: 40vh');
+    expect(doc).toContain('the modal needs more\n  space!');
+  });
+
+  it('Q3: a splitter sets the pane width, remembered, the same on every tab', () => {
+    const shell = src('features/analyzer/RunShell.tsx');
+    expect(shell).toContain('<PaneResizer');
+    expect(shell).toContain("'--pane-w'");
+    const resizer = src('features/analyzer/PaneResizer.tsx');
+    expect(resizer).toContain('role="separator"');
+    expect(resizer).toContain('aria-valuenow=');
+    expect(resizer).toContain("'qym:analyzer-pane-width'");
+    const css = stripComments(src('features/analyzer/analyzer.module.css'));
+    expect(css).toContain('var(--pane-w, min(36%, 760px))');
+    expect(css).toContain('.resizer:hover::before');
+    expect(doc).toContain('a size slider between it and the\nmain section');
+  });
+});
