@@ -41,9 +41,10 @@ describe('Prompt contents switches (cv5 Q4): one switch, one section, one name',
     const s = { ...base(), useTrace: false };
     expect(sectionNotes(s).find((n) => n.key === 'TRACE EVIDENCE')?.state).toBe('off');
     expect(sectionNotes(s).find((n) => n.key === 'ITEM METADATA')?.state).toBe('empty');
-    // all metadata keys: the metadata is part of the metric result, so no section of its own is expected
-    expect(sectionNotes(s).some((n) => n.key === 'SELECTED METRIC METADATA')).toBe(false);
-    expect(peekKeys('metricMeta', s)).toEqual(['SELECTED METRIC RESULT']);
+    // the metric metadata is its own section in every case, also with every key chosen
+    expect(sectionNotes(s).find((n) => n.key === 'SELECTED METRIC METADATA')?.state).toBe('empty');
+    expect(peekKeys('metricMeta', s)).toContain('SELECTED METRIC METADATA');
+    expect(peekKeys('metricMeta', s)).not.toContain('SELECTED METRIC RESULT');
     expect(peekKeys('metricMeta', { ...s, metaDeselected: ['reason'] })).toContain('SELECTED METRIC METADATA');
     expect(peekKeys('docs', s)).toEqual(['REFERENCE DOCUMENTS']);
   });

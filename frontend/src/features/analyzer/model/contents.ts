@@ -65,12 +65,12 @@ export const CONTENT_SWITCHES: ContentSwitch[] = [
 ];
 
 /**
- * The section keys to mark while a switch is hovered or focused. With every key chosen, the metric metadata is part
- * of the metric result (the builder writes it there), so that section is marked.
+ * The section keys to mark while a switch is hovered or focused. The metric metadata is always its own section
+ * (the builder writes SELECTED METRIC METADATA for a payload that names the switch), never a part of the result.
  */
-export function peekKeys(id: SwitchId, s: AnalyzerSettings): string[] {
+export function peekKeys(id: SwitchId, _s?: AnalyzerSettings): string[] {
   if (id === 'metricMeta')
-    return s.metaDeselected.length ? ['SELECTED METRIC METADATA', 'SELECTED METADATA'] : ['SELECTED METRIC RESULT'];
+    return ['SELECTED METRIC METADATA', 'SELECTED METADATA'];
   const sw = CONTENT_SWITCHES.find((c) => c.id === id);
   return sw ? [sw.key] : [];
 }
@@ -87,8 +87,6 @@ export interface SectionNote {
 export function sectionNotes(s: AnalyzerSettings): SectionNote[] {
   return CONTENT_SWITCHES.flatMap((c) => {
     const on = c.on(s);
-    // the metric metadata has a section of its own only for a key selection
-    if (c.id === 'metricMeta' && on && !s.metaDeselected.length) return [];
     return [{ key: c.key, label: c.label, parent: c.parent, message: c.message, state: on ? 'empty' : 'off' }];
   });
 }

@@ -6345,6 +6345,23 @@ def test_metric_metadata_switch_is_not_the_item_metadata_switch() -> None:
     assert '"reason": "bad join"' in item_off
 
 
+def test_metric_metadata_is_its_own_block_with_every_key() -> None:
+    """A payload that names the switch: the metadata is never inside the metric result."""
+    prompt = _metadata_prompt({"metric_metadata": True}, None)
+    result = prompt.split("SELECTED METRIC RESULT:\n", 1)[1].split("\n\n", 1)[0]
+    assert "bad join" not in result
+    block = prompt.split("SELECTED METRIC METADATA:\n", 1)[1]
+    assert '"judge": "gpt"' in block and '"reason": "bad join"' in block
+    # the metric-result switch off does not remove the metadata
+    no_result = _metadata_prompt({"scores": False, "metric_metadata": True}, None)
+    assert "SELECTED METRIC RESULT:" not in no_result
+    assert '"reason": "bad join"' in no_result.split("SELECTED METRIC METADATA:\n", 1)[1]
+    # an older payload (no switch key) keeps the metadata inside the result
+    old = _metadata_prompt({}, None)
+    assert "SELECTED METRIC METADATA:" not in old
+    assert '"reason": "bad join"' in old.split("SELECTED METRIC RESULT:\n", 1)[1]
+
+
 def test_selected_metric_metadata_does_not_need_the_item_metadata_switch() -> None:
     prompt = _metadata_prompt(
         {"metadata": False, "metric_metadata": True},
