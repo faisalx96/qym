@@ -66,9 +66,9 @@
      melts into a card and is never brighter on the section ground than before cv4. */
   --control-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
   --control-fill-hover: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  --button-fill: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  --button-fill-hover: color-mix(in srgb, var(--text-primary) 12%, transparent);
-  --button-fill-pressed: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --button-fill: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --button-fill-hover: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  --button-fill-pressed: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
   /* The containing block for visually hidden (absolute) text, which must never widen the page. */
   position: relative;

@@ -48,19 +48,18 @@ describe('DatasetCell', () => {
     expect(screen.getByText('support-tickets')).toBeInTheDocument();
     expect(versionOf()).toHaveTextContent('v3');
     expect(versionOf()).toHaveAttribute('data-status', 'production');
-    // cv5 M3: an alias reads as an alias (the at-sign of the run label) and its tooltip says what it is
-    expect(tag.querySelector('[data-part="alias"]')).toHaveTextContent('@staging');
-    expect(tag.querySelector('[data-part="alias"]')).toHaveAttribute(
-      'title',
-      'Alias staging: a name that points at v3',
-    );
+    // cv5 M3 / Y5: an alias reads as an alias (the at-sign of the run label); its hint is the shared Tooltip, which
+    // keyboard focus opens, so the segment is a focus stop with an accessible name and no native title
+    const alias = tag.querySelector('[data-part="alias"]');
+    expect(alias).toHaveTextContent('@staging');
+    expect(alias).toHaveAttribute('tabindex', '0');
+    expect(alias).toHaveAttribute('aria-label', 'alias @staging');
+    expect(alias).toHaveAttribute('title', '');
     // the status is the version's colour and the tooltip, never a word after the tag
     expect(screen.queryByText('Production')).toBeNull();
     expect(screen.queryByText('production')).toBeNull();
-    expect(tag.querySelector('[title]')).toHaveAttribute(
-      'title',
-      'support-tickets · version v3 · production · aliases: staging',
-    );
+    // the tag's title does not repeat the alias (cv5 Y5)
+    expect(tag.querySelector('[title]')).toHaveAttribute('title', 'support-tickets · version v3 · production');
   });
 
   it('colours a published version blue and a draft version amber by its status', () => {

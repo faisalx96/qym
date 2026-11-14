@@ -121,7 +121,8 @@
 }
 
 /* cv4 E4: the expanded field, a wide dialog (Dialog size "wide", cv4 X9). Y19: the dialog is as high as the value,
-   from 240px up to 640px of editor (less on a short window); a longer value scrolls inside the editor. */
+   up to 640px of editor (less on a short window); a longer value scrolls inside the editor. cv5 Y15: the floor is the
+   field card's own 96px (it was 240px, so a 3-line value opened a 400px dialog), so a short value gives a short dialog. */
 .expandBody {
   --expand-editor-max: min(640px, calc(100vh - 260px));
   display: flex;
@@ -139,13 +140,13 @@
 
 .expandBody .textarea {
   field-sizing: content;
-  min-height: 240px;
+  min-height: 96px;
   max-height: var(--expand-editor-max);
   resize: none;
 }
 
 .expandBody > .pre {
-  min-height: 240px;
+  min-height: 96px;
   max-height: var(--expand-editor-max);
 }
 

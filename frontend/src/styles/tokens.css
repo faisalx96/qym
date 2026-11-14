@@ -96,15 +96,17 @@
      redefines the fills translucent too: a control on an inset card (--bg-elevated) still separates from the card. */
   --control-fill: var(--bg-elevated);
   --control-fill-hover: var(--bg-hover);
-  --control-edge: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  /* cv5 Y7: the well edge at 7% (never weaker than the pre-cv4 border on a card); the neutral button one fill step up
+     (--bg-active) with a visible top highlight (9%), so on the page ground a button is as defined as a well beside it */
+  --control-edge: color-mix(in srgb, var(--text-primary) 7%, transparent);
   --control-edge-hover: color-mix(in srgb, var(--text-primary) 12%, transparent);
-  --button-fill: var(--bg-hover);
-  --button-fill-hover: var(--bg-active);
-  --button-fill-pressed: var(--bg-elevated);
-  --button-highlight: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --button-fill: var(--bg-active);
+  --button-fill-hover: color-mix(in srgb, var(--text-primary) 6%, var(--bg-active));
+  --button-fill-pressed: var(--bg-hover);
+  --button-highlight: color-mix(in srgb, var(--text-primary) 9%, transparent);
   --button-lowlight: color-mix(in srgb, var(--bg-void) 55%, transparent);
   --button-depth: inset 0 1px 0 var(--button-highlight), 0 1px 0 var(--button-lowlight);
-  --button-text: #cdcdd8; /* 11.6:1 on --bg-hover */
+  --button-text: #cdcdd8; /* 7.9:1 on --bg-active (the --button-fill) */
   --analysis-action-gap: 5px;
   --analysis-icon-optical-offset: 0.25px;
   --analysis-action-padding-start: 9px;

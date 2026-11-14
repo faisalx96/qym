@@ -18,6 +18,7 @@ import {
   Button,
   Checkbox,
   ConfirmDialog,
+  CountTile,
   DropdownMenu,
   EmptyState,
   ErrorState,
@@ -393,10 +394,12 @@ function RulesView({
                 onChange={setIncludeDocs}
                 isDisabled={!canManage || enabledDocs === 0}
               >
-                {`Project documents (${enabledDocs} enabled)`}
+                {/* cv5 Y6: the count after a label is a CountTile (the enabled documents), a trigger reads
+                    "Label · value"; never a count in parentheses */}
+                Project documents<CountTile>{enabledDocs}</CountTile>
               </Checkbox>
               <Button size="sm" isDisabled={!canManage || approved === 0} onPress={() => setPickerOpen(true)}>
-                {`Choose examples (${selectedExamples} of ${approved})`}
+                {`Choose examples · ${selectedExamples} of ${approved}`}
               </Button>
               <span className={s.spacer} />
               <Button
@@ -616,9 +619,11 @@ function VersionWorkspace({
    */
   let aside: React.ReactNode;
   if (editable) {
+    // cv5 Y2: "Add rule" is the primary create action of this view, so the commit is the accent button (one solid
+    // green button in a view, design language "Which button")
     aside = (
       <Button
-        variant="primary"
+        variant="accent"
         size="sm"
         isDisabled={!settled || draft.rules.length === 0}
         disabledReason={draft.rules.length === 0 ? 'Add a rule first' : 'Wait until the draft is saved'}
@@ -654,14 +659,20 @@ function VersionWorkspace({
   }
   return (
     <div className={s.main}>
-      <SectionHeader title={`Rules in v${version.version}`} aside={aside} />
-      <Text variant="sm" tone="muted" as="p" data-testid="version-meta" className={s.metaLine}>
-        <span>{`Created ${formatDateParts(version.created_at).full || '—'}`}</span>
-        <span>·</span>
-        <span>{`Updated ${formatDateParts(version.updated_at).full || '—'}`}</span>
-        <span>·</span>
-        <span>{`~${estimateTokens(draft.rules).toLocaleString(APP_LOCALE)} prompt tokens`}</span>
-      </Text>
+      {/* cv5 Y3: the Created / Updated line is the header description, directly under the title as on other headers */}
+      <SectionHeader
+        title={`Rules in v${version.version}`}
+        aside={aside}
+        description={
+          <span data-testid="version-meta">
+            {[
+              `Created ${formatDateParts(version.created_at).full || '—'}`,
+              `Updated ${formatDateParts(version.updated_at).full || '—'}`,
+              `~${estimateTokens(draft.rules).toLocaleString(APP_LOCALE)} prompt tokens`,
+            ].join(' · ')}
+          </span>
+        }
+      />
       {generation}
       <RuleEditor draft={draft} editable={editable} />
       {editable ? sources : null}

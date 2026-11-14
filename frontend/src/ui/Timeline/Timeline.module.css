@@ -192,16 +192,17 @@ button.what:focus-visible::after {
   background: var(--row-selected);
 }
 
-/* cv5 Z3: on the selected fill (an accent wash) a success or accent mark keeps its edge and an opaque ground, so it
-   does not melt into the row */
+/* cv5 Z3 / Y12: on the selected fill (an accent wash) a toned mark keeps its edge and sits on a solid dark base with
+   its tint over it, so it reads as a mark, darker than the row, and never melts into the wash. The green Flag on
+   --row-selected measures 5.8:1 (AA), so the selected row keeps the --row-selected token of the row ladder. */
 .event[data-active] .mark:not([data-tone='neutral'], [data-dot]) {
   border-color: color-mix(in srgb, var(--mark) 80%, transparent);
-  background: color-mix(in srgb, var(--mark) 18%, var(--bg-base));
+  background: color-mix(in srgb, var(--mark) 12%, var(--bg-void));
 }
 
 .event[data-active] .mark[data-tone='neutral'] {
   border-color: var(--border-strong);
-  background: var(--bg-base);
+  background: var(--bg-void);
 }
 
 /* cv5 Z3 `revealActions`: the row actions show on row hover, on focus inside the row, for the selected row and while

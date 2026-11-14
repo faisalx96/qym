@@ -1,4 +1,4 @@
-import { Icon, Select, Text, ToggleChips } from '@/ui';
+import { Select, Text, ToggleChips } from '@/ui';
 import {
   SOURCE_FIELDS,
   STD_VARIABLES,
@@ -129,7 +129,7 @@ export function FieldsMapping({
               <Text variant="sm" weight={600} tone="muted" mono={r.mono} className={s.label}>
                 {r.label}
               </Text>
-              <Icon name="next" size={12} className={s.arrow} aria-hidden="true" />
+              {/* cv5 Y11: no chevron between the label and the dropdown (it read as a link) */}
               <Select
                 label={`${r.label} source`}
                 hideLabel

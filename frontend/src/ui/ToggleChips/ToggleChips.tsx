@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import { Focusable } from 'react-aria-components';
 import { Icon } from '../Icon';
+import { Tooltip } from '../Tooltip';
 import styles from './ToggleChips.module.css';
 
 export interface ToggleChipOption<T extends string = string> {
@@ -73,24 +75,29 @@ export function ToggleChips<T extends string = string>({
       {options.map((o) => {
         const pressed = on.has(o.value);
         const locked = pressed && on.size <= min;
+        // cv5 Y9: the hint is the shared Tooltip (hover and keyboard focus), as the reason of a disabled Button; the
+        // chip is always wrapped, so it keeps its DOM node (and focus) when it locks or unlocks
+        const hint = o.title ?? (locked ? (min === 1 ? 'Keep at least one on' : `Keep at least ${min} on`) : null);
         return (
-          <button
-            key={o.value}
-            type="button"
-            className={styles.chip}
-            aria-pressed={pressed}
-            aria-disabled={locked || undefined}
-            disabled={o.disabled}
-            title={o.title ?? (locked ? (min === 1 ? 'Keep at least one on' : `Keep at least ${min} on`) : undefined)}
-            data-value={o.value}
-            onClick={() => toggle(o.value)}
-          >
-            <span className={styles.check} aria-hidden="true">
-              {pressed ? <Icon name="check" size={12} /> : null}
-            </span>
-            <span className={styles.label}>{o.label}</span>
-            {typeof o.count === 'number' ? <span className={styles.count}>{o.count}</span> : null}
-          </button>
+          <Tooltip key={o.value} content={hint} isDisabled={!hint}>
+            <Focusable isDisabled={o.disabled}>
+              <button
+                type="button"
+                className={styles.chip}
+                aria-pressed={pressed}
+                aria-disabled={locked || undefined}
+                disabled={o.disabled}
+                data-value={o.value}
+                onClick={() => toggle(o.value)}
+              >
+                <span className={styles.check} aria-hidden="true">
+                  {pressed ? <Icon name="check" size={12} /> : null}
+                </span>
+                <span className={styles.label}>{o.label}</span>
+                {typeof o.count === 'number' ? <span className={styles.count}>{o.count}</span> : null}
+              </button>
+            </Focusable>
+          </Tooltip>
         );
       })}
     </div>

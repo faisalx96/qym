@@ -211,10 +211,11 @@ function Workspace({
 
         <ReportSection
           id="analysis-targets"
-          // cv4 Y16: the count is the count badge right after the title, not alone at the far end
+          // cv4 Y16: the count is the count badge right after the title, not alone at the far end. cv5 Y10: it counts
+          // targets (item-metric pairs), the same thing as the table footer "of N targets" (not items)
           title={
             <>
-              Targets<CountTile>{ws.targetCount}</CountTile>
+              Targets<CountTile>{ws.matched.reduce((n, m) => n + m.metrics.length, 0)}</CountTile>
             </>
           }
           description="Failed item–metric targets. The limit applies to the most severe. Task and metric errors are never analyzed. Check up to 3 targets to test them together."

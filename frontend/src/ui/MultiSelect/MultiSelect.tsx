@@ -345,7 +345,9 @@ export function BarTrigger({ label, value, active, className, ...rest }: BarTrig
       data-active={active ? '' : undefined}
     >
       <span className={styles.triggerLabel}>{label}</span>
-      {value ? <span className={styles.triggerValue}>· {value}</span> : null}
+      {/* cv5 Y13: the dot is its own flex item, so the same gap sits on both sides of it */}
+      {value ? <span className={styles.triggerSep}>·</span> : null}
+      {value ? <span className={styles.triggerValue}>{value}</span> : null}
       <Icon name="chevron-down" size={12} />
     </AriaButton>
   );

@@ -30,6 +30,14 @@
   max-inline-size: 100%;
 }
 
+/* cv5 Y4: the page-header controls (source, environment, day): one row of controls, no text separator between them. */
+.headerControls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+}
+
 .inline {
   display: inline-flex;
   flex-wrap: wrap;

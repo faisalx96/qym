@@ -186,7 +186,9 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
     for (const f of shippedTsx) {
       if (rel(f) === 'features/experiments/launch/settings/SweepChips.tsx') continue;
       for (const b of buttons(read(f))) {
-        if (commit.has(b.text) && !/variant="primary"/.test(b.attrs))
+        // cv5 Y2: a view with a primary section create action makes its commit the accent button (one solid green)
+        const createInView = rel(f) === 'features/analyzer/guidance/RulesPanel.tsx' && b.text === 'Publish';
+        if (commit.has(b.text) && !/variant="primary"/.test(b.attrs) && !(createInView && /variant="accent"/.test(b.attrs)))
           problems.push(`${rel(f)}:${b.line}: ${b.text}`);
         if (/Disable item|Disable \$\{/.test(b.inner) && !/variant="danger"/.test(b.attrs))
           problems.push(`${rel(f)}:${b.line}: Disable item is not danger`);
@@ -909,7 +911,7 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
 
   it('C-03: a stale live page shows one notice, not a tinted status card', () => {
     const line = src('features/live/components/StatusLine.tsx');
-    // the red Stale StatusMark stays; the card itself takes no stale tone or wash
+    // the card takes no stale tone or wash (and no Stale tag: the notice above it says Stale, cv5 Y17)
     none(
       elements(line, ['[A-Z][A-Za-z.]*'])
         .filter((e) => e.name !== 'StatusMark' && /tone=\{stale/.test(e.attrs))
@@ -924,6 +926,8 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
       expect(before, 'staleText renders only under stale ? null :').toMatch(/stale \? null :/);
     }
     expect(src('features/live/LiveOverviewPage.tsx')).toContain('live-stale-notice');
+    // cv5 Y17: the notice says Stale with its detail; the status card has no second Stale tag
+    expect(line).not.toMatch(/>\s*Stale\s*</);
   });
 
   it('C-04: relative times come from lib/dates', () => {
@@ -1953,6 +1957,16 @@ describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
     // depth by fill, not by outline (owner 2026-11-13): no variant draws a 1px edge ring
     expect(css).not.toMatch(/inset 0 0 0 1px/);
     expect(tokens()).not.toContain('--button-edge');
+    // cv5 Y14: an open panel's button keeps the hover look (React Aria also marks it pressed, so the rule comes after)
+    const open = css.indexOf(".button[data-variant='neutral'][aria-expanded='true']");
+    expect(open).toBeGreaterThan(css.indexOf('.button[data-pressed]'));
+    expect(rule(css, ".button[data-variant='neutral'][aria-expanded='true']")).toMatch(/var\(--button-fill-hover\)/);
+    for (const v of ['accent', 'meta', 'primary', 'danger'])
+      expect(css, v).toContain(`.button[data-variant='${v}'][aria-expanded='true']`);
+    // cv5 Y7: a button reads as a button on the page ground: one fill step up and a visible top highlight
+    expect(tokens()).toMatch(/--button-fill:\s*var\(--bg-active\)/);
+    expect(tokens()).toMatch(/--button-highlight:\s*color-mix\(in srgb, var\(--text-primary\) (8|9|10)%, transparent\)/);
+    expect(tokens()).toMatch(/--control-edge:\s*color-mix\(in srgb, var\(--text-primary\) 7%, transparent\)/);
   });
 
   it('F7/F8, cv5 H1: wells share --control-fill and a translucent hairline; a report body makes the fills relative', () => {
@@ -2100,6 +2114,14 @@ describe('cv5 family H (owner review 2026-11-13): shared controls and elements',
     expect(chip).toMatch(/background:\s*var\(--control-fill\)/);
     expect(css).not.toContain('--radius-pill');
     expect(src('ui/ToggleChips/ToggleChips.tsx')).toContain('aria-pressed={pressed}');
+    // cv5 Y8: the accent is on the check box only; the on chip body is not washed (it is not a selected segment)
+    for (const sel of [".chip[aria-pressed='true']", ".chip[aria-disabled='true']"])
+      expect(rules(css, sel).join('\n'), sel).not.toMatch(/background:[^;]*accent/);
+    expect(rule(css, ".chip[aria-pressed='true'] .check")).toMatch(/background:\s*var\(--accent-primary\)/);
+    // cv5 Y9: the chip hint is the shared Tooltip, not a native title
+    const tsx = src('ui/ToggleChips/ToggleChips.tsx');
+    expect(tsx).toContain('<Tooltip key={o.value} content={hint} isDisabled={!hint}>');
+    expect(tsx).not.toMatch(/\btitle=\{/);
   });
 
   it('H5: the Change log is the shared Timeline; no local timeline markup', () => {
@@ -2185,6 +2207,60 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(doc).toContain('No rule above\n  the bar (cv5 K5)');
   });
 
+  it('Y1: the main action of the action rail is the primary button', () => {
+    const t = src('features/analyzer/blocks/ActionRail.tsx');
+    // the Analyze start button, View run (done) and Analyze again (failed) are primary
+    expect(t).toMatch(/variant="primary"\s+onPress=\{\(\) => void ws\.analyze\(\)\}/);
+    expect(t).toContain('<Button size="sm" variant="primary" onPress={runner.dismiss} className={s.railPrimary}>');
+    const full = t.slice(0, t.indexOf('export function CompactJobRail'));
+    expect(full).not.toContain('variant="accent"');
+    expect(doc).toContain('Exactly one primary button per state');
+    expect(doc).not.toContain('Exactly one accent button per state');
+  });
+
+  it('Y2: the Rules draft has one solid green button: Add rule primary, Publish accent', () => {
+    expect(src('features/analyzer/guidance/RuleEditor.tsx')).toMatch(/variant="primary"[\s\S]{0,400}?Add rule/);
+    expect(src('features/analyzer/guidance/RulesPanel.tsx')).toMatch(/variant="accent"[\s\S]{0,300}?Publish\s*<\/Button>/);
+    expect(doc).toContain('the commit of that view\n  ("Publish") is the accent button');
+  });
+
+  it('Y6: no count or value in parentheses on an analyzer control', () => {
+    const rules = src('features/analyzer/guidance/RulesPanel.tsx');
+    expect(rules).not.toMatch(/Project documents \(|Choose examples \(/);
+    expect(rules).toContain('Project documents<CountTile>{enabledDocs}</CountTile>');
+    expect(src('features/analyzer/blocks/PromptContents.tsx')).not.toMatch(/Choose metadata \(/);
+    expect(doc).toContain('a button that opens a picker reads "Label · value"');
+  });
+
+  it('Y11: an input mapping row has no chevron between the label and the dropdown', () => {
+    expect(src('features/analyzer/blocks/FieldsMapping.tsx')).not.toMatch(/<Icon name="next"/);
+    expect(doc).toContain('no chevron between them (cv5 Y11');
+  });
+
+  it('Y12: a toned mark on the selected Timeline row sits on a solid dark base', () => {
+    const css = stripComments(src('ui/Timeline/Timeline.module.css'));
+    expect(css).toMatch(
+      /\.event\[data-active\] \.mark:not\(\[data-tone='neutral'\], \[data-dot\]\) \{[^}]*background:\s*color-mix\(in srgb, var\(--mark\) \d+%, var\(--bg-void\)\)/,
+    );
+    expect(rule(css, '.timeline[data-selectable] .event[data-active]')).toMatch(/background:\s*var\(--row-selected\)/);
+  });
+
+  it('Y13: the bar trigger dot has equal space on both sides; the items count sits on the control centre line', () => {
+    const ms = src('ui/MultiSelect/MultiSelect.tsx');
+    expect(ms).toContain('<span className={styles.triggerSep}>·</span>');
+    expect(ms).not.toContain('>· {value}<');
+    expect(rule(stripComments(src('features/run-detail/components/items/FilterBar.module.css')), '.count')).toMatch(
+      /line-height:\s*1;/,
+    );
+  });
+
+  it('Y15: the field expand dialog is as high as the value (a low editor floor)', () => {
+    const css = stripComments(src('features/datasets/components/FieldEditor.module.css'));
+    for (const sel of ['.expandBody .textarea', '.expandBody > .pre'])
+      expect(rule(css, sel), sel).toMatch(/min-height:\s*96px/);
+    expect(doc).toContain('so a 3-line value opens a short dialog');
+  });
+
   it('K3: the prompt pane shows a quiet change status, not a spinner', () => {
     const t = src('features/analyzer/blocks/PromptPane.tsx');
     expect(t).toContain('No change to the prompt');
@@ -2211,6 +2287,16 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
   it('M3: a dataset alias reads @alias with its tooltip', () => {
     expect(src('features/run-detail/components/DatasetChip.tsx')).toContain('Alias ${alias}: a name that points at');
     expect(doc).toContain('An alias segment is written `@alias`');
+    // cv5 Y5: one alias form; the dataset tag hint is the shared Tooltip; the switcher rows show the aliases
+    const chip = src('features/run-detail/components/DatasetChip.tsx');
+    expect(chip).toContain('<Tooltip content={aliasTitle(alias, version)}>');
+    expect(chip).not.toContain('title={aliasTitle(');
+    expect(chip).not.toContain('`aliases: ${');
+    const sw = src('features/datasets/components/VersionSwitcher.tsx');
+    expect(sw).toContain('<AliasTags version={v} />');
+    expect(sw).toContain('{`@${a}`}');
+    expect(src('ui/EntityTag/EntityTag.tsx')).toContain('{`@${a}`}');
+    expect(doc).toContain('One alias\n  form everywhere (cv5 Y5)');
   });
 
   it('M4: the Experiments table draws no live rail (the Status column shows the step)', () => {

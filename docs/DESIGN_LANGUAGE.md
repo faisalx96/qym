@@ -240,18 +240,21 @@ preselected.
   - A **well** is a control that you type in or pick a value from: `TextField`, `SearchField`, `Textarea`, the
     `Select` and `MultiSelect` trigger (field and bar), the `SegmentedControl` track, the date and time field. It has
     the `--control-fill` fill (`--bg-elevated`, one step over the ground) and the `--control-edge` hairline (the text
-    colour at 5%, so it reads the same on every ground). Hover = `--control-edge-hover` (a trigger also takes
+    colour at 7%, so it reads the same on every ground and is never weaker than the border before cv4, cv5 Y7). Hover = `--control-edge-hover` (a trigger also takes
     `--control-fill-hover`); focus or open = the accent edge.
-  - A **neutral button** is a raised surface: the `--button-fill` fill one step lighter than a well and
-    `--button-depth` (a 1px highlight on its top inner edge, `--button-highlight`, and a 1px dark line under it). It
+  - A **neutral button** is a raised surface: the `--button-fill` fill (`--bg-active`, cv5 Y7) two steps lighter than a
+    well and `--button-depth` (a 1px highlight on its top inner edge, `--button-highlight` at 9% so that it is
+    visible, and a 1px dark line under it). On the page ground it is at least as defined as a well beside it. It
     has no edge ring. Its label is `--button-text`, a step under `--text-primary` (cv4 F6: "this white text is too
-    bright"). Hover = `--button-fill-hover` and the primary label; pressed = `--button-fill-pressed` and no highlight;
+    bright"). Hover = `--button-fill-hover` and the primary label; a button whose panel is open (`aria-expanded`,
+    for example Columns, Density, Display) keeps that hover look while the panel is open, in every variant (cv5 Y14);
+    pressed = `--button-fill-pressed` and no highlight;
     never the reverse (a resting fill brighter than its hover reads as already pressed, round 8). A neutral button
     next to a dropdown still reads as a button: by its fill, its highlight and its label weight, not by an outline.
   - **Tinted** buttons (accent, meta, danger) are a tint fill only: `--tint-soft` at rest, `--tint-strong` on hover; no
     edge and no highlight. **Primary** is the solid accent, `--accent-primary-hover` on hover.
   - **On an inset card:** a `ReportSection` body (inset cards at `--bg-elevated`) makes the well and button fills
-    translucent (the text colour at 4% and 8%), so a well is one step and a button two steps over whichever ground it
+    translucent (the text colour at 4% and 10%), so a well is one step and a button two steps over whichever ground it
     sits on: a control never melts into a card. A feature never sets a control's fill, edge, height or font size.
   The menu actions Select all and None are the same neutral recipe at `--control-height-sm`. A disabled neutral button
   keeps the flat shape at half its fill with muted text and no depth.
@@ -261,7 +264,9 @@ preselected.
   `danger` (red tint) deletes or replaces: Delete, Archive, Revoke, Restore default. A disabled primary, accent or
   danger button keeps its own colour at 45% opacity, so a locked Save is still the green Save and a locked Restore
   default is still red. A creating action carries the plus glyph (New project, Add connection, Add environment).
-  Make live, Send, Start conversation, Add model and Run backfill commit, so they are primary. A dialog footer that
+  Make live, Send, Start conversation, Add model and Run backfill commit, so they are primary. Exception (cv5 Y2): when
+  the view has a section create action (primary, for example "Add rule" in the Rules draft), the commit of that view
+  ("Publish") is the accent button, so that the view has one solid green button. A dialog footer that
   runs a job reads Cancel (neutral), Preview (accent), the commit (primary). Create draft always carries the plus
   Icon. A confirm that disables, deletes or revokes is danger. An export or download only reads data: on a page it is
   the accent button with the `download` Icon, also when it opens a format menu (no chevron, cv5 Z1). A Download
@@ -274,7 +279,9 @@ preselected.
   Test) is accent before it. A page's main action is `primary`, 24px, with the `plus`
   `Icon`, named "New <object>" or "Add <part>". A disabled `Button`, `LinkButton` or `IconButton` says why on hover
   through `disabledReason` (C166; "No changes to save", "Select two runs"); a disabled icon in a table row shows its
-  hint as the reason. A count in a control is `CountTile` after the label, centred; never in parentheses. The same
+  hint as the reason. A count in a control is `CountTile` after the label, centred; never in parentheses (cv5 Y6: also in a checkbox
+  label, "Project documents [1]"; a button that opens a picker reads "Label · value": "Choose metadata · All",
+  "Choose examples · 0 of 2"). The same
   action uses the same words in the page button, the switcher and the palette. Labels and placeholders carry no "…"
   (progress words such as "Saving…" stay), and a glyph is always an `Icon`: no typed "+", "×", "←" or "→" in a button.
   The `zap` Icon marks latency and trace columns; the typed ⚡ is not used. The category key marker is the `diamond`
@@ -351,9 +358,11 @@ preselected.
   small set (about 8 or fewer) of options that are each on or off and that the person must see at one time (the
   Auto-analysis metrics, the run page categories). Each chip is a well (`--control-fill`, `--control-edge`, the control
   radius; never a pill) with a 14px check box at its start: an empty box is off, the accent box with a check is on, so
-  the state reads without colour. On adds an accent wash (`--tint-soft`, `--tint-strong` on hover) and the primary
-  label; off keeps the secondary label and reads as a control you can switch on. Each chip is a button with
-  `aria-pressed`; `min` keeps the last options on (the chip says "Keep at least one on"). A visible label before the
+  the state reads without colour. The accent is on the check box only (cv5 Y8): the chip body stays the neutral well
+  in both states, so an on chip never reads as the selected segment of a `SegmentedControl` beside it. On = the
+  accent box and the primary label; off = the empty box and the muted label. Each chip is a button with
+  `aria-pressed`; `min` keeps the last options on (the shared `Tooltip` of the chip says "Keep at least one on"; hover and keyboard
+  focus open it, no native title, cv5 Y9). A visible label before the
   chips names the group through `aria-labelledby` (cv5 Z4); `aria-label` only when no label is on screen. Uses (cv5):
   analyzer metrics (`min={1}`), input mapping keys ("Full value" first, it excludes the key chips), run page
   Categories keys (`count`, `min={1}`). It is not a `Tag` (static, no
@@ -371,7 +380,8 @@ preselected.
   for the selected row and while its menu is open (always on touch); a caller never hides them with its own
   selectors. `markAlign="start"` puts the mark, the time and the actions on the title line of a two-line row (a
   version with its meta under the title). A toned dot is solid in its tone; on the selected fill a toned mark keeps
-  an 80% edge and an opaque ground, so a success or accent mark stays visible on the accent wash. `rowData` puts
+  an 80% edge and a solid dark base (`--bg-void`) under a 12% tint, so a success or accent mark stays visible on the
+  accent wash (cv5 Y12); a green `Flag` on `--row-selected` measures 5.8:1, so the selected row keeps that token. `rowData` puts
   `data-*` hooks on a row. Users (cv5 Z6): the dataset Change log, the rule versions, the item History tab (one
   timeline newest first: each revision with its diff in `detail` and Revert in `actions`, then the event that drafted
   its version), the feedback request History, the run review log (the state words stay `StateTag`s), the Live worker
@@ -416,7 +426,9 @@ preselected.
 
 - **Action rail** (auto-analysis, `features/analyzer/blocks/ActionRail`): a page-level sticky bottom bar of
   `--action-rail-height`, always mounted, with a fixed primary-button width (`--action-primary-width`) so
-  label changes never move neighbours. Exactly one accent button per state. The sections above it reserve
+  label changes never move neighbours. Exactly one primary button per state (cv5 Y1: "Analyze N items", "View run",
+  "Analyze again"); the other start action of the state ("Test the first target") is neutral. The compact job rail of a
+  guidance tab uses the accent button, because that tab has its own primary create action. The sections above it reserve
   their space (`--results-slot-min-height`) so state changes insert nothing above existing content. No rule above
   the bar (cv5 K5). The analyzer model is a labelled bar `Select` with `showValue="always"` ("Analyzer model ·
   gpt-4o-mini"); with the prompt pane on screen the bar has no Prompt preview button.
@@ -604,7 +616,8 @@ preselected.
   accent), number `--json-number` (purple), true/false `--json-boolean` (blue), null `--json-null` (muted), punctuation
   `--json-punct` (secondary). `JsonViewer`, the dataset item pane, item page, expand dialog and edit mode use only these;
   a string value is never plain white. **Field expand:** the expand button of a field card opens
-  the same editor and state in a `wide` dialog as high as the value (see "Dialog"). **Item pane:** the pane's item is
+  the same editor and state in a `wide` dialog as high as the value (see "Dialog"): the editor floor is the card's
+  96px, so a 3-line value opens a short dialog; up to 640px, then it scrolls (cv5 Y15). **Item pane:** the pane's item is
   the table's current row (`DataTable activeKey`); the row actions stay while the pane is open.
 
 - **Auto-analysis, Analyze run** (cv4 D, Y1, Y3, Y11, Y12, Y16): Setup, Targets and Results are `ReportSection`s. Setup
@@ -617,7 +630,8 @@ preselected.
   pairs are `--space-xl` apart, so each label reads with its own switch. The sticky rail's notice is shown in full and
   wraps; it is never cut with "…". **Input mapping keys (cv5 K2):** a field with a single value shows only its
   dropdown; a JSON field shows a `ToggleChips` row under it, "Full value" first (on by default), then one chip for each
-  top-level key; a key on switches Full value off, and the reverse.
+  top-level key; a key on switches Full value off, and the reverse. A mapping row is the label column, then the
+  dropdown; no chevron between them (cv5 Y11: it read as a link).
   **Prompt pane (cv5 K3):** the panel surface of the report sections, sticky at `--space-md`, its height measured to
   the viewport bottom, with its own scroll. The head shows the title, the char count `Tag kind="count"`, a quiet status
   text (Updating / N lines added · M removed / No change to the prompt) and Copy. Lines added by the last change get
@@ -838,7 +852,10 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   Flag follows the tag: the tooltip names the status. The API sends the status as `dataset_version_status` (and
   `status` in each `datasets` entry). The runs table Dataset column, the run header Dataset fact and the hero dataset
   chip of a union run use it. A run with no version shows only the name. An alias segment is written `@alias` (the
-  at-sign of the run label, in `--text-dim`), with the tooltip "Alias X: a name that points at vN" (cv5 M3).
+  at-sign of the run label, in `--text-dim`), with the tooltip "Alias X: a name that points at vN" (cv5 M3). One alias
+  form everywhere (cv5 Y5): `@alias` in the dataset tag, in the hero chip, in the version switcher (each version row
+  shows its aliases) and in the Lineage alias tags; each place keeps its own surface. The hint of the alias segment is
+  the shared `Tooltip` (hover and keyboard focus open it), and the tag's title does not repeat the alias.
 
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
   (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for
@@ -978,7 +995,7 @@ range; a toolbar has no count. A count tag after a card title or a name is not a
   "+N more" count tag (Q02 C, Q49 C).
 
 - **Filter bar** (`features/runs-list/FilterBar`, `MultiSelect triggerVariant="bar"`, toolbar `rows` slot): row 1 is search,
-  Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint when active),
+  Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, the dot its own flex item with the same gap on both sides (cv5 Y13), accent tint when active),
   `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset, User, Version)
   and, right after them, one `× Clear n` in the danger tone, the count on its own red disc. There is no chip line (round 8: each trigger already names
   its value, and the status-bar sentence lists every filter). The table controls (Select, Columns, Density) centre on
@@ -1234,7 +1251,7 @@ browser or server text as is, and a 422 lands on its field (`fieldErrorsOf`; `Fo
   `--font-sm`. A link to the details (See Errors) ends the line in the tone's
   text colour. No border box, no title, never a banner or a toast. A filter has one Clear: the red `Clear n` of the
   bar or sticky nav. A stale Live source is one `danger` InlineNotice above the neutral status card (lead `Stale.`),
-  never a red card. Compare notes are InlineNotice lines (warning, danger, info); no bordered note boxes. `Callout`
+  never a red card; the status card then shows no Stale tag (the notice says it with its detail, cv5 Y17). Compare notes are InlineNotice lines (warning, danger, info); no bordered note boxes. `Callout`
   uses the same recipe (rail, glyph, wash, lead in tone text); there is no bordered callout box. The dataset Note is
   one line: tone-coloured title, then the reason.
 
