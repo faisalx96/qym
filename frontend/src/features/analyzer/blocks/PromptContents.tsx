@@ -101,10 +101,10 @@ export function PromptContents({ ws, onPeek }: { ws: RunWorkspace; onPeek?: Peek
 }
 
 /** The drawer's copy of the Context switches: the same state as the page, in one row. */
-export function ContextRow({ ws }: { ws: RunWorkspace }) {
+export function ContextRow({ ws, onPeek }: { ws: RunWorkspace; onPeek?: PeekHandler }) {
   return (
     <SwitchGroup label="Context" row>
-      <ContextSwitches ws={ws} />
+      <ContextSwitches ws={ws} onPeek={onPeek} />
     </SwitchGroup>
   );
 }

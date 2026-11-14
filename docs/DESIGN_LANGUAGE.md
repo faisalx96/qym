@@ -668,8 +668,7 @@ preselected.
   bar and a hairline under it (the one accent role); a part of the item data is the small tracked label (`--font-sm`
   650 muted); the body is sans `--font-base` at `--field-measure`; JSON, code and item values sit in a `--bg-elevated`
   well, JSON in the `--json-*` colours (`ui/JsonText`). Each heading toggles its section; a part or a document longer
-  than 80 lines starts closed and shows "N lines". A sticky outline at the top of the scroll region (role, then the
-  sections as `--font-sm` text links; the section in view in the accent) jumps to a section and opens it. The rendered
+  than 80 lines starts closed and shows "N lines". The outline (see below) jumps to a section and opens it. The rendered
   view hides and changes no character: a closed section is `hidden`, not removed, trailing colons and list markers stay
   (muted), and a unit test checks that the page text equals the raw text. Change marks work in both views: an added
   line is marked inside its section, and a closed section that holds one opens. Text that matches no known structure
@@ -681,9 +680,31 @@ preselected.
   analysed metrics and each target reads its own metric's keys, never another metric's), Item metadata (ITEM
   METADATA); Context = Analysis rules, Reference documents, Trace evidence. There is no Error switch: a target is never
   an item with a task error, so it could change nothing. Hover or focus of a switch marks its section in the pane (a
-  1px accent outline at `--space-xs` offset, brought into view, no motion) and its outline entry in the accent. A
-  switched-off section is never silently missing: the outline keeps its entry with a muted "not sent"; a switch that is
+  1px accent outline at `--space-xs` offset, brought into view, no motion) and its rail row (the soft accent wash). A
+  switched-off section is never silently missing: the outline keeps its row with a muted "not sent"; a switch that is
   on but finds nothing for this target says "none".
+  **The outline (cv5 N, owner 2026-11-14: "this navbar sucks!!"):** one tree with two levels under each message:
+  message (System, User) → section → part of the item data (`model/outline.ts`). It is never wrapped rows of words.
+  *Wide pane* (messages area 680px and more, a pane of about 720px): a rail at the start of the pane body, sticky, its
+  own scroll when taller than the pane, `clamp(196px, 27%, 212px)` wide (one line for "Reference documents  not sent"),
+  the document takes the rest. The message name is the switch-group label (`--font-sm`, 600, muted, sentence case)
+  above the rows, not a row. The sections are a list of buttons on one 1px `--border-subtle` track: a section
+  `--font-base` 600 secondary, a part of the item data 450 and indented by `--space-md`, so the tree reads by its
+  indent, not by weight alone. The section in view is `aria-current="location"`: accent text and a 2px accent bar on
+  the track (the vertical tab list's selected row); its parent section takes the primary text. Up / Down / Home / End
+  move the focus; the focus ring is the 2px accent outline. *Narrow pane and the drawer:* no rail; one line at the
+  top of the scroll region, sticky, a `--border-subtle` hairline only while text runs under it: the current location
+  in the dropdown trigger look (`BarTrigger`, "System · Item data · Input"), which opens the same tree in the shared
+  `DropdownMenu` (group labels, level-1 rows indented, the current row checked). *Both forms:* a section that is not in
+  the prompt keeps its row, muted, with "not sent" or "none" at the row end, and the row jumps to one quiet
+  `--font-sm` muted line at its place in the document ("Reference documents: not sent"; "none for this target").
+  That line is interface text, not prompt text: it is not selectable, never in Copy, the Raw view or the round trip. A
+  section that holds a line of the last change shows a 6px accent dot at the row end (rail and menu). No pills, no
+  fills other than the hover wash.
+  **Grouped menu (`DropdownMenu`, cv5 N):** `group` puts consecutive items under a quiet group label (the switch-group
+  label) with a hairline between groups; a grouped menu's rows take `--font-base` (the Select option); `level` 0 / 1
+  makes a two-level list (600, then 450 indented); `end` is quiet row-end text; `selectedId` checks the current item
+  (`menuitemradio`, the accent check at the row end) while an action still runs `onAction`.
   **Rule versions (cv5 L2, L3, Z5):** the Rules tab's versions are a selectable `Timeline`, newest first, with
   `revealActions` (the row menu) and `markAlign="start"`. Each version has an icon mark: draft `edit` (warning),
   production `star` (success), another released version `check` (neutral). A released version is read-only: the

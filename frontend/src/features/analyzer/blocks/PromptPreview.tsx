@@ -12,7 +12,16 @@ import { APP_LOCALE } from '@/lib/dates';
  * contents" on the page and in the drawer head). No LLM call is made. The text never auto-scrolls: while an update is
  * pending it is dimmed in place instead of being swapped.
  */
-export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxHeight?: boolean }) {
+export function PromptPreview({
+  ws,
+  maxHeight = true,
+  peek = null,
+}: {
+  ws: RunWorkspace;
+  maxHeight?: boolean;
+  /** cv5 N: the section keys of a hovered or focused Context switch of the drawer head. */
+  peek?: string[] | null;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = usePromptView();
   const notes = useMemo(() => sectionNotes(ws.settings), [ws.settings]);
@@ -68,7 +77,15 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
             role="region"
             aria-label="Prompt messages"
           >
-            <PromptMessages messages={preview.messages} view={view} change={null} notes={notes} />
+            {/* cv5 N: the drawer is never wide enough for the rail: the outline is the location line and its menu */}
+            <PromptMessages
+              messages={preview.messages}
+              view={view}
+              change={null}
+              notes={notes}
+              peek={peek}
+              form="menu"
+            />
           </div>
           <div className={s.previewFoot}>
             <Text variant="sm" tone="muted" as="span">

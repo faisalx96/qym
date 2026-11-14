@@ -124,8 +124,8 @@ export function PromptPane({
     const root = scroller.current;
     const line = root?.querySelector<HTMLElement>('[data-added]');
     if (!root || !line) return;
-    // below the sticky outline of the rendered view
-    const offset = (root.querySelector('nav')?.getBoundingClientRect().height ?? 0) + 48;
+    // below the sticky location line of the narrow outline (the rail is beside the text, not above it)
+    const offset = (root.querySelector('[data-outline-bar]')?.getBoundingClientRect().height ?? 0) + 48;
     root.scrollTop += line.getBoundingClientRect().top - root.getBoundingClientRect().top - offset;
   };
 

@@ -2367,9 +2367,30 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(src('features/analyzer/model/mapping.ts')).toContain('`metric_metadata.${path}`');
     const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
     expect(css).toContain('.section[data-peek]');
-    expect(css).toContain('.outlineNote');
-    expect(src('features/analyzer/blocks/PromptMessages.tsx')).toContain("'not sent'");
+    // cv5 N: the outline row and the document's note line say it (model/outline.ts)
+    expect(css).toContain('.noteLine');
+    expect(src('features/analyzer/model/outline.ts')).toContain("'not sent'");
     expect(doc).toContain('A\n  switched-off section is never silently missing');
+  });
+
+  it('N (owner 2026-11-14: "this navbar sucks!!"): the outline is one tree, a rail when wide, a location menu when narrow', () => {
+    const messages = src('features/analyzer/blocks/PromptMessages.tsx');
+    // wide: a list of buttons, the section in view aria-current
+    expect(messages).toContain("aria-current={active === rowKey(r) ? 'location' : undefined}");
+    // narrow and the drawer: the one dropdown trigger look and the shared menu, the current row checked
+    expect(messages).toContain('<BarTrigger');
+    expect(messages).toContain('<DropdownMenu');
+    expect(messages).toContain('selectedId={rowKey(active)}');
+    expect(src('features/analyzer/blocks/PromptPreview.tsx')).toContain('form="menu"');
+    const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
+    expect(css).toMatch(/\.railRow\[aria-current\] \{[^}]*border-inline-start-color: var\(--accent-primary\)/);
+    expect(css).toMatch(/\.railRow\[data-depth='1'\] \{[^}]*padding-inline-start/);
+    // the wrapped rows of words are gone
+    expect(css).not.toContain('.outlineGroup');
+    // a section that is not sent: one quiet line in the document, interface text that no copy takes
+    expect(css).toMatch(/\.noteLine \{[^}]*user-select: none/);
+    expect(src('features/analyzer/blocks/PromptDocument.tsx')).toContain('data-ui-note');
+    expect(doc).toContain('The outline (cv5 N');
   });
 
   it('Q5: a slider never spans a section', () => {
