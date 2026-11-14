@@ -491,7 +491,11 @@ preselected.
   Aria provides this; do not hand-roll). Destructive confirms start on Cancel.
   A closed drawer that stays mounted is `inert`. Never close a modal by toggling
   `display`. An information dialog is 440px for text and 760px for media; a full editor or a large value is `wide`
-  (1100px, cv4 X9). A dialog is as high as its content: an editor in it grows with its value from a minimum to a
+  (1100px, cv4 X9). A picker with a filter row and a table is `xl` (1200px, cv5 Q7, owner: "the modal needs more
+  space!"): the rule writer's Approved examples dialog puts its filters on one row with the labels inside the controls
+  (search, Source, Task, Dataset, Model, Run, Reviewer as bar triggers, then "Confidence [min] – [max] %" as one
+  compact range), the selection summary, Select all filtered, View selected and Choose prompt fields on the next line,
+  and the 12 rows of a page without an inner scroll; the confidence column is centred. A dialog is as high as its content: an editor in it grows with its value from a minimum to a
   maximum and then scrolls inside, so a 3-line value never opens a tall empty dialog (cv4 Y19). Drawer widths: 360px (sm) or 560px (md);
   trace drawers are wide with the heavy scrim.
 

@@ -2393,6 +2393,17 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(doc).toContain('why is add category there?');
   });
 
+  it('Q7: the approved examples picker is an xl dialog with one filter row and a compact confidence range', () => {
+    expect(stripComments(src('ui/Dialog/Dialog.module.css'))).toContain(".modal[data-size='xl'] {\n  width: 1200px;");
+    const picker = src('features/analyzer/guidance/ExamplePicker.tsx');
+    expect(picker).toContain('size="xl"');
+    expect(picker).toContain('triggerVariant="bar"');
+    expect(picker).toContain('className={s.range}');
+    expect(picker).not.toContain('<SegmentedControl');
+    expect(stripComments(src('features/analyzer/guidance/examples.module.css'))).not.toContain('max-height: 40vh');
+    expect(doc).toContain('the modal needs more\n  space!');
+  });
+
   it('Q3: a splitter sets the pane width, remembered, the same on every tab', () => {
     const shell = src('features/analyzer/RunShell.tsx');
     expect(shell).toContain('<PaneResizer');
