@@ -1,8 +1,7 @@
 /* cv5 K3: the prompt preview pane next to the settings. The same panel surface as the report sections on its left;
-   sticky under the page top, as tall as the viewport allows (measured, --pane-height), its own scroll. Tokens only. */
+   sticky under the page top (the shell's pane column holds it sticky with the splitter, cv5 Q3), as tall as the
+   viewport allows (measured, --pane-height), its own scroll. Tokens only. */
 .pane {
-  position: sticky;
-  top: var(--space-md);
   display: flex;
   flex-direction: column;
   height: var(--pane-height, calc(100vh - 160px));

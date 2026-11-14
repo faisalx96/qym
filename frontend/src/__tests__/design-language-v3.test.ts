@@ -2355,4 +2355,18 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(stripComments(src('ui/JsonViewer/JsonViewer.module.css'))).toContain('var(--json-key)');
     expect(doc).toContain('The rendered\n  view hides and changes no character');
   });
+
+  it('Q3: a splitter sets the pane width, remembered, the same on every tab', () => {
+    const shell = src('features/analyzer/RunShell.tsx');
+    expect(shell).toContain('<PaneResizer');
+    expect(shell).toContain("'--pane-w'");
+    const resizer = src('features/analyzer/PaneResizer.tsx');
+    expect(resizer).toContain('role="separator"');
+    expect(resizer).toContain('aria-valuenow=');
+    expect(resizer).toContain("'qym:analyzer-pane-width'");
+    const css = stripComments(src('features/analyzer/analyzer.module.css'));
+    expect(css).toContain('var(--pane-w, min(36%, 760px))');
+    expect(css).toContain('.resizer:hover::before');
+    expect(doc).toContain('a size slider between it and the\nmain section');
+  });
 });

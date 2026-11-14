@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useRef, useState, type CSSProperties } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import {
   useAnalysisConfig,
@@ -16,6 +16,7 @@ import { AnalyzerFrame } from './AnalyzerFrame';
 import { CompactJobRail } from './blocks/ActionRail';
 import { outcomeText, summarize } from './blocks/JobStatus';
 import { GuidanceArea } from './GuidanceArea';
+import { PaneResizer, usePaneWidth } from './PaneResizer';
 import { RunAnalyze } from './RunAnalyze';
 import { useAnalysisPhase } from './useAnalysisPhase';
 import { useAnalysisRunner } from './useAnalysisRunner';
@@ -61,6 +62,11 @@ export function RunShell({
   // cv5 Z11: the pane stays on every tab, in one slot that this shell owns, so a tab change never remounts or moves
   // it. The run workspace (kept mounted on every tab) renders the pane into the slot.
   const [paneSlot, setPaneSlot] = useState<HTMLDivElement | null>(null);
+  // cv5 Q3: the pane width, set with the splitter and remembered for the person; one value for all four tabs
+  const [paneWidth, setPaneWidth] = usePaneWidth();
+  const shellRef = useRef<HTMLDivElement>(null);
+  const paneCol = useRef<HTMLDivElement>(null);
+  const slotId = useId();
   const [openRule, setOpenRule] = useState<RuleVersion | null>(null);
   const rules = useRuleVersions(scope, pane && route.scope === 'rules');
   const paneNote = rulesNote(route.scope === 'rules' ? openRule : null, rules.data?.versions ?? [], rules.data);
@@ -105,7 +111,12 @@ export function RunShell({
       // The frame stays wide on every tab, so a tab click never moves the header, the tabs or the pane.
       wide={pane}
     >
-      <div className={s.shell} data-pane={pane ? '' : undefined}>
+      <div
+        ref={shellRef}
+        className={s.shell}
+        data-pane={pane ? '' : undefined}
+        style={paneWidth != null ? ({ '--pane-w': `${paneWidth}px` } as CSSProperties) : undefined}
+      >
         <div className={s.main}>
           <div hidden={!onRun}>
             {config.isError && !config.data ? (
@@ -147,7 +158,21 @@ export function RunShell({
             </div>
           ) : null}
         </div>
-        {pane ? <div ref={setPaneSlot} className={s.paneSlot} data-testid="prompt-pane-slot" /> : null}
+        {pane ? (
+          <div ref={paneCol} className={s.paneCol}>
+            {/* the splitter and the pane are sticky together, so the handle is as tall as the pane */}
+            <div className={s.paneStick}>
+              <PaneResizer
+                shell={shellRef}
+                pane={paneCol}
+                width={paneWidth}
+                onWidth={setPaneWidth}
+                controls={slotId}
+              />
+              <div ref={setPaneSlot} id={slotId} className={s.paneSlot} data-testid="prompt-pane-slot" />
+            </div>
+          </div>
+        ) : null}
       </div>
     </AnalyzerFrame>
   );

@@ -27,9 +27,11 @@
   min-width: 0;
 }
 
+/* cv5 Q3: the pane width is the person's (--pane-w from the splitter), else 36% up to 760px; the grid keeps 440px
+   for the pane and 600px for the tab content whatever was remembered */
 .shell[data-pane] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(440px, 36%, 760px);
+  grid-template-columns: minmax(0, 1fr) clamp(440px, var(--pane-w, min(36%, 760px)), calc(100% - var(--space-lg) - 600px));
   gap: var(--space-lg);
   align-items: stretch;
 }
@@ -39,9 +41,63 @@
   min-width: 0;
 }
 
-/* the column stretches to the row, so the sticky pane inside it follows the scroll */
+/* the column stretches to the row, so the sticky block inside it follows the scroll */
+.paneCol {
+  min-width: 0;
+}
+
+.paneStick {
+  position: sticky;
+  top: var(--space-md);
+}
+
 .paneSlot {
   min-width: 0;
+}
+
+/* cv5 Q3: the splitter in the column gap, as tall as the pane. The ui/SplitPane look: at rest a short grip, on hover,
+   drag and focus a 3px accent line; no motion. */
+.resizer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(-1 * var(--space-lg));
+  width: var(--space-lg);
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.resizer::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(50% - 1px);
+  width: 3px;
+  background: transparent;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: calc(50% - 16px);
+  inset-inline-start: calc(50% - 1px);
+  width: 3px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--border-strong);
+}
+
+.resizer:hover::before,
+.resizer[data-dragging]::before,
+.resizer:focus-visible::before {
+  background: var(--accent-primary);
+}
+
+.resizer:hover::after,
+.resizer[data-dragging]::after,
+.resizer:focus-visible::after {
+  background: transparent;
 }
 
 /* The guidance tabs in the left column: at most the constrained page's content width, at the start edge. */

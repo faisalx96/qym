@@ -1351,7 +1351,12 @@ screen wider than the cap the free space is equal at both sides. A feature does 
 constrained page. Profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
 `fullWidth` with their own layout. Auto-analysis with a run open, viewport ≥ 1500 px, is one stable workspace with a
 side pane (cv5 K3, Z11): `fullWidth`, two columns on every tab, the tab content at `minmax(0,1fr)` and the prompt pane
-at `clamp(440px, 36%, 760px)`, with a `--space-lg` gap. The pane column belongs to the page shell, so a tab change never
+at 36% up to 760px, with a `--space-lg` gap. A splitter in the gap (cv5 Q3, owner: "a size slider between it and the
+main section") sets the pane width: `role="separator"`, pointer drag, Left / Right 16px (Shift 64px), Home / End to the
+limits, double click or Enter back to the default; the `ui/SplitPane` look (an accent line on hover, drag and focus),
+with a short `--border-strong` grip at rest, sticky with the pane and as tall as it. The pane keeps at least 440px and
+the tab content 600px (the grid clamps a remembered width). The width is the person's (`localStorage
+qym:analyzer-pane-width`) and one value for the four tabs; the shell owns it, so a tab change never moves the pane. The pane column belongs to the page shell, so a tab change never
 moves, remounts or scrolls the pane, and the header and the tabs never move. Categories, rules and documents are part
 of the prompt: a save on a guidance tab reloads the pane, which marks the change. On the Rules tab a draft adds one
 quiet line under the pane's target ("The prompt uses the production rules (vN). A draft changes it when you
