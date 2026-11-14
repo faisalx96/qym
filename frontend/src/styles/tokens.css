@@ -96,9 +96,10 @@
      redefines the fills translucent too: a control on an inset card (--bg-elevated) still separates from the card. */
   --control-fill: var(--bg-elevated);
   --control-fill-hover: var(--bg-hover);
-  /* cv5 Y7: the well edge at 7% (never weaker than the pre-cv4 border on a card); the neutral button one fill step up
+  /* The well edge at 4% (owner 2026-11-14: the edge of the round 1 build was softer; 4% over the well fill gives the
+     strength of --border-subtle, the edge before cv5). cv5 Y7: the neutral button one fill step up
      (--bg-active) with a visible top highlight (9%), so on the page ground a button is as defined as a well beside it */
-  --control-edge: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --control-edge: color-mix(in srgb, var(--text-primary) 4%, transparent);
   --control-edge-hover: color-mix(in srgb, var(--text-primary) 12%, transparent);
   --button-fill: var(--bg-active);
   --button-fill-hover: color-mix(in srgb, var(--text-primary) 6%, var(--bg-active));

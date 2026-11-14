@@ -240,7 +240,7 @@ preselected.
   - A **well** is a control that you type in or pick a value from: `TextField`, `SearchField`, `Textarea`, the
     `Select` and `MultiSelect` trigger (field and bar), the `SegmentedControl` track, the date and time field. It has
     the `--control-fill` fill (`--bg-elevated`, one step over the ground) and the `--control-edge` hairline (the text
-    colour at 7%, so it reads the same on every ground and is never weaker than the border before cv4, cv5 Y7). Hover = `--control-edge-hover` (a trigger also takes
+    colour at 4%, so it reads the same on every ground and has the soft strength of `--border-subtle`, the edge of the round 1 build; owner 2026-11-14). Hover = `--control-edge-hover` (a trigger also takes
     `--control-fill-hover`); focus or open = the accent edge.
   - A **neutral button** is a raised surface: the `--button-fill` fill (`--bg-active`, cv5 Y7) two steps lighter than a
     well and `--button-depth` (a 1px highlight on its top inner edge, `--button-highlight` at 9% so that it is
