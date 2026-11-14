@@ -55,12 +55,12 @@
 .filterLine {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-sm) var(--space-xl);
 }
 
 .sliderSlot {
-  flex: 1 1 280px;
+  flex: none;
   min-width: 0;
 }
 

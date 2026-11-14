@@ -2372,6 +2372,16 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(doc).toContain('A\n  switched-off section is never silently missing');
   });
 
+  it('Q5: a slider never spans a section', () => {
+    const css = stripComments(src('ui/Slider/Slider.module.css'));
+    expect(css).toContain('.slider:not([data-layout]) {\n  max-width: 360px;');
+    expect(css).toContain('flex: 0 0 var(--slider-track-w)');
+    const targets = src('features/analyzer/blocks/Targets.tsx');
+    expect(targets).toContain('trackWidth={280}');
+    expect(targets).not.toContain('width="100%"');
+    expect(doc).toContain('this slider is too wide');
+  });
+
   it('Q3: a splitter sets the pane width, remembered, the same on every tab', () => {
     const shell = src('features/analyzer/RunShell.tsx');
     expect(shell).toContain('<PaneResizer');

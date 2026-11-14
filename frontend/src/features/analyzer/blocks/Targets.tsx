@@ -55,7 +55,9 @@ export function TargetFilters({
             unit="%"
             value={settings.maxScorePct}
             onChange={(v) => update({ maxScorePct: v })}
-            width="100%"
+            // cv5 Q5: label, a 280px track and the value on one line; it never spans the section
+            layout="inline"
+            trackWidth={280}
           />
         </div>
         <div className={s.switchRow}>

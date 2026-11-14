@@ -433,6 +433,11 @@ preselected.
   the bar (cv5 K5). The analyzer model is a labelled bar `Select` with `showValue="always"` ("Analyzer model ·
   gpt-4o-mini"); with the prompt pane on screen the bar has no Prompt preview button.
 
+- **Slider** (`Slider`): a threshold control, accent fill, 14px thumb, the value in mono accent. It never spans a
+  section (cv5 Q5, owner: "this slider is too wide"): a stacked slider is capped at 360px, and an `inline` slider
+  (label, track, value on one control line) takes `trackWidth` for a fixed track (the auto-analysis "Max score" uses
+  280px, beside its switches on one line).
+
 - **Pagination** (`Pagination`): every paginated view uses it. Borderless
   rounded-square icon buttons for First, Previous, Next, Last around a direct
   page entry (cv4 F3: `--control-height-sm` 20px high, 22px wide, growing only with the digit count, a soft
