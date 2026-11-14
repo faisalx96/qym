@@ -1,7 +1,16 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useMemo, useState, type ReactNode } from 'react';
 import { Icon, JsonText } from '@/ui';
 import { textDirAttrs } from '@/lib/text';
-import { hasMark, lineSpan, type Block, type Line, type ListItem, type PromptDoc, type Section } from '../model/promptDoc';
+import {
+  hasMark,
+  lineSpan,
+  type Block,
+  type Line,
+  type ListItem,
+  type PromptDoc,
+  type Section,
+} from '../model/promptDoc';
+import { stateText, type NotePlace } from '../model/outline';
 import s from './promptDoc.module.css';
 
 /** A part of the item data or a document longer than this many lines starts closed (a change or a jump opens it). */
@@ -18,9 +27,20 @@ interface DocState {
   prefix: string;
   /** cv5 Q4: section keys to mark (the Prompt contents switch under the pointer or the focus). */
   peek: ReadonlySet<string> | null;
+  /** cv5 N: the note lines of the sections that are not in the prompt, by container ('' = the top level). */
+  notes: ReadonlyMap<string, NotePlace[]>;
 }
 
-const Ctx = createContext<DocState>({ added: undefined, change: null, jump: null, prefix: '', peek: null });
+const NO_NOTES: ReadonlyMap<string, NotePlace[]> = new Map();
+
+const Ctx = createContext<DocState>({
+  added: undefined,
+  change: null,
+  jump: null,
+  prefix: '',
+  peek: null,
+  notes: NO_NOTES,
+});
 
 const leading = (text: string) => text.length - text.trimStart().length;
 /** The line without its layout indent (the leading spaces that the structure already shows). */
@@ -118,7 +138,7 @@ function Collapsible({ section, level }: { section: Section; level: 1 | 2 }) {
       </Heading>
       {/* closed content stays in the page (the rendered view holds every character of the prompt) */}
       <div id={bodyId} className={s.body} hidden={!open}>
-        <Blocks blocks={section.children} />
+        <Blocks blocks={section.children} container={section.id} />
       </div>
     </section>
   );
@@ -302,12 +322,55 @@ function BlockView({ block }: { block: Block }) {
   }
 }
 
-function Blocks({ blocks }: { blocks: Block[] }) {
+/**
+ * cv5 N: a section that is not in the prompt keeps its place: one quiet line, "Reference documents: not sent". It is
+ * interface text, not prompt text: no id of the raw text, not selectable, never part of Copy or of the raw view.
+ */
+function NoteLine({ place }: { place: NotePlace }) {
+  const { prefix, peek } = useContext(Ctx);
+  const { row } = place;
+  return (
+    <p
+      id={`${prefix}${row.id}`}
+      className={s.noteLine}
+      data-depth={row.depth}
+      data-key={row.key ?? undefined}
+      data-peek={row.key && peek?.has(row.key) ? '' : undefined}
+      data-ui-note=""
+    >
+      <span className={s.noteName}>{row.label}</span>
+      {`: ${row.state === 'empty' ? 'none for this target' : stateText(row.state)}`}
+    </p>
+  );
+}
+
+/** The blocks of one container; `container` (a section id, '' for the top level) places its note lines. */
+function Blocks({ blocks, container }: { blocks: Block[]; container?: string }) {
+  const { notes } = useContext(Ctx);
+  const here = container === undefined ? undefined : notes.get(container);
+  if (!here?.length)
+    return (
+      <>
+        {blocks.map((block, n) => (
+          <BlockView key={n} block={block} />
+        ))}
+      </>
+    );
+  const before = (n: number) =>
+    here.filter((p) => p.index === n).map((p) => <NoteLine key={p.row.id} place={p} />);
   return (
     <>
       {blocks.map((block, n) => (
-        <BlockView key={n} block={block} />
+        <Fragment key={n}>
+          {before(n)}
+          <BlockView block={block} />
+        </Fragment>
       ))}
+      {here
+        .filter((p) => p.index >= blocks.length)
+        .map((p) => (
+          <NoteLine key={p.row.id} place={p} />
+        ))}
     </>
   );
 }
@@ -315,7 +378,8 @@ function Blocks({ blocks }: { blocks: Block[] }) {
 /**
  * One message of the analyzer prompt as a document (cv5 Q2): headings, prose, lists, definitions, JSON in the JSON
  * colours, the trace as steps. Every character of the raw message is in the page (a closed section is hidden, not
- * removed). Lines that the last settings change added carry `data-added`, inside their own section.
+ * removed). Lines that the last settings change added carry `data-added`, inside their own section. A section that is
+ * not in the prompt shows one note line at its place (cv5 N, `data-ui-note`): interface text, not prompt text.
  */
 export function PromptDocument({
   doc,
@@ -324,6 +388,7 @@ export function PromptDocument({
   jump,
   prefix,
   peek = null,
+  notes,
 }: {
   doc: PromptDoc;
   added?: ReadonlySet<number>;
@@ -331,11 +396,22 @@ export function PromptDocument({
   jump: DocState['jump'];
   prefix: string;
   peek?: ReadonlySet<string> | null;
+  /** cv5 N: the sections that are not in this message, each shown as one quiet line at its place. */
+  notes?: NotePlace[];
 }) {
+  const byContainer = useMemo(() => {
+    if (!notes?.length) return NO_NOTES;
+    const map = new Map<string, NotePlace[]>();
+    for (const p of notes) {
+      const k = p.container ?? '';
+      map.set(k, [...(map.get(k) ?? []), p]);
+    }
+    return map;
+  }, [notes]);
   return (
-    <Ctx.Provider value={{ added, change, jump, prefix, peek }}>
+    <Ctx.Provider value={{ added, change, jump, prefix, peek, notes: byContainer }}>
       <div className={s.doc} data-structured={doc.structured ? '' : undefined}>
-        <Blocks blocks={doc.blocks} />
+        <Blocks blocks={doc.blocks} container="" />
       </div>
     </Ctx.Provider>
   );

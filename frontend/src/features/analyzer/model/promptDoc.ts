@@ -591,6 +591,16 @@ export function hasMark(block: Block, marks: ReadonlySet<number> | undefined): b
   return flattenLines([block]).some((l) => marks.has(l.i));
 }
 
+/** The index of the user message's closing line ("Return only the JSON object ..."), or -1. */
+export function closingIndex(blocks: Block[]): number {
+  for (let n = blocks.length - 1; n >= 0; n -= 1) {
+    const block = blocks[n]!;
+    if (block.kind === 'blank') continue;
+    return block.kind === 'para' && block.lines.length === 1 && END_LINE.test(block.lines[0]!.text) ? n : -1;
+  }
+  return -1;
+}
+
 export interface OutlineEntry {
   id: string;
   label: string;

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Drawer, Select } from '@/ui';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import { ContextRow } from './PromptContents';
@@ -21,6 +22,8 @@ export function PreviewDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  // cv5 N: hover or focus of a Context switch marks its section in the prompt, as on the page
+  const [peek, setPeek] = useState<string[] | null>(null);
   const items = ws.allKeys.map((k) => {
     const [itemId = '', metric = ''] = k.split('\u0000');
     const score = ws.rowById.get(itemId)?.metric_scores[metric];
@@ -44,8 +47,8 @@ export function PreviewDrawer({
           isDisabled={items.length === 0}
           placeholder="No targets"
         />
-        <ContextRow ws={ws} />
-        <PromptPreview ws={ws} maxHeight={false} />
+        <ContextRow ws={ws} onPeek={setPeek} />
+        <PromptPreview ws={ws} maxHeight={false} peek={peek} />
       </div>
     </Drawer>
   );

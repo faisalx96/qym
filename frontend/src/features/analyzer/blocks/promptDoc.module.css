@@ -366,85 +366,211 @@
   color: var(--text-muted);
 }
 
-/* ── outline: the sections to jump to, sticky at the top of the scroll region; the section in view in the accent ── */
-.outline {
-  position: sticky;
-  /* sticky inside a padded scroller stops at the padding: the scroller says how far (--outline-stick) */
-  top: calc(-1 * var(--outline-stick, 0px));
-  z-index: 1;
+/* ── outline (cv5 N, owner 2026-11-14: "this navbar sucks!!"): one tree, message → section → part of the item data ──
+   A wide pane: a slim sticky rail at the start of the body. A narrow pane and the drawer: one location line, the
+   dropdown trigger, that opens the same tree in the shared menu. */
+.prompt {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--space-xs) 0 var(--space-sm);
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--outline-bg, var(--bg-surface));
+  gap: var(--space-sm);
+  min-width: 0;
 }
 
-.outlineGroup {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+.prompt[data-form='rail'] {
+  display: grid;
+  /* wide enough for "Reference documents  not sent" on one line */
+  grid-template-columns: clamp(196px, 27%, 212px) minmax(0, 1fr);
   column-gap: var(--space-md);
-  row-gap: 2px;
+  align-items: start;
 }
 
-.outlineRole {
-  min-width: 6ch;
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* The rail: sticky at the top of the scroller, its own scroll when the tree is taller than the pane
+   (--rail-max: the scroller's height, measured). */
+.rail {
+  position: sticky;
+  top: 0;
+  max-height: var(--rail-max, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-block: var(--space-xs);
+}
+
+.railGroup + .railGroup {
+  margin-top: var(--space-md);
+}
+
+/* The message name: the switch-group label (--font-sm, 600, muted), above the track, not a row */
+.railName {
+  margin: 0 0 var(--space-xs);
   font-size: var(--font-sm);
+  font-weight: 600;
   color: var(--text-muted);
 }
 
-.outlineLink {
+/* the sections hang on one hairline track: the tree reads by its indent, not by weight alone */
+.railList {
+  margin: 0;
   padding: 0;
+  list-style: none;
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.railRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-xs);
+  width: calc(100% + 1px);
+  min-height: 24px;
+  margin-inline-start: -1px;
+  padding: 3px var(--space-xs) 3px var(--space-sm);
   border: 0;
+  /* the selected bar sits on the track */
+  border-inline-start: 2px solid transparent;
   background: none;
   font: inherit;
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
   font-weight: 600;
+  line-height: 1.4;
+  text-align: start;
   color: var(--text-secondary);
   cursor: pointer;
 }
 
-.outlineLink[data-depth='1'] {
+/* a part of the item data: indented under its section, regular weight */
+.railRow[data-depth='1'] {
+  padding-inline-start: calc(var(--space-sm) + var(--space-md));
+  font-weight: 450;
+}
+
+.railLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.railRow:hover {
+  color: var(--text-primary);
+}
+
+/* the parent section of the part in view */
+.railRow[data-trail] {
+  color: var(--text-primary);
+}
+
+/* the section in view: accent text and a 2px start bar (the vertical tab list's selected row) */
+.railRow[aria-current] {
+  color: var(--accent-primary);
+  border-inline-start-color: var(--accent-primary);
+}
+
+.railRow:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+/* a section that is not in the prompt: muted, its state at the row end */
+.railRow[data-state] {
   font-weight: 450;
   color: var(--text-muted);
 }
 
-.outlineLink:hover,
-.outlineLink[aria-current] {
+.railRow[data-state][aria-current] {
   color: var(--accent-primary);
 }
 
-.outlineLink:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
+/* cv5 Q4: the row of a hovered or focused Prompt contents switch: the soft accent wash (the document marks the section) */
+.railRow[data-peek] {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  color: var(--text-primary);
+}
+
+/* the menu row of a section that is not in the prompt (the rail's muted row) */
+.mutedLabel {
+  color: var(--text-muted);
+}
+
+.rowState {
+  margin-inline-start: auto;
+  font-size: var(--font-sm);
+  font-weight: 450;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* a section that holds a line of the last change: a small accent dot at the row end (the added lines' colour) */
+.changeDot {
+  display: inline-block;
+  flex: none;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.changeDot + .rowState {
+  margin-inline-start: 0;
+}
+
+/* The narrow form: one line under the pane head, sticky at the top of the scroller (--outline-stick: the scroller's
+   top padding); a hairline only while text runs under it. */
+.locationBar {
+  position: sticky;
+  top: calc(-1 * var(--outline-stick, 0px));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding-block: var(--space-xs);
+  border-bottom: 1px solid transparent;
+  background: var(--outline-bg, var(--bg-surface));
+}
+
+.locationBar[data-scrolled] {
+  border-bottom-color: var(--border-subtle);
+}
+
+.location {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* cv5 Q4: the section of a hovered or focused Prompt contents switch: an accent edge around it, no motion */
-.section[data-peek] {
+.section[data-peek],
+.noteLine[data-peek] {
   outline: 1px solid var(--accent-primary);
   outline-offset: var(--space-xs);
   border-radius: var(--radius-sm);
 }
 
-.outlineLink[data-peek],
-.outlineNote[data-peek] {
-  color: var(--accent-primary);
-}
-
-/* a section that is not in this prompt: its name, then "not sent" or "none", quiet */
-.outlineNote {
+/* cv5 N: a section that is not in the prompt keeps its place in the document as one quiet line. Interface text, not
+   prompt text: not selectable, so a copy of the page text never takes it. */
+.noteLine {
+  margin: var(--space-xs) 0 0;
   font-size: var(--font-sm);
   color: var(--text-muted);
+  user-select: none;
 }
 
-.outlineNote[data-depth='0'] {
+/* aligned with the heading text of its level (after the 3px bar of a section, after the chevron of a part) */
+.noteLine[data-depth='0'] {
+  padding-inline-start: calc(3px + var(--space-sm));
+}
+
+.noteLine[data-depth='1'] {
+  padding-inline-start: calc(12px + var(--space-xs));
+}
+
+.noteName {
   font-weight: 600;
-}
-
-.outlineState {
-  margin-inline-start: var(--space-xs);
-  font-weight: 450;
-  color: var(--text-muted);
 }
