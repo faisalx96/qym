@@ -1,4 +1,5 @@
-/* Item pane recipe: one frame over the page, inset blocks with a tone rail, the JSON fields recipe, one metrics table. Tokens only. */
+/* Item pane recipe (DESIGN_LANGUAGE §3.9 "Item pane"): one frame over the page, inset blocks with a tone rail, the JSON
+   fields recipe in the --json-* colours, one metrics table. Tokens only; every control is a platform primitive. */
 
 /* ---------- frame ---------- */
 /* the Drawer's surface with no scrim, from the sticky nav down, so the table and the page controls stay in reach */
@@ -47,7 +48,7 @@
   position: absolute;
   inset-block: 0;
   inset-inline-start: 3px;
-  width: 2px;
+  width: 3px;
   background: transparent;
   content: '';
   transition: background var(--transition-fast);
@@ -164,12 +165,29 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+
+  /* cv5 H1, "On an inset card": the pane body holds controls on its own ground (--bg-surface) and on inset blocks
+     (--bg-elevated), as a ReportSection body does. The same translucent fills put a well one step and a button two
+     steps over whichever ground it sits on. No rule here sets the fill of one control. */
+  --control-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --control-fill-hover: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --button-fill: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --button-fill-hover: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  --button-fill-pressed: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
-.skeleton,
-.loadError {
+/* the loading frame lays its blocks out as the body does */
+.skeleton {
   display: grid;
+  grid-auto-rows: max-content;
   gap: var(--space-md);
+  min-width: 0;
+}
+
+.boneCell {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
 }
 
 .note {
@@ -226,18 +244,21 @@
   padding-inline: var(--space-md) var(--space-sm);
 }
 
-/* fixed UI labels keep the uppercase tracked eyebrow; Input, Expected and Output carry their tone */
-.eyebrow {
+/* the title of a block is the platform Eyebrow (a fixed UI label); Input, Expected and Output carry their tone.
+   A title that is a name (the run of an output on the compare page) is shown as written, not as an eyebrow. */
+.blockTitle {
+  display: flex;
+  align-items: center;
+  min-width: 0;
   margin: 0;
-  font-size: var(--font-sm);
-  font-weight: 650;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--text-muted);
+  font: inherit;
 }
 
-.block:not([data-tone='neutral']) > .blockHead > .eyebrow {
+.eyebrow {
+  white-space: nowrap;
+}
+
+.block:not([data-tone='neutral']) > .blockHead > .blockTitle > .eyebrow {
   color: var(--tone-text);
 }
 
@@ -335,10 +356,28 @@
 .mark {
   padding-block: 1px;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--warning) 26%, transparent);
+  background: color-mix(in srgb, var(--warning) var(--tint-strong), transparent);
   color: inherit;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
+}
+
+/* a very long text or code value: its first lines, then the platform's Show more button (no fade over the text) */
+.fold {
+  display: grid;
+  gap: var(--space-sm);
+  justify-items: start;
+  min-width: 0;
+}
+
+.fold > :first-child {
+  inline-size: 100%;
+  min-width: 0;
+}
+
+.folded {
+  max-block-size: calc(var(--lines) * 1.6em);
+  overflow: hidden;
 }
 
 /* code and raw JSON: the one deeper fill inside a block */
@@ -362,23 +401,31 @@
   text-indent: -2ch;
 }
 
-/* the JSON viewer's palette: a key and a keyword are the structure of the text */
+/* cv5 H3: the one set of JSON syntax colours (--json-*), as ui/JsonViewer and JsonText. A SQL keyword is the
+   structure of its text, as a key is: it takes the key colour. */
 .code [data-t='keyword'],
 .code [data-t='key'] {
-  color: var(--accent-secondary);
+  color: var(--json-key);
+}
+
+.code [data-t='string'] {
+  color: var(--json-string);
 }
 
 .code [data-t='number'] {
-  color: var(--chart-5);
+  color: var(--json-number);
 }
 
 .code [data-t='boolean'] {
-  color: var(--accent-tertiary-soft);
+  color: var(--json-boolean);
 }
 
-.code [data-t='null'],
+.code [data-t='null'] {
+  color: var(--json-null);
+}
+
 .code [data-t='punct'] {
-  color: var(--text-muted);
+  color: var(--json-punct);
 }
 
 /* ---------- the fields of a JSON value: each key above its value ---------- */
@@ -407,7 +454,7 @@
   flex: 1 1 100%;
 }
 
-/* a data key: mono, as written, never cut, in the key colour of the JSON viewer so a key never reads as a value */
+/* a data key: mono, as written, never cut, in the key colour of the JSON viewer (--json-key) */
 .key {
   min-inline-size: 0;
   overflow-wrap: anywhere;
@@ -415,7 +462,7 @@
   font-size: var(--font-sm);
   font-weight: 600;
   line-height: 1.5;
-  color: color-mix(in srgb, var(--accent-secondary) 62%, var(--text-secondary));
+  color: var(--json-key);
 }
 
 .fieldValue {
@@ -444,20 +491,21 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1.6;
-  color: var(--text-primary);
+  color: var(--json-string);
 }
 
-/* the JSON viewer's palette for the kind of a value */
-.scalar[data-kind='number'] {
-  color: color-mix(in srgb, var(--chart-5) 70%, var(--text-primary));
+/* cv5 H3: the kind of a value in the JSON viewer's colours; a string value is never plain white */
+.scalar[data-kind='number'],
+.scalar[data-kind='bigint'] {
+  color: var(--json-number);
 }
 
 .scalar[data-kind='boolean'] {
-  color: var(--accent-tertiary-soft);
+  color: var(--json-boolean);
 }
 
 .scalar[data-kind='null'] {
-  color: var(--text-muted);
+  color: var(--json-null);
 }
 
 .list {
@@ -520,13 +568,9 @@
   min-width: 0;
 }
 
-/* a neutral button on a block's fill takes the next fill up, so it reads as a button */
-.tableWrap > .moreRows {
-  background: var(--bg-active);
-}
-
-.tableWrap > .moreRows[data-hovered] {
-  background: var(--border-default);
+/* the table footer ("Show N more") on the block's fill */
+.tableWrap [data-dt-footer] {
+  background: transparent;
 }
 
 .tableNote {
@@ -599,57 +643,6 @@
   background: var(--bg-surface);
 }
 
-/* ---------- execution facts: equal centred cells, a label above its value ---------- */
-.facts {
-  display: grid;
-  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
-  margin: 0;
-}
-
-.fact {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  align-items: center;
-  min-width: 0;
-  padding-inline: var(--space-xs);
-  text-align: center;
-}
-
-.fact + .fact {
-  border-inline-start: 1px solid var(--border-subtle);
-}
-
-.fact dt {
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.fact dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: var(--font-lg);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
-}
-
-.fact[data-bad] dd {
-  color: var(--error-text);
-}
-
-@container (max-width: 520px) {
-  .facts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    row-gap: var(--space-md);
-  }
-
-  .fact:nth-child(3n + 1) {
-    border-inline-start: 0;
-  }
-}
-
 /* ---------- metrics: one table ---------- */
 .block[data-part='metrics'] {
   container: metrics / inline-size;
@@ -669,7 +662,12 @@
   padding-inline: var(--space-md) var(--space-sm);
 }
 
-/* one line: the block title in the name column, then the column titles */
+/* the loading frame: one column of bones under the title row */
+.mgrid[data-loading] {
+  --cols: minmax(0, 1fr);
+}
+
+/* one line: the column titles, in the type of a DataTable header (--font-sm, 650, 0.05em, upper case, muted) */
 .mhead {
   align-items: center;
   min-height: 36px;
@@ -706,9 +704,9 @@
   background: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
 }
 
-/* the row whose score is in edit: the selected fill */
+/* the row whose score is in edit: the selected step of the row ladder (cv4 F11) */
 .mrow[data-editing] {
-  background: var(--bg-selected);
+  background: var(--row-selected);
 }
 
 .mrow > [role='cell'] {
@@ -798,9 +796,9 @@
   border-radius: var(--control-radius);
 }
 
-/* the pass in view: the selected fill */
+/* the pass in view: the selected step of the row ladder */
 .cellScore[data-focus] {
-  background: var(--bg-selected);
+  background: var(--row-selected);
 }
 
 .passIf {
@@ -923,32 +921,11 @@
   min-width: 0;
 }
 
-.editRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  align-items: center;
-}
-
-/* a neutral button on the block's fill takes the next fill up, so it reads as a button */
-.editRow .onFill {
-  background: var(--bg-active);
-}
-
-.editRow .onFill[data-hovered] {
-  background: var(--border-default);
-}
-
-.hint,
-.editError {
+.hint {
   margin: 0;
   font-size: var(--font-sm);
   line-height: 1.5;
   color: var(--text-muted);
-}
-
-.editError {
-  color: var(--error-text);
 }
 
 /* ---------- pass switch ---------- */
@@ -970,6 +947,8 @@
 /* ---------- root cause (the app's own cards) ---------- */
 /* on the pane's own surface, so the fields of the issue form keep their fill */
 .rootCause {
+  display: grid;
+  gap: var(--space-sm);
   min-width: 0;
   margin-block-start: var(--space-sm);
 }
@@ -981,25 +960,4 @@
 
 .rootCause:empty {
   display: none;
-}
-
-/* ---------- the table beside the pane ---------- */
-/* the open row reads as selected: the selected fill and the 2px accent bar */
-:global(body[data-item-pane]) tr[data-item-id][data-open='true'] {
-  --row-tint: var(--bg-selected);
-}
-
-:global(body[data-item-pane]) tr[data-item-id][data-open='true'] > td:first-child {
-  box-shadow: inset 2px 0 0 var(--accent-primary);
-}
-
-/* the issue form: its fields and its plain buttons take a fill, so each one reads as a control on the dark card */
-.rootCause input,
-.rootCause textarea,
-.rootCause button[aria-haspopup] {
-  background: var(--bg-elevated);
-}
-
-.rootCause button[data-variant='neutral'] {
-  background: var(--bg-active);
 }

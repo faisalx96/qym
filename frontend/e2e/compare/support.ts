@@ -64,9 +64,9 @@ export async function goSection(page: Page, name: string): Promise<void> {
     .click();
 }
 
-/** The expanded detail of one item (a sibling row of the item-row, so it is found by item id). */
+/** The item pane of one item (the item opens in a pane at the side of the list; it is found by item id). */
 export const itemDetail = (page: Page, id: string) =>
-  page.locator(`[data-testid="item-detail"][data-item-id="${id}"]`);
+  page.locator(`[data-testid="item-pane"][data-item-id="${id}"]`);
 
 /** The baseline select trigger (K1: by the page title, not in the sticky bar). */
 export const baselineSelect = (page: Page) =>

@@ -1,6 +1,7 @@
 /** Everything an item pane needs about one row: load state, passes, verdict, metric rows, facts, metadata and the link. */
 import { useEffect, useMemo } from 'react';
-import { formatNumericValue, isItemTaskError, passThresholdLabel } from '@/lib/metrics';
+import { formatHeaderDate, toDate } from '@/lib/dates';
+import { formatNumericValue, isItemTaskError, passThresholdLabel, type MetricDirection } from '@/lib/metrics';
 import { parseStructured, promptPreview } from '@/ui';
 import { bodyText, formatCompact, itemLink } from '../../../lib/itemText';
 import { metricPassesFor } from '../../../lib/filterRules';
@@ -16,7 +17,7 @@ import {
 import { HIDDEN_METADATA_KEYS } from '../../../lib/rowMeta';
 import { metricHasPassThreshold } from '../../../lib/runModel';
 import { useRunPage } from '../../../RunContext';
-import type { Row } from '../../../types';
+import type { MetricAnalysis, Row } from '../../../types';
 import { useItemsUi } from '../ItemsUi';
 
 export interface ItemPass {
@@ -82,6 +83,51 @@ export function extraMeta(meta: Record<string, unknown>): Record<string, unknown
   return Object.fromEntries(Object.entries(meta).filter(([k]) => !REASON_KEYS.includes(k)));
 }
 
+/** Item-level and per-metric analysis warnings, deduplicated; failed analyses own their warnings. */
+export function analysisWarnings(row: Row): string[] {
+  const md = row.item_metadata ?? {};
+  const analyses = (md.metric_analyses ?? {}) as Record<string, MetricAnalysis | undefined>;
+  const out: string[] = [];
+  const add = (value: unknown) => {
+    const text = String(value ?? '').trim();
+    if (text && !out.some((w) => w.toLowerCase() === text.toLowerCase())) out.push(text);
+  };
+  const failed = !!md.analysis_error || Object.values(analyses).some((a) => a?.error);
+  if (!failed) add(md.analysis_warning);
+  for (const a of Object.values(analyses)) if (a && !a.error) add(a.warning);
+  return out;
+}
+
+/** Why the texts of an item are hidden from this reader. */
+export function restrictedReason(reason: string | null | undefined): string {
+  return reason === 'dataset_access'
+    ? 'Hidden: you don’t have access to this dataset’s items.'
+    : 'Item bodies are visible to admins only on a private test set.';
+}
+
+function editValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'no score';
+  return String(typeof value === 'number' ? Number(value.toFixed(4)) : value);
+}
+
+/** Who edited the score, when, and from what to what (meta.last_edit), plus the scorer's original value. */
+export function editTooltip(meta: Record<string, unknown>): string {
+  const record =
+    meta.last_edit && typeof meta.last_edit === 'object' ? (meta.last_edit as Record<string, unknown>) : null;
+  const lines: string[] = [];
+  if (record) {
+    const whenText = record.at && toDate(String(record.at)) ? formatHeaderDate(String(record.at)) : '';
+    lines.push(
+      `${record.action === 'reset' ? 'Reset by ' : 'Edited by '}${String(record.by || 'a reviewer')}${whenText ? ` on ${whenText}` : ''}`,
+    );
+    lines.push(`${editValue(record.from)} \u2192 ${editValue(record.to)}`);
+  } else {
+    lines.push('Edited by a reviewer');
+  }
+  if (meta.original_score !== undefined) lines.push(`Original score: ${editValue(meta.original_score)}`);
+  return lines.join('\n');
+}
+
 /** A text field under one of the well-known prompt keys, looked for level by level (an input can nest its prompt). */
 function promptIn(data: Record<string, unknown>, depth = 0): string | null {
   const entries = Object.entries(data);
@@ -110,6 +156,16 @@ export function promptLine(value: unknown): string {
     if (main) return main.replace(/\s+/g, ' ').trim();
   }
   return promptPreview(value, 240);
+}
+
+/**
+ * The pass rule of a metric as the "Pass if" text: "≥ 70%" for a score, "≤ 3" for a number that is better when lower.
+ * The run pane and the compare pane show the same text.
+ */
+export function passIfText(type: string, threshold: number, direction: MetricDirection | undefined): string {
+  return type === 'numeric'
+    ? `${direction === 'minimize' ? '≤' : '≥'} ${formatNumericValue(threshold)}`
+    : passThresholdLabel(threshold, direction ?? null);
 }
 
 export function useItem(row: Row) {
@@ -172,11 +228,7 @@ export function useItem(row: Row) {
         verdicts: cells.map((c) => verdictOf(name, c)),
         mean,
         meanVerdict: verdictOf(name, mean, !multi),
-        passIf: metricHasPassThreshold(model, name)
-          ? type === 'numeric'
-            ? `${dir === 'minimize' ? '≤' : '≥'} ${formatNumericValue(threshold)}`
-            : passThresholdLabel(threshold, dir)
-          : '',
+        passIf: metricHasPassThreshold(model, name) ? passIfText(type, threshold, dir) : '',
       };
     });
   }, [model, passes, ctx, row, pageMetric, multi]);
@@ -219,6 +271,7 @@ export function useItem(row: Row) {
   return {
     loaded,
     loadError: !loaded && loadState?.status === 'error',
+    loadErrorCause: loadState?.status === 'error' ? loadState.error : undefined,
     retryLoad: () => void ui.details.retry(row.item_id),
     ui,
     run,

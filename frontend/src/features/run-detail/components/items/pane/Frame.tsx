@@ -21,7 +21,7 @@ import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard'
 import { useDelayedPending } from '@/lib/pending';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs, type TextMode } from '@/lib/text';
-import { Button, Icon, Kbd, Skeleton, StateTag, type StateTagTone } from '@/ui';
+import { ErrorState, Icon, Kbd, Skeleton, StateTag, type StateTagTone } from '@/ui';
 import { useShellScroller } from '../../../hooks/useScrollMargin';
 import { defaultPageSize } from '../../../lib/itemsPaging';
 import { itemVerdict, type ItemVerdict } from '../../../lib/itemVerdict';
@@ -29,13 +29,14 @@ import { verdictTone } from '../../../lib/verdictMark';
 import { useRunPage } from '../../../RunContext';
 import type { Row } from '../../../types';
 import pager from '../../RunPager.module.css';
+import { PAGE_SIZES } from '../ItemsTable';
 import { useItemsUi } from '../ItemsUi';
 import { Act, CopyTile } from './actions';
+import { Block, PaneSection, type BlockTone } from './blocks';
 import { firstBadPass, promptLine, useItem, type ItemData } from './model';
 import { PaneTextMode } from './values';
 import s from './pane.module.css';
 
-const PAGE_SIZES = [20, 50, 100, 500];
 /** At its default width the pane leaves this much of the table in view (the row number and the status). */
 const TABLE_IN_VIEW = 240;
 
@@ -184,38 +185,62 @@ function Step({
   );
 }
 
-/** The loading frame: the design's own blocks with bones in them, so the content arrives in place. */
-export function PaneSkeleton({ blocks }: { blocks: SkeletonBlock[] }) {
-  const block = (kind: Exclude<SkeletonBlock, 'pair'>, key: string) => {
-    const [label, rows, tone] = (
+export interface PaneSkeletonProps {
+  blocks: SkeletonBlock[];
+  /** The metric rows that will arrive (the page knows its metrics before the item texts load). */
+  metricRows?: number;
+  /** The output blocks of a pair: one on the run page, one per run on the compare page. */
+  outputs?: number;
+  /** The class of the element that holds Expected and the outputs (the compare page has its own grid). */
+  pairClassName?: string;
+}
+
+/**
+ * The loading frame (DESIGN_LANGUAGE §7 "A loading frame is the loaded layout"): the pane's own blocks and section
+ * head, with `Skeleton` shapes in place of the values, so the content arrives in place. No invented value, no word.
+ */
+export function PaneSkeleton({ blocks, metricRows = 3, outputs = 1, pairClassName }: PaneSkeletonProps) {
+  const text = (kind: 'input' | 'expected' | 'output', key: string) => {
+    const [title, tone, label, rows] = (
       {
-        metrics: ['Loading metrics', 4, 'neutral'],
-        input: ['Loading input', 3, 'info'],
-        expected: ['Loading expected output', 3, 'gold'],
-        output: ['Loading output', 3, 'neutral'],
-      } as const
+        input: ['Input', 'info', 'Loading input', 2],
+        expected: ['Expected', 'gold', 'Loading expected output', 3],
+        output: ['Output', 'neutral', 'Loading output', 3],
+      } as const satisfies Record<string, readonly [string, BlockTone, string, number]>
     )[kind];
     return (
-      <section key={key} className={s.block} data-tone={tone} aria-hidden="true">
-        <header className={s.blockHead}>
-          <Skeleton kind="value" width={72} label={label} />
-        </header>
-        <div className={s.blockBody}>
-          <Skeleton kind="lines" rows={rows} label={label} />
-        </div>
-      </section>
+      <Block key={key} title={title} tone={tone} part={kind} fill={kind !== 'input'} busy>
+        <Skeleton kind="lines" rows={rows} label={label} />
+      </Block>
     );
   };
   return (
-    <div className={s.skeleton} aria-busy="true" aria-label="Loading item">
+    <div className={s.skeleton} data-part="pane-skeleton" aria-busy="true" aria-label="Loading item">
       {blocks.map((b, i) =>
         b === 'pair' ? (
-          <div key={i} className={s.pair}>
-            {block('expected', 'e')}
-            {block('output', 'o')}
+          <div key={i} className={pairClassName ?? s.pair}>
+            {text('expected', 'e')}
+            {Array.from({ length: Math.max(1, outputs) }, (_, n) => text('output', `o${n}`))}
           </div>
+        ) : b === 'metrics' ? (
+          <PaneSection key={i} title="Metrics" part="metrics-section">
+            <section className={s.block} data-tone="neutral" data-part="metrics" aria-hidden="true">
+              <div className={s.mgrid} data-loading="">
+                <div className={s.mhead}>
+                  <span className={s.mtitle}>Metric</span>
+                </div>
+                {Array.from({ length: Math.max(1, metricRows) }, (_, n) => (
+                  <div key={n} className={s.mrow}>
+                    <span className={s.boneCell}>
+                      <Skeleton kind="value" width="60%" height={14} label="Loading metrics" />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </PaneSection>
         ) : (
-          block(b, String(i))
+          text(b, String(i))
         ),
       )}
     </div>
@@ -224,6 +249,11 @@ export function PaneSkeleton({ blocks }: { blocks: SkeletonBlock[] }) {
 
 const NOT_FOR_KEYS =
   'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="dialog"], dialog';
+const shown = (selector: string) =>
+  Array.from(document.querySelectorAll(selector)).some((n) => n.getClientRects().length);
+/** A tooltip is on screen and no menu, list or dialog is: Escape has no other owner than the hint. */
+const onlyTooltipOpen = () =>
+  shown('[role="tooltip"]') && !shown('[role="menu"], [role="listbox"], [role="dialog"], [data-popover]');
 const modalOpen = () =>
   Array.from(document.querySelectorAll('[aria-modal="true"]')).some((n) => n.getClientRects().length);
 
@@ -305,25 +335,33 @@ export function PaneShell({
 
   // ---- Escape closes the pane from anywhere on the page. It runs last (bubble, on the document): a widget that owns
   // the key (the score editor, a menu, a dialog) has stopped it or prevented it before it arrives here.
+  // A tooltip is not such a widget: it only describes the control that has the focus (an action tile after the trace
+  // drawer gave the focus back, a pager step). React Aria takes Escape to close its tooltip; the same press closes the
+  // pane, so the pane never needs a press more because a hint was open.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
+    const done = new WeakSet<Event>();
+    const blocked = (event: KeyboardEvent) => {
       const el = event.target as HTMLElement | null;
-      if (el?.closest?.(NOT_FOR_KEYS) || modalOpen()) return;
+      return !!el?.closest?.(NOT_FOR_KEYS) || modalOpen();
+    };
+    const onCapture = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || blocked(event)) return;
+      if (!onlyTooltipOpen()) return;
+      done.add(event);
+      onClose();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || done.has(event) || blocked(event)) return;
       event.preventDefault();
       onClose();
     };
+    window.addEventListener('keydown', onCapture, true);
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  // ---- the open row reads as selected while a pane shows it
-  useEffect(() => {
-    document.body.dataset.itemPane = 'overlay';
     return () => {
-      delete document.body.dataset.itemPane;
+      window.removeEventListener('keydown', onCapture, true);
+      document.removeEventListener('keydown', onKey);
     };
-  }, []);
+  }, [onClose]);
 
   // a new item starts at its top
   useLayoutEffect(() => {
@@ -560,16 +598,15 @@ function PaneItem({
       {item.loaded ? (
         children(ctx)
       ) : item.loadError ? (
-        <div className={s.loadError} role="alert">
-          <p className={s.note}>Couldn’t load this item.</p>
-          <div>
-            <Button size="sm" variant="neutral" onPress={item.retryLoad}>
-              Retry
-            </Button>
-          </div>
-        </div>
+        // a failed load is never an empty state (§3 "Failed requests"): the platform error state with its Retry
+        <ErrorState
+          compact
+          error={item.loadErrorCause}
+          title="Couldn’t load this item"
+          onRetry={item.retryLoad}
+        />
       ) : pending ? (
-        <PaneSkeleton blocks={skeleton} />
+        <PaneSkeleton blocks={skeleton} metricRows={item.metrics.length} />
       ) : null}
     </PaneShell>
   );

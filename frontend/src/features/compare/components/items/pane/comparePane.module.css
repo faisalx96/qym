@@ -72,33 +72,11 @@ a.runLink:focus-visible {
   margin-inline-start: auto;
 }
 
+/* the label of a control group: the switch-group label (--font-sm, 600, muted) */
 .outsLabel {
   font-size: var(--font-sm);
+  font-weight: 600;
   color: var(--text-muted);
-}
-
-/* one run of the picker: pressed = its output is in view */
-.runToggle {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: 24px;
-  padding: 0 var(--space-sm);
-  border: 0;
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  cursor: pointer;
-  opacity: 0.45;
-  transition: opacity var(--transition-fast);
-}
-
-.runToggle[aria-pressed='true'] {
-  background: color-mix(in srgb, var(--run) 16%, var(--bg-elevated));
-  opacity: 1;
-}
-
-.runToggle:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 1px;
 }
 
 .outs {
@@ -126,8 +104,7 @@ a.runLink:focus-visible {
 
 /* ---------- metrics, up to four runs: a row per metric, a column per run ---------- */
 .matrix,
-.byRun,
-.facts {
+.byRun {
   display: grid;
   min-width: 0;
 }
@@ -195,9 +172,10 @@ a.runLink:focus-visible {
   background: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
 }
 
+/* the score in edit: the selected step of the row ladder (cv4 F11) */
 .cell[data-editing],
 .brLine[data-editing] {
-  background: var(--bg-selected);
+  background: var(--row-selected);
 }
 
 .cellTop {
@@ -274,10 +252,11 @@ a.runLink:focus-visible {
   padding-block-start: 0;
 }
 
-/* a neutral button on a block's fill takes the next fill up, so it reads as a button */
-.edit button[data-variant='neutral'],
-.onFill {
-  background: var(--bg-active);
+/* the platform's score editor, then the hint line */
+.edit {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
 }
 
 /* a narrow pane: the runs of a metric go under its name */
@@ -408,62 +387,43 @@ a.runLink:focus-visible {
   padding-block-start: 0;
 }
 
-/* ---------- execution: each run against the baseline ---------- */
-.factRow {
-  display: grid;
-  grid-template-columns: minmax(132px, 184px) repeat(var(--n), minmax(0, 1fr));
-  column-gap: var(--space-sm);
-  align-items: center;
-  min-height: 40px;
-  padding-inline: var(--space-md);
+/* ---------- execution: each run against the baseline, in the platform table ---------- */
+/* the table is in a block: the block's own fill with a clear title band and soft stripes, as a table inside a value
+   (the page table's dark base is too hard a step inside a block) */
+.facts {
+  display: block;
 }
 
-.factRow + .factRow {
-  border-block-start: 1px solid var(--border-subtle);
+.facts > [data-stripe] {
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
 }
 
-.factRow[data-head] {
-  padding-block: var(--space-sm);
+.facts thead th {
+  border-block-end: 0;
+  background: var(--bg-active);
 }
 
-.facts[data-by-run] .factRow {
-  grid-template-columns: minmax(200px, 1.6fr) repeat(var(--n), minmax(84px, 1fr));
+.facts tbody tr {
+  --row-base: color-mix(in srgb, var(--text-primary) 2%, transparent);
+}
+
+.facts tbody tr[data-zebra] {
+  --row-base: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+/* a run's name in a column title is shown as written (a table header is upper case) */
+.facts .runHead {
+  padding-inline: 0;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .factName {
-  font-size: var(--font-base);
   font-weight: 600;
   color: var(--text-secondary);
-}
-
-.factLabel {
-  font-size: var(--font-sm);
-  font-weight: 650;
-  letter-spacing: 0.05em;
-  text-align: center;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.factRun {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs) var(--space-sm);
-  align-items: center;
-  min-width: 0;
-}
-
-.factCell {
-  display: flex;
-  justify-content: center;
-  min-width: 0;
-  padding-block: var(--space-xs);
-}
-
-/* under a run's column title the value starts where the title starts */
-.factCell[data-start] {
-  justify-content: flex-start;
-  padding-inline: var(--space-sm);
 }
 
 .statValue {

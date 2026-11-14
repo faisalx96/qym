@@ -188,7 +188,7 @@ test('C-items-8: CSV is a 24 px accent button that opens the export dialog', asy
   await expect(page.getByRole('dialog', { name: 'Export CSV' })).toBeVisible();
 });
 
-test('C-row-1/2: cards of 54 with a pitch of 60, 20 per page, a 26 px chevron, the number and a clamped title', async ({
+test('C-row-1/2: cards of 54 with a pitch of 60, 20 per page, no chevron, the number and a clamped title', async ({
   page,
 }) => {
   await openCompare(page, s.four, 1440);
@@ -203,9 +203,8 @@ test('C-row-1/2: cards of 54 with a pitch of 60, 20 per page, a 26 px chevron, t
   expect(css.r).toBe('8px');
   expect(css.b).toBe('1px');
   within((await box(part(page, 'item-list'))).w, 1163, 4, 'list width');
-  const chev = await box(rows.first().locator('[data-part="item-chevron"]'));
-  within(chev.w, 26, 1, 'chevron');
-  within(chev.h, 26, 1, 'chevron');
+  // a row opens its item in the pane at the side: nothing expands in place, so the row has no chevron
+  await expect(rows.first().locator('[data-part="item-chevron"]')).toHaveCount(0);
   const no = await rows
     .first()
     .locator('[data-part="item-index"]')
@@ -312,7 +311,7 @@ test('C-row-5: the run key names every run once, is not sticky and takes at most
   expect(await part(page, 'run-key').evaluate((e) => getComputedStyle(e).position)).not.toBe('sticky');
 });
 
-test('C-row-6: the head is one tab stop (role=button), Enter and Space toggle, several rows can stay open', async ({
+test('C-row-6: the head is one tab stop (role=button), Enter and Space open the item pane, Escape gives the focus back', async ({
   page,
 }) => {
   await openCompare(page, s.four, 1440);
@@ -321,20 +320,29 @@ test('C-row-6: the head is one tab stop (role=button), Enter and Space toggle, s
   await expect(h1).toHaveAttribute('tabindex', '0');
   await h1.focus();
   await page.keyboard.press('Enter');
-  await expect(h1).toHaveAttribute('aria-expanded', 'true');
+  const pane = page.getByTestId('item-pane');
+  // the item in the pane is the list's current row (aria-current); the row never has aria-expanded
+  await expect(h1).toHaveAttribute('aria-current', 'true');
+  await expect(h1).not.toHaveAttribute('aria-expanded');
+  await expect(pane).toHaveAttribute('data-item-id', 'cmp-001');
   const h2 = itemHead(page, 'cmp-002');
   await h2.focus();
   await page.keyboard.press('Space');
-  await expect(h2).toHaveAttribute('aria-expanded', 'true');
-  await expect(h1).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByTestId('item-detail')).toHaveCount(2);
-  // the hover background comes from --bg-hover
+  // one item at a time: the pane moves to the second row
+  await expect(h2).toHaveAttribute('aria-current', 'true');
+  await expect(h1).not.toHaveAttribute('aria-current');
+  await expect(pane).toHaveCount(1);
+  await expect(pane).toHaveAttribute('data-item-id', 'cmp-002');
+  await page.keyboard.press('Escape');
+  await expect(pane).toHaveCount(0);
+  await expect(h2).toBeFocused();
+  // the hover background is the hover step of the row ladder (--row-hover)
   await h2.hover();
   const [bg, hover] = await Promise.all([
     h2.evaluate((e) => getComputedStyle(e).backgroundColor),
     page.evaluate(() => {
       const el = document.createElement('i');
-      el.style.color = 'var(--bg-hover)';
+      el.style.color = 'var(--row-hover)';
       document.body.appendChild(el);
       const c = getComputedStyle(el).color;
       el.remove();

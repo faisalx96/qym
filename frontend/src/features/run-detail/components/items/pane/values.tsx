@@ -4,7 +4,16 @@
  * query is a formatted code block. The raw JSON is one switch away (the app's Sections | Raw preference).
  * With `other` and `side`, the words that differ from the other value are marked (Expected against Output).
  */
-import { Fragment, createContext, useContext, useMemo, useState, useSyncExternalStore } from 'react';
+import {
+  Fragment,
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { diffSide, wordDiff } from '@/features/datasets/lib/wordDiff';
 import { keyWithBreaks } from '@/lib/keyBreaks';
 import { readLocal, writeLocal } from '@/lib/storage';
@@ -133,6 +142,40 @@ function Marked({ parts }: { parts: Piece[] }) {
   );
 }
 
+/* ---------- a very long text folds ---------- */
+
+/** Lines of a text or a code value in view before "Show more". */
+export const FOLD_LINES = 40;
+
+/** True when a text is longer than the fold: more lines, or more characters than the lines hold (the ClampedText rule). */
+export function isLongText(text: string, lines = FOLD_LINES): boolean {
+  return text.length > lines * 60 || text.split('\n').length > lines;
+}
+
+/**
+ * The platform's fold of a long text (`ui/ClampedText`: the first lines, then a neutral "Show more" / "Show less"
+ * button), for a value that is not one plain TextBlock (text with difference marks, code). A value up to the fold
+ * shows in full: the reader opened the item to read it. A longer one must not make the pane endless.
+ */
+function Fold({ text, children }: { text: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (!isLongText(text)) return <>{children}</>;
+  return (
+    <div className={s.fold}>
+      <div
+        className={open ? undefined : s.folded}
+        style={open ? undefined : ({ '--lines': FOLD_LINES } as CSSProperties)}
+        data-folded={open ? undefined : ''}
+      >
+        {children}
+      </div>
+      <Button variant="neutral" size="sm" aria-expanded={open} onPress={() => setOpen(!open)}>
+        {open ? 'Show less' : 'Show more'}
+      </Button>
+    </div>
+  );
+}
+
 /* ---------- leaves ---------- */
 
 export function Prose({ text, other, side }: { text: string; other?: string; side?: Side }) {
@@ -142,13 +185,15 @@ export function Prose({ text, other, side }: { text: string; other?: string; sid
   const rtl = textDirAttrs(text).dir === 'rtl';
   return (
     <div className={s.prose} data-rtl={rtl ? '' : undefined}>
-      {parts ? (
-        <div className={s.marked} {...textDirAttrs(text)}>
-          <Marked parts={parts} />
-        </div>
-      ) : (
-        <TextBlock text={text} mode={mode} code={false} />
-      )}
+      <Fold text={text}>
+        {parts ? (
+          <div className={s.marked} {...textDirAttrs(text)}>
+            <Marked parts={parts} />
+          </div>
+        ) : (
+          <TextBlock text={text} mode={mode} code={false} />
+        )}
+      </Fold>
     </div>
   );
 }
@@ -259,7 +304,11 @@ export function Code({
         : [{ text: p.text, mark: p.mark }],
     );
   }, [marks, shown, sql]);
-  return <CodeLines segs={segs} lang={sql ? 'sql' : undefined} />;
+  return (
+    <Fold text={shown}>
+      <CodeLines segs={segs} lang={sql ? 'sql' : undefined} />
+    </Fold>
+  );
 }
 
 function ScalarText({ v, changed }: { v: Scalar; changed?: boolean }) {
@@ -504,12 +553,18 @@ export function Table({
           setSort(next);
           setAll(true);
         }}
-      />
-      {paged ? (
-        <Button size="sm" variant="neutral" className={s.moreRows} onPress={() => setAll(true)}>
-          {`Show ${data.length - TABLE_PAGE} more`}
-        </Button>
-      ) : null}
+      >
+        {/* the platform's place for "Show N more": the centre of the table footer (§3.4) */}
+        {paged ? (
+          <DataTable.Footer
+            center={
+              <Button size="sm" variant="neutral" onPress={() => setAll(true)}>
+                {`Show ${data.length - TABLE_PAGE} more`}
+              </Button>
+            }
+          />
+        ) : null}
+      </DataTable>
       {table.total > table.rows.length && !paged ? (
         <p className={s.tableNote}>{`The first ${table.rows.length} of ${table.total} rows`}</p>
       ) : null}
@@ -625,7 +680,12 @@ export function FieldList({
 
 function RawJson({ data, label }: { data: unknown; label: string }) {
   const segs = useMemo<Seg[]>(() => jsonTokens(JSON.stringify(data, null, 2)), [data]);
-  return <CodeLines segs={segs} lang="json" label={`${label}, raw JSON`} />;
+  const text = useMemo(() => segs.map((x) => x.text).join(''), [segs]);
+  return (
+    <Fold text={text}>
+      <CodeLines segs={segs} lang="json" label={`${label}, raw JSON`} />
+    </Fold>
+  );
 }
 
 /** The text an object stands for when it holds one text field ({"answer": "…"}): it can be compared with plain text. */

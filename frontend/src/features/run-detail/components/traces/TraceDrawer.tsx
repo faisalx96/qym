@@ -1,27 +1,31 @@
-/** Trace drawer: virtualized span tree with waterfall, retries merged, keyboard model, detail tabs, Langfuse link (brief 04 J6, §3k). */
+/**
+ * Trace drawer: virtualized span tree with waterfall, retries merged, keyboard model, detail tabs (brief 04 J6, §3k).
+ * One component for the run page and the compare page: the page gives the run. The drawer follows the item pane:
+ * tinted action tiles with a tooltip, the red close tile, the facts in the platform's stat strip.
+ */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useItemTraceQuery } from '@/api/runs';
 import {
   Button,
   Chip,
-  CopyButton,
   Drawer,
   ErrorState,
   Icon,
-  LinkButton,
   SearchField,
   SegmentedControl,
   Skeleton,
   SplitPane,
+  StatStrip,
+  StateTag,
   Tag,
   Text,
+  type StatStripItem,
 } from '@/ui';
 import { useMediaQuery } from '@/features/shell/hooks';
 import { useRunPage } from '../../RunContext';
 import {
   aggregateStats,
-  buildLangfuseTraceUrl,
   computeBounds,
   failingSpan,
   flattenTree,
@@ -38,6 +42,7 @@ import {
   type TraceBounds,
 } from '../../lib/traceTree';
 import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
+import { CopyTile } from '../items/pane/actions';
 import { KIND_ICON, KIND_LABEL, KIND_TONE } from './spanKinds';
 import { SpanDetail } from './SpanDetail';
 import styles from './TraceDrawer.module.css';
@@ -160,7 +165,7 @@ function Row({
         ) : null}
         {model ? <span className={styles.sub}>{model}</span> : null}
         {tokens ? <span className={styles.sub}>{tokens.toLocaleString('en-US')} tokens</span> : null}
-        {err ? <Tag tone="danger">error</Tag> : null}
+        {err ? <StateTag tone="danger">Error</StateTag> : null}
       </span>
       <span className={styles.dur}>{formatDuration(node.duration_ms)}</span>
       <span className={styles.bar} aria-hidden="true">
@@ -192,21 +197,25 @@ function attemptLabel(
     : `Attempt ${a.attempt_number}`;
 }
 
-export function TraceDrawer({
-  itemId,
-  pass,
-  passCount = 0,
-  onPass,
-  onClose,
-}: {
+export interface TraceViewProps {
+  /** The run (base id) whose item trace is read. */
+  runId: string;
   itemId: string;
   pass: number | null;
   /** A repeat run's sample count: the drawer shows one pass at a time, with a chip per pass (C009). 0 otherwise. */
   passCount?: number;
   onPass?: (pass: number) => void;
   onClose: () => void;
-}) {
-  const { runId, payload } = useRunPage();
+}
+
+/** The trace drawer of the run page: the run is the page's own. */
+export function TraceDrawer(props: Omit<TraceViewProps, 'runId'>) {
+  const { runId } = useRunPage();
+  return <TraceView runId={runId} {...props} />;
+}
+
+/** The trace drawer of any page (the compare page opens it for the run of a column). */
+export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose }: TraceViewProps) {
   const query = useItemTraceQuery(runId, itemId, pass);
   const norm = useMemo(() => (query.data ? normalizeTrace(query.data) : null), [query.data]);
   const [attempt, setAttempt] = useState<'combined' | string>('combined');
@@ -331,42 +340,45 @@ export function TraceDrawer({
   }, []);
 
   const stats = active ? aggregateStats(active.tree.nodes) : null;
-  const run = payload.run;
-  const langfuse =
-    norm?.item.trace_url ||
-    buildLangfuseTraceUrl(run.langfuse_host, run.langfuse_project_id, norm?.item.trace_id);
   const errors = active?.summary.error_count ?? 0;
-  const meta =
-    norm && active ? (
-      <div className={styles.chips} role="group" aria-label="Trace summary">
-        <Tag kind="data">{active.summary.span_count ?? active.tree.nodes.length} spans</Tag>
-        <Tag kind="data">{formatDuration(active.summary.duration_ms)}</Tag>
-        {stats?.totalTokens ? (
-          <Tag kind="data" tone="info">
-            {stats.totalTokens.toLocaleString('en-US')} tokens
-          </Tag>
-        ) : null}
-        {stats && formatCost(stats.totalCost) ? <Tag kind="data">{formatCost(stats.totalCost)}</Tag> : null}
-        {norm.attempts.length > 1 ? (
-          <Tag kind="data" tone="warning">
-            {norm.attempts.length} attempts ({norm.attempts.length - 1}{' '}
-            {norm.attempts.length === 2 ? 'retry' : 'retries'})
-          </Tag>
-        ) : null}
-        {errors ? <Tag tone="danger">{errors} errors</Tag> : null}
-        {query.data?.summary?.has_orphans ? (
-          <Tag tone="warning">{query.data.summary.orphan_count ?? ''} orphan spans</Tag>
-        ) : null}
-        {norm.item.trace_id ? (
-          <span className={styles.idChip}>
-            <Tag kind="data" title={norm.item.trace_id}>
-              ID {norm.item.trace_id.slice(0, 8)}
-            </Tag>
-            <CopyButton text={norm.item.trace_id} label="Copy trace id" />
-          </span>
-        ) : null}
-      </div>
-    ) : null;
+  const retries = norm ? norm.attempts.length - 1 : 0;
+  const orphans = query.data?.summary?.has_orphans ? (query.data.summary.orphan_count ?? 0) : 0;
+  const cost = stats ? formatCost(stats.totalCost) : null;
+  // the facts of the trace in view, as the Execution section of the item pane
+  const facts: StatStripItem[] =
+    norm && active
+      ? [
+          {
+            key: 'spans',
+            label: 'Spans',
+            value: (active.summary.span_count ?? active.tree.nodes.length).toLocaleString('en-US'),
+          },
+          { key: 'duration', label: 'Duration', value: formatDuration(active.summary.duration_ms) },
+          ...(stats?.totalTokens
+            ? [{ key: 'tokens', label: 'Tokens', value: stats.totalTokens.toLocaleString('en-US') }]
+            : []),
+          ...(cost ? [{ key: 'cost', label: 'Cost', value: cost }] : []),
+          ...(retries > 0
+            ? [
+                { key: 'attempts', label: 'Attempts', value: String(norm.attempts.length) },
+                { key: 'retries', label: 'Retries', value: String(retries) },
+              ]
+            : []),
+          ...(errors
+            ? [{ key: 'errors', label: 'Errors', value: String(errors), tone: 'danger' as const }]
+            : []),
+          ...(query.data?.summary?.has_orphans
+            ? [
+                {
+                  key: 'orphans',
+                  label: 'Orphan spans',
+                  value: orphans ? String(orphans) : 'Yes',
+                  tone: 'warning' as const,
+                },
+              ]
+            : []),
+        ]
+      : [];
   const drawerWidth =
     typeof window === 'undefined'
       ? 1320
@@ -476,26 +488,16 @@ export function TraceDrawer({
       open
       onOpenChange={(o) => !o && onClose()}
       title="Trace"
-      subtitle={<span className={styles.mono}>{`${runId} · ${itemId}`}</span>}
-      meta={meta}
-      scrim="heavy"
-      width={drawerWidth}
-      actions={
-        <span className={styles.actions}>
-          {langfuse ? (
-            <LinkButton
-              size="sm"
-              variant="neutral"
-              href={langfuse}
-              target="_blank"
-              rel="noopener noreferrer"
-              iconEnd={<Icon name="external" size={12} />}
-            >
-              Open in Langfuse
-            </LinkButton>
-          ) : null}
+      subtitle={
+        <span className={styles.mono}>
+          {`${runId} · ${itemId}`}
+          {norm?.item.trace_id ? ` · trace ${norm.item.trace_id}` : ''}
         </span>
       }
+      scrim="heavy"
+      width={drawerWidth}
+      closeTile
+      actions={norm?.item.trace_id ? <CopyTile text={norm.item.trace_id} label="Copy trace id" /> : null}
     >
       <div className={styles.body} data-testid="trace-drawer">
         {query.isPending ? <Skeleton kind="lines" rows={6} label="Loading trace" /> : null}
@@ -537,10 +539,13 @@ export function TraceDrawer({
                 ))}
               </div>
             ) : null}
+            <div className={styles.stats}>
+              <StatStrip variant="compact" aria-label="Trace summary" items={facts} />
+            </div>
             {active.tree.nodes.length === 0 ? (
               <p className={styles.empty} role="status" data-testid="trace-empty">
                 Spans were not captured for this item. The run recorded a trace id, but no spans reached the
-                platform{langfuse ? '; open it in Langfuse for the full trace' : ''}.
+                platform.
               </p>
             ) : (
               <>

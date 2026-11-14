@@ -3,7 +3,15 @@
  * their differences marked, then the metrics table, the execution facts, the item metadata and the root causes.
  */
 import type { Row } from '../../../types';
-import { ExecutionBlock, ExpectedBlock, InputBlock, MetadataBlock, OutputBlock, RootCause } from './blocks';
+import {
+  ExecutionBlock,
+  ExpectedBlock,
+  InputBlock,
+  MetadataBlock,
+  OutputBlock,
+  RestrictedNote,
+  RootCause,
+} from './blocks';
 import { Pane } from './Frame';
 import { MetricTable } from './metrics';
 import s from './pane.module.css';
@@ -23,6 +31,7 @@ export function ItemPane({ openId, rows }: { openId: string; rows: Row[] }) {
         const pass = item.passes.find((p) => p.pass === focus)!;
         return (
           <>
+            <RestrictedNote item={item} />
             <InputBlock item={item} />
             <div className={s.pair}>
               <ExpectedBlock row={row} item={item} pass={pass} fill />

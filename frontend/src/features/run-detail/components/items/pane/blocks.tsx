@@ -1,10 +1,17 @@
 /** The parts of an item pane: the titled block, Input / Expected / Output, a named section, item metadata, execution facts, the pass switch. */
 import { useState, type ReactNode } from 'react';
-import { Icon, SegmentedControl, StatStrip, Subsection, TextBlock } from '@/ui';
+import { Eyebrow, Icon, InlineNotice, SegmentedControl, StatStrip, Subsection, TextBlock } from '@/ui';
 import type { Row } from '../../../types';
 import { MetricAnalysisCards } from '../../analysis/MetricAnalysisCards';
 import { Act, CopyTile } from './actions';
-import { bodyText, latencyLabel, type ItemData, type ItemPass } from './model';
+import {
+  analysisWarnings,
+  bodyText,
+  latencyLabel,
+  restrictedReason,
+  type ItemData,
+  type ItemPass,
+} from './model';
 import { DiffToggle, FieldList, JsonToggle, Value, isStructuredValue } from './values';
 import s from './pane.module.css';
 
@@ -20,6 +27,7 @@ export function Block({
   label,
   fill,
   part,
+  busy,
   children,
 }: {
   /** The name of the part. Text, or (the output of one run among several) the run it belongs to. */
@@ -32,6 +40,8 @@ export function Block({
   /** The block takes the free height of its row (two blocks side by side end on one line). */
   fill?: boolean;
   part?: string;
+  /** The loading frame: the block is there, its value is not yet. */
+  busy?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -41,9 +51,13 @@ export function Block({
       data-fill={fill ? '' : undefined}
       data-part={part}
       aria-label={label ?? (typeof title === 'string' ? title : undefined)}
+      aria-busy={busy || undefined}
     >
       <header className={s.blockHead}>
-        <h4 className={s.eyebrow}>{title}</h4>
+        {/* a fixed UI label is the platform Eyebrow; a name (the run of an output) is shown as written */}
+        <h4 className={s.blockTitle}>
+          {typeof title === 'string' ? <Eyebrow className={s.eyebrow}>{title}</Eyebrow> : title}
+        </h4>
         {after ? <span className={s.blockAfter}>{after}</span> : null}
         {actions ? <span className={s.blockActions}>{actions}</span> : null}
       </header>
@@ -312,9 +326,30 @@ export function PassSwitch({
 /* ---------- root cause ---------- */
 
 export function RootCause({ row }: { row: Row }) {
+  const warnings = analysisWarnings(row);
   return (
     <div className={s.rootCause}>
+      {warnings.length ? (
+        // what the analysis could not do for this item: one notice line (§3.7 "Inline notice")
+        <InlineNotice
+          tone="warning"
+          lead={/taxonom/i.test(warnings.join('; ')) ? 'No taxonomy.' : 'Analysis warning.'}
+          data-testid="analysis-warning"
+        >
+          {warnings.join('; ')}
+        </InlineNotice>
+      ) : null}
       <MetricAnalysisCards row={row} />
     </div>
+  );
+}
+
+/** The texts of the item are hidden from this reader: the neutral lock notice, in place of a silent empty block. */
+export function RestrictedNote({ item }: { item: ItemData }) {
+  if (!item.restricted) return null;
+  return (
+    <InlineNotice tone="neutral" icon="lock" data-testid="run-item-redacted">
+      {restrictedReason(item.run.items_restricted_reason)}
+    </InlineNotice>
   );
 }

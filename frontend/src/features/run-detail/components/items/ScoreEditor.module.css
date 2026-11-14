@@ -1,0 +1,13 @@
+/* The inline score editor (run page and compare page): the field, Save, Cancel and Reset on one line; the error under them. */
+.editor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.error {
+  flex-basis: 100%;
+  font-size: var(--font-sm);
+  color: var(--error);
+}

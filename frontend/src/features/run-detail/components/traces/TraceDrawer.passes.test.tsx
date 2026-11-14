@@ -59,7 +59,7 @@ describe('trace drawer on a repeat run', () => {
     data = trace(2);
     show(3);
     expect(screen.getByRole('group', { name: 'Attempts' })).toHaveTextContent('Retries combined');
-    expect(screen.getByLabelText('Trace summary')).toHaveTextContent('2 attempts');
+    expect(screen.getByLabelText('Trace summary')).toHaveTextContent('Attempts2Retries1');
   });
 
   it('a single run keeps its attempt chips and no pass chips', () => {
@@ -67,5 +67,28 @@ describe('trace drawer on a repeat run', () => {
     show(0);
     expect(screen.queryByRole('group', { name: 'Passes' })).toBeNull();
     expect(screen.getByRole('group', { name: 'Attempts' })).toHaveTextContent('All attempts');
+  });
+
+  it('shows the facts in the stat strip, has tile actions and no Langfuse link', () => {
+    data = trace(1);
+    show(0);
+    const facts = screen.getByLabelText('Trace summary');
+    expect(facts).toHaveTextContent('Spans2');
+    expect(facts).toHaveTextContent('Duration');
+    expect(facts).not.toHaveTextContent('Attempts');
+    expect(screen.queryByText(/Langfuse/)).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Copy trace id' })).toHaveAttribute('data-tile');
+    const close = screen.getByRole('button', { name: 'Close' });
+    expect(close).toHaveAttribute('data-tile');
+    expect(close).toHaveAttribute('data-tone', 'danger');
+  });
+});
+
+describe('the compare page trace drawer', () => {
+  it('is the same component, with the run from the page', async () => {
+    const shared = await import('./TraceDrawer');
+    const compare = await import('@/features/compare/components/rd/TraceDrawer');
+    expect(compare.TraceDrawer).toBe(shared.TraceView);
   });
 });

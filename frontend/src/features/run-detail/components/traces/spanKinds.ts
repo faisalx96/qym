@@ -13,18 +13,6 @@ export const KIND_TONE: Record<SpanKind, string> = {
   DEFAULT: 'var(--text-muted)',
 };
 
-export const KIND_GLYPH: Record<SpanKind, string> = {
-  LLM: 'L',
-  TOOL: 'T',
-  AGENT: 'A',
-  CHAIN: 'C',
-  EVALUATOR: 'E',
-  RETRIEVER: 'R',
-  EMBED: 'M',
-  GUARDRAIL: 'G',
-  DEFAULT: '·',
-};
-
 export const KIND_LABEL: Record<SpanKind, string> = {
   LLM: 'LLM call',
   TOOL: 'Tool',

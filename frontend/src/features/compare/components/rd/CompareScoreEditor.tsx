@@ -10,7 +10,7 @@ import { parseMetricScoreInput, type MetricSpec } from '@/lib/metrics';
 import { Button, TextField } from '@/ui';
 import type { Row } from '@/features/run-detail/types';
 import { messageFor, useRestoreFocus } from '@/features/run-detail/components/items/ScoreEditor';
-import styles from '@/features/run-detail/components/items/MetricStrip.module.css';
+import styles from '@/features/run-detail/components/items/ScoreEditor.module.css';
 
 export interface ScoreEditorProps {
   runId: string;

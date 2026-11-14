@@ -142,12 +142,19 @@ export async function openRootCause(card: Locator): Promise<void> {
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
 }
 
+/** The row of item #n in the items table. A click, Enter or Space on it opens the item in the pane at the side. */
 export function itemRow(page: Page, n: number): Locator {
-  return page.getByRole('row', { name: new RegExp(`^Open item #${n} `) });
+  return page.locator('tr[data-item-id]').filter({ has: page.getByText(`#${n}`, { exact: true }) });
 }
 
+/** What opens item #n: the row itself (the table has no chevron button since the item pane). */
 export function itemButton(page: Page, n: number): Locator {
-  return page.getByRole('button', { name: `Open item #${n}`, exact: true });
+  return itemRow(page, n);
+}
+
+/** The item pane (the item opened last), at the side of the items table. */
+export function itemPane(page: Page): Locator {
+  return page.getByTestId('item-pane');
 }
 
 /** The matrix row of a metric inside an expanded item (round 3 P5 replaced the metric chips). */

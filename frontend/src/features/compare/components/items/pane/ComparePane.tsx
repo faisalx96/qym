@@ -6,17 +6,24 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { runPath } from '@/app/routes';
-import {
-  formatLatency,
-  formatNumericValue,
-  passThresholdLabel,
-  getRowScore,
-  isInternalMetaKey,
-} from '@/lib/metrics';
+import { formatLatency, getRowScore, isInternalMetaKey } from '@/lib/metrics';
 import { useDelayedPending } from '@/lib/pending';
 import { keyWithBreaks } from '@/lib/keyBreaks';
 import { textDirAttrs } from '@/lib/text';
-import { Button, Flag, Icon, ScoreValue, SegmentedControl, StateTag, Tag, TextBlock } from '@/ui';
+import {
+  Button,
+  DataTable,
+  ErrorState,
+  Flag,
+  Icon,
+  ScoreValue,
+  SegmentedControl,
+  StateTag,
+  Tag,
+  TextBlock,
+  ToggleChips,
+  type Column,
+} from '@/ui';
 import { Act, CopyTile } from '@/features/run-detail/components/items/pane/actions';
 import { Block, PaneSection } from '@/features/run-detail/components/items/pane/blocks';
 import {
@@ -25,8 +32,13 @@ import {
   PaneSkeleton,
   type PanePeek,
 } from '@/features/run-detail/components/items/pane/Frame';
-import { useDetailsOpen } from '@/features/run-detail/components/items/pane/metrics';
-import { extraMeta, promptLine, reasonOf } from '@/features/run-detail/components/items/pane/model';
+import { ScoreHint, useDetailsOpen } from '@/features/run-detail/components/items/pane/metrics';
+import {
+  extraMeta,
+  passIfText,
+  promptLine,
+  reasonOf,
+} from '@/features/run-detail/components/items/pane/model';
 import {
   FieldList,
   JsonToggle,
@@ -58,7 +70,7 @@ import { metricCtx, verdictOf } from '../../../lib/scoring';
 import { CompareScoreEditor } from '../../rd/CompareScoreEditor';
 import { RunTag } from '../../RunTag';
 import { useItemsUi } from '../ItemsUi';
-import { Issues } from '../OutputCard';
+import { Issues } from './Issues';
 import s from './comparePane.module.css';
 
 /** Up to this many runs stand side by side as columns; more runs are rows. */
@@ -108,10 +120,11 @@ function RunName({ col }: { col: Col }) {
   );
 }
 
+/** The platform's baseline mark (the blue star Flag of `RunTag`): the run the others are read against. */
 const BaselineTag = () => (
-  <Tag tone="info" title="The run the others are read against">
+  <Flag tone="info" icon="star" data-part="baseline-tag" title="The run the others are read against">
     Baseline
-  </Tag>
+  </Flag>
 );
 
 /* ---------- the output of one run ---------- */
@@ -259,11 +272,7 @@ function useMetricLines(cols: Col[], baseIdx: number): MetricLine[] {
     return {
       metric,
       cells,
-      passIf: hasThreshold
-        ? type === 'numeric'
-          ? `${ctx.direction === 'minimize' ? '≤' : '≥'} ${formatNumericValue(ctx.threshold)}`
-          : passThresholdLabel(ctx.threshold, ctx.direction)
-        : '',
+      passIf: hasThreshold ? passIfText(type, ctx.threshold, ctx.direction) : '',
       hasDetails: cells.some((x) => Object.keys(x.details).length > 0 && !x.taskError),
       // short facts only: the tiles of the runs stand side by side at any width
       compact: cells.every((x) => detailIsCompact(x.details)),
@@ -298,6 +307,7 @@ function ScoreLine({ metric, x }: { metric: string; x: Cell }) {
       ) : null}
       {cell.edited ? (
         <Tag
+          kind="accent"
           tone="warning"
           title={`Edited${meta.original_score !== undefined ? `. The scorer value was ${String(meta.original_score)}` : ''}`}
         >
@@ -348,6 +358,7 @@ function useScoreEdit() {
               patch(x.col.run.base, updated);
             }}
           />
+          <ScoreHint spec={model.specs[metric]} />
         </div>
       ) : null,
   };
@@ -598,7 +609,14 @@ function Metrics({ cols, baseIdx }: { cols: Col[]; baseIdx: number }) {
     <PaneSection
       title="Metrics"
       part="metrics-section"
-      description={failed ? <Flag tone="danger">{failed} failed</Flag> : null}
+      // a problem count is a count tag in its tone (§3.3)
+      description={
+        failed ? (
+          <Tag kind="count" tone="danger" data-count="failed">
+            {failed} failed
+          </Tag>
+        ) : null
+      }
     >
       <section className={p.block} data-tone="neutral" data-part="metrics" aria-label="Metrics">
         {cols.length > MAX_COLUMNS ? (
@@ -686,82 +704,88 @@ function StatValue({
   );
 }
 
+interface FactRow {
+  key: string;
+  stat?: Stat;
+  col?: Col;
+}
+
+/**
+ * The execution facts of each run against the baseline, in the platform table (`DataTable`): up to four runs a row
+ * per fact and a column per run, five runs or more a row per run and a column per fact. Numbers are centred.
+ */
 function Execution({ cols, baseIdx }: { cols: Col[]; baseIdx: number }) {
   const stats = STATS.filter((st) => cols.some((c) => st.value(c.row) !== null));
   if (!stats.length) return null;
   const base = cols.find((c) => c.i === baseIdx) ?? null;
   const baseOf = (st: Stat, col: Col) => (base && col.i !== baseIdx ? st.value(base.row) : undefined);
   const byRun = cols.length > MAX_COLUMNS;
+  const runHead = (col: Col) => (
+    <span className={s.runHead}>
+      <RunName col={col} />
+      {col.i === baseIdx ? <BaselineTag /> : null}
+    </span>
+  );
+  const columns: Column<FactRow>[] = byRun
+    ? [
+        {
+          id: 'run',
+          header: 'Run',
+          flex: true,
+          minWidth: 220,
+          wrap: true,
+          resizable: false,
+          cell: (r) => runHead(r.col!),
+        },
+        ...stats.map((st): Column<FactRow> => ({
+          id: st.label,
+          header: st.label,
+          align: 'center',
+          width: 132,
+          resizable: false,
+          cell: (r) => <StatValue stat={st} value={st.value(r.col!.row)} base={baseOf(st, r.col!)} />,
+        })),
+      ]
+    : [
+        {
+          id: 'fact',
+          header: 'Fact',
+          width: 168,
+          resizable: false,
+          cell: (r) => <span className={s.factName}>{r.stat!.label}</span>,
+        },
+        ...cols.map((col): Column<FactRow> => ({
+          id: col.run.ref,
+          header: runHead(col),
+          label: col.run.label,
+          align: 'center',
+          flex: true,
+          minWidth: 160,
+          resizable: false,
+          cell: (r) => (
+            <StatValue stat={r.stat!} value={r.stat!.value(col.row)} base={baseOf(r.stat!, col)} />
+          ),
+        })),
+      ];
+  const rows: FactRow[] = byRun
+    ? cols.map((col) => ({ key: col.run.ref, col }))
+    : stats.map((stat) => ({ key: stat.label, stat }));
   return (
     <PaneSection title="Execution" part="execution">
-      <section className={p.block} data-tone="neutral" aria-label="Execution">
-        {byRun ? (
-          // five runs or more: a row per run, a column per fact
-          <div
-            className={s.facts}
-            role="table"
-            aria-label="Execution of each run"
-            style={{ ['--n' as string]: stats.length }}
-            data-by-run=""
-          >
-            <div role="row" className={s.factRow} data-head="">
-              <span role="columnheader" className={s.colTitle}>
-                Run
-              </span>
-              {stats.map((st) => (
-                <span key={st.label} role="columnheader" className={s.factLabel}>
-                  {st.label}
-                </span>
-              ))}
-            </div>
-            {cols.map((col) => (
-              <div key={col.run.ref} role="row" className={s.factRow}>
-                <span role="rowheader" className={s.factRun}>
-                  <RunName col={col} />
-                  {col.i === baseIdx ? <BaselineTag /> : null}
-                </span>
-                {stats.map((st) => (
-                  <span key={st.label} role="cell" className={s.factCell}>
-                    <StatValue stat={st} value={st.value(col.row)} base={baseOf(st, col)} />
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        ) : (
-          // as the page's per-run averages: a row per fact, a column per run, each run against the baseline
-          <div
-            className={s.facts}
-            role="table"
-            aria-label="Execution of each run"
-            style={{ ['--n' as string]: cols.length }}
-          >
-            <div role="row" className={s.factRow} data-head="">
-              <span role="columnheader" className={s.colTitle}>
-                Fact
-              </span>
-              {cols.map((col) => (
-                <span key={col.run.ref} role="columnheader" className={s.runHead}>
-                  <RunName col={col} />
-                  {col.i === baseIdx ? <BaselineTag /> : null}
-                </span>
-              ))}
-            </div>
-            {stats.map((st) => (
-              <div key={st.label} role="row" className={s.factRow}>
-                <span role="rowheader" className={s.factName}>
-                  {st.label}
-                </span>
-                {cols.map((col) => (
-                  <span key={col.run.ref} role="cell" className={s.factCell} data-start="">
-                    <StatValue stat={st} value={st.value(col.row)} base={baseOf(st, col)} />
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <div className={s.facts} data-by-run={byRun ? '' : undefined}>
+        <DataTable<FactRow>
+          aria-label="Execution of each run"
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.key}
+          density="regular"
+          densityLocked
+          columnMenu={false}
+          stripe="report"
+          stickyHeader={false}
+          responsive="scroll"
+        />
+      </div>
     </PaneSection>
   );
 }
@@ -805,8 +829,27 @@ function TextPart({
 
 type Against = 'expected' | 'baseline';
 
-function ComparePane({ item, at, pageSize }: { item: FilteredItem; at: number; pageSize: number }) {
-  const { model, ctx, baseline, items, c } = useCompare();
+/**
+ * `ident` stands after the item id in the header (the Sweep gives the passes of each cohort side). With `list` the
+ * pane steps through that list (the Sweep table, as filtered and sorted) and its owner turns its own pages; without
+ * it the pane steps through the compare page's item list and turns that list's page.
+ */
+export function ComparePane({
+  item,
+  at,
+  pageSize,
+  ident,
+  list,
+}: {
+  item: FilteredItem;
+  at: number;
+  pageSize: number;
+  ident?: ReactNode;
+  list?: FilteredItem[];
+}) {
+  const { model, ctx, baseline, items: pageItems, c } = useCompare();
+  const items = list ?? pageItems;
+  const ownList = list !== undefined;
   const ui = useItemsUi();
   const store = useDetailsStore();
   const location = useLocation();
@@ -833,13 +876,15 @@ function ComparePane({ item, at, pageSize }: { item: FilteredItem; at: number; p
       const target = which === 'next' ? next : prev;
       if (!target) return;
       toggleExpanded(target.itemId, true);
-      const page = Math.floor(items.indexOf(target) / pageSize) + 1;
-      if (page !== c.view.page) c.setView({ page }, { keepPage: true });
+      if (!ownList) {
+        const page = Math.floor(items.indexOf(target) / pageSize) + 1;
+        if (page !== c.view.page) c.setView({ page }, { keepPage: true });
+      }
       requestAnimationFrame(() =>
         document.getElementById(`item-${target.itemId}`)?.scrollIntoView({ block: 'nearest' }),
       );
     },
-    [next, prev, toggleExpanded, items, pageSize, c],
+    [next, prev, toggleExpanded, items, pageSize, c, ownList],
   );
   const close = useCallback(() => {
     toggleExpanded(itemId, false);
@@ -861,6 +906,9 @@ function ComparePane({ item, at, pageSize }: { item: FilteredItem; at: number; p
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [model.runs, itemId, resolved],
   );
+  const failedRow = failed[0]?.byItem.get(itemId);
+  const failedState = failedRow ? store.stateOf(failed[0]!.base, failedRow.item_id) : undefined;
+  const failedCause = failedState?.status === 'error' ? failedState.error : undefined;
   const pending = useDelayedPending(!loaded);
   const cols: Col[] = resolved.flatMap((r, i) =>
     r.row ? [{ i, run: model.runs[i]!, row: r.row, state: pillState(model.runs[i]!, r.row, ctx).state }] : [],
@@ -940,6 +988,7 @@ function ComparePane({ item, at, pageSize }: { item: FilteredItem; at: number; p
           <span className={p.itemId} title="Item id">
             {first?.item_id ?? itemId}
           </span>
+          {ident}
         </>
       }
       actions={<LinkTile text={link} />}
@@ -952,21 +1001,21 @@ function ComparePane({ item, at, pageSize }: { item: FilteredItem; at: number; p
       onClose={close}
     >
       {failed.length ? (
-        <div className={p.loadError} role="alert">
-          <p className={p.note}>Couldn’t load this item for {failed.map((r) => r.label).join(', ')}.</p>
-          <div>
-            <Button
-              size="sm"
-              variant="neutral"
-              onPress={() => failed.forEach((r) => void store.retry(r.base, r.byItem.get(itemId)!.item_id))}
-            >
-              Retry
-            </Button>
-          </div>
-        </div>
+        // a failed load is never an empty state (§3 "Failed requests"): the platform error state with its Retry
+        <ErrorState
+          compact
+          error={failedCause}
+          title={`Couldn’t load this item for ${failed.map((r) => r.label).join(', ')}`}
+          onRetry={() => failed.forEach((r) => void store.retry(r.base, r.byItem.get(itemId)!.item_id))}
+        />
       ) : !loaded ? (
         pending ? (
-          <PaneSkeleton blocks={['input', 'pair', 'metrics']} />
+          <PaneSkeleton
+            blocks={['input', 'pair', 'metrics']}
+            metricRows={model.metrics.length}
+            outputs={resolved.filter((r) => r.row).length}
+            pairClassName={s.outs}
+          />
         ) : null
       ) : (
         <>
@@ -975,41 +1024,33 @@ function ComparePane({ item, at, pageSize }: { item: FilteredItem; at: number; p
             <div className={s.outsBar}>
               {cols.length > 3 ? (
                 // many runs: pick the outputs to read
-                <div className={s.runPick} role="group" aria-label="Outputs shown">
-                  <span className={s.outsLabel}>Outputs</span>
-                  {cols.map((col) => (
-                    <button
-                      key={col.run.ref}
-                      type="button"
-                      className={s.runToggle}
-                      style={{ '--run': runColor(col.i) } as CSSProperties}
-                      aria-pressed={!hidden.has(col.i)}
-                      title={col.run.label}
-                      onClick={() =>
-                        setHidden((h) => {
-                          const n = new Set(h);
-                          // one run at least stays in view
-                          if (n.has(col.i)) n.delete(col.i);
-                          else if (cols.filter((x) => !n.has(x.i)).length > 1) n.add(col.i);
-                          return n;
-                        })
-                      }
-                    >
-                      <RunTag index={col.i} showName={false} bare />
-                    </button>
-                  ))}
-                  <Button
+                // each output is on or off and the reader sees them all: the platform's on/off chips (cv5 H4)
+                <div className={s.runPick}>
+                  <span className={s.outsLabel} id={`outs-${itemId}`}>
+                    Outputs
+                  </span>
+                  <ToggleChips
+                    aria-labelledby={`outs-${itemId}`}
                     size="sm"
-                    variant="neutral"
-                    className={s.onFill}
-                    onPress={() => setHidden(new Set())}
-                  >
+                    min={1}
+                    options={cols.map((col) => ({
+                      value: String(col.i),
+                      label: <RunTag index={col.i} showName={false} bare />,
+                      title: col.run.label,
+                    }))}
+                    value={cols.filter((col) => !hidden.has(col.i)).map((col) => String(col.i))}
+                    onChange={(on) =>
+                      setHidden(
+                        new Set(cols.filter((col) => !on.includes(String(col.i))).map((col) => col.i)),
+                      )
+                    }
+                  />
+                  <Button size="sm" variant="neutral" onPress={() => setHidden(new Set())}>
                     All
                   </Button>
                   <Button
                     size="sm"
                     variant="neutral"
-                    className={s.onFill}
                     onPress={() =>
                       setHidden(new Set(cols.filter((_, n) => !differing[n]).map((col) => col.i)))
                     }
@@ -1020,7 +1061,9 @@ function ComparePane({ item, at, pageSize }: { item: FilteredItem; at: number; p
               ) : null}
               {hasExpected || canBaseline ? (
                 <div className={s.marksPick}>
-                  <span className={s.outsLabel}>Mark the differences from</span>
+                  <span className={s.outsLabel} aria-hidden="true">
+                    Mark the differences from
+                  </span>
                   <SegmentedControl<Against | 'off'>
                     label="Mark the differences from"
                     value={!marks ? 'off' : against}
@@ -1075,8 +1118,7 @@ function ComparePane({ item, at, pageSize }: { item: FilteredItem; at: number; p
             <div className={s.causes}>
               {cols.map((col) => (
                 <div key={col.run.ref} className={s.cause}>
-                  <RunName col={col} />
-                  <Issues run={col.run} row={col.row} />
+                  <Issues run={col.run} row={col.row} head={<RunName col={col} />} />
                 </div>
               ))}
             </div>

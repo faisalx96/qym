@@ -1,4 +1,4 @@
-/** The Items section: header, filter bar, filter banner, virtualized table or heatmap, deep link to ?item=. */
+/** The Items section: header, filter bar, filter banner, virtualized table or heatmap, the item pane, deep link to ?item=. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
 import { HelpMarker, InlineNotice, ReportSection } from '@/ui';
@@ -11,15 +11,13 @@ import { DirectionNote } from './items/DirectionNote';
 import { FilterBar } from './items/FilterBar';
 import { Heatmap } from './items/Heatmap';
 import { defaultPageSize } from '../lib/itemsPaging';
-import { ItemsTable, PAGE_SIZES } from './items/ItemsTable';
+import { ItemsTable } from './items/ItemsTable';
 import { ItemsUi, type ItemsUiValue } from './items/ItemsUi';
+import { ItemPane } from './items/pane/ItemPane';
+import type { Row } from '../types';
 import styles from './ItemsSection.module.css';
 
 const HIGHLIGHT_MS = 2600;
-void PAGE_SIZES;
-
-import { ItemPane } from './items/pane/ItemPane';
-import type { Row } from '../types';
 
 export function ItemsSection() {
   const { runId, model, api, items, payload } = useRunPage();

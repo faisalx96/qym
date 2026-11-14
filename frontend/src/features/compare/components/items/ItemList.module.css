@@ -36,23 +36,20 @@
   cursor: pointer;
 }
 
+/* cv4 F11: the hover step of the row ladder, as a DataTable row */
 .head:hover {
-  background: var(--bg-hover);
+  background: var(--row-hover);
+}
+
+/* cv4 F4: the row's primary text (the item number) turns accent while the row is hovered or holds keyboard focus */
+.head:hover .no,
+.head:focus-visible .no {
+  color: var(--accent-primary);
 }
 
 .head:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
-}
-
-.chev {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  inline-size: 26px;
-  block-size: 26px;
-  color: var(--text-muted);
 }
 
 .no {
@@ -62,6 +59,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-md);
   font-weight: 600;
+  transition: color var(--transition-fast);
 }
 
 .title {
@@ -196,10 +194,6 @@
   white-space: nowrap;
 }
 
-.detailHold {
-  min-inline-size: 0;
-}
-
 /* 390: four chips with a swatch AND a letter measure 292 px in a 247 px row; the letter badge keeps the run colour, the swatch steps aside */
 @media (max-width: 640px) {
   .chip {
@@ -228,8 +222,8 @@
   }
 }
 
-/* the item in the pane reads as selected: the selected fill and the 2px accent bar, as the open row of the run page */
-.item[data-open] {
-  background: var(--bg-selected);
-  box-shadow: inset 2px 0 0 var(--accent-primary);
+/* cv4 X7: the item in the pane is the list's current row. It takes the focused-row tone of a DataTable (the hover
+   step of the row ladder), as the open row of the run page's items table. */
+.item[data-open] > .head {
+  background: var(--row-hover);
 }

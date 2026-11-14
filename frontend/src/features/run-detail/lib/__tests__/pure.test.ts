@@ -41,7 +41,6 @@ import { buildRunModel } from '../runModel';
 import { scopeRowToPass } from '../passScope';
 import {
   buildTree,
-  buildLangfuseTraceUrl,
   detectRetries,
   extractMessages,
   failingSpan,
@@ -560,10 +559,6 @@ describe('trace tree', () => {
     );
     expect(msgs).toHaveLength(2);
     expect(msgs[1]!.toolCalls[0]!.name).toBe('f');
-    expect(buildLangfuseTraceUrl('https://lf.example/', 'p1', 't 1')).toBe(
-      'https://lf.example/project/p1/traces/t%201',
-    );
-    expect(buildLangfuseTraceUrl(null, 'p1', 't')).toBeNull();
   });
 });
 

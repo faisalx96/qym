@@ -1,4 +1,5 @@
-/* Trace drawer: tree + waterfall on the left, span details on the right. */
+/* Trace drawer: tree + waterfall on the left, span details on the right. The blocks, the value view and the action
+   tiles of the details are the item pane's own (items/pane); this file holds the tree and the frame of the details. */
 .body {
   display: flex;
   flex-direction: column;
@@ -8,17 +9,21 @@
   padding: var(--space-md);
 }
 
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.chips,
 .attempts {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
+}
+
+/* the platform's stat strip: the facts of the trace, and of the span in view */
+.stats {
+  flex: none;
+  min-width: 0;
+}
+
+/* the facts of one span: a cell keeps a reading width, so one fact is not a line-wide box */
+.stats[data-fit] {
+  max-inline-size: calc(var(--n) * 168px);
 }
 
 .split {
@@ -37,12 +42,6 @@
 
 .mono {
   font-family: var(--font-mono);
-}
-
-.idChip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
 }
 
 .treePane,
@@ -70,8 +69,7 @@
   flex: 1;
 }
 
-.toggle:focus-visible,
-.more:focus-visible {
+.toggle:focus-visible {
   outline: 2px solid var(--accent-primary);
 }
 
@@ -155,8 +153,13 @@
   width: 20px;
   height: 20px;
   border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+  background: color-mix(in srgb, var(--tone) var(--tint-tile), transparent);
   color: var(--tone);
+}
+
+/* the name gives way last: the model and the tokens of a row go first, and the full name stands in the details */
+.rowMain > .sub {
+  flex-shrink: 1000;
 }
 
 .rowMain > .name,
@@ -225,21 +228,6 @@
   color: var(--text-primary);
 }
 
-.meta {
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.exception {
-  padding: var(--space-sm);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  border-inline-start: 3px solid var(--error);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
 .pane {
   padding-top: var(--space-sm);
 }
@@ -250,65 +238,8 @@
   gap: var(--space-sm);
 }
 
-.block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding-block: var(--space-sm);
-  border-block-start: 1px solid var(--border-subtle);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.block:first-child {
-  border-block-start: 0;
-}
-
-.blockHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-}
-
-.blockLabel,
-.label {
-  font-size: var(--font-sm);
-  font-weight: 650;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.blockLabel[data-tone='info'] {
-  color: var(--info);
-}
-
-.blockLabel[data-tone='success'] {
-  color: var(--success);
-}
-
-.blockActions {
-  display: inline-flex;
-  align-items: center;
-}
-
-.blockBody {
-  min-width: 0;
-}
-
 .expanded {
   min-width: 0;
-}
-
-.doc {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding-block: var(--space-sm);
-  border-block-start: 1px solid var(--border-subtle);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
 }
 
 .kindTile {
@@ -319,7 +250,7 @@
   width: 28px;
   height: 28px;
   border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+  background: color-mix(in srgb, var(--tone) var(--tint-tile), transparent);
   color: var(--tone);
 }
 
@@ -341,17 +272,35 @@
 }
 
 .toolName {
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: var(--font-base);
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.docHead {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
+.toolNote,
+.fact {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.fact {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.errorLead {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--error-text);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-muted);
 }
 
 .toolCall {
@@ -363,56 +312,6 @@
 .reasoning {
   font-size: var(--font-base);
   color: var(--text-muted);
-}
-
-.longText {
-  position: relative;
-}
-
-.longHead {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.clamp {
-  max-height: 14em;
-  overflow: hidden;
-}
-
-.more {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--accent-primary);
-  cursor: pointer;
-}
-
-.kv {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-xs);
-  margin: 0;
-}
-
-.kv > div {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: var(--space-sm);
-}
-
-.kv dt {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.kv dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-family: var(--font-mono);
-  font-size: var(--font-base);
-  color: var(--text-primary);
 }
 
 .empty {

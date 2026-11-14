@@ -1,6 +1,7 @@
 /**
- * The item table on the shared DataTable: windowed rows on the shell scroller (virtualized), expandable
- * item cards, sortable headers, the `?item=` deep link landing, pagination that keeps the `page` param.
+ * The item table on the shared DataTable: windowed rows on the shell scroller (virtualized), sortable headers, the
+ * `?item=` deep link landing, pagination that keeps the `page` param. A row opens its item in the pane at the side
+ * (ItemPane): a click, Enter or Space on the row; the item in the pane is the table's current row (`activeKey`, cv4 X7).
  * Review group R2: no Reason column (C017); scores are centred numbers with no bar in 120px columns, plain green or
  * red where the metric has a pass threshold (C149, C220); Status is a StateTag (an item result); the open-trace
  * action is a green tile with the trace glyph in a normal last column (C230); one header line, no group band (C253).
@@ -87,6 +88,8 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
   );
 
   const hasTraces = pageItems.some((it) => it.row.trace_id);
+  // the item opened last is the one the pane shows
+  const openId = [...ui.expanded].pop() ?? null;
   const union = isUnionRun(payload.run);
   const columns: Column<FilteredItem>[] = [
     {
@@ -247,16 +250,23 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
   ];
 
   return (
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- Escape on an open row closes it (C231)
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- keys of a focused row: Space, Escape (C231)
     <div
       className={styles.wrap}
       ref={wrapRef}
       onKeyDown={(e) => {
-        // C231: Escape with focus on an open item's row closes the item (and drops ?item); focus stays on the row
         const tr = e.target as HTMLElement;
-        if (e.key !== 'Escape' || e.defaultPrevented || tr.tagName !== 'TR') return;
+        if (e.defaultPrevented || tr.tagName !== 'TR') return;
         const id = tr.dataset.itemId;
-        if (!id || !ui.expanded.has(id)) return;
+        if (!id) return;
+        if (e.key === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          // the row opens its item as a button does: Space as well as Enter (the table has no row selection)
+          e.preventDefault();
+          ui.toggleExpanded(id);
+          return;
+        }
+        // C231: Escape with focus on an open item's row closes the item (and drops ?item); focus stays on the row
+        if (e.key !== 'Escape' || !ui.expanded.has(id)) return;
         e.preventDefault();
         ui.toggleExpanded(id, false);
       }}
@@ -280,8 +290,10 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
           else onSort(`${s.key}_${s.direction}` as SortBy);
         }}
         // a row opens its item in the pane at the side (ItemPane); the same row closes it. No row expands in place,
-        // so the table has no chevron column.
+        // so the table has no chevron column. The item in the pane is the current row: the focused-row tone and
+        // aria-current, as the dataset items table (cv4 X7). The # column is the row's primary text (cv4 F4).
         onRowOpen={(it) => ui.toggleExpanded(it.row.item_id)}
+        activeKey={openId}
         rowState={(it) => (rowStatus(ctx, it.row, selectedMetric).kind === 'error' ? 'error' : undefined)}
         rowProps={(it) => ({
           'data-item-id': it.row.item_id,

@@ -4,7 +4,6 @@ import { metricDirectionLabel } from '@/lib/metrics';
 import {
   Button,
   Checkbox,
-  Dialog,
   EmptyState,
   HelpMarker,
   Icon,
@@ -37,8 +36,9 @@ import {
   type SweepOutcome,
 } from '../../lib/cohort';
 import { changeGlyph, type NoiseStat } from '../../lib/noise';
-import { ItemDetail } from '../items/ItemDetail';
+import { useItemsUi } from '../items/ItemsUi';
 import { ScrollRegion } from '../ScrollRegion';
+import { PassTrack, SweepPaneHost, sweepRowId, useSweepOpen, type SweepSide } from './SweepPane';
 import styles from './SweepView.module.css';
 
 const pct = (v: number | null | undefined, d = 1) =>
@@ -140,26 +140,10 @@ function StatCard({
   );
 }
 
-function PassTrack({ passes }: { passes: boolean[] }) {
-  const ok = passes.filter(Boolean).length;
-  return (
-    <span className={styles.passCell} data-part="sweep-pass-cell">
-      <span className={styles.track} role="img" aria-label={`${ok} of ${passes.length} pass`}>
-        {passes.map((p, i) => (
-          <span key={i} className={styles.dot} data-pass={p || undefined} aria-hidden />
-        ))}
-      </span>
-      <b aria-hidden>
-        {ok}/{passes.length}
-      </b>
-    </span>
-  );
-}
-
 export function SweepView() {
   const { model, cohorts, ctx, items: filteredCompareItems, c } = useCompare();
   const [f, reverse, setF] = useSweepFilters();
-  const [open, setOpen] = useState<string | null>(null);
+  const ui = useItemsUi();
   // C217: the item table pages instead of drawing every row
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{
@@ -197,6 +181,13 @@ export function SweepView() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed, f.move, f.outcome, f.q, key, f.values, f.mode, f.only, sort]);
+  // The item in the pane (C-pane): its row is on the page in view, also when J / K step to another page.
+  const open = useSweepOpen(shown);
+  const [paged, setPaged] = useState<string | null>(null);
+  if (open.id !== paged) {
+    setPaged(open.id);
+    if (open.at >= 0) setPage(Math.floor(open.at / SWEEP_PAGE) + 1);
+  }
   const pageCount = Math.max(1, Math.ceil(shown.length / SWEEP_PAGE));
   const pageNow = Math.min(page, pageCount);
   void filteredCompareItems;
@@ -285,7 +276,11 @@ export function SweepView() {
       s: summarizeSweepItems(subset, grouped.leftRunCount, grouped.rightRunCount, null, direction),
     };
   });
-  const sweepOpenItem = open ? displayed.find((i) => i.itemId === open) : null;
+  // The sides in the order of the table. Reverse sides changes the order, not the letters of the runs.
+  const sides: SweepSide[] = [
+    { letter: reverse ? 'B' : 'A', label: left, passes: (i) => i.leftPasses },
+    { letter: reverse ? 'A' : 'B', label: right, passes: (i) => i.rightPasses },
+  ];
   return (
     <div className={styles.sweep} data-testid="sweep-view">
       <header className={styles.head}>
@@ -650,16 +645,21 @@ export function SweepView() {
                   {shown.slice((pageNow - 1) * SWEEP_PAGE, pageNow * SWEEP_PAGE).map((item) => (
                     <tr
                       key={item.itemId}
+                      id={sweepRowId(item.itemId)}
                       className={styles.itemRow}
                       data-part="sweep-item-row"
                       data-outcome={sweepOutcomeOf(item)}
-                      onClick={() => setOpen(item.itemId)}
+                      data-open={open.id === item.itemId ? '' : undefined}
+                      // the row opens its item in the pane at the side; a second click closes it (as the compare list)
+                      onClick={() => ui.toggleExpanded(item.itemId)}
                     >
                       <th scope="row">
+                        {/* the click goes up to the row; the pane gives the focus back to this button */}
                         <button
                           type="button"
                           className={styles.link}
-                          onClick={() => setOpen(item.itemId)}
+                          data-part="item-head"
+                          aria-current={open.id === item.itemId ? 'true' : undefined}
                           aria-label={`Open item ${item.itemId}`}
                         >
                           {item.itemId}
@@ -711,21 +711,7 @@ export function SweepView() {
           </section>
         </>
       )}
-      {open ? (
-        <Dialog
-          open
-          onOpenChange={(o) => !o && setOpen(null)}
-          size="data"
-          title={`Item comparison · ${open}`}
-          description={
-            sweepOpenItem
-              ? `${left}: ${sweepOpenItem.leftPassCount}/${sweepOpenItem.leftPasses.length} pass · ${right}: ${sweepOpenItem.rightPassCount}/${sweepOpenItem.rightPasses.length} pass`
-              : undefined
-          }
-        >
-          <ItemDetail itemId={open} />
-        </Dialog>
-      ) : null}
+      <SweepPaneHost items={shown} sides={sides} />
     </div>
   );
 }

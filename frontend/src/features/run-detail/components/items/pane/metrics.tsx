@@ -4,20 +4,18 @@
  * (its model, a rubric, a table of mismatches) shows under the metric over the full width of the table: short facts
  * first, then text, then tables. The details are closed until the reader opens one metric or all of them.
  */
-import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { useUpdateMetric } from '@/api/runs';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { keyWithBreaks } from '@/lib/keyBreaks';
-import { SCORE_EDIT_HINTS, isInternalMetaKey, parseMetricScoreInput, type MetricSpec } from '@/lib/metrics';
+import { SCORE_EDIT_HINTS, isInternalMetaKey, type MetricSpec } from '@/lib/metrics';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs } from '@/lib/text';
-import { Button, Flag, Icon, ScoreValue, Tag, TextField } from '@/ui';
+import { Icon, ScoreValue, StateTag, Tag } from '@/ui';
 import { useRunPage } from '../../../RunContext';
 import type { Row } from '../../../types';
-import { editTooltip } from '../MetricStrip';
-import { messageFor, useRestoreFocus } from '../ScoreEditor';
+import { ScoreEditor } from '../ScoreEditor';
 import { Act } from './actions';
 import { PaneSection } from './blocks';
-import { extraMeta, metaOf, reasonOf, type ItemData, type MetricRow } from './model';
+import { editTooltip, extraMeta, metaOf, reasonOf, type ItemData, type MetricRow } from './model';
 import { FieldList } from './values';
 import s from './pane.module.css';
 
@@ -77,7 +75,13 @@ export function Score({ cell, verdict }: { cell: MetricRow['cells'][number]; ver
 
 /* ---------- score edit ---------- */
 
-/** The app's score edit (same request, same checks), with the buttons drawn for the pane's inset fill. */
+/** What the score field takes, by the kind of the metric: one quiet line under the platform's score editor. */
+export function ScoreHint({ spec }: { spec: MetricSpec | undefined }) {
+  const kind = spec?.score_type && spec.score_type in SCORE_EDIT_HINTS ? spec.score_type : 'legacy';
+  return <p className={s.hint}>{SCORE_EDIT_HINTS[kind]}</p>;
+}
+
+/** The platform's score editor (same request, same checks, same buttons) with the hint line of the pane. */
 export function ScoreEdit({
   row,
   item,
@@ -98,89 +102,22 @@ export function ScoreEdit({
   onDone: () => void;
 }) {
   const { payload } = useRunPage();
-  const [value, setValue] = useState(initial);
-  const [message, setMessage] = useState('');
-  const mutation = useUpdateMetric(item.runId);
-  useRestoreFocus();
-  // `isPending` only flips after the next render; two clicks in one frame would both pass it
-  const inFlight = useRef(false);
-  const base = {
-    file_path: payload.run.file_path ?? payload.run.run_id,
-    row_index: row.index,
-    metric_name: metric,
-    ...(passNumber ? { pass_number: passNumber, expected_pass_version: item.model.passRevision } : {}),
-  };
-  const send = (body: { new_score: number } | { reset: true }) => {
-    if (inFlight.current) return;
-    setMessage('');
-    inFlight.current = true;
-    mutation.mutate(
-      { ...base, ...body },
-      {
-        onSuccess: onDone,
-        onError: (e) => setMessage(messageFor(e)),
-        onSettled: () => (inFlight.current = false),
-      },
-    );
-  };
-  const save = () => {
-    // saving the value that is already there would only mark the score as edited
-    if (value.trim() === initial.trim() && value.trim() !== '') return onDone();
-    const parsed = parseMetricScoreInput(value, spec);
-    if (!parsed.ok) return setMessage(parsed.message);
-    send({ new_score: parsed.value });
-  };
-  const kind = spec?.score_type && spec.score_type in SCORE_EDIT_HINTS ? spec.score_type : 'legacy';
   return (
-    <form
-      className={s.edit}
-      aria-label={`Edit ${metric} score`}
-      onSubmit={(e) => {
-        e.preventDefault();
-        save();
-      }}
-    >
-      <div className={s.editRow}>
-        <TextField
-          label={`New ${metric} score`}
-          hideLabel
-          value={value}
-          onChange={setValue}
-          autoFocus
-          mono
-          width="10ch"
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.stopPropagation();
-              onDone();
-            }
-          }}
-        />
-        <Button variant="primary" type="submit" loading={mutation.isPending}>
-          Save
-        </Button>
-        <Button variant="neutral" className={s.onFill} onPress={onDone}>
-          Cancel
-        </Button>
-        {edited ? (
-          <Button
-            variant="neutral"
-            className={s.onFill}
-            onPress={() => send({ reset: true })}
-            isDisabled={mutation.isPending}
-          >
-            Reset to scorer value
-          </Button>
-        ) : null}
-      </div>
-      {message ? (
-        <p className={s.editError} role="alert">
-          {message}
-        </p>
-      ) : (
-        <p className={s.hint}>{SCORE_EDIT_HINTS[kind]}</p>
-      )}
-    </form>
+    <div className={s.edit}>
+      <ScoreEditor
+        runId={item.runId}
+        filePath={payload.run.file_path ?? payload.run.run_id}
+        row={row}
+        metric={metric}
+        spec={spec}
+        initial={initial}
+        passNumber={passNumber}
+        passVersion={item.model.passRevision}
+        edited={edited}
+        onDone={onDone}
+      />
+      <ScoreHint spec={spec} />
+    </div>
   );
 }
 
@@ -304,10 +241,13 @@ export function MetricTable({ row, item, focus, onFocus }: MetricsProps) {
       title="Metrics"
       part="metrics-section"
       description={
+        // a result is a StateTag; a problem count is a count tag in its tone (§3.3)
         none ? null : taskError ? (
-          <Flag tone="danger">{taskError}</Flag>
+          <StateTag tone="danger">{taskError}</StateTag>
         ) : below ? (
-          <Flag tone="danger">{below} failed</Flag>
+          <Tag kind="count" tone="danger" data-count="failed">
+            {below} failed
+          </Tag>
         ) : null
       }
     >
@@ -356,7 +296,7 @@ export function MetricTable({ row, item, focus, onFocus }: MetricsProps) {
                       {keyWithBreaks(m.metric)}
                     </span>
                     {cell.edited ? (
-                      <Tag tone="warning" title={editTooltip(meta)}>
+                      <Tag kind="accent" tone="warning" title={editTooltip(meta)}>
                         edited
                       </Tag>
                     ) : null}

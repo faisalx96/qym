@@ -31,7 +31,7 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await expect(tree.getByRole('treeitem', { name: /retrieve_docs/ })).toBeVisible();
     await expect(tree.getByRole('treeitem', { name: /ChatOpenAI/ })).toBeVisible();
     await expect(page.getByTestId('span-detail')).toBeVisible();
-    await expect(page.getByLabel('Trace summary')).toContainText('spans');
+    await expect(page.getByLabel('Trace summary')).toContainText('Spans');
     await page.keyboard.press('Escape');
     await expect(drawer(page)).toHaveCount(0);
     await expect.poll(() => params(page).get('trace')).toBeNull();
@@ -120,7 +120,8 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await expect(attempts.getByRole('button', { name: 'All attempts' })).toBeVisible();
     await expect(attempts.getByRole('button', { name: /Attempt 1 · failed/ })).toBeVisible();
     await expect(attempts.getByRole('button', { name: 'Attempt 2' })).toBeVisible();
-    await expect(page.getByLabel('Trace summary')).toContainText('2 attempts');
+    // the facts are a stat strip: the label, then the value
+    await expect(page.getByLabel('Trace summary')).toContainText(/Attempts\s*2/);
     const tree = page.getByRole('tree', { name: 'Span tree' });
     await expect(tree.getByText(/^try \d+$/).first()).toBeVisible();
     const all = await tree.getByRole('treeitem').count();
@@ -140,17 +141,23 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await expect(drawer(page)).toHaveCount(0);
   });
 
-  test('Trace button inside an opened item opens the same drawer', async ({ page }) => {
+  test('the Open trace tile of the item pane opens the same drawer; there is no Langfuse link', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 4).click();
-    const card = page.locator('[data-testid=item-card][data-item-id="item-0004"]');
-    await card.getByRole('button', { name: 'Trace', exact: true }).click();
+    const pane = page.locator('[data-testid=item-pane][data-item-id="item-0004"]');
+    await pane.getByRole('button', { name: 'Open trace', exact: true }).click();
     await expect(drawer(page)).toBeVisible();
     expect(params(page).get('trace')).toBe('item-0004');
-    await expect(card.getByRole('link', { name: 'Open in Langfuse' })).toHaveAttribute(
-      'href',
-      /langfuse\.example/,
-    );
+    // "Open in Langfuse" is no longer supported: not in the pane, not in the drawer
+    await expect(page.getByRole('link', { name: /Langfuse/ })).toHaveCount(0);
+    // Escape closes the drawer first, then the pane (one press each)
+    await page.keyboard.press('Escape');
+    await expect(drawer(page)).toHaveCount(0);
+    await expect(pane).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(pane).toHaveCount(0);
   });
 
   test('a failing trace request shows an error with Retry', async ({ page }) => {
@@ -187,7 +194,10 @@ test.describe('latency and traces panel (J5)', () => {
     await bars.nth(8).click(); // 2.25s to 2.5s: 26 items
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(240);
     await expect.poll(() => params(page).get('filters') ?? '').toContain('latency');
-    const chip = page.locator('[data-run-filters]').getByText(/(ms|s)/i).first();
+    const chip = page
+      .locator('[data-run-filters]')
+      .getByText(/(ms|s)/i)
+      .first();
     await expect(chip).toBeVisible();
     const [n] = await itemsCount(page);
     expect(n).toBeGreaterThan(0);
