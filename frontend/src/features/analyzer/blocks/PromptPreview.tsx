@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Skeleton, Tag, Text } from '@/ui';
+import { Button, CopyButton, EmptyState, ErrorState, Skeleton, Tag, Text } from '@/ui';
+import { PromptMessages, PromptViewSwitch, usePromptView } from './PromptMessages';
 import { fieldsSent } from '../model/settings';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import s from './blocks.module.css';
 import { APP_LOCALE } from '@/lib/dates';
 
 /**
- * Role-labelled messages, copy, char count and fields sent (the context switches are in "Prompt
+ * Role-labelled messages (Rendered or Raw, cv5 Q2), copy, char count and fields sent (the context switches are in "Prompt
  * contents" on the page and in the drawer head). No LLM call is made. The text never auto-scrolls: while an update is
  * pending it is dimmed in place instead of being swapped.
  */
 export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxHeight?: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const [view, setView] = usePromptView();
   const { preview, focus } = ws;
   const fields = fieldsSent(ws.cfg);
   return (
@@ -33,6 +35,7 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
         <Text variant="sm" tone="muted" as="span" role="status" aria-live="polite" className={s.updating}>
           {preview.pending ? 'Updating…' : ''}
         </Text>
+        {preview.messages.length ? <PromptViewSwitch view={view} onView={setView} /> : null}
       </div>
       {!preview.hasTarget ? (
         <EmptyState
@@ -56,22 +59,14 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
             className={s.messages}
             data-pending={preview.pending ? '' : undefined}
             data-expanded={expanded || !maxHeight ? '' : undefined}
+            // the drawer body is the one scroller, so the outline sticks to it (cv5 Q2)
+            data-fill={!maxHeight ? '' : undefined}
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
             tabIndex={0}
             role="region"
             aria-label="Prompt messages"
           >
-            {preview.messages.map((m, i) => (
-              <article key={i} className={s.message}>
-                <header className={s.messageHead}>
-                  <Eyebrow tone={m.role === 'system' ? 'accent' : 'muted'}>{m.role}</Eyebrow>
-                  <CopyButton text={m.content} label={`Copy ${m.role} message`} />
-                </header>
-                <pre className={s.messageBody} dir="auto">
-                  {m.content}
-                </pre>
-              </article>
-            ))}
+            <PromptMessages messages={preview.messages} view={view} change={null} />
           </div>
           <div className={s.previewFoot}>
             <Text variant="sm" tone="muted" as="span">

@@ -2330,3 +2330,29 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(stripComments(src('ui/DataTable/cells/cells.module.css'))).toContain('.secondary[data-lines]');
   });
 });
+
+describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
+  const doc = read(join(SRC, '../../docs/DESIGN_LANGUAGE.md'));
+
+  it('Q1: with the pane on screen the target is a quiet line, not a dropdown', () => {
+    const pane = src('features/analyzer/blocks/PromptPane.tsx');
+    expect(pane).not.toContain('<Select');
+    expect(pane).toContain('data-testid="prompt-pane-target"');
+    expect(src('features/analyzer/blocks/PreviewDrawer.tsx')).toContain('label="Previewed target"');
+    expect(doc).toContain('with the pane on screen there is no target\n  dropdown');
+  });
+
+  it('Q2: the prompt is rendered from the builder markers, with a Raw view and the JSON colours', () => {
+    const messages = src('features/analyzer/blocks/PromptMessages.tsx');
+    expect(messages).toContain('<SegmentedControl');
+    expect(messages).toContain("'qym:prompt-view'");
+    expect(src('features/analyzer/blocks/PromptDocument.tsx')).toContain('<JsonText');
+    expect(src('features/analyzer/model/promptDoc.ts')).toContain('EVALUATION ITEM DATA');
+    const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
+    expect(css).toContain("border-inline-start: 3px solid var(--accent-primary)");
+    expect(css).toContain('max-width: var(--field-measure)');
+    expect(css).toContain('background: var(--bg-elevated)');
+    expect(stripComments(src('ui/JsonViewer/JsonViewer.module.css'))).toContain('var(--json-key)');
+    expect(doc).toContain('The rendered\n  view hides and changes no character');
+  });
+});

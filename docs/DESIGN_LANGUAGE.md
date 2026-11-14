@@ -637,6 +637,30 @@ preselected.
   text (Updating / N lines added · M removed / No change to the prompt) and Copy. Lines added by the last change get
   the accent at `--tint-soft` behind the text, with no motion. With the pane on screen a target row click shows that
   target in the pane (`DataTable activeKey`); the eye tile is only for the narrow layout (drawer).
+  **Pane target (cv5 Q1, owner 2026-11-14: "what's the point of this?"):** with the pane on screen there is no target
+  dropdown: the head names the target in one quiet `--font-sm` muted line, the ids and the score mono
+  ("sql-003 · result_similarity · 0.71"); the target row at the left stays the active row. The guidance tabs show the
+  same line and no "Change" control (the last row chosen, else the first target). The drawer keeps its target `Select`,
+  because the drawer covers the table.
+  **Rendered prompt (cv5 Q2, owner: "rendered and structured ... rather than some text dump"):** the head's second line
+  ends with a `SegmentedControl` Rendered | Raw (default Rendered, remembered per viewer in `localStorage
+  qym:prompt-view`, shared with the drawer). Raw is the exact text, mono; Copy always copies the exact raw text.
+  Rendered is a document: `model/promptDoc.ts` reads the markers of the platform's prompt builder
+  (`services/llm_analyzer.py`): the top-level blocks (ANALYSIS RULES, EVALUATION ITEM DATA, REFERENCE DOCUMENTS,
+  Respond ONLY ..., Additional Instructions, any all-caps heading line after a blank line), the item data parts (INPUT,
+  EXPECTED OUTPUT, ACTUAL OUTPUT, ERROR, TRACE EVIDENCE, SELECTED METRIC RESULT, ITEM METADATA, SELECTED METADATA), the
+  trace (Agent trace / Evaluation trace, "Step N — name", CALL / OUTPUT / THINKING), the response fields ("1. category -
+  ..."), lists with their "Description / Use when / Approved examples" facts (a definition grid), numbered rules,
+  documents, JSON and Markdown tables. A top-level heading is `--font-md` 650 primary with the Subsection's 3px accent
+  bar and a hairline under it (the one accent role); a part of the item data is the small tracked label (`--font-sm`
+  650 muted); the body is sans `--font-base` at `--field-measure`; JSON, code and item values sit in a `--bg-elevated`
+  well, JSON in the `--json-*` colours (`ui/JsonText`). Each heading toggles its section; a part or a document longer
+  than 80 lines starts closed and shows "N lines". A sticky outline at the top of the scroll region (role, then the
+  sections as `--font-sm` text links; the section in view in the accent) jumps to a section and opens it. The rendered
+  view hides and changes no character: a closed section is `hidden`, not removed, trailing colons and list markers stay
+  (muted), and a unit test checks that the page text equals the raw text. Change marks work in both views: an added
+  line is marked inside its section, and a closed section that holds one opens. Text that matches no known structure
+  is clean paragraphs; a parser failure is plain text, never an error.
   **Rule versions (cv5 L2, L3, Z5):** the Rules tab's versions are a selectable `Timeline`, newest first, with
   `revealActions` (the row menu) and `markAlign="start"`. Each version has an icon mark: draft `edit` (warning),
   production `star` (success), another released version `check` (neutral). A released version is read-only: the

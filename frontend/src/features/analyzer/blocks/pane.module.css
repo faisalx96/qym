@@ -43,6 +43,15 @@
   overflow-wrap: anywhere;
 }
 
+/* cv5 Q1, Q2: the target line, then the Rendered | Raw switch at the end */
+.targetRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
 /* cv5 Q1: the target of the prompt, one quiet line (the selected row at the left says the same, so no control) */
 .target {
   margin: 0;
@@ -62,6 +71,7 @@
   min-height: 0;
   overflow: auto;
   padding: var(--space-sm) var(--space-md) var(--space-md);
+  --outline-stick: var(--space-sm);
   border-top: 1px solid var(--border-subtle);
   transition: opacity var(--transition-fast);
 }

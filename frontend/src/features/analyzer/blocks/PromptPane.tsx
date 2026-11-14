@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Skeleton, Tag, Text } from '@/ui';
+import { Button, CopyButton, EmptyState, ErrorState, Skeleton, Tag, Text } from '@/ui';
 import { APP_LOCALE } from '@/lib/dates';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import { changedLines, type LineChange } from '../model/promptDiff';
+import { PromptMessages, PromptViewSwitch, usePromptView } from './PromptMessages';
 import s from './pane.module.css';
 
 /** Space between the pane and the bottom of the viewport (the action rail's button line). */
@@ -94,26 +95,6 @@ function useChanges(key: string | null, messages: Messages['messages'], pending:
   return state.change;
 }
 
-function MessageBody({ content, added }: { content: string; added: ReadonlySet<number> | undefined }) {
-  if (!added?.size) {
-    return (
-      <pre className={s.body} dir="auto">
-        {content}
-      </pre>
-    );
-  }
-  return (
-    <pre className={s.body} dir="auto">
-      {content.split('\n').map((line, i) => (
-        <span key={i} className={s.line} data-added={added.has(i) ? '' : undefined}>
-          {line}
-          {'\n'}
-        </span>
-      ))}
-    </pre>
-  );
-}
-
 /**
  * The prompt preview as a fixed pane next to the settings (cv5 K3, owner: "the prompt is always open on the right
  * ... because I want to see what these impact"). Sticky under the page header with its own scroll. It follows every
@@ -124,6 +105,7 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
   const ref = useFitHeight();
   const scroller = useRef<HTMLDivElement>(null);
   const { preview } = ws;
+  const [view, setView] = usePromptView();
   const change = useChanges(ws.focusKey, preview.messages, preview.pending);
   const firstAdded = change?.added.findIndex((set) => set.size > 0) ?? -1;
 
@@ -131,7 +113,9 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
     const root = scroller.current;
     const line = root?.querySelector<HTMLElement>('[data-added]');
     if (!root || !line) return;
-    root.scrollTop += line.getBoundingClientRect().top - root.getBoundingClientRect().top - 48;
+    // below the sticky outline of the rendered view
+    const offset = (root.querySelector('nav')?.getBoundingClientRect().height ?? 0) + 48;
+    root.scrollTop += line.getBoundingClientRect().top - root.getBoundingClientRect().top - offset;
   };
 
   return (
@@ -163,7 +147,10 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
             />
           ) : null}
         </div>
-        <TargetLine ws={ws} />
+        <div className={s.targetRow}>
+          <TargetLine ws={ws} />
+          <PromptViewSwitch view={view} onView={setView} />
+        </div>
         {/* cv5 Z11: an honest, quiet line when the open tab shows something the prompt does not use (a draft) */}
         {note ? (
           <Text variant="sm" tone="muted" as="p" className={s.note} data-testid="prompt-pane-note">
@@ -197,15 +184,7 @@ export function PromptPane({ ws, note }: { ws: RunWorkspace; note?: string | nul
         ) : preview.messages.length === 0 ? (
           <Skeleton kind="lines" rows={12} label="Building prompt preview" />
         ) : (
-          preview.messages.map((m, i) => (
-            <article key={i} className={s.message}>
-              <header className={s.messageHead}>
-                <Eyebrow tone={m.role === 'system' ? 'accent' : 'muted'}>{m.role}</Eyebrow>
-                <CopyButton text={m.content} label={`Copy ${m.role} message`} />
-              </header>
-              <MessageBody content={m.content} added={change?.added[i]} />
-            </article>
-          ))
+          <PromptMessages messages={preview.messages} view={view} change={change} />
         )}
       </div>
     </aside>
