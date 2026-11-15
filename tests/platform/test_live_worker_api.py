@@ -528,6 +528,65 @@ def test_settings_409_without_encryption_key(
         assert db.query(AuditLog).count() == 0
 
 
+def test_evaluator_traces_save_and_read(client, session_factory, values):
+    values["evaluator_traces"] = {
+        "enabled": True,
+        "host": "https://traces.example",
+        "public_key": "pk-traces",
+    }
+    secret = "traces-secret-9012"
+    response = save(
+        client, values, secrets={**SECRETS, "evaluator_traces_secret_key": secret}
+    )
+    assert response.status_code == 201, response.text
+    body = read(client)
+    assert body["settings"]["values"] == values
+    assert body["settings"]["secret_hints"]["evaluator_traces_secret_key"] == "9012"
+    for payload in (response.json(), body):
+        assert_safe(payload)
+        assert secret not in json.dumps(payload)
+
+
+@pytest.mark.parametrize("field", ["host", "public_key", "evaluator_traces_secret_key"])
+def test_evaluator_traces_incomplete_422(client, session_factory, values, field):
+    section = {
+        "enabled": True,
+        "host": "https://traces.example",
+        "public_key": "pk-traces",
+    }
+    secrets = {**SECRETS, "evaluator_traces_secret_key": "traces-secret-9012"}
+    if field == "evaluator_traces_secret_key":
+        secrets.pop(field)
+        loc = ["body", "secrets", field]
+    else:
+        section.pop(field)
+        loc = ["body", "values", "evaluator_traces", field]
+    values["evaluator_traces"] = section
+    response = save(client, values, secrets=secrets)
+    assert response.status_code == 422, response.text
+    body = response.json()
+    assert body["error"]["code"] == "validation_error"
+    assert body["detail"] == body["error"]["details"]
+    assert len(body["detail"]) == 1
+    assert body["detail"][0]["loc"] == loc
+    assert_safe(body)
+    assert "traces-secret-9012" not in response.text
+
+
+def test_evaluator_traces_legacy_read_restore_and_save(client, session_factory, values):
+    assert save(client, values, secrets=SECRETS).status_code == 201
+    legacy = {key: value for key, value in values.items() if key != "evaluator_traces"}
+    with session_factory() as db:
+        db.query(LiveWorkerSettings).one().values = legacy
+        db.commit()
+    assert read(client)["settings"]["values"] == legacy
+    response = client.post(BASE + "/settings/1/restore", headers=ADMIN)
+    assert response.status_code == 201, response.text
+    assert read(client)["settings"]["values"] == legacy
+    assert save(client, legacy).status_code == 201
+    assert read(client)["settings"]["values"] == values
+
+
 def test_settings_422_field_path(client, session_factory, values):
     values["evaluation"]["parallel_turns"] = 9
     response = save(client, values, secrets=SECRETS)

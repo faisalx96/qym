@@ -137,6 +137,61 @@ def _assert_error(response, status, detail):
     assert response.json()["error"]["code"]
 
 
+def test_control_evaluator_traces_discloses_secret_only_to_worker_key(
+    client, session_factory, values
+):
+    values["evaluator_traces"] = {
+        "enabled": True,
+        "host": "https://traces.example",
+        "public_key": "pk-traces",
+    }
+    secret = "traces-secret-9012"
+    with session_factory() as db:
+        live_worker_settings.create_version(
+            db,
+            db.get(LiveSource, "source"),
+            values,
+            {"evaluator_traces_secret_key": secret},
+            None,
+            None,
+        )
+        db.commit()
+    response = _control(client)
+    assert response.status_code == 200, response.text
+    settings = response.json()["settings"]
+    assert settings["values"] == values
+    assert settings["secrets"]["evaluator_traces_secret_key"] == secret
+    assert settings["secrets_digest"] == live_worker_settings.secrets_digest(
+        settings["secrets"]
+    )
+    for clear_worker_key in (False, True):
+        if clear_worker_key:
+            with session_factory() as db:
+                db.get(LiveSource, "source").worker_key_id = None
+                db.commit()
+        response = _control(client, Authorization=f"Bearer {OTHER_TOKEN}")
+        assert response.status_code == 200, response.text
+        withheld = response.json()["settings"]
+        assert withheld["values"] == values
+        assert withheld["secrets_withheld"] is True
+        assert "secrets" not in withheld
+        assert withheld["secrets_digest"] == settings["secrets_digest"]
+        assert secret not in response.text
+
+
+def test_control_legacy_values_pass_through(client, session_factory, values):
+    values.pop("evaluator_traces")
+    with session_factory() as db:
+        db.query(LiveWorkerSettings).one().values = values
+        db.commit()
+    response = _control(client)
+    assert response.status_code == 200, response.text
+    settings = response.json()["settings"]
+    assert settings["values"] == values
+    assert "evaluator_traces" not in settings["values"]
+    assert "evaluator_traces_secret_key" not in settings["secrets"]
+
+
 def test_control_returns_state_settings_and_jobs_to_worker_key(
     client, session_factory, values
 ):
