@@ -33,15 +33,24 @@ class Facts:
 
 def reconciliation_action(
     stamp: Optional[str], facts: Facts
-) -> Literal["none", "repair", "stamp"]:
-    """Recognize only the old Live head and this tool's interrupted states."""
+) -> list[tuple[Literal["stamp", "upgrade"], str]]:
+    """Plan only the missing migrations for legacy or interrupted Live states."""
     if not (facts.live_sources and facts.live_jobs):
-        return "none"
+        return []
     if stamp not in {"0100", "0102", *_RESUME_STAMPS}:
-        return "none"
+        return []
     if facts.api_key_kind and facts.job_priority:
-        return "stamp" if stamp in _RESUME_STAMPS else "none"
-    return "repair"
+        return [("stamp", "0102")] if stamp in _RESUME_STAMPS else []
+
+    start = "0092" if facts.api_key_kind else "0091"
+    target = "0092" if facts.job_priority else "0093"
+    steps: list[tuple[Literal["stamp", "upgrade"], str]] = []
+    if stamp != start:
+        steps.append(("stamp", start))
+    if target > start:
+        steps.append(("upgrade", target))
+    steps.append(("stamp", "0102"))
+    return steps
 
 
 def _read_state(connection: Connection) -> tuple[Optional[str], Facts]:
@@ -74,7 +83,7 @@ def _reconcile(connection: Connection) -> None:
     # Release inspection's transaction before Alembic's separate connections
     # perform DDL. The session advisory lock survives rollback and commit.
     connection.rollback()
-    action = reconciliation_action(stamp, facts)
+    steps = reconciliation_action(stamp, facts)
     state = (
         "stamp=%s live_sources=%s live_jobs=%s api_keys.kind=%s "
         "eval_experiment_jobs.priority=%s"
@@ -86,7 +95,7 @@ def _reconcile(connection: Connection) -> None:
         facts.api_key_kind,
         facts.job_priority,
     )
-    if action == "none":
+    if not steps:
         logger.info("migration order: no action (" + state + ")", *values)
         return
 
@@ -95,7 +104,7 @@ def _reconcile(connection: Connection) -> None:
         "migration order: decision=%s",
         (
             "repair legacy migration order"
-            if action == "repair"
+            if not (facts.api_key_kind and facts.job_priority)
             else "finish interrupted repair"
         ),
     )
@@ -103,14 +112,12 @@ def _reconcile(connection: Connection) -> None:
     config = Config(str(migrations / "alembic.ini"))
     # Resolve the packaged scripts independently of the caller's working directory.
     config.set_main_option("script_location", str(migrations))
-    if action == "repair":
-        if stamp in {"0100", "0102"}:
-            logger.info("migration order: step=stamp 0091")
-            command.stamp(config, "0091")
-        logger.info("migration order: step=upgrade 0093")
-        command.upgrade(config, "0093")
-    logger.info("migration order: step=stamp 0102")
-    command.stamp(config, "0102")
+    for operation, revision in steps:
+        logger.info("migration order: step=%s %s", operation, revision)
+        if operation == "stamp":
+            command.stamp(config, revision)
+        else:
+            command.upgrade(config, revision)
     final_stamp = connection.scalar(sa.text("SELECT version_num FROM alembic_version"))
     logger.info("migration order: final stamp=%s", final_stamp)
 

@@ -337,15 +337,26 @@ already has), so recreate such a throwaway database instead.
 Images from 5–10 November used `0100` for the old Live worker-control head.
 After renumbering, that stamp skips the new API-key and job-priority migrations;
 an attempted upgrade may fail on an existing covering index or reach `0102`
-with those columns still missing. At startup the image now runs
-`python -m qym_platform.tools.reconcile_migration_order` immediately before
-`alembic upgrade head`. `QYM_SKIP_MIGRATIONS=1` skips both commands.
+with those columns still missing. The repair runs as follows:
+
+- Default image startup runs `python -m qym_platform.tools.reconcile_migration_order`
+  immediately before `alembic upgrade head`. Application replicas with
+  `QYM_SKIP_MIGRATIONS=1` skip both commands.
+- A migration job passing `alembic … upgrade …` through this image's entrypoint
+  runs the repair before that command, including with `QYM_SKIP_MIGRATIONS=1`.
+- A Kubernetes `command:` override that replaces the entrypoint does **not** run
+  the repair automatically. The job must call
+  `python -m qym_platform.tools.reconcile_migration_order` itself before Alembic.
 
 On PostgreSQL the tool holds its own session advisory lock, checks the state
 under that lock, and repairs stamps `0100` or `0102` only when both `live_sources`
 and `live_jobs` exist and either `api_keys.kind` or
-`eval_experiment_jobs.priority` is missing. It stamps `0091`, upgrades through
-`0093`, then stamps `0102`, preserving the already-applied Live migrations.
+`eval_experiment_jobs.priority` is missing. It runs only the missing migrations:
+when only `kind` is missing, it stamps `0091` and upgrades to `0092`; when only
+`priority` is missing, it stamps `0092` and upgrades to `0093`; when both are
+missing, it stamps `0091` and upgrades to `0093`. It omits the initial stamp if
+already at that revision, then stamps `0102`, preserving the already-applied
+Live migrations.
 Stamps `0091`–`0093` with both Live tables are treated as interrupted repairs:
 the tool resumes the upgrade, or only stamps `0102` if both columns exist.
 Old stamps other than `0100` are not handled; the `0102` case covers an old
@@ -364,15 +375,17 @@ migration order: step=stamp 0102
 migration order: final stamp=0102
 ```
 
-An interrupted repair omits `step=stamp 0091`; if both columns already exist,
-its decision is `finish interrupted repair` and it also omits the upgrade.
+An interrupted repair plans the same steps from the columns present, omitting
+the initial stamp only if already at the required starting revision. If both
+columns already exist, its decision is `finish interrupted repair` and it only
+stamps `0102`.
 A database needing nothing emits one `migration order: no action (...)` line
 with the stamp and four facts, or `dialect=sqlite`. A failed step stops startup
 with a nonzero exit; the next start can resume a committed intermediate step.
 No database URL is logged.
 
 The manual equivalent for a confirmed old `0100` head (or its incomplete
-`0102` upgrade), with API and workers stopped, is:
+`0102` upgrade), with both columns missing and API and workers stopped, is:
 
 ```bash
 alembic -c packages/platform/qym_platform/migrations/alembic.ini stamp 0091

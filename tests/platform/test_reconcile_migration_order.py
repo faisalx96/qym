@@ -9,30 +9,14 @@ import sqlalchemy as sa
 from alembic import command
 
 
+@pytest.mark.parametrize("stamp", ["0100", "0102", "0091", "0092", "0093"])
 @pytest.mark.parametrize(
-    "stamp,kind,priority,expected",
+    "kind,priority,expected",
     [
-        (stamp, kind, priority, expected)
-        for stamp, expected in [
-            ("0100", "repair"),
-            ("0102", "repair"),
-            ("0091", "repair"),
-            ("0092", "repair"),
-            ("0093", "repair"),
-            ("0094", "none"),
-            ("0099", "none"),
-            ("0101", "none"),
-            ("0103", "none"),
-            (None, "none"),
-        ]
-        for kind, priority in [(False, False), (True, False), (False, True)]
-    ]
-    + [
-        ("0100", True, True, "none"),  # new chain mid-upgrade
-        ("0102", True, True, "none"),  # complete new chain
-        ("0091", True, True, "stamp"),
-        ("0092", True, True, "stamp"),
-        ("0093", True, True, "stamp"),
+        (False, False, [("stamp", "0091"), ("upgrade", "0093"), ("stamp", "0102")]),
+        (True, False, [("stamp", "0092"), ("upgrade", "0093"), ("stamp", "0102")]),
+        (False, True, [("stamp", "0091"), ("upgrade", "0092"), ("stamp", "0102")]),
+        (True, True, [("stamp", "0102")]),
     ],
 )
 def test_detection(stamp, kind, priority, expected):
@@ -41,7 +25,24 @@ def test_detection(stamp, kind, priority, expected):
         reconciliation_action,
     )
 
+    if kind and priority and stamp in {"0100", "0102"}:
+        expected = []
+    elif expected[0] == ("stamp", stamp):
+        expected = expected[1:]
     assert reconciliation_action(stamp, Facts(True, True, kind, priority)) == expected
+
+
+@pytest.mark.parametrize("stamp", ["0094", "0099", "0101", "0103", None])
+@pytest.mark.parametrize(
+    "kind,priority", [(False, False), (True, False), (False, True), (True, True)]
+)
+def test_unrecognized_stamp_is_unchanged(stamp, kind, priority):
+    from qym_platform.tools.reconcile_migration_order import (
+        Facts,
+        reconciliation_action,
+    )
+
+    assert reconciliation_action(stamp, Facts(True, True, kind, priority)) == []
 
 
 @pytest.mark.parametrize("stamp", ["0091", "0092", "0093", "0100", "0102"])
@@ -53,7 +54,7 @@ def test_requires_both_live_tables(stamp, sources, jobs, kind, priority):
         reconciliation_action,
     )
 
-    assert reconciliation_action(stamp, Facts(sources, jobs, kind, priority)) == "none"
+    assert reconciliation_action(stamp, Facts(sources, jobs, kind, priority)) == []
 
 
 @pytest.mark.parametrize("stamp", [None, "empty", "0100", "0102", "0091"])
@@ -87,20 +88,35 @@ def test_sqlite_is_unchanged(tmp_path, monkeypatch, caplog, stamp):
         engine.dispose()
 
 
-@pytest.mark.parametrize("stamp", ["0100", "0102", "0091", "0092", "0093"])
-def test_postgres_repairs_and_is_idempotent(postgres, monkeypatch, stamp):
+@pytest.mark.parametrize(
+    "stamp,kind,priority",
+    [
+        ("0100", False, False),
+        ("0102", False, False),
+        ("0091", False, False),
+        ("0092", True, False),
+        ("0093", True, True),
+        ("0100", False, True),
+        ("0100", True, False),
+        ("0102", False, True),
+        ("0102", True, False),
+    ],
+)
+def test_postgres_repairs_and_is_idempotent(
+    postgres, monkeypatch, stamp, kind, priority
+):
     from qym_platform.tools.reconcile_migration_order import main
 
     engine, config = postgres
     command.upgrade(config, "head")
     with engine.begin() as connection:
         # Recreate the old head, or a committed intermediate repair step.
-        if stamp not in {"0092", "0093"}:
+        if not kind:
             connection.execute(sa.text("ALTER TABLE api_keys DROP COLUMN kind"))
             connection.execute(
                 sa.text("ALTER TABLE api_keys DROP COLUMN experiment_id CASCADE")
             )
-        if stamp != "0093":
+        if not priority:
             connection.execute(
                 sa.text("ALTER TABLE eval_experiment_jobs DROP COLUMN priority")
             )

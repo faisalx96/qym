@@ -24,6 +24,14 @@ else
 fi
 
 if [ "$#" -gt 0 ]; then
+  if [ "$1" = "alembic" ]; then
+    for argument in "$@"; do
+      if [ "$argument" = "upgrade" ]; then
+        python -m qym_platform.tools.reconcile_migration_order
+        break
+      fi
+    done
+  fi
   exec "$@"
 fi
 
