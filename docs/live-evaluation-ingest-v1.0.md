@@ -419,9 +419,11 @@ shared caches. Continue control polling while paused so resume can be observed.
 | `settings.version` | integer | Monotonically increasing version |
 | `settings.created_at`, `settings.created_by` | datetime, string or null | Version creation time and creator display name |
 | `settings.values` | object | Saved non-secret settings, including models and database connection |
+| `settings.values.evaluator_traces` | object, optional | Evaluator's own Langfuse destination: `{enabled, host, public_key}`; missing means off |
 | `settings.secrets_digest` | string | SHA-256 digest of resolved secrets; changes when credentials change |
 | `settings.errors` | array of strings | Empty when resolution succeeds; otherwise `connection missing` or `connection has no api key` |
 | `settings.secrets` | object | Resolved credentials, only for the selected worker key |
+| `settings.secrets.evaluator_traces_secret_key` | string, optional | Evaluator traces project secret, included only when stored and disclosed only to the selected worker key |
 | `settings.secrets_withheld` | boolean | `true` instead of `secrets` for other project keys, or when no worker key is selected |
 | `jobs` | array | Queued and running jobs, ordered by request time then ID |
 | `jobs[].id`, `jobs[].kind` | string | Job ID and `backfill_preview` or `backfill` |
@@ -436,6 +438,22 @@ this is a successful `200`, not a `403`. Authentication still rejects invalid,
 revoked and out-of-project keys. Secret resolution errors in `errors` do not
 change the HTTP status; do not apply an incomplete configuration. A stored
 secret that cannot be decrypted returns `500` (`secret_cannot_be_decrypted`).
+
+`evaluator_traces` configures the worker's own traces and spans, one trace per
+evaluated turn, in a Langfuse project separate from the source agent's project.
+New saves default this section to `{"enabled": false, "host": "", "public_key": ""}`.
+When enabled, `host` must be an absolute HTTP(S) URL (up to 500 characters),
+`public_key` must be non-empty (up to 200 characters), and
+`evaluator_traces_secret_key` must be stored; incomplete settings return `422`
+with the corresponding values field or secret field path. When disabled, the
+host and public key may be empty and no secret is required. Switching off, or
+omitting the secret on a later save, keeps a stored secret; it remains included
+in secret resolution, hints and the digest like other stored secrets.
+
+Versions saved before this section existed pass through unchanged on reads and
+restore; re-saving their values adds the disabled default. Workers must treat a
+missing section or `enabled: false` as no evaluator traces. Older workers can
+ignore these new values and secret keys.
 
 The UI read endpoint `GET /api/projects/{project_slug}/live/worker` accepts:
 
@@ -590,6 +608,13 @@ from heartbeat status because an unclaimed job cannot report progress.
 The worker verifies a candidate version before applying it and reports the
 verification and effective running version here. A saved version is not proof
 that the worker has applied it; the Worker page distinguishes the two.
+
+When evaluator traces are enabled, `verification.checks` may include
+`evaluator_traces.auth` (under the `evaluator_traces.` prefix). This check is
+**advisory**: failure never blocks the worker or stops evaluation. Report it only
+when enabled, and use event component `evaluator_traces` for related problems.
+`running.values.evaluator_traces` is optional: older workers may omit it. A
+missing section, like `enabled: false`, means evaluator traces are off.
 
 ---
 

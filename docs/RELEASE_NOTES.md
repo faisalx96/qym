@@ -251,6 +251,8 @@ The entries below cover the shipped work after `e2fda02` through `067cc6e`. The 
 
 ## Unreleased — LLM analyzer context and rule lifecycle
 
+- **Evaluator traces** — optionally send the Live worker’s turn evaluation traces to a separate Langfuse project from Live → Worker settings.
+
 The `llm_analyzer` branch extends the existing playground into a project-scoped,
 metric-aware analysis workspace. The complete developer/operator record is in
 [LLM analyzer branch changes](BRANCH_CHANGES_LLM_ANALYZER.md).

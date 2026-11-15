@@ -24,6 +24,7 @@ export interface LiveWorkerValues {
     vision_design_judge: string;
   };
   langfuse: { host: string; public_key: string };
+  evaluator_traces: { enabled: boolean; host: string; public_key: string };
   dataiku: { url: string; database: string };
   database: {
     host: string;
@@ -33,6 +34,9 @@ export interface LiveWorkerValues {
     sslmode: 'disable' | 'allow' | 'prefer' | 'require' | 'verify-ca' | 'verify-full';
   };
 }
+/** Stored versions and older workers may omit the evaluator traces section. */
+export type LiveWorkerStoredValues = Omit<LiveWorkerValues, 'evaluator_traces'> &
+  Partial<Pick<LiveWorkerValues, 'evaluator_traces'>>;
 export interface LiveWorkerControl {
   state: 'waiting' | 'running' | 'paused';
   reason: string | null;
@@ -44,7 +48,7 @@ export interface LiveWorkerControl {
     checked_at: string;
     checks: Record<string, { ok: boolean; latency_ms: number | null; error: string | null }>;
   };
-  running: LiveWorkerValues | null;
+  running: LiveWorkerStoredValues | null;
   models: { listed_at: string; ids: string[] } | null;
   errors_last_hour: number;
   last_error: { at: string; component: string; code: string; message: string } | null;
@@ -143,7 +147,10 @@ export interface LiveWorkerEvent {
   last_at: string;
 }
 export type LiveWorkerSecrets = Partial<
-  Record<'langfuse_secret_key' | 'dataiku_api_key' | 'database_password', string>
+  Record<
+    'langfuse_secret_key' | 'evaluator_traces_secret_key' | 'dataiku_api_key' | 'database_password',
+    string
+  >
 >;
 export interface LiveWorkerRead {
   state: { desired: 'running' | 'paused'; changed_at: string | null; changed_by: string | null };
@@ -153,7 +160,7 @@ export interface LiveWorkerRead {
   today: { day: string; turns_seen: number; evaluated: number; failed: number; in_qym: number };
   worker_key: LiveWorkerKey | null;
   api_keys: Pick<LiveWorkerKey, 'id' | 'name' | 'prefix'>[];
-  settings: (LiveWorkerVersion & { values: LiveWorkerValues; secret_hints: LiveWorkerSecrets }) | null;
+  settings: (LiveWorkerVersion & { values: LiveWorkerStoredValues; secret_hints: LiveWorkerSecrets }) | null;
   versions: LiveWorkerVersion[];
   jobs: LiveJob[];
   connections: { id: string; name: string; base_url: string; api_key_last4: string }[];
@@ -303,20 +310,37 @@ export function workerDefaults(): LiveWorkerValues {
       vision_design_judge: '',
     },
     langfuse: { host: '', public_key: '' },
+    evaluator_traces: { enabled: false, host: '', public_key: '' },
     dataiku: { url: '', database: '' },
     database: { host: '', port: 5432, database: '', user: '', sslmode: 'require' },
+  };
+}
+/** Fill absent sections at the form boundary, for both saved and running values. */
+export function normalizeWorkerValues(values?: Partial<LiveWorkerValues> | null): LiveWorkerValues {
+  const defaults = workerDefaults();
+  return {
+    evaluation: values?.evaluation ?? defaults.evaluation,
+    models: values?.models ?? defaults.models,
+    langfuse: values?.langfuse ?? defaults.langfuse,
+    evaluator_traces: values?.evaluator_traces ?? defaults.evaluator_traces,
+    dataiku: values?.dataiku ?? defaults.dataiku,
+    database: values?.database ?? defaults.database,
   };
 }
 const checkPrefixes: Partial<Record<keyof LiveWorkerValues, string>> = {
   database: 'database.',
   langfuse: 'langfuse.',
+  evaluator_traces: 'evaluator_traces.',
   models: 'gateway.',
   dataiku: 'dataiku.',
 };
 function failedChecks(section: keyof LiveWorkerValues, read: LiveWorkerRead) {
   const prefix = checkPrefixes[section];
   const verification = read.running?.verification;
-  return prefix && read.settings && verification?.version === read.settings.version && !verification.ok
+  return prefix &&
+    read.settings &&
+    verification?.version === read.settings.version &&
+    (!verification.ok || section === 'evaluator_traces')
     ? Object.entries(verification.checks).filter(([name, check]) => name.startsWith(prefix) && !check.ok)
     : [];
 }

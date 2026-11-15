@@ -249,7 +249,9 @@ it('keeps errors for duplicate host and database field names in their own sectio
   await waitFor(() =>
     expect(screen.getByLabelText('Database host')).toHaveAccessibleDescription('Database host is invalid'),
   );
-  expect(screen.getByLabelText('Langfuse host')).toHaveAccessibleDescription('Langfuse host is invalid');
+  expect(
+    within(screen.getByRole('region', { name: 'Langfuse' })).getByLabelText('Langfuse host'),
+  ).toHaveAccessibleDescription('Langfuse host is invalid');
   expect(screen.getByLabelText('Dataiku database')).toHaveAccessibleDescription(
     'Dataiku database is invalid',
   );
@@ -593,4 +595,20 @@ it.each([undefined, 0, 3])('shows only positive deferred counts: %s', async (def
   else expect(table.queryByText(/left to the live loop/)).toBeNull();
   expect(table.getByText('9 traces listed: 2 user turns, 1 other traces')).toBeVisible();
   expect(table.queryByText(/outside_window|duplicate|no_id/)).toBeNull();
+});
+
+it.each([false, true])('reports an evaluator trace auth failure when overall verification is %s', (ok) => {
+  const read = structuredClone(liveWorkerRead);
+  read.running!.verification = {
+    ...read.running!.verification!,
+    ok,
+    checks: {
+      'evaluator_traces.auth': { ok: false, latency_ms: null, error: 'Trace authentication failed' },
+    },
+  };
+  expect(fieldStatus('evaluator_traces', read)).toBe('failed');
+  expect(failedCheckText('evaluator_traces', read)).toBe('Trace authentication failed');
+  expect(fieldStatus('langfuse', read)).toBe('running');
+  read.running!.verification.version = 2;
+  expect(failedCheckText('evaluator_traces', read)).toBeNull();
 });

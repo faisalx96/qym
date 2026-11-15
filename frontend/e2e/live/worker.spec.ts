@@ -44,7 +44,7 @@ test('waiting for the first version becomes Running v1 in the status strip and e
   const state = page.locator('[data-live-block="worker-status"]');
   await expect(state).toContainText('Waiting for settings version 1');
   const settings = page.locator('[data-live-block="worker-settings"]');
-  await expect(settings.getByText('Waiting for version 1', { exact: true })).toHaveCount(5);
+  await expect(settings.getByText('Waiting for version 1', { exact: true })).toHaveCount(6);
 
   const configured = await seedWorkerControl(request, seed.projectId, seed.apiKey, seed.sourceKey, seed);
   expect(configured.version).toBe(1);
@@ -57,7 +57,7 @@ test('waiting for the first version becomes Running v1 in the status strip and e
   await page.reload();
   await expect(state).toContainText('Running v1');
   await expect(state.locator('[data-shape="orbit"][data-tone="info"]')).toHaveText('Running v1');
-  for (const name of ['Evaluation', 'Models', 'Langfuse', 'Dataiku', 'Database']) {
+  for (const name of ['Evaluation', 'Models', 'Langfuse', 'Evaluator traces', 'Dataiku', 'Database']) {
     await expect(
       settings.getByRole('region', { name, exact: true }).locator('[data-tone="info"]'),
     ).toHaveText('Running');

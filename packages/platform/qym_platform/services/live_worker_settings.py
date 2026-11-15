@@ -17,6 +17,7 @@ from pydantic import (
     TypeAdapter,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -25,7 +26,20 @@ from qym_platform import secrets as secret_storage
 from qym_platform.datetime_utils import to_api_timestamp
 from qym_platform.db.models import LiveSource, LiveWorkerSettings, ProjectLlmConnection
 
-SECRET_FIELDS = ("langfuse_secret_key", "dataiku_api_key", "database_password")
+SECRET_FIELDS = (
+    "langfuse_secret_key",
+    "dataiku_api_key",
+    "database_password",
+    "evaluator_traces_secret_key",
+)
+
+
+def _absolute_http_url(value: str) -> str:
+    TypeAdapter(AnyHttpUrl).validate_python(value)
+    parsed = urlsplit(value)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("must be an absolute http(s) URL")
+    return value
 
 
 class EvaluationValues(BaseModel):
@@ -60,11 +74,24 @@ class LangfuseValues(BaseModel):
     @field_validator("host")
     @classmethod
     def absolute_http_url(cls, value: str) -> str:
-        TypeAdapter(AnyHttpUrl).validate_python(value)
-        parsed = urlsplit(value)
-        if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            raise ValueError("must be an absolute http(s) URL")
-        return value
+        return _absolute_http_url(value)
+
+
+class EvaluatorTracesValues(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    host: str = Field(default="", max_length=500)
+    public_key: str = Field(default="", max_length=200)
+
+    @model_validator(mode="after")
+    def enabled_destination(self) -> EvaluatorTracesValues:
+        if self.enabled:
+            # Reuse Langfuse's requirements and preserve host/public_key error paths.
+            LangfuseValues.model_validate(
+                {"host": self.host, "public_key": self.public_key}
+            )
+        return self
 
 
 class DataikuValues(BaseModel):
@@ -76,11 +103,7 @@ class DataikuValues(BaseModel):
     @field_validator("url")
     @classmethod
     def absolute_http_url(cls, value: str) -> str:
-        TypeAdapter(AnyHttpUrl).validate_python(value)
-        parsed = urlsplit(value)
-        if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            raise ValueError("must be an absolute http(s) URL")
-        return value
+        return _absolute_http_url(value)
 
 
 class DatabaseValues(BaseModel):
@@ -103,6 +126,9 @@ class WorkerSettingsValues(BaseModel):
     langfuse: LangfuseValues
     dataiku: DataikuValues
     database: DatabaseValues
+    evaluator_traces: EvaluatorTracesValues = Field(
+        default_factory=EvaluatorTracesValues
+    )
 
 
 class SettingsError(Exception):
@@ -116,6 +142,8 @@ def required_secrets(values: WorkerSettingsValues) -> set:
     required = {"langfuse_secret_key", "database_password"}
     if values.evaluation.dataiku_execution:
         required.add("dataiku_api_key")
+    if values.evaluator_traces.enabled:
+        required.add("evaluator_traces_secret_key")
     return required
 
 

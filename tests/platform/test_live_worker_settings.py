@@ -76,6 +76,7 @@ def values():
             "vision_design_judge": "design",
         },
         "langfuse": {"host": "https://langfuse.example", "public_key": "pk-test"},
+        "evaluator_traces": {"enabled": False, "host": "", "public_key": ""},
         "dataiku": {"url": "https://dataiku.example", "database": "analytics"},
         "database": {
             "host": "db.example",
@@ -85,6 +86,118 @@ def values():
             "sslmode": "require",
         },
     }
+
+
+@pytest.mark.parametrize("section", [None, {}, {"enabled": False}])
+def test_evaluator_traces_defaults(session_factory, values, section):
+    expected = values.pop("evaluator_traces")
+    if section is not None:
+        values["evaluator_traces"] = section
+    with session_factory() as db:
+        row = settings.create_version(
+            db, db.get(LiveSource, "source"), values, SECRETS, None, None
+        )
+        assert row.values["evaluator_traces"] == expected
+        assert row.secret_hints == {name: value[-4:] for name, value in SECRETS.items()}
+
+
+@pytest.mark.parametrize(
+    "field, bad",
+    [
+        ("host", None),
+        ("host", ""),
+        ("host", "relative/path"),
+        ("host", "https:///traces.example"),
+        ("host", "ftp://traces.example"),
+        ("host", "https://traces.example/" + "x" * 500),
+        ("public_key", None),
+        ("public_key", ""),
+        ("public_key", "x" * 201),
+        ("unknown", True),
+    ],
+)
+def test_evaluator_traces_field_errors(session_factory, values, field, bad):
+    section = {
+        "enabled": True,
+        "host": "https://traces.example",
+        "public_key": "pk-traces",
+    }
+    if bad is None:
+        section.pop(field)
+    else:
+        section[field] = bad
+    values["evaluator_traces"] = section
+    with session_factory() as db:
+        with pytest.raises(settings.SettingsError) as error:
+            settings.create_version(
+                db, db.get(LiveSource, "source"), values, SECRETS, None, None
+            )
+        assert error.value.status == 422
+        assert error.value.detail["details"][0]["loc"] == ["evaluator_traces", field]
+
+
+def test_evaluator_traces_secret_required_and_retained(session_factory, values):
+    values["evaluator_traces"] = {
+        "enabled": True,
+        "host": "https://traces.example",
+        "public_key": "pk-traces",
+    }
+    name = "evaluator_traces_secret_key"
+    with session_factory() as db:
+        source = db.get(LiveSource, "source")
+        with pytest.raises(settings.SettingsError) as error:
+            settings.create_version(db, source, values, SECRETS, None, None)
+        assert (error.value.status, error.value.detail) == (
+            422,
+            f"missing secret {name}",
+        )
+        first = settings.create_version(
+            db, source, values, {**SECRETS, name: "traces-secret-9012"}, None, None
+        )
+        assert first.secrets_encrypted[name] != "traces-secret-9012"
+        assert settings.version_payload(first)["secret_hints"][name] == "9012"
+        resolved, errors = settings.resolved_secrets(db, source, first)
+        assert errors == []
+        assert resolved[name] == "traces-secret-9012"
+        digest = settings.secrets_digest(resolved)
+        expected = "\n".join(
+            f"{key}={value}" for key, value in sorted(resolved.items())
+        )
+        assert digest == hashlib.sha256(expected.encode()).hexdigest()
+        assert digest != settings.secrets_digest(
+            {key: value for key, value in resolved.items() if key != name}
+        )
+        second = settings.create_version(db, source, values, {}, None, None)
+        values["evaluator_traces"] = {"enabled": False}
+        third = settings.create_version(db, source, values, {}, None, None)
+        values.pop("evaluator_traces")
+        fourth = settings.create_version(db, source, values, {}, None, None)
+        for row in (second, third, fourth):
+            assert row.secrets_encrypted == first.secrets_encrypted
+            assert row.secret_hints == first.secret_hints
+        assert fourth.values["evaluator_traces"]["enabled"] is False
+
+
+def test_evaluator_traces_restore_legacy_version(session_factory, values):
+    with session_factory() as db:
+        source = db.get(LiveSource, "source")
+        first = settings.create_version(db, source, values, SECRETS, None, None)
+        legacy = {
+            key: value
+            for key, value in first.values.items()
+            if key != "evaluator_traces"
+        }
+        first.values = legacy
+        db.commit()
+        restored = settings.restore_version(db, source, 1, None)
+        assert restored.values == legacy
+        assert "evaluator_traces" not in settings.version_payload(restored)["values"]
+        assert restored.secrets_encrypted == first.secrets_encrypted
+        saved = settings.create_version(db, source, restored.values, {}, None, None)
+        assert saved.values == {
+            **legacy,
+            "evaluator_traces": values["evaluator_traces"],
+        }
 
 
 def test_create_version_validates_and_encrypts(session_factory, values):

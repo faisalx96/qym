@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import {
   failedCheckText,
   fieldStatus,
-  workerDefaults,
+  normalizeWorkerValues,
   type LiveWorkerRead,
   type LiveWorkerSecrets,
   type LiveWorkerValues,
@@ -32,12 +32,20 @@ import styles from '../../worker.module.css';
 
 const sectionSecrets: Partial<Record<keyof LiveWorkerValues, keyof LiveWorkerSecrets>> = {
   langfuse: 'langfuse_secret_key',
+  evaluator_traces: 'evaluator_traces_secret_key',
   dataiku: 'dataiku_api_key',
   database: 'database_password',
 };
-const sections = ['evaluation', 'models', 'langfuse', 'dataiku', 'database'] as const;
-function sectionChanged(section: keyof LiveWorkerValues, values: LiveWorkerValues, saved: LiveWorkerValues) {
-  return Object.entries(values[section]).some(([key, value]) => value !== Reflect.get(saved[section], key));
+const sections = ['evaluation', 'models', 'langfuse', 'evaluator_traces', 'dataiku', 'database'] as const;
+function sectionChanged(
+  section: keyof LiveWorkerValues,
+  values: LiveWorkerValues,
+  saved: Partial<LiveWorkerValues>,
+) {
+  const baseline = normalizeWorkerValues(saved);
+  return Object.entries(values[section]).some(
+    ([key, value]) => value !== Reflect.get(baseline[section], key),
+  );
 }
 
 function SettingsSection({
@@ -123,7 +131,7 @@ export function SettingsForm({
   busyKey?: boolean;
   modelIndex?: Record<string, number> | null;
 } & Pick<WorkerCallbacks, 'onSave' | 'onKey'>) {
-  const [values, setValues] = useState(() => read.settings?.values ?? workerDefaults());
+  const [values, setValues] = useState(() => normalizeWorkerValues(read.settings?.values));
   const [loaded, setLoaded] = useState(() => ({ version: read.settings?.version, values }));
   const [seenVersion, setSeenVersion] = useState(read.settings?.version);
   const [incoming, setIncoming] = useState<LiveWorkerRead['settings']>(null);
@@ -173,17 +181,25 @@ export function SettingsForm({
       </>
     ),
     langfuse: `${values.langfuse.host || '—'} · secret ${secrets.langfuse_secret_key || read.settings?.secret_hints.langfuse_secret_key ? 'set' : 'not set'}`,
+    evaluator_traces: values.evaluator_traces.enabled
+      ? `${values.evaluator_traces.host || '—'} · secret ${secrets.evaluator_traces_secret_key || read.settings?.secret_hints.evaluator_traces_secret_key ? 'set' : 'not set'}`
+      : 'Off',
     dataiku: `${values.dataiku.url || '—'} · ${values.dataiku.database || '—'}`,
     database: `${values.database.host || '—'}:${values.database.port} / ${values.database.database || '—'} · user ${values.database.user || '—'} · SSL ${values.database.sslmode}`,
   };
   function sectionProps(section: keyof LiveWorkerValues) {
     const secretKey = sectionSecrets[section];
-    const running = read.running?.running;
+    const running = normalizeWorkerValues(read.running?.running);
     return {
       summary: summaries[section],
       differsFromRunning:
         read.running?.settings_version_applied != null &&
-        Boolean(running && sectionChanged(section, values, running)),
+        Boolean(read.running?.running && sectionChanged(section, values, running)) &&
+        !(
+          section === 'evaluator_traces' &&
+          !values.evaluator_traces.enabled &&
+          !running.evaluator_traces.enabled
+        ),
       invalid:
         Object.keys(values[section]).some((key) => Boolean(fieldError(section, key))) ||
         Boolean(secretKey && fieldError('secrets', secretKey)),
@@ -194,9 +210,10 @@ export function SettingsForm({
     JSON.stringify(values) !== JSON.stringify(loaded.values) ||
     Object.values(secrets).some((value) => value !== '') ||
     note !== '';
-  function initialise(version: number | undefined, nextValues: LiveWorkerValues) {
-    setLoaded({ version, values: nextValues });
-    setValues(nextValues);
+  function initialise(version: number | undefined, nextValues: Partial<LiveWorkerValues>) {
+    const normalized = normalizeWorkerValues(nextValues);
+    setLoaded({ version, values: normalized });
+    setValues(normalized);
     setSecrets({});
     setNote('');
     setError(null);
@@ -205,7 +222,7 @@ export function SettingsForm({
   // Observe each incoming version once, keeping the draft's baseline until it is loaded or saved.
   if (read.settings?.version !== seenVersion) {
     setSeenVersion(read.settings?.version);
-    if (!dirty) initialise(read.settings?.version, read.settings?.values ?? workerDefaults());
+    if (!dirty) initialise(read.settings?.version, normalizeWorkerValues(read.settings?.values));
     else if (read.settings?.version !== loaded.version) setIncoming(read.settings);
   }
   function update<S extends keyof LiveWorkerValues, K extends keyof LiveWorkerValues[S]>(
@@ -226,13 +243,14 @@ export function SettingsForm({
       : [];
     return fieldErrorsOf(new ApiError(error.status, error.detail, { body: { detail: scoped } }))[key];
   }
-  function secret(key: keyof LiveWorkerSecrets, label: string, help?: string) {
+  function secret(key: keyof LiveWorkerSecrets, label: string, help?: string, isDisabled = false) {
     const hint = read.settings?.secret_hints[key];
     return (
       <TextField
         label={label}
         type="password"
         autoComplete="new-password"
+        isDisabled={isDisabled}
         value={secrets[key] ?? ''}
         onChange={(value) => setSecrets((previous) => ({ ...previous, [key]: value }))}
         help={`${hint ? `set, ends in …${hint}` : 'not set'}${help ? ` · ${help}` : ''}`}
@@ -425,6 +443,46 @@ export function SettingsForm({
             errorMessage={fieldError('langfuse', 'public_key')}
           />
           {secret('langfuse_secret_key', 'Langfuse secret key')}
+        </SettingsSection>
+        <SettingsSection
+          section="evaluator_traces"
+          title="Evaluator traces"
+          read={read}
+          {...sectionProps('evaluator_traces')}
+        >
+          <div>
+            <Switch
+              isSelected={values.evaluator_traces.enabled}
+              onChange={(enabled) => {
+                update('evaluator_traces', 'enabled', enabled);
+                if (!enabled) setSecrets((previous) => ({ ...previous, evaluator_traces_secret_key: '' }));
+              }}
+            >
+              Send evaluator traces
+            </Switch>
+            <Text as="p" tone="muted">
+              The worker’s own traces of each evaluated turn (checks, judge calls, SQL comparison) go to this
+              Langfuse project; use a project separate from the one Insightor writes to.
+            </Text>
+            {fieldError('evaluator_traces', 'enabled') ? (
+              <Text tone="danger">{fieldError('evaluator_traces', 'enabled')}</Text>
+            ) : null}
+          </div>
+          <TextField
+            label="Langfuse host"
+            value={values.evaluator_traces.host}
+            onChange={(value) => update('evaluator_traces', 'host', value)}
+            isDisabled={!values.evaluator_traces.enabled}
+            errorMessage={fieldError('evaluator_traces', 'host')}
+          />
+          <TextField
+            label="Public key"
+            value={values.evaluator_traces.public_key}
+            onChange={(value) => update('evaluator_traces', 'public_key', value)}
+            isDisabled={!values.evaluator_traces.enabled}
+            errorMessage={fieldError('evaluator_traces', 'public_key')}
+          />
+          {secret('evaluator_traces_secret_key', 'Secret key', undefined, !values.evaluator_traces.enabled)}
         </SettingsSection>
         <SettingsSection section="dataiku" title="Dataiku" read={read} {...sectionProps('dataiku')}>
           <TextField
