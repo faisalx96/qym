@@ -160,8 +160,8 @@ export interface LiveWorkerRead {
   model_ids: string[];
 }
 export interface WorkerEventsFilters {
-  component?: string;
-  level?: 'error' | 'warning';
+  component?: string[];
+  level?: ('error' | 'warning')[];
   limit?: number;
   page?: number;
 }
@@ -192,7 +192,10 @@ function livePath(
   filters: WorkerEventsFilters & { jobs_limit?: number } = {},
 ) {
   const params = new URLSearchParams({ source });
-  for (const [key, value] of Object.entries(filters)) if (value !== undefined) params.set(key, String(value));
+  for (const [key, value] of Object.entries(filters)) {
+    if (Array.isArray(value)) value.forEach((item) => params.append(key, item));
+    else if (value !== undefined) params.set(key, String(value));
+  }
   return `/api/projects/${encodeURIComponent(slug)}/live/worker${sub}?${params}`;
 }
 export function useLiveWorker(slug: string, source: string, jobsLimit?: number) {
@@ -216,8 +219,8 @@ export function useLiveWorkerEvents(slug: string, source: string, filters: Worke
       const previousFilters = query?.queryKey[5] as WorkerEventsFilters | undefined;
       return query?.queryKey[1] === slug &&
         query.queryKey[4] === source &&
-        previousFilters?.component === filters.component &&
-        previousFilters?.level === filters.level
+        JSON.stringify(previousFilters?.component ?? []) === JSON.stringify(filters.component ?? []) &&
+        JSON.stringify(previousFilters?.level ?? []) === JSON.stringify(filters.level ?? [])
         ? previous
         : undefined;
     },

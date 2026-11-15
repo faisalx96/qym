@@ -1,4 +1,3 @@
-import { zoneToday } from './zone';
 import { formatDayKey } from '@/lib/dates';
 
 /** Live days are calendar-day keys of the source (its day_key_timezone); they are never shifted to the browser zone. */
@@ -11,13 +10,12 @@ export function shiftDay(day: string, delta: number): string {
 }
 
 /** `today` is the source's own 'today' key. */
-export function isToday(day: string, today: string | Date = new Date(), zone?: string): boolean {
-  return day === (typeof today === 'string' ? today : zoneToday(zone, today));
+export function isToday(day: string, today: string): boolean {
+  return day === today;
 }
 
 /** 'Today · Nov 7, 2026' or 'Thu Nov 5, 2026'. */
-export function dayLabel(day: string, todayOrZone: string): string {
-  const today = /^\d{4}-\d{2}-\d{2}$/.test(todayOrZone) ? todayOrZone : zoneToday(todayOrZone);
+export function dayLabel(day: string, today: string): string {
   if (isToday(day, today)) return `Today · ${formatDayKey(day)}`;
   const weekday = WEEKDAYS[new Date(`${day}T00:00:00Z`).getUTCDay()];
   return `${weekday} ${formatDayKey(day)}`;

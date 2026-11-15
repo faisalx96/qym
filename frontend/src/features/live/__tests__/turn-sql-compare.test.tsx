@@ -99,6 +99,57 @@ describe('clauseDiff', () => {
 });
 
 describe('SQL comparison', () => {
+  it.each([
+    ['privacy', "Blocked by Insightor's privacy guard."],
+    ['table_permission', 'Blocked by table permissions.'],
+    ['validation', 'Blocked by SQL validation.'],
+    [undefined, 'Statement blocked.'],
+  ])('keeps the real blocked reason for %s', (blocked, notice) => {
+    show(
+      custom(
+        [{ text: 'SELECT a FROM t', status: 'blocked', blocked, error: 'Producer block details' }],
+        [{ text: 'SELECT a FROM t' }],
+      ),
+    );
+    expect(screen.getByText(`${notice} The evaluator did not run it.`)).toBeVisible();
+    if (blocked !== 'privacy') {
+      expect(screen.getByText('Producer block details')).toBeVisible();
+      expect(screen.queryByText(/privacy guard/)).toBeNull();
+    }
+    expect(screen.getByLabelText('Agent results')).toHaveTextContent('Not run');
+  });
+
+  it.each([false, true])('keeps paired original execution facts with replay %s', (replayed) => {
+    const { container } = show(
+      custom(
+        [{ text: 'SELECT a FROM t', executed: true, rows: 7, ...(replayed ? { replay: { rows: 2 } } : {}) }],
+        [{ text: 'SELECT a FROM t', rows: 3 }],
+      ),
+    );
+    const pane = container.querySelector('[data-sql-pane="agent"]')!;
+    expect(pane).toHaveTextContent('Executed');
+    expect(pane).toHaveTextContent('7 rows');
+    expect(container.querySelector('[data-sql-verdict]')).toHaveTextContent(
+      `Agent ${replayed ? '2' : '7'} rows · Judge 3 rows`,
+    );
+    expect(screen.getByLabelText('Agent results')).toHaveTextContent(replayed ? '2 rows' : '7 rows');
+    if (replayed) expect(screen.getByLabelText('Agent results')).toHaveTextContent('Replayed for comparison');
+  });
+
+  it('keeps original errors on older paired statements without calling them replay errors', () => {
+    const { container } = show(
+      custom(
+        [{ text: 'SELECT a FROM t', executed: false, rows: 0, error: 'Original execution failed' }],
+        [{ text: 'SELECT a FROM t' }],
+      ),
+    );
+    const pane = container.querySelector('[data-sql-pane="agent"]')!;
+    expect(pane).toHaveTextContent('Not executed');
+    expect(pane).toHaveTextContent('0 rows');
+    expect(within(pane as HTMLElement).getByText('Original execution failed')).toBeVisible();
+    expect(screen.queryByText(/The evaluator could not re-run/)).toBeNull();
+  });
+
   it('shows mismatch clauses, two kinds of marks, original SQL and default-visible previews', () => {
     const { container } = show();
     const row = screen.getByRole('region', { name: 'Sub-question 1 of 1' });
@@ -210,6 +261,7 @@ describe('SQL comparison', () => {
       ),
     );
     expect(screen.getByText(/because it was not runnable/)).toBeVisible();
+    expect(screen.queryByText('Replayed for comparison')).toBeNull();
     expect(screen.getByLabelText('Agent results')).toHaveTextContent('Not run');
     expect(screen.getByLabelText('Judge A results')).toHaveTextContent('0 rows');
     expect(screen.getByText('Identical')).toBeVisible();

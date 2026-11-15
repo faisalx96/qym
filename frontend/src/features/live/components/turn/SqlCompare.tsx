@@ -63,21 +63,36 @@ function Verdict({ value, yes, no }: { value: boolean | null | undefined; yes: s
 
 function Notices({ part, agent }: { part: SqlPart; agent: boolean }) {
   if (agent && part.status === 'blocked') {
-    return <Text as="p">Blocked by Insightor's privacy guard. The evaluator did not run it.</Text>;
+    const reason =
+      part.blocked === 'privacy'
+        ? "Blocked by Insightor's privacy guard."
+        : part.blocked === 'table_permission'
+          ? 'Blocked by table permissions.'
+          : part.blocked === 'validation'
+            ? 'Blocked by SQL validation.'
+            : 'Statement blocked.';
+    return (
+      <>
+        <Text as="p">{reason} The evaluator did not run it.</Text>
+        {part.blocked !== 'privacy' && part.error ? <TextBlock text={part.error} code={false} /> : null}
+      </>
+    );
   }
   return (
     <>
       {part.error ? (
         <TextBlock
           text={
-            agent && part.status === null
+            agent && part.status === null && part.executed === null && part.replay
               ? `The evaluator could not re-run this statement: ${part.error}`
               : part.error
           }
           code={false}
         />
       ) : null}
-      {agent && part.replay?.error && (part.status !== null || part.replay.error !== part.error) ? (
+      {agent &&
+      part.replay?.error &&
+      (part.status !== null || part.executed !== null || part.replay.error !== part.error) ? (
         <TextBlock
           text={`The evaluator could not re-run this statement: ${part.replay.error}`}
           code={false}
@@ -102,6 +117,7 @@ function Pane({
   modelIndex,
   segments,
   hook,
+  originalExecution = false,
 }: {
   part: SqlPart | null;
   label: string;
@@ -110,6 +126,7 @@ function Pane({
   modelIndex?: Record<string, number> | null;
   segments?: Segment[];
   hook?: string;
+  originalExecution?: boolean;
 }) {
   return (
     <div className={styles.pane} data-live-block={hook} data-sql-pane={agent ? 'agent' : 'judge'}>
@@ -120,6 +137,23 @@ function Pane({
       </div>
       {part ? (
         <>
+          {originalExecution ? (
+            <div className={styles.line}>
+              <Text>Original execution</Text>
+              <StateTag
+                tone={part.executed === true ? 'success' : part.executed === false ? 'warning' : 'neutral'}
+              >
+                {part.executed === true
+                  ? 'Executed'
+                  : part.executed === false
+                    ? 'Not executed'
+                    : 'Execution unknown'}
+              </StateTag>
+              <span>
+                <span className={styles.number}>{part.rows ?? '—'}</span> rows
+              </span>
+            </div>
+          ) : null}
           <pre className={styles.sql} dir="ltr">
             <code>
               {segments
@@ -149,14 +183,20 @@ function Pane({
 }
 
 function Preview({ part, agent, label }: { part: SqlPart | null; agent: boolean; label: string }) {
-  const result = agent ? part?.replay : part;
+  const result = agent ? (part?.replay ?? part) : part;
   const unavailable =
     !part ||
     (agent && (part.status === 'blocked' || part.replay?.skipped || part.replay?.error)) ||
+    (agent && !part.replay && part.error) ||
     (!agent && part.error);
   return (
     <div className={styles.pane} aria-label={`${label} results`}>
       <Text weight={600}>{label} results</Text>
+      {agent && part?.replay && part.status !== 'blocked' && !part.replay.skipped ? (
+        <Text as="p" tone="muted">
+          Replayed for comparison
+        </Text>
+      ) : null}
       {!unavailable &&
       result &&
       result.rows !== 0 &&
@@ -166,16 +206,18 @@ function Preview({ part, agent, label }: { part: SqlPart | null; agent: boolean;
       ) : (
         <Text as="p" tone="muted">
           {agent && part?.status === 'blocked'
-            ? 'Not run (privacy guard)'
+            ? part.blocked === 'privacy'
+              ? 'Not run (privacy guard)'
+              : 'Not run'
             : agent && part?.replay?.skipped
               ? 'Not run'
               : agent && part?.replay?.error
                 ? part.replay.error
-                : !agent && part?.error
+                : (!agent || !part?.replay) && part?.error
                   ? part.error
                   : result?.rows != null
                     ? `${result.rows} rows`
-                    : !part || (!agent && part.executed === false)
+                    : !part || ((!agent || !part.replay) && part.executed === false)
                       ? 'Not run'
                       : 'No result sample available'}
         </Text>
@@ -219,7 +261,7 @@ function PairRow({
           <span className={styles.number}>
             {pair.agent?.status === 'blocked' || pair.agent?.replay?.skipped || pair.agent?.replay?.error
               ? '—'
-              : (pair.agent?.replay?.rows ?? '—')}
+              : ((pair.agent?.replay ?? pair.agent)?.rows ?? '—')}
           </span>{' '}
           rows · Judge <span className={styles.number}>{pair.judge.rows ?? '—'}</span> rows
         </span>
@@ -243,6 +285,7 @@ function PairRow({
           part={pair.agent}
           label="Agent"
           agent
+          originalExecution
           segments={pair.diff?.left}
           hook={compact ? 'agent-sql' : undefined}
         />

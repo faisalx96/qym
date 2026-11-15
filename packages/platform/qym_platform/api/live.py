@@ -670,17 +670,17 @@ def project_live_worker_cancel(
 @live_router.get("/api/projects/{project_slug}/live/worker/events")
 def project_live_worker_events(
     selected: LiveSource = Depends(_worker_source),
-    component: Optional[str] = Query(default=None),
-    level: Optional[str] = Query(default=None),
+    component: Optional[list[str]] = Query(default=None),
+    level: Optional[list[str]] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
 ) -> dict:
     query = db.query(LiveWorkerEvent).filter_by(source_id=selected.id)
     if component is not None:
-        query = query.filter_by(component=component)
+        query = query.filter(LiveWorkerEvent.component.in_(component))
     if level is not None:
-        query = query.filter_by(level=level)
+        query = query.filter(LiveWorkerEvent.level.in_(level))
     total = query.count()
     rows = (
         query.order_by(LiveWorkerEvent.last_at.desc(), LiveWorkerEvent.id.desc())

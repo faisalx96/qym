@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
-import { problemReport, type LiveWorkerEvent, type WorkerEventsFilters } from '@/api/liveWorker';
+import {
+  problemReport,
+  useLiveWorkerEvents,
+  type LiveWorkerEvent,
+  type WorkerEventsFilters,
+} from '@/api/liveWorker';
 import { liveOverview, liveTurnDetail, liveWorkerEvents, liveWorkerRead } from '@/features/dev/liveFixtures';
 import { ProblemsBlock } from '../components/worker/ProblemsBlock';
 import { StatusLine } from '../components/StatusLine';
@@ -137,6 +142,69 @@ it('keeps the previous problems visible while the next page loads', async () => 
   expect(await screen.findByText('Older problem')).toBeVisible();
 });
 
+it('sends all selected components before paging and keeps the filtered total', async () => {
+  const { requests } = paginatedProblems(25, (params) => {
+    const selected = params.getAll('component');
+    const page = Number(params.get('page'));
+    return {
+      events: [
+        {
+          ...liveWorkerEvents[0]!,
+          component: 'gateway',
+          message: `Selection ${selected.join(',') || 'all'} page ${page}`,
+        },
+      ],
+      total: selected.length === 2 ? 12 : 25,
+      page,
+      limit: 10,
+    };
+  });
+  const user = userEvent.setup();
+  await screen.findByText('Selection all page 1');
+  await user.click(screen.getByRole('button', { name: 'Next page' }));
+  await screen.findByText('Selection all page 2');
+  await user.click(screen.getByRole('button', { name: 'Component filter' }));
+  await user.click(screen.getByRole('button', { name: 'Only Gateway' }));
+  await screen.findByText('Selection gateway page 1');
+  await user.click(screen.getByRole('checkbox', { name: 'Dataiku' }));
+  await user.keyboard('{Escape}');
+  await screen.findByText('Selection gateway,dataiku page 1');
+  expect(requests.at(-1)!.getAll('component')).toEqual(['gateway', 'dataiku']);
+  expect(requests.at(-1)!.get('page')).toBe('1');
+  expect(screen.getByText('1–10 of 12 problems')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Next page' }));
+  await screen.findByText('Selection gateway,dataiku page 2');
+  expect(requests.at(-1)!.getAll('component')).toEqual(['gateway', 'dataiku']);
+  expect(screen.getByText('11–12 of 12 problems')).toBeVisible();
+});
+
+it('serializes multiple levels and components as repeated query parameters', async () => {
+  const requests: URLSearchParams[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string) => {
+      requests.push(new URL(input, 'http://localhost').searchParams);
+      return new Response(JSON.stringify({ events: [], total: 0 }));
+    }),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  clients.push(client);
+  const { result } = renderHook(
+    () =>
+      useLiveWorkerEvents('demo', 'worker', {
+        component: ['gateway', 'dataiku'],
+        level: ['error', 'warning'],
+        page: 2,
+        limit: 10,
+      }),
+    { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> },
+  );
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  expect(requests[0]!.getAll('component')).toEqual(['gateway', 'dataiku']);
+  expect(requests[0]!.getAll('level')).toEqual(['error', 'warning']);
+  expect(requests[0]!.get('page')).toBe('2');
+});
+
 it('moves an empty page to the last existing page after problems age out', async () => {
   const { requests } = paginatedProblems(25, (params) => {
     const page = Number(params.get('page'));
@@ -252,29 +320,38 @@ function Problems({ events = liveWorkerEvents }: { events?: LiveWorkerEvent[] })
   );
 }
 it('renders grouped counts, filters by component and level, and can clear filters', async () => {
-  const { container } = render(<Problems />);
+  const { container } = paginatedProblems(6, (params) => {
+    const components = params.getAll('component');
+    const levels = params.getAll('level');
+    const events = liveWorkerEvents.filter(
+      (event) =>
+        (!components.length || components.includes(event.component)) &&
+        (!levels.length || levels.includes(event.level)),
+    );
+    return { events, total: events.length, page: 1, limit: 10 };
+  });
   const rows = () => container.querySelectorAll('[data-worker-event]');
-  expect(rows()).toHaveLength(6);
+  await waitFor(() => expect(rows()).toHaveLength(6));
   expect(screen.getByText('×14')).toBeVisible();
   expect(screen.getAllByText('in 12 min')[0]).toBeVisible();
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Component filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Gateway' }));
-  expect(rows()).toHaveLength(2);
+  await waitFor(() => expect(rows()).toHaveLength(2));
   await user.keyboard('{Escape}');
   await user.click(screen.getByRole('button', { name: 'Level filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Errors' }));
-  expect(rows()).toHaveLength(1);
+  await waitFor(() => expect(rows()).toHaveLength(1));
   await user.keyboard('{Escape}');
   await user.click(screen.getByRole('button', { name: 'Clear 2 filters' }));
-  expect(rows()).toHaveLength(6);
+  await waitFor(() => expect(rows()).toHaveLength(6));
   expect(screen.queryByTestId('filters-clear')).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Component filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Settings' }));
   await user.keyboard('{Escape}');
-  expect(screen.getByText('No problems reported by the worker')).toBeVisible();
+  expect(await screen.findByText('No problems reported by the worker')).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Clear 1 filter' }));
-  expect(rows()).toHaveLength(6);
+  await waitFor(() => expect(rows()).toHaveLength(6));
 });
 it('copies the full problem report including code and message', async () => {
   const user = userEvent.setup();
@@ -479,9 +556,7 @@ it('keeps main diagnostic report timestamps unchanged for a source with a differ
   );
   await user.click(screen.getByRole('button', { name: 'Copy report' }));
   await waitFor(() =>
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining('Time (UTC): 2026-11-09T22:30:12'),
-    ),
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Time (UTC): 2026-11-09T22:30:12')),
   );
   expect(writeText.mock.calls[0]![0]).not.toContain('Time (Riyadh)');
 });

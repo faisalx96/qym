@@ -126,13 +126,6 @@ export function zoneToday(zone?: string | null, now: Date = new Date()): string 
   return `${year}-${month}-${day}`;
 }
 
-export function zoneTime(iso: string, zone?: string | null): string {
-  const date = toDate(iso);
-  if (!date) return '—';
-  const { hour, minute } = parts(date, zone);
-  return `${hour}:${minute}`;
-}
-
 export function zoneDateTime(iso: string, zone?: string | null, includeSeconds = false): string {
   const date = toDate(iso);
   if (!date) return '—';

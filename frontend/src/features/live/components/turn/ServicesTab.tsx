@@ -208,9 +208,7 @@ export function ServicesTab({ data }: { data: LiveTurnDetail }) {
             densityLocked
             responsive="scroll"
             rowProps={(row) => ({ 'data-live-turn-service': row.name })}
-            canExpand={(row) =>
-              !serviceEvidence(row.signals) && !!row.signals && Object.keys(row.signals).length > 0
-            }
+            canExpand={(row) => !!row.signals && Object.keys(row.signals).length > 0}
             renderExpanded={(row) => <Facts value={row.signals} label="Signals" />}
           />
         </>

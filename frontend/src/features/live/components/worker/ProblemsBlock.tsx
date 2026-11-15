@@ -114,7 +114,7 @@ export function ProblemsBlock({
     onEventsFilters({
       ...eventsFilters,
       page: 1,
-      component: keys.size === 1 ? String([...keys][0]) : undefined,
+      component: keys.size ? [...keys].map(String) : undefined,
     });
   }
   function onLevels(keys: Set<Key>) {
@@ -122,7 +122,7 @@ export function ProblemsBlock({
     onEventsFilters({
       ...eventsFilters,
       page: 1,
-      level: keys.size === 1 ? (String([...keys][0]) as 'error' | 'warning') : undefined,
+      level: keys.size ? ([...keys].map(String) as ('error' | 'warning')[]) : undefined,
     });
   }
   const components = [
@@ -132,13 +132,7 @@ export function ProblemsBlock({
       ...[...componentKeys].map(String),
     ]),
   ];
-  const rows = events
-    .filter(
-      (event) =>
-        (componentKeys.size === 0 || componentKeys.has(event.component)) &&
-        (levelKeys.size === 0 || levelKeys.has(event.level)),
-    )
-    .sort((a, b) => b.last_at.localeCompare(a.last_at));
+  const rows = [...events].sort((a, b) => b.last_at.localeCompare(a.last_at));
   const sourceStatus = status ?? read.status;
   const worker = sourceStatus.worker;
   const workerVersion = typeof worker?.worker_version === 'string' ? worker.worker_version : undefined;

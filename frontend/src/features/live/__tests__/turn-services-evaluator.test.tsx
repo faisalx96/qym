@@ -102,6 +102,33 @@ describe('Services and tools', () => {
     expect(screen.getByText('Keep this evidence')).toBeInTheDocument();
   });
 
+  it('keeps recognised signal summaries and expands their complete evidence', async () => {
+    const user = userEvent.setup();
+    render(
+      <ServicesTab
+        data={withSummary({
+          services: {
+            retrieval: {
+              status: 'ok',
+              signals: {
+                selected_tables: ['sales', 'customers'],
+                judge_tables: ['sales'],
+                missing_tables: [],
+                producer_note: 'Selected for the regional question',
+              },
+            },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByLabelText('Services')).toHaveTextContent('Selected 2');
+    expect(screen.queryByText('Selected for the regional question')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Expand row' }));
+    expect(screen.getByText('customers')).toBeVisible();
+    expect(screen.getByText('Selected for the regional question')).toBeVisible();
+    expect(screen.getByLabelText('Services')).toHaveTextContent('Selected 2');
+  });
+
   it('matches repeated tool failures by order without losing unmatched evidence', () => {
     const tools = toolsOf({
       tools: {

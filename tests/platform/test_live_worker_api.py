@@ -888,6 +888,49 @@ def test_events_list_filters_and_limit(client, session_factory):
     }
 
 
+def test_events_filter_multiple_components_and_levels_before_paging(
+    client, session_factory
+):
+    with session_factory() as db:
+        for i in range(30):
+            db.add(
+                LiveWorkerEvent(
+                    source_id="source",
+                    level=["error", "warning", "info"][i % 3],
+                    component=["gateway", "dataiku", "judge"][i % 5 % 3],
+                    code="connect",
+                    message=f"Event {i}",
+                    details={},
+                    fingerprint=str(i),
+                    count=1,
+                    first_at=NOW,
+                    last_at=NOW + timedelta(seconds=i),
+                )
+            )
+        db.commit()
+    filters = {"component": ["gateway", "dataiku"], "level": ["error", "warning"]}
+    expected = [i for i in range(29, -1, -1) if i % 3 != 2 and i % 5 % 3 != 2]
+    for page in (1, 2, 3):
+        response = client.get(
+            BASE + "/events",
+            headers=ADMIN,
+            params={**filters, "limit": 10, "page": page},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == len(expected)
+        assert body["page"] == page
+        assert body["limit"] == 10
+        assert [row["message"] for row in body["events"]] == [
+            f"Event {i}" for i in expected[(page - 1) * 10 : page * 10]
+        ]
+        assert all(
+            row["component"] in filters["component"]
+            and row["level"] in filters["level"]
+            for row in body["events"]
+        )
+
+
 def seed_member(db, role, project_id="p"):
     db.add(
         User(
