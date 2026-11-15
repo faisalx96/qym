@@ -1,8 +1,9 @@
 import { useId, useRef, useState } from 'react';
 import type { LiveTurnDetail } from '@/api/live';
+import { isInternalMetaKey } from '@/lib/metrics';
 import { splitBilingual } from '@/lib/text';
-import { Button, DataTable, Subsection, Text, TextBlock, type Column } from '@/ui';
-import { MetricDetailBody } from '@/features/run-detail/components/items/MetricStrip';
+import { Button, DataTable, EmptyState, Subsection, Text, TextBlock, type Column } from '@/ui';
+import { FieldList } from '@/features/run-detail/components/items/pane/values';
 import { Bilingual, MetricValue } from './Evidence';
 import styles from './EvaluatorTab.module.css';
 
@@ -30,6 +31,11 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
     spec: score.spec ?? data.specs.find((spec) => spec.metric_name === score.metric_name) ?? null,
   }));
   const score = rows.find((row) => row.id === selected);
+  const details = Object.fromEntries(
+    Object.entries(score?.meta ?? {}).filter(
+      ([k, v]) => !isInternalMetaKey(k) && !hidden.has(k) && v !== null && v !== undefined && v !== '',
+    ),
+  );
   const groups = [...new Set(rows.flatMap((row) => (row.spec ? [row.spec.group] : [])))];
   rows.sort(
     (a, b) =>
@@ -134,7 +140,11 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
                 <TextBlock text={score.explanation} code={false} />
               )
             ) : null}
-            <MetricDetailBody meta={score.meta} hidden={hidden} />
+            {Object.keys(details).length ? (
+              <FieldList data={details} label="Judge metadata" detail />
+            ) : (
+              <EmptyState compact title="No details were recorded for this metric" />
+            )}
           </section>
         ) : null}
       </div>

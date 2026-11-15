@@ -364,7 +364,19 @@ describe('Evaluator record', () => {
           spec: { ...base.spec!, metric_name: 'quality_one', label: 'Quality one', group: 'quality' },
           explanation:
             'The answer omitted the region requested in the question. / الإجابة لم تتضمن المنطقة المطلوبة في السؤال ولذلك فهي غير مكتملة.',
-          meta: { confidence: 0.83 },
+          meta: {
+            confidence: 0.83,
+            reason: 'The recorded reason must remain visible in the selected score details.',
+            reasoning: 'The scorer compared every requested region against the supplied answer.',
+            explanation: 'Only one of the requested regions appeared in the answer.',
+            label: 'Incomplete',
+            matches: [{ region: 'Riyadh', matched: false }],
+            rubric: { coverage: { required: 2, found: 1 } },
+            modified: true,
+            last_edit: { user: 'internal editor' },
+            empty_note: '',
+            missing_note: null,
+          },
         },
         {
           ...base,
@@ -388,6 +400,18 @@ describe('Evaluator record', () => {
     expect(within(panel).getByText('English')).toBeInTheDocument();
     expect(panel.querySelector('[dir="rtl"]')).toBeInTheDocument();
     expect(within(panel).getByText('confidence')).toBeInTheDocument();
+    const metadata = within(panel).getByRole('group', { name: 'Judge metadata' });
+    expect(metadata).toHaveTextContent('0.83');
+    expect(metadata).toHaveTextContent(data.scores[0]!.meta.reason as string);
+    expect(metadata).toHaveTextContent(data.scores[0]!.meta.reasoning as string);
+    expect(metadata).toHaveTextContent(data.scores[0]!.meta.explanation as string);
+    expect(metadata).toHaveTextContent('Incomplete');
+    expect(within(metadata).getByRole('grid', { name: 'matches' })).toHaveTextContent('Riyadh');
+    expect(within(metadata).getByText('coverage')).toBeInTheDocument();
+    expect(within(metadata).getByText('required')).toBeInTheDocument();
+    for (const key of ['modified', 'last_edit', 'empty_note', 'missing_note'])
+      expect(within(metadata).queryByText(key)).not.toBeInTheDocument();
+    expect(metadata).not.toHaveTextContent('internal editor');
     await user.keyboard('{ArrowDown}{Enter}');
     expect(screen.queryByRole('region', { name: 'Details for Quality one' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Details for custom_metric' })).toHaveTextContent('42');
@@ -395,6 +419,24 @@ describe('Evaluator record', () => {
     expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
     expect(container.querySelector('[data-score-id="102"]')).toHaveFocus();
   });
+
+  it.each([{}, { modified: true, original_score: 0.5, reason: '', explanation: null }])(
+    'shows the no-details message when score metadata has no visible fields: %j',
+    async (meta) => {
+      const user = userEvent.setup();
+      const base = liveTurnDetail.scores[0]!;
+      const { container } = render(
+        <EvaluatorTab data={{ ...liveTurnDetail, scores: [{ ...base, id: 101, meta }] }} />,
+      );
+      act(() => container.querySelector<HTMLElement>('[data-score-id="101"]')!.focus());
+      await user.keyboard('{Enter}');
+      const panel = screen.getByRole('region', { name: /^Details for / });
+      expect(
+        within(panel).getByRole('heading', { name: 'No details were recorded for this metric' }),
+      ).toBeInTheDocument();
+      expect(within(panel).queryByRole('group', { name: 'Judge metadata' })).not.toBeInTheDocument();
+    },
+  );
 
   it('keeps raw detail in its existing disclosure', async () => {
     const user = userEvent.setup();
