@@ -73,7 +73,9 @@ describe('live chart screenshots', () => {
 
   it('shows only the first chart as a thumbnail on Diagnosis', () => {
     const { container } = render(
-      <DiagnosisTab data={{ ...data, chart_images: { first: image, second: image } }} />,
+      <MemoryRouter>
+        <DiagnosisTab data={{ ...data, chart_images: { first: image, second: image } }} />
+      </MemoryRouter>,
     );
     const card = container.querySelector('[data-live-block="chart"]')!;
     expect(card.querySelectorAll('img')).toHaveLength(1);
@@ -82,7 +84,11 @@ describe('live chart screenshots', () => {
   });
 
   it('keeps the no-charts message on Diagnosis', () => {
-    const { container } = render(<DiagnosisTab data={{ ...data, summary: {} }} />);
+    const { container } = render(
+      <MemoryRouter>
+        <DiagnosisTab data={{ ...data, summary: {} }} />
+      </MemoryRouter>,
+    );
     expect(screen.getByText('No charts for this turn')).toBeInTheDocument();
     expect(container.querySelector('[data-live-chart-image]')).not.toBeInTheDocument();
   });

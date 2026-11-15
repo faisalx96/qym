@@ -73,9 +73,13 @@ DAY="2026-11-01"
 
 Send ISO 8601 timestamps with an explicit UTC offset, preferably `Z`. Stored
 timestamps are normalized to UTC; returned timestamps use `Z`. Naive timestamps
-are treated as UTC. A source's `day_key_timezone` is informational: send an
-explicit turn `day` to implement the worker's reporting boundary. Otherwise the
-API takes the date component of `turn_at` **before** converting it to UTC.
+are treated as UTC. A source's `day_key_timezone` is a validated IANA timezone
+name (for example `Asia/Riyadh`). It drives the source's "today", the overview's
+fallback day and trend window, and job day windows. An omitted or null value
+keeps the stored zone on re-registration; a new source defaults to `UTC`.
+Producers should still send an explicit turn `day` computed in that zone.
+Otherwise the API takes the date component of `turn_at` **before** converting it
+to UTC; it does not infer the turn's day from `day_key_timezone`.
 
 Heartbeat liveness uses the platform's **receive time**, not the supplied `at`.
 Replaying an old heartbeat therefore makes the source fresh now. Historical
@@ -109,7 +113,7 @@ these conversions.
 ```bash
 curl -sS -X PUT "$SOURCE" \
   -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{"name":"Evaluation worker","environment":"preprod","worker":{"poll_interval_s":60,"judges":{"a":"judge-a","b":"judge-b"},"eval_code_version":"v1"},"day_key_timezone":"UTC"}'
+  -d '{"name":"Evaluation worker","environment":"preprod","worker":{"poll_interval_s":60,"judges":{"a":"judge-a","b":"judge-b"},"eval_code_version":"v1"},"day_key_timezone":"Asia/Riyadh"}'
 ```
 
 | Field | Type | Required | Limits / default |
@@ -118,7 +122,7 @@ curl -sS -X PUT "$SOURCE" \
 | `environment` | string | yes | 1–50 characters; free text |
 | `product` | string or null | no | Up to 100 characters; default null; optional display label |
 | `worker` | object | no | Default `{}`; arbitrary metadata |
-| `day_key_timezone` | string | no | 1–40 characters; default `UTC`; no timezone-name validation |
+| `day_key_timezone` | string or null | no | 1–40 characters; validated IANA timezone name; unknown names return `422`; omitted/null keeps the stored zone, or defaults to `UTC` on creation |
 
 Recommended `worker` keys are `worker_version`, `eval_code_version`, `suite`,
 `judges: {a, b}`, `poll_interval_s`, `config_hash`, and `manifest_hash`.
@@ -126,14 +130,23 @@ Recommended `worker` keys are `worker_version`, `eval_code_version`, `suite`,
 Response (`201` on creation, `200` on replacement):
 
 ```json
-{"id":"source-uuid","key":"example-worker","name":"Evaluation worker","environment":"preprod","product":null,"worker":{"poll_interval_s":60,"judges":{"a":"judge-a","b":"judge-b"},"eval_code_version":"v1"},"created_at":"2026-11-01T00:00:00Z"}
+{"id":"source-uuid","key":"example-worker","name":"Evaluation worker","environment":"preprod","product":null,"worker":{"poll_interval_s":60,"judges":{"a":"judge-a","b":"judge-b"},"eval_code_version":"v1"},"day_key_timezone":"Asia/Riyadh","created_at":"2026-11-01T00:00:00Z"}
 ```
 
-The response always has these seven fields: `id` (UUID string), `key`, `name`,
-`environment` (strings), `product` (nullable string), `worker` (object), and
-`created_at` (UTC timestamp). It does not echo `day_key_timezone`. Re-registration
-preserves the source ID and creation time, and replaces the reported configuration;
-omitted optional fields take their defaults.
+The response always has these eight fields: `id` (UUID string), `key`, `name`,
+`environment`, `day_key_timezone` (strings), `product` (nullable string), `worker`
+(object), and `created_at` (UTC timestamp). Re-registration preserves the source ID
+and creation time, and replaces the reported configuration. An omitted or null
+`day_key_timezone` keeps the stored zone; other omitted optional fields take their
+defaults. An unknown timezone returns `422` with
+`day_key_timezone is not a known timezone` in the validation message.
+
+The effective source zone is returned in the UI read APIs: `sources[].day_key_timezone`
+in `GET /api/projects/{project_slug}/live`, and `status.day_key_timezone` in both
+`GET /api/projects/{project_slug}/live/overview` and
+`GET /api/projects/{project_slug}/live/worker`. These reads return `UTC` and use it
+for day calculations if a legacy stored zone is invalid; job creation still
+rejects an invalid stored zone with `422`.
 
 **Status codes:** `201` created; `200` replaced; `401` missing/invalid key; `403`
 project or owner access denied; `409` archived project or database conflict;
@@ -151,7 +164,7 @@ curl -sS -X POST "$SOURCE/heartbeat" \
 |---|---|---|---|
 | `at` | datetime | yes | Worker timestamp; accepted but does not drive liveness |
 | `last_poll_at` | datetime or null | no | Default null; replaces source `last_poll_at`, including when omitted |
-| `current_day` | date or null | no | Default null; when present, increments that day's heartbeat counters |
+| `current_day` | date or null | no | Default null; send the current date in the source's `day_key_timezone`; when present, increments that day's heartbeat counters |
 | `worker` | object or null | no | Default null; when present, shallow-merges top-level keys into source `worker` |
 
 Response: **`204 No Content`**, empty body. A nested `worker` object such as
@@ -412,7 +425,8 @@ shared caches. Continue control polling while paused so resume can be observed.
 | `settings.secrets_withheld` | boolean | `true` instead of `secrets` for other project keys, or when no worker key is selected |
 | `jobs` | array | Queued and running jobs, ordered by request time then ID |
 | `jobs[].id`, `jobs[].kind` | string | Job ID and `backfill_preview` or `backfill` |
-| `jobs[].params` | object | `since_day`, `until_day`, UTC `since`/`until`, and `limit` |
+| `jobs[].params` | object | `since_day`, `until_day` in the source's `day_key_timezone`; UTC `since`/`until` bound those inclusive local days; `limit` and `redo` |
+| `jobs[].params.redo` | array of strings | Existing rows to re-evaluate: `failed`, `inconclusive`, or `all`; defaults to `["failed"]` for backfill, always `[]` for preview |
 | `jobs[].status`, `jobs[].progress` | string, object | Current status and counters |
 | `jobs[].cancel_requested` | boolean | Worker should stop this job between turns |
 
@@ -422,6 +436,18 @@ this is a successful `200`, not a `403`. Authentication still rejects invalid,
 revoked and out-of-project keys. Secret resolution errors in `errors` do not
 change the HTTP status; do not apply an incomplete configuration. A stored
 secret that cannot be decrypted returns `500` (`secret_cannot_be_decrypted`).
+
+The UI read endpoint `GET /api/projects/{project_slug}/live/worker` accepts:
+
+| Query parameter | Type | Default / limits |
+|---|---|---|
+| `jobs_limit` | integer | Default `20`; `1`–`200`; returns the newest jobs first |
+
+To queue a job, `POST /api/projects/{project_slug}/live/worker/jobs` accepts an
+optional `redo` array alongside `kind`, `since_day`, `until_day`, and `limit`.
+Omitting it (or passing null) defaults to `["failed"]` for `backfill`; an explicit
+`[]` requests no redo. `backfill_preview` always stores `[]`. Duplicate labels or
+`all` combined with any other label return `422`.
 
 ### 3.10 `POST /sources/{key}/jobs/{job_id}/progress` — Job progress
 
@@ -441,19 +467,60 @@ A queued or running job accepts `running` or a terminal status (`done`, `failed`
 `cancelled`). The first `running` sets its start time; a terminal status sets
 its finish time. Terminal jobs reject all later updates, including retries.
 A pending cancellation rejects `running`; acknowledge with `cancelled` and the
-latest counters. Cancellation of a queued job finishes it immediately.
+latest counters. Cancellation of a queued job finishes it immediately. Cancelling
+running work also finishes it immediately when the source's server-recorded
+`last_heartbeat_at` is at least 120 seconds old (falling back to the job's
+`updated_at` when no heartbeat exists). The job's error is then
+`cancelled while the worker was not responding`; later worker posts get 409.
+With a recent heartbeat, cancellation remains a request for the worker to stop.
 
 The counters `found`, `skipped_existing`, `evaluated` and `failed` must be
 nonnegative integers (not booleans) and must never decrease. An omitted counter
 is treated as zero, so send the complete latest counters on every update,
 including completion and cancellation.
 
+`redone` and `listed` must also be nonnegative integers, not booleans. A decrease
+(including omission on a later report) is accepted: qym stores the larger of the
+stored and reported values. This lets older workers finish jobs after resuming
+with reset counters. If neither report supplies a counter, it remains absent.
+
+Other progress is stored exactly as supplied, including unknown extra keys (which must
+still be finite JSON). Older workers may omit every new field below. Optional
+counts must be nonnegative integers, not booleans; these new counts are not
+subject to the monotonic check.
+
+| Optional progress keys | Type | Meaning |
+|---|---|---|
+| `resumed` | integer | Turns written by an earlier attempt of this job |
+| `judged`, `recorded`, `incomplete` | integers | Breakdown of `evaluated`: judged, recorded without judges (cancelled or failed in Insightor), and incomplete; `evaluated = judged + recorded + incomplete` |
+| `fetch_failed` | integer | Turns that could not be fetched and can be retried by the next backfill |
+| `deferred` | integer | Turns still arriving in Langfuse, left to the live loop |
+| `limit_reached` | boolean | The job stopped at its selection limit |
+| `remaining` | integer | Turns in the range still not evaluated |
+| `would_evaluate`, `would_redo`, `beyond_limit` | integers | Preview selections and turns beyond the limit |
+| `waiting` | string | Why work is waiting |
+| `rejected` | object | Optional nonnegative integer counts: `other_names`, `no_session`, `excluded_users`, `other_environment`, `bad_timestamp`; explains `listed − found`. Extra keys such as `outside_window`, `duplicate`, and `no_id` are accepted and stored; the page ignores them |
+| `effective_until` | ISO timestamp string | Effective cutoff; later turns are left to the live loop |
+
+`evaluated` counts rows written without an evaluation failure. `redone` counts
+replacements by a non-failed result; `failed` includes redos that failed again.
+`skipped_existing` counts turns evaluated before this job. These counters retain
+the worker's meanings; qym does not recompute them. Existing `last_turn_at` and
+`paused` progress keys also remain supported.
+
+Both preview and backfill jobs carry the same `params.limit` and `params.redo`
+in their read and control documents. Both default to `redo: ["failed"]` when
+omitted; an explicit empty list disables redo. Preview uses the new counts when
+available; for older workers the UI uses `found − skipped_existing` and does not
+infer a redo or beyond-limit count. The stopped-at-limit warning is shown only
+for real backfills, never for preview rows or the preview dialog.
+
 | HTTP / scope | `error.code` | Exact detail or message | Meaning / action |
 |---|---|---|---|
 | `404` | `job_not_found` | `job not found` | Unknown job, or job belongs to another source |
 | `409` | `job_already_finished` | `job already finished` | Job is already done, failed or cancelled |
 | `409` | `job_cancelled` | `job cancelled` | Cancellation is pending; stop sending `running` |
-| `422` | `counters_must_not_decrease` | `counters must not decrease` | Send all counters as nonnegative, nondecreasing integers |
+| `422` | `counters_must_not_decrease` | `counters must not decrease` | Send `found`, `skipped_existing`, `evaluated`, and `failed` as nonnegative, nondecreasing integers |
 
 ### 3.11 `POST /sources/{key}/events` — Worker events
 
@@ -513,7 +580,12 @@ state. Send the whole block each time: heartbeat merging is shallow.
 | `models` | `{listed_at, ids}` | Available model IDs and when they were listed |
 | `errors_last_hour` | nonnegative integer | Recent problem count, also shown on the overview badge |
 | `last_error` | `{at, component, code, message}` | Latest reported problem |
-| `job` | `{id, kind, progress}` | Active job and its counters |
+| `job` | `{id?, kind?, progress?, waiting_reason?, blocked_job_id?}` | Active job counters, or the reason a queued job is blocked |
+
+`job.waiting_reason` is text (for example, `worker paused` or `another job is running`).
+The queued row matching `job.blocked_job_id` shows `Waiting: <reason>`. Other queued
+rows, and older workers that omit these fields, show `Queued`. These fields come
+from heartbeat status because an unclaimed job cannot report progress.
 
 The worker verifies a candidate version before applying it and reports the
 verification and effective running version here. A saved version is not proof
@@ -535,7 +607,7 @@ are character limits unless explicitly stated otherwise.
 | `turn_at` | datetime | yes | User turn time |
 | `status` | string | yes | `completed`, `failed`, `incomplete_ingest` |
 | `question` | string | yes | May be empty; strip NUL, keep first 200,000 characters |
-| `day` | date or null | no | Default: date component of supplied `turn_at`; explicit day wins |
+| `day` | date or null | no | Send explicitly, computed in the source's `day_key_timezone`; default: date component of supplied `turn_at`; explicit day wins |
 | `conversation_id` | string or null | no | Up to 200 characters; default null |
 | `turn_index` | integer or null | no | 0–2,147,483,647; default null |
 | `evaluated_at` | datetime or null | no | Evaluation time; default null |
@@ -545,7 +617,7 @@ are character limits unless explicitly stated otherwise.
 | `label` | string or null | no | Up to 60 characters; default null; diagnosis category |
 | `label_reason` | string or null | no | Default null; plain explanation; no explicit text cap |
 | `answer` | string or null | no | Default null; strip NUL, keep first 200,000 characters |
-| `sql` | array of objects | no | Default `[]`; entries conventionally `{text, executed, rows, error}` |
+| `sql` | array of objects | no | Default `[]`; entries conventionally `{text, executed, rows, error, replay?}` |
 | `latency_ms` | number or null | no | Default null; milliseconds; must be finite if supplied |
 | `result_rows` | integer or null | no | 0–2,147,483,647; default null |
 | `tool_calls` | integer or null | no | 0–2,147,483,647; default null |
@@ -559,6 +631,14 @@ are character limits unless explicitly stated otherwise.
 `error` a string or null. These entry keys are conventions, not nested Pydantic
 validation. `id`, `source_id`, `received_at`, and `rejected` are server-owned
 fields and must not be sent as Turn fields.
+
+An optional `sql[].replay` object describes the result when the worker re-runs
+the agent's statement for comparison: `{rows, columns, columns_total, sample}`.
+Its `rows` is the replay's total row count (or null); the original entry's
+`executed`, `rows`, and `error` retain their original meaning. `columns` is an
+array of at most 20 column names, `columns_total` is the real column count,
+and `sample` contains the first rows as arrays of strings or null aligned with
+`columns`. All replay keys are optional; `sample: []` means counts only.
 
 ### 4.2 Summary contract
 
@@ -576,7 +656,7 @@ do not recognize them.
 | `judges.a.model`, `judges.b.model` | string | Judge model identifier |
 | `judges.a.compliance`, `judges.b.compliance` | `{sql: number, response: number, overall: number}` | Compliance axes, conventionally 0–1 |
 | `judges.a.reasoning`, `judges.b.reasoning` | string | Plain-language explanation of the judgment |
-| `judges.a.sql_parts`, `judges.b.sql_parts` | `[{text, executed, rows, error}]` | Judge SQL, execution flag, row count and nullable error |
+| `judges.a.sql_parts`, `judges.b.sql_parts` | `[{text, executed, rows, error, columns?, columns_total?, sample?}]` | Judge SQL, execution flag, total row count and nullable error; optional result preview uses the same `columns`, `columns_total`, and `sample` shape as `sql[].replay` above (`sample: []` for counts only) |
 | `judges.a.vs_agent`, `judges.b.vs_agent` | `{equivalent: boolean, result_set_match: boolean, coverage: {covered, total}}` | Judge comparison with the evaluated answer/query |
 | `judges_agree` | boolean | Whether the judges agree on the evaluation |
 | `coverage` | `{covered: integer, total: integer}` | Requirements addressed out of requirements checked |
@@ -612,7 +692,7 @@ A worked `summary` for a turn whose answer missed a requested region:
       "model": "judge-a",
       "compliance": {"sql": 0.6, "response": 0.5, "overall": 0.55},
       "reasoning": "The result omits one of the requested regions.",
-      "sql_parts": [{"text": "SELECT region, SUM(population) FROM population_sample GROUP BY region", "executed": true, "rows": 3, "error": null}],
+      "sql_parts": [{"text": "SELECT region, SUM(population) FROM population_sample GROUP BY region", "executed": true, "rows": 3, "error": null, "columns": ["region", "sum"], "columns_total": 2, "sample": [["الرياض", "1250"], ["مكة", null]]}],
       "vs_agent": {"equivalent": false, "result_set_match": false, "coverage": {"covered": 2, "total": 3}}
     },
     "b": {
@@ -669,8 +749,10 @@ null numeric score.
 
 ## 5. Idempotency, replacement, and limits
 
-- Source identity is `(project_id, key)`. Source PUT replaces configuration.
-  Heartbeat `worker` metadata alone uses a shallow merge.
+- Source identity is `(project_id, key)`. Source PUT replaces configuration, except
+  an omitted/null `day_key_timezone` preserves the stored zone (default `UTC` on
+  creation). A supplied zone must be a known IANA name. Heartbeat `worker`
+  metadata alone uses a shallow merge.
 - Metric PUT replaces the entire spec set atomically. It permits zero or one
   primary metric; more than one returns `422` with
   `at most one metric may be primary` in the validation message.
@@ -769,6 +851,7 @@ PROJECT_ID = "replace-with-project-id"
 import json
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 
 def call(method, path, body=None):
@@ -788,13 +871,15 @@ def call(method, path, body=None):
 
 
 now = datetime.now(timezone.utc)
-day = now.date().isoformat()
+day_key_timezone = "Asia/Riyadh"
+zone = ZoneInfo(day_key_timezone)
+day = now.astimezone(zone).date().isoformat()
 at = now.isoformat()
 source = f"/v1/projects/{PROJECT_ID}/live/sources/example-worker"
 worker = {"poll_interval_s": 60, "eval_code_version": "v1"}
 call("PUT", source, {
     "name": "Evaluation worker", "environment": "preprod",
-    "worker": worker, "day_key_timezone": "UTC",
+    "worker": worker, "day_key_timezone": day_key_timezone,
 })
 call("PUT", source + "/metric-specs", {"specs": [
     {"metric_name": "agent_success", "group": "quality", "label": "Agent success",
@@ -809,9 +894,10 @@ call("PUT", source + "/days/" + day, {
 })
 turns = []
 for index in range(1, 3):
+    turn_at = now - timedelta(seconds=60 * index)
     turns.append({
-        "turn_id": f"turn-{index}", "day": day,
-        "turn_at": (now - timedelta(seconds=60 * index)).isoformat(),
+        "turn_id": f"turn-{index}", "day": turn_at.astimezone(zone).date().isoformat(),
+        "turn_at": turn_at.isoformat(),
         "evaluated_at": at, "status": "completed", "outcome": "ok", "label": "ok",
         "question": f"How many records are in sample {index}?",
         "answer": f"There are {index * 12} records.",

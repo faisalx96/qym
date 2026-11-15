@@ -48,7 +48,16 @@ function ListNavigation({
   );
 }
 
-export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug: string; source: string }) {
+export function TurnHeader({
+  data,
+  slug,
+  source,
+}: {
+  data: LiveTurnDetail;
+  slug: string;
+  source: string;
+  zone?: string;
+}) {
   const { turn, conversation, specs } = data;
   const { get } = useSearchParamsState();
   const list = get('list');
@@ -88,22 +97,13 @@ export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug:
           <span key="time" className={styles.time}>
             {liveTime(turn.turn_at)}
           </span>,
-          <span
-            key="user"
-            className={styles.userRef}
-            dir="auto"
-            title={user ?? undefined}
-          >
+          <span key="user" className={styles.userRef} dir="auto" title={user ?? undefined}>
             {user ?? '—'}
           </span>,
           ...(turn.conversation_id
             ? [
                 <span key="conversation" title={turn.conversation_id}>
-                  conversation{' '}
-                  <span dir="auto">
-                    {turn.conversation_id.slice(-3)}
-                  </span>{' '}
-                  · turn{' '}
+                  conversation <span dir="auto">{turn.conversation_id.slice(-3)}</span> · turn{' '}
                   <span>
                     {current >= 0 ? current + 1 : '—'} of {conversation.length}
                   </span>
@@ -117,11 +117,7 @@ export function TurnHeader({ data, slug, source }: { data: LiveTurnDetail; slug:
                 </Tag>,
               ]
             : []),
-          ...(environment
-            ? [
-                <EnvironmentTag key="environment" environment={environment} />,
-              ]
-            : []),
+          ...(environment ? [<EnvironmentTag key="environment" environment={environment} />] : []),
           ...(productTrace
             ? [
                 <a

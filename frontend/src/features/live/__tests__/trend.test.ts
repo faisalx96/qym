@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
-import { columnPitch, trendColumns } from '../lib/trend';
+import { columnPitch, trendColumns, trendDayLabel, trendLabels } from '../lib/trend';
+import { mixSegments } from '../lib/mix';
 
 const diagnosis: LiveMetricSpec = {
   metric_name: 'diagnosis',
@@ -33,6 +34,26 @@ const trend: LiveOverview['trend'] = [
 ];
 
 describe('trendColumns', () => {
+  it('uses the mix tones for every diagnosis, including inconclusive', () => {
+    const spec = {
+      ...diagnosis,
+      values: [
+        { value: 'system_problem', label: 'System problem', tone: 'meta' },
+        { value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' },
+      ],
+    };
+    const counts = { inconclusive: 3 };
+    expect(trendColumns([{ ...trend[0]!, turns: 4, counts_by_label: counts }], [spec])[0]?.stacks).toEqual([
+      ...mixSegments(counts, spec).map(({ value, label, tone, dark, n }) => ({
+        value,
+        label,
+        tone,
+        dark,
+        n,
+      })),
+      { value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: 1 },
+    ]);
+  });
   it('keeps every day, including zero days, with totals and missing rates intact', () => {
     const columns = trendColumns(trend, [diagnosis]);
     expect(columns.map(({ day, total, rate }) => ({ day, total, rate }))).toEqual([
@@ -58,24 +79,54 @@ describe('trendColumns', () => {
       { value: 'ok', tone: 'success', n: 4 },
       { value: 'problem', tone: 'danger', n: 2 },
       { value: 'other', tone: 'neutral', n: 0 },
-      { value: 'new_label', tone: 'neutral', n: 1 },
-      { value: null, label: 'Undiagnosed', tone: 'neutral', n: 1 },
+      { value: 'new_label', tone: 'neutral', dark: false, n: 1 },
+      { value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: 1 },
     ]);
     expect(trendColumns(trend, [])[0]?.stacks).toMatchObject([
-      { value: 'new_label', tone: 'neutral', n: 1 },
+      { value: 'new_label', tone: 'neutral', dark: false, n: 1 },
       { value: 'problem', tone: 'neutral', n: 2 },
       { value: 'ok', tone: 'neutral', n: 4 },
-      { value: null, label: 'Undiagnosed', tone: 'neutral', n: 1 },
+      { value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: 1 },
     ]);
   });
 
   it('retains undiagnosed turns in the stack denominator', () => {
     const column = trendColumns([{ ...trend[0]!, turns: 8, counts_by_label: { ok: 4 } }], [diagnosis])[0]!;
     expect(column.total).toBe(8);
-    expect(column.stacks.at(-1)).toEqual({ value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: 4 });
+    expect(column.stacks.at(-1)).toEqual({
+      value: null,
+      label: 'Undiagnosed',
+      tone: 'neutral',
+      dark: false,
+      n: 4,
+    });
     expect(column.stacks.find((stack) => stack.value === 'ok')!.n / column.total).toBe(0.5);
     expect(column.stacks.reduce((sum, stack) => sum + stack.n, 0)).toBe(8);
     expect(trendColumns([trend[2]!], [diagnosis])[0]?.stacks).toEqual([]);
+  });
+});
+
+describe('trendDayLabel', () => {
+  it('keeps the month boundary and demotes a colliding first label only at narrow pitch', () => {
+    const days = Array.from({ length: 14 }, (_, index) =>
+      new Date(Date.UTC(2026, 9, 31 + index)).toISOString().slice(0, 10),
+    );
+    expect(trendLabels(days, 20).slice(0, 2)).toEqual([
+      { label: '31', labelPriority: false },
+      { label: 'Nov 1', labelPriority: true },
+    ]);
+    expect(trendLabels(days, 60).slice(0, 2)).toEqual([
+      { label: 'Oct 31', labelPriority: true },
+      { label: 'Nov 1', labelPriority: true },
+    ]);
+  });
+
+  it('marks the first day and month boundaries in UTC, including across years', () => {
+    expect(trendDayLabel('2026-10-26', true)).toBe('Oct 26');
+    expect(trendDayLabel('2026-10-31', false)).toBe('31');
+    expect(trendDayLabel('2026-11-01', false)).toBe('Nov 1');
+    expect(trendDayLabel('2027-01-01', false)).toBe('Jan 1');
+    expect(trendDayLabel('2027-01-02', false)).toBe('02');
   });
 });
 

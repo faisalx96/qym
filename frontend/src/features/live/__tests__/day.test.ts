@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dayLabel, isToday, shiftDay } from '../lib/day';
+import { zoneToday } from '../lib/zone';
 
 describe('Live day keys', () => {
   it('crosses month, year and leap-day boundaries', () => {
@@ -17,4 +18,13 @@ describe('Live day keys', () => {
     expect(dayLabel('2026-11-01', '2026-11-01')).toBe('Today · Nov 1, 2026');
     expect(dayLabel('2026-10-31', '2026-11-01')).toBe('Sat Oct 31, 2026');
   });
+});
+
+it('marks today in Riyadh without shifting historical keys', () => {
+  const now = new Date('2026-11-09T22:30:00Z');
+  const today = zoneToday('Asia/Riyadh', now);
+  expect(isToday('2026-11-10', today)).toBe(true);
+  expect(isToday('2026-11-09', today)).toBe(false);
+  expect(dayLabel('2026-11-10', today)).toBe('Today · Nov 10, 2026');
+  expect(dayLabel('2026-11-09', today)).toBe('Mon Nov 9, 2026');
 });

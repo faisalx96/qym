@@ -4,6 +4,7 @@ Projects gain a **Live** tab for real user turns reported by the evaluation work
 
 ## Before you update
 
+- **Automatic migration-order repair.** Image startup repairs PostgreSQL databases stamped by the pre-2026-11-12 Live head (`0100`, including those already advanced to `0102` with missing API-key/job-priority columns); see [Operations](internal/OPERATIONS.md#databases-migrated-by-an-image-from-before-the-2026-11-12-renumbering).
 - **Migration `0094`.** Creates six empty `live_*` tables and their indexes. This is quick DDL with no backfill; existing evaluation runs are unchanged.
 - **Five platform settings.** `QYM_LIVE_RETENTION_DAYS=180` keeps turns, scores and canary results for 180 days; `QYM_LIVE_STALE_AFTER_SECONDS=300` controls heartbeat staleness; `QYM_LIVE_TURN_BATCH_MAX=100` caps turns per ingest batch; `QYM_LIVE_DETAIL_MAX_BYTES=524288` caps a turn's opaque detail; `QYM_LIVE_TREND_MAX_DAYS=90` caps the trend window. These are the defaults.
 - **Ingestion routing.** `/v1/projects/{project_id}/live/*` belongs on the ingestion surface and requires a project API key. The main app also serves it when `QYM_MAIN_INCLUDE_INGEST` is enabled. The ingestion alias uses `QYM_INGESTION_PREFIX` (default `/ingestion`); unprefixed ingestion paths depend on `QYM_INGESTION_LEGACY_PATHS`. In split deployments, include the rule from `docker/nginx.split.conf`: `location ~ ^/v1/projects/[^/]+/live/ { proxy_pass http://qym_ingestion; }`. UI reads under `/api/projects/{slug}/live` stay on main.

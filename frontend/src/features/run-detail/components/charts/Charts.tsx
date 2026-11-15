@@ -10,7 +10,15 @@ import { plural } from '@/features/shell/plural';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { staggerIndex, useEntrance } from '@/ui/motion';
 import { bucketTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
-import { COLUMN_GAP, axisLabelShown, columnPitch, countText, countTiers, isDenseCounts } from './chartLabels';
+import {
+  CHAR_PX,
+  COLUMN_GAP,
+  axisLabelShown,
+  columnPitch,
+  countText,
+  countTiers,
+  isDenseCounts,
+} from './chartLabels';
 import styles from './Charts.module.css';
 
 /** Width of an element in CSS px (ResizeObserver); `fallback` until measured. Charts draw at this width so text and marks keep their size. */
@@ -46,10 +54,14 @@ export interface BarSpec {
   count: number;
   /** Axis label under the baseline. */
   label: string;
+  /** Keep a boundary label visible, thinning neighbouring labels to make room. */
+  labelPriority?: boolean;
   /** Second line under the axis label (mono, muted): a percentage. */
   sub?: string;
   /** Bar fill: a token expression such as `var(--score-5)`. */
   color: string;
+  /** Optional fill for a narrow marker below the bar at the baseline. */
+  baseline?: string;
   /** Share (0..1) of the bar drawn as the error hatch. */
   errShare?: number;
   tip?: ReactNode;
@@ -99,6 +111,15 @@ export function BarColumns({
     bars.map((b) => b.label),
     plotW,
   );
+  bars.forEach((bar, index) => {
+    if (!bar.labelPriority) return;
+    showAxis[index] = true;
+    bars.forEach((other, otherIndex) => {
+      if (other.labelPriority) return;
+      const clearance = ((bar.label.length + other.label.length) * CHAR_PX) / 2 + 6;
+      if (Math.abs(otherIndex - index) * pitch < clearance) showAxis[otherIndex] = false;
+    });
+  });
   const digits = Math.max(1, ...bars.map((b) => countText(b.count, colWidth, b.zero).length));
   const dense = isDenseCounts(pitch, digits);
   const digitsW = digits * 7 + 2;
@@ -146,6 +167,9 @@ export function BarColumns({
                 </span>
               </span>
               <span className={styles.foot} data-part="foot" aria-hidden="true">
+                {b.baseline ? (
+                  <span className={styles.baseline} data-part="baseline" style={{ background: b.baseline }} />
+                ) : null}
                 {axis ? (
                   <>
                     <span

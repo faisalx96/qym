@@ -1,7 +1,35 @@
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import type { CardTone } from '@/ui';
+import { formatShortDayKey } from '@/lib/dates';
 import { formatDurationMs, formatPercentValue } from '@/lib/format';
+import { CHAR_PX } from '@/features/run-detail/components/charts/chartLabels';
 import { diagnosisSpec, mixSegments } from './mix';
+
+export function trendDayLabel(day: string, first: boolean): string {
+  return first || day.endsWith('-01') ? formatShortDayKey(day) : day.slice(8);
+}
+
+/** Month boundaries take precedence when the first date label would overlap them. */
+export function trendLabels(days: string[], pitch: number) {
+  const labels = days.map((day, index) => ({
+    label: trendDayLabel(day, index === 0),
+    labelPriority: index === 0 || day.endsWith('-01'),
+  }));
+  const first = labels[0];
+  if (
+    first &&
+    labels.some(
+      (item, index) =>
+        index > 0 &&
+        item.labelPriority &&
+        index * pitch < ((first.label.length + item.label.length) * CHAR_PX) / 2 + 6,
+    )
+  ) {
+    first.label = days[0]!.slice(8);
+    first.labelPriority = false;
+  }
+  return labels;
+}
 
 /** Columns include half a gap at each edge, so their centres stay at (i + 0.5) * width / count. */
 export function columnPitch(width: number, count: number): { bar: number; gap: number } {
@@ -30,10 +58,14 @@ export function trendColumns(
 }[] {
   const spec = diagnosisSpec(specs);
   return trend.map((entry) => {
-    const stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; n: number }[] = mixSegments(
-      entry.counts_by_label,
-      spec,
-    ).map(({ value, label, tone, dark, n }) => ({ value, label, tone, dark, n }));
+    const stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; n: number }[] =
+      mixSegments(entry.counts_by_label, spec).map(({ value, label, tone, dark, n }) => ({
+        value,
+        label,
+        tone,
+        dark,
+        n,
+      }));
     const undiagnosed = entry.turns - stacks.reduce((sum, stack) => sum + stack.n, 0);
     if (undiagnosed > 0)
       stacks.push({ value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: undiagnosed });

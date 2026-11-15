@@ -91,3 +91,51 @@ export function formatAgo(
   const days = Math.round(s / 86_400);
   return days <= 30 ? `${days}d ago` : formatDay(d);
 }
+
+/** Calendar keys and diagnostic timestamps in an explicitly selected source zone. */
+
+export function safeZone(zone?: string | null): string {
+  if (!zone) return 'UTC';
+  try {
+    new Intl.DateTimeFormat(APP_LOCALE, { timeZone: zone });
+    return zone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+function parts(date: Date, zone?: string | null) {
+  return Object.fromEntries(
+    new Intl.DateTimeFormat(APP_LOCALE, {
+      timeZone: safeZone(zone),
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(date)
+      .map(({ type, value }) => [type, value]),
+  );
+}
+
+export function zoneToday(zone?: string | null, now: Date = new Date()): string {
+  const { year, month, day } = parts(now, zone);
+  return `${year}-${month}-${day}`;
+}
+
+export function zoneDateTime(iso: string, zone?: string | null, includeSeconds = false): string {
+  const date = toDate(iso);
+  if (!date) return '—';
+  const { year, month, day, hour, minute, second } = parts(date, zone);
+  return `${year}-${month}-${day} ${hour}:${minute}${includeSeconds ? `:${second}` : ''}`;
+}
+
+export function zoneLabel(zone?: string | null): string {
+  const name = safeZone(zone);
+  if (['Etc/UTC', 'Etc/Universal', 'Etc/Zulu'].includes(name)) return 'UTC';
+  if (name.startsWith('Etc/')) return name;
+  return name.split('/').at(-1)!.replaceAll('_', ' ');
+}

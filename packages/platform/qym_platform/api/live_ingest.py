@@ -7,6 +7,7 @@ import math
 from copy import deepcopy
 from datetime import date, datetime
 from typing import Any, Awaitable, Callable, Literal, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -49,7 +50,17 @@ class SourceBody(BaseModel):
     environment: str = Field(..., min_length=1, max_length=50)
     product: Optional[str] = Field(default=None, max_length=100)
     worker: dict[str, Any] = Field(default_factory=dict)
-    day_key_timezone: str = Field(default="UTC", min_length=1, max_length=40)
+    day_key_timezone: Optional[str] = Field(default=None, min_length=1, max_length=40)
+
+    @field_validator("day_key_timezone")
+    @classmethod
+    def _known_timezone(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            try:
+                ZoneInfo(value)
+            except (ZoneInfoNotFoundError, ValueError, OSError):
+                raise ValueError("day_key_timezone is not a known timezone") from None
+        return value
 
 
 class HeartbeatBody(BaseModel):
@@ -403,6 +414,7 @@ def _source_payload(source: LiveSource) -> dict[str, Any]:
         "name": source.name,
         "environment": source.environment,
         "product": source.product,
+        "day_key_timezone": source.day_key_timezone,
         "worker": source.worker,
         "created_at": to_api_timestamp(source.created_at),
     }

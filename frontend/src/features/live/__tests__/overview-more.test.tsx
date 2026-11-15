@@ -151,6 +151,18 @@ describe('overview service and history blocks', () => {
     expect(gap.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
       'repeating-linear-gradient',
     );
+    expect(gap.querySelector('[data-part="baseline"]')).toBeNull();
+    expect(gap.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '1');
+    expect(gap).toHaveStyle({ '--p': '0.25' });
+    expect(container.querySelector('[data-live-trend-day="2026-10-28"] [data-part="axis"]')).toHaveAttribute(
+      'data-text',
+      'Oct 28',
+    );
+    expect(container.querySelector('[data-live-trend-day="2026-11-01"] [data-part="axis"]')).toHaveAttribute(
+      'data-text',
+      'Nov 1',
+    );
+    expect(gap).toHaveAccessibleName(/worker gap/);
     expect(container.querySelector('[data-live-trend-day="2026-10-31"]')).toHaveAttribute(
       'data-live-gap',
       'false',
@@ -166,6 +178,60 @@ describe('overview service and history blocks', () => {
     fireEvent.click(screen.getByRole('button', { name: /Oct 28, 2026: 4 turns/ }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('trend_days=30&day=2026-10-28');
     expect(screen.getByText('Problem', { exact: true })).toBeVisible();
+  });
+
+  it('keeps distinct diagnosis tones in the trend legend and inconclusive stacks neutral', () => {
+    const values = [
+      { value: 'ok', label: 'OK', tone: 'accent' },
+      { value: 'problem', label: 'Problem', tone: 'danger' },
+      { value: 'system_problem', label: 'System problem', tone: 'meta' },
+      { value: 'inconclusive', label: 'Inconclusive', tone: 'neutral' },
+    ];
+    const { container } = render(
+      <MemoryRouter>
+        <TrendChart
+          trend={[{ ...trend[0]!, counts_by_label: { inconclusive: 3 } }]}
+          specs={[{ ...specs[2]!, values }]}
+          primaryMetric="diagnosis"
+          days={14}
+          onDays={() => {}}
+        />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
+      'var(--text-muted) 0% 75%',
+    );
+    const legendTones = values.map(({ label, tone }) => {
+      const entry = screen.getByText(label, { exact: true }).closest('[data-tone]');
+      expect(entry).toHaveAttribute(
+        'data-tone',
+        tone === 'accent' ? 'success' : tone === 'meta' ? 'neutral' : tone,
+      );
+      if (tone === 'meta') expect(entry).toHaveAttribute('data-dark');
+      return `${entry?.getAttribute('data-tone')}:${entry?.hasAttribute('data-dark')}`;
+    });
+    expect(new Set(legendTones).size).toBe(values.length);
+    expect(screen.getByText('Undiagnosed').closest('[data-tone]')).toHaveAttribute('data-tone', 'neutral');
+    expect(container.querySelector('[data-part="baseline"]')).toBeNull();
+  });
+
+  it('keeps an empty gap distinct with main hatch styling', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <TrendChart
+          trend={[{ ...trend[3]!, worker_gap: true }]}
+          specs={specs}
+          primaryMetric="quality"
+          days={14}
+          onDays={() => {}}
+        />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '');
+    expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
+      'repeating-linear-gradient',
+    );
+    expect(container.querySelector('[data-live-trend-day]')).toHaveStyle({ '--p': '0' });
   });
 
   it('fills half an eight-turn bar with the four diagnosed turns and labels the remainder', () => {

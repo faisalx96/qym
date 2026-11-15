@@ -1,5 +1,6 @@
 /** Live worker control, settings and jobs. Secrets are write-only. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { safeZone, zoneDateTime, zoneLabel } from '@/features/live/lib/zone';
 import { api } from '@/lib/http';
 import type { LiveSourceInfo } from './live';
 export { errorReport } from '@/lib/error-report';
@@ -47,7 +48,13 @@ export interface LiveWorkerControl {
   models: { listed_at: string; ids: string[] } | null;
   errors_last_hour: number;
   last_error: { at: string; component: string; code: string; message: string } | null;
-  job: { id: string; kind: string; progress: Record<string, unknown> } | null;
+  job: {
+    id?: string;
+    kind?: string;
+    progress?: Record<string, unknown>;
+    waiting_reason?: string;
+    blocked_job_id?: string;
+  } | null;
 }
 export interface LiveWorkerVersion {
   version: number;
@@ -66,15 +73,45 @@ export interface LiveWorkerKey {
 export interface LiveJob {
   id: string;
   kind: 'backfill_preview' | 'backfill';
-  params: { since_day: string; until_day: string; since: string; until: string; limit: number };
+  params: {
+    since_day: string;
+    until_day: string;
+    since: string;
+    until: string;
+    limit: number;
+    redo?: string[];
+  };
   status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   progress: {
     found?: number;
+    listed?: number;
+    redone?: number;
     skipped_existing?: number;
     evaluated?: number;
     failed?: number;
     last_turn_at?: string;
     paused?: boolean;
+    resumed?: number;
+    judged?: number;
+    recorded?: number;
+    incomplete?: number;
+    fetch_failed?: number;
+    deferred?: number;
+    limit_reached?: boolean;
+    remaining?: number;
+    would_evaluate?: number;
+    would_redo?: number;
+    beyond_limit?: number;
+    waiting?: string;
+    rejected?: {
+      [key: string]: unknown;
+      other_names?: number;
+      no_session?: number;
+      excluded_users?: number;
+      other_environment?: number;
+      bad_timestamp?: number;
+    };
+    effective_until?: string;
   };
   error: string | null;
   requested_by: string | null;
@@ -85,6 +122,15 @@ export interface LiveJob {
   finished_at: string | null;
   cancel_requested: boolean;
 }
+/** Older workers cannot distinguish redo or turns beyond the selection limit. */
+export function jobPreviewSentence(job: LiveJob): string {
+  const p = job.progress;
+  if (p.would_evaluate === undefined && p.would_redo === undefined && p.beyond_limit === undefined) {
+    return `${p.found ?? 0} turns, ${p.skipped_existing ?? 0} already evaluated, ${(p.found ?? 0) - (p.skipped_existing ?? 0)} to evaluate`;
+  }
+  return `${p.would_evaluate ?? 0} to evaluate · ${p.would_redo ?? 0} to redo · ${p.skipped_existing ?? 0} already evaluated · ${p.beyond_limit ?? 0} beyond the limit of ${job.params.limit}`;
+}
+
 export interface LiveWorkerEvent {
   id: number;
   level: 'error' | 'warning';
@@ -114,8 +160,15 @@ export interface LiveWorkerRead {
   model_ids: string[];
 }
 export interface WorkerEventsFilters {
-  component?: string;
-  level?: 'error' | 'warning';
+  component?: string[];
+  level?: ('error' | 'warning')[];
+  limit?: number;
+  page?: number;
+}
+export interface LiveWorkerEvents {
+  events: LiveWorkerEvent[];
+  total?: number;
+  page?: number;
   limit?: number;
 }
 export interface SaveWorkerSettings {
@@ -128,18 +181,29 @@ export interface CreateWorkerJob {
   since_day: string;
   until_day: string;
   limit: number;
+  redo?: ('failed' | 'inconclusive' | 'all')[];
 }
 
 const workerKey = (slug: string, source: string) => ['project', slug, 'live', 'worker', source];
-function livePath(slug: string, source: string, sub = '', filters: WorkerEventsFilters = {}) {
+function livePath(
+  slug: string,
+  source: string,
+  sub = '',
+  filters: WorkerEventsFilters & { jobs_limit?: number } = {},
+) {
   const params = new URLSearchParams({ source });
-  for (const [key, value] of Object.entries(filters)) if (value !== undefined) params.set(key, String(value));
+  for (const [key, value] of Object.entries(filters)) {
+    if (Array.isArray(value)) value.forEach((item) => params.append(key, item));
+    else if (value !== undefined) params.set(key, String(value));
+  }
   return `/api/projects/${encodeURIComponent(slug)}/live/worker${sub}?${params}`;
 }
-export function useLiveWorker(slug: string, source: string) {
+export function useLiveWorker(slug: string, source: string, jobsLimit?: number) {
   return useQuery({
-    queryKey: workerKey(slug, source),
-    queryFn: () => api.get<LiveWorkerRead>(livePath(slug, source)),
+    queryKey: [...workerKey(slug, source), jobsLimit],
+    queryFn: () => api.get<LiveWorkerRead>(livePath(slug, source, '', { jobs_limit: jobsLimit })),
+    placeholderData: (previous, query) =>
+      query?.queryKey[1] === slug && query.queryKey[4] === source ? previous : undefined,
     refetchInterval: (query) =>
       query.state.data?.jobs?.some((job) => job.status === 'queued' || job.status === 'running')
         ? 5000
@@ -150,7 +214,16 @@ export function useLiveWorker(slug: string, source: string) {
 export function useLiveWorkerEvents(slug: string, source: string, filters: WorkerEventsFilters = {}) {
   return useQuery({
     queryKey: ['project', slug, 'live', 'worker-events', source, filters],
-    queryFn: () => api.get<{ events: LiveWorkerEvent[] }>(livePath(slug, source, '/events', filters)),
+    queryFn: () => api.get<LiveWorkerEvents>(livePath(slug, source, '/events', filters)),
+    placeholderData: (previous, query) => {
+      const previousFilters = query?.queryKey[5] as WorkerEventsFilters | undefined;
+      return query?.queryKey[1] === slug &&
+        query.queryKey[4] === source &&
+        JSON.stringify(previousFilters?.component ?? []) === JSON.stringify(filters.component ?? []) &&
+        JSON.stringify(previousFilters?.level ?? []) === JSON.stringify(filters.level ?? [])
+        ? previous
+        : undefined;
+    },
     refetchInterval: 15000,
     refetchIntervalInBackground: false,
   });
@@ -267,6 +340,7 @@ export function validateDateRange(
   since_day: string,
   until_day: string,
   limit: number,
+  // A day key in the source's timezone, supplied by the caller.
   today: string,
 ): string | null {
   if (
@@ -283,6 +357,7 @@ export function validateDateRange(
   return null;
 }
 export interface ProblemReportInput {
+  day_key_timezone?: string;
   source: string;
   environment?: string | null;
   worker_version?: string | null;
@@ -292,12 +367,14 @@ export interface ProblemReportInput {
 }
 export function problemReport(input: ProblemReportInput): string {
   const { event } = input;
+  const zone = safeZone(input.day_key_timezone);
   return Object.entries({
     Source: input.source,
     Environment: input.environment,
     'Worker version': input.worker_version,
     'Eval code version': input.eval_code_version,
     'Settings version applied': input.settings_version_applied,
+    ...(zone === 'UTC' ? {} : { [`Time (${zoneLabel(zone)})`]: zoneDateTime(event.last_at, zone, true) }),
     'Time (UTC)': event.last_at,
     Component: event.component,
     Code: event.code,

@@ -7,7 +7,7 @@ import { useSearchParamsState } from '@/lib/url-state';
 import { SegmentedControl, type CardTone } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
-import { columnPitch, formatPrimaryMean, trendColumns } from '../lib/trend';
+import { columnPitch, formatPrimaryMean, trendColumns, trendLabels } from '../lib/trend';
 import styles from '../live.module.css';
 
 const toneFill: Record<CardTone, string> = {
@@ -39,6 +39,7 @@ export function TrendChart({
   days,
   onDays,
 }: {
+  zone?: string;
   trend: LiveOverview['trend'];
   specs: LiveMetricSpec[];
   primaryMetric: string | null;
@@ -75,10 +76,14 @@ export function TrendChart({
     specs.find((item) => item.is_primary) ?? specs.find((item) => item.metric_name === primaryMetric);
   const primaryLabel = primary?.label ?? 'Primary mean';
   const showRate = primary?.score_type === 'percentage' || primary?.score_type === 'boolean';
-  const bars: BarSpec[] = columns.map((column) => ({
+  const axisLabels = trendLabels(
+    columns.map((column) => column.day),
+    pitch.bar + pitch.gap,
+  );
+  const bars: BarSpec[] = columns.map((column, index) => ({
     key: column.day,
     count: column.total,
-    label: formatShortDayKey(column.day),
+    ...axisLabels[index]!,
     zero: column.gap ? 'hide' : 'show',
     color: column.gap
       ? 'repeating-linear-gradient(135deg, var(--border-strong) 0 var(--space-xs), var(--bg-elevated) var(--space-xs) var(--space-sm))'

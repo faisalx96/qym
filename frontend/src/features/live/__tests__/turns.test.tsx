@@ -1,3 +1,4 @@
+import { formatTableDate } from '@/lib/dates';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,6 +8,7 @@ import { parseLiveFilters, type LiveMetricSpec, type LiveTurnRow } from '@/api/l
 import { TurnFilters } from '../components/TurnFilters';
 import { TurnsTable } from '../components/TurnsTable';
 import { TurnHeader } from '../components/turn/TurnHeader';
+import { LiveTurnPage } from '../LiveTurnPage';
 import { LiveTurnsPage } from '../LiveTurnsPage';
 import { liveOverview, liveTurnDetail } from '@/features/dev/liveFixtures';
 
@@ -624,3 +626,66 @@ describe('LiveTurnsPage', () => {
     expect(screen.queryByRole('heading', { name: 'No turns match' })).toBeNull();
   });
 });
+
+it.each([['Asia/Riyadh'], ['UTC'], [undefined], ['Invalid/Zone']])(
+  'renders viewer clock times with source calendar day filters (%s)',
+  async (zone) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async (input: string) =>
+          new Response(
+            JSON.stringify(
+              input.includes('/overview')
+                ? { ...liveOverview, specs, status: { ...liveOverview.status, day_key_timezone: zone } }
+                : { rows: [{ ...row, turn_at: '2026-11-01T09:00:00' }], total: 1, facets },
+            ),
+          ),
+      ),
+    );
+    renderPage();
+    expect(await screen.findByText(row.question)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Time' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /Day filter/ })).toBeVisible();
+    expect(document.querySelector('[data-live-turn-row] [data-col="turn_at"]')).toHaveTextContent(
+      formatTableDate('2026-11-01T09:00:00'),
+    );
+  },
+);
+
+it.each([['Asia/Riyadh'], ['UTC']])(
+  'uses the viewer clock for turn detail and conversation regardless of source zone (%s)',
+  async (zone) => {
+    const detail = {
+      ...liveTurnDetail,
+      turn: { ...liveTurnDetail.turn, turn_at: '2026-11-09T22:30:00' },
+      conversation: [{ ...liveTurnDetail.conversation[0]!, turn_at: '2026-11-09T22:30:00' }],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async (input: string) =>
+          new Response(
+            JSON.stringify(
+              new URL(input, 'http://localhost').pathname.endsWith('/live')
+                ? {
+                    sources: [{ ...liveOverview.status, key: 'worker', day_key_timezone: zone }],
+                    default_source: 'worker',
+                  }
+                : detail,
+            ),
+          ),
+      ),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    clients.push(client);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['?tab=conversation']}>
+          <LiveTurnPage slug="demo" source="worker" turnId={detail.turn.turn_id} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findAllByText(formatTableDate('2026-11-09T22:30:00'))).toHaveLength(2);
+  },
+);

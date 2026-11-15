@@ -18,9 +18,20 @@ import { ServiceHealth } from './components/ServiceHealth';
 import { Canaries } from './components/Canaries';
 import { TrendChart } from './components/TrendChart';
 import { DaysTable } from './components/DaysTable';
+import { zoneToday } from './lib/zone';
 import styles from './live.module.css';
 
-export function LiveOverviewPage({ slug, source, day }: { slug: string; source: string; day: string }) {
+export function LiveOverviewPage({
+  slug,
+  source,
+  day,
+  zone: sourceZone,
+}: {
+  slug: string;
+  source: string;
+  day: string;
+  zone?: string;
+}) {
   const { project } = useProjectContext();
   useDocumentTitle(`Live · ${project.name}`);
   const { get, replaceUrlQuery } = useSearchParamsState();
@@ -32,6 +43,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
   const modelIndex = useModelIndex(slug);
   const showSkeleton = useDelayedPending(query.isPending);
   const overview = query.data;
+  const zone = overview?.status.day_key_timezone ?? sourceZone;
   const cachedOverview = useCachedOverview(slug, source);
   const linkTo = (filters: Record<string, string> = {}) =>
     `/projects/${encodeURIComponent(slug)}/live/turns?${new URLSearchParams({ day, source, ...filters })}`;
@@ -46,7 +58,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
             // cv5 Y4: the source and the day are controls side by side, one meta item: no "·" separator between them
             <span key="controls" className={styles.headerControls}>
               <SourceControl slug={slug} source={source} status={overview?.status} />
-              <DaySwitcher day={day} today={overview?.status.today ?? new Date().toISOString().slice(0, 10)} />
+              <DaySwitcher day={day} today={overview?.status.today ?? zoneToday(zone)} />
             </span>,
           ]}
           actions={
@@ -101,6 +113,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
             <Canaries canaries={overview.canaries} specs={overview.specs} />
           </ServiceHealth>
           <TrendChart
+            zone={zone}
             trend={overview.trend}
             specs={overview.specs}
             primaryMetric={overview.primary_metric}
@@ -108,6 +121,7 @@ export function LiveOverviewPage({ slug, source, day }: { slug: string; source: 
             onDays={(value) => replaceUrlQuery({ trend_days: value })}
           />
           <DaysTable
+            zone={zone}
             days={overview.days}
             slug={slug}
             source={source}

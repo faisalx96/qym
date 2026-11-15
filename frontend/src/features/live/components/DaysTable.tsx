@@ -16,6 +16,7 @@ export function DaysTable({
   primaryMetric,
   stale = false,
 }: {
+  zone?: string;
   days: LiveOverview['days'];
   slug: string;
   source: string;

@@ -5,13 +5,12 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from math import ceil
 from typing import Any, Optional
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from qym_platform.datetime_utils import ensure_utc, to_api_timestamp, utc_now_naive
+from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
     LiveCanaryResult,
     LiveDay,
@@ -21,6 +20,7 @@ from qym_platform.db.models import (
     LiveTurnScore,
 )
 from qym_platform.log import get_logger
+from qym_platform.services.live_days import source_today, source_zone
 from qym_platform.settings import PlatformSettings
 
 logger = get_logger(__name__)
@@ -30,14 +30,6 @@ def utcnow() -> datetime:
     """Return qym's current time as naive UTC."""
     return utc_now_naive()
 
-
-def source_today(source: LiveSource, now: datetime) -> date:
-    """Return the current calendar day in the source's day_key_timezone (UTC when the zone is unknown)."""
-    try:
-        zone = ZoneInfo(source.day_key_timezone or "UTC")
-    except (ZoneInfoNotFoundError, ValueError):
-        zone = ZoneInfo("UTC")
-    return ensure_utc(now).astimezone(zone).date()
 
 
 def source_status(
@@ -65,6 +57,7 @@ def source_status(
         "name": source.name,
         "environment": source.environment,
         "product": source.product,
+        "day_key_timezone": source_zone(source).key,
         "stale": elapsed is None or elapsed > settings.live_stale_after_seconds,
         "seconds_since_heartbeat": int(elapsed) if elapsed is not None else None,
         "last_heartbeat_at": to_api_timestamp(source.last_heartbeat_at),
@@ -427,12 +420,13 @@ def overview_payload(
     page: int = 1,
 ) -> dict[str, Any]:
     """Assemble the selected day's activity and the source's overview context."""
+    today = source_today(source, now)
     if day is None:
         day = (
             db.query(func.max(LiveDay.day))
             .filter(LiveDay.source_id == source.id)
             .scalar()
-            or source_today(source, now)
+            or today
         )
     row = (
         db.query(LiveDay)
@@ -465,7 +459,7 @@ def overview_payload(
         "trend": trend(
             db,
             source,
-            day,
+            max(day, today),
             max(1, min(trend_days, settings.live_trend_max_days)),
             primary_name=primary_name,
         ),

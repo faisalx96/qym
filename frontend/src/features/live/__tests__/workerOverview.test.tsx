@@ -182,7 +182,7 @@ it('shows plain problem labels and opens the section targeted by a Fix link', as
   const view = setup(liveWorkerRead, undefined, [route]);
   await screen.findByRole('button', { name: 'Save as v4' });
   act(() => {
-    view.client.setQueryData(['project', 'demo', 'live', 'worker-events', source, {}], {
+    view.client.setQueryData(['project', 'demo', 'live', 'worker-events', source, { page: 1, limit: 10 }], {
       events: [
         {
           ...liveWorkerEvents[0]!,
@@ -215,4 +215,19 @@ it('shows plain problem labels and opens the section targeted by a Fix link', as
     'href',
     `${route}#problems`,
   );
+});
+
+it('uses the viewer clock for status and settings times with a Riyadh source', async () => {
+  setup({
+    ...liveWorkerRead,
+    stale: true,
+    status: { ...liveWorkerRead.status, stale: true, day_key_timezone: 'Asia/Riyadh' },
+  });
+  const status = await screen.findByRole('region', { name: 'Worker status' });
+  expect(within(status).getByText(`since ${formatTableDate('2026-11-03T14:20:00Z')} by Ali`)).toBeVisible();
+  expect(within(status).getByText(formatTableDate('2026-11-03T14:19:00Z'))).toBeVisible();
+  expect(within(status).getByText(formatTableDate('2026-11-03T14:18:00Z'))).toBeVisible();
+  expect(
+    screen.getByText(`gateway listed 5 models at ${formatTableDate('2026-11-03T14:20:00Z')}`),
+  ).toBeVisible();
 });

@@ -1,3 +1,4 @@
+import { formatHeaderDate } from '@/lib/dates';
 import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -129,7 +130,7 @@ it.each([
 it('polls the worker every five seconds while a job runs and every fifteen afterwards', async () => {
   vi.useFakeTimers();
   let read = liveWorkerRead;
-  const fetch = vi.fn(async () => response(read));
+  const fetch = vi.fn<(input: string) => Promise<Response>>(async () => response(read));
   vi.stubGlobal('fetch', fetch);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   clients.push(client);
@@ -140,6 +141,7 @@ it('polls the worker every five seconds while a job runs and every fifteen after
     await vi.advanceTimersByTimeAsync(1);
   });
   expect(fetch).toHaveBeenCalledTimes(1);
+  expect(new URL(fetch.mock.calls[0]![0], 'http://localhost').searchParams.has('jobs_limit')).toBe(false);
   // The fixture has a running job: the page refreshes every five seconds.
   await act(async () => {
     await vi.advanceTimersByTimeAsync(4998);
@@ -252,4 +254,343 @@ it('keeps errors for duplicate host and database field names in their own sectio
     'Dataiku database is invalid',
   );
   expect(screen.getByLabelText('Database name')).not.toHaveAttribute('aria-invalid', 'true');
+});
+
+it.each([
+  [{}, '0 evaluated · 0 failed · 0 already evaluated · 0 turns in the range', undefined],
+  [
+    { evaluated: 4, found: 8, skipped_existing: 0, redone: 0, failed: 0, listed: 0 },
+    '4 evaluated · 0 failed · 0 already evaluated · 8 turns in the range',
+    '0 traces listed',
+  ],
+  [
+    { evaluated: 4, found: 10, skipped_existing: 3, redone: 2, failed: 1, listed: 20 },
+    '4 evaluated · 2 redone · 1 failed · 3 already evaluated · 10 turns in the range',
+    '20 traces listed',
+  ],
+] as const)('explains progress counters for %j', async (progress, label, listed) => {
+  setup({ ...liveWorkerRead, jobs: [{ ...liveWorkerRead.jobs[0]!, progress }] });
+  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
+  expect(within(table).getByText(label)).toBeVisible();
+  if (listed) expect(within(table).getByText(listed)).toBeVisible();
+  else expect(within(table).queryByText(/traces listed/)).toBeNull();
+});
+it.each([
+  [['failed'], null],
+  [['failed', 'inconclusive'], 'redo inconclusive'],
+  [['all'], 'redo all'],
+] as const)('labels redo params %j', async (redo, label) => {
+  const job = liveWorkerRead.jobs[0]!;
+  setup({ ...liveWorkerRead, jobs: [{ ...job, params: { ...job.params, redo: [...redo] } }] });
+  const table = await screen.findByRole('grid', { name: 'Worker jobs' });
+  if (label) expect(within(table).getByText(label)).toBeVisible();
+  expect(within(table).getByText(`Limit 200 · redo ${redo.join(', ')}`)).toBeVisible();
+});
+it('requests older jobs at 20, 50, 100 and 200 and stops at the maximum', async () => {
+  const jobs = Array.from({ length: 200 }, (_, i) => ({
+    ...liveWorkerRead.jobs[0]!,
+    id: `job-${i}`,
+    status: 'done' as const,
+  }));
+  const { fetch } = setup({ ...liveWorkerRead, jobs });
+  const user = userEvent.setup();
+  for (const limit of [20, 50, 100, 200]) {
+    expect(await screen.findByText(`Newest ${limit} jobs`)).toBeVisible();
+    expect(
+      fetch.mock.calls.some(([input]) => {
+        const url = new URL(input, 'http://localhost');
+        return url.pathname.endsWith('/worker') && url.searchParams.get('jobs_limit') === String(limit);
+      }),
+    ).toBe(true);
+    if (limit < 200) await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
+  }
+  expect(screen.queryByRole('button', { name: 'Show older jobs' })).toBeNull();
+});
+it.each([20, 50])('keeps the page and draft when loading jobs beyond %i fails', async (limit) => {
+  const jobs = Array.from({ length: 100 }, (_, i) => ({
+    ...liveWorkerRead.jobs[0]!,
+    id: `job-${i}`,
+    status: 'done' as const,
+  }));
+  const { fetch, client } = setup({ ...liveWorkerRead, jobs });
+  const user = userEvent.setup();
+  await screen.findByText('Newest 20 jobs');
+  if (limit === 50) {
+    await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
+    await screen.findByText('Newest 50 jobs');
+  }
+  await user.type(screen.getByRole('textbox', { name: 'Note' }), 'Unsaved note');
+  const table = screen.getByRole('grid', { name: 'Worker jobs' });
+  const original = fetch.getMockImplementation()!;
+  fetch.mockImplementation((input, init) => {
+    const url = new URL(input, 'http://localhost');
+    if (url.pathname.endsWith('/worker') && Number(url.searchParams.get('jobs_limit')) > limit)
+      return Promise.resolve(response({ detail: 'Older jobs unavailable' }, 500));
+    return original(input, init);
+  });
+  await user.click(screen.getByRole('button', { name: 'Show older jobs' }));
+  expect(await screen.findByText(/Couldn’t load older jobs/)).toBeVisible();
+  expect(screen.getByRole('grid', { name: 'Worker jobs' })).toBe(table);
+  expect(screen.getByText(`Newest ${limit} jobs`)).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'Note' })).toHaveValue('Unsaved note');
+  fetch.mockClear();
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
+  });
+  const requests = fetch.mock.calls.map(([input]) => new URL(input, 'http://localhost'));
+  expect(
+    requests
+      .filter((url) => url.pathname.endsWith('/worker'))
+      .map((url) => url.searchParams.get('jobs_limit')),
+  ).toEqual([String(limit)]);
+});
+it('hides older jobs when fewer than the current limit are returned', async () => {
+  setup({ ...liveWorkerRead, jobs: [] });
+  expect(await screen.findByText('No jobs yet')).toBeVisible();
+  expect(screen.queryByText(/Newest \d+ jobs/)).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Show older jobs' })).toBeNull();
+});
+it.each(['running', 'done'] as const)('explains new backfill outcomes for %s', async (status) => {
+  setup({
+    ...liveWorkerRead,
+    status: { ...liveWorkerRead.status, day_key_timezone: 'Asia/Riyadh' },
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        status,
+        progress: {
+          found: 30,
+          evaluated: 6,
+          judged: 3,
+          recorded: 2,
+          incomplete: 1,
+          redone: 2,
+          failed: 1,
+          skipped_existing: 4,
+          resumed: 3,
+          fetch_failed: 1,
+          limit_reached: true,
+          remaining: 14,
+          effective_until: '2026-11-03T21:30:00Z',
+          listed: 40,
+          rejected: {
+            other_names: 3,
+            excluded_users: 2,
+            no_session: 1,
+            other_environment: 3,
+            bad_timestamp: 1,
+          },
+        },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(
+    table.getByText(
+      '6 evaluated · 2 redone · 1 failed · 4 already evaluated · 30 turns in the range · 3 from an earlier attempt · 1 could not be fetched, will be retried by the next backfill',
+    ),
+  ).toBeVisible();
+  expect(
+    table.getByText(
+      'Of the evaluated: 3 judged, 2 recorded without judges (cancelled or failed in Insightor), 1 incomplete',
+    ),
+  ).toBeVisible();
+  expect(
+    table.getByText('Stopped at the limit of 200. 14 turns in this range are still not evaluated.'),
+  ).toHaveAttribute('data-tone', 'warning');
+  expect(
+    table.getByText(
+      `Covers turns up to ${formatHeaderDate('2026-11-03T21:30:00Z')}; later turns are left to the live loop.`,
+    ),
+  ).toBeVisible();
+  expect(
+    table.getByText(
+      '40 traces listed: 30 user turns, 3 other traces, 2 from excluded users, 1 without a conversation, 3 from other environments, 1 with an invalid timestamp',
+    ),
+  ).toHaveAttribute('data-tone', 'muted');
+});
+it('hides empty breakdowns and zero rejection categories', async () => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        progress: {
+          evaluated: 4,
+          found: 4,
+          judged: 4,
+          recorded: 0,
+          incomplete: 0,
+          listed: 6,
+          rejected: { other_names: 2, excluded_users: 0, no_session: 0 },
+        },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.queryByText(/Of the evaluated/)).toBeNull();
+  expect(
+    table.queryByText(/Stopped at the limit|earlier attempt|could not be fetched|Covers turns/),
+  ).toBeNull();
+  expect(table.getByText('6 traces listed: 4 user turns, 2 other traces')).toBeVisible();
+});
+it('explains why a running job is waiting from progress', async () => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        status: 'running',
+        updated_at: '2026-01-01T00:00:00Z',
+        progress: { waiting: 'worker paused' },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText('Waiting: worker paused')).toBeVisible();
+  expect(table.queryByText(/no update for/)).toBeNull();
+});
+it('shows Queued for an old worker without heartbeat waiting fields', async () => {
+  setup({ ...liveWorkerRead, jobs: [{ ...liveWorkerRead.jobs[0]!, status: 'queued', progress: {} }] });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getAllByText('Queued').length).toBeGreaterThan(0);
+});
+it('shows the reason for cancelling an unresponsive worker job', async () => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        status: 'cancelled',
+        error: 'cancelled while the worker was not responding',
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText('cancelled while the worker was not responding')).toBeVisible();
+});
+it.each([
+  [{ found: 12, skipped_existing: 10 }, '12 turns, 10 already evaluated, 2 to evaluate'],
+  [
+    {
+      found: 50,
+      skipped_existing: 10,
+      would_evaluate: 20,
+      would_redo: 5,
+      beyond_limit: 15,
+      limit_reached: true,
+      remaining: 15,
+    },
+    '20 to evaluate · 5 to redo · 10 already evaluated · 15 beyond the limit of 25',
+  ],
+  [
+    { found: 10, skipped_existing: 10, would_evaluate: 0, would_redo: 0, beyond_limit: 0 },
+    '0 to evaluate · 0 to redo · 10 already evaluated · 0 beyond the limit of 25',
+  ],
+])('gives preview rows their own summary for %j', async (progress, sentence) => {
+  const job = liveWorkerRead.jobs[0]!;
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...job,
+        kind: 'backfill_preview',
+        status: 'done',
+        params: { ...job.params, limit: 25, redo: [] },
+        progress,
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText(sentence)).toBeVisible();
+  expect(table.getByText('Limit 25 · redo none')).toBeVisible();
+  expect(table.queryByText(/Stopped at the limit/)).toBeNull();
+});
+it('keeps a zero redone count visible after the job previously reported redos', async () => {
+  const job = { ...liveWorkerRead.jobs[0]!, progress: { evaluated: 1, found: 3, redone: 2 } };
+  const { client, setRead } = setup({ ...liveWorkerRead, jobs: [job] });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText(/1 evaluated · 2 redone/)).toBeVisible();
+  setRead({ ...liveWorkerRead, jobs: [{ ...job, progress: { ...job.progress, redone: 0 } }] });
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['project', 'demo', 'live', 'worker', source] });
+  });
+  await waitFor(() => expect(table.getByText(/1 evaluated · 0 redone/)).toBeVisible());
+});
+it('does not invent a rejection gap when listed equals found', async () => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        progress: {
+          found: 4,
+          listed: 4,
+          rejected: { other_names: 0 },
+        },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getByText('4 traces listed')).toBeVisible();
+  expect(table.queryByText(/user turns/)).toBeNull();
+});
+it.each([
+  'worker paused',
+  'another job is running',
+  'waiting for runtime settings',
+  "finishing a previous job's report",
+])('shows the heartbeat waiting reason only on its queued job: %s', async (reason) => {
+  const job = liveWorkerRead.jobs[0]!;
+  setup({
+    ...liveWorkerRead,
+    running: {
+      ...liveWorkerRead.running!,
+      job: { waiting_reason: reason, blocked_job_id: 'blocked' },
+    },
+    jobs: [
+      { ...job, id: 'blocked', status: 'queued', progress: {} },
+      { ...job, id: 'other', status: 'queued', progress: {} },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  expect(table.getAllByText(`Waiting: ${reason}`)).toHaveLength(1);
+  expect(table.getAllByText('Queued')).toHaveLength(3);
+});
+it.each(['running', 'done', 'failed', 'cancelled'] as const)(
+  'ignores a heartbeat queued reason for a %s job',
+  async (status) => {
+    const job = liveWorkerRead.jobs[0]!;
+    setup({
+      ...liveWorkerRead,
+      running: {
+        ...liveWorkerRead.running!,
+        job: { waiting_reason: 'worker paused', blocked_job_id: job.id },
+      },
+      jobs: [{ ...job, status, progress: {} }],
+    });
+    const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+    expect(table.queryByText('Waiting: worker paused')).toBeNull();
+  },
+);
+it.each([undefined, 0, 3])('shows only positive deferred counts: %s', async (deferred) => {
+  setup({
+    ...liveWorkerRead,
+    jobs: [
+      {
+        ...liveWorkerRead.jobs[0]!,
+        progress: {
+          deferred,
+          found: 2,
+          listed: 9,
+          rejected: { other_names: 1, outside_window: 3, duplicate: 2, no_id: 1 },
+        },
+      },
+    ],
+  });
+  const table = within(await screen.findByRole('grid', { name: 'Worker jobs' }));
+  if (deferred) expect(table.getByText('3 left to the live loop (still arriving)')).toBeVisible();
+  else expect(table.queryByText(/left to the live loop/)).toBeNull();
+  expect(table.getByText('9 traces listed: 2 user turns, 1 other traces')).toBeVisible();
+  expect(table.queryByText(/outside_window|duplicate|no_id/)).toBeNull();
 });

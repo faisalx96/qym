@@ -7,6 +7,7 @@ export interface WorkerCallbacks {
   onRestore: (version: number) => Promise<{ version: number }>;
   onCreateJob: (body: CreateWorkerJob) => Promise<LiveJob>;
   onCancelJob: (id: string) => Promise<unknown>;
+  onJobsLimit?: (limit: number) => void;
 }
 export type WorkerBusy = Partial<
   Record<'state' | 'key' | 'save' | 'restore' | 'createJob' | 'cancelJob', boolean>

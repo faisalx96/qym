@@ -105,6 +105,31 @@ def test_read_defensive_worker_metadata(
     assert body["model_ids"] == model_ids
 
 
+@pytest.mark.parametrize(
+    "job",
+    [
+        {"id": "active", "kind": "backfill", "progress": {}},  # Old worker.
+        {"waiting_reason": "worker paused", "blocked_job_id": "queued-job"},
+        {
+            "id": "active",
+            "kind": "backfill",
+            "progress": {},
+            "waiting_reason": "another job is running",
+            "blocked_job_id": "queued-job",
+        },
+    ],
+)
+def test_read_preserves_heartbeat_job_waiting_reason(client, session_factory, job):
+    control = {"state": "paused", "errors_last_hour": 0, "last_error": None, "job": job}
+    with session_factory() as db:
+        record_heartbeat(
+            db, db.get(LiveSource, "source"), NOW, None, None, {"control": control}, NOW
+        )
+        db.commit()
+        assert db.get(LiveSource, "source").worker["control"]["job"] == job
+    assert read(client)["running"] == control
+
+
 def test_read_without_version_and_with_version(client, session_factory, values):
     body = read(client)
     assert body == {
@@ -121,6 +146,7 @@ def test_read_without_version_and_with_version(client, session_factory, values):
             "name": "Worker",
             "environment": "test",
             "product": None,
+            "day_key_timezone": "UTC",
             "stale": True,
             "seconds_since_heartbeat": None,
             "last_heartbeat_at": None,
@@ -250,14 +276,46 @@ def test_read_without_version_and_with_version(client, session_factory, values):
     )
 
 
-@pytest.mark.parametrize("with_day", [False, True])
-def test_read_today_uses_source_day_and_selected_source(
-    client, session_factory, with_day
-):
+@pytest.mark.parametrize("jobs_limit", [1, 50, 200])
+def test_read_jobs_limit(client, session_factory, jobs_limit):
     with session_factory() as db:
-        # 22:00 UTC on November 3 is already November 4 in the source timezone;
-        # the strip reports the source's today, not the UTC day.
-        db.get(LiveSource, "source").day_key_timezone = "Asia/Riyadh"
+        for i in range(205):
+            db.add(
+                LiveJob(
+                    id=f"job-{i}",
+                    source_id="source",
+                    kind="backfill",
+                    status="done",
+                    requested_at=NOW + timedelta(seconds=i),
+                )
+            )
+        db.commit()
+    jobs = read(client, jobs_limit=jobs_limit)["jobs"]
+    assert [job["id"] for job in jobs] == [
+        f"job-{i}" for i in range(204, 204 - jobs_limit, -1)
+    ]
+
+
+@pytest.mark.parametrize("jobs_limit", [0, 201])
+def test_read_jobs_limit_bounds(client, jobs_limit):
+    response = client.get(BASE, headers=ADMIN, params={"jobs_limit": jobs_limit})
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.parametrize("with_day", [False, True])
+@pytest.mark.parametrize(
+    "zone", ["Asia/Riyadh", "UTC", "Unknown/Timezone", "/UTC", "Asia", "+03:00"]
+)
+def test_read_today_uses_source_timezone_and_selected_source(
+    client, session_factory, monkeypatch, with_day, zone
+):
+    now = datetime(2026, 11, 3, 22, 30)
+    monkeypatch.setattr("qym_platform.services.live_overview.utcnow", lambda: now)
+    today = now.date() + timedelta(days=1 if zone == "Asia/Riyadh" else 0)
+    with session_factory() as db:
+        # At 22:30 UTC it is already November 4 in Riyadh.
+        db.get(LiveSource, "source").day_key_timezone = zone
         db.add(
             LiveSource(
                 id="second",
@@ -269,11 +327,10 @@ def test_read_today_uses_source_day_and_selected_source(
             )
         )
         db.flush()
-        today = NOW.date() + timedelta(days=1)
         for source_id, day, seen, evaluated, failed, count in [
-            ("source", today, 12, 9, 2, 3),
-            ("source", NOW.date(), 100, 90, 10, 2),
-            ("second", today, 200, 180, 20, 4),
+            ("source", NOW.date(), 12, 9, 2, 3),
+            ("source", NOW.date() + timedelta(days=1), 100, 90, 10, 2),
+            ("second", NOW.date(), 200, 180, 20, 4),
         ]:
             if with_day or day != today or source_id != "source":
                 db.add(
@@ -297,12 +354,28 @@ def test_read_today_uses_source_day_and_selected_source(
                     )
                 )
         db.commit()
-    assert read(client, source="worker")["today"] == {
-        "day": "2026-11-04",
-        "turns_seen": 12 if with_day else 0,
-        "evaluated": 9 if with_day else 0,
-        "failed": 2 if with_day else 0,
-        "in_qym": 3,
+    body = read(client, source="worker")
+    assert body["status"]["day_key_timezone"] == (
+        "Asia/Riyadh" if zone == "Asia/Riyadh" else "UTC"
+    )
+    seen, evaluated, failed, count = (
+        (100, 90, 10, 2) if zone == "Asia/Riyadh" else (12, 9, 2, 3)
+    )
+    assert body["today"] == {
+        "day": today.isoformat(),
+        "turns_seen": seen if with_day else 0,
+        "evaluated": evaluated if with_day else 0,
+        "failed": failed if with_day else 0,
+        "in_qym": count,
+    }
+    second = read(client, source="second")
+    assert second["status"]["day_key_timezone"] == "UTC"
+    assert second["today"] == {
+        "day": "2026-11-03",
+        "turns_seen": 200,
+        "evaluated": 180,
+        "failed": 20,
+        "in_qym": 4,
     }
 
 
@@ -509,6 +582,13 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
         ({"until_day": "2026-02-01"}, "At most 31 days per job"),
         ({"limit": 0}, "limit must be 1 to 2000"),
         ({"limit": 2001}, "limit must be 1 to 2000"),
+        ({"redo": ["failed", "failed"]}, "redo must not contain duplicate labels"),
+        ({"redo": ["all", "all"]}, "redo must not contain duplicate labels"),
+        ({"redo": ["all", "failed"]}, "redo all must not be combined with others"),
+        (
+            {"redo": ["inconclusive", "all"]},
+            "redo all must not be combined with others",
+        ),
         (
             {"since_day": "2026-11-05", "until_day": "2026-11-05"},
             "until_day in the future",
@@ -523,6 +603,7 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
     assert response.status_code == 201, response.text
     assert response.json()["status"] == "queued"
     assert response.json()["requested_by"] == "Owner"
+    assert response.json()["params"]["redo"] == ["failed"]
     duplicate = client.post(BASE + "/jobs", headers=ADMIN, json=JOB)
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"] == "a backfill job is already queued or running"
@@ -531,12 +612,11 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
         db.get(LiveJob, response.json()["id"]).status = "running"
         db.commit()
     assert client.post(BASE + "/jobs", headers=ADMIN, json=JOB).status_code == 409
-    assert (
-        client.post(
-            BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": "backfill_preview"}
-        ).status_code
-        == 201
+    preview = client.post(
+        BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": "backfill_preview"}
     )
+    assert preview.status_code == 201, preview.text
+    assert preview.json()["params"]["redo"] == ["failed"]
     with session_factory() as db:
         db.add(
             LiveSource(
@@ -560,6 +640,33 @@ def test_jobs_create_validations(client, session_factory, monkeypatch):
         client.post(BASE + "/jobs", headers=ADMIN, json=JOB).json()["detail"]
         == "At most 2 days per job"
     )
+
+
+@pytest.mark.parametrize("kind", ["backfill", "backfill_preview"])
+@pytest.mark.parametrize(
+    "redo",
+    [None, [], ["failed"], ["inconclusive"], ["failed", "inconclusive"], ["all"]],
+)
+def test_jobs_redo(client, session_factory, kind, redo):
+    response = client.post(
+        BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": kind, "redo": redo}
+    )
+    assert response.status_code == 201, response.text
+    expected = ["failed"] if redo is None else redo
+    assert response.json()["params"]["redo"] == expected
+    assert read(client)["jobs"][0]["params"]["redo"] == expected
+    assert read(client)["jobs"][0]["params"]["limit"] == JOB["limit"]
+    with session_factory() as db:
+        assert db.get(LiveJob, response.json()["id"]).params["redo"] == expected
+
+
+@pytest.mark.parametrize("kind", ["backfill", "backfill_preview"])
+def test_jobs_redo_unknown_label(client, kind):
+    response = client.post(
+        BASE + "/jobs", headers=ADMIN, json={**JOB, "kind": kind, "redo": ["success"]}
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_error"
 
 
 @pytest.mark.parametrize("stale_precheck", [False, True])
@@ -608,9 +715,10 @@ def test_jobs_duplicate_insert_is_409(
             assert db.query(LiveJob).count() == 1
 
 
-def test_jobs_unknown_timezone_is_422(client, session_factory):
+@pytest.mark.parametrize("zone", ["UTC+03:00", "Asia"])
+def test_jobs_unknown_timezone_is_422(client, session_factory, zone):
     with session_factory() as db:
-        db.get(LiveSource, "source").day_key_timezone = "UTC+03:00"
+        db.get(LiveSource, "source").day_key_timezone = zone
         db.commit()
     response = client.post(BASE + "/jobs", headers=ADMIN, json=JOB)
     assert response.status_code == 422, response.text
@@ -632,6 +740,7 @@ def test_jobs_params_are_utc_bounds_of_the_source_timezone(client, session_facto
         "since_day": "2026-11-04",
         "until_day": "2026-11-04",
         "limit": 2000,
+        "redo": ["failed"],
         "since": "2026-11-03T21:00:00Z",
         "until": "2026-11-04T20:59:59.999999Z",
     }
@@ -719,6 +828,9 @@ def test_events_list_filters_and_limit(client, session_factory):
     response = client.get(BASE + "/events", headers=ADMIN)
     assert response.status_code == 200
     rows = response.json()["events"]
+    assert response.json()["total"] == 204
+    assert response.json()["page"] == 1
+    assert response.json()["limit"] == 50
     assert len(rows) == 50
     assert rows[0]["message"] == "Event 203"
     assert all(row["details"] == {"attempt": 203 - i} for i, row in enumerate(rows))
@@ -734,14 +846,16 @@ def test_events_list_filters_and_limit(client, session_factory):
         "last_at",
     }
     assert rows[0]["first_at"] == "2026-11-03T22:00:00Z"
-    for filters in (
-        {"component": "database"},
-        {"level": "error"},
-        {"component": "database", "level": "error"},
+    for filters, total in (
+        ({"component": "database"}, 136),
+        ({"level": "error"}, 102),
+        ({"component": "database", "level": "error"}, 68),
     ):
-        rows = client.get(
+        body = client.get(
             BASE + "/events", headers=ADMIN, params={**filters, "limit": 200}
-        ).json()["events"]
+        ).json()
+        assert body["total"] == total
+        rows = body["events"]
         assert rows
         assert all(all(row[k] == v for k, v in filters.items()) for row in rows)
         assert [r["last_at"] for r in rows] == sorted(
@@ -752,9 +866,69 @@ def test_events_list_filters_and_limit(client, session_factory):
         == 200
     )
     assert client.get(BASE + "/events?limit=201", headers=ADMIN).status_code == 422
-    assert client.get(BASE + "/events?component=missing", headers=ADMIN).json() == {
-        "events": []
+    assert client.get(BASE + "/events?page=0", headers=ADMIN).status_code == 422
+    page = client.get(BASE + "/events?limit=10&page=2", headers=ADMIN).json()
+    assert page["total"] == 204
+    assert page["page"] == 2
+    assert page["limit"] == 10
+    assert [row["message"] for row in page["events"]] == [
+        f"Event {i}" for i in range(193, 183, -1)
+    ]
+    assert client.get(BASE + "/events?limit=10&page=22", headers=ADMIN).json() == {
+        "events": [],
+        "total": 204,
+        "page": 22,
+        "limit": 10,
     }
+    assert client.get(BASE + "/events?component=missing", headers=ADMIN).json() == {
+        "events": [],
+        "total": 0,
+        "page": 1,
+        "limit": 50,
+    }
+
+
+def test_events_filter_multiple_components_and_levels_before_paging(
+    client, session_factory
+):
+    with session_factory() as db:
+        for i in range(30):
+            db.add(
+                LiveWorkerEvent(
+                    source_id="source",
+                    level=["error", "warning", "info"][i % 3],
+                    component=["gateway", "dataiku", "judge"][i % 5 % 3],
+                    code="connect",
+                    message=f"Event {i}",
+                    details={},
+                    fingerprint=str(i),
+                    count=1,
+                    first_at=NOW,
+                    last_at=NOW + timedelta(seconds=i),
+                )
+            )
+        db.commit()
+    filters = {"component": ["gateway", "dataiku"], "level": ["error", "warning"]}
+    expected = [i for i in range(29, -1, -1) if i % 3 != 2 and i % 5 % 3 != 2]
+    for page in (1, 2, 3):
+        response = client.get(
+            BASE + "/events",
+            headers=ADMIN,
+            params={**filters, "limit": 10, "page": page},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == len(expected)
+        assert body["page"] == page
+        assert body["limit"] == 10
+        assert [row["message"] for row in body["events"]] == [
+            f"Event {i}" for i in expected[(page - 1) * 10 : page * 10]
+        ]
+        assert all(
+            row["component"] in filters["component"]
+            and row["level"] in filters["level"]
+            for row in body["events"]
+        )
 
 
 def seed_member(db, role, project_id="p"):
@@ -800,3 +974,125 @@ def test_other_project_member_is_404(client, session_factory):
     for method, path, body in [("GET", "", None), ("GET", "/events", None), *WRITES]:
         response = client.request(method, BASE + path, headers=headers, json=body)
         assert response.status_code == 404, response.text
+
+
+@pytest.mark.parametrize(
+    "heartbeat_age, job_age, cancelled",
+    [
+        (120, 1, True),
+        (121, 1, True),
+        (119, 600, False),
+        (0, 600, False),
+        (None, 120, True),
+        (None, 119, False),
+    ],
+)
+def test_cancel_running_uses_worker_heartbeat_or_job_update(
+    client, session_factory, heartbeat_age, job_age, cancelled
+):
+    from qym_platform.services.live_jobs import JobError, report_progress
+
+    with session_factory() as db:
+        source = db.get(LiveSource, "source")
+        source.last_heartbeat_at = (
+            NOW - timedelta(seconds=heartbeat_age)
+            if heartbeat_age is not None
+            else None
+        )
+        db.add(
+            LiveJob(
+                id="stalled",
+                source_id=source.id,
+                kind="backfill",
+                status="running",
+                updated_at=NOW - timedelta(seconds=job_age),
+            )
+        )
+        db.commit()
+    response = client.post(BASE + "/jobs/stalled/cancel", headers=ADMIN)
+    assert response.status_code == 200, response.text
+    job = response.json()
+    assert job["cancel_requested"] is True
+    assert job["status"] == ("cancelled" if cancelled else "running")
+    assert bool(job["finished_at"]) is cancelled
+    assert job["error"] == (
+        "cancelled while the worker was not responding" if cancelled else None
+    )
+    assert client.post(BASE + "/jobs", headers=ADMIN, json=JOB).status_code == (
+        201 if cancelled else 409
+    )
+    with session_factory() as db:
+        for status in (
+            ["running", "done", "failed", "cancelled"] if cancelled else ["running"]
+        ):
+            with pytest.raises(JobError) as exc:
+                report_progress(
+                    db, db.get(LiveSource, "source"), "stalled", status, {}, None, NOW
+                )
+            assert exc.value.status == 409
+
+
+@pytest.mark.parametrize("redo", [["failed", "failed"], ["all", "failed"]])
+def test_preview_rejects_invalid_redo_combinations(client, redo):
+    response = client.post(
+        BASE + "/jobs",
+        headers=ADMIN,
+        json={**JOB, "kind": "backfill_preview", "redo": redo},
+    )
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("with_day", [False, True])
+def test_read_today_uses_source_day_and_selected_source(
+    client, session_factory, with_day
+):
+    with session_factory() as db:
+        # 22:00 UTC on November 3 is already November 4 in the source timezone;
+        # the strip reports the source's today, not the UTC day.
+        db.get(LiveSource, "source").day_key_timezone = "Asia/Riyadh"
+        db.add(
+            LiveSource(
+                id="second",
+                project_id="p",
+                key="second",
+                name="Second",
+                environment="test",
+                is_active=False,
+            )
+        )
+        db.flush()
+        today = NOW.date() + timedelta(days=1)
+        for source_id, day, seen, evaluated, failed, count in [
+            ("source", today, 12, 9, 2, 3),
+            ("source", NOW.date(), 100, 90, 10, 2),
+            ("second", today, 200, 180, 20, 4),
+        ]:
+            if with_day or day != today or source_id != "source":
+                db.add(
+                    LiveDay(
+                        source_id=source_id,
+                        day=day,
+                        turns_seen=seen,
+                        evaluated=evaluated,
+                        failed=failed,
+                    )
+                )
+            for i in range(count):
+                db.add(
+                    LiveTurn(
+                        source_id=source_id,
+                        day=day,
+                        turn_id=f"{day}-{i}",
+                        turn_at=NOW,
+                        status="completed",
+                        question="Question",
+                    )
+                )
+        db.commit()
+    assert read(client, source="worker")["today"] == {
+        "day": "2026-11-04",
+        "turns_seen": 12 if with_day else 0,
+        "evaluated": 9 if with_day else 0,
+        "failed": 2 if with_day else 0,
+        "in_qym": 3,
+    }

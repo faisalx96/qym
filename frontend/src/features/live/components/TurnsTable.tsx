@@ -10,6 +10,7 @@ import { PassFailTag } from './turn/Evidence';
 import styles from '../turns.module.css';
 
 interface TurnsTableProps {
+  zone?: string;
   slug: string;
   source: string;
   filters: LiveFilters;
@@ -116,7 +117,9 @@ export function TurnsTable({ slug, source, filters, data, specs, refreshing }: T
         spec.score_type === 'boolean' ? (
           <PassFailTag
             value={
-              row.scores[spec.metric_name]?.skipped ? null : (row.scores[spec.metric_name]?.score_numeric ?? null)
+              row.scores[spec.metric_name]?.skipped
+                ? null
+                : (row.scores[spec.metric_name]?.score_numeric ?? null)
             }
           />
         ) : (

@@ -7,6 +7,7 @@ import { diagnosisSpec, mixSegments } from '../lib/mix';
 import styles from '../turns.module.css';
 
 interface TurnFiltersProps {
+  zone?: string;
   filters: LiveFilters;
   facets: LiveTurnsPage['facets'] | undefined;
   specs: LiveMetricSpec[];
@@ -131,7 +132,9 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
                 searchable={false}
                 selectAll={false}
                 onlyAction={false}
-                items={[{ key: chip.key, label: chip.label, count: chip.key === 'day' ? dayCount : undefined }]}
+                items={[
+                  { key: chip.key, label: chip.label, count: chip.key === 'day' ? dayCount : undefined },
+                ]}
                 value={new Set([chip.key])}
                 onChange={(next) => {
                   if (!next.size) removeChip(chip.onRemove);
@@ -271,8 +274,12 @@ export function TurnFilters({ filters, facets, specs, dayCount }: TurnFiltersPro
                 count: facets?.services[value] ?? 0,
               })),
             ]}
-            renderItem={(item) => (item.count === undefined ? item.label : countLabel(item.label, item.count))}
-            renderValue={(item) => (item.count === undefined ? item.label : countLabel(item.label, item.count))}
+            renderItem={(item) =>
+              item.count === undefined ? item.label : countLabel(item.label, item.count)
+            }
+            renderValue={(item) =>
+              item.count === undefined ? item.label : countLabel(item.label, item.count)
+            }
             onChange={(value) => update({ service: value ? String(value) : null, service_status: null })}
           />
           <Select

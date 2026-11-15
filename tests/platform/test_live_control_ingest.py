@@ -374,6 +374,32 @@ def test_progress_monotonic_counters(client, session_factory, counter):
         assert db.get(LiveJob, "new").progress == {counter: 3}
 
 
+@pytest.mark.parametrize("counter", ["redone", "listed"])
+@pytest.mark.parametrize("terminal", ["done", "failed", "cancelled"])
+def test_old_worker_resumed_counters_keep_maximum(
+    client, session_factory, counter, terminal
+):
+    # Deployed workers can reset these counters when resuming a job.
+    assert _progress(client, progress={counter: 5}).status_code == 200
+    for progress in ({counter: 2}, {}):
+        response = _progress(client, progress=progress)
+        assert response.status_code == 200, response.text
+        assert response.json()["progress"][counter] == 5
+    response = _progress(client, status=terminal, progress={counter: 1})
+    assert response.status_code == 200, response.text
+    assert response.json()["progress"][counter] == 5
+    with session_factory() as db:
+        job = db.get(LiveJob, "new")
+        assert job.status == terminal
+        assert job.progress[counter] == 5
+
+
+@pytest.mark.parametrize("counter", ["redone", "listed"])
+@pytest.mark.parametrize("value", [-1, True, 1.5, "2", None])
+def test_progress_retained_counters_require_nonnegative_integers(client, counter, value):
+    assert _progress(client, progress={counter: value}).status_code == 422
+
+
 @pytest.mark.parametrize("terminal", ["done", "failed", "cancelled"])
 def test_progress_409_after_cancel_and_after_terminal(
     client, session_factory, terminal
@@ -404,9 +430,12 @@ def test_progress_stamps_started_and_finished(
     }
     later = NOW + timedelta(minutes=1)
     monkeypatch.setattr("qym_platform.services.live_ingest.utcnow", lambda: later)
-    assert _progress(client, progress={"evaluated": 2}).status_code == 200
+    assert _progress(client, progress={"evaluated": 2, "redone": 5}).status_code == 200
     response = _progress(
-        client, status=terminal, progress={"evaluated": 3}, error="x" * 2001
+        client,
+        status=terminal,
+        progress={"evaluated": 3, "listed": 20, "redone": 5},
+        error="x" * 2001,
     )
     assert response.status_code == 200, response.text
     with session_factory() as db:
@@ -414,7 +443,7 @@ def test_progress_stamps_started_and_finished(
         assert job.started_at == NOW
         assert job.finished_at == later
         assert job.updated_at == later
-        assert job.progress == {"evaluated": 3}
+        assert job.progress == {"evaluated": 3, "listed": 20, "redone": 5}
         assert job.error == ("x" * 2000 if terminal == "failed" else None)
 
 
@@ -445,7 +474,7 @@ def test_progress_rejects_non_finite_json(client, session_factory, progress_json
     response = client.post(
         f"{BASE}/jobs/new/progress",
         headers={**_auth_headers(), "Content-Type": "application/json"},
-        content='{"status":"running","progress":' + progress_json + '}',
+        content='{"status":"running","progress":' + progress_json + "}",
     )
     assert response.status_code == 422, response.text
     assert "progress must be finite JSON" in response.text
@@ -593,3 +622,98 @@ def test_events_invalid_component_is_422(client, changes):
     )
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"]
+
+
+NEW_PROGRESS = {
+    "resumed": 2,
+    "judged": 3,
+    "recorded": 1,
+    "incomplete": 1,
+    "fetch_failed": 1,
+    "deferred": 3,
+    "limit_reached": True,
+    "remaining": 8,
+    "would_evaluate": 4,
+    "would_redo": 2,
+    "beyond_limit": 8,
+    "waiting": "live batch",
+    "effective_until": "2026-11-03T12:00:00+03:00",
+    "rejected": {
+        "other_names": 2,
+        "no_session": 1,
+        "excluded_users": 3,
+        "other_environment": 4,
+        "bad_timestamp": 1,
+        "outside_window": 3,
+        "duplicate": 2,
+        "no_id": 1,
+    },
+    "future_key": {"unchanged": [True, None, "value"]},
+}
+
+
+def test_progress_preserves_optional_and_unknown_keys(client, session_factory):
+    response = _progress(client, progress=NEW_PROGRESS)
+    assert response.status_code == 200, response.text
+    assert response.json()["progress"] == NEW_PROGRESS
+    with session_factory() as db:
+        assert db.get(LiveJob, "new").progress == NEW_PROGRESS
+
+
+@pytest.mark.parametrize(
+    "counter",
+    [
+        "resumed",
+        "judged",
+        "recorded",
+        "incomplete",
+        "fetch_failed",
+        "deferred",
+        "remaining",
+        "would_evaluate",
+        "would_redo",
+        "beyond_limit",
+    ],
+)
+@pytest.mark.parametrize("value", [-1, True, 1.5, "2", None])
+def test_progress_optional_counters_require_nonnegative_integers(
+    client, counter, value
+):
+    assert _progress(client, progress={counter: value}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "progress",
+    [
+        {"limit_reached": 1},
+        {"limit_reached": "true"},
+        {"limit_reached": None},
+        {"waiting": 1},
+        {"waiting": None},
+        {"effective_until": 1},
+        {"effective_until": "not a date"},
+        {"effective_until": None},
+        {"rejected": []},
+        {"rejected": None},
+        *[
+            {"rejected": {key: value}}
+            for key in (
+                "other_names",
+                "no_session",
+                "excluded_users",
+                "other_environment",
+                "bad_timestamp",
+            )
+            for value in (-1, True, 1.5, "2", None)
+        ],
+    ],
+)
+def test_progress_optional_fields_validate_types(client, progress):
+    assert _progress(client, progress=progress).status_code == 422
+
+
+@pytest.mark.parametrize("value", [0, 3])
+def test_progress_deferred_accepts_zero_and_positive(client, value):
+    response = _progress(client, progress={"deferred": value})
+    assert response.status_code == 200, response.text
+    assert response.json()["progress"] == {"deferred": value}

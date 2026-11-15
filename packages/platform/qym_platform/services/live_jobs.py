@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -44,7 +44,12 @@ def report_progress(
         raise JobError(409, "job already finished")
     if status == "running" and job.cancel_requested_at is not None:
         raise JobError(409, "job cancelled")
-    for counter in ("found", "skipped_existing", "evaluated", "failed"):
+    for counter in (
+        "found",
+        "skipped_existing",
+        "evaluated",
+        "failed",
+    ):
         value = progress.get(counter, 0)
         if (
             type(value) is not int
@@ -52,6 +57,58 @@ def report_progress(
             or value < (job.progress or {}).get(counter, 0)
         ):
             raise JobError(422, "counters must not decrease")
+    # Older workers reset these on resume, including in their terminal report.
+    # Keep the high-water values without preventing the job from finishing.
+    progress = dict(progress)
+    for counter in ("redone", "listed"):
+        value = progress.get(counter, 0)
+        if type(value) is not int or value < 0:
+            raise JobError(422, f"{counter} must be a nonnegative integer")
+        if counter in progress or counter in (job.progress or {}):
+            progress[counter] = max(value, (job.progress or {}).get(counter, 0))
+    for counter in (
+        "resumed",
+        "judged",
+        "recorded",
+        "incomplete",
+        "fetch_failed",
+        "deferred",
+        "remaining",
+        "would_evaluate",
+        "would_redo",
+        "beyond_limit",
+    ):
+        if counter in progress and (
+            type(progress[counter]) is not int or progress[counter] < 0
+        ):
+            raise JobError(422, f"{counter} must be a nonnegative integer")
+    if "limit_reached" in progress and type(progress["limit_reached"]) is not bool:
+        raise JobError(422, "limit_reached must be a boolean")
+    if "waiting" in progress and not isinstance(progress["waiting"], str):
+        raise JobError(422, "waiting must be a string")
+    if "effective_until" in progress:
+        value = progress["effective_until"]
+        try:
+            if not isinstance(value, str):
+                raise ValueError
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            raise JobError(422, "effective_until must be an ISO timestamp") from None
+    if "rejected" in progress:
+        rejected = progress["rejected"]
+        if not isinstance(rejected, dict):
+            raise JobError(422, "rejected must be an object")
+        for counter in (
+            "other_names",
+            "no_session",
+            "excluded_users",
+            "other_environment",
+            "bad_timestamp",
+        ):
+            if counter in rejected and (
+                type(rejected[counter]) is not int or rejected[counter] < 0
+            ):
+                raise JobError(422, f"rejected.{counter} must be a nonnegative integer")
     now = to_storage_utc(now)
     if status == "running" and job.started_at is None:
         job.started_at = now
@@ -78,10 +135,16 @@ def create_job(
     settings: PlatformSettings,
     actor_user_id: Optional[str],
     now: datetime,
+    redo: Optional[list[str]] = None,
 ) -> LiveJob:
     """Queue one inclusive calendar-day range per source and job kind."""
     if kind not in ("backfill_preview", "backfill"):
         raise JobError(422, "invalid job kind")
+    if redo is not None:
+        if len(redo) != len(set(redo)):
+            raise JobError(422, "redo must not contain duplicate labels")
+        if "all" in redo and len(redo) > 1:
+            raise JobError(422, "redo all must not be combined with others")
     if until_day < since_day:
         raise JobError(422, "until_day before since_day")
     if (until_day - since_day).days + 1 > settings.live_job_max_days:
@@ -90,7 +153,7 @@ def create_job(
         raise JobError(422, f"limit must be 1 to {settings.live_job_max_limit}")
     try:
         zone = ZoneInfo(source.day_key_timezone)
-    except (ZoneInfoNotFoundError, ValueError):
+    except (ZoneInfoNotFoundError, ValueError, OSError):
         raise JobError(422, "source timezone not recognised") from None
     if until_day > ensure_utc(now).astimezone(zone).date():
         raise JobError(422, "until_day in the future")
@@ -118,6 +181,7 @@ def create_job(
             "since": to_api_timestamp(datetime.combine(since_day, time.min, zone)),
             "until": to_api_timestamp(datetime.combine(until_day, time.max, zone)),
             "limit": limit,
+            "redo": ["failed"] if redo is None else list(redo),
         },
         status="queued",
         requested_by_user_id=actor_user_id,
@@ -152,6 +216,13 @@ def cancel_job(db: Session, source: LiveSource, job_id: str, now: datetime) -> L
         job.finished_at = now
     else:
         job.cancel_requested_at = now
+        # Heartbeats use the server receipt time; last_poll_at is the worker's
+        # live polling clock and can stop advancing while it is alive but paused.
+        last_seen = to_storage_utc(source.last_heartbeat_at or job.updated_at)
+        if now - last_seen >= timedelta(seconds=120):
+            job.status = "cancelled"
+            job.finished_at = now
+            job.error = "cancelled while the worker was not responding"
     job.updated_at = now
     flag_modified(job, "updated_at")
     return job

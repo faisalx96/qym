@@ -176,6 +176,7 @@ test('date range preview, run, progress and cancellation use the worker jobs API
     since_day: day,
     until_day: day,
     limit: 200,
+    redo: ['failed'],
   });
   const preview = (await previewResponse.json()) as WorkerJob;
   expect(preview.kind).toBe('backfill_preview');
@@ -183,7 +184,7 @@ test('date range preview, run, progress and cancellation use the worker jobs API
     status: 'done',
     progress: { found: 12, skipped_existing: 10 },
   });
-  await expect(dialog.getByRole('status')).toHaveText('12 chats, 10 already evaluated, 2 to evaluate');
+  await expect(dialog.getByRole('status')).toHaveText('12 turns, 10 already evaluated, 2 to evaluate');
   const queued = page.waitForResponse(
     (response) => response.request().method() === 'POST' && response.url().endsWith(apiPath('/jobs')),
   );

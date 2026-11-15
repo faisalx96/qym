@@ -52,3 +52,16 @@ describe('staleText', () => {
     expect(staleText(status, new Date('2026-11-01T08:59:58Z'))).toBe('last poll just now');
   });
 });
+
+it('formats naive UTC timestamps on the viewer clock regardless of source zone', () => {
+  const now = new Date('2026-11-09T22:30:00Z');
+  expect(statusTime('2026-11-09T21:15:00', now)).toBe(formatTableDate('2026-11-09T21:15:00', now));
+  expect(statusTime('2026-11-09T20:15:00Z', now)).toBe(formatTableDate('2026-11-09T20:15:00Z', now));
+  expect(statusTime('2026-11-09T21:15:00', now)).toBe(formatTableDate('2026-11-09T21:15:00', now));
+  expect(
+    staleText(
+      { ...status, stale: true, day_key_timezone: 'Asia/Riyadh', last_heartbeat_at: '2026-11-09T21:15:00' },
+      now,
+    ),
+  ).toBe(`Worker not heard from since ${formatTableDate('2026-11-09T21:15:00', now)}`);
+});

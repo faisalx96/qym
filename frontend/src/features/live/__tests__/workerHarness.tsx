@@ -30,7 +30,11 @@ export function setup(
       );
     }
     if (url.pathname.endsWith('/events')) return response({ events: liveWorkerEvents });
-    if (url.pathname.endsWith('/worker')) return response(current);
+    if (url.pathname.endsWith('/worker'))
+      return response({
+        ...current,
+        jobs: current.jobs.slice(0, Number(url.searchParams.get('jobs_limit') ?? 20)),
+      });
     return response({ sources: [liveOverview.status], default_source: source });
   });
   vi.stubGlobal('fetch', fetch);

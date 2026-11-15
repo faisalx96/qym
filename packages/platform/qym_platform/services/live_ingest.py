@@ -84,6 +84,10 @@ def upsert_source(
         source = LiveSource(project_id=project_id, key=key)
         db.add(source)
     for name, value in body.model_dump().items():
+        if name == "day_key_timezone" and value is None:
+            if not created:
+                continue
+            value = "UTC"
         if (
             name == "worker"
             and isinstance(source.worker, dict)

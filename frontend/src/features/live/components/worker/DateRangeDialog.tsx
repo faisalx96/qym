@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { validateDateRange, type LiveJob } from '@/api/liveWorker';
+import { jobPreviewSentence, validateDateRange, type CreateWorkerJob, type LiveJob } from '@/api/liveWorker';
 import { errorSentence } from '@/lib/http';
-import { Button, Dialog, ErrorState, NumberField, Text, TextField, useToast } from '@/ui';
+import { Button, Checkbox, Dialog, ErrorState, NumberField, Text, TextField, useToast } from '@/ui';
 import type { WorkerCallbacks } from './types';
+import { zoneToday } from '../../lib/zone';
 import styles from '../../worker.module.css';
 
 export function DateRangeDialog({
@@ -11,7 +12,7 @@ export function DateRangeDialog({
   jobs,
   onCreateJob,
   busy,
-  today = new Date().toISOString().slice(0, 10),
+  today = zoneToday(),
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,13 +23,19 @@ export function DateRangeDialog({
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [limit, setLimit] = useState(200);
+  const [redoInconclusive, setRedoInconclusive] = useState(false);
   const [validation, setValidation] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [preview, setPreview] = useState<LiveJob | null>(null);
   const toast = useToast();
   const latest = jobs.find((job) => job.id === preview?.id) ?? preview;
+  const redo: CreateWorkerJob['redo'] = redoInconclusive ? ['failed', 'inconclusive'] : ['failed'];
   const currentPreview =
-    latest?.params.since_day === since && latest.params.until_day === until && latest.params.limit === limit
+    latest?.params.since_day === since &&
+    latest.params.until_day === until &&
+    latest.params.limit === limit &&
+    latest.params.redo?.length === redo.length &&
+    redo.every((label) => latest.params.redo?.includes(label))
       ? latest
       : null;
   async function submit(kind: LiveJob['kind']) {
@@ -37,7 +44,13 @@ export function DateRangeDialog({
     setError(null);
     if (message) return;
     try {
-      const job = await onCreateJob({ kind, since_day: since, until_day: until, limit });
+      const job = await onCreateJob({
+        kind,
+        since_day: since,
+        until_day: until,
+        limit,
+        redo,
+      });
       if (kind === 'backfill_preview') setPreview(job);
       else {
         onOpenChange(false);
@@ -71,7 +84,15 @@ export function DateRangeDialog({
       <div className={styles.stack}>
         <TextField label="From" type="date" value={since} onChange={setSince} />
         <TextField label="To" type="date" value={until} onChange={setUntil} />
-        <NumberField label="Limit" value={limit} onChange={setLimit} help="1 to 2,000" />
+        <NumberField
+          label="Limit"
+          value={limit}
+          onChange={setLimit}
+          help="The job stops after this many turns. Preview shows how many are waiting."
+        />
+        <Checkbox isSelected={redoInconclusive} onChange={setRedoInconclusive}>
+          Also redo turns labelled Inconclusive
+        </Checkbox>
         {validation ? (
           <Text role="alert" tone="danger">
             {validation}
@@ -82,14 +103,18 @@ export function DateRangeDialog({
         ) : null}
         {currentPreview?.status === 'done' ? (
           <Text role="status">
-            {currentPreview.progress.found ?? 0} chats, {currentPreview.progress.skipped_existing ?? 0}{' '}
-            already evaluated,{' '}
-            {(currentPreview.progress.found ?? 0) - (currentPreview.progress.skipped_existing ?? 0)} to
-            evaluate
+            {jobPreviewSentence(currentPreview)}
+            {typeof currentPreview.progress.listed === 'number'
+              ? ` (${currentPreview.progress.listed} traces listed)`
+              : ''}
           </Text>
         ) : null}
         {currentPreview && (currentPreview.status === 'queued' || currentPreview.status === 'running') ? (
-          <Text role="status">Preview {currentPreview.status}</Text>
+          <Text role="status">
+            {currentPreview.progress.waiting?.trim()
+              ? `Waiting: ${currentPreview.progress.waiting}`
+              : `Preview ${currentPreview.status}`}
+          </Text>
         ) : null}
         {currentPreview?.status === 'failed' ? (
           <ErrorState

@@ -18,6 +18,7 @@ import {
   ErrorState,
   LinkButton,
   MultiSelect,
+  Pagination,
   Skeleton,
   StateTag,
   Tag,
@@ -34,6 +35,11 @@ const componentLabels: Record<string, string> = {
   qym_push: 'Delivery to qym',
   turn: 'Turns',
   job: 'Jobs',
+  poller: 'Polling',
+  langfuse: 'Langfuse',
+  gateway: 'Gateway',
+  renderer: 'Charts',
+  config: 'Worker environment',
 };
 
 /** A worker component key as its label; an unknown key reads as plain words (X18). */
@@ -74,11 +80,14 @@ function FailedChecks({ event, path }: { event: LiveWorkerEvent; path: string })
   );
 }
 
+export const PROBLEMS_PAGE_SIZE = 10;
+
 export interface ProblemsProps {
   source: string;
   status?: LiveSourceInfo;
   read: LiveWorkerRead;
   events: LiveWorkerEvent[];
+  eventsTotal?: number;
   eventsFilters: WorkerEventsFilters;
   onEventsFilters: (filters: WorkerEventsFilters) => void;
   eventsPending?: boolean;
@@ -90,6 +99,7 @@ export function ProblemsBlock({
   status,
   read,
   events,
+  eventsTotal,
   eventsFilters,
   onEventsFilters,
   eventsPending,
@@ -101,13 +111,18 @@ export function ProblemsBlock({
   const [levelKeys, setLevelKeys] = useState<Set<Key>>(new Set());
   function onComponents(keys: Set<Key>) {
     setComponentKeys(keys);
-    onEventsFilters({ ...eventsFilters, component: keys.size === 1 ? String([...keys][0]) : undefined });
+    onEventsFilters({
+      ...eventsFilters,
+      page: 1,
+      component: keys.size ? [...keys].map(String) : undefined,
+    });
   }
   function onLevels(keys: Set<Key>) {
     setLevelKeys(keys);
     onEventsFilters({
       ...eventsFilters,
-      level: keys.size === 1 ? (String([...keys][0]) as 'error' | 'warning') : undefined,
+      page: 1,
+      level: keys.size ? ([...keys].map(String) as ('error' | 'warning')[]) : undefined,
     });
   }
   const components = [
@@ -117,13 +132,7 @@ export function ProblemsBlock({
       ...[...componentKeys].map(String),
     ]),
   ];
-  const rows = events
-    .filter(
-      (event) =>
-        (componentKeys.size === 0 || componentKeys.has(event.component)) &&
-        (levelKeys.size === 0 || levelKeys.has(event.level)),
-    )
-    .sort((a, b) => b.last_at.localeCompare(a.last_at));
+  const rows = [...events].sort((a, b) => b.last_at.localeCompare(a.last_at));
   const sourceStatus = status ?? read.status;
   const worker = sourceStatus.worker;
   const workerVersion = typeof worker?.worker_version === 'string' ? worker.worker_version : undefined;
@@ -240,7 +249,7 @@ export function ProblemsBlock({
           onClear={() => {
             setComponentKeys(new Set());
             setLevelKeys(new Set());
-            onEventsFilters({ ...eventsFilters, component: undefined, level: undefined });
+            onEventsFilters({ ...eventsFilters, component: undefined, level: undefined, page: 1 });
           }}
         />
       </div>
@@ -267,6 +276,15 @@ export function ProblemsBlock({
       ) : (
         <EmptyState title="No problems reported by the worker" />
       )}
+      {eventsTotal !== undefined && eventsTotal > PROBLEMS_PAGE_SIZE ? (
+        <Pagination
+          total={eventsTotal}
+          page={eventsFilters.page ?? 1}
+          pageSize={PROBLEMS_PAGE_SIZE}
+          noun="problems"
+          onPageChange={(page) => onEventsFilters({ ...eventsFilters, page })}
+        />
+      ) : null}
     </WorkerBlock>
   );
 }

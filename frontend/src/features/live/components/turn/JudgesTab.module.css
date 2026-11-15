@@ -1,0 +1,85 @@
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+.judge {
+  grid-row: span var(--judge-rows);
+}
+
+/* Card owns the only frame. Its body passes the shared tracks to each facet. */
+.judge,
+.judge > div {
+  display: grid;
+  grid-template-rows: subgrid;
+  min-inline-size: 0;
+}
+
+.judge > div {
+  grid-row: 1 / -1;
+}
+
+.identity,
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.facet {
+  display: grid;
+  align-content: start;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.facetBody,
+.facts {
+  display: grid;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.facts,
+.statements {
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+}
+
+.statements {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.statements > li::marker {
+  font-family: var(--font-mono);
+}
+
+.facet[data-empty='true'] {
+  border: 0;
+}
+
+@container (width < 900px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .judge,
+  .judge > div {
+    grid-template-rows: none;
+    grid-row: auto;
+    gap: var(--space-md);
+  }
+
+  .facet[data-empty='true'] {
+    display: none;
+  }
+}

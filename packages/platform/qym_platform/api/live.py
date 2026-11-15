@@ -45,6 +45,7 @@ from qym_platform.services import (
     live_turns,
     live_worker_settings,
 )
+from qym_platform.services.live_days import source_today
 from qym_platform.settings import PlatformSettings
 
 logger = get_logger(__name__)
@@ -274,6 +275,7 @@ class WorkerJobBody(BaseModel):
     since_day: date
     until_day: date
     limit: int
+    redo: Optional[list[Literal["failed", "inconclusive", "all"]]] = None
 
 
 def _worker_project(db: Session, principal: Principal, project_slug: str) -> Project:
@@ -390,6 +392,7 @@ def _settings_error(exc: live_worker_settings.SettingsError) -> NoReturn:
 
 @live_router.get("/api/projects/{project_slug}/live/worker")
 def project_live_worker(
+    jobs_limit: int = Query(default=20, ge=1, le=200),
     selected: LiveSource = Depends(_worker_source),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -398,7 +401,7 @@ def project_live_worker(
         db.query(LiveJob)
         .filter_by(source_id=selected.id)
         .order_by(LiveJob.requested_at.desc(), LiveJob.id.desc())
-        .limit(20)
+        .limit(jobs_limit)
         .all()
     )
     keys = (
@@ -435,7 +438,7 @@ def project_live_worker(
     key = next((key for key in keys if key.id == selected.worker_key_id), None)
     now = live_overview.utcnow()
     status = live_overview.source_status(selected, PlatformSettings(), now)
-    today = live_overview.source_today(selected, now)
+    today = source_today(selected, now)
     day = db.query(LiveDay).filter_by(source_id=selected.id, day=today).first()
     in_qym = (
         db.query(func.count(LiveTurn.id))
@@ -626,6 +629,7 @@ def project_live_worker_job(
             PlatformSettings(),
             principal.user.id,
             live_overview.utcnow(),
+            redo=body.redo,
         )
     except live_jobs.JobError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
@@ -666,18 +670,21 @@ def project_live_worker_cancel(
 @live_router.get("/api/projects/{project_slug}/live/worker/events")
 def project_live_worker_events(
     selected: LiveSource = Depends(_worker_source),
-    component: Optional[str] = Query(default=None),
-    level: Optional[str] = Query(default=None),
+    component: Optional[list[str]] = Query(default=None),
+    level: Optional[list[str]] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
 ) -> dict:
     query = db.query(LiveWorkerEvent).filter_by(source_id=selected.id)
     if component is not None:
-        query = query.filter_by(component=component)
+        query = query.filter(LiveWorkerEvent.component.in_(component))
     if level is not None:
-        query = query.filter_by(level=level)
+        query = query.filter(LiveWorkerEvent.level.in_(level))
+    total = query.count()
     rows = (
         query.order_by(LiveWorkerEvent.last_at.desc(), LiveWorkerEvent.id.desc())
+        .offset((page - 1) * limit)
         .limit(limit)
         .all()
     )
@@ -695,5 +702,8 @@ def project_live_worker_events(
                 "last_at": to_api_timestamp(row.last_at),
             }
             for row in rows
-        ]
+        ],
+        "total": total,
+        "page": page,
+        "limit": limit,
     }

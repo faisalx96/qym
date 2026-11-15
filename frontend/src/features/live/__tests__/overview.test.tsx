@@ -230,7 +230,32 @@ describe('overview blocks', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
     expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Today · Nov 1, 2026' }));
-    expect(screen.getByRole('button', { name: 'Today · Nov 1, 2026' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Today · Nov 1, 2026' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
     expect(screen.getByRole('group', { name: 'Day' })).toBeInTheDocument();
   });
+});
+
+it('navigates and clamps to Riyadh today with main day labels', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-11-09T22:30:00Z'));
+  function Switcher() {
+    const location = useLocation();
+    return <DaySwitcher day={new URLSearchParams(location.search).get('day')!} zone="Asia/Riyadh" />;
+  }
+  render(
+    <MemoryRouter initialEntries={['?day=2026-11-09']}>
+      <Switcher />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
+  expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Today · Nov 10, 2026' }));
+  expect(screen.getByRole('group', { name: 'Day' })).toBeVisible();
+  const dayInput = screen.getByRole('spinbutton', { name: /day,/i });
+  fireEvent.keyDown(dayInput, { key: 'ArrowUp' });
+  expect(dayInput).toHaveAttribute('aria-valuenow', '10');
 });

@@ -36,11 +36,7 @@ export function StatusLine({
   const lastTurn = status.last_turn_at ? statusTime(status.last_turn_at, now) : '—';
   const workerState = control ? workerStateTag(control.state, control.settings_version_applied) : null;
   return (
-    <Card
-      compact
-      data-live-block="status"
-      data-live-stale={stale ? 'true' : 'false'}
-    >
+    <Card compact data-live-block="status" data-live-stale={stale ? 'true' : 'false'}>
       <div className={styles.status} data-stale={stale ? '' : undefined}>
         {/* cv5 Y17: a stale source says "Stale." once, in the notice above this card (it carries the detail); the card
             shows no second Stale tag */}

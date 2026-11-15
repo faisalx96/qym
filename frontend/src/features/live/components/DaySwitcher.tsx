@@ -2,9 +2,18 @@ import { useState } from 'react';
 import { useSearchParamsState } from '@/lib/url-state';
 import { Button, DateTimeField, IconButton } from '@/ui';
 import { dayLabel, isToday, shiftDay } from '../lib/day';
+import { zoneToday } from '../lib/zone';
 import styles from '../live.module.css';
 
-export function DaySwitcher({ day, today }: { day: string; today: string }) {
+export function DaySwitcher({
+  day,
+  zone,
+  today = zoneToday(zone),
+}: {
+  day: string;
+  today?: string;
+  zone?: string;
+}) {
   const { replaceUrlQuery } = useSearchParamsState();
   const [open, setOpen] = useState(false);
   const setDay = (value: string) => {
