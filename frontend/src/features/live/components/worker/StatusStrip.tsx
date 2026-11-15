@@ -14,7 +14,8 @@ export function StatusStrip({ read }: { read: LiveWorkerRead }) {
   const stateTag = workerStateTag(state, state !== 'waiting' ? version : null);
   const poll = read.status.last_poll_at ?? read.status.last_heartbeat_at;
   const interval = control?.running?.evaluation?.poll_interval_s;
-  const job = control?.job;
+  // A report with only a waiting reason (no id) says a queued job is blocked; nothing is running.
+  const job = control?.job?.id ? control.job : null;
   const currentJob = job ? read.jobs.find((item) => item.id === job.id) : undefined;
   const evaluated = typeof job?.progress?.evaluated === 'number' ? job.progress.evaluated : 0;
   const found = typeof job?.progress?.found === 'number' ? job.progress.found : 0;
