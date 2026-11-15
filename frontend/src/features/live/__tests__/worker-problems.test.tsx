@@ -319,7 +319,8 @@ function Problems({ events = liveWorkerEvents }: { events?: LiveWorkerEvent[] })
     </MemoryRouter>
   );
 }
-it('renders grouped counts, filters by component and level, and can clear filters', async () => {
+// The server applies the filters, so each change below is a new request.
+function filteredProblems() {
   const { container } = paginatedProblems(6, (params) => {
     const components = params.getAll('component');
     const levels = params.getAll('level');
@@ -330,7 +331,10 @@ it('renders grouped counts, filters by component and level, and can clear filter
     );
     return { events, total: events.length, page: 1, limit: 10 };
   });
-  const rows = () => container.querySelectorAll('[data-worker-event]');
+  return () => container.querySelectorAll('[data-worker-event]');
+}
+it('renders grouped counts, filters by component and level, and can clear filters', async () => {
+  const rows = filteredProblems();
   await waitFor(() => expect(rows()).toHaveLength(6));
   expect(screen.getByText('×14')).toBeVisible();
   expect(screen.getAllByText('in 12 min')[0]).toBeVisible();
@@ -346,6 +350,11 @@ it('renders grouped counts, filters by component and level, and can clear filter
   await user.click(screen.getByRole('button', { name: 'Clear 2 filters' }));
   await waitFor(() => expect(rows()).toHaveLength(6));
   expect(screen.queryByTestId('filters-clear')).toBeNull();
+});
+it('shows the empty state for a filter with no problems and clears it', async () => {
+  const rows = filteredProblems();
+  await waitFor(() => expect(rows()).toHaveLength(6));
+  const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Component filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Settings' }));
   await user.keyboard('{Escape}');
