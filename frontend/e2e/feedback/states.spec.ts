@@ -11,7 +11,9 @@ test.beforeAll(async ({ request }) => {
   seedFeedback(0);
 });
 
-test('QE-125: the list loading frame is as tall as the loaded table at three widths (0 ± 1 px)', async ({ page }) => {
+test('QE-125: the list loading frame is as tall as the loaded table at three widths (0 ± 1 px)', async ({
+  page,
+}) => {
   for (const w of WIDTHS) {
     await setViewport(page, w);
     await gotoApp(page, '/feedback');
@@ -42,7 +44,9 @@ test('QE-126: a failed list is an error with Retry, never an empty list', async 
   await shot(page, 'list-error', 1440);
 });
 
-test('QE-127: filtered to nothing says so; QE-136 is covered by the platform rate-limit test', async ({ page }) => {
+test('QE-127: filtered to nothing says so; QE-136 is covered by the platform rate-limit test', async ({
+  page,
+}) => {
   await setViewport(page, 1440);
   await gotoApp(page, '/feedback?q=zzzz-nothing&sort=priority:desc');
   await expect(page.getByText('No requests match.')).toBeVisible();
@@ -52,9 +56,18 @@ test('QE-127: filtered to nothing says so; QE-136 is covered by the platform rat
   await expect(page.getByRole('link', { name: 'FB-0001' }).first()).toBeVisible();
 });
 
-test('QE-125: the chat loading frame is as tall as the loaded chat at three widths (0 ± 1 px)', async ({ page, request }) => {
+test('QE-125: the chat loading frame is as tall as the loaded chat at three widths (0 ± 1 px)', async ({
+  page,
+  request,
+}) => {
   test.setTimeout(120_000);
-  const id = ((await (await request.post('/v1/feedback', { data: { subject: 'platform', message: 'A draft for the loading frame.' } })).json()) as { id: string }).id;
+  const id = (
+    (await (
+      await request.post('/v1/feedback', {
+        data: { subject: 'platform', message: 'A draft for the loading frame.' },
+      })
+    ).json()) as { id: string }
+  ).id;
   await request.post(`/v1/feedback/${id}/turn`, { headers: { Accept: 'application/json' } });
   for (const w of WIDTHS) {
     await setViewport(page, w);
@@ -79,11 +92,16 @@ test('QE-129: the message limit callout and a forced proposal', async ({ page, r
   await request.put('/v1/admin/feedback-agent', { data: { max_user_messages: 6 } });
   await configureAgent(request, 'forced_propose');
   try {
-    const res = await request.post('/v1/feedback', { data: { subject: 'platform', message: 'Message 1 of 6.' } });
+    const res = await request.post('/v1/feedback', {
+      data: { subject: 'platform', message: 'Message 1 of 6.' },
+    });
     const id = ((await res.json()) as { id: string }).id;
     await request.post(`/v1/feedback/${id}/turn`, { headers: { Accept: 'application/json' } });
     for (let i = 2; i <= 5; i += 1)
-      await request.post(`/v1/feedback/${id}/messages`, { data: { content: `Message ${i} of 6.` }, headers: { Accept: 'application/json' } });
+      await request.post(`/v1/feedback/${id}/messages`, {
+        data: { content: `Message ${i} of 6.` },
+        headers: { Accept: 'application/json' },
+      });
     await setViewport(page, 1440);
     await gotoApp(page, `/feedback/${id}`);
     await expect(page.getByTestId('chat-log')).toContainText('Message 5 of 6.');
@@ -102,11 +120,17 @@ test('QE-129: the message limit callout and a forced proposal', async ({ page, r
 test('QE-130: an invented request id is removed and the log says so', async ({ page, request }) => {
   await configureAgent(request, 'invalid_request_id');
   try {
-    const res = await request.post('/v1/feedback', { data: { subject: 'platform', message: 'Invented id please.' } });
+    const res = await request.post('/v1/feedback', {
+      data: { subject: 'platform', message: 'Invented id please.' },
+    });
     const id = ((await res.json()) as { id: string }).id;
     await setViewport(page, 1440);
     await gotoApp(page, `/feedback/${id}`);
-    await expect(page.getByText('The assistant’s proposal named a request that does not exist. It was removed before you saw it.')).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByText(
+        'The assistant’s proposal named a request that does not exist. It was removed before you saw it.',
+      ),
+    ).toBeVisible({ timeout: 20_000 });
     await shot(page, 'chat-corrected', 1440);
   } finally {
     await configureAgent(request);
@@ -116,12 +140,17 @@ test('QE-130: an invented request id is removed and the log says so', async ({ p
 test('QE-54, QE-152: Arabic text renders right to left inside its block', async ({ page, request }) => {
   await configureAgent(request, 'arabic');
   try {
-    const res = await request.post('/v1/feedback', { data: { subject: 'platform', message: 'نحتاج إلى تصدير المقارنة' } });
+    const res = await request.post('/v1/feedback', {
+      data: { subject: 'platform', message: 'نحتاج إلى تصدير المقارنة' },
+    });
     const id = ((await res.json()) as { id: string }).id;
     await setViewport(page, 1440);
     await gotoApp(page, `/feedback/${id}`);
     await expect(page.getByTestId('chat-log')).toContainText('شكرًا', { timeout: 15_000 });
-    const dirs = await page.getByTestId('chat-log').locator('[data-text-mode]').evaluateAll((els) => els.map((e) => e.getAttribute('dir')));
+    const dirs = await page
+      .getByTestId('chat-log')
+      .locator('[data-text-mode]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('dir')));
     expect(dirs.every((d) => d === 'rtl')).toBe(true);
   } finally {
     await configureAgent(request);

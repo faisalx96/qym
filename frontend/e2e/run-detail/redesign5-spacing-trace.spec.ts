@@ -5,7 +5,7 @@
  * R4-3 a trace opens on the step's content, never on its metadata.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { openRun, seedClassic, seedProject, seedR5, type Seeded } from './support';
+import { itemPane, openRun, seedClassic, seedProject, seedR5, type Seeded } from './support';
 
 let s: Seeded;
 let classic: string;
@@ -132,7 +132,7 @@ async function stepTabs(page: Page): Promise<Array<{ step: string; tab: string; 
   return out;
 }
 
-const META = /^(Metrics|Scores|Raw)/;
+const META = /^(Scores|Raw)/;
 const CONTENT = /^(Messages|Response|Input \/ Output|Documents)/;
 
 function expectContentDefault(rows: Awaited<ReturnType<typeof stepTabs>>) {
@@ -170,27 +170,30 @@ for (const width of [1440, 390]) {
       expectContentDefault(rows);
     });
 
-    test('R4-3c: the Trace button of an expanded item opens on content for every step', async ({ page }) => {
+    test('R4-3c: the Open trace tile of the item pane opens on content for every step', async ({ page }) => {
       await openRun(page, s.slug, classic, 'item=item-0006');
-      const card = page.locator('[data-testid=item-card][data-item-id="item-0006"]');
-      await expect(card).toBeVisible();
-      await card.getByRole('button', { name: /Trace/ }).first().click();
+      const pane = itemPane(page, 'item-0006');
+      await expect(pane).toBeVisible();
+      await pane.getByRole('button', { name: 'Open trace', exact: true }).click();
       const rows = await stepTabs(page);
       console.log(`R4-3c ${width}px ${JSON.stringify(rows.map((r) => [r.step, r.tab]))}`);
       expectContentDefault(rows);
     });
 
-    test('R4-3d: picking Metrics is not remembered; a content pick is, for the session', async ({ page }) => {
+    test('R4-3d: picking Raw (metadata) is not remembered; a content pick is, for the session', async ({
+      page,
+    }) => {
       await openRun(page, s.slug, classic, 'trace=item-0006');
       const dialog = page.getByRole('dialog', { name: 'Trace' });
       const rows = dialog.getByRole('treeitem');
       await expect(rows.first()).toBeVisible();
       await rows.nth(1).click({ force: true });
-      await dialog.getByRole('tab', { name: /^Metrics/ }).click();
+      // the span facts are a stat strip above the tabs now: the drawer has no Metrics tab. Raw is a metadata tab.
+      await dialog.getByRole('tab', { name: /^Raw/ }).click();
       const tree = dialog.getByRole('radio', { name: 'Tree' });
       if (await tree.count()) await tree.check({ force: true });
       await rows.nth(2).click({ force: true });
-      await expect(dialog.getByRole('tab', { selected: true })).not.toHaveText(/^(Metrics|Scores|Raw)/);
+      await expect(dialog.getByRole('tab', { selected: true })).not.toHaveText(/^(Scores|Raw)/);
     });
   });
 }

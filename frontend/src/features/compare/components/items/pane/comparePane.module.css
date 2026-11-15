@@ -1,0 +1,473 @@
+/* The item pane on the compare page: the run page's pane recipe with a column per run. Tokens only. */
+
+/* ---------- the run a column stands for: its full name, a link to the item in that run ---------- */
+.runName {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.runName > :first-child {
+  flex: none;
+  align-self: center;
+}
+
+.runLink {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-decoration: none;
+  text-transform: none;
+  white-space: normal;
+  color: var(--text-primary);
+}
+
+/* the hover of a name link (white at rest, green on hover, no underline) is the platform's `a[data-link='name']` */
+a.runLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* a column title of a table in the pane */
+.colTitle {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ---------- Expected and one Output per run, side by side ---------- */
+.outsWrap {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.outsBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.outsBar:empty {
+  display: none;
+}
+
+.runPick,
+.marksPick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+}
+
+.marksPick {
+  margin-inline-start: auto;
+}
+
+/* the label of a control group: the switch-group label (--font-sm, 600, muted) */
+.outsLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.outs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* three runs or more: Expected takes a line of its own, the outputs share the next */
+.outs[data-expected-row] > section[data-part='expected'] {
+  grid-column: 1 / -1;
+}
+
+/* the head of a run's output: the run on the first line, its status and the actions on the second, in every column */
+.outs > section[data-part='output'] > header {
+  padding-block-start: var(--space-sm);
+}
+
+.outs > section[data-part='output'] > header > h4 {
+  flex: 1 1 100%;
+  white-space: normal;
+}
+
+/* ---------- metrics, up to four runs: a row per metric, a column per run ---------- */
+.matrix,
+.byRun {
+  display: grid;
+  min-width: 0;
+}
+
+.mhead,
+.mrow {
+  display: grid;
+  grid-template-columns: 24px minmax(132px, 184px) repeat(var(--runs), minmax(0, 1fr));
+  column-gap: var(--space-sm);
+  padding-inline: var(--space-md) var(--space-sm);
+}
+
+.mhead {
+  align-items: center;
+  min-height: 40px;
+  padding-block: var(--space-sm);
+}
+
+.runHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+  min-width: 0;
+  padding-inline: var(--space-sm);
+}
+
+.mrow {
+  align-items: start;
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.nameCell {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-width: 0;
+  padding-block: var(--space-xs);
+}
+
+.passIf {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+/* one run on one metric: the score line, then the reason */
+.cell {
+  display: grid;
+  gap: var(--space-xs);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--control-radius);
+}
+
+/* the one wash: a score below its threshold */
+.cell[data-failing],
+.brCell[data-failing] {
+  background: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
+}
+
+/* the score in edit: the selected step of the row ladder (cv4 F11) */
+.cell[data-editing],
+.brLine[data-editing] {
+  background: var(--row-selected);
+}
+
+.cellTop {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+  min-height: 24px;
+}
+
+/* the run letter of a cell: only where the cells no longer stand under their column title */
+.cellRun {
+  display: none;
+}
+
+.cellAct {
+  display: inline-flex;
+  margin-inline-start: auto;
+}
+
+.delta {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.delta[data-move='improved'] {
+  color: var(--success);
+}
+
+.delta[data-move='regressed'] {
+  color: var(--error-text);
+}
+
+.notScored {
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+/* what the scorer recorded for a metric, under its row over the full width: one deeper tile per run */
+.details {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
+  gap: var(--space-sm);
+  min-width: 0;
+  margin-block-start: var(--space-sm);
+}
+
+.details[data-compact] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+.detail {
+  display: grid;
+  gap: var(--space-sm);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-md);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+/* the arrow that opens the details of a row: the first thing in the row */
+.lead {
+  display: flex;
+  justify-content: center;
+  padding-block-start: var(--space-xs);
+}
+
+.mhead > .lead,
+.brHead > .lead,
+.brRow > .lead {
+  padding-block-start: 0;
+}
+
+.act {
+  display: flex;
+  justify-content: flex-end;
+  padding-block-start: var(--space-xs);
+}
+
+.mhead > .act,
+.brHead > .act {
+  padding-block-start: 0;
+}
+
+/* the platform's score editor, then the hint line */
+.edit {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* a narrow pane: the runs of a metric go under its name */
+@container metrics (max-width: 719px) {
+  .mhead,
+  .mrow {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .runHead {
+    display: none;
+  }
+
+  .cell {
+    grid-column: 1 / -1;
+  }
+
+  .cellRun {
+    display: inline-flex;
+  }
+
+  .mrow {
+    row-gap: var(--space-xs);
+  }
+}
+
+/* ---------- metrics, five runs or more: a row per run, a column per metric ---------- */
+.brHead,
+.brRow {
+  display: grid;
+  grid-template-columns: 24px minmax(200px, 1.6fr) repeat(var(--metrics), minmax(84px, 1fr));
+  column-gap: var(--space-sm);
+  align-items: center;
+  padding-inline: var(--space-md) var(--space-sm);
+}
+
+.brHead {
+  align-items: end;
+  padding-block: var(--space-sm);
+}
+
+.brMetric {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+.brRow {
+  min-height: 40px;
+  padding-block: var(--space-xs);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.brRow[data-open] {
+  padding-block-end: var(--space-sm);
+}
+
+.brRun {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+  min-width: 0;
+}
+
+.brCell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-sm);
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border-radius: var(--control-radius);
+  text-align: center;
+}
+
+.brRow > .act {
+  padding-block-start: 0;
+}
+
+/* an open run: its reasons and what the scorer recorded, metric by metric, in one deeper tile */
+.brDetail {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-block-start: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+.brLine {
+  display: grid;
+  grid-template-columns: minmax(120px, 168px) 132px minmax(0, 1fr) 24px;
+  column-gap: var(--space-md);
+  align-items: start;
+  padding: var(--space-sm) var(--space-xs);
+  border-radius: var(--control-radius);
+}
+
+.brLine + .brLine {
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.brLineName,
+.brLineScore {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+  min-height: 24px;
+}
+
+.brLineBody {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.brLine > .act {
+  padding-block-start: 0;
+}
+
+/* ---------- execution: each run against the baseline, in the platform table ---------- */
+/* the table is in a block: the block's own fill with a clear title band and soft stripes, as a table inside a value
+   (the page table's dark base is too hard a step inside a block) */
+.facts {
+  display: block;
+}
+
+.facts > [data-stripe] {
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+}
+
+.facts thead th {
+  border-block-end: 0;
+  background: var(--bg-active);
+}
+
+.facts tbody tr {
+  --row-base: color-mix(in srgb, var(--text-primary) 2%, transparent);
+}
+
+.facts tbody tr[data-zebra] {
+  --row-base: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+/* a run's name in a column title is shown as written (a table header is upper case) */
+.facts .runHead {
+  padding-inline: 0;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.factName {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.statValue {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-sm);
+  align-items: baseline;
+  justify-content: inherit;
+}
+
+.statNum {
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.statNum[data-bad] {
+  color: var(--error-text);
+}
+
+/* ---------- root causes: a column per run, on the pane's own surface ---------- */
+.causes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.cause {
+  display: grid;
+  gap: var(--space-xs);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}

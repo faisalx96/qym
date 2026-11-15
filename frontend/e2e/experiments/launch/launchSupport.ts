@@ -132,7 +132,9 @@ export async function openLaunch(page: Page, slug: string, q = '', step: StepId 
   const sep = q.includes('?') ? '&' : '?';
   await page.goto(APP_BASE + launchUrl(slug, `${q}${sep}step=${step}`));
   // 25 s: the first page load of a worker compiles the app in Vite; with two workers that exceeded the 8 s default.
-  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({
+    timeout: 25_000,
+  });
 }
 
 export const rail = (page: Page): Locator => page.getByRole('navigation', { name: 'Steps' });
@@ -147,13 +149,17 @@ export async function goStep(page: Page, step: StepId): Promise<void> {
       await page.getByRole('option', { name: new RegExp(STEP_LABELS[step]) }).click();
     }
     // 25 s: the first page load of a worker compiles the app in Vite; with two workers that exceeded the 8 s default.
-  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({
+      timeout: 25_000,
+    });
     return;
   }
   const button = rail(page).getByRole('button', { name: new RegExp(`^\\d\\s*${STEP_LABELS[step]}`) });
   if ((await button.getAttribute('aria-current')) !== 'step') await button.click();
   // 25 s: the first page load of a worker compiles the app in Vite; with two workers that exceeded the 8 s default.
-  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({
+    timeout: 25_000,
+  });
 }
 
 export const nameBox = (page: Page): Locator => page.getByRole('textbox', { name: 'Experiment name' });
@@ -162,7 +168,8 @@ export const dialog = (page: Page): Locator => page.locator('[role="dialog"],[ro
  * The Review step's content (Summary, runs, Changes, Checks). It exists on the Review step only (round 9, point 4):
  * call `toReview(page)` first, or read the run count and the first problem from `launchBar(page)` on any step.
  */
-export const review = (page: Page): Locator => page.getByTestId('review-step').or(page.getByTestId('publish-review'));
+export const review = (page: Page): Locator =>
+  page.getByTestId('review-step').or(page.getByTestId('publish-review'));
 /** The one bottom bar (home view and every step). */
 export const launchBar = (page: Page): Locator => page.locator('[data-part=launch-bar]');
 /**
@@ -181,7 +188,9 @@ export async function toReview(page: Page): Promise<void> {
     await jump.click();
     await page.getByRole('option', { name: /Review and (launch|publish)/ }).click();
   } else {
-    await rail(page).getByRole('button', { name: /Review and (launch|publish)/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /Review and (launch|publish)/ })
+      .click();
   }
   await expect(review(page)).toBeVisible({ timeout: 25_000 });
 }

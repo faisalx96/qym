@@ -1,6 +1,8 @@
 /** J3 + J7, scenarios 3, 4, 5: chart-click filters, search, rule builder, URL round-trips, CSV. */
 import { test, expect } from '@playwright/test';
 import {
+  itemPane,
+  itemRow,
   itemsCount,
   metricCard,
   openRun,
@@ -92,12 +94,12 @@ test.describe('search (scenario 4)', () => {
     await search.fill('Question 17:');
     await expect.poll(() => params(page).get('q')).toBe('Question 17:');
     await expect.poll(async () => (await itemsCount(page))[0]).toBe(1);
-    await expect(page.getByRole('button', { name: 'Open item #17', exact: true })).toBeVisible();
+    await expect(itemRow(page, 17)).toBeVisible();
     await page.reload();
     await expect(page.getByTestId('items-count')).toBeVisible();
     await expect(search).toHaveValue('Question 17:');
     expect(await itemsCount(page)).toEqual([1, 240]);
-    await expect(page.getByRole('button', { name: 'Open item #17', exact: true })).toBeVisible();
+    await expect(itemRow(page, 17)).toBeVisible();
     // clearing the box clears the param
     await search.fill('');
     await expect.poll(() => params(page).get('q')).toBeNull();
@@ -227,8 +229,7 @@ test.describe('URL contract for the view params', () => {
     await expect.poll(() => params(page).get('sort')).toBe('latency_desc');
     const ms = async () => {
       const texts = await page
-        .getByRole('row')
-        .filter({ has: page.getByRole('button', { name: /^Open item/ }) })
+        .locator('tr[data-item-id]')
         .evaluateAll((rows) =>
           rows.map((r) => (r.querySelector('[data-cell=latency]') as HTMLElement | null)?.innerText ?? ''),
         );
@@ -262,36 +263,40 @@ test.describe('URL contract for the view params', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('?hide_field= hides that item field in an opened item', async ({ page }) => {
+  test('?hide_field= hides that item field in the Metadata of the item pane', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await page.getByRole('button', { name: 'Open item #2', exact: true }).click();
-    const card = page.locator('[data-testid=item-card][data-item-id="item-0002"]');
-    await expect(card.getByText(/^source: /)).toBeVisible();
+    await itemRow(page, 2).click();
+    const pane = itemPane(page, 'item-0002');
+    // the item metadata is a field list in the Metadata section: the key is a <dt>
+    const source = pane.locator('[data-part="metadata"] dt').filter({ hasText: /^source$/ });
+    await expect(source).toBeVisible();
     await openRun(page, s.slug, classic, 'hide_field=source');
-    await page.getByRole('button', { name: 'Open item #2', exact: true }).click();
-    await expect(page.locator('[data-testid=item-card][data-item-id="item-0002"]')).toBeVisible();
-    await expect(
-      page.locator('[data-testid=item-card][data-item-id="item-0002"]').getByText(/^source: /),
-    ).toHaveCount(0);
+    await itemRow(page, 2).click();
+    await expect(pane).toBeVisible();
+    await expect(pane.locator('[data-part="metadata"] dt').filter({ hasText: /^domain$/ })).toBeVisible();
+    await expect(source).toHaveCount(0);
     expect(params(page).getAll('hide_field')).toEqual(['source']);
   });
 
-  test('?hide_metric_field= is preserved and hides that judge field', async ({ page }) => {
+  test('?hide_metric_field= is preserved and hides that judge field in the metric details', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic, 'hide_metric_field=judge_model');
-    await page.getByRole('button', { name: 'Open item #2', exact: true }).click();
-    const card = page.locator('[data-testid=item-card][data-item-id="item-0002"]');
-    await openMetric(card, 'quality');
-    await expect(card.getByText('confidence')).toBeVisible();
-    await expect(card.getByText('judge_model')).toHaveCount(0);
+    await itemRow(page, 2).click();
+    const pane = itemPane(page, 'item-0002');
+    // the details of a metric are closed until the reader opens them
+    const details = await openMetric(pane, 'quality');
+    await expect(details.locator('dt').filter({ hasText: /^confidence$/ })).toBeVisible();
+    await expect(pane.getByText('judge_model')).toHaveCount(0);
     expect(params(page).getAll('hide_metric_field')).toEqual(['judge_model']);
   });
 
   test('legacy ?page= and ?item_id= links still land correctly', async ({ page }) => {
     await openRun(page, s.slug, classic, 'page=2');
     await expect(page.getByText('21–40 of 240 items')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open item #21', exact: true })).toBeVisible();
+    await expect(itemRow(page, 21)).toBeVisible();
     await openRun(page, s.slug, classic, 'item_id=item-0005');
-    await expect(page.locator('[data-testid=item-card][data-item-id="item-0005"]')).toBeVisible();
+    await expect(itemPane(page, 'item-0005')).toBeVisible();
   });
 });
 

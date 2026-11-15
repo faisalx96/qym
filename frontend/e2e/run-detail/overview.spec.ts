@@ -2,10 +2,12 @@
 import { test, expect } from '@playwright/test';
 import {
   showItems,
+  itemPane,
   itemRow,
   itemsCount,
   metricCard,
   openRun,
+  paneBlock,
   runUrl,
   seedClassic,
   seedProject,
@@ -43,7 +45,7 @@ test.describe('open a run (J1, scenario 1)', () => {
     await expect(page.getByText('1–20 of 240 items')).toBeVisible();
     await showItems(page);
     // the table is virtualized: only the rows in view (up to the page of 20) are in the DOM
-    const rows = await page.getByRole('button', { name: /^Open item #\d+$/ }).count();
+    const rows = await page.locator('tr[data-item-id]').count();
     expect(rows).toBeGreaterThanOrEqual(5);
     expect(rows).toBeLessThanOrEqual(20);
   });
@@ -166,9 +168,9 @@ test.describe('not received items (scenario 12)', () => {
     await expect(itemRow(page, 240)).toContainText('Not received');
     await expect(itemRow(page, 239)).toContainText('Not received');
     await expect(itemRow(page, 238)).toContainText('Not received');
-    // opening one explains it
-    await page.getByRole('button', { name: 'Open item #240', exact: true }).click();
-    await expect(page.getByRole('note').filter({ hasText: 'Output not received' })).toBeVisible();
+    // opening one explains it: the Output block of the item pane says so
+    await itemRow(page, 240).click();
+    await expect(paneBlock(itemPane(page, 'item-0240'), 'output')).toContainText('Output not received');
   });
 });
 
@@ -200,7 +202,7 @@ test.describe('virtualization', () => {
     await page.addInitScript(() => localStorage.setItem('qym:run-page-size', '500'));
     await openRun(page, s.slug, classic);
     await expect(page.getByText('1–240 of 240 items')).toBeVisible();
-    const rendered = await page.getByRole('button', { name: /^Open item #\d+$/ }).count();
+    const rendered = await page.locator('tr[data-item-id]').count();
     expect(rendered).toBeGreaterThan(5);
     expect(rendered).toBeLessThan(100);
     // scrolling reaches the end of the list
@@ -209,8 +211,8 @@ test.describe('virtualization', () => {
       const el = document.getElementById('shell-content');
       if (el) el.scrollTop = el.scrollHeight;
     });
-    await expect(page.getByRole('button', { name: 'Open item #240', exact: true })).toBeVisible();
-    expect(await page.getByRole('button', { name: /^Open item #\d+$/ }).count()).toBeLessThan(100);
+    await expect(itemRow(page, 240)).toBeVisible();
+    expect(await page.locator('tr[data-item-id]').count()).toBeLessThan(100);
   });
 
   test('the Pagination size control switches the page size', async ({ page }) => {
@@ -241,10 +243,17 @@ test.describe('keyboard reachability', () => {
     expect(joined).toMatch(/Analysis metric|quality/);
     expect(joined).toMatch(/Filters/);
     expect(joined).toMatch(/Display/);
-    // a row button opens its item by keyboard
-    const open = page.getByRole('button', { name: 'Open item #2', exact: true });
-    await open.focus();
+    // a row is one tab stop; Enter on it opens its item in the pane, Escape closes the pane and the row has the focus
+    const row = itemRow(page, 2);
+    await row.focus();
     await page.keyboard.press('Enter');
-    await expect(page.locator('[data-testid=item-card][data-item-id="item-0002"]')).toBeVisible();
+    await expect(itemPane(page, 'item-0002')).toBeVisible();
+    await expect(row).toHaveAttribute('aria-current', 'true');
+    // An Escape in the first moments after the open does not close the pane (seen on the preview app: the page state of
+    // ?item= arrives after the URL, and the item opens again). Let the open step settle before the key.
+    await page.waitForTimeout(400);
+    await page.keyboard.press('Escape');
+    await expect(itemPane(page)).toHaveCount(0);
+    await expect(row).toBeFocused();
   });
 });

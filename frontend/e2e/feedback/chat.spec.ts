@@ -2,11 +2,24 @@
 /** QE-35 to QE-76: the chat on a draft, the checklist and the proposal card (stub model, scripted conversations). */
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { box, configureAgent, near, overflowX, record, seedFeedback, setViewport, shot, WIDTHS } from './support';
+import {
+  box,
+  configureAgent,
+  near,
+  overflowX,
+  record,
+  seedFeedback,
+  setViewport,
+  shot,
+  WIDTHS,
+} from './support';
 
 test.describe.configure({ mode: 'serial' });
 
-async function newDraft(request: APIRequestContext, message = 'We need to export the run comparison as a PDF.'): Promise<string> {
+async function newDraft(
+  request: APIRequestContext,
+  message = 'We need to export the run comparison as a PDF.',
+): Promise<string> {
   const res = await request.post('/v1/feedback', { data: { subject: 'platform', message } });
   expect(res.status()).toBe(201);
   return ((await res.json()) as { id: string }).id;
@@ -22,14 +35,19 @@ async function toProposal(page: Page, id: string) {
   await expect(page.getByTestId('proposal')).toBeVisible({ timeout: 20_000 });
 }
 
-test('QE-35 to QE-45: opening a draft streams the first answer; the log, composer and checklist', async ({ page, request }) => {
+test('QE-35 to QE-45: opening a draft streams the first answer; the log, composer and checklist', async ({
+  page,
+  request,
+}) => {
   await configureAgent(request, 'ask_then_propose');
   const id = await newDraft(request);
   await setViewport(page, 1440);
   const calls: string[] = [];
   page.on('request', (r) => r.method() === 'POST' && calls.push(new URL(r.url()).pathname));
   await gotoApp(page, `/feedback/${id}`);
-  await expect(page.getByTestId('chat-log')).toContainText('Who is affected and how often', { timeout: 15_000 });
+  await expect(page.getByTestId('chat-log')).toContainText('Who is affected and how often', {
+    timeout: 15_000,
+  });
   expect(calls.filter((c) => c.endsWith('/turn'))).toHaveLength(1);
   // a draft whose last message is the assistant's makes no call when opened again
   calls.length = 0;
@@ -46,7 +64,10 @@ test('QE-35 to QE-45: opening a draft streams the first answer; the log, compose
   await expect(page.getByTestId('checklist')).toContainText('1 of 6');
 });
 
-test('QE-36, QE-37, QE-41, QE-44: geometry of the chat page at the three widths', async ({ page, request }) => {
+test('QE-36, QE-37, QE-41, QE-44: geometry of the chat page at the three widths', async ({
+  page,
+  request,
+}) => {
   await configureAgent(request, 'ask_then_propose');
   const id = await newDraft(request);
   for (const w of WIDTHS) {
@@ -67,7 +88,10 @@ test('QE-36, QE-37, QE-41, QE-44: geometry of the chat page at the three widths'
   }
 });
 
-test('QE-42, QE-43, QE-139, QE-140: sending streams under the message and announces once', async ({ page, request }) => {
+test('QE-42, QE-43, QE-139, QE-140: sending streams under the message and announces once', async ({
+  page,
+  request,
+}) => {
   await configureAgent(request, 'ask_then_propose');
   const id = await newDraft(request);
   await setViewport(page, 1440);
@@ -75,12 +99,21 @@ test('QE-42, QE-43, QE-139, QE-140: sending streams under the message and announ
   await expect(page.getByTestId('chat-log')).toContainText('Who is affected');
   await composer(page).fill('Five analysts, every week, screenshots today. A PDF is enough. No deadline.');
   await composer(page).press('Enter');
-  await expect(page.getByText('writing…').or(page.getByTestId('chat-log').locator('[aria-busy="true"]'))).toBeVisible({ timeout: 15_000 }).catch(() => undefined);
-  await expect(page.getByTestId('chat-status')).toHaveText(/The assistant (answered|proposed a request)/, { timeout: 20_000 });
-  await expect(composer(page)).toBeFocused({ timeout: 5_000 }).catch(() => undefined);
+  await expect(page.getByText('writing…').or(page.getByTestId('chat-log').locator('[aria-busy="true"]')))
+    .toBeVisible({ timeout: 15_000 })
+    .catch(() => undefined);
+  await expect(page.getByTestId('chat-status')).toHaveText(/The assistant (answered|proposed a request)/, {
+    timeout: 20_000,
+  });
+  await expect(composer(page))
+    .toBeFocused({ timeout: 5_000 })
+    .catch(() => undefined);
 });
 
-test('QE-57 to QE-72: the proposal card, its fields, duplicate callout and submit', async ({ page, request }) => {
+test('QE-57 to QE-72: the proposal card, its fields, duplicate callout and submit', async ({
+  page,
+  request,
+}) => {
   await configureAgent(request, 'ask_then_propose');
   // an existing request the stub proposal can name is not needed: the ask_then_propose script relates nothing
   const id = await newDraft(request, 'We need to export the run comparison as a PDF.');
@@ -109,7 +142,9 @@ test('QE-57 to QE-72: the proposal card, its fields, duplicate callout and submi
   await page.getByLabel('Description').fill('');
   await expect(card.getByRole('button', { name: 'Submit request' })).toBeDisabled();
   await expect(card).toContainText('The description cannot be empty.');
-  await page.getByLabel('Description').fill('A PDF of the compare view for the weekly review, replacing manual screenshots.');
+  await page
+    .getByLabel('Description')
+    .fill('A PDF of the compare view for the weekly review, replacing manual screenshots.');
   // QE-60: priority edited keeps the assistant's value visible
   await card.getByRole('button', { name: /Priority/ }).click();
   await page.getByRole('option', { name: 'High' }).click();
@@ -121,7 +156,10 @@ test('QE-57 to QE-72: the proposal card, its fields, duplicate callout and submi
   await expect(page.getByText(/Submitted as FB-/)).toBeVisible();
 });
 
-test('QE-65: a new message supersedes the proposal; Keep talking focuses the composer', async ({ page, request }) => {
+test('QE-65: a new message supersedes the proposal; Keep talking focuses the composer', async ({
+  page,
+  request,
+}) => {
   await configureAgent(request, 'ask_then_propose');
   const id = await newDraft(request);
   await setViewport(page, 1440);
@@ -134,7 +172,7 @@ test('QE-65: a new message supersedes the proposal; Keep talking focuses the com
   await expect(page.getByText('Superseded')).toBeVisible();
 });
 
-test('QE-68: a stale proposal keeps the person\'s edits', async ({ page, request }) => {
+test("QE-68: a stale proposal keeps the person's edits", async ({ page, request }) => {
   await configureAgent(request, 'ask_then_propose');
   const id = await newDraft(request);
   await setViewport(page, 1440);
@@ -142,10 +180,15 @@ test('QE-68: a stale proposal keeps the person\'s edits', async ({ page, request
   await page.getByLabel('Title').fill('My own title');
   await expect(composer(page)).toBeEnabled({ timeout: 20_000 });
   // the conversation moves on in another window
-  const other = await request.post(`/v1/feedback/${id}/messages`, { data: { content: 'Actually also the item table.' }, headers: { Accept: 'application/json' } });
+  const other = await request.post(`/v1/feedback/${id}/messages`, {
+    data: { content: 'Actually also the item table.' },
+    headers: { Accept: 'application/json' },
+  });
   expect(other.status(), await other.text()).toBe(200);
   await page.getByTestId('proposal').getByRole('button', { name: 'Submit request' }).click();
-  await expect(page.getByText('The conversation moved on. Ask the assistant to propose again.')).toBeVisible();
+  await expect(
+    page.getByText('The conversation moved on. Ask the assistant to propose again.'),
+  ).toBeVisible();
   await expect(page.getByLabel('Title')).toHaveValue('My own title');
 });
 
@@ -162,7 +205,10 @@ test('QE-48: Discard draft asks, then returns to the list', async ({ page, reque
   await expect(page).toHaveURL(/\/feedback$/);
 });
 
-test('QE-124: an unavailable model shows the cause and Retry re-runs without duplicating the message', async ({ page, request }) => {
+test('QE-124: an unavailable model shows the cause and Retry re-runs without duplicating the message', async ({
+  page,
+  request,
+}) => {
   await configureAgent(request, 'down');
   const id = await newDraft(request, 'This will fail first.');
   await setViewport(page, 1440);
@@ -192,7 +238,10 @@ test('QE-50, QE-148: Stop keeps the partial text marked stopped', async ({ page,
   await expect(composer(page)).toBeEnabled();
 });
 
-test('QE-62, QE-63, QE-64: a duplicate and a conflict are real requests; the submit label says possible duplicate', async ({ page, request }) => {
+test('QE-62, QE-63, QE-64: a duplicate and a conflict are real requests; the submit label says possible duplicate', async ({
+  page,
+  request,
+}) => {
   test.setTimeout(90_000);
   await configureAgent(request, 'ask_then_propose');
   seedFeedback(0);
@@ -204,7 +253,8 @@ test('QE-62, QE-63, QE-64: a duplicate and a conflict are real requests; the sub
       await gotoApp(page, `/feedback/${id}`);
       const card = page.getByTestId('proposal');
       await expect(card).toBeVisible({ timeout: 25_000 });
-      if (w === 1440) await expect(page.getByTestId('chat-status')).toHaveText(/answered|proposed/, { timeout: 25_000 });
+      if (w === 1440)
+        await expect(page.getByTestId('chat-status')).toHaveText(/answered|proposed/, { timeout: 25_000 });
       await expect(card.getByText(/This looks like a duplicate of FB-0001/)).toBeVisible();
       await expect(card.getByRole('button', { name: 'Submit as a possible duplicate' })).toBeVisible();
       const related = card.getByTestId('related');

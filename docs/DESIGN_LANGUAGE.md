@@ -1225,45 +1225,88 @@ Recipes that exist only on the run report. They compose the primitives above and
   item count is in the hover text), and a 4px bar of its share of the kind. A card
   toggles the item filter (`aria-pressed`, an outline in the kind's colour).
 
-- **Items table header and ItemBar** (round 3 P4): the column header sticks at the sticky line only over collapsed rows. For an
-  expanded item it is held above the detail (it stops when its bottom touches the detail's top, scrolls away, and returns to the line
-  when the line crosses the detail's bottom; `useStickyShift` takes the detail spans, pure geometry in `stickyShift.ts`). The
-  expanded item starts with an `ItemBar` (`--row-compact`, opaque, number, verdict, input preview, Copy link, Collapse) that
-  takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky;
-  the hook writes `--head-shift` on the bar itself (a custom property is inherited: written on the item it restyled every descendant on every
-  scroll event), and the bar is its own layer only while it is shifted (round 7, D1).
-
 - **Items table columns** (review group R2): #, Status (the item result as a `StateTag`), Input, one 120px centred score
   column per metric (page metric first), Latency, then the open-trace action: a green action tile (`IconButton tile`) with
   the `trace` glyph and the tooltip "Open trace", in a normal last column that scrolls with the table (not pinned, C230).
-  There is no Reason column (C017). The `list` glyph is for filters only; the compare output cards' Trace button uses
-  the `trace` glyph too.
+  There is no Reason column (C017). The `list` glyph is for filters only; the item pane's Open trace tile uses
+  the `trace` glyph too. A row opens its item in the item pane (see "Item pane"); the table has no chevron column.
 
-- **Item details** (round 3 P5): the expanded item is `direction: ltr` and left anchored: Input, Expected and Tags are
-  `FieldRow labelAnchor="start"` (label column `--field-label-width`, the value block as wide as its text up to
-  `--field-measure`; only the value carries `dir`), then the Output region, a full-width divider (1px `--border-strong`, 20px
-  above) and the Metrics region. Output keys are collapsed key rows (`StructuredValue variant="keys"` / `KeyTree`: chevron, key,
-  one-line preview; open: the value, Copy, per-key Expand all / Collapse all recursive; the region has global Expand all / Collapse
-  all and Sections | Raw). **A data key is a name: it is shown exactly as written (case included, `text-transform: none`), wraps
-  (`overflow-wrap: anywhere`) and is never cut, clipped or ellipsised; whatever follows it (its preview, its actions) starts after
-  its last line, so a key never overlaps its content** (round 7, D2; tree keys, `StructuredValue` section keys, fact keys, Tag
-  keys; the key element carries `data-part="key"` and its own script direction, `textDirAttrs`, the row stays left to right). The
-  preview follows the key's last line (8px) when 12ch fit there, else starts the next line under it; the row's actions wrap under
-  the name when the whole name does not fit beside them. Fixed UI labels (Input, Expected, Output, the prose eyebrow) keep the
-  uppercase tracked eyebrow style. A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
-  side). **A pass has no colour**: its identity is text, colour on a pass is only its verdict. Metrics are one matrix
-  (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are mono 600 band-coloured text (no tinted cells, no
-  outline: the selected row takes `--bg-selected` and a 2px `--accent-primary` bar at its inline start; a single pass's Reason is a
-  `fit-content` block anchored at the column's inline start, whatever its direction) and open ONE detail panel below (round 5 R3).
-  The panel (`--bg-elevated`, `container-type: inline-size`, `direction: ltr`) has a one-row header (mono name, `ScoreValue`, "Pass n",
-  "edited", then the text button "Edit score" and Close), a hairline, then: **prose blocks** (reason, reasoning, explanation, label,
-  then any string over 60 characters) with the eyebrow label stacked above the text (13px, line 1.6, 76ch, `dir` on the text only) so a
-  label can never overlap its text; **facts** (`dl`: the judge key as written, `--font-sm` 650, in a key column of
-  `fit-content(40%)` at least `--field-label-width` where a long key wraps, value next to it; the row stacks under 420px); **tables** for `{columns, rows}`, arrays of arrays and
-  arrays of two or more uniform plain objects (`detectTable`; eyebrow with the row count over an embedded `DataTable`, every header
-  sortable, 12 rows then "Show N more rows", scrolls inside); and collapsed key rows for everything else. Label roles are exactly
-  three: eyebrow (11px 650 uppercase), fact key (11px 650, case as written), tree key (12px 600 mono). `FieldRow` labels wrap in
-  their column; no key is cut. Score edits happen in that panel.
+- **Item pane** (owner 2026-11-14, "Version 10"; `features/run-detail/components/items/pane/`, on the compare page
+  `features/compare/components/items/pane/`). An item never opens in place. A row of the items list opens the item in
+  a pane at the side of the list; the same pane serves the run page, the compare page and the Sweep table. It replaces
+  the inline item view (`ItemCard`, `ItemBar`, `OutputRegion`, `MetricMatrix`, the compare `ItemDetail` and
+  `OutputCard`), which no longer exists.
+  **The row.** The row says "opens the item": pointer cursor, the hover step of the row ladder (`--row-hover`), the
+  focus frame, and the row's primary text (the `#` number) in the accent while the row is hovered or holds keyboard
+  focus (cv4 F4). No chevron and no `aria-expanded`: nothing expands. Enter and Space open the item; a click on the
+  open row, or Escape, closes it and the focus returns to the row. The item in the pane is the list's current row
+  (cv4 X7): `DataTable activeKey` on the run page, `aria-current` and the same tone on the compare list. The compare
+  row shows the item's prompt (`promptPreview`), as the run page's Input column, never the braces of a JSON input.
+  **The frame** (`PaneShell`). The `Drawer` surface with no scrim (`--bg-surface`, a 1px `--border-default` start edge,
+  `--shadow-dialog`), fixed from the lower edge of the page's sticky section nav down, so the page's Metric and
+  Pass-if controls stay in reach. A splitter at its start edge has the `SplitPane` look (a 3px accent line on hover,
+  drag and focus; `role="separator"`, Left / Right 16px, Home / End, double click = the default width). The default
+  width leaves 240px of the list in view; the width is the person's (`localStorage qym:item-pane:*`).
+  Header, one row: the item number (mono, `--font-md` 650), the verdict as a `StateTag`, the item id (mono, muted,
+  never cut); then the actions at the row's end. Every icon action is the plain icon action ("Icon action", §3.1: no tile, the glyph turns green on hover) with the shared `Tooltip`
+  (`Act`): Open trace, Copy link, Full width, then the pager, then Close (the close glyph, as the close of a Drawer and a Dialog). The one tile of the pane is the score edit at the end of a metric row, because it is a row action of a table. The pager
+  is the run pager's recipe (`RunPager.module.css`: arrows around "N of M"; the neighbour shows on hover and keyboard
+  focus). Under the row: the item's prompt as the title (`--font-lg` 600, two lines at most). J / K step through the
+  list in its own order, across its pages. Escape closes the pane from anywhere on the page, also on the same press
+  that closes a tooltip; a text field, a menu or a dialog keeps its own Escape. There is no "Open in Langfuse" link.
+  **Order of the body:** Input, then Expected beside Output (one Output per run on the compare page), then the
+  `Subsection`s Metrics, Execution, Metadata and Root cause. A feature sets no title size: a section head is the
+  `Subsection` head.
+  **Block** (`Block`): an inset fill (`--bg-elevated`, `--radius-md`) with the meaning of the part on a 3px start rail
+  (`--rail-width`, `data-tone`): Input `info`, Expected `gold`, Output `success` only when it passed and `danger` when
+  it failed or the task failed, else neutral (no rail). Green never marks Expected. The block title is the `Eyebrow`
+  in the tone's text colour; a title that is a name (the run of an output) is shown as written. The block's actions
+  are icon actions at the end of its head. The raw JSON switch (`braces`, `aria-pressed`) changes its own block only.
+  **Controls on a block.** The pane body sets the inset-card control tokens of a `ReportSection` body
+  (`--control-fill`, `--button-fill` and their hover and pressed steps, translucent), so a well is one step and a
+  button two steps over the pane ground or a block. No pane rule sets the fill, edge, height or font of a control.
+  **Values** (`Value`, `FieldList`). Plain text is prose: sans `--font-md`, line 1.6, as wide as its text up to
+  `--field-measure`; right-to-left text takes the line and starts at its right edge. A JSON value shows its fields:
+  each key above its value; short values share a line, a long text, a table or code takes the line. **JSON colours
+  are the one token set `--json-*` (cv5 H3), in the fields view and in the raw view:** key `--json-key` (blue), string
+  `--json-string` (green), number `--json-number`, true / false `--json-boolean`, null `--json-null`, punctuation
+  `--json-punct`. A key is mono, as written, and wraps. A value that is one sentence or more is reading text and keeps
+  the text colour; a short string value (an id, a label) is mono in the string colour, never plain white. A nested
+  object is a tile under its key, one step lighter than what it is in (the text colour at 4%), at any depth. A list of
+  like objects, `{columns, rows}` or a list of lists is an embedded `DataTable` (compact, report stripe, sortable,
+  numbers centred, "Show N more" in the centre of the table footer). A query or code string is a `pre` on
+  `--bg-surface`; a one-line SQL query is laid out by clause (white space only changes) and its keywords take the key
+  colour. **Fold:** a text or code value longer than 40 lines (or 2400 characters) shows its first 40 lines and the
+  `ClampedText` control, a neutral "Show more" / "Show less" button; a shorter value shows in full, because the reader
+  opened the item to read it. Nothing fades over the text.
+  **Difference marks.** The words that differ between Expected and Output get one quiet wash, the same on both sides:
+  `--warning` at `--tint-strong`. Not green and red: those two colours say passed and failed in this pane. The `diff`
+  tile (run page) or the `SegmentedControl` Expected | Baseline | Off (compare page) switches them.
+  **Pass switch.** A multi-pass item picks the pass in view with one `SegmentedControl` in the Output head (seven
+  passes or more: Previous / Next icon actions around "Pass n of N"). A pass has no colour: the glyph after its name is its
+  verdict.
+  **Metrics table.** One table in a neutral block: the column titles in the type of a `DataTable` header (`--font-sm`
+  650, 0.05em, upper case, muted); a metric name mono, as written, the page metric in the accent; the score a
+  `ScoreValue`, centred; "Pass if" mono muted; the reason sans `--font-md`. The only wash is `--error` at
+  `--tint-faint` on a metric below its threshold; the row in edit and the pass in view take `--row-selected`. A count
+  of failed metrics is a count `Tag` (danger) after the section title; a task error is a `StateTag`. An edited score
+  shows the `Tag kind="accent" tone="warning"` "edited". The score edit is the platform's `ScoreEditor` (field, Save
+  primary, Cancel neutral, Reset) with one muted hint line. What a scorer recorded beside the reason is closed until
+  the reader opens it (a chevron at the start of each metric row, `chevron-right` closed and `chevron-down` open, and one at the start of the table head for all): one `--bg-surface` tile under the row, short
+  facts first, then text, tables, groups. In a narrow pane the reason goes under its metric (container queries).
+  **Compare page.** A run is named by its `RunTag` mark and its name as a `data-link="name"` link to the item in that
+  run. The baseline is the blue star `Flag` "Baseline". With four runs or more the outputs in view are picked with
+  `ToggleChips` (`min={1}`), then the neutral buttons All and "Only the ones that differ from the baseline". Metrics:
+  up to four runs a row per metric and a column per run (score, change against the baseline, reason); five runs or
+  more a row per run and a column per metric. Execution is a `DataTable` (a row per fact and a column per run, or the
+  reverse for five runs or more), numbers centred, the change against the baseline in `--success` or `--error-text`.
+  Root cause: one inset tile per run, the run's name, the neutral "Add issue" button, each issue a data `Tag`.
+  **Execution (run page)** is the compact `StatStrip`. **Metadata** is the fields recipe in a neutral block.
+  **States.** Loading: `PaneSkeleton` draws the pane's own blocks, the Metrics head and one row per metric with
+  `Skeleton` shapes (§7 "A loading frame is the loaded layout"). A failed load is the compact `ErrorState` with Retry.
+  A task error is a line in `--error-text` with the `warning` glyph and the error text as code in the red Output
+  block; the Metrics table then says once that there are no scores.
+  Enforced in `design-language-v3.test.ts` ("item pane").
 
 - **Items toolbar and correlation matrix** (round 5 R4): the toolbar row aligns its controls to one bottom edge, so a control with a
   label above (analysis metric, threshold, sort) and one without share a vertical centre; the metric correlation grid is as wide as its

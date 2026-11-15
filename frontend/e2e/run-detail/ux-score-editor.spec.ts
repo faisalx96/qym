@@ -1,6 +1,6 @@
-/** UX review (group C): the inline score editor keeps focus, never posts twice and never posts a no-op. */
+/** UX review (group C): the inline score editor of the item pane keeps focus, never posts twice and never posts a no-op. */
 import { test, expect, type Page } from '@playwright/test';
-import { openRun, seedClassic, seedProject, type Seeded, openMetric } from './support';
+import { itemPane, metricRow, openRun, seedClassic, seedProject, type Seeded } from './support';
 
 let s: Seeded;
 let classic: string;
@@ -12,10 +12,13 @@ test.beforeAll(async () => {
 
 async function openEditor(page: Page, item: string, metric = 'quality') {
   await openRun(page, s.slug, classic, `item=${item}`);
-  const card = page.getByTestId('item-card');
+  // the item opens in the pane; the pencil tile of the metric row opens the editor in the same row
+  const card = itemPane(page, item);
   await expect(card).toBeVisible();
-  const panel = await openMetric(card, metric);
-  const edit = panel.getByRole('button', { name: 'Edit score', exact: true });
+  const edit = metricRow(card, metric).getByRole('button', {
+    name: `Edit the ${metric} score`,
+    exact: true,
+  });
   await edit.click();
   const box = card.getByRole('textbox', { name: `New ${metric} score` });
   await expect(box).toBeFocused();
@@ -35,6 +38,8 @@ test('Escape and Cancel give focus back to the Edit button', async ({ page }) =>
   await box.press('Escape');
   await expect(card.getByRole('textbox', { name: 'New quality score' })).toHaveCount(0);
   await expect(edit).toBeFocused();
+  // Escape in the editor belongs to the editor: the pane stays open
+  await expect(card).toBeVisible();
   await edit.click();
   await card.getByRole('button', { name: 'Cancel' }).click();
   await expect(edit).toBeFocused();

@@ -1,6 +1,6 @@
 /**
- * UI state shared by the item rows and cards (text mode, hidden metadata fields,
- * expansion) and the trace drawer, hosted once around the list and the Sweep dialog.
+ * UI state shared by the item rows and the item pane (text mode, hidden metadata fields, the open item) and the
+ * trace drawer, hosted once around the item list and the Sweep table.
  */
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
@@ -85,7 +85,6 @@ export function ItemsUiHost({ children }: { children: ReactNode }) {
     (t: TraceTarget) => replaceUrlQuery({ trace: t.itemId, traceRun: t.runId, tracePass: t.pass }),
     [replaceUrlQuery],
   );
-  const run = trace ? model.runs.find((r) => r.base === trace.runId) : null;
 
   const value = useMemo<ItemsUiValue>(
     () => ({
@@ -116,8 +115,6 @@ export function ItemsUiHost({ children }: { children: ReactNode }) {
           runId={trace.runId}
           itemId={trace.itemId}
           pass={trace.pass}
-          langfuseHost={model.langfuseHost || run?.run.langfuse_host}
-          langfuseProjectId={model.langfuseProjectId || run?.run.langfuse_project_id}
           onClose={() => replaceUrlQuery({ trace: null, traceRun: null, tracePass: null })}
         />
       ) : null}

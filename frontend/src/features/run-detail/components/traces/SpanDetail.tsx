@@ -1,19 +1,20 @@
-/** Right pane: per-span tabs (Messages, Input/Output, Documents, Metrics, Scores, Raw). */
-import { useMemo, useState } from 'react';
+/**
+ * Right pane: the span's identity and facts, then its tabs (Messages, Input / Output, Documents, Scores, Raw).
+ * The blocks, the JSON value view and the action tiles are the item pane's own, so a span reads as an item does.
+ */
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   ClampedText,
-  CopyButton,
   Dialog,
   Disclosure,
   Icon,
-  IconButton,
   JsonTree,
-  StructuredValue,
+  StatStrip,
   TabPanel,
   Tabs,
-  Tag,
   TextBlock,
   parseStructured,
+  type StatStripItem,
   type TabItem,
   StateTag,
 } from '@/ui';
@@ -32,86 +33,150 @@ import {
   type SpanNode,
 } from '../../lib/traceTree';
 import { bodyText } from '../../lib/itemText';
+import { Act, CopyAct } from '../items/pane/actions';
+import { Block, type BlockTone } from '../items/pane/blocks';
+import { FieldList, JsonToggle, Value, isStructuredValue } from '../items/pane/values';
 import { KIND_ICON, KIND_LABEL, KIND_TONE } from './spanKinds';
 import styles from './TraceDrawer.module.css';
 
-/** Tabs that show what the step did; the others (Metrics, Scores, Raw) describe it. */
+/** Tabs that show what the step did; Scores and Raw describe it. */
 const CONTENT_TABS = ['messages', 'response', 'io', 'docs'];
 /** The content tab picked last in this page session; never persisted, never a metadata tab. */
 let sessionContentTab: string | null = null;
 
-type LabelTone = 'info' | 'success' | 'muted';
+/** The output of a span has the colour of its result, as the Output of an item: green passed, red failed. */
+function outputTone(node: SpanNode): BlockTone {
+  const cls = statusClass(node.status);
+  return cls === 'error' ? 'danger' : cls === 'ok' ? 'success' : 'neutral';
+}
 
-/** Labelled block: the label row carries copy and expand-to-dialog; the body is hairline separated, never boxed. */
-function Block({
-  label,
-  tone = 'muted',
+/**
+ * One titled part of a span in the item pane's block recipe (inset fill, tone rail, eyebrow head). Its actions are
+ * tiles: the block's own switches, copy, and a full-size dialog.
+ */
+function TraceBlock({
+  title,
+  tone = 'neutral',
   text,
+  after,
+  switches,
   children,
   expanded,
+  expand = true,
   role,
 }: {
-  label: string;
-  tone?: LabelTone;
+  title: string;
+  tone?: BlockTone;
   /** What copy puts on the clipboard. */
   text: string;
-  children: React.ReactNode;
+  /** Right after the title: a short fact. */
+  after?: ReactNode;
+  /** Tiles before copy (the raw JSON switch of this block). */
+  switches?: ReactNode;
+  children: ReactNode;
   /** Content for the full-size dialog (defaults to `children`). */
-  expanded?: React.ReactNode;
+  expanded?: ReactNode;
+  /** A short block has no full-size dialog. */
+  expand?: boolean;
   role?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const name = title.toLowerCase();
   return (
-    <section className={styles.block} data-role={role} aria-label={label}>
-      <header className={styles.blockHead}>
-        <span className={styles.blockLabel} data-tone={tone}>
-          {label}
-        </span>
-        <span className={styles.blockActions}>
-          <CopyButton text={text} label={`Copy ${label.toLowerCase()}`} />
-          <IconButton
-            label={`Expand ${label.toLowerCase()}`}
-            icon={<Icon name="expand" size={14} />}
-            onPress={() => setOpen(true)}
-          />
-        </span>
-      </header>
-      <div className={styles.blockBody}>{children}</div>
+    <>
+      <Block
+        title={title}
+        tone={tone}
+        part={role}
+        after={after}
+        actions={
+          <>
+            {switches}
+            <CopyAct text={text} label={`Copy ${name}`} />
+            {expand ? <Act label={`Expand ${name}`} icon="expand" onPress={() => setOpen(true)} /> : null}
+          </>
+        }
+      >
+        {children}
+      </Block>
       {open ? (
-        <Dialog open onOpenChange={setOpen} title={label} size="data">
+        <Dialog open onOpenChange={setOpen} title={title} size="data">
           <div className={styles.expanded}>{expanded ?? children}</div>
         </Dialog>
       ) : null}
-    </section>
+    </>
   );
 }
 
-/** Text or JSON payload of a span: JSON gets per-key sections, text clamps with Show more. */
-function Payload({ value, label }: { value: unknown; label: string }) {
-  return <StructuredValue value={value} label={label} defaultOpen="auto" />;
+/** The input or the output of a span: text is prose, JSON is the pane's fields view with a raw switch of its own. */
+function PayloadBlock({
+  title,
+  tone,
+  value,
+  label,
+}: {
+  title: string;
+  tone: BlockTone;
+  value: unknown;
+  label: string;
+}) {
+  const [raw, setRaw] = useState(false);
+  return (
+    <TraceBlock
+      title={title}
+      tone={tone}
+      text={bodyText(value)}
+      switches={isStructuredValue(value) ? <JsonToggle raw={raw} onChange={setRaw} /> : null}
+    >
+      <Value value={value} label={label} raw={raw} />
+    </TraceBlock>
+  );
 }
 
 function ToolArguments({ args }: { args: string }) {
-  const parsed = parseStructured(args);
-  return parsed.structured ? (
-    <JsonTree data={parsed.data} expandDepth={2} label="Tool arguments" toolbar={false} />
+  return parseStructured(args).structured ? (
+    <Value value={args} label="Tool arguments" />
   ) : (
     <TextBlock text={args} code />
   );
 }
+
+function ToolCall({ name, args }: { name: string; args: string }) {
+  return (
+    <div className={styles.toolCall}>
+      <div className={styles.toolHead}>
+        <span className={styles.glyph} style={{ ['--tone' as string]: KIND_TONE.TOOL }} aria-hidden="true">
+          <Icon name={KIND_ICON.TOOL} size={12} />
+        </span>
+        <span className={styles.toolName}>{name}</span>
+        <span className={styles.toolNote}>tool call</span>
+      </div>
+      <ToolArguments args={args} />
+    </div>
+  );
+}
+
+const ROLE_TITLE: Record<string, string> = {
+  system: 'System',
+  user: 'User',
+  assistant: 'Assistant',
+  tool: 'Tool',
+};
 
 function Messages({ node, only }: { node: SpanNode; only?: 'input' | 'output' }) {
   const a = node.attributes ?? {};
   const input = only === 'output' ? [] : extractMessages(a, 'llm.input_messages');
   const output = only === 'input' ? [] : extractMessages(a, 'llm.output_messages');
   const reasoning = extractReasoning(node);
+  const out = outputTone(node);
   const render = (msgs: ReturnType<typeof extractMessages>, key: string) =>
     msgs.map((m, i) => {
-      const tone: LabelTone = m.role === 'user' ? 'info' : m.role === 'assistant' ? 'success' : 'muted';
+      // what went in is blue, what the model gave has the colour of the call's result
+      const tone: BlockTone = m.role === 'user' ? 'info' : m.role === 'assistant' ? out : 'neutral';
       return (
-        <Block
+        <TraceBlock
           key={`${key}${i}`}
-          label={m.role.toUpperCase()}
+          title={ROLE_TITLE[m.role] ?? m.role}
           tone={tone}
           role={m.role}
           text={m.content || m.toolCalls.map((t) => `${t.name} ${t.arguments}`).join('\n')}
@@ -119,31 +184,23 @@ function Messages({ node, only }: { node: SpanNode; only?: 'input' | 'output' })
             <>
               {m.content ? <TextBlock text={m.content} /> : null}
               {m.toolCalls.map((t, j) => (
-                <div key={j} className={styles.toolCall}>
-                  <ToolArguments args={t.arguments} />
-                </div>
+                <ToolCall key={j} name={t.name} args={t.arguments} />
               ))}
             </>
           }
         >
-          {m.reasoning ? (
-            <Disclosure className={styles.reasoning} title="Reasoning">
-              <TextBlock text={m.reasoning} />
-            </Disclosure>
-          ) : null}
-          {m.content ? <ClampedText text={m.content} lines={14} /> : null}
-          {m.toolCalls.map((t, j) => (
-            <div key={j} className={styles.toolCall}>
-              <div className={styles.toolHead}>
-                <span className={styles.toolName}>{t.name}</span>
-                <Tag kind="data" tone="meta">
-                  CALL
-                </Tag>
-              </div>
-              <ToolArguments args={t.arguments} />
-            </div>
-          ))}
-        </Block>
+          <div className={styles.stack}>
+            {m.reasoning ? (
+              <Disclosure className={styles.reasoning} title="Reasoning">
+                <TextBlock text={m.reasoning} />
+              </Disclosure>
+            ) : null}
+            {m.content ? <ClampedText text={m.content} lines={14} /> : null}
+            {m.toolCalls.map((t, j) => (
+              <ToolCall key={j} name={t.name} args={t.arguments} />
+            ))}
+          </div>
+        </TraceBlock>
       );
     });
   return (
@@ -206,9 +263,9 @@ export function SpanDetail({ node }: { node: SpanNode }) {
       if (inputMsgs) t.push({ id: 'messages', label: 'Messages' });
     }
     if (docs.length) t.push({ id: 'docs', label: 'Documents', count: docs.length });
-    // a step with no recorded content still opens on a content tab (with an empty state), never on its metadata
+    // a step with no recorded content still opens on a content tab (with an empty state), never on its metadata.
+    // There is no Metrics tab: the facts of the span stand above the tabs (the stat strip), for every tab.
     if (!t.length) t.push({ id: 'io', label: 'Input / Output' });
-    t.push({ id: 'metrics', label: 'Metrics' });
     if (scores.length) t.push({ id: 'scores', label: 'Scores', count: scores.length });
     t.push({ id: 'raw', label: 'Raw' });
     return t;
@@ -224,18 +281,24 @@ export function SpanDetail({ node }: { node: SpanNode }) {
   };
   const errorEvents = (node.events ?? []).filter((e) => e?.name === 'exception');
   const tokens = spanTokens(node);
+  const reasoningTokens = spanReasoningTokens(node);
   const cost = formatCost(spanCost(node));
+  const model = spanModel(node);
+  const out = outputTone(node);
+  const facts: StatStripItem[] = [
+    { key: 'duration', label: 'Duration', value: formatDuration(node.duration_ms) },
+    ...(tokens ? [{ key: 'tokens', label: 'Tokens', value: tokens.toLocaleString('en-US') }] : []),
+    ...(reasoningTokens
+      ? [{ key: 'reasoning', label: 'Reasoning tokens', value: reasoningTokens.toLocaleString('en-US') }]
+      : []),
+    ...(cost ? [{ key: 'cost', label: 'Cost', value: cost }] : []),
+  ];
   const content = (id: string) => {
     if (id !== current) return null;
     if (id === 'messages') return <Messages node={node} />;
     if (id === 'response') {
-      const out = extractMessages(a, 'llm.output_messages');
-      if (out.length) return <Messages node={node} only="output" />;
-      return (
-        <Block label="OUTPUT" tone="success" text={bodyText(a['output.value'])}>
-          <Payload value={a['output.value']} label="Response" />
-        </Block>
-      );
+      if (extractMessages(a, 'llm.output_messages').length) return <Messages node={node} only="output" />;
+      return <PayloadBlock title="Output" tone={out} value={a['output.value']} label="Response" />;
     }
     if (id === 'io' && a['input.value'] == null && a['output.value'] == null) {
       return <p className={styles.empty}>No input or output was recorded for this step.</p>;
@@ -244,14 +307,10 @@ export function SpanDetail({ node }: { node: SpanNode }) {
       return (
         <div className={styles.stack}>
           {a['input.value'] != null ? (
-            <Block label="INPUT" tone="info" text={bodyText(a['input.value'])}>
-              <Payload value={a['input.value']} label="Span input" />
-            </Block>
+            <PayloadBlock title="Input" tone="info" value={a['input.value']} label="Span input" />
           ) : null}
           {a['output.value'] != null ? (
-            <Block label="OUTPUT" tone="success" text={bodyText(a['output.value'])}>
-              <Payload value={a['output.value']} label="Span output" />
-            </Block>
+            <PayloadBlock title="Output" tone={out} value={a['output.value']} label="Span output" />
           ) : null}
         </div>
       );
@@ -260,57 +319,47 @@ export function SpanDetail({ node }: { node: SpanNode }) {
       return (
         <div className={styles.stack}>
           {docs.map((d, i) => (
-            <article key={i} className={styles.doc}>
-              <header className={styles.docHead}>
-                <span className={styles.blockLabel}>Document {i + 1}</span>
-                {d.score !== null ? <Tag kind="data">score {d.score.toFixed(2)}</Tag> : null}
-                {d.meta
-                  ? Object.entries(d.meta)
-                      .slice(0, 4)
-                      .map(([k, v]) => (
-                        <Tag key={k} kind="data">
-                          {k}: {String(v)}
-                        </Tag>
-                      ))
-                  : null}
-              </header>
-              <ClampedText text={d.content} lines={14} />
-            </article>
+            <TraceBlock
+              key={i}
+              title={`Document ${i + 1}`}
+              text={d.content}
+              after={
+                d.score !== null ? <span className={styles.fact}>score {d.score.toFixed(2)}</span> : undefined
+              }
+              expanded={<TextBlock text={d.content} />}
+            >
+              <div className={styles.stack}>
+                <ClampedText text={d.content} lines={14} />
+                {d.meta && Object.keys(d.meta).length ? (
+                  <FieldList data={d.meta} label={`Metadata of document ${i + 1}`} />
+                ) : null}
+              </div>
+            </TraceBlock>
           ))}
         </div>
-      );
-    }
-    if (id === 'metrics') {
-      const rt = spanReasoningTokens(node);
-      const rows: Array<[string, string]> = [
-        ['Kind', KIND_LABEL[kind]],
-        ['Status', node.status ?? 'UNSET'],
-        ['Duration', formatDuration(node.duration_ms)],
-        ['Model', spanModel(node) || '—'],
-        ['Tokens', tokens ? tokens.toLocaleString('en-US') : '—'],
-        ['Reasoning tokens', rt ? rt.toLocaleString('en-US') : '—'],
-        ['Cost', cost ?? '—'],
-        ['Span id', node.span_id],
-      ];
-      return (
-        <dl className={styles.kv}>
-          {rows.map(([k, v]) => (
-            <div key={k}>
-              <dt>{k}</dt>
-              <dd>{v}</dd>
-            </div>
-          ))}
-        </dl>
       );
     }
     if (id === 'scores') {
       return (
         <div className={styles.stack}>
           {scores.map((s, i) => (
-            <div key={i} className={styles.doc}>
-              <b>{s.name}</b> <Tag kind="data">{String(s.value)}</Tag> {s.label ? <Tag>{s.label}</Tag> : null}
-              {s.explanation ? <TextBlock text={s.explanation} /> : null}
-            </div>
+            <TraceBlock
+              key={i}
+              title={s.name}
+              text={[String(s.value), s.label, s.explanation].filter(Boolean).join('\n')}
+              after={
+                <>
+                  <span className={styles.fact}>{String(s.value)}</span>
+                  {s.label ? <StateTag tone="neutral">{s.label}</StateTag> : null}
+                </>
+              }
+            >
+              {s.explanation ? (
+                <TextBlock text={s.explanation} />
+              ) : (
+                <p className={styles.note}>No explanation was recorded.</p>
+              )}
+            </TraceBlock>
           ))}
         </div>
       );
@@ -329,25 +378,26 @@ export function SpanDetail({ node }: { node: SpanNode }) {
         </span>
         <div className={styles.headText}>
           <h3 className={styles.spanName}>{node.name}</h3>
-          <div className={styles.metaLine}>
-            {[
-              spanModel(node),
-              formatDuration(node.duration_ms),
-              tokens ? `${tokens.toLocaleString('en-US')} tokens` : '',
-              cost ?? '',
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </div>
+          <div className={styles.metaLine}>{[KIND_LABEL[kind], model].filter(Boolean).join(' · ')}</div>
         </div>
         <SpanStatusTag status={node.status} />
+        <CopyAct text={node.span_id} label="Copy span id" />
       </header>
-      {errorEvents.map((e, i) => (
-        <div key={i} className={styles.exception} role="alert">
-          <b>{String(e.attributes?.['exception.type'] ?? 'Exception')}</b>:{' '}
-          {String(e.attributes?.['exception.message'] ?? '')}
-        </div>
-      ))}
+      <div className={styles.stats} data-fit="" style={{ ['--n' as string]: facts.length }}>
+        <StatStrip variant="compact" aria-label="Span facts" items={facts} />
+      </div>
+      {errorEvents.map((e, i) => {
+        const type = String(e.attributes?.['exception.type'] ?? 'Exception');
+        const message = String(e.attributes?.['exception.message'] ?? '');
+        return (
+          <div key={i} role="alert">
+            <TraceBlock title="Error" tone="danger" text={`${type}: ${message}`} expand={false}>
+              <p className={styles.errorLead}>{type}</p>
+              {message ? <TextBlock text={message} code dir="ltr" /> : null}
+            </TraceBlock>
+          </div>
+        );
+      })}
       <Tabs label="Span details" items={tabs} selected={current} onSelect={select}>
         {tabs.map((t) => (
           <TabPanel key={t.id} id={t.id} forceMount>

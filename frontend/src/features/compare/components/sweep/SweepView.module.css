@@ -406,3 +406,22 @@ button.outcome:focus-visible {
     align-items: stretch;
   }
 }
+
+/* the item in the pane is the current row: the platform's current-row tone, as the open row of the compare list */
+.table tr.itemRow[data-open] > * {
+  background: var(--row-hover);
+}
+
+/* the pane header: the passes of each cohort side, after the item id */
+.paneSides {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  align-items: center;
+}
+
+.paneSide {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+}

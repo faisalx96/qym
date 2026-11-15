@@ -1,4 +1,4 @@
-/** Redesign 2: run identity, the 44px bar, the averages matrix, category and error cards, the aligned expanded item, run focus. */
+/** Redesign 2: run identity, the 44px bar, the averages matrix, category and error cards, the item pane, run focus. */
 import { expect, test, type Page } from '@playwright/test';
 import { uniqueSlug } from '../helpers';
 import { axeSeriousViolations } from '../shell/support';
@@ -8,6 +8,8 @@ import {
   compareUrl,
   goSection,
   itemDetail,
+  itemPane,
+  paneOutputs,
   seedScenario,
   urlParams,
   waitLoaded,
@@ -40,9 +42,11 @@ const four = () => {
 };
 const axe = async (page: Page) => {
   await page.mouse.move(0, 0); // hover dims the other runs on purpose; scan the resting state
-  return (await axeSeriousViolations(page, '[data-testid="compare-page"]')).map(
-    (v: { id: string; nodes: unknown[] }) => `${v.id} x${v.nodes.length}`,
-  );
+  const found = await axeSeriousViolations(page, '[data-testid="compare-page"]');
+  // an open item pane is in a portal on the body, outside the page element: scan it too
+  if (await itemPane(page).count())
+    found.push(...(await axeSeriousViolations(page, '[data-testid="item-pane"]')));
+  return found.map((v: { id: string; nodes: unknown[] }) => `${v.id} x${v.nodes.length}`);
 };
 
 test.describe('run identity and chrome', () => {
@@ -144,66 +148,76 @@ test.describe('category and error cards', () => {
   });
 });
 
-test.describe('expanded item', () => {
+test.describe('item pane', () => {
   const open = async (page: Page, runs = four()) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(compareUrl(runs));
     await waitLoaded(page);
     await page.locator('[data-testid="item-row"]').first().click();
     const id = (await page.getByTestId('item-row').first().getAttribute('data-item-id'))!;
-    await expect(itemDetail(page, id).getByTestId('output-card')).toHaveCount(runs.length);
+    await expect(paneOutputs(itemDetail(page, id))).toHaveCount(runs.length);
     return itemDetail(page, id);
   };
 
-  test('four runs sit on one row with a run-colour rail each', async ({ page }) => {
-    const detail = await open(page);
-    const tops = await detail
-      .getByTestId('output-card')
-      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
-    expect(new Set(tops).size).toBe(1);
-    const rails = await detail
-      .getByTestId('output-card')
-      .evaluateAll((els) => els.map((e) => getComputedStyle(e).borderInlineStartColor));
-    expect(new Set(rails).size).toBeGreaterThan(1);
-  });
-
-  test('a metric click opens its details under every run, at the same top; Escape closes', async ({
+  test('one button opens the details of a metric for every run; the same button closes them; Escape closes the pane', async ({
     page,
   }) => {
     const detail = await open(page);
-    await detail.getByRole('button', { name: 'Show quality details' }).first().click();
-    const cells = detail.getByTestId('metric-panel-cell');
-    await expect(cells).toHaveCount(4);
-    const tops = await detail
-      .locator('[data-part="metric-details"]')
-      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
-    expect(new Set(tops).size).toBe(1);
+    const show = detail.getByRole('button', { name: 'Show the details of quality', exact: true });
+    // the details are closed until the reader opens them
+    await expect(show).toHaveAttribute('aria-expanded', 'false');
+    await expect(detail.locator('[data-part="metric-details"]')).toHaveCount(0);
+    await show.click();
+    const hide = detail.getByRole('button', { name: 'Hide the details of quality', exact: true });
+    await expect(hide).toHaveAttribute('aria-expanded', 'true');
+    // one details row under the metric, with one group for each run that scored it
+    const details = detail.locator('[data-part="metric-details"]');
+    await expect(details).toHaveCount(1);
+    await expect(details.getByRole('group', { name: /^Details of quality, / })).toHaveCount(4);
+    await hide.click();
+    await expect(details).toHaveCount(0);
     await page.keyboard.press('Escape');
-    await expect(cells).toHaveCount(0);
+    await expect(detail).toHaveCount(0);
   });
 
-  test('run toggles hide a column; All restores; Only differing keeps runs whose output differs', async ({
+  test('output chips hide an output; one stays on; All restores; "Only the ones that differ from the baseline" keeps the outputs that differ', async ({
     page,
   }) => {
     const detail = await open(page);
-    const toggles = detail.getByRole('group', { name: 'Runs shown' });
-    await toggles.getByRole('button').nth(1).click();
-    await expect(detail.getByTestId('output-card')).toHaveCount(3);
+    // above three runs: one on/off chip for each output
+    const chips = detail.getByRole('group', { name: 'Outputs' }).getByRole('button');
+    await expect(chips).toHaveCount(4);
+    for (let i = 0; i < 4; i++) await expect(chips.nth(i)).toHaveAttribute('aria-pressed', 'true');
+    await chips.nth(1).click();
+    await expect(chips.nth(1)).toHaveAttribute('aria-pressed', 'false');
+    await expect(paneOutputs(detail)).toHaveCount(3);
+    for (const i of [0, 2]) await chips.nth(i).click();
+    await expect(paneOutputs(detail)).toHaveCount(1);
+    // the last output stays on: its chip is locked (aria-disabled)
+    await expect(chips.nth(3)).toHaveAttribute('aria-pressed', 'true');
+    await expect(chips.nth(3)).toHaveAttribute('aria-disabled', 'true');
     await detail.getByRole('button', { name: 'All', exact: true }).click();
-    await expect(detail.getByTestId('output-card')).toHaveCount(4);
-    await detail.getByRole('button', { name: 'Only differing' }).click();
-    const n = await detail.getByTestId('output-card').count();
+    await expect(paneOutputs(detail)).toHaveCount(4);
+    await detail.getByRole('button', { name: 'Only the ones that differ from the baseline' }).click();
+    const n = await paneOutputs(detail).count();
     expect(n).toBeGreaterThanOrEqual(1);
     expect(n).toBeLessThanOrEqual(4);
   });
 
-  test('a unique best score carries a Best tag', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(compareUrl(four()));
-    await waitLoaded(page);
-    await page.getByTestId('item-row').first().click();
-    const tags = page.getByTestId('output-card').getByText('Best');
-    expect(await tags.count()).toBeLessThanOrEqual(1);
+  test('two runs: no output chips; Expected and each output have a tone rail; the baseline output has the Baseline mark', async ({
+    page,
+  }) => {
+    const { base, a } = seed.runs;
+    const detail = await open(page, [base, a]);
+    await expect(detail.getByRole('group', { name: 'Outputs' })).toHaveCount(0);
+    // Expected is gold; an output is green only when it passed and red when it failed
+    await expect(detail.locator('section[data-part="expected"]')).toHaveAttribute('data-tone', 'gold');
+    for (const out of await paneOutputs(detail).all())
+      await expect(out).toHaveAttribute('data-tone', /^(success|danger|neutral)$/);
+    await expect(detail.locator('[data-part="baseline-tag"]').first()).toBeVisible();
+    await expect(
+      detail.getByRole('radiogroup', { name: 'Mark the differences from' }).getByRole('radio'),
+    ).toHaveCount(3);
   });
 });
 
@@ -251,18 +265,22 @@ test.describe('polish', () => {
     expect(Math.max(...gaps)).toBeLessThanOrEqual(8);
   });
 
-  test('four expanded cards fit the content width at 1440', async ({ page }) => {
+  test('the outputs of four runs fit the width of the item pane at 1440', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(compareUrl(four()));
     await waitLoaded(page);
     await page.getByTestId('item-row').first().click();
-    const grid = page.getByTestId('output-grid');
-    await expect(grid.getByTestId('output-card')).toHaveCount(4);
-    const [g, last] = await Promise.all([
-      grid.boundingBox(),
-      grid.getByTestId('output-card').last().boundingBox(),
-    ]);
-    expect(last!.x + last!.width).toBeLessThanOrEqual(g!.x + g!.width + 1);
+    const pane = itemPane(page);
+    await expect(paneOutputs(pane)).toHaveCount(4);
+    const g = (await pane.boundingBox())!;
+    for (const out of await paneOutputs(pane).all()) {
+      const o = (await out.boundingBox())!;
+      expect(o.x).toBeGreaterThanOrEqual(g.x);
+      expect(o.x + o.width).toBeLessThanOrEqual(g.x + g.width + 1);
+    }
+    // the pane leaves the start of the list in view and the page does not scroll sideways
+    expect(g.x).toBeGreaterThanOrEqual(200);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
   });
 
   test('category key chips sit above the cards; table view shares one column template', async ({ page }) => {
@@ -315,17 +333,21 @@ test.describe('accessibility and phone', () => {
     [4, () => four()],
     [8, () => eight],
   ] as const) {
-    test(`axe: ${n} runs with an opened metric panel`, async ({ page }) => {
+    test(`axe: ${n} runs with the item pane and its metric details open`, async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto(compareUrl(runs()));
       await waitLoaded(page);
       await page.getByTestId('item-row').first().click();
-      await page.getByRole('button', { name: 'Show quality details' }).first().click();
+      const pane = itemPane(page);
+      await expect(paneOutputs(pane)).toHaveCount(n);
+      // up to four runs the Metrics table has a row for each metric; above four it has a row for each run
+      await pane.getByRole('button', { name: /^Show the details of every (metric|run)$/ }).click();
+      await expect(pane.locator('[data-part="metric-details"]').first()).toBeVisible();
       expect(await axe(page)).toEqual([]);
     });
   }
 
-  test('390px: stacked cards, averages as cards, expanded cards stacked, no sideways scroll', async ({
+  test('390px: stacked cards, averages as cards, the outputs of the pane stacked, no sideways scroll', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -333,9 +355,10 @@ test.describe('accessibility and phone', () => {
     await waitLoaded(page);
     await expect(page.locator('[data-part="averages-table"] section[data-row]')).toHaveCount(4);
     await page.getByTestId('item-row').first().click();
-    const tops = await page
-      .getByTestId('output-card')
-      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    await expect(paneOutputs(itemPane(page))).toHaveCount(4);
+    const tops = await paneOutputs(itemPane(page)).evaluateAll((els) =>
+      els.map((e) => Math.round(e.getBoundingClientRect().top)),
+    );
     expect(new Set(tops).size).toBe(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     // the pointer rests where the click left it; after the section panel moved the lists it sits over an error row, whose siblings dim (--dim-opacity)

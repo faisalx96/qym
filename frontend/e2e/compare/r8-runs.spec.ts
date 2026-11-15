@@ -133,11 +133,9 @@ test('C-run-2/3/4: card head, stat strip and the six meta rows', async ({ page }
 test('K2 (C062): a repeat run counts executions, with items × passes under the strip', async ({ page }) => {
   await openCompare(page, [s.seed.runs.repeat3, s.seed.runs.base], 1440);
   const card = part(page, 'run-card').first();
-  await expect(card.locator('[data-part="run-stat-strip"] [role="group"] > div > [class*="label"]')).toHaveText([
-    'Executions',
-    'Succeeded',
-    'Errors',
-  ]);
+  await expect(
+    card.locator('[data-part="run-stat-strip"] [role="group"] > div > [class*="label"]'),
+  ).toHaveText(['Executions', 'Succeeded', 'Errors']);
   await expect(card.locator('[data-part="run-passes"]')).toContainText('× 3 passes');
 });
 

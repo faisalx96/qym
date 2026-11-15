@@ -4,9 +4,25 @@
  * dataset picker badges (B4-21 to B4-27). Numbers are the spec's, measured at 1440, 1024 and 390.
  */
 import { expect, type Locator, type Page } from '@playwright/test';
-import { createEnvironment, fakeJobsOf, getExperiment, resetFakes, setFakeFlags, FAKE_A, test } from '../support';
+import {
+  createEnvironment,
+  fakeJobsOf,
+  getExperiment,
+  resetFakes,
+  setFakeFlags,
+  FAKE_A,
+  test,
+} from '../support';
 import { datasetSelect, dsBox } from './multiSupport';
-import { launchButton, nameBox, openLaunch, review, seedLaunch, type LaunchFixture, toReview } from './launchSupport';
+import {
+  launchButton,
+  nameBox,
+  openLaunch,
+  review,
+  seedLaunch,
+  type LaunchFixture,
+  toReview,
+} from './launchSupport';
 
 test.setTimeout(120_000);
 test.use({ actionTimeout: 10_000 });
@@ -58,7 +74,11 @@ test.describe('Run settings', () => {
       const c = await box(callout);
       expect(c.height).toBeCloseTo(width === 390 ? 51.6 : 34.8, 0);
       // B5-34: nothing scrolls sideways.
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBe(0);
 
       // Review row (B5-35): "Latency-sensitive: yes" after Priority.
       await toReview(page);
@@ -82,7 +102,9 @@ test.describe('Run settings', () => {
     await page.keyboard.press('Space');
     await expect(checkbox(page)).toBeChecked();
     await expect(checkbox(page)).toHaveAttribute('aria-describedby', /launch-latency-help/);
-    await expect.poll(() => bodies.some((b) => (b as { latency_sensitive?: boolean }).latency_sensitive === true)).toBe(true);
+    await expect
+      .poll(() => bodies.some((b) => (b as { latency_sensitive?: boolean }).latency_sensitive === true))
+      .toBe(true);
     await page.keyboard.press('Space');
     await expect(checkbox(page)).not.toBeChecked();
     await expect.poll(() => bodies.some((b) => !('latency_sensitive' in (b as object)))).toBe(true);
@@ -95,7 +117,9 @@ test.describe('Run settings', () => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await nameBox(page).fill('flagged');
     await checkbox(page).check({ force: true });
-    await expect(page.locator('[data-part=launch-bar]').getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-part=launch-bar]').getByText('Ready to launch')).toBeVisible({
+      timeout: 15_000,
+    });
     await toReview(page);
     await expect(launchButton(page)).toBeEnabled({ timeout: 15_000 });
     await launchButton(page).click();
@@ -183,8 +207,14 @@ test.describe('Dataset picker', () => {
       await expect(options.filter({ hasText: 'golden' }).getByTestId('dataset-chip')).toHaveCount(0);
       for (const o of await options.all()) await expect(o).not.toHaveAttribute('aria-disabled', 'true');
       await options.filter({ hasText: 'secret-set' }).click();
-      await expect(page.getByTestId('dataset-token-help')).toContainText('Private test set. The experiment reads it');
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+      await expect(page.getByTestId('dataset-token-help')).toContainText(
+        'Private test set. The experiment reads it',
+      );
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBe(0);
     }
   });
 });
@@ -195,7 +225,12 @@ test.describe('Token warning', () => {
     request,
   }) => {
     const res = await request.post('/v1/datasets', {
-      data: { project_slug: f.project.slug, name: 'golden-private', description: 'e2e', private_test_set: true },
+      data: {
+        project_slug: f.project.slug,
+        name: 'golden-private',
+        description: 'e2e',
+        private_test_set: true,
+      },
     });
     expect(res.ok(), await res.text()).toBeTruthy();
     const heights: Record<number, number> = {};
@@ -208,7 +243,9 @@ test.describe('Token warning', () => {
       await datasetSelect(page).click();
       await page.getByRole('option', { name: /golden-private/ }).click();
       await toReview(page);
-      const callout = review(page).getByRole('note').filter({ hasText: 'Dataset read token will not be sent' });
+      const callout = review(page)
+        .getByRole('note')
+        .filter({ hasText: 'Dataset read token will not be sent' });
       await expect(callout).toBeVisible({ timeout: 15_000 });
       await expect(callout).toContainText(
         'The schema of Alpha does not declare QYM_DATASET_READ_TOKEN, so \u201cgolden-private\u201d (private) is read with the worker\u2019s own token.',

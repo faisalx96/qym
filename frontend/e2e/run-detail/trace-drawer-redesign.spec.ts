@@ -1,4 +1,4 @@
-/** Redesign 2, trace drawer: split pane resize and persistence, header chips and ID copy, expand dialog, kind icons, 390px switch. */
+/** Redesign 2, trace drawer: split pane resize and persistence, the stat strip and ID copy, expand dialog, kind icons, 390px switch. */
 import { test, expect, type Page } from '@playwright/test';
 import {
   axeSeriousViolations,
@@ -60,7 +60,7 @@ test('the split is draggable by keyboard, remembered after a reload, and a doubl
   await expect.poll(() => pct(page)).toBe(55);
 });
 
-test('the header carries the trace statistics and a copyable id; rows have kind icons', async ({
+test('the drawer carries the trace statistics in a stat strip and a copyable id in its header; rows have kind icons', async ({
   page,
   context,
 }) => {
@@ -68,12 +68,13 @@ test('the header carries the trace statistics and a copyable id; rows have kind 
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRun(page, s.slug, classic);
   await openTrace(page);
-  const summary = page.getByRole('group', { name: 'Trace summary' });
-  await expect(summary).toContainText('spans');
-  await expect(summary).toContainText('tokens');
-  await expect(summary.getByText(/^ID /)).toBeVisible();
-  await summary.getByRole('button', { name: 'Copy trace id' }).click();
-  await expect(summary.getByRole('button', { name: 'Copied' })).toBeVisible();
+  // the facts are the platform stat strip; the trace id and its copy tile are in the drawer header
+  const summary = page.getByLabel('Trace summary');
+  await expect(summary).toContainText('Spans');
+  await expect(summary).toContainText('Tokens');
+  const dialog = page.getByRole('dialog', { name: 'Trace' });
+  await dialog.getByRole('button', { name: 'Copy trace id' }).click();
+  await expect(dialog.getByRole('button', { name: 'Copied' })).toBeVisible();
   const kinds = await page.getByRole('tree', { name: 'Span tree' }).locator('[data-kind] svg').count();
   expect(kinds).toBeGreaterThan(3);
   const w = await page.getByRole('dialog', { name: 'Trace' }).boundingBox();

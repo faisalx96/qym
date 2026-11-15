@@ -3,10 +3,10 @@
  * test_item_reasons.py: a Fail bar lands on the filtered list with a banner explaining the order, and structured
  * item metadata never renders as "[object Object]". The Items table has no Reason column (C017).
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { compareUrl, waitLoaded } from '../compare/support';
 import { PERCENT, seedCustomRun, type CustomItem } from './cutover-support';
-import { openRun, seedProject, showItems, type Seeded } from './support';
+import { itemPane, itemRow, openRun, seedProject, showItems, type Seeded } from './support';
 
 let s: Seeded;
 let runId: string;
@@ -52,16 +52,21 @@ test.beforeAll(async () => {
   runId = await seedCustomRun(s, { name: 'reasons', specs: { accuracy: PERCENT }, items });
 });
 
-const row = (page: Page, n: number) => page.getByRole('row', { name: new RegExp(`^Open item #${n} `) });
-
-// C017 (review group R2): the owner removed the Reason column completely; the reason stays in the item's details.
+// C017 (review group R2): the owner removed the Reason column completely; the reason is in the Metrics table of the
+// item pane.
 test('the Items table has no Reason column, even when it is wide', async ({ page }) => {
   await page.setViewportSize({ width: 1900, height: 1000 });
   await openRun(page, s.slug, runId);
   await showItems(page);
-  await expect(row(page, 1)).toBeVisible();
+  await expect(itemRow(page, 1)).toBeVisible();
   await expect(page.locator('td[data-col="reason"]')).toHaveCount(0);
   await expect(page.getByRole('columnheader', { name: /^Reason/ })).toHaveCount(0);
+  // the reason of a failed item is in the pane (item-0: "Expected 12 rows, got 9")
+  await itemRow(page, 1).click();
+  const pane = itemPane(page, 'item-0');
+  const table = pane.getByRole('table', { name: 'Metrics' });
+  await expect(table.getByRole('columnheader', { name: 'Reason', exact: true })).toBeVisible();
+  await expect(table).toContainText('Expected 12 rows, got 9');
 });
 
 // 8 items score 0; the scorer error and the task error are errors, the other 6 are failures
@@ -101,12 +106,15 @@ test('structured item metadata never renders as [object Object]', async ({ page 
     ],
   });
   await openRun(page, s.slug, id);
-  await page.getByRole('button', { name: 'Open item #1', exact: true }).click();
-  const card = page.getByTestId('item-card');
+  await itemRow(page, 1).click();
+  const card = itemPane(page, 'item-0');
   await expect(card).toBeVisible();
-  await expect(card).toContainText('hard');
-  await expect(card).toContainText('finance');
-  await expect(card).toContainText('{"source":"import","batch":3}');
+  // the Metadata part of the pane shows each key with its value; a nested object shows as its own fields
+  const meta = card.locator('[data-part="metadata"]');
+  await expect(meta).toContainText('hard');
+  await expect(meta).toContainText('finance');
+  await expect(meta).toContainText('provenance');
+  await expect(meta).toContainText('import');
   await expect(page.locator('body')).not.toContainText('[object Object]');
 });
 
@@ -132,8 +140,9 @@ test('compare: structured item metadata never renders as [object Object]', async
   await page.goto(compareUrl([a, b]));
   await waitLoaded(page);
   await page.getByTestId('item-row').nth(0).locator('[data-part="item-head"]').click();
-  // scalars and lists show as badges; the structured value shows as nothing wrong, never as [object Object]
-  await expect(page.locator('body')).toContainText('hard');
-  await expect(page.locator('body')).toContainText('finance');
+  // the item opens in the pane; its Metadata part shows the values, never [object Object]
+  const meta = page.getByTestId('item-pane').locator('[data-part="metadata"]');
+  await expect(meta).toContainText('hard');
+  await expect(meta).toContainText('finance');
   await expect(page.locator('body')).not.toContainText('[object Object]');
 });

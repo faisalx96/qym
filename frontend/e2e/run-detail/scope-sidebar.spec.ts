@@ -95,7 +95,7 @@ test.describe('desktop 1280', () => {
     await scopeBar(page)
       .getByRole('button', { name: /^View \d+ items/ })
       .click();
-    await expect(page.getByRole('treegrid', { name: 'Items' })).toBeInViewport();
+    await expect(page.getByRole('grid', { name: 'Items' })).toBeInViewport();
     await expect(scopeBar(page)).toBeVisible();
   });
 

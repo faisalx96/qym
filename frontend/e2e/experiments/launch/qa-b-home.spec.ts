@@ -6,7 +6,17 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { archiveProject, unarchiveProject } from '../../helpers';
 import { axeSeriousViolations, describeViolations, resetFakes, test } from '../support';
-import { captureExperimentPosts, nameBox, openHome, openLaunch, review, seedLaunch, type LaunchFixture, toReview, goStep } from './launchSupport';
+import {
+  captureExperimentPosts,
+  nameBox,
+  openHome,
+  openLaunch,
+  review,
+  seedLaunch,
+  type LaunchFixture,
+  toReview,
+  goStep,
+} from './launchSupport';
 
 test.setTimeout(120_000);
 test.use({ actionTimeout: 10_000 });
@@ -20,7 +30,8 @@ test.beforeEach(async ({ request }) => {
 
 const checkbox = (page: Page) => page.getByRole('checkbox', { name: 'Latency-sensitive run' });
 const control = (page: Page) => page.getByTestId('launch-latency');
-const envCard = (page: Page) => page.getByTestId('home-latency').locator('xpath=ancestor::*[contains(@class,"card")][1]');
+const envCard = (page: Page) =>
+  page.getByTestId('home-latency').locator('xpath=ancestor::*[contains(@class,"card")][1]');
 
 async function box(l: Locator) {
   const b = await l.boundingBox();
@@ -37,7 +48,9 @@ const overflow = (l: Locator) =>
 
 test.describe('home view', () => {
   for (const width of WIDTHS) {
-    test(`the control sits in the Environments card after "Add environment" at ${width}px`, async ({ page }) => {
+    test(`the control sits in the Environments card after "Add environment" at ${width}px`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width, height: 900 });
       await openHome(page, f.project.slug);
       // QA3-10: once, in the Environments card, below the Add environment button.
@@ -57,10 +70,12 @@ test.describe('home view', () => {
       expect(await overflow(page.getByTestId('home-latency'))).toEqual([]);
       // QA3-12: helper 11 px, indented 24 px.
       const helper = page.locator('#launch-latency-help');
-      expect(await helper.evaluate((el) => [getComputedStyle(el).fontSize, getComputedStyle(el).paddingInlineStart])).toEqual([
-        '11px',
-        '24px',
-      ]);
+      expect(
+        await helper.evaluate((el) => [
+          getComputedStyle(el).fontSize,
+          getComputedStyle(el).paddingInlineStart,
+        ]),
+      ).toEqual(['11px', '24px']);
       const lines = Math.round((await box(helper)).height / 15.4);
       expect(lines).toBe(width === 1440 ? 2 : width === 1024 ? 3 : 4);
       // QA3-13: the Dataset card stretches to the Environments card (side by side).
@@ -73,7 +88,11 @@ test.describe('home view', () => {
       const bar = page.getByRole('region', { name: 'Launch', exact: true });
       await expect(bar.getByTestId('latency-tag')).toHaveCount(0);
       if (width === 1440) expect(Math.round((await box(bar)).height)).toBe(56);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBe(0);
     });
   }
 
@@ -108,7 +127,10 @@ test.describe('home view', () => {
     }
   });
 
-  test('one value: home -> Customize -> back, and Launch as is sends it (QA3-17)', async ({ page, request }) => {
+  test('one value: home -> Customize -> back, and Launch as is sends it (QA3-17)', async ({
+    page,
+    request,
+  }) => {
     const posts = captureExperimentPosts(page);
     await openHome(page, f.project.slug, `?env=${f.env.id}`);
     await nameBox(page).fill('round trip');
@@ -132,12 +154,16 @@ test.describe('home view', () => {
     expect(posts.launches[0]!.body).not.toHaveProperty('versioning_details');
     await expect
       .poll(async () =>
-        JSON.stringify(await (await request.get(`/v1/projects/${f.project.id}/experiments?latency_sensitive=true`)).json()),
+        JSON.stringify(
+          await (await request.get(`/v1/projects/${f.project.id}/experiments?latency_sensitive=true`)).json(),
+        ),
       )
       .toContain('round trip');
   });
 
-  test('a manager never sees a reason; the dry run keeps no latency problem (QA3-15, QA3-24)', async ({ page }) => {
+  test('a manager never sees a reason; the dry run keeps no latency problem (QA3-15, QA3-24)', async ({
+    page,
+  }) => {
     await openHome(page, f.project.slug, `?env=${f.env.id}`);
     await expect(checkbox(page)).toBeEnabled();
     await expect(page.getByTestId('launch-latency-reason')).toHaveCount(0);
@@ -177,12 +203,18 @@ test.describe('Customize step 1', () => {
       // Children: the name and priority row, and the latency block only.
       const kids = await card.evaluate((el) => {
         const stack = el.querySelector('[data-testid="launch-latency"]')!.parentElement!;
-        return Array.from(stack.children).map((c) => c.getAttribute('data-testid') ?? c.className.split(' ')[0]);
+        return Array.from(stack.children).map(
+          (c) => c.getAttribute('data-testid') ?? c.className.split(' ')[0],
+        );
       });
       console.log('QA2-10 children', JSON.stringify(kids));
       expect(kids).toHaveLength(2);
       expect(kids[1]).toBe('launch-latency');
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      ).toBe(0);
     });
   }
 

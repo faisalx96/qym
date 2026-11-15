@@ -56,7 +56,9 @@ const tickBoth = async (page: Page) => {
 };
 
 test.describe('the Datasets card', () => {
-  test('QD-1, QD-9: nothing chosen is today single Select; one dataset costs two clicks', async ({ page }) => {
+  test('QD-1, QD-9: nothing chosen is today single Select; one dataset costs two clicks', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openHome(page, f.project.slug);
     await expect(page.getByTestId('datasets-fieldset')).toHaveCount(0);
@@ -88,7 +90,9 @@ test.describe('the Datasets card', () => {
   });
 
   for (const width of WIDTHS) {
-    test(`single dataset box and the composed card at ${width}px (QD-3 to QD-14, QD-18, QD-20 to QD-23)`, async ({ page }) => {
+    test(`single dataset box and the composed card at ${width}px (QD-3 to QD-14, QD-18, QD-20 to QD-23)`, async ({
+      page,
+    }) => {
       const height = width === 1440 ? 900 : 1000;
       await page.setViewportSize({ width, height });
       await openHome(page, f.project.slug);
@@ -102,14 +106,24 @@ test.describe('the Datasets card', () => {
       const fieldset = datasetsCard(page);
       m['singleFieldset'] = await sized(fieldset);
       m['singleBox'] = await sized(dsBox(page, 'support-tickets'));
-      near((await sized(dsBox(page, 'support-tickets'))).height, 75, 1.6, 'QD-3 box height (75: the option box padding of round 9, was 67)');
-      const trigger = dsBox(page, 'support-tickets').getByRole('button', { name: /^Versions.* of support-tickets$/ });
+      near(
+        (await sized(dsBox(page, 'support-tickets'))).height,
+        75,
+        1.6,
+        'QD-3 box height (75: the option box padding of round 9, was 67)',
+      );
+      const trigger = dsBox(page, 'support-tickets').getByRole('button', {
+        name: /^Versions.* of support-tickets$/,
+      });
       const tsize = await sized(trigger);
       m['trigger'] = tsize;
       expect(tsize.height).toBeLessThanOrEqual(24.5);
       expect(tsize.width).toBeLessThanOrEqual(139.5);
       await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
-      const tag = dsBox(page, 'support-tickets').locator('[data-kind="version"], span').filter({ hasText: /^Latest version$/ }).first();
+      const tag = dsBox(page, 'support-tickets')
+        .locator('[data-kind="version"], span')
+        .filter({ hasText: /^Latest version$/ })
+        .first();
       await expect(tag).toBeVisible();
       await shot(page, `after-d-home-single-${width}`);
 
@@ -125,8 +139,14 @@ test.describe('the Datasets card', () => {
       near((await sized(radios)).height, 24, 0.8, 'QD-12 control');
       // One run each is the default: both environments fan out, the count is 8.
       await expect(radios.getByRole('radio', { name: 'One run each' })).toBeChecked();
-      const prodTag = page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name: 'production' }) }).getByTestId('env-shape-tag');
-      const stagTag = page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name: 'staging' }) }).getByTestId('env-shape-tag');
+      const prodTag = page
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('checkbox', { name: 'production' }) })
+        .getByTestId('env-shape-tag');
+      const stagTag = page
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('checkbox', { name: 'staging' }) })
+        .getByTestId('env-shape-tag');
       await expect(prodTag).toHaveText('4 runs, one per dataset version');
       await expect(page.getByText(/^8 runs to launch$/)).toBeAttached();
       // Combine into one run is the opt-in; the composed state is measured in it.
@@ -140,8 +160,12 @@ test.describe('the Datasets card', () => {
       // The home bar hides the count below 961 px (as before this round); the review pane says it.
       await expect(page.getByText(/^5 runs to launch$/)).toBeAttached();
       m['envBoxes'] = {
-        production: await sized(page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name: 'production' }) })),
-        staging: await sized(page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name: 'staging' }) })),
+        production: await sized(
+          page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name: 'production' }) }),
+        ),
+        staging: await sized(
+          page.getByRole('listitem').filter({ has: page.getByRole('checkbox', { name: 'staging' }) }),
+        ),
       };
       m['homeBar'] = await sized(page.getByRole('region', { name: 'Launch' }));
       // The app scrolls inside its shell: the page is the scroll height of the tallest scrolling element.
@@ -171,16 +195,22 @@ test.describe('the Datasets card', () => {
     });
   }
 
-  test('QD-5 to QD-8, QD-11, QD-17, QD-19: references, snap back, add, remove and focus', async ({ page }) => {
+  test('QD-5 to QD-8, QD-11, QD-17, QD-19: references, snap back, add, remove and focus', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openHome(page, f.project.slug);
     await tickBoth(page);
     await chooseDataset(page, 'support-tickets');
-    const trigger = dsBox(page, 'support-tickets').getByRole('button', { name: /^Versions.* of support-tickets$/ });
+    const trigger = dsBox(page, 'support-tickets').getByRole('button', {
+      name: /^Versions.* of support-tickets$/,
+    });
     await trigger.click();
     const panel = page.getByRole('dialog', { name: /Versions options/ });
     await expect(panel.getByRole('checkbox')).toHaveCount(5);
-    const labels = await panel.getByRole('checkbox').evaluateAll((els) => els.map((e) => e.closest('label')?.textContent?.trim()));
+    const labels = await panel
+      .getByRole('checkbox')
+      .evaluateAll((els) => els.map((e) => e.closest('label')?.textContent?.trim()));
     expect(labels[0]).toBe('Latest version');
     expect(labels.slice(1, 4)).toEqual(['Version v3', 'Version v2', 'Version v1']);
     expect(labels.at(-1)).toBe('Alias production');
@@ -219,11 +249,14 @@ test.describe('the Datasets card', () => {
     await expect(datasetSelect(page)).toBeVisible();
   });
 
-  test('QD-25 to QD-28: Customize step 1 shows the same card and issues no extra requests', async ({ page }) => {
+  test('QD-25 to QD-28: Customize step 1 shows the same card and issues no extra requests', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const hits: string[] = [];
     page.on('request', (r) => {
-      if (r.method() === 'GET' && /versioning-details|\/tasks$|\/versions\?/.test(r.url())) hits.push(r.url().replace(/^.*\/v1\//, '/v1/'));
+      if (r.method() === 'GET' && /versioning-details|\/tasks$|\/versions\?/.test(r.url()))
+        hits.push(r.url().replace(/^.*\/v1\//, '/v1/'));
     });
     await openHome(page, f.project.slug);
     await tickBoth(page);
@@ -254,15 +287,21 @@ test.describe('the Datasets card', () => {
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`);
     await chooseDataset(page, 'support-tickets');
     await setVersions(page, 'support-tickets', ['v2', 'v3']);
-    const step = page.getByRole('navigation', { name: 'Steps' }).getByRole('button', { name: /Where it runs/ });
+    const step = page
+      .getByRole('navigation', { name: 'Steps' })
+      .getByRole('button', { name: /Where it runs/ });
     const tag = step.locator('[title$="changed from the starting point"]');
-    const count = async () => ((await tag.count()) ? Number((await tag.first().getAttribute('title'))?.match(/^\d+/)?.[0]) : 0);
+    const count = async () =>
+      (await tag.count()) ? Number((await tag.first().getAttribute('title'))?.match(/^\d+/)?.[0]) : 0;
     const base = await count();
     expect(base).toBeGreaterThan(0);
     await addDataset(page, 'billing-faq');
     await expect.poll(count).toBe(base); // the list is "Datasets changed" once
     // One run each is the default: the shape counts once it leaves it.
-    await page.getByTestId('run-shape').getByRole('radio', { name: 'Combine into one run' }).click({ force: true });
+    await page
+      .getByTestId('run-shape')
+      .getByRole('radio', { name: 'Combine into one run' })
+      .click({ force: true });
     await expect.poll(count).toBe(base + 1);
   });
 });

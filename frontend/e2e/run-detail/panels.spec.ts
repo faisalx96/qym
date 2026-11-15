@@ -65,7 +65,7 @@ test.describe('report sections', () => {
   test('#items scrolls to the table', async ({ page }) => {
     await page.goto(`/projects/${s.slug}/runs/${classic}#items`);
     await expect(page.getByTestId('items-count')).toBeVisible();
-    await expect(page.getByRole('treegrid', { name: 'Items' })).toBeInViewport();
+    await expect(page.getByRole('grid', { name: 'Items' })).toBeInViewport();
   });
 
   test('lazy sections mount once they near the viewport', async ({ page }) => {
@@ -95,7 +95,12 @@ test.describe('errors section', () => {
     await timeout.click();
     await expect.poll(async () => (await itemsCount(page))[0]).toBe(6);
     await expect.poll(() => params(page).get('filters') ?? '').toContain('errors');
-    await expect(page.locator('[data-run-filters]').getByText(/Task error/i).first()).toBeVisible();
+    await expect(
+      page
+        .locator('[data-run-filters]')
+        .getByText(/Task error/i)
+        .first(),
+    ).toBeVisible();
     // clicking again toggles the filter off
     await timeout.click();
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);

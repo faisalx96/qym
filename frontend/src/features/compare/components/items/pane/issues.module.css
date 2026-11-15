@@ -1,0 +1,63 @@
+/* The root-cause issues of one run in the compare item pane. Tokens only; the controls are platform primitives. */
+.issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* the run, then Add issue at the end; the name keeps its width and the action wraps under it when narrow */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+  min-height: 24px;
+}
+
+.headEnd {
+  display: inline-flex;
+  margin-inline-start: auto;
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.issue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: center;
+}
+
+.issue + .issue {
+  padding-block-start: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* a metric name is a key: mono, as written */
+.metric {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.finding {
+  flex-basis: 100%;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}

@@ -1,5 +1,5 @@
 /** Shared helpers for the compare specs. */
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { uniqueSlug } from '../helpers';
 import { seedCompareScenario, type CompareSeed, type SeedClient } from './seed';
 
@@ -64,9 +64,34 @@ export async function goSection(page: Page, name: string): Promise<void> {
     .click();
 }
 
-/** The expanded detail of one item (a sibling row of the item-row, so it is found by item id). */
+/** The item pane of one item (the item opens in a pane at the side of the list; it is found by item id). */
 export const itemDetail = (page: Page, id: string) =>
-  page.locator(`[data-testid="item-detail"][data-item-id="${id}"]`);
+  page.locator(`[data-testid="item-pane"][data-item-id="${id}"]`);
+
+/** The item pane (`<aside aria-label="Item #n">`, in a portal on the body). One item is open at a time. */
+export const itemPane = (page: Page) => page.getByTestId('item-pane');
+
+/** The output blocks of a pane: one for each run in view, in the order of the runs (`aria-label="Output of <run>"`). */
+export const paneOutputs = (pane: Locator) => pane.locator('section[data-part="output"]');
+
+/** The Metrics table of the compare pane: a row for each metric and a column for each run (a row for each run above 4 runs). */
+export const paneMetrics = (pane: Locator) => pane.getByRole('table', { name: 'Metrics of each run' });
+
+/** Open an item in the pane from its row and wait for the output of each run. Returns the pane. */
+export async function openItem(page: Page, id: string, outputs?: number): Promise<Locator> {
+  // the start of the row: an open pane covers the rest of the list (it leaves 240 px of it in view)
+  await itemHead(page, id).click({ position: { x: 24, y: 16 } });
+  const pane = itemDetail(page, id);
+  await expect(pane).toBeVisible();
+  if (outputs !== undefined) await expect(paneOutputs(pane)).toHaveCount(outputs);
+  return pane;
+}
+
+/** Close the item pane with its red Close tile (the pane covers most of the row, so a second click on the row can miss). */
+export async function closeItem(page: Page): Promise<void> {
+  await itemPane(page).getByRole('button', { name: 'Close item', exact: true }).click();
+  await expect(itemPane(page)).toHaveCount(0);
+}
 
 /** The baseline select trigger (K1: by the page title, not in the sticky bar). */
 export const baselineSelect = (page: Page) =>
@@ -81,7 +106,7 @@ export async function pickBaseline(page: Page, option: RegExp): Promise<void> {
 /** The "Per-run averages" matrix (a table; at 390 px a group of per-metric blocks). */
 export const averagesGrid = (page: Page) => page.getByRole('table', { name: 'Per-run averages' });
 
-/** The head of one item row: the one tab stop that expands and collapses it (round 8). */
+/** The head of one item row: the one tab stop (role=button) that opens the item in the pane; `aria-current` when open. */
 export const itemHead = (page: Page, id: string) =>
   page.locator(`[data-testid="item-row"][data-item-id="${id}"] [data-part="item-head"]`);
 

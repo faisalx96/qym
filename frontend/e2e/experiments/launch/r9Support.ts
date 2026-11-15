@@ -21,9 +21,19 @@ export interface R9Fixture extends Seeded {
   staging: SeededEnv;
 }
 
-export const ANSWER = { id: 'answer-ticket', name: 'Answer a ticket', description: 'Reply from the knowledge base', default: true };
+export const ANSWER = {
+  id: 'answer-ticket',
+  name: 'Answer a ticket',
+  description: 'Reply from the knowledge base',
+  default: true,
+};
 export const ROUTE = { id: 'route-ticket', name: 'Route a ticket', description: null, default: false };
-export const SUMMARISE = { id: 'summarise-ticket', name: 'Summarise a ticket', description: null, default: false };
+export const SUMMARISE = {
+  id: 'summarise-ticket',
+  name: 'Summarise a ticket',
+  description: null,
+  default: false,
+};
 
 /**
  * Project with datasets, `production` on FAKE_A (three tasks, High allowed) and `staging` on FAKE_B (one task, capped at
@@ -40,8 +50,14 @@ export async function seedR9(request: APIRequestContext, opts: { tasks?: boolean
     await setFakeTasks(request, FAKE_A, { tasks: [ANSWER, ROUTE, SUMMARISE] });
     await setFakeTasks(request, FAKE_B, { tasks: [ANSWER] });
   }
-  const production = await createEnvironment(request, s.project.id, 'production', { port: FAKE_A, maxPriority: 'HIGH' });
-  const staging = await createEnvironment(request, s.project.id, 'staging', { port: FAKE_B, maxPriority: 'NORMAL' });
+  const production = await createEnvironment(request, s.project.id, 'production', {
+    port: FAKE_A,
+    maxPriority: 'HIGH',
+  });
+  const staging = await createEnvironment(request, s.project.id, 'staging', {
+    port: FAKE_B,
+    maxPriority: 'NORMAL',
+  });
   const spec = {
     evaluator: { config: { samples: 1 } },
     slot_bindings: { 'endpoint:primary': { connection_id: s.connectionId } },
@@ -57,7 +73,12 @@ export async function launchSweep(request: APIRequestContext, f: R9Fixture, task
     name: 'timeout sweep',
     environment_ids: [f.production.id, f.staging.id],
     spec: {
-      evaluator: { dataset: 'support-tickets', dataset_version: 'v3', ...(task ? { task } : {}), config: { samples: 1 } },
+      evaluator: {
+        dataset: 'support-tickets',
+        dataset_version: 'v3',
+        ...(task ? { task } : {}),
+        config: { samples: 1 },
+      },
       slot_bindings: { 'endpoint:primary': { connection_id: f.connectionId } },
       env_overrides: { LLM_OVERRIDES: { endpoints: { primary: { timeout: { sweep: [10, 30, 60] } } } } },
     },
@@ -70,12 +91,15 @@ export const cloneUrl = (slug: string, id: string, step?: string) =>
 export const bar = (page: Page): Locator => page.locator('[data-part=launch-bar]');
 export const part = (page: Page, name: string): Locator => page.locator(`[data-part=${name}]`);
 export const taskSection = (page: Page): Locator => part(page, 'task-section');
-export const taskSelect = (page: Page): Locator => part(page, 'task-select').getByRole('button', { name: /Task/ });
+export const taskSelect = (page: Page): Locator =>
+  part(page, 'task-select').getByRole('button', { name: /Task/ });
 export const envBox = (page: Page, name: string): Locator =>
   page.locator('[data-part=env-box]').filter({ has: page.getByRole('checkbox', { name }) });
 
 export const near = (actual: number, expected: number, tolerance: number, what = '') =>
-  expect(Math.abs(actual - expected), `${what} ${actual} vs ${expected} ± ${tolerance}`).toBeLessThanOrEqual(tolerance);
+  expect(Math.abs(actual - expected), `${what} ${actual} vs ${expected} ± ${tolerance}`).toBeLessThanOrEqual(
+    tolerance,
+  );
 
 export async function box(l: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
   await l.page().evaluate(() => document.fonts.ready);

@@ -23,15 +23,19 @@ test('C-page-1: the first screen at 1440x900 shows all four run cards and the wh
   const table = await box(part(page, 'averages-table'));
   expect(card.bottom).toBeLessThanOrEqual(530);
   expect(table.bottom).toBeLessThanOrEqual(900);
-  expect((await part(page, 'run-card').count())).toBe(4);
+  expect(await part(page, 'run-card').count()).toBe(4);
 });
 
 for (const width of [1440, 1024, 390]) {
-  test(`C-page-2/3: one sticky element (the 36 px nav) and no sideways scroll at ${width}`, async ({ page }) => {
+  test(`C-page-2/3: one sticky element (the 36 px nav) and no sideways scroll at ${width}`, async ({
+    page,
+  }) => {
     await openCompare(page, s.four, width);
     const sticky = await page.evaluate(() =>
       Array.from(document.querySelectorAll<HTMLElement>('body *'))
-        .filter((e) => getComputedStyle(e).position === 'sticky' && !e.closest('table, [data-part=averages-table]'))
+        .filter(
+          (e) => getComputedStyle(e).position === 'sticky' && !e.closest('table, [data-part=averages-table]'),
+        )
         .map((e) => e.getAttribute('data-part')),
     );
     expect(sticky).toEqual(['section-nav']);
@@ -60,11 +64,10 @@ for (const [n, width] of [
   [8, 1440],
   [8, 1024],
 ] as const) {
-  test(`C-page-4: no run, column, category or toggle name is cut at ${width} with ${n} runs`, async ({ page }) => {
+  test(`C-page-4: no run, column or category name is cut at ${width} with ${n} runs`, async ({ page }) => {
     await openCompare(page, n === 4 ? s.four : s.eight, width);
     const bad = await page.evaluate(() => {
-      const sel =
-        '[data-part=run-name], [data-part=averages-colhead], [data-part=category-run-row], [data-part=output-toggle]';
+      const sel = '[data-part=run-name], [data-part=averages-colhead], [data-part=category-run-row]';
       return Array.from(document.querySelectorAll<HTMLElement>(sel))
         .filter((e) => getComputedStyle(e).textOverflow === 'ellipsis' || e.scrollWidth > e.clientWidth + 1)
         .map((e) => `${e.getAttribute('data-part')}: ${e.textContent?.slice(0, 40)}`);
@@ -83,7 +86,9 @@ test('C-page-5: section heights, 4 runs at 1440', async ({ page }) => {
   within(h.errors!, 490, 6, 'errors'); // 440 + 16 panel + 34 wrapped error messages (owner decision H6)
   within(h.items!, 1391, 6, 'items');
   // one metadata key: the section is the head plus one row of cards
-  await part(page, 'category-chip-bar').getByRole('button', { name: /^domain/ }).click();
+  await part(page, 'category-chip-bar')
+    .getByRole('button', { name: /^domain/ })
+    .click();
   within((await box(part(page, 'section-categories'))).h, 301, 6, 'categories with one key');
 });
 
@@ -102,22 +107,33 @@ test('C-page-5 (390): averages and items stay within their ceilings', async ({ p
   expect(h.items!).toBeLessThanOrEqual(2600); // amended from 1820 (chips with letters wrap under the title) and from 2200 (the panel padding wraps the chips to two lines at 390, measured 2571; owner decision H6)
 });
 
-test('C-page-6: eight runs keep the 4-run recipe (two rows of cards, no Run-details button)', async ({ page }) => {
+test('C-page-6: eight runs keep the 4-run recipe (two rows of cards, no Run-details button)', async ({
+  page,
+}) => {
   await openCompare(page, s.eight, 1440);
   const h = await heights(page);
-  within(h.runs!, 584, 8, 'runs (amended: the letter badge wraps one more name; +16 for the panel, owner decision H6)');
+  within(
+    h.runs!,
+    584,
+    8,
+    'runs (amended: the letter badge wraps one more name; +16 for the panel, owner decision H6)',
+  );
   within(h.averages!, 418, 8, 'averages (amended: column heads wrap to 3 lines with letters)');
   within(h.overview!, 409, 6, 'overview');
   within(h.errors!, 708, 8, 'errors'); // 620 + 16 panel + 72 wrapped messages (owner decision H6)
   within(h.items!, 1391, 8, 'items');
   await expect(page.getByRole('button', { name: /Run details/ })).toHaveCount(0);
-  const tops = await part(page, 'run-card').evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size);
+  const tops = await part(page, 'run-card').evaluateAll(
+    (els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size,
+  );
   expect(tops).toBe(2);
 });
 
 test('C-page-7: section order and one description line per head', async ({ page }) => {
   await openCompare(page, s.four, 1440);
-  const order = await page.locator('[data-report-section]').evaluateAll((els) => els.map((e) => e.getAttribute('data-part')));
+  const order = await page
+    .locator('[data-report-section]')
+    .evaluateAll((els) => els.map((e) => e.getAttribute('data-part')));
   expect(order).toEqual(SECTIONS.map((k) => `section-${k}`));
   for (const k of SECTIONS) {
     const head = part(page, `section-${k}`).locator('[data-part=section-head]');
@@ -144,8 +160,15 @@ test('C-nav-2: a click puts the section 12 px under the nav; the active link fol
   await openCompare(page, s.four, 1440);
   const nav = part(page, 'section-nav');
   await nav.getByRole('link', { name: 'Overview' }).click();
-  await expect.poll(async () => Math.round((await box(part(page, 'section-overview'))).y - (await box(nav)).bottom)).toBeGreaterThanOrEqual(8);
-  within((await box(part(page, 'section-overview'))).y - (await box(nav)).bottom, 12, 4, 'section top under nav');
+  await expect
+    .poll(async () => Math.round((await box(part(page, 'section-overview'))).y - (await box(nav)).bottom))
+    .toBeGreaterThanOrEqual(8);
+  within(
+    (await box(part(page, 'section-overview'))).y - (await box(nav)).bottom,
+    12,
+    4,
+    'section top under nav',
+  );
   await expect(nav.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'location');
   await nav.getByRole('link', { name: 'Errors' }).focus();
   await page.keyboard.press('Enter');
@@ -156,7 +179,9 @@ test('C-nav-3: at 390 the nav scrolls inside itself, 36 high, no wrap', async ({
   await openCompare(page, s.four, 390);
   const nav = part(page, 'section-nav').locator('nav');
   within((await box(part(page, 'section-nav'))).h, 36, 1, 'nav');
-  const wraps = await nav.evaluate((el) => new Set(Array.from(el.children).map((c) => Math.round(c.getBoundingClientRect().y))).size);
+  const wraps = await nav.evaluate(
+    (el) => new Set(Array.from(el.children).map((c) => Math.round(c.getBoundingClientRect().y))).size,
+  );
   expect(wraps).toBe(1);
   await noSidewaysScroll(page);
 });

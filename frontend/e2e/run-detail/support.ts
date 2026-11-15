@@ -114,13 +114,17 @@ export function runUrl(slug: string, runId: string, query = ''): string {
   return `/projects/${slug}/runs/${runId}${query ? (query.startsWith('?') ? query : `?${query}`) : ''}`;
 }
 
+/** The items table of the run page. It is a grid: no row expands in place since the item pane, so it is not a treegrid. */
+export function itemsGrid(page: Page): Locator {
+  return page.getByRole('grid', { name: 'Items' });
+}
+
 /** Open the run page and wait until the items table has rendered. */
 export async function openRun(page: Page, slug: string, runId: string, query = ''): Promise<void> {
   await page.goto(runUrl(slug, runId, query));
   await expect(page.getByTestId('items-count')).toBeVisible();
   await expect(
-    page
-      .getByRole('treegrid', { name: 'Items' })
+    itemsGrid(page)
       .or(page.getByRole('grid', { name: /by item and pass/ }))
       // below 640 px the rows are cards
       .or(page.getByRole('list', { name: 'Items' })),
@@ -131,37 +135,88 @@ export async function openRun(page: Page, slug: string, runId: string, query = '
 export async function showItems(page: Page): Promise<void> {
   await page.locator('#run-items').scrollIntoViewIfNeeded();
   await page.evaluate(() => document.getElementById('run-items')?.scrollIntoView({ block: 'start' }));
-  await expect(page.getByRole('button', { name: /^Open item #\d+$/ }).first()).toBeVisible();
+  // a table row at desktop width, a card (li) below 640 px
+  await expect(page.locator('#run-items [data-item-id]').first()).toBeVisible();
 }
 
-/** Open the item's closed "Root cause" disclosure (its per-metric cards are inside). */
-export async function openRootCause(card: Locator): Promise<void> {
-  const trigger = card.getByRole('button', { name: /^Root cause/ });
+/** Open the closed "Root cause" disclosure of the item pane (its per-metric cards are inside). */
+export async function openRootCause(pane: Locator): Promise<void> {
+  const trigger = pane.getByRole('button', { name: /^Root cause/ });
   await expect(trigger).toBeVisible();
   if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
 }
 
+/** The row of item #n in the items table. A click, Enter or Space on it opens the item in the pane at the side. */
 export function itemRow(page: Page, n: number): Locator {
-  return page.getByRole('row', { name: new RegExp(`^Open item #${n} `) });
+  return page.locator('tr[data-item-id]').filter({ has: page.getByText(`#${n}`, { exact: true }) });
 }
 
+/** What opens item #n: the row itself (the table has no chevron button since the item pane). */
 export function itemButton(page: Page, n: number): Locator {
-  return page.getByRole('button', { name: `Open item #${n}`, exact: true });
+  return itemRow(page, n);
 }
 
-/** The matrix row of a metric inside an expanded item (round 3 P5 replaced the metric chips). */
-export function metricRow(card: Locator, metric: string): Locator {
-  return card.locator(`tr[data-metric="${metric}"]`);
+/**
+ * Click the row of item #n at its start (the # cell). Use it when the pane is open: the pane lies over the table from
+ * about 240 px after the table's start edge, so a click on the centre of a row lands on the pane and Playwright waits
+ * until its timeout. A click on the row of the open item closes the pane.
+ */
+export async function clickItemRow(page: Page, n: number): Promise<void> {
+  await itemRow(page, n).click({ position: { x: 24, y: 14 } });
 }
 
-/** Open a metric's detail panel by clicking its (first, or the given pass's) matrix value; returns the panel. */
-export async function openMetric(card: Locator, metric: string, pass?: number): Promise<Locator> {
-  const re = new RegExp(`^${metric}, pass ${pass ?? '\\d+'}:`);
-  await card.getByRole('button', { name: re }).first().click();
-  const panel = card.locator(`[data-testid=metric-detail][data-metric="${metric}"]`);
-  await expect(panel).toBeVisible();
-  return panel;
+/**
+ * The item pane at the side of the items table (`<aside aria-label="Item #n">`, in a portal on the body). One item is
+ * open at a time. With an item id, the pane of that item only.
+ */
+export function itemPane(page: Page, itemId?: string): Locator {
+  return itemId
+    ? page.locator(`[data-testid="item-pane"][data-item-id="${itemId}"]`)
+    : page.getByTestId('item-pane');
+}
+
+/** A titled block of the pane: `input`, `expected`, `output` (data-tone: info, gold, success | danger | neutral). */
+export function paneBlock(pane: Locator, part: 'input' | 'expected' | 'output'): Locator {
+  return pane.locator(`section[data-part="${part}"]`);
+}
+
+/** The Metrics table of the item pane (role=table; one row for each metric, a score column for each pass). */
+export function metricTable(pane: Locator): Locator {
+  return pane.getByRole('table', { name: 'Metrics' });
+}
+
+/** The row of a metric in the pane's Metrics table (the row carries data-failing and data-editing). */
+export function metricRow(pane: Locator, metric: string): Locator {
+  return metricTable(pane)
+    .getByRole('row')
+    .filter({ has: pane.page().getByRole('cell', { name: metric, exact: true }) });
+}
+
+/**
+ * Open the details of a metric (what its scorer recorded beside the reason) and return them. The details are closed
+ * until the reader opens them, and the button is there only when the metric has details. For a multi-pass item, give
+ * the pass: its column header puts that pass in view first (the details and the reasons are those of the pass in view).
+ */
+export async function openMetric(pane: Locator, metric: string, pass?: number): Promise<Locator> {
+  if (pass !== undefined) {
+    const head = metricTable(pane).getByRole('button', { name: new RegExp(`^Pass ${pass}\b`) });
+    // up to 4 passes each have a column header button; beyond that the pass switch of the Output block picks the pass
+    if (await head.count()) await head.click();
+  }
+  const row = metricRow(pane, metric);
+  const show = row.getByRole('button', { name: `Show the details of ${metric}`, exact: true });
+  if (await show.count()) await show.click();
+  await expect(row.getByRole('button', { name: `Hide the details of ${metric}`, exact: true })).toBeVisible();
+  const details = row.locator('[data-part="metric-details"]');
+  await expect(details).toBeVisible();
+  return details;
+}
+
+/** Close the item pane with its red Close tile. */
+export async function closePane(page: Page): Promise<void> {
+  await itemPane(page).getByRole('button', { name: 'Close item', exact: true }).click();
+  await expect(itemPane(page)).toHaveCount(0);
 }
 
 export function metricCard(page: Page, metric: string): Locator {

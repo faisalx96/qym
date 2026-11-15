@@ -4,10 +4,14 @@
  * failed rows, 0 ms, edited tooltip + reset, empty spans, Repeat tab, per-metric pass compare, warnings, CSV
  * headers, narrow viewport, tailored 403 copy, live counter and runtime.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { PERCENT, seedCustomRun, type CustomItem } from './cutover-support';
 import {
   itemButton,
+  itemPane,
+  metricRow,
+  metricTable,
+  paneBlock,
   goToSection,
   openRootCause,
   openRun,
@@ -18,7 +22,6 @@ import {
   settleDashboard,
   client,
   type Seeded,
-  openMetric,
 } from './support';
 import { seedRunningRun } from './seed';
 
@@ -49,7 +52,11 @@ test.beforeAll(async () => {
   custom = await seedCustomRun(s, { name: 'qa-custom', specs: { accuracy: PERCENT }, items });
 });
 
-const card = (page: Page, id: string) => page.locator(`[data-testid=item-card][data-item-id="${id}"]`);
+/** The item pane of one item (the item opens in a pane at the side of the items table). */
+const card = (page: Page, id: string) => itemPane(page, id);
+/** A key of the item metadata in the pane's Metadata part. */
+const metaKey = (pane: Locator, key: string) =>
+  pane.locator('[data-part="metadata"] [data-part="key"]').filter({ hasText: new RegExp(`^${key}$`) });
 
 test.describe('Display popover submenus', () => {
   test('Item fields opens inline with the mouse, toggles a field into the URL, Escape folds it first', async ({
@@ -135,17 +142,18 @@ test.describe('sticky section nav and filter bar', () => {
   });
 });
 
-test('hide_field also hides the complexity and domain badges', async ({ page }) => {
+test('hide_field also hides the complexity and domain fields of the item metadata', async ({ page }) => {
   await openRun(page, s.slug, custom, 'item=zero');
-  await expect(card(page, 'zero').getByTitle('complexity')).toBeVisible();
-  await expect(card(page, 'zero').getByTitle('domain')).toBeVisible();
+  await expect(metaKey(card(page, 'zero'), 'complexity')).toBeVisible();
+  await expect(metaKey(card(page, 'zero'), 'domain')).toBeVisible();
   await openRun(page, s.slug, custom, 'item=zero&hide_field=complexity&hide_field=domain');
   await expect(card(page, 'zero')).toBeVisible();
-  await expect(card(page, 'zero').getByTitle('complexity')).toHaveCount(0);
-  await expect(card(page, 'zero').getByTitle('domain')).toHaveCount(0);
+  await expect(paneBlock(card(page, 'zero'), 'output')).toBeVisible();
+  await expect(metaKey(card(page, 'zero'), 'complexity')).toHaveCount(0);
+  await expect(metaKey(card(page, 'zero'), 'domain')).toHaveCount(0);
 });
 
-test('an item analysis warning shows above the output', async ({ page }) => {
+test('an item analysis warning shows as a notice in the pane', async ({ page }) => {
   await openRun(page, s.slug, custom, 'item=zero');
   const w = card(page, 'zero').getByTestId('analysis-warning');
   await expect(w).toContainText('No taxonomy');
@@ -155,32 +163,38 @@ test('an item analysis warning shows above the output', async ({ page }) => {
 test('0 ms latency is shown, not a dash', async ({ page }) => {
   await openRun(page, s.slug, custom, 'item=zero');
   await expect(page.locator('[data-cell=latency]').first()).toHaveText('0ms');
-  await expect(card(page, 'zero').locator('[data-kind=output]')).toContainText('0ms');
+  // the pane shows the latency in the Execution stat strip (the label, then the value)
+  await expect(card(page, 'zero').getByRole('group', { name: 'Execution' })).toContainText(/Latency\s*0ms/);
 });
 
 test.describe('failed rows', () => {
-  test('a task error shows no metric chips and no Add-issue cards', async ({ page }) => {
+  test('a task error shows no metric rows and no Add-issue cards', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0008');
     const c = card(page, 'item-0008');
     await expect(c).toBeVisible();
-    await expect(c.locator('[data-kind=output]')).toContainText(/error/i);
-    await expect(c.locator('tr[data-metric]')).toHaveCount(0);
+    const output = paneBlock(c, 'output');
+    await expect(output).toHaveAttribute('data-tone', 'danger');
+    await expect(output.getByRole('note')).toContainText('The task failed before it gave an output');
+    await expect(metricTable(c)).toContainText('No scores: this item gave no output to score');
+    await expect(metricTable(c).getByRole('cell')).toHaveCount(0);
     await expect(c.getByTestId('metric-analysis-card')).toHaveCount(0);
     await expect(c.getByRole('button', { name: 'Add issue' })).toHaveCount(0);
   });
 
-  test('a not-received item says so and has no chips or cards', async ({ page }) => {
+  test('a not-received item says so and has no metric rows or cards', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0240');
     const c = card(page, 'item-0240');
-    await expect(c).toContainText('Output not received');
-    await expect(c.locator('tr[data-metric]')).toHaveCount(0);
+    await expect(paneBlock(c, 'output')).toContainText('Output not received');
+    await expect(metricTable(c)).toContainText('No scores: this item gave no output to score');
+    await expect(metricTable(c).getByRole('cell')).toHaveCount(0);
     await expect(c.getByTestId('metric-analysis-card')).toHaveCount(0);
   });
 
-  test('a failing item still gets its chips and cards', async ({ page }) => {
+  test('a failing item still gets its metric rows and cards', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0003');
     const c = card(page, 'item-0003');
-    await expect(c.locator('tr[data-metric=quality]')).toBeVisible();
+    await expect(metricRow(c, 'quality')).toBeVisible();
+    await expect(metricRow(c, 'quality')).toHaveAttribute('data-failing', '');
     await openRootCause(c);
     await expect(c.getByTestId('metric-analysis-card').first()).toBeVisible();
   });
@@ -241,23 +255,27 @@ test.describe('Approve gating by the server review status', () => {
 });
 
 test.describe('scores', () => {
-  test('the edited badge says who, when and old to new, and its reset action restores the scorer value', async ({
+  test('the edited tag says who, when and old to new, and the editor restores the scorer value', async ({
     page,
   }) => {
     await openRun(page, s.slug, classic, 'item=item-0006');
-    const panel = await openMetric(card(page, 'item-0006'), 'quality');
-    await panel.getByRole('button', { name: 'Edit score', exact: true }).click();
-    await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
-    await panel.getByRole('button', { name: 'Save' }).click();
-    const badge = panel.getByText('edited', { exact: true });
+    const c = card(page, 'item-0006');
+    const row = metricRow(c, 'quality');
+    const edit = c.getByRole('button', { name: 'Edit the quality score', exact: true });
+    await edit.click();
+    await row.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
+    await row.getByRole('button', { name: 'Save' }).click();
+    const badge = row.getByText('edited', { exact: true });
     await expect(badge).toBeVisible();
     const title = (await badge.getAttribute('title')) ?? '';
     expect(title).toMatch(/^Edited by .+ on /);
     expect(title).toContain('→');
     expect(title).toContain('Original score:');
-    await panel.getByRole('button', { name: /^Reset quality to its original score/ }).click();
-    await expect(page.getByText(/quality reset to its original score/i)).toBeVisible();
-    await expect(panel.getByText('edited', { exact: true })).toHaveCount(0);
+    // the reset action is in the score editor of an edited score (the old one-click reset button is gone)
+    await edit.click();
+    await row.getByRole('button', { name: 'Reset to scorer value' }).click();
+    await expect(row.getByRole('textbox')).toHaveCount(0);
+    await expect(row.getByText('edited', { exact: true })).toHaveCount(0);
   });
 });
 
@@ -333,12 +351,19 @@ test.describe('repeat runs', () => {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
-  test('a repeat item lines every metric up across the passes (the metrics matrix)', async ({ page }) => {
+  test('a repeat item lines every metric up across the passes (the Metrics table of the pane)', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, repeat);
     await itemButton(page, 1).click();
-    const row = page.locator('[data-testid=item-card] tr[data-metric=quality]').first();
-    await expect(row).toBeVisible();
-    await expect(row.getByRole('button', { name: /^quality, pass \d:/ })).toHaveCount(3);
+    const pane = itemPane(page);
+    const table = metricTable(pane);
+    await expect(metricRow(pane, 'quality')).toBeVisible();
+    // one column for each of the 3 passes (its header puts that pass in view), then the mean
+    await expect(table.getByRole('columnheader').getByRole('button', { name: /^Pass \d$/ })).toHaveCount(3);
+    await expect(table.getByRole('columnheader', { name: 'Mean', exact: true })).toBeVisible();
+    // the metric name, 3 pass scores and the mean come before the other cells of the row
+    expect(await metricRow(pane, 'quality').getByRole('cell').count()).toBeGreaterThanOrEqual(5);
   });
 });
 
