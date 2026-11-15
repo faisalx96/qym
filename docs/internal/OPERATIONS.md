@@ -332,6 +332,54 @@ silently. An old `0063` existed only on an unreleased stream branch; it would
 also upgrade silently (this release's `0064` and `0065` add nothing it
 already has), so recreate such a throwaway database instead.
 
+### Databases migrated by an image from before the 2026-11-12 renumbering
+
+Images from 5–10 November used `0100` for the old Live worker-control head.
+After renumbering, that stamp skips the new API-key and job-priority migrations;
+an attempted upgrade may fail on an existing covering index or reach `0102`
+with those columns still missing. At startup the image now runs
+`python -m qym_platform.tools.reconcile_migration_order` immediately before
+`alembic upgrade head`. `QYM_SKIP_MIGRATIONS=1` skips both commands.
+
+On PostgreSQL the tool holds its own session advisory lock, checks the state
+under that lock, and repairs stamps `0100` or `0102` only when both `live_sources`
+and `live_jobs` exist and either `api_keys.kind` or
+`eval_experiment_jobs.priority` is missing. It stamps `0091`, upgrades through
+`0093`, then stamps `0102`, preserving the already-applied Live migrations.
+Stamps `0091`–`0093` with both Live tables are treated as interrupted repairs:
+the tool resumes the upgrade, or only stamps `0102` if both columns exist.
+Old stamps other than `0100` are not handled; the `0102` case covers an old
+`0100` database already advanced by a newer image. SQLite, unversioned or
+empty-version databases, and all other states are unchanged.
+
+The tool's INFO messages (in addition to Alembic's own migration messages) for
+an old head with both columns missing are:
+
+```text
+migration order: found stamp=0100 live_sources=True live_jobs=True api_keys.kind=False eval_experiment_jobs.priority=False
+migration order: decision=repair legacy migration order
+migration order: step=stamp 0091
+migration order: step=upgrade 0093
+migration order: step=stamp 0102
+migration order: final stamp=0102
+```
+
+An interrupted repair omits `step=stamp 0091`; if both columns already exist,
+its decision is `finish interrupted repair` and it also omits the upgrade.
+A database needing nothing emits one `migration order: no action (...)` line
+with the stamp and four facts, or `dialect=sqlite`. A failed step stops startup
+with a nonzero exit; the next start can resume a committed intermediate step.
+No database URL is logged.
+
+The manual equivalent for a confirmed old `0100` head (or its incomplete
+`0102` upgrade), with API and workers stopped, is:
+
+```bash
+alembic -c packages/platform/qym_platform/migrations/alembic.ini stamp 0091
+alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade 0093
+alembic -c packages/platform/qym_platform/migrations/alembic.ini stamp 0102
+```
+
 ### API keys that stop working at deploy
 
 Keys of archived projects answer 409 (`X-Qym-Key-State: project_archived`), and

@@ -19,6 +19,7 @@ if [ "${QYM_SKIP_MIGRATIONS:-0}" = "1" ]; then
   echo "Skipping migrations (QYM_SKIP_MIGRATIONS=1)"
 else
   echo "Running migrations..."
+  python -m qym_platform.tools.reconcile_migration_order
   alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head
 fi
 
