@@ -31,7 +31,7 @@ import type { Row } from '../../../types';
 import pager from '../../RunPager.module.css';
 import { PAGE_SIZES } from '../ItemsTable';
 import { useItemsUi } from '../ItemsUi';
-import { Act, CopyTile } from './actions';
+import { Act, CopyAct } from './actions';
 import { Block, PaneSection, type BlockTone } from './blocks';
 import { firstBadPass, promptLine, useItem, type ItemData } from './model';
 import { PaneTextMode } from './values';
@@ -109,8 +109,8 @@ function useViewportWidth(): number {
 }
 
 /** Copy the link of the item. */
-export function LinkTile({ text }: { text: string }) {
-  return <CopyTile text={text} label="Copy link" icon="link" />;
+export function LinkAct({ text }: { text: string }) {
+  return <CopyAct text={text} label="Copy link" icon="link" />;
 }
 
 /** What the pager shows of a neighbour item. */
@@ -456,7 +456,7 @@ export function PaneShell({
               </span>
               <Step which="next" target={next} onGo={() => onStep('next')} />
             </nav>
-            <Act tone="danger" label="Close item" icon="close" onPress={onClose} />
+            <Act label="Close item" icon="close" onPress={onClose} />
           </div>
         </div>
         {title ? (
@@ -580,7 +580,7 @@ function PaneItem({
             disabledReason="No trace was recorded for this item"
             onPress={() => ui.openTrace(row.item_id, item.multi ? focus : item.model.viewPass)}
           />
-          <LinkTile text={item.link} />
+          <LinkAct text={item.link} />
         </>
       }
       title={item.prompt || undefined}

@@ -133,7 +133,8 @@ describe('ItemPane', () => {
     const heads = within(table)
       .getAllByRole('columnheader')
       .map((h) => h.textContent);
-    expect(heads.slice(0, 4)).toEqual(['Metric', 'Score', 'Pass if', 'Reason']);
+    // the first column holds the arrow that opens the details of a metric
+    expect(heads.slice(1, 5)).toEqual(['Metric', 'Score', 'Pass if', 'Reason']);
     expect(within(table).getByText('≥70%')).toBeTruthy();
     expect(within(table).getByText('The timeline is wrong')).toBeTruthy();
     expect(pane.querySelector('[data-count="failed"]')!.textContent).toBe('1 failed');

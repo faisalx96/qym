@@ -649,7 +649,7 @@
 }
 
 .mgrid {
-  --cols: minmax(148px, 0.8fr) repeat(var(--scores), 68px) var(--c-passif) var(--c-reason) 52px;
+  --cols: 24px minmax(148px, 0.8fr) repeat(var(--scores), 68px) var(--c-passif) var(--c-reason) 24px;
 
   display: grid;
 }
@@ -659,7 +659,7 @@
   display: grid;
   grid-template-columns: var(--cols);
   column-gap: var(--space-md);
-  padding-inline: var(--space-md) var(--space-sm);
+  padding-inline: var(--space-sm);
 }
 
 /* the loading frame: one column of bones under the title row */
@@ -685,7 +685,7 @@
 
 /* no metric has a reason: the score edit takes a line of its own under the row */
 .mgrid[data-noreason] .reasonCell {
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
 }
 
 .mrow {
@@ -838,7 +838,7 @@
 /* what the scorer recorded for a metric: one deeper tile under the row, over the full width of the table */
 .mrow > .mdetail {
   display: block;
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   min-width: 0;
   margin-block-start: var(--space-sm);
   padding: var(--space-md);
@@ -853,10 +853,17 @@
   justify-content: flex-end;
 }
 
+/* the arrow that opens the details of a metric: the first thing in its row */
+.mrow > .leadCell,
+.mhead > .leadCell {
+  display: flex;
+  justify-content: center;
+}
+
 /* a pane too narrow for a reason column: the reason goes under its metric, on the name's edge */
 @container metrics (max-width: 599px) {
   .mgrid:not([data-multi]) {
-    --cols: minmax(0, 1fr) repeat(var(--scores), 68px) var(--c-passif) 52px;
+    --cols: 24px minmax(0, 1fr) repeat(var(--scores), 68px) var(--c-passif) 24px;
   }
 
   .mgrid:not([data-multi]) .reasonHead {
@@ -865,7 +872,7 @@
 
   .mgrid:not([data-multi]) .reasonCell {
     grid-row: 2;
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
     padding-block-start: var(--space-xs);
   }
 
@@ -876,7 +883,7 @@
 
 @container metrics (max-width: 819px) {
   .mgrid[data-multi] {
-    --cols: minmax(0, 1fr) repeat(var(--scores), 68px) var(--c-passif) 52px;
+    --cols: 24px minmax(0, 1fr) repeat(var(--scores), 68px) var(--c-passif) 24px;
   }
 
   .mgrid[data-multi] .reasonHead {
@@ -885,7 +892,7 @@
 
   .mgrid[data-multi] .reasonCell {
     grid-row: 2;
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
     padding-block-start: var(--space-xs);
   }
 
@@ -897,12 +904,12 @@
 /* narrower still: a multi-pass metric puts its name on one line and its score columns on the next */
 @container metrics (max-width: 519px) {
   .mgrid[data-multi] {
-    --cols: repeat(var(--scores), minmax(0, 1fr)) var(--c-passif) 52px;
+    --cols: 24px repeat(var(--scores), minmax(0, 1fr)) var(--c-passif) 24px;
   }
 
   .mgrid[data-multi] .mtitle,
   .mgrid[data-multi] .nameCell {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
   }
 
   .mgrid[data-multi] .reasonCell {

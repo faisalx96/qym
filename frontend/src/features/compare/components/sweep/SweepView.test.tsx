@@ -183,12 +183,12 @@ describe('Sweep item pane', () => {
     const { unmount } = render(<Harness {...two} />);
     fireEvent.click(within(rows()[0]!).getByRole('button'));
     let table = within(pane()!).getByRole('table', { name: 'Metrics of each run' });
-    expect(within(table).getAllByRole('columnheader')[0]!.textContent).toBe('Metric');
+    expect(within(table).getAllByRole('columnheader')[1]!.textContent).toBe('Metric');
     unmount();
     render(<Harness {...six} />);
     fireEvent.click(within(rows()[0]!).getByRole('button'));
     table = within(pane()!).getByRole('table', { name: 'Metrics of each run' });
-    expect(within(table).getAllByRole('columnheader')[0]!.textContent).toBe('Run');
+    expect(within(table).getAllByRole('columnheader')[1]!.textContent).toBe('Run');
     expect(within(table).getAllByRole('rowheader')).toHaveLength(6);
   });
 

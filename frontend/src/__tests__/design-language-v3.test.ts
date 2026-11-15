@@ -2515,15 +2515,24 @@ describe('item pane (DESIGN_LANGUAGE §3.6 "Item pane")', () => {
     expect(css).not.toMatch(/:hover[^{]*\{[^}]*transform/);
   });
 
-  it('P-03: every icon action is a tile with a tooltip; close is the red tile; no Langfuse link', () => {
+  it('P-03: an icon action is the plain icon action with a tooltip; only the score edit of a row is a tile; no Langfuse link', () => {
     const actions = src(`${PANE}actions.tsx`);
-    expect(actions).toMatch(/Act\(\{ tile = true/);
+    // §3.1 Icon action: no tile by default; the tile is for a row action of a table
+    expect(actions).not.toMatch(/tile = true/);
     expect(actions).toContain('<Tooltip content={props.label}>');
     none(
       grep(paneTsx, /<IconButton\b/, [`${PANE}actions.tsx`]),
-      'An icon action of the pane is <Act> (tile + tooltip)',
+      'An icon action of the pane is <Act> (the icon action + tooltip)',
     );
-    expect(src(`${PANE}Frame.tsx`)).toMatch(/<Act tone="danger" label="Close item" icon="close"/);
+    expect(src(`${PANE}Frame.tsx`)).toMatch(/<Act label="Close item" icon="close"/);
+    // the tiles of the pane: the score edit of a metric row, and nothing else
+    const anyTile = (file: string) => (src(file).match(/<Act\s+tile\b/g) ?? []).length;
+    for (const f of [`${PANE}metrics.tsx`, `${CPANE}ComparePane.tsx`]) {
+      expect(anyTile(f), `${f}: one tile`).toBe(1);
+      expect(src(f)).toMatch(/<Act\s+tile\s+label=\{`Edit the /);
+    }
+    for (const f of [`${PANE}Frame.tsx`, `${PANE}blocks.tsx`, `${PANE}values.tsx`])
+      expect(anyTile(f), f).toBe(0);
     none(grep(under(shippedTsx, PANE, CPANE, 'features/run-detail/components/traces/'), /[Ll]angfuse/));
   });
 

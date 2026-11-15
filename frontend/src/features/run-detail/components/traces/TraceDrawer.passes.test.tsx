@@ -69,7 +69,7 @@ describe('trace drawer on a repeat run', () => {
     expect(screen.getByRole('group', { name: 'Attempts' })).toHaveTextContent('All attempts');
   });
 
-  it('shows the facts in the stat strip, has tile actions and no Langfuse link', () => {
+  it('shows the facts in the stat strip, has plain icon actions and no Langfuse link', () => {
     data = trace(1);
     show(0);
     const facts = screen.getByLabelText('Trace summary');
@@ -78,10 +78,9 @@ describe('trace drawer on a repeat run', () => {
     expect(facts).not.toHaveTextContent('Attempts');
     expect(screen.queryByText(/Langfuse/)).toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Copy trace id' })).toHaveAttribute('data-tile');
-    const close = screen.getByRole('button', { name: 'Close' });
-    expect(close).toHaveAttribute('data-tile');
-    expect(close).toHaveAttribute('data-tone', 'danger');
+    // §3.1 Icon action: a header action is the plain icon action; the tile is for a row action of a table
+    expect(screen.getByRole('button', { name: 'Copy trace id' })).not.toHaveAttribute('data-tile');
+    expect(screen.getByRole('button', { name: 'Close' })).not.toHaveAttribute('data-tile');
   });
 });
 

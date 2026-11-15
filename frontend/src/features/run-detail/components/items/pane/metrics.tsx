@@ -170,6 +170,20 @@ export function MetricTable({ row, item, focus, onFocus }: MetricsProps) {
 
   const head: ReactNode = (
     <div className={s.mhead} role="row">
+      {/* the arrow of the head opens or closes the details of every metric */}
+      <span role="columnheader" className={s.leadCell}>
+        {anyDetails ? (
+          <Act
+            label={allOpen ? 'Hide the details of every metric' : 'Show the details of every metric'}
+            icon={allOpen ? 'chevron-down' : 'chevron-right'}
+            aria-expanded={allOpen}
+            onPress={() => {
+              setDetailsOpen(!allOpen);
+              setOwn({});
+            }}
+          />
+        ) : null}
+      </span>
       <span role="columnheader" className={s.mtitle}>
         Metric
       </span>
@@ -218,19 +232,7 @@ export function MetricTable({ row, item, focus, onFocus }: MetricsProps) {
               {multi ? `Reason, pass ${focus}` : 'Reason'}
             </span>
           ) : null}
-          <span role="columnheader" className={s.actionCell}>
-            {anyDetails ? (
-              <Act
-                label={allOpen ? 'Hide the details of every metric' : 'Show the details of every metric'}
-                icon={allOpen ? 'collapse' : 'expand'}
-                aria-expanded={allOpen}
-                onPress={() => {
-                  setDetailsOpen(!allOpen);
-                  setOwn({});
-                }}
-              />
-            ) : null}
-          </span>
+          <span role="columnheader" className={s.actionCell} />
         </>
       )}
     </div>
@@ -287,6 +289,17 @@ export function MetricTable({ row, item, focus, onFocus }: MetricsProps) {
                   data-failing={failing ? '' : undefined}
                   data-editing={isEditing ? '' : undefined}
                 >
+                  {/* the arrow leads the row, as a disclosure: it opens what the scorer recorded for the metric */}
+                  <span role="cell" className={s.leadCell}>
+                    {hasDetails ? (
+                      <Act
+                        label={`${open ? 'Hide' : 'Show'} the details of ${m.metric}`}
+                        icon={open ? 'chevron-down' : 'chevron-right'}
+                        aria-expanded={open}
+                        onPress={() => setOwn((cur) => ({ ...cur, [m.metric]: !open }))}
+                      />
+                    ) : null}
+                  </span>
                   <span role="cell" className={s.nameCell}>
                     <span
                       className={s.metricName}
@@ -354,16 +367,9 @@ export function MetricTable({ row, item, focus, onFocus }: MetricsProps) {
                     </div>
                   ) : null}
                   <span role="cell" className={s.actionCell}>
-                    {hasDetails ? (
-                      <Act
-                        label={`${open ? 'Hide' : 'Show'} the details of ${m.metric}`}
-                        icon={open ? 'chevron-up' : 'chevron-down'}
-                        aria-expanded={open}
-                        onPress={() => setOwn((cur) => ({ ...cur, [m.metric]: !open }))}
-                      />
-                    ) : null}
                     {item.canEdit ? (
                       <Act
+                        tile
                         label={`Edit the ${m.metric} score${multi ? ` of pass ${focus}` : ''}`}
                         icon="edit"
                         active={isEditing}

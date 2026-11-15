@@ -106,10 +106,10 @@ describe('SpanDetail follows the item pane', () => {
     expect(output.querySelector('pre')).toBeNull();
   });
 
-  it('has a copy tile and an expand tile on each block, and no raw switch on plain text', () => {
+  it('has a copy action and an expand action on each block, and no raw switch on plain text', () => {
     render(<SpanDetail node={span({ 'input.value': 'q', 'output.value': 'a' })} />);
     for (const name of ['Copy input', 'Expand input', 'Copy output', 'Expand output', 'Copy span id'])
-      expect(screen.getByRole('button', { name })).toHaveAttribute('data-tile');
+      expect(screen.getByRole('button', { name })).not.toHaveAttribute('data-tile');
     expect(screen.queryByRole('button', { name: 'Show the raw JSON' })).toBeNull();
   });
 

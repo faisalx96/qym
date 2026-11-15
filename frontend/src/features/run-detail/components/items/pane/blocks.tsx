@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Eyebrow, Icon, InlineNotice, SegmentedControl, StatStrip, Subsection, TextBlock } from '@/ui';
 import type { Row } from '../../../types';
 import { MetricAnalysisCards } from '../../analysis/MetricAnalysisCards';
-import { Act, CopyTile } from './actions';
+import { Act, CopyAct } from './actions';
 import {
   analysisWarnings,
   bodyText,
@@ -104,7 +104,7 @@ export function InputBlock({ item }: { item: ItemData }) {
       actions={
         <>
           {isStructuredValue(item.rawInput) ? <JsonToggle raw={raw} onChange={setRaw} /> : null}
-          <CopyTile text={bodyText(item.rawInput)} label="Copy input" />
+          <CopyAct text={bodyText(item.rawInput)} label="Copy input" />
         </>
       }
     >
@@ -142,7 +142,7 @@ export function ExpectedBlock({
       actions={
         <>
           {isStructuredValue(item.rawExpected) ? <JsonToggle raw={raw} onChange={setRaw} /> : null}
-          <CopyTile text={bodyText(item.rawExpected)} label="Copy expected output" />
+          <CopyAct text={bodyText(item.rawExpected)} label="Copy expected output" />
         </>
       }
     >
@@ -198,7 +198,7 @@ export function OutputBlock({
           {value !== undefined && isStructuredValue(value) ? (
             <JsonToggle raw={raw} onChange={setRaw} />
           ) : null}
-          <CopyTile
+          <CopyAct
             text={pass.taskError ? errorText : bodyText(value)}
             label={item.multi ? `Copy the output of pass ${pass.pass}` : 'Copy output'}
           />

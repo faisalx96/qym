@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { Dialog as AriaDialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
 import { IconButton } from '../IconButton';
-import { Tooltip } from '../Tooltip';
 import styles from './Drawer.module.css';
 
 export interface DrawerProps {
@@ -19,8 +18,6 @@ export interface DrawerProps {
   actions?: ReactNode;
   footer?: ReactNode;
   dismissOnBackdrop?: boolean;
-  /** The close button as the red action tile with a tooltip (the item pane's close), for a drawer whose actions are tiles. */
-  closeTile?: boolean;
   children?: ReactNode;
   className?: string;
 }
@@ -41,7 +38,6 @@ export function Drawer({
   actions,
   footer,
   dismissOnBackdrop = true,
-  closeTile,
   children,
   className,
 }: DrawerProps) {
@@ -68,13 +64,7 @@ export function Drawer({
                 </div>
                 <div className={styles.actions}>
                   {actions}
-                  {closeTile ? (
-                    <Tooltip content="Close">
-                      <IconButton tile tone="danger" label="Close" icon="close" onPress={close} />
-                    </Tooltip>
-                  ) : (
-                    <IconButton label="Close" icon="close" onPress={close} />
-                  )}
+                  <IconButton label="Close" icon="close" onPress={close} />
                 </div>
               </header>
               <div className={styles.body}>{children}</div>

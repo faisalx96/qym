@@ -112,7 +112,7 @@ a.runLink:focus-visible {
 .mhead,
 .mrow {
   display: grid;
-  grid-template-columns: minmax(132px, 184px) repeat(var(--runs), minmax(0, 1fr)) 24px;
+  grid-template-columns: 24px minmax(132px, 184px) repeat(var(--runs), minmax(0, 1fr));
   column-gap: var(--space-sm);
   padding-inline: var(--space-md) var(--space-sm);
 }
@@ -241,6 +241,19 @@ a.runLink:focus-visible {
   background: var(--bg-surface);
 }
 
+/* the arrow that opens the details of a row: the first thing in the row */
+.lead {
+  display: flex;
+  justify-content: center;
+  padding-block-start: var(--space-xs);
+}
+
+.mhead > .lead,
+.brHead > .lead,
+.brRow > .lead {
+  padding-block-start: 0;
+}
+
 .act {
   display: flex;
   justify-content: flex-end;
@@ -263,7 +276,7 @@ a.runLink:focus-visible {
 @container metrics (max-width: 719px) {
   .mhead,
   .mrow {
-    grid-template-columns: minmax(0, 1fr) 24px;
+    grid-template-columns: 24px minmax(0, 1fr);
   }
 
   .runHead {
@@ -272,11 +285,6 @@ a.runLink:focus-visible {
 
   .cell {
     grid-column: 1 / -1;
-  }
-
-  .mrow > .act {
-    grid-row: 1;
-    grid-column: 2;
   }
 
   .cellRun {
@@ -292,7 +300,7 @@ a.runLink:focus-visible {
 .brHead,
 .brRow {
   display: grid;
-  grid-template-columns: minmax(200px, 1.6fr) repeat(var(--metrics), minmax(84px, 1fr)) 24px;
+  grid-template-columns: 24px minmax(200px, 1.6fr) repeat(var(--metrics), minmax(84px, 1fr));
   column-gap: var(--space-sm);
   align-items: center;
   padding-inline: var(--space-md) var(--space-sm);

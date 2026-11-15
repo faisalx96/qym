@@ -1248,8 +1248,8 @@ Recipes that exist only on the run report. They compose the primitives above and
   drag and focus; `role="separator"`, Left / Right 16px, Home / End, double click = the default width). The default
   width leaves 240px of the list in view; the width is the person's (`localStorage qym:item-pane:*`).
   Header, one row: the item number (mono, `--font-md` 650), the verdict as a `StateTag`, the item id (mono, muted,
-  never cut); then the actions at the row's end. Every icon action is an `IconButton tile` with the shared `Tooltip`
-  (`Act`): Open trace, Copy link, Full width, then the pager, then Close as the red tile (`tone="danger"`). The pager
+  never cut); then the actions at the row's end. Every icon action is the plain icon action ("Icon action", §3.1: no tile, the glyph turns green on hover) with the shared `Tooltip`
+  (`Act`): Open trace, Copy link, Full width, then the pager, then Close (the close glyph, as the close of a Drawer and a Dialog). The one tile of the pane is the score edit at the end of a metric row, because it is a row action of a table. The pager
   is the run pager's recipe (`RunPager.module.css`: arrows around "N of M"; the neighbour shows on hover and keyboard
   focus). Under the row: the item's prompt as the title (`--font-lg` 600, two lines at most). J / K step through the
   list in its own order, across its pages. Escape closes the pane from anywhere on the page, also on the same press
@@ -1261,7 +1261,7 @@ Recipes that exist only on the run report. They compose the primitives above and
   (`--rail-width`, `data-tone`): Input `info`, Expected `gold`, Output `success` only when it passed and `danger` when
   it failed or the task failed, else neutral (no rail). Green never marks Expected. The block title is the `Eyebrow`
   in the tone's text colour; a title that is a name (the run of an output) is shown as written. The block's actions
-  are tiles at the end of its head. The raw JSON switch (`braces` tile, `aria-pressed`) changes its own block only.
+  are icon actions at the end of its head. The raw JSON switch (`braces`, `aria-pressed`) changes its own block only.
   **Controls on a block.** The pane body sets the inset-card control tokens of a `ReportSection` body
   (`--control-fill`, `--button-fill` and their hover and pressed steps, translucent), so a well is one step and a
   button two steps over the pane ground or a block. No pane rule sets the fill, edge, height or font of a control.
@@ -1283,7 +1283,7 @@ Recipes that exist only on the run report. They compose the primitives above and
   `--warning` at `--tint-strong`. Not green and red: those two colours say passed and failed in this pane. The `diff`
   tile (run page) or the `SegmentedControl` Expected | Baseline | Off (compare page) switches them.
   **Pass switch.** A multi-pass item picks the pass in view with one `SegmentedControl` in the Output head (seven
-  passes or more: Previous / Next tiles around "Pass n of N"). A pass has no colour: the glyph after its name is its
+  passes or more: Previous / Next icon actions around "Pass n of N"). A pass has no colour: the glyph after its name is its
   verdict.
   **Metrics table.** One table in a neutral block: the column titles in the type of a `DataTable` header (`--font-sm`
   650, 0.05em, upper case, muted); a metric name mono, as written, the page metric in the accent; the score a
@@ -1292,7 +1292,7 @@ Recipes that exist only on the run report. They compose the primitives above and
   of failed metrics is a count `Tag` (danger) after the section title; a task error is a `StateTag`. An edited score
   shows the `Tag kind="accent" tone="warning"` "edited". The score edit is the platform's `ScoreEditor` (field, Save
   primary, Cancel neutral, Reset) with one muted hint line. What a scorer recorded beside the reason is closed until
-  the reader opens it (a chevron tile per metric, an expand tile for all): one `--bg-surface` tile under the row, short
+  the reader opens it (a chevron at the start of each metric row, `chevron-right` closed and `chevron-down` open, and one at the start of the table head for all): one `--bg-surface` tile under the row, short
   facts first, then text, tables, groups. In a narrow pane the reason goes under its metric (container queries).
   **Compare page.** A run is named by its `RunTag` mark and its name as a `data-link="name"` link to the item in that
   run. The baseline is the blue star `Flag` "Baseline". With four runs or more the outputs in view are picked with

@@ -33,7 +33,7 @@ import {
   type SpanNode,
 } from '../../lib/traceTree';
 import { bodyText } from '../../lib/itemText';
-import { Act, CopyTile } from '../items/pane/actions';
+import { Act, CopyAct } from '../items/pane/actions';
 import { Block, type BlockTone } from '../items/pane/blocks';
 import { FieldList, JsonToggle, Value, isStructuredValue } from '../items/pane/values';
 import { KIND_ICON, KIND_LABEL, KIND_TONE } from './spanKinds';
@@ -92,7 +92,7 @@ function TraceBlock({
         actions={
           <>
             {switches}
-            <CopyTile text={text} label={`Copy ${name}`} />
+            <CopyAct text={text} label={`Copy ${name}`} />
             {expand ? <Act label={`Expand ${name}`} icon="expand" onPress={() => setOpen(true)} /> : null}
           </>
         }
@@ -381,7 +381,7 @@ export function SpanDetail({ node }: { node: SpanNode }) {
           <div className={styles.metaLine}>{[KIND_LABEL[kind], model].filter(Boolean).join(' · ')}</div>
         </div>
         <SpanStatusTag status={node.status} />
-        <CopyTile text={node.span_id} label="Copy span id" />
+        <CopyAct text={node.span_id} label="Copy span id" />
       </header>
       <div className={styles.stats} data-fit="" style={{ ['--n' as string]: facts.length }}>
         <StatStrip variant="compact" aria-label="Span facts" items={facts} />

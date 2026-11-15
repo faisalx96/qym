@@ -24,10 +24,10 @@ import {
   ToggleChips,
   type Column,
 } from '@/ui';
-import { Act, CopyTile } from '@/features/run-detail/components/items/pane/actions';
+import { Act, CopyAct } from '@/features/run-detail/components/items/pane/actions';
 import { Block, PaneSection } from '@/features/run-detail/components/items/pane/blocks';
 import {
-  LinkTile,
+  LinkAct,
   PaneShell,
   PaneSkeleton,
   type PanePeek,
@@ -167,7 +167,7 @@ function RunOutput({ col, against, isBase }: { col: Col; against: unknown; isBas
           {value !== undefined && isStructuredValue(value) ? (
             <JsonToggle raw={raw} onChange={setRaw} />
           ) : null}
-          <CopyTile text={failed ? errorText : bodyText(value)} label={`Copy the output of ${run.label}`} />
+          <CopyAct text={failed ? errorText : bodyText(value)} label={`Copy the output of ${run.label}`} />
         </>
       }
     >
@@ -328,6 +328,7 @@ function useScoreEdit() {
     button: (metric: string, x: Cell) =>
       x.cell && x.canEdit ? (
         <Act
+          tile
           label={`Edit the ${metric} score of ${x.col.run.label}`}
           icon="edit"
           active={editing === keyOf(metric, x)}
@@ -406,7 +407,7 @@ function useDetailToggles(keys: string[]) {
       keys.length ? (
         <Act
           label={allOpen ? `Hide the details of every ${what}` : `Show the details of every ${what}`}
-          icon={allOpen ? 'collapse' : 'expand'}
+          icon={allOpen ? 'chevron-down' : 'chevron-right'}
           aria-expanded={allOpen}
           onPress={() => {
             setDetailsOpen(!allOpen);
@@ -417,7 +418,7 @@ function useDetailToggles(keys: string[]) {
     button: (key: string, name: string) => (
       <Act
         label={`${isOpen(key) ? 'Hide' : 'Show'} the details of ${name}`}
-        icon={isOpen(key) ? 'chevron-up' : 'chevron-down'}
+        icon={isOpen(key) ? 'chevron-down' : 'chevron-right'}
         aria-expanded={isOpen(key)}
         onPress={() => setOwn((cur) => ({ ...cur, [key]: !isOpen(key) }))}
       />
@@ -437,6 +438,9 @@ function MetricsByMetric({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: 
       style={{ ['--runs' as string]: cols.length }}
     >
       <div className={s.mhead} role="row">
+        <span role="columnheader" className={s.lead}>
+          {toggles.allButton('metric')}
+        </span>
         <span role="columnheader" className={s.colTitle}>
           Metric
         </span>
@@ -446,14 +450,14 @@ function MetricsByMetric({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: 
             {col.i === baseIdx ? <BaselineTag /> : null}
           </span>
         ))}
-        <span role="columnheader" className={s.act}>
-          {toggles.allButton('metric')}
-        </span>
       </div>
       {lines.map(({ metric, cells, passIf, hasDetails, compact }) => {
         const open = hasDetails && toggles.isOpen(metric);
         return (
           <div key={metric} className={s.mrow} role="row">
+            <span role="cell" className={s.lead}>
+              {hasDetails ? toggles.button(metric, metric) : null}
+            </span>
             <span role="rowheader" className={s.nameCell}>
               <MetricName metric={metric} passIf={passIf} />
             </span>
@@ -476,9 +480,6 @@ function MetricsByMetric({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: 
                 {edit.isEditing(metric, x) ? edit.form(metric, x) : <Reason x={x} />}
               </div>
             ))}
-            <span role="cell" className={s.act}>
-              {hasDetails ? toggles.button(metric, metric) : null}
-            </span>
             {open ? (
               // what the scorer recorded, a tile per run: side by side while two tiles fit, else one under the other
               <div
@@ -519,6 +520,9 @@ function MetricsByRun({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: Col
       style={{ ['--metrics' as string]: lines.length }}
     >
       <div className={s.brHead} role="row">
+        <span role="columnheader" className={s.lead}>
+          {toggles.allButton('run')}
+        </span>
         <span role="columnheader" className={s.colTitle}>
           Run
         </span>
@@ -527,14 +531,14 @@ function MetricsByRun({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: Col
             <MetricName metric={l.metric} passIf={l.passIf} />
           </span>
         ))}
-        <span role="columnheader" className={s.act}>
-          {toggles.allButton('run')}
-        </span>
       </div>
       {cols.map((col, n) => {
         const open = toggles.isOpen(col.run.ref);
         return (
           <div key={col.run.ref} className={s.brRow} role="row" data-open={open ? '' : undefined}>
+            <span role="cell" className={s.lead}>
+              {toggles.button(col.run.ref, col.run.label)}
+            </span>
             <span role="rowheader" className={s.brRun}>
               <RunName col={col} />
               {col.i === baseIdx ? <BaselineTag /> : null}
@@ -556,9 +560,6 @@ function MetricsByRun({ lines, cols, baseIdx }: { lines: MetricLine[]; cols: Col
                 </span>
               );
             })}
-            <span role="cell" className={s.act}>
-              {toggles.button(col.run.ref, col.run.label)}
-            </span>
             {open ? (
               <div role="cell" className={s.brDetail} data-part="metric-details">
                 {col.state === 'error' ? (
@@ -818,7 +819,7 @@ function TextPart({
       actions={
         <>
           {isStructuredValue(value) ? <JsonToggle raw={raw} onChange={setRaw} /> : null}
-          <CopyTile text={bodyText(value)} label={copyLabel} />
+          <CopyAct text={bodyText(value)} label={copyLabel} />
         </>
       }
     >
@@ -991,7 +992,7 @@ export function ComparePane({
           {ident}
         </>
       }
-      actions={<LinkTile text={link} />}
+      actions={<LinkAct text={link} />}
       title={promptLine(rawInput) || undefined}
       at={at}
       total={items.length}

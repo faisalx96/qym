@@ -1,19 +1,19 @@
 /**
- * The icon actions of an item pane, in the platform's action tile recipe: a tinted 20px tile, its name on hover and
- * on keyboard focus.
+ * The icon actions of an item pane, in the platform's icon action recipe (DESIGN_LANGUAGE §3.1): a plain glyph with
+ * its name on hover and on keyboard focus. Only a row action of a table (the score edit of a metric row) is a tile.
  */
 import { useEffect, useState } from 'react';
 import { IconButton, Tooltip, type IconButtonProps, type IconName } from '@/ui';
 
-/** An icon action: a tile with a tooltip. A locked action shows its reason in place of the tooltip. */
-export function Act({ tile = true, ...props }: IconButtonProps) {
-  const button = <IconButton tile={tile} {...props} />;
+/** An icon action with a tooltip. A locked action shows its reason in place of the tooltip. */
+export function Act(props: IconButtonProps) {
+  const button = <IconButton {...props} />;
   if (props.isDisabled) return button;
   return <Tooltip content={props.label}>{button}</Tooltip>;
 }
 
 /** Copy a text: the glyph is a check for a moment after a copy. */
-export function CopyTile({ text, label, icon = 'copy' }: { text: string; label: string; icon?: IconName }) {
+export function CopyAct({ text, label, icon = 'copy' }: { text: string; label: string; icon?: IconName }) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return undefined;

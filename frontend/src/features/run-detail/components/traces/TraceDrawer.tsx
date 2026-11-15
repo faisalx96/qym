@@ -1,7 +1,7 @@
 /**
  * Trace drawer: virtualized span tree with waterfall, retries merged, keyboard model, detail tabs (brief 04 J6, §3k).
  * One component for the run page and the compare page: the page gives the run. The drawer follows the item pane:
- * tinted action tiles with a tooltip, the red close tile, the facts in the platform's stat strip.
+ * icon actions with a tooltip, the Drawer's own close, the facts in the platform's stat strip.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -42,7 +42,7 @@ import {
   type TraceBounds,
 } from '../../lib/traceTree';
 import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
-import { CopyTile } from '../items/pane/actions';
+import { CopyAct } from '../items/pane/actions';
 import { KIND_ICON, KIND_LABEL, KIND_TONE } from './spanKinds';
 import { SpanDetail } from './SpanDetail';
 import styles from './TraceDrawer.module.css';
@@ -496,8 +496,7 @@ export function TraceView({ runId, itemId, pass, passCount = 0, onPass, onClose 
       }
       scrim="heavy"
       width={drawerWidth}
-      closeTile
-      actions={norm?.item.trace_id ? <CopyTile text={norm.item.trace_id} label="Copy trace id" /> : null}
+      actions={norm?.item.trace_id ? <CopyAct text={norm.item.trace_id} label="Copy trace id" /> : null}
     >
       <div className={styles.body} data-testid="trace-drawer">
         {query.isPending ? <Skeleton kind="lines" rows={6} label="Loading trace" /> : null}
