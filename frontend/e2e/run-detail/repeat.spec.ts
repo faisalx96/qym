@@ -1,6 +1,19 @@
 /** J4 + scenario 10: repeat runs (samples=3): analysis tab, ?pass=N, heatmap layout, pass columns, latency filter. */
-import { test, expect, type Page } from '@playwright/test';
-import { itemButton, itemsCount, openRun, params, seedProject, seedRepeat, type Seeded } from './support';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import {
+  itemButton,
+  itemPane,
+  itemRow,
+  itemsCount,
+  metricRow,
+  metricTable,
+  openRun,
+  paneBlock,
+  params,
+  seedProject,
+  seedRepeat,
+  type Seeded,
+} from './support';
 
 let s: Seeded;
 let repeat: string;
@@ -10,9 +23,18 @@ test.beforeAll(async () => {
   repeat = await seedRepeat(s);
 });
 
+/** The pass switch of the Output block (a multi-pass item shows the output of one pass at a time). */
+const passSwitch = (pane: Locator) => pane.getByRole('radiogroup', { name: 'Pass in view' });
+
+/** Put pass n in view with the pass switch and wait until the Output block is the one of that pass. */
+async function showPass(pane: Locator, n: number): Promise<void> {
+  await passSwitch(pane).getByText(`Pass ${n}`, { exact: true }).click();
+  await expect(paneBlock(pane, 'output')).toHaveAttribute('aria-label', `Output of pass ${n}`);
+}
+
 /** Text of the "quality" column for the visible rows of the table, keyed by item number. */
 async function qualityByItem(page: Page): Promise<Record<string, string>> {
-  const rows = page.getByRole('row').filter({ has: page.getByRole('button', { name: /^Open item #\d+$/ }) });
+  const rows = page.locator('tr[data-item-id]');
   const out: Record<string, string> = {};
   const n = await rows.count();
   for (let i = 0; i < n; i++) {
@@ -82,18 +104,23 @@ test.describe('?pass=N (scenario 10)', () => {
     expect(common.length).toBeGreaterThan(5);
     expect(common.some((k) => p1[k] !== p2[k])).toBe(true);
     // item #1 failed in pass 2 only
-    await expect(page.getByRole('row', { name: /^Open item #1 / })).toContainText('Error');
+    await expect(itemRow(page, 1)).toContainText('Error');
     await openRun(page, s.slug, repeat, 'pass=1');
-    await expect(page.getByRole('row', { name: /^Open item #1 / })).not.toContainText('Error');
+    await expect(itemRow(page, 1)).not.toContainText('Error');
   });
 
-  test("an opened item in ?pass=2 shows that pass' chips and its per-pass output", async ({ page }) => {
+  test("an opened item in ?pass=3 shows that pass' metric rows and its output, with no pass switch", async ({
+    page,
+  }) => {
     await openRun(page, s.slug, repeat, 'pass=3&item=sql-006');
-    const card = page.locator('[data-testid=item-card][data-item-id="sql-006"]');
+    const card = itemPane(page, 'sql-006');
     await expect(card).toBeVisible();
-    await expect(card.locator('tr[data-metric=correct]')).toBeVisible();
-    await expect(card.locator('tr[data-metric=quality]')).toBeVisible();
-    await expect(card.locator('[data-kind=output]')).toContainText('SELECT name FROM customers');
+    await expect(metricRow(card, 'correct')).toBeVisible();
+    await expect(metricRow(card, 'quality')).toBeVisible();
+    await expect(paneBlock(card, 'output')).toContainText(/SELECT\s+name\s+FROM\s+customers/);
+    // one pass in view: one Score column, no column for each pass and no pass switch
+    await expect(metricTable(card).getByRole('columnheader', { name: 'Score', exact: true })).toBeVisible();
+    await expect(passSwitch(card)).toHaveCount(0);
     await expect.poll(() => params(page).get('pass')).toBe('3');
   });
 
@@ -109,15 +136,38 @@ test.describe('?pass=N (scenario 10)', () => {
   });
 });
 
-test.describe('all-passes item card', () => {
-  test('shows one output column per pass, with pass toggles and per-pass trace buttons', async ({ page }) => {
+test.describe('all-passes item pane', () => {
+  test('shows the output of one pass at a time with a pass switch, a score column for each pass, and the trace of the pass in view', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, repeat);
     await itemButton(page, 2).click();
-    const card = page.locator('[data-testid=item-card][data-item-id="sql-002"]');
+    const card = itemPane(page, 'sql-002');
     await expect(card).toBeVisible();
-    await expect(card.getByRole('group', { name: 'Passes shown' })).toBeVisible();
-    await expect(card.locator('section[aria-label=Output] [data-pass]')).toHaveCount(3);
-    await expect(card.getByRole('button', { name: /Open trace of pass \d/ }).first()).toBeVisible();
+    // sql-002 passes in each pass: the pane opens on pass 1
+    await expect(passSwitch(card).getByRole('radio')).toHaveCount(3);
+    await expect(passSwitch(card).getByRole('radio', { name: /^Pass 1/ })).toBeChecked();
+    await expect(paneBlock(card, 'output')).toHaveCount(1);
+    await expect(paneBlock(card, 'output')).toHaveAttribute('aria-label', 'Output of pass 1');
+    await expect(card.getByRole('button', { name: 'Copy the output of pass 1', exact: true })).toBeVisible();
+    // the Metrics table: a column for each pass (its header button puts the pass in view), then the mean
+    const table = metricTable(card);
+    await expect(table.getByRole('columnheader').getByRole('button', { name: /^Pass \d$/ })).toHaveCount(3);
+    await expect(table.getByRole('columnheader', { name: 'Mean', exact: true })).toBeVisible();
+    await table.getByRole('columnheader').getByRole('button', { name: 'Pass 3', exact: true }).click();
+    await expect(paneBlock(card, 'output')).toHaveAttribute('aria-label', 'Output of pass 3');
+    await expect(table.getByRole('columnheader', { name: 'Reason, pass 3', exact: true })).toBeVisible();
+    await showPass(card, 2);
+    // the Open trace tile opens the trace of the pass in view (the seed gives a trace to each third item only)
+    await card.getByRole('button', { name: 'Close item', exact: true }).click();
+    await expect(card).toHaveCount(0);
+    await itemButton(page, 1).click();
+    const first = itemPane(page, 'sql-001');
+    await showPass(first, 3);
+    await first.getByRole('button', { name: 'Open trace', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Trace' })).toBeVisible();
+    await expect.poll(() => params(page).get('trace')).toBe('sql-001');
+    await expect.poll(() => params(page).get('trace_pass')).toBe('3');
   });
 });
 
@@ -149,7 +199,7 @@ test.describe('heatmap layout (scenario 10, J4.5)', () => {
     await expect(grid).toBeVisible();
     await expect(grid.getByRole('button', { name: 'Item #1 pass 2: error' })).toBeVisible();
     await grid.getByRole('button', { name: 'Item #2 pass 1: True' }).click();
-    await expect(page.locator('[data-testid=item-card][data-item-id="sql-002"]')).toBeVisible();
+    await expect(itemPane(page, 'sql-002')).toBeVisible();
     await expect.poll(() => params(page).get('item')).toBe('sql-002');
     expect(params(page).get('view')).not.toBe('heatmap');
   });
@@ -187,7 +237,12 @@ test.describe('latency filter (scenario 10)', () => {
     await bars.nth(Math.floor(n / 2)).click();
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(60);
     await expect.poll(() => params(page).get('filters') ?? '').toContain('latency');
-    await expect(page.locator('[data-run-filters]').getByText(/(ms|s)/i).first()).toBeVisible();
+    await expect(
+      page
+        .locator('[data-run-filters]')
+        .getByText(/(ms|s)/i)
+        .first(),
+    ).toBeVisible();
     await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([60, 60]);
   });
@@ -198,14 +253,20 @@ test.describe('loaded bodies survive a rows refetch', () => {
     page,
   }) => {
     // October 2026: the compact refetch replaced the hydrated pass attempts with their stripped form while the row
-    // still counted as loaded, so every pass column read "No output was recorded." until the item was reopened.
+    // still counted as loaded, so every pass read as if it had no output until the item was reopened.
     test.setTimeout(60_000);
     await openRun(page, s.slug, repeat);
     await itemButton(page, 2).click();
-    const card = page.locator('[data-testid=item-card][data-item-id="sql-002"]');
-    const cols = card.locator('section[aria-label=Output] [data-pass]');
-    await expect(cols).toHaveCount(3);
-    for (let i = 0; i < 3; i++) await expect(cols.nth(i)).toContainText('SELECT name FROM customers');
+    const card = itemPane(page, 'sql-002');
+    const output = paneBlock(card, 'output');
+    const everyPassHasItsOutput = async () => {
+      for (const n of [1, 2, 3]) {
+        await showPass(card, n);
+        await expect(output).toContainText(/SELECT\s+name\s+FROM\s+customers/);
+        await expect(output.getByText('Nothing was recorded')).toHaveCount(0);
+      }
+    };
+    await everyPassHasItsOutput();
     // past staleTime (10 s), a revisit refetches the compact rows over the cached, hydrated ones
     await page.waitForTimeout(11_000);
     const refetch = page.waitForRequest((r) => /view=compact&fields=/.test(r.url()));
@@ -214,9 +275,7 @@ test.describe('loaded bodies survive a rows refetch', () => {
     await page.goBack();
     await refetch;
     await expect(card).toBeVisible();
-    await expect(cols).toHaveCount(3);
-    await expect(card.getByText('No output was recorded.')).toHaveCount(0);
-    for (let i = 0; i < 3; i++) await expect(cols.nth(i)).toContainText('SELECT name FROM customers');
+    await everyPassHasItsOutput();
     expect(params(page).get('item')).toBe('sql-002');
   });
 });

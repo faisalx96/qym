@@ -2,7 +2,19 @@
 /** QE-77 to QE-108: the request page, its Conversation tab and the administrator's triage panel. */
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { asMember, box, configureAgent, near, overflowX, record, seedFeedback, setViewport, shot, WIDTHS, COLUMN } from './support';
+import {
+  asMember,
+  box,
+  configureAgent,
+  near,
+  overflowX,
+  record,
+  seedFeedback,
+  setViewport,
+  shot,
+  WIDTHS,
+  COLUMN,
+} from './support';
 
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ request }) => {
@@ -142,8 +154,17 @@ test('QE-106: a second administrator saving stale sees the reload message', asyn
   const ref = await refOf(page, 'Light theme');
   await setViewport(page, 1440);
   await gotoApp(page, `/feedback/${ref}`);
-  const current = (await (await request.get(`/v1/feedback/${ref}`)).json()) as { request: { updated_at: string } };
-  const other = await request.patch(`/v1/feedback/${ref}/triage`, { data: { status: 'declined', note: 'n', decline_reason: 'again', expected_updated_at: current.request.updated_at } });
+  const current = (await (await request.get(`/v1/feedback/${ref}`)).json()) as {
+    request: { updated_at: string };
+  };
+  const other = await request.patch(`/v1/feedback/${ref}/triage`, {
+    data: {
+      status: 'declined',
+      note: 'n',
+      decline_reason: 'again',
+      expected_updated_at: current.request.updated_at,
+    },
+  });
   expect(other.status()).toBe(409 === other.status() ? 409 : other.status());
   const triage = page.getByTestId('triage');
   await triage.getByRole('button', { name: /Status/ }).click();

@@ -10,7 +10,8 @@ import {
   urlParams,
   waitLoaded,
   goSection,
-  itemDetail,
+  openItem,
+  paneOutputs,
 } from './support';
 import { createApiKey, createRun, ensureProject, EventStream, seedTracedRun, type CompareSeed } from './seed';
 import { uniqueSlug } from '../helpers';
@@ -116,7 +117,7 @@ test.beforeAll(async () => {
 
 const row = (page: Page, id: string) => page.locator(`[data-testid="item-row"][data-item-id="${id}"]`);
 
-test('C065 collapsed rows show the score, not only Pass/Fail; C063 keeps the item number under a sort', async ({
+test('C065 item rows show the score, not only Pass/Fail; C063 keeps the item number under a sort', async ({
   page,
 }) => {
   await page.goto(compareUrl([fix.a, fix.b, fix.c]));
@@ -130,7 +131,9 @@ test('C065 collapsed rows show the score, not only Pass/Fail; C063 keeps the ite
   const id = (await first.getAttribute('data-item-id'))!;
   expect(id).not.toBe('fix-001'); // the sort moved a different item to the top
   await expect(
-    first.locator('[data-part="item-head"]').filter({ hasText: new RegExp(`^#${Number(id.slice(-3))}(?!\\d)`) }),
+    first
+      .locator('[data-part="item-head"]')
+      .filter({ hasText: new RegExp(`^#${Number(id.slice(-3))}(?!\\d)`) }),
   ).toBeVisible();
 });
 
@@ -192,30 +195,30 @@ test('C037 trace statistic rows appear when a compared run has spans', async ({ 
 test('C078 Add issue targets the metric the page is on, with a metric picker', async ({ page }) => {
   await page.goto(compareUrl([fix.a, fix.c], { metric: 'quality' }));
   await waitLoaded(page);
-  await row(page, 'fix-003')
-    .locator('[data-part="item-head"]')
-    .click();
-  await itemDetail(page, 'fix-003').getByRole('button', { name: 'Add issue' }).first().click();
+  const pane = await openItem(page, 'fix-003', 2);
+  // the Root cause section of the pane has one issues block for each run
+  await pane.getByRole('button', { name: 'Add issue' }).first().click();
   const dialog = page.getByTestId('issue-dialog');
   await expect(dialog).toContainText('Add issue · quality');
   await expect(dialog.getByRole('button', { name: /Metric/ })).toBeVisible();
 });
 
-test('C069 a long expected output collapses; C073 a 0 ms item shows its latency; the link copy has its own icon', async ({
-  page,
-}) => {
+test('C069 a long expected output folds; C073 a 0 ms item shows its latency', async ({ page }) => {
   await page.goto(compareUrl([fix.a, fix.c]));
   await waitLoaded(page);
-  await row(page, 'fix-001')
-    .locator('[data-part="item-head"]')
-    .click();
-  const expected = itemDetail(page, 'fix-001').locator('[data-kind="expected"]');
-  await expect(expected.getByRole('button', { name: 'Show more' })).toBeVisible();
-  expect((await expected.boundingBox())!.height).toBeLessThan(500);
-  await row(page, 'fix-002')
-    .locator('[data-part="item-head"]')
-    .click();
-  await expect(itemDetail(page, 'fix-002').getByTestId('output-card').first()).toContainText('0ms');
+  const first = await openItem(page, 'fix-001', 2);
+  // 60 lines: the Expected block shows the first lines (the fold is 40 lines), then "Show more"
+  const expected = first.locator('section[data-part="expected"]');
+  const more = expected.getByRole('button', { name: 'Show more' });
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await expect(expected.locator('[data-folded]')).toHaveCount(1);
+  await more.click();
+  await expect(expected.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(expected.locator('[data-folded]')).toHaveCount(0);
+  // one item at a time: the second row replaces the first item in the pane
+  const second = await openItem(page, 'fix-002', 2);
+  await expect(first).toHaveCount(0);
+  await expect(paneOutputs(second).first()).toContainText('0ms');
 });
 
 test('C012 the not-found panel names the missing run and links back; the toast lists ids', async ({

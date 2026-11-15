@@ -1,7 +1,17 @@
 /// <reference lib="dom" />
 /** Round 5 after-screenshots (docs/internal/ui-migration/redesign5/shots/after-*.png). Runs only with R5_SHOTS=1. */
 import { test, expect, type Page } from '@playwright/test';
-import { chooseOption, openRun, seedClassic, seedProject, seedR5, type Seeded } from './support';
+import {
+  chooseOption,
+  itemPane,
+  metricTable,
+  openMetric,
+  openRun,
+  seedClassic,
+  seedProject,
+  seedR5,
+  type Seeded,
+} from './support';
 
 test.skip(!process.env.R5_SHOTS, 'screenshots are produced on demand');
 
@@ -63,16 +73,13 @@ for (const w of [1440, 390]) {
     ] as const) {
       test(name, async ({ page }) => {
         await openRun(page, s.slug, details, 'item=r5-005');
-        const card = page.locator('[data-testid=item-card][data-item-id="r5-005"]');
-        await card.locator(`[data-cell^="${metric}::"]`).first().click();
-        const panel = card.getByTestId('metric-detail');
-        await expect(panel).toBeVisible();
+        // the item opens in the pane; the details of a metric open under its row of the Metrics table
+        const card = itemPane(page, 'r5-005');
+        const panel = await openMetric(card, metric);
         await page.waitForTimeout(300);
         await panel.screenshot({ path: `${OUT}/after-r5-${name}-${w}.png` });
         if (metric === 'rubric_judge' && w === 1440)
-          await card
-            .getByRole('region', { name: 'Metrics' })
-            .screenshot({ path: `${OUT}/after-r5-metric-matrix-${w}.png` });
+          await metricTable(card).screenshot({ path: `${OUT}/after-r5-metric-matrix-${w}.png` });
       });
     }
   });

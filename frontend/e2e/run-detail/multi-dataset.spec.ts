@@ -124,7 +124,9 @@ test.describe('union run page', () => {
       await expect(section.getByTestId('dataset-breakdown')).not.toContainText('Loading');
       await expect(page.locator('[data-testid=show-items-link]').first()).toBeVisible();
       const sectionBox = await size(page, '#run-section-datasets');
-      expect(Math.abs(sectionBox.h - SECTION[width]), `section height ${sectionBox.h}`).toBeLessThanOrEqual(width === 390 ? 12 : 6);
+      expect(Math.abs(sectionBox.h - SECTION[width]), `section height ${sectionBox.h}`).toBeLessThanOrEqual(
+        width === 390 ? 12 : 6,
+      );
       if (width !== 390) {
         // QC-U13: the table is the column minus its frame and never scrolls sideways
         const table = await page
@@ -176,7 +178,9 @@ test.describe('union run page', () => {
     await page.getByTestId('show-items-link').first().click();
     await expect(page).toHaveURL(/dataset=support-tickets%40v1/);
     await expect(page.getByTestId('items-count')).toHaveText('412 items');
-    await expect(page.locator('[data-run-filters]').getByText('Dataset: support-tickets v1', { exact: true })).toBeVisible();
+    await expect(
+      page.locator('[data-run-filters]').getByText('Dataset: support-tickets v1', { exact: true }),
+    ).toBeVisible();
     // the page-wide scope follows; the Datasets section is the breakdown of the whole run and does not
     await expect(page.locator('#run-section-overview')).toContainText('over 412 of 946 items');
     await expect(page.locator('#run-section-datasets')).toContainText('All datasets');
@@ -196,13 +200,13 @@ test.describe('union run page', () => {
   }) => {
     await open(page, 1440, url(union));
     await page.locator('#run-items').scrollIntoViewIfNeeded();
-    const header = page.getByRole('treegrid', { name: 'Items' }).getByRole('columnheader');
+    const header = page.getByRole('grid', { name: 'Items' }).getByRole('columnheader');
     await expect(header.filter({ hasText: /^Dataset$/ })).toBeVisible();
     await expect(header.filter({ hasText: /^Item$/ })).toBeVisible();
     // t-0001 exists in both versions of support-tickets and in billing-faq: three rows, one per dataset
     await page.getByRole('searchbox', { name: /Search inputs/ }).fill('t-0001');
     await expect(page.getByTestId('items-count')).toHaveText('3 items');
-    const rows = page.locator('[data-item-id]');
+    const rows = page.locator('tr[data-item-id]');
     await expect(rows).toHaveCount(3);
     const ids = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-item-id')));
     expect(new Set(ids).size).toBe(3);

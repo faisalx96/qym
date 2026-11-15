@@ -9,6 +9,9 @@ import {
   seedScenario,
   urlParams,
   waitLoaded,
+  closeItem,
+  itemPane,
+  paneOutputs,
 } from './support';
 import type { CompareSeed } from './seed';
 
@@ -104,8 +107,13 @@ test('pass refs and a whole repeat run expand into pass columns (columns=passes)
   await waitLoaded(page);
   await expect(page.getByText('2 columns')).toBeVisible();
   await page.getByTestId('item-row').first().click();
-  await expect(page.locator(`[data-testid="output-card"][data-run="${repeat3}::pass2"]`)).toBeVisible();
-  await expect(page.locator(`[data-testid="output-card"][data-run="${repeat3}::pass1"]`)).toHaveCount(0);
+  // the pane has one output block for each column; a pass column is named "<run> · pass N" (the seed run is repeat-3x)
+  const pane = itemPane(page);
+  await expect(paneOutputs(pane)).toHaveCount(2);
+  await expect(pane.getByRole('region', { name: 'Output of repeat-3x · pass 2', exact: true })).toBeVisible();
+  await expect(pane.getByRole('region', { name: 'Output of repeat-3x · pass 1', exact: true })).toHaveCount(
+    0,
+  );
 
   // the whole repeat run: Run average (1 column) <-> Each pass (3 columns)
   await page.goto(compareUrl([repeat3, base]));
@@ -120,8 +128,13 @@ test('pass refs and a whole repeat run expand into pass columns (columns=passes)
   await expect(grid.getByRole('columnheader')).toHaveCount(5);
   await expect(grid.getByRole('columnheader').nth(1)).toContainText('pass 1');
   await page.getByTestId('item-row').first().click();
+  await expect(paneOutputs(pane)).toHaveCount(4);
   for (const p of [1, 2, 3])
-    await expect(page.locator(`[data-testid="output-card"][data-run="${repeat3}::pass${p}"]`)).toBeVisible();
+    await expect(
+      pane.getByRole('region', { name: `Output of repeat-3x · pass ${p}`, exact: true }),
+    ).toBeVisible();
+  // the pane lies over the page controls: close it before the click on the columns switch
+  await closeItem(page);
   await toggle.getByText('Run average').click();
   await expect.poll(() => urlParams(page).get('columns')).toBeNull();
   await expect(page.getByText('2 columns')).toBeVisible();

@@ -1,6 +1,6 @@
 /** Round 8: Step latency (C-step-1) and Root cause (C-rc-1) appear only with data, in the averages and error-card recipes. */
 import { expect, test } from '@playwright/test';
-import { client, itemHead } from './support';
+import { client, closeItem, openItem } from './support';
 import { createApiKey, seedTracedRun } from './seed';
 import { box, openCompare, part, seedR8, within, type R8Seed } from './r8';
 
@@ -42,9 +42,11 @@ test('C-rc-1: no Root cause section without analyses; an issue adds one card per
   const { base, a } = s.seed.runs;
   await openCompare(page, [base, a], 1440);
   await expect(part(page, 'section-root-cause')).toHaveCount(0);
-  await itemHead(page, 'cmp-004').click();
-  await page
-    .locator(`[data-testid="output-card"][data-run="${base}"]`)
+  const pane = await openItem(page, 'cmp-004', 2);
+  // the Root cause section of the pane has one issues block for each run, in the order of the runs: the first is the base run
+  await pane
+    .getByRole('region', { name: /^Root-cause issues for / })
+    .first()
     .getByRole('button', { name: 'Add issue' })
     .click();
   const dialog = page.getByTestId('issue-dialog');
@@ -54,6 +56,8 @@ test('C-rc-1: no Root cause section without analyses; an issue adds one card per
   await dialog.getByRole('textbox', { name: 'Finding' }).fill('Invented a clause number');
   await page.getByTestId('issue-save').click();
   await expect(dialog).toHaveCount(0);
+  // the pane lies over the report sections: close it before the click on a section card
+  await closeItem(page);
   const cards = part(page, 'root-cause-card');
   await expect(cards).toHaveCount(1);
   await expect(cards.first()).toContainText('Hallucination');

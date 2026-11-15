@@ -6,7 +6,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { APP, trackPageLoads } from '../helpers';
-import { seedClassic, seedProject, openRun } from '../run-detail/support';
+import { itemButton, seedClassic, seedProject, openRun } from '../run-detail/support';
 import { openRuns, sharedProject, dataRows } from './support';
 
 /** The nearest scrolling ancestor of `selector` (the pages scroll inside the shell, not the window). */
@@ -118,7 +118,8 @@ test.describe('Runs list history', () => {
     const p = await seedProject('nav-back-run');
     const runId = await seedClassic(p);
     await openRun(page, p.slug, runId);
-    await page.getByRole('button', { name: 'Open item #3', exact: true }).click();
+    // the row opens the item in the pane at the side (the table has no "Open item" button)
+    await itemButton(page, 3).click();
     await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBeTruthy();
     const sel = '[data-testid="items-count"]';
     await setTop(page, sel, 'end');
@@ -172,12 +173,13 @@ test.describe('links', () => {
     ).toBeVisible();
   });
 
-  test("Compare output cards link to the item on each run's page", async ({ page }) => {
+  test("The outputs of the compare item pane link to the item on each run's page", async ({ page }) => {
     const p1 = await seedProject('nav-cmp');
     const a = await seedClassic(p1);
     const b = await seedClassic(p1);
     await page.goto(`${APP}/compare?runs=${a}&runs=${b}&item=item-0003`);
-    const links = page.locator('[data-testid="output-card"] a[href*="?item="]');
+    // the run name at the head of each output block of the pane is the link
+    const links = page.locator('[data-testid="item-pane"] section[data-part="output"] a[data-link="name"]');
     await expect(links.first()).toBeVisible({ timeout: 20_000 });
     const hrefs = await links.evaluateAll((els) => els.map((el) => el.getAttribute('href')));
     expect(hrefs.slice(0, 2)).toEqual([

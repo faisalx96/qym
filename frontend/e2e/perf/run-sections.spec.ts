@@ -129,7 +129,6 @@ test('deep links land on their section after the skeletons swap for content', as
     expect(off, hash).toBeLessThanOrEqual(80);
   }
   await page.goto(runUrl(s.slug, runId, 'item=item-3'));
-  await expect(
-    page.getByRole('button', { name: 'Open item #4', exact: true }).or(page.getByText('item-3')).first(),
-  ).toBeVisible();
+  // the deep link opens the item in the pane at the side; its row is the current row of the table
+  await expect(page.locator('[data-testid="item-pane"][data-item-id="item-3"]')).toBeVisible();
 });

@@ -1,7 +1,7 @@
 /** Round 8: keyboard order, focus rings and axe (C-kbd-1..3). */
 import { expect, test } from '@playwright/test';
 import { axeSeriousViolations } from '../shell/support';
-import { itemDetail, itemHead } from './support';
+import { itemDetail, itemHead, paneOutputs } from './support';
 import { openCompare, seedR8, type R8Seed } from './r8';
 
 let s: R8Seed;
@@ -87,16 +87,22 @@ test('C-kbd-1: Tab follows the visual order and every stop has the 2 px focus ri
 });
 
 for (const width of [1440, 390]) {
-  test(`C-kbd-3: axe finds nothing serious at ${width} with one expanded item and its metric details open`, async ({
+  test(`C-kbd-3: axe finds nothing serious at ${width} with one item open in the pane and its metric details open`, async ({
     page,
   }) => {
     await openCompare(page, s.four, width);
     await itemHead(page, 'cmp-001').click();
     const detail = itemDetail(page, 'cmp-001');
-    await expect(detail.getByTestId('output-card')).toHaveCount(4);
-    await detail.getByRole('button', { name: 'Show quality details' }).first().click();
+    await expect(paneOutputs(detail)).toHaveCount(4);
+    // one button opens the details of the metric for every run
+    await detail.getByRole('button', { name: 'Show the details of quality', exact: true }).click();
+    await expect(detail.locator('[data-part="metric-details"]')).toHaveCount(1);
     await page.mouse.move(0, 0);
-    const v = await axeSeriousViolations(page, '[data-testid="compare-page"]');
+    // the pane is in a portal on the body, outside the page element: scan the two
+    const v = [
+      ...(await axeSeriousViolations(page, '[data-testid="compare-page"]')),
+      ...(await axeSeriousViolations(page, '[data-testid="item-pane"]')),
+    ];
     expect(v.map((x: { id: string; nodes: unknown[] }) => `${x.id} x${x.nodes.length}`)).toEqual([]);
   });
 }

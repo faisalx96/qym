@@ -717,15 +717,3 @@ export function formatCost(n: unknown): string | null {
   if (!Number.isFinite(num) || num <= 0) return null;
   return '$' + (num < 0.01 ? num.toFixed(4) : num.toFixed(3));
 }
-
-/** Langfuse trace URL from the run's host/project (brief 04 §3k). */
-export function buildLangfuseTraceUrl(
-  host: string | null | undefined,
-  projectId: string | null | undefined,
-  traceId: string | null | undefined,
-): string | null {
-  if (!host || !projectId || !traceId) return null;
-  const base = String(host).replace(/\/+$/, '');
-  if (!/^https?:\/\//i.test(base)) return null;
-  return `${base}/project/${encodeURIComponent(projectId)}/traces/${encodeURIComponent(traceId)}`;
-}

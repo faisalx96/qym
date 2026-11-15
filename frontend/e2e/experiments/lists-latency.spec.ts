@@ -56,7 +56,9 @@ test('the list tags flagged experiments and filters them from the URL', async ({
   await expect(grid.getByRole('row')).toHaveCount(2);
   await expect(grid).not.toContainText('ordinary');
   await page.reload();
-  await expect(page.getByRole('button', { name: /Latency-sensitive/ })).toContainText('Latency-sensitive only');
+  await expect(page.getByRole('button', { name: /Latency-sensitive/ })).toContainText(
+    'Latency-sensitive only',
+  );
   await pickSelect(page, /Latency-sensitive/, /^All$/);
   await expect(page).not.toHaveURL(/latency=1/);
   expect(await pageOverflow(page)).toBe('');
@@ -67,7 +69,9 @@ test('the queue tags flagged jobs, filters them and warns that others wait', asy
   await gotoApp(page, expPath(project.slug, '/queue'));
   await expect(page.getByTestId('latency-tag').first()).toBeVisible();
   const note = page.getByTestId('queue-latency-note');
-  await expect(note).toHaveText('A latency-sensitive job is active on staging. Other jobs wait until it finishes.');
+  await expect(note).toHaveText(
+    'A latency-sensitive job is active on staging. Other jobs wait until it finishes.',
+  );
   expect(Math.round((await note.boundingBox())!.height * 10) / 10).toBeCloseTo(25.4, 0);
   await pickSelect(page, /Latency-sensitive/, 'Latency-sensitive only');
   await expect(page).toHaveURL(/latency=1/);
@@ -148,16 +152,26 @@ test('a long name wraps beside its tag instead of being clipped (QA3-35)', async
       const r = el.getBoundingClientRect();
       const name = el.querySelector('span span') as HTMLElement;
       const td = el.closest('td,li') as HTMLElement;
-      return { w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, fits: name.scrollWidth <= name.clientWidth, td: td.getBoundingClientRect().height };
+      return {
+        w: Math.round(r.width * 10) / 10,
+        h: Math.round(r.height * 10) / 10,
+        fits: name.scrollWidth <= name.clientWidth,
+        td: td.getBoundingClientRect().height,
+      };
     });
     console.log('QA3-35', width, JSON.stringify(m));
     expect(m.fits).toBe(true);
     if (width === 1440) {
       expect(m.w).toBe(204); // the 220 px cell minus its 8 px padding
       expect(Math.abs(m.td - 73.9)).toBeLessThanOrEqual(2);
-      const rows = await page.getByRole('grid', { name: 'Experiments' }).getByRole('row').evaluateAll((r) => r.slice(1).map((x) => Math.round(x.getBoundingClientRect().height)));
+      const rows = await page
+        .getByRole('grid', { name: 'Experiments' })
+        .getByRole('row')
+        .evaluateAll((r) => r.slice(1).map((x) => Math.round(x.getBoundingClientRect().height)));
       expect(rows.filter((h) => h === 40).length).toBe(rows.length - 1);
-      await page.screenshot({ path: '../docs/internal/feature-rounds/2026-10-qa-feedback/shots/after-qb-list-wrap-1440.png' });
+      await page.screenshot({
+        path: '../docs/internal/feature-rounds/2026-10-qa-feedback/shots/after-qb-list-wrap-1440.png',
+      });
     }
     expect(await pageOverflow(page)).toBe('');
   }

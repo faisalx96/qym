@@ -188,7 +188,11 @@ describe('consistency v3: family A (buttons, links, menus)', () => {
       for (const b of buttons(read(f))) {
         // cv5 Y2: a view with a primary section create action makes its commit the accent button (one solid green)
         const createInView = rel(f) === 'features/analyzer/guidance/RulesPanel.tsx' && b.text === 'Publish';
-        if (commit.has(b.text) && !/variant="primary"/.test(b.attrs) && !(createInView && /variant="accent"/.test(b.attrs)))
+        if (
+          commit.has(b.text) &&
+          !/variant="primary"/.test(b.attrs) &&
+          !(createInView && /variant="accent"/.test(b.attrs))
+        )
           problems.push(`${rel(f)}:${b.line}: ${b.text}`);
         if (/Disable item|Disable \$\{/.test(b.inner) && !/variant="danger"/.test(b.attrs))
           problems.push(`${rel(f)}:${b.line}: Disable item is not danger`);
@@ -565,8 +569,9 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
 
   it('B-10: a verdict is a drawn mark from VERDICT_MARK, not a typed glyph or a tag', () => {
     none(grep(noDev, /✓ Pass|✗ Fail|⚠ Error/));
-    expect(src('features/run-detail/components/items/OutputRegion.tsx')).not.toContain('<Tag tone={tone}');
-    expect(src('features/run-detail/components/items/ItemBar.tsx')).not.toContain('<Tag');
+    // the item pane replaced the inline item view (OutputRegion, ItemBar): its verdict is a StateTag
+    expect(src('features/run-detail/components/items/pane/blocks.tsx')).not.toContain('<Tag tone={tone}');
+    expect(src('features/run-detail/components/items/pane/Frame.tsx')).not.toContain('<Tag');
     expect(src('features/run-detail/lib/verdictMark.ts')).toMatch(/export const VERDICT_MARK\b/);
     expect(src('features/run-detail/components/items/ItemsTable.tsx')).not.toContain('const STATUS_MARK');
   });
@@ -682,8 +687,8 @@ describe('consistency v3: family B (status, tags, counts, tones)', () => {
       'features/feedback/FeedbackListPage.tsx',
       'features/reviews/ReviewsPage.tsx',
       'features/live/components/TurnFilters.tsx',
+      // the compare page's trace drawer is this component (compare/components/rd/TraceDrawer.tsx gives it back)
       'features/run-detail/components/traces/TraceDrawer.tsx',
-      'features/compare/components/rd/TraceDrawer.tsx',
     ];
     const missing = pages.filter(
       (p) => !elements(src(p), ['SearchField']).some((e) => /(shortcut|hint)="\/"/.test(e.attrs)),
@@ -940,9 +945,7 @@ describe('consistency v3: family C (dates, numbers, words, notices)', () => {
   });
 
   it('C-06: history times are sans', () => {
-    expect(rule(src('ui/Timeline/Timeline.module.css'), '.when')).not.toContain(
-      '--font-mono',
-    );
+    expect(rule(src('ui/Timeline/Timeline.module.css'), '.when')).not.toContain('--font-mono');
     expect(rule(src('features/datasets/item/ItemHistoryTab.module.css'), '.when')).not.toContain(
       '--font-mono',
     );
@@ -1764,11 +1767,12 @@ describe('consistency v3: family E (pages, dialogs, forms, layout)', () => {
 
   it('E-30: no typed decision glyphs', () => {
     none(grep(noDev, /◆/));
-    const rail = src('features/run-detail/components/items/PassRail.tsx');
+    // the pass switch of the item pane replaced PassRail
+    const rail = src('features/run-detail/components/items/pane/blocks.tsx');
     expect(rail).not.toContain('✓');
     expect(rail).not.toContain('✕');
     expect(src('features/run-detail/components/analysis/MetricAnalysisCards.tsx')).not.toContain('✓ Approve');
-    expect(src('features/compare/components/items/OutputCard.tsx')).not.toContain('★ Best');
+    expect(src('features/compare/components/items/pane/ComparePane.tsx')).not.toContain('★ Best');
   });
 
   it('E-32: no native details/summary outside the docs', () => {
@@ -1935,7 +1939,9 @@ describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
       /border-color:\s*var\(--accent-primary\)/,
     );
     expect(rule(ui('Select'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--control-fill-hover\)/);
-    expect(rule(ui('MultiSelect'), '.trigger[data-hovered]')).toMatch(/background:\s*var\(--control-fill-hover\)/);
+    expect(rule(ui('MultiSelect'), '.trigger[data-hovered]')).toMatch(
+      /background:\s*var\(--control-fill-hover\)/,
+    );
   });
 
   it('F6, cv5 H1: a neutral button is raised by fill and a top highlight, never outlined; hover lightens it', () => {
@@ -1960,12 +1966,16 @@ describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
     // cv5 Y14: an open panel's button keeps the hover look (React Aria also marks it pressed, so the rule comes after)
     const open = css.indexOf(".button[data-variant='neutral'][aria-expanded='true']");
     expect(open).toBeGreaterThan(css.indexOf('.button[data-pressed]'));
-    expect(rule(css, ".button[data-variant='neutral'][aria-expanded='true']")).toMatch(/var\(--button-fill-hover\)/);
+    expect(rule(css, ".button[data-variant='neutral'][aria-expanded='true']")).toMatch(
+      /var\(--button-fill-hover\)/,
+    );
     for (const v of ['accent', 'meta', 'primary', 'danger'])
       expect(css, v).toContain(`.button[data-variant='${v}'][aria-expanded='true']`);
     // cv5 Y7: a button reads as a button on the page ground: one fill step up and a visible top highlight
     expect(tokens()).toMatch(/--button-fill:\s*var\(--bg-active\)/);
-    expect(tokens()).toMatch(/--button-highlight:\s*color-mix\(in srgb, var\(--text-primary\) (8|9|10)%, transparent\)/);
+    expect(tokens()).toMatch(
+      /--button-highlight:\s*color-mix\(in srgb, var\(--text-primary\) (8|9|10)%, transparent\)/,
+    );
     expect(tokens()).toMatch(/--control-edge:\s*color-mix\(in srgb, var\(--text-primary\) 4%, transparent\)/);
   });
 
@@ -1975,7 +1985,9 @@ describe('cv4 family F (owner review 2026-11-12): shared recipes', () => {
     expect(rule(ui('SegmentedControl'), '.segmented')).toMatch(/background:\s*var\(--control-fill\)/);
     expect(rule(ui('TextField'), '.control')).toMatch(/background:\s*var\(--control-fill\)/);
     expect(tokens()).toMatch(/--control-fill:\s*var\(--bg-elevated\)/);
-    expect(tokens()).toMatch(/--control-edge:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
+    expect(tokens()).toMatch(
+      /--control-edge:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/,
+    );
     const body = rule(ui('ReportSection'), '.body');
     expect(body).toMatch(/--control-fill:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
     expect(body).toMatch(/--button-fill:\s*color-mix\(in srgb, var\(--text-primary\) \d+%, transparent\)/);
@@ -2166,7 +2178,9 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(css).toContain('.timeline[data-reveal-actions]');
     expect(css).toContain(".timeline[data-mark-align='start'] .rail");
     expect(css).toContain(".event[data-active] .mark:not([data-tone='neutral'], [data-dot])");
-    expect(stripComments(src('features/analyzer/guidance/rules.module.css'))).not.toMatch(/\[data-key\]|\[data-active\]/);
+    expect(stripComments(src('features/analyzer/guidance/rules.module.css'))).not.toMatch(
+      /\[data-key\]|\[data-active\]/,
+    );
   });
 
   it('Z6: dated event lists about one entity are the shared Timeline (no local list CSS)', () => {
@@ -2178,7 +2192,9 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
       'features/reviews/DetailPane.tsx',
     ])
       expect(src(p), p).toContain('<Timeline');
-    expect(src('features/datasets/item/ItemHistoryTab.module.css')).not.toMatch(/\.versionCard\b|\.revision\b/);
+    expect(src('features/datasets/item/ItemHistoryTab.module.css')).not.toMatch(
+      /\.versionCard\b|\.revision\b/,
+    );
     expect(src('features/feedback/feedback.module.css')).not.toMatch(/\.eventHead\b|\.events\b/);
     expect(src('features/run-detail/components/RunPanels.module.css')).not.toMatch(/\.entryHead\b/);
     expect(src('features/live/worker.module.css')).not.toMatch(/\.versionMeta\b/);
@@ -2190,7 +2206,9 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(stripComments(src('ui/MultiSelect/MultiSelect.module.css'))).toContain(
       ".trigger[data-variant='bar'][data-show-value]",
     );
-    expect(stripComments(src('features/analyzer/blocks/blocks.module.css'))).not.toContain("[data-variant='bar']");
+    expect(stripComments(src('features/analyzer/blocks/blocks.module.css'))).not.toContain(
+      "[data-variant='bar']",
+    );
   });
 
   it('Z4 / K1: the analyzer metrics are ToggleChips named by the visible Metrics label', () => {
@@ -2211,7 +2229,9 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     const t = src('features/analyzer/blocks/ActionRail.tsx');
     // the Analyze start button, View run (done) and Analyze again (failed) are primary
     expect(t).toMatch(/variant="primary"\s+onPress=\{\(\) => void ws\.analyze\(\)\}/);
-    expect(t).toContain('<Button size="sm" variant="primary" onPress={runner.dismiss} className={s.railPrimary}>');
+    expect(t).toContain(
+      '<Button size="sm" variant="primary" onPress={runner.dismiss} className={s.railPrimary}>',
+    );
     const full = t.slice(0, t.indexOf('export function CompactJobRail'));
     expect(full).not.toContain('variant="accent"');
     expect(doc).toContain('Exactly one primary button per state');
@@ -2219,8 +2239,12 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
   });
 
   it('Y2: the Rules draft has one solid green button: Add rule primary, Publish accent', () => {
-    expect(src('features/analyzer/guidance/RuleEditor.tsx')).toMatch(/variant="primary"[\s\S]{0,400}?Add rule/);
-    expect(src('features/analyzer/guidance/RulesPanel.tsx')).toMatch(/variant="accent"[\s\S]{0,300}?Publish\s*<\/Button>/);
+    expect(src('features/analyzer/guidance/RuleEditor.tsx')).toMatch(
+      /variant="primary"[\s\S]{0,400}?Add rule/,
+    );
+    expect(src('features/analyzer/guidance/RulesPanel.tsx')).toMatch(
+      /variant="accent"[\s\S]{0,300}?Publish\s*<\/Button>/,
+    );
     expect(doc).toContain('the commit of that view\n  ("Publish") is the accent button');
   });
 
@@ -2242,16 +2266,18 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
     expect(css).toMatch(
       /\.event\[data-active\] \.mark:not\(\[data-tone='neutral'\], \[data-dot\]\) \{[^}]*background:\s*color-mix\(in srgb, var\(--mark\) \d+%, var\(--bg-void\)\)/,
     );
-    expect(rule(css, '.timeline[data-selectable] .event[data-active]')).toMatch(/background:\s*var\(--row-selected\)/);
+    expect(rule(css, '.timeline[data-selectable] .event[data-active]')).toMatch(
+      /background:\s*var\(--row-selected\)/,
+    );
   });
 
   it('Y13: the bar trigger dot has equal space on both sides; the items count sits on the control centre line', () => {
     const ms = src('ui/MultiSelect/MultiSelect.tsx');
     expect(ms).toContain('<span className={styles.triggerSep}>·</span>');
     expect(ms).not.toContain('>· {value}<');
-    expect(rule(stripComments(src('features/run-detail/components/items/FilterBar.module.css')), '.count')).toMatch(
-      /line-height:\s*1;/,
-    );
+    expect(
+      rule(stripComments(src('features/run-detail/components/items/FilterBar.module.css')), '.count'),
+    ).toMatch(/line-height:\s*1;/);
   });
 
   it('Y15: the field expand dialog is as high as the value (a low editor floor)', () => {
@@ -2285,7 +2311,9 @@ describe('cv5 family G (fix round after the merge): area recipes', () => {
   });
 
   it('M3: a dataset alias reads @alias with its tooltip', () => {
-    expect(src('features/run-detail/components/DatasetChip.tsx')).toContain('Alias ${alias}: a name that points at');
+    expect(src('features/run-detail/components/DatasetChip.tsx')).toContain(
+      'Alias ${alias}: a name that points at',
+    );
     expect(doc).toContain('An alias segment is written `@alias`');
     // cv5 Y5: one alias form; the dataset tag hint is the shared Tooltip; the switcher rows show the aliases
     const chip = src('features/run-detail/components/DatasetChip.tsx');
@@ -2349,7 +2377,7 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(src('features/analyzer/blocks/PromptDocument.tsx')).toContain('<JsonText');
     expect(src('features/analyzer/model/promptDoc.ts')).toContain('EVALUATION ITEM DATA');
     const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
-    expect(css).toContain("border-inline-start: 3px solid var(--accent-primary)");
+    expect(css).toContain('border-inline-start: 3px solid var(--accent-primary)');
     expect(css).toContain('max-width: var(--field-measure)');
     expect(css).toContain('background: var(--bg-elevated)');
     expect(stripComments(src('ui/JsonViewer/JsonViewer.module.css'))).toContain('var(--json-key)');
@@ -2383,7 +2411,9 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(messages).toContain('selectedId={rowKey(active)}');
     expect(src('features/analyzer/blocks/PromptPreview.tsx')).toContain('form="menu"');
     const css = stripComments(src('features/analyzer/blocks/promptDoc.module.css'));
-    expect(css).toMatch(/\.railRow\[aria-current\] \{[^}]*border-inline-start-color: var\(--accent-primary\)/);
+    expect(css).toMatch(
+      /\.railRow\[aria-current\] \{[^}]*border-inline-start-color: var\(--accent-primary\)/,
+    );
     expect(css).toMatch(/\.railRow\[data-depth='1'\] \{[^}]*padding-inline-start/);
     // the wrapped rows of words are gone
     expect(css).not.toContain('.outlineGroup');
@@ -2405,7 +2435,9 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
 
   it('Q6: Add category ends the section header row and opens a dialog; search heads the list column', () => {
     const panel = src('features/analyzer/guidance/DiagnosisPanel.tsx');
-    expect(panel).toMatch(/<SectionHeader\s+title="Diagnosis categories"[\s\S]*?aside=\{[\s\S]*?Add category/);
+    expect(panel).toMatch(
+      /<SectionHeader\s+title="Diagnosis categories"[\s\S]*?aside=\{[\s\S]*?Add category/,
+    );
     expect(panel).toContain('<FormDialog');
     expect(panel).not.toContain('label="New category name"');
     expect(stripComments(src('features/analyzer/guidance/diagnosis.module.css'))).toContain(
@@ -2415,13 +2447,17 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
   });
 
   it('Q7: the approved examples picker is an xl dialog with one filter row and a compact confidence range', () => {
-    expect(stripComments(src('ui/Dialog/Dialog.module.css'))).toContain(".modal[data-size='xl'] {\n  width: 1200px;");
+    expect(stripComments(src('ui/Dialog/Dialog.module.css'))).toContain(
+      ".modal[data-size='xl'] {\n  width: 1200px;",
+    );
     const picker = src('features/analyzer/guidance/ExamplePicker.tsx');
     expect(picker).toContain('size="xl"');
     expect(picker).toContain('triggerVariant="bar"');
     expect(picker).toContain('className={s.range}');
     expect(picker).not.toContain('<SegmentedControl');
-    expect(stripComments(src('features/analyzer/guidance/examples.module.css'))).not.toContain('max-height: 40vh');
+    expect(stripComments(src('features/analyzer/guidance/examples.module.css'))).not.toContain(
+      'max-height: 40vh',
+    );
     expect(doc).toContain('the modal needs more\n  space!');
   });
 
@@ -2437,5 +2473,129 @@ describe('cv5 family Q (owner review 2026-11-14): the prompt pane', () => {
     expect(css).toContain('var(--pane-w, min(36%, 760px))');
     expect(css).toContain('.resizer:hover::before');
     expect(doc).toContain('a size slider between it and the\nmain section');
+  });
+});
+
+describe('item pane (DESIGN_LANGUAGE §3.6 "Item pane")', () => {
+  const PANE = 'features/run-detail/components/items/pane/';
+  const CPANE = 'features/compare/components/items/pane/';
+  const css = stripComments(src(`${PANE}pane.module.css`));
+  const ccss = stripComments(src(`${CPANE}comparePane.module.css`));
+  const paneTsx = under(shippedTsx, PANE, CPANE);
+
+  it('P-01: JSON colours are the --json-* tokens, in the fields view and in the raw view', () => {
+    expect(rule(css, '.key')).toContain('var(--json-key)');
+    expect(rule(css, '.scalar')).toContain('var(--json-string)');
+    for (const [kind, token] of [
+      ['number', 'number'],
+      ['boolean', 'boolean'],
+      ['null', 'null'],
+    ] as const)
+      expect(css).toMatch(
+        new RegExp(`\\.scalar\\[data-kind='${kind}'\\][^{]*\\{[^}]*var\\(--json-${token}\\)`),
+      );
+    for (const t of ['key', 'string', 'number', 'boolean', 'null', 'punct'] as const)
+      expect(css, t).toMatch(new RegExp(`\\.code \\[data-t='${t}'\\][^{]*\\{[^}]*var\\(--json-${t}\\)`));
+    // no colour of an older palette for a value (purple and indigo chart colours)
+    for (const sheet of [css, ccss]) expect(sheet).not.toMatch(/var\(--chart-\d\)|--accent-tertiary/);
+  });
+
+  it('P-02: the pane sets no control fill; it uses the inset-card tokens and the row ladder', () => {
+    for (const sheet of [css, ccss, stripComments(src(`${CPANE}issues.module.css`))]) {
+      expect(sheet).not.toMatch(/\.onFill|\.moreRows/);
+      expect(sheet).not.toContain('--bg-selected');
+      // no selector reaches into a control (a line that ends a selector and names an element)
+      expect(sheet).not.toMatch(/^[^\n;]*\b(button|input|textarea)\b[^\n;]*\{$/m);
+      expect(sheet).not.toMatch(/linear-gradient|radial-gradient|infinite/);
+    }
+    expect(rule(css, '.body')).toContain(
+      '--button-fill: color-mix(in srgb, var(--text-primary) 10%, transparent)',
+    );
+    expect(rule(css, '.mrow[data-editing]')).toContain('var(--row-selected)');
+    expect(css).not.toMatch(/:hover[^{]*\{[^}]*transform/);
+  });
+
+  it('P-03: an icon action is the plain icon action with a tooltip; only the score edit of a row is a tile; no Langfuse link', () => {
+    const actions = src(`${PANE}actions.tsx`);
+    // §3.1 Icon action: no tile by default; the tile is for a row action of a table
+    expect(actions).not.toMatch(/tile = true/);
+    expect(actions).toContain('<Tooltip content={props.label}>');
+    none(
+      grep(paneTsx, /<IconButton\b/, [`${PANE}actions.tsx`]),
+      'An icon action of the pane is <Act> (the icon action + tooltip)',
+    );
+    expect(src(`${PANE}Frame.tsx`)).toMatch(/<Act label="Close item" icon="close"/);
+    // the tiles of the pane: the score edit of a metric row, and nothing else
+    const anyTile = (file: string) => (src(file).match(/<Act\s+tile\b/g) ?? []).length;
+    for (const f of [`${PANE}metrics.tsx`, `${CPANE}ComparePane.tsx`]) {
+      expect(anyTile(f), `${f}: one tile`).toBe(1);
+      expect(src(f)).toMatch(/<Act\s+tile\s+label=\{`Edit the /);
+    }
+    for (const f of [`${PANE}Frame.tsx`, `${PANE}blocks.tsx`, `${PANE}values.tsx`])
+      expect(anyTile(f), f).toBe(0);
+    none(grep(under(shippedTsx, PANE, CPANE, 'features/run-detail/components/traces/'), /[Ll]angfuse/));
+  });
+
+  it('P-04: states use the platform primitives (StateTag, count Tag, Flag, ErrorState, Eyebrow, ToggleChips)', () => {
+    const frame = src(`${PANE}Frame.tsx`);
+    const compare = src(`${CPANE}ComparePane.tsx`);
+    expect(frame).toContain('<StateTag tone={tone}>');
+    for (const t of [frame, compare]) {
+      expect(t).toMatch(/<ErrorState\s+compact/);
+      expect(t).not.toMatch(/<StatusMark|<RunStatusBadge/);
+    }
+    expect(src(`${PANE}metrics.tsx`)).toMatch(/<Tag kind="count" tone="danger" data-count="failed">/);
+    expect(compare).toMatch(/<Tag kind="count" tone="danger" data-count="failed">/);
+    expect(compare).toMatch(/<Flag tone="info" icon="star" data-part="baseline-tag"/);
+    expect(compare).toContain('<ToggleChips');
+    expect(compare).not.toContain('aria-pressed={!hidden.has(');
+    expect(src(`${PANE}blocks.tsx`)).toContain('<Eyebrow className={s.eyebrow}>');
+    // the score edit is the platform editor, not a copy
+    expect(src(`${PANE}metrics.tsx`)).toContain('<ScoreEditor');
+    expect(src(`${PANE}metrics.tsx`)).not.toContain('useUpdateMetric');
+  });
+
+  it('P-05: a row opens the item and is the current row; nothing expands in place', () => {
+    const table = src('features/run-detail/components/items/ItemsTable.tsx');
+    expect(table).toContain('onRowOpen={(it) => ui.toggleExpanded(it.row.item_id)}');
+    expect(table).toContain('activeKey={openId}');
+    expect(table).not.toMatch(/renderExpanded|expandOnRowClick/);
+    const list = src('features/compare/components/items/ItemList.tsx');
+    expect(list).toContain("aria-current={open ? 'true' : undefined}");
+    expect(list).not.toMatch(/aria-expanded|aria-pressed|chevron/);
+    // the sweep rows and the pane's focus return depend on this contract
+    expect(list).toContain('id={`item-${it.itemId}`}');
+    expect(list).toContain('data-part="item-head"');
+    const lcss = stripComments(src('features/compare/components/items/ItemList.module.css'));
+    expect(rule(lcss, '.head:hover')).toContain('var(--row-hover)');
+    expect(rule(lcss, '.item[data-open] > .head')).toContain('var(--row-hover)');
+    expect(lcss).toMatch(/\.head:hover \.no,\s*\.head:focus-visible \.no\s*\{[^}]*var\(--accent-primary\)/);
+    // the pane's own open-row style is gone: the table draws its current row
+    expect(css).not.toContain('data-item-pane');
+  });
+
+  it('P-06: the inline item view is gone', () => {
+    for (const f of [
+      'features/run-detail/components/items/ItemCard.tsx',
+      'features/run-detail/components/items/ItemBar.tsx',
+      'features/run-detail/components/items/OutputRegion.tsx',
+      'features/run-detail/components/items/MetricMatrix.tsx',
+      'features/run-detail/components/items/MetricStrip.tsx',
+      'features/run-detail/components/items/PassRail.tsx',
+      'features/compare/components/items/ItemDetail.tsx',
+      'features/compare/components/items/OutputCard.tsx',
+    ])
+      expect(exists(f), f).toBe(false);
+    none(grep(shippedTs, /buildLangfuseTraceUrl/));
+  });
+
+  it('P-07: the loading frame draws the pane blocks and the Metrics head; the recipe is in the design language', () => {
+    const frame = src(`${PANE}Frame.tsx`);
+    expect(frame).toMatch(/<Block key=\{key\} title=\{title\} tone=\{tone\} part=\{kind\}[^>]*busy>/);
+    expect(frame).toContain('<PaneSection key={i} title="Metrics" part="metrics-section">');
+    const doc = read(join(SRC, '../../docs/DESIGN_LANGUAGE.md'));
+    expect(doc).toContain('- **Item pane** (owner 2026-11-14, "Version 10"');
+    expect(doc).toContain('JSON colours\n  are the one token set `--json-*`');
+    expect(doc).not.toContain('**Items table header and ItemBar**');
   });
 });

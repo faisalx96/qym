@@ -276,13 +276,14 @@ test.describe('P1-9 across widths', () => {
       await page.setViewportSize({ width: w, height: 900 });
       await openRun(page, s.slug, classic);
       await expect(page.getByTestId('metric-card').first()).toBeVisible();
-      const over = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('[data-testid=metric-card]'))
-          .map((c) => ({
-            w: c.getBoundingClientRect().width,
-            over: c.scrollWidth - (c as HTMLElement).clientWidth,
-          }))
-          .filter((c) => c.over > 0 || c.w < (innerWidth <= 400 ? 248 : 250)), // 390: the card is the 249 px content box of the section panel (round 8b fix pass; it was 260 and left the panel)
+      const over = await page.evaluate(
+        () =>
+          Array.from(document.querySelectorAll('[data-testid=metric-card]'))
+            .map((c) => ({
+              w: c.getBoundingClientRect().width,
+              over: c.scrollWidth - (c as HTMLElement).clientWidth,
+            }))
+            .filter((c) => c.over > 0 || c.w < (innerWidth <= 400 ? 248 : 250)), // 390: the card is the 249 px content box of the section panel (round 8b fix pass; it was 260 and left the panel)
       );
       expect(over).toEqual([]);
       // the overview section never grows past its column (the shell's own top bar is outside this change)

@@ -16,7 +16,12 @@ async function measure(page: Page) {
     const r = (el: Element | null) => {
       if (!el) return null;
       const b = el.getBoundingClientRect();
-      return { x: Math.round(b.x * 10) / 10, y: Math.round(b.y * 10) / 10, w: Math.round(b.width * 10) / 10, h: Math.round(b.height * 10) / 10 };
+      return {
+        x: Math.round(b.x * 10) / 10,
+        y: Math.round(b.y * 10) / 10,
+        w: Math.round(b.width * 10) / 10,
+        h: Math.round(b.height * 10) / 10,
+      };
     };
     const content = document.querySelector('[data-shell-content]')!;
     const table = document.querySelector('[data-testid="runs-table"]');
@@ -28,17 +33,24 @@ async function measure(page: Page) {
           return (o === 'auto' || o === 'scroll') && n.clientHeight > 100;
         }) ?? null)
       : null;
-    const rows = document.querySelectorAll('[data-testid="runs-table"] tr[data-run-id], [data-testid="runs-table"] li[data-run-id]').length;
+    const rows = document.querySelectorAll(
+      '[data-testid="runs-table"] tr[data-run-id], [data-testid="runs-table"] li[data-run-id]',
+    ).length;
     return {
       viewport: { w: window.innerWidth, h: window.innerHeight },
       content: r(content),
       contentScroll: { scrollHeight: content.scrollHeight, clientHeight: content.clientHeight },
       table: r(table),
       scroller: r(scroller),
-      scrollerScroll: scroller ? { scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight } : null,
+      scrollerScroll: scroller
+        ? { scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight }
+        : null,
       footer: r(footer),
       rows,
-      gapBelowTable: table ? Math.round((content.getBoundingClientRect().bottom - table.getBoundingClientRect().bottom) * 10) / 10 : null,
+      gapBelowTable: table
+        ? Math.round((content.getBoundingClientRect().bottom - table.getBoundingClientRect().bottom) * 10) /
+          10
+        : null,
     };
   });
 }
@@ -51,7 +63,10 @@ const VIEWPORTS = [
 
 test.describe('runs table fills the page height', () => {
   for (const vp of VIEWPORTS) {
-    test(`many runs at ${vp.width}x${vp.height}: the card reaches the bottom, its body scrolls`, async ({ page, request }) => {
+    test(`many runs at ${vp.width}x${vp.height}: the card reaches the bottom, its body scrolls`, async ({
+      page,
+      request,
+    }) => {
       const s = await freshProject(request, 60, { running: false });
       await page.setViewportSize(vp);
       await openRuns(page, s.project.slug, '?pageSize=100');
@@ -68,16 +83,25 @@ test.describe('runs table fills the page height', () => {
       expect(m.gapBelowTable!, 'gap below the table').toBeGreaterThanOrEqual(7);
       expect(m.gapBelowTable!, 'gap below the table').toBeLessThanOrEqual(9);
       // Criterion RH-2: the page itself does not scroll; the table body does.
-      expect(m.contentScroll.scrollHeight - m.contentScroll.clientHeight, 'page scroll').toBeLessThanOrEqual(1);
-      expect(m.scrollerScroll!.scrollHeight, 'body scrolls inside').toBeGreaterThan(m.scrollerScroll!.clientHeight);
+      expect(m.contentScroll.scrollHeight - m.contentScroll.clientHeight, 'page scroll').toBeLessThanOrEqual(
+        1,
+      );
+      expect(m.scrollerScroll!.scrollHeight, 'body scrolls inside').toBeGreaterThan(
+        m.scrollerScroll!.clientHeight,
+      );
     });
   }
 
-  test('few runs at 1440x900: the card is as tall as its rows, nothing scrolls', async ({ page, request }) => {
+  test('few runs at 1440x900: the card is as tall as its rows, nothing scrolls', async ({
+    page,
+    request,
+  }) => {
     const s = await freshProject(request, 3, { running: false });
     await page.setViewportSize({ width: 1440, height: 900 });
     await openRuns(page, s.project.slug);
-    await expect(page.locator('[data-testid="runs-table"] tbody tr').nth(2)).toBeAttached({ timeout: 20_000 });
+    await expect(page.locator('[data-testid="runs-table"] tbody tr').nth(2)).toBeAttached({
+      timeout: 20_000,
+    });
     const m = await measure(page);
     if (SHOTS) {
       fs.writeFileSync(path.join(SHOTS, `runs-height-few-1440.json`), JSON.stringify(m, null, 2));

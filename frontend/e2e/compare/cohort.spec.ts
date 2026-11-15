@@ -1,6 +1,6 @@
-/** Scenario 7: cohort links - banner, Compare | Sweep, verdict, stat cards, outcome filters, item dialog, reverse. */
+/** Scenario 7: cohort links - banner, Compare | Sweep, verdict, stat cards, outcome filters, item pane, reverse. */
 import { expect, test, type Page } from '@playwright/test';
-import { cohortUrl, seedScenario, urlParams, waitLoaded } from './support';
+import { cohortUrl, itemDetail, paneOutputs, seedScenario, urlParams, waitLoaded } from './support';
 import type { CompareSeed } from './seed';
 import { part } from './r8';
 
@@ -109,7 +109,7 @@ test('Sweep: outcome cards set sweepMove / sweepOutcome and filter the table', a
   await expect(card('Decisively fixed')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('Sweep: a row opens the item dialog with a focus trap; Escape closes and focus returns', async ({
+test('Sweep: a row opens the item in the pane at the side (no dialog); Escape closes and focus returns', async ({
   page,
 }) => {
   await page.goto(url({ tab: 'sweep' }));
@@ -120,17 +120,17 @@ test('Sweep: a row opens the item dialog with a focus trap; Escape closes and fo
   const label = (await opener.getAttribute('aria-label')) ?? '';
   const id = label.replace('Open item ', '');
   await opener.click();
-  const dialog = page.getByRole('dialog', { name: `Item comparison · ${id}` });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByTestId('item-detail')).toBeVisible();
-  await expect(dialog.getByTestId('output-card').first()).toBeVisible();
-  // focus stays inside the dialog while tabbing past its last control
-  for (let i = 0; i < 25; i++) {
-    await page.keyboard.press('Tab');
-    expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true);
-  }
+  // the same pane as the compare list: not a dialog, so the Sweep table stays in reach and no focus trap exists
+  const pane = itemDetail(page, id);
+  await expect(pane).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(opener).toHaveAttribute('aria-current', 'true');
+  await expect(paneOutputs(pane)).toHaveCount(4);
+  // the pane header shows the two cohort sides with their pass dots
+  await expect(pane.locator('[data-part="sweep-pane-sides"]')).toBeVisible();
+  await expect.poll(() => urlParams(page).get('item')).toBe(id);
   await page.keyboard.press('Escape');
-  await expect(dialog).toHaveCount(0);
+  await expect(pane).toHaveCount(0);
   await expect(opener).toBeFocused();
 });
 

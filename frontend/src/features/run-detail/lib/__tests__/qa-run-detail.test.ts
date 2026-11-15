@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { issueStatus } from '../../components/analysis/MetricAnalysisCards';
-import { analysisWarnings } from '../../components/items/ItemCard';
-import { editTooltip } from '../../components/items/MetricStrip';
+import { editTooltip } from '../../components/items/pane/model';
 import { rawSpan } from '../../components/traces/SpanDetail';
 import { buildCsv, discoverColumns } from '../csv';
 import { latencyLabel } from '../rowDisplay';
@@ -40,24 +39,6 @@ describe('issueStatus', () => {
         undefined,
       ),
     ).toBe('pending');
-  });
-});
-
-describe('analysisWarnings', () => {
-  it('collects item and metric warnings once, case-insensitively', () => {
-    const r = row({
-      item_metadata: {
-        analysis_warning: 'No taxonomy',
-        metric_analyses: { a: { warning: 'no taxonomy' }, b: { warning: 'Low confidence' } },
-      },
-    });
-    expect(analysisWarnings(r)).toEqual(['No taxonomy', 'Low confidence']);
-  });
-  it('does not repeat the item warning when an analysis failed', () => {
-    const r = row({
-      item_metadata: { analysis_warning: 'x', metric_analyses: { a: { error: 'boom', warning: 'y' } } },
-    });
-    expect(analysisWarnings(r)).toEqual([]);
   });
 });
 

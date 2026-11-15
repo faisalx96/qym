@@ -5,7 +5,15 @@
 import { expect } from '@playwright/test';
 import { expPath, getExperiment, launchExperiment, resetFakes, test } from '../support';
 import { captureExperimentPosts, nameBox, openHome } from './launchSupport';
-import { addDataset, chooseDataset, datasetsCard, dsBox, seedMulti, setVersions, type MultiFixture } from './multiSupport';
+import {
+  addDataset,
+  chooseDataset,
+  datasetsCard,
+  dsBox,
+  seedMulti,
+  setVersions,
+  type MultiFixture,
+} from './multiSupport';
 
 test.setTimeout(180_000);
 test.use({ actionTimeout: 10_000 });
@@ -22,12 +30,20 @@ const PAIRS = [
   { dataset: 'billing-faq', version: 'v2' },
   { dataset: 'billing-faq', version: 'v1' },
 ];
-async function original(request: Parameters<typeof launchExperiment>[0], shape: 'combined' | 'one_each' = 'one_each') {
+async function original(
+  request: Parameters<typeof launchExperiment>[0],
+  shape: 'combined' | 'one_each' = 'one_each',
+) {
   return launchExperiment(request, f.project.id, {
     name: 'source experiment',
     environment_ids: [f.production.id, f.staging.id],
     spec: {
-      evaluator: { datasets: PAIRS, run_shape: shape, task: { [f.production.id]: 'route-ticket' }, config: { samples: 1 } },
+      evaluator: {
+        datasets: PAIRS,
+        run_shape: shape,
+        task: { [f.production.id]: 'route-ticket' },
+        config: { samples: 1 },
+      },
       slot_bindings: { 'endpoint:primary': { connection_id: f.connectionId } },
       env_overrides: {},
     },
@@ -36,7 +52,10 @@ async function original(request: Parameters<typeof launchExperiment>[0], shape: 
 const cloneUrl = (id: string, q = '') => `/projects/${f.project.slug}/experiments/new?clone=${id}${q}`;
 
 test.describe('clone, rerun and starting points', () => {
-  test('QD-63, QD-70: a clone shows the same datasets, shape and tasks, and launches the same jobs', async ({ page, request }) => {
+  test('QD-63, QD-70: a clone shows the same datasets, shape and tasks, and launches the same jobs', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const x: any = await original(request);
     expect(x.job_count).toBe(8);
@@ -62,23 +81,32 @@ test.describe('clone, rerun and starting points', () => {
     await launch.click();
     await expect(page).toHaveURL(/\/experiments\/[0-9a-f-]{36}$/, { timeout: 15_000 });
     const again: any = await getExperiment(request, f.project.id, page.url().split('/').pop()!);
-    const perEnv = (e: any) => e.jobs.reduce((m: any, j: any) => ({ ...m, [j.environment_id]: (m[j.environment_id] ?? 0) + 1 }), {});
+    const perEnv = (e: any) =>
+      e.jobs.reduce((m: any, j: any) => ({ ...m, [j.environment_id]: (m[j.environment_id] ?? 0) + 1 }), {});
     expect(perEnv(again)).toEqual(perEnv(x));
     expect(again.selection).toEqual(x.selection);
     // QD-63: the cloned dry run's job bodies equal the original's.
-    const keyOf = (j: any) => `${j.environment_id}:${j.dataset_index}:${JSON.stringify(j.dataset)}:${JSON.stringify(j.task)}`;
+    const keyOf = (j: any) =>
+      `${j.environment_id}:${j.dataset_index}:${JSON.stringify(j.dataset)}:${JSON.stringify(j.task)}`;
     expect(again.jobs.map(keyOf).sort()).toEqual(x.jobs.map(keyOf).sort());
   });
 
-  test('QD-64: a task of an environment that is no longer part of the launch is dropped with a note', async ({ page, request }) => {
+  test('QD-64: a task of an environment that is no longer part of the launch is dropped with a note', async ({
+    page,
+    request,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const x: any = await original(request, 'combined');
     // Disable production: the clone leaves it out and says what happened to its task.
-    const off = await request.put(`/v1/projects/${f.project.id}/eval-environments/${f.production.id}`, { data: { is_active: false } });
+    const off = await request.put(`/v1/projects/${f.project.id}/eval-environments/${f.production.id}`, {
+      data: { is_active: false },
+    });
     expect(off.ok(), await off.text()).toBeTruthy();
     await page.goto(cloneUrl(x.id));
     await expect(datasetsCard(page)).toBeVisible();
-    await expect(page.getByText('Task for production was not carried (environment not selected)')).toBeVisible();
+    await expect(
+      page.getByText('Task for production was not carried (environment not selected)'),
+    ).toBeVisible();
     await expect(page.locator('[data-part=task-section]')).toHaveCount(0);
   });
 
@@ -101,14 +129,22 @@ test.describe('clone, rerun and starting points', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openHome(page, f.project.slug, `?env=${f.production.id}`);
     await chooseDataset(page, 'support-tickets');
-    await expect(page.getByText('The configuration of a top-scoring official run on support-tickets.')).toBeVisible();
+    await expect(
+      page.getByText('The configuration of a top-scoring official run on support-tickets.'),
+    ).toBeVisible();
     await addDataset(page, 'billing-faq');
-    await expect(page.getByText('The configuration of a top-scoring official run on support-tickets and 1 more dataset.')).toBeVisible();
+    await expect(
+      page.getByText(
+        'The configuration of a top-scoring official run on support-tickets and 1 more dataset.',
+      ),
+    ).toBeVisible();
     await addDataset(page, 'refund-cases');
     await expect(page.getByText(/on support-tickets and 2 more datasets\./)).toBeVisible();
   });
 
-  test('QD-69: the default-preset editor keeps the single Dataset select, no run shape, and offers the task row', async ({ page }) => {
+  test('QD-69: the default-preset editor keeps the single Dataset select, no run shape, and offers the task row', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/projects/${f.project.slug}/environments/${f.production.id}/default-preset/edit`);
     await expect(page.getByTestId('editor-where')).toBeVisible();

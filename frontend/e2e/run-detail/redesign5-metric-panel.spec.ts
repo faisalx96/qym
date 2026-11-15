@@ -1,12 +1,22 @@
 /// <reference lib="dom" />
 /**
- * Round 5 R3 (docs/internal/ui-migration/redesign5/run-detail.md): the item metric matrix and the detail panel a clicked score
- * opens. R3-1 .. R3-21 on run `details` item r5-005 (English `rubric_judge`, Arabic `arabic_judge`) at 1440 and 390.
+ * Round 5 R3, as it lives in the item pane: the Metrics table of an item and the details of a metric (what its scorer
+ * recorded beside the reason). Run `details`, item r5-005 (English `rubric_judge`, Arabic `arabic_judge`), at 1440 and
+ * 390.
+ *
+ * The round 5 metric matrix and the detail panel that a clicked score opened are gone (MetricMatrix, MetricStrip). The
+ * criteria that measured them in pixels (R3-1 header height, R3-2/4/5/6 label and prose geometry, R3-9 and R3-9b table
+ * row heights and paddings, R3-13 type roles, R3-14 panel height, R3-16/17/18 matrix rows, R3-21 FieldRow labels, R3-7
+ * output key rows) were deleted with them. The criteria below still apply to the pane.
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   axeSeriousViolations,
   describeViolations,
+  itemPane,
+  metricRow,
+  metricTable,
+  openMetric,
   openRun,
   seedProject,
   seedR5,
@@ -22,356 +32,160 @@ test.beforeAll(async () => {
   details = (await seedR5(s)).details;
 });
 
-async function openPanel(
-  page: Page,
-  metric: string,
-  width: number,
-): Promise<{ card: Locator; panel: Locator }> {
+/** Open item r5-005 in the pane (by its link), with the metric details closed (the default). */
+async function openItemPane(page: Page, width: number): Promise<Locator> {
   await page.setViewportSize({ width, height: 1000 });
   await openRun(page, s.slug, details, 'item=r5-005');
-  const card = page.locator('[data-testid=item-card][data-item-id="r5-005"]');
-  await expect(card).toBeVisible();
-  await card.locator(`[data-cell^="${metric}::"]`).first().click();
-  const panel = card.getByTestId('metric-detail');
-  await expect(panel).toBeVisible();
-  await page.waitForTimeout(250);
-  return { card, panel };
+  const pane = itemPane(page, 'r5-005');
+  await expect(pane).toBeVisible();
+  await expect(metricRow(pane, 'rubric_judge')).toBeVisible();
+  return pane;
+}
+
+/** Sideways overflow of the pane body (its scroller) and of the page. */
+async function sideways(pane: Locator): Promise<{ pane: number; page: number }> {
+  return pane.evaluate((el) => {
+    const body = el.lastElementChild as HTMLElement;
+    return {
+      pane: body.scrollWidth - body.clientWidth,
+      page: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
 }
 
 for (const width of [1440, 390] as const) {
   test.describe(`${width}px`, () => {
-    test('R3-1, R3-15, R3-20: header row, text Edit button, no sideways scroll', async ({ page }) => {
-      const { panel } = await openPanel(page, 'rubric_judge', width);
-      const h = await panel.evaluate((el) => {
-        const head = el.querySelector(':scope > header')!;
-        const edit = Array.from(head.querySelectorAll('button')).find((b) =>
-          /Edit score/.test(b.textContent ?? ''),
-        )!;
-        const er = edit.getBoundingClientRect();
-        return {
-          height: head.getBoundingClientRect().height,
-          hasScore: !!head.querySelector('[data-band]') || /%/.test(head.textContent ?? ''),
-          name: head.textContent,
-          editH: er.height,
-          editVisible: er.width > 0 && getComputedStyle(edit).opacity !== '0',
-          panelScroll: el.scrollWidth - el.clientWidth,
-          pageScroll: document.documentElement.scrollWidth - window.innerWidth,
-        };
-      });
-      console.log(`R3-1 ${width}px header ${h.height}px`);
-      expect(h.height).toBeLessThanOrEqual(width === 390 ? 80 : 40);
-      expect(h.name).toContain('rubric_judge');
-      expect(h.hasScore).toBe(true);
-      expect(Math.abs(h.editH - 24)).toBeLessThanOrEqual(1);
-      expect(h.editVisible).toBe(true);
-      expect(h.panelScroll).toBeLessThanOrEqual(0);
-      expect(h.pageScroll).toBeLessThanOrEqual(0);
-      // Edit opens the editor in the panel (title "Edit {metric}"), Escape and Close return focus to the matrix cell
-      await panel.getByRole('button', { name: 'Edit score', exact: true }).click();
-      await expect(panel.getByText('Edit rubric_judge')).toBeVisible();
-      await panel.getByRole('button', { name: 'Close rubric_judge details' }).click();
-      await expect(page.getByTestId('metric-detail')).toHaveCount(0);
-      await expect(page.locator('[data-cell^="rubric_judge::"]').first()).toBeFocused();
-    });
-
-    for (const [metric, rtl] of [
-      ['rubric_judge', false],
-      ['arabic_judge', true],
-    ] as const) {
-      test(`R3-2, R3-3, R3-4, R3-5, R3-6, R3-13 (${metric}): no label overlaps its value; prose is stacked; type roles`, async ({
-        page,
-      }) => {
-        const { panel } = await openPanel(page, metric, width);
-        const m = await panel.evaluate((el) => {
-          const box = (e: Element) => e.getBoundingClientRect();
-          const facts = Array.from(el.querySelectorAll('dl > div')).map((row) => {
-            const dt = row.querySelector('dt')!;
-            const dd = row.querySelector('dd')!;
-            return {
-              key: dt.textContent,
-              dtRight: box(dt).right,
-              dtBottom: box(dt).bottom,
-              ddLeft: box(dd).left,
-              ddTop: box(dd).top,
-              gap: box(dd).left - box(dt).right,
-              clipped: dt.scrollWidth > dt.clientWidth + 1,
-              ellipsis: getComputedStyle(dt).textOverflow === 'ellipsis',
-              rtl: dd.getAttribute('dir') === 'rtl',
-            };
-          });
-          const prose = Array.from(el.querySelectorAll('[data-part=prose]')).map((p) => {
-            const eb = p.querySelector('[data-part=eyebrow]')!;
-            const tx = p.querySelector('[data-part=prose-text]')!;
-            const inner = tx.firstElementChild!;
-            const cs = getComputedStyle(tx);
-            return {
-              key: p.getAttribute('data-key'),
-              ebBottom: box(eb).bottom,
-              txTop: box(inner).top,
-              ebLeft: box(eb).left,
-              txLeft: box(tx).left,
-              fontSize: cs.fontSize,
-              lineHeight: parseFloat(cs.lineHeight) / parseFloat(cs.fontSize),
-              color: cs.color,
-              maxInline: cs.maxInlineSize,
-              panelLeft: box(el).left,
-              dirOnInner: inner.hasAttribute('dir'),
-              dirOnWrapper: tx.hasAttribute('dir'),
-              lang: inner.getAttribute('lang'),
-            };
-          });
-          // label roles: distinct (size, weight, transform) among eyebrows, fact keys and tree keys
-          const roles = new Set<string>();
-          const add = (e: Element) => {
-            const c = getComputedStyle(e);
-            roles.add(
-              `${c.fontSize}|${c.fontWeight}|${c.textTransform}|${c.fontFamily.includes('mono') ? 'mono' : 'sans'}`,
-            );
-          };
-          el.querySelectorAll('[data-part=eyebrow], dl dt, [data-keytree] [class*=key]').forEach(add);
-          return {
-            facts,
-            prose,
-            roles: Array.from(roles),
-            probe: Array.from(el.querySelectorAll('dl dt')).length,
-          };
-        });
-        expect(m.facts.length).toBeGreaterThan(0);
-        expect(m.prose.length).toBeGreaterThan(0);
-        for (const f of m.facts) {
-          if (width === 390 || f.ddTop > f.dtBottom - 2) {
-            expect(f.ddTop, `${f.key} stacked`).toBeGreaterThanOrEqual(f.dtBottom + 2 - 0.5);
-          } else {
-            expect(f.gap, `${f.key} gap`).toBeGreaterThanOrEqual(12 - 0.5);
-            if (rtl && f.rtl) expect(f.gap).toBeLessThanOrEqual(14.5);
-          }
-          // round 7 (D2) reverses round 5: a fact key wraps in its column, it is never cut
-          expect(f.clipped, `${f.key} is whole`).toBe(false);
-          expect(f.ellipsis, `${f.key} has no ellipsis`).toBe(false);
-        }
-        for (const p of m.prose) {
-          expect(p.txTop, `${p.key} stacked`).toBeGreaterThanOrEqual(p.ebBottom + 2 - 0.5);
-          expect(Math.abs(p.ebLeft - p.txLeft)).toBeLessThanOrEqual(1);
-          expect(p.fontSize).toBe('13px');
-          expect(p.lineHeight).toBeGreaterThanOrEqual(p.lang === 'ar' ? 1.7 - 0.01 : 1.6 - 0.01);
-          expect(p.dirOnInner).toBe(true);
-          expect(p.dirOnWrapper).toBe(false);
-          expect(Math.abs(p.txLeft - (p.panelLeft + 15))).toBeLessThanOrEqual(2);
-        }
-        expect(m.prose[0]!.key).toMatch(/^reason/);
-        console.log(`R3-13 ${metric} ${width}px roles ${JSON.stringify(m.roles)}`);
-        expect(m.roles.length).toBeLessThanOrEqual(3);
-      });
-    }
-
-    test('R3-3 (round 7, D2): every key (fact key or eyebrow) is whole in its column and never painted over its value', async ({
+    test('R3-1, R3-20: the metric row has its name and score; the details are closed until the reader opens them; no sideways scroll', async ({
       page,
     }) => {
-      const { panel } = await openPanel(page, 'rubric_judge', width);
-      const keys = await panel.evaluate((el) =>
-        Array.from(el.querySelectorAll('dl dt, [data-part=eyebrow]')).map((k) => ({
-          // a fact key shows the key as written; the prose label is the one uppercase label and carries the raw key
-          key: k.getAttribute('title') ?? k.textContent,
+      const pane = await openItemPane(page, width);
+      const row = metricRow(pane, 'rubric_judge');
+      await expect(row).toContainText('rubric_judge');
+      await expect(row).toContainText('%');
+      await expect(pane.locator('[data-part="metric-details"]')).toHaveCount(0);
+      const show = row.getByRole('button', { name: 'Show the details of rubric_judge', exact: true });
+      await expect(show).toHaveAttribute('aria-expanded', 'false');
+      const panel = await openMetric(pane, 'rubric_judge');
+      await expect(panel.getByRole('group', { name: 'Details of rubric_judge' })).toBeVisible();
+      // one metric only: the other metrics stay closed
+      await expect(pane.locator('[data-part="metric-details"]')).toHaveCount(1);
+      const o = await sideways(pane);
+      expect(o.pane).toBeLessThanOrEqual(0);
+      expect(o.page).toBeLessThanOrEqual(0);
+      await row.getByRole('button', { name: 'Hide the details of rubric_judge', exact: true }).click();
+      await expect(pane.locator('[data-part="metric-details"]')).toHaveCount(0);
+    });
+
+    test('R3-15: the Edit tile opens the score editor in the row; Escape closes it, keeps the pane and gives the focus back', async ({
+      page,
+    }) => {
+      const pane = await openItemPane(page, width);
+      const row = metricRow(pane, 'rubric_judge');
+      const edit = row.getByRole('button', { name: 'Edit the rubric_judge score', exact: true });
+      await edit.click();
+      await expect(row).toHaveAttribute('data-editing', '');
+      await expect(row.getByRole('form', { name: 'Edit rubric_judge score' })).toBeVisible();
+      await row.getByRole('textbox', { name: 'New rubric_judge score' }).press('Escape');
+      await expect(row.getByRole('textbox')).toHaveCount(0);
+      await expect(pane).toBeVisible();
+      await expect(edit).toBeFocused();
+    });
+
+    test('the header switch opens the details of every metric and the choice is remembered', async ({
+      page,
+    }) => {
+      const pane = await openItemPane(page, width);
+      const table = metricTable(pane);
+      await table.getByRole('button', { name: 'Show the details of every metric', exact: true }).click();
+      await expect(
+        table.getByRole('button', { name: 'Hide the details of every metric', exact: true }),
+      ).toHaveAttribute('aria-expanded', 'true');
+      await expect(pane.getByRole('group', { name: 'Details of rubric_judge' })).toBeVisible();
+      await expect(pane.getByRole('group', { name: 'Details of arabic_judge' })).toBeVisible();
+      // the preference is one for every pane (localStorage)
+      expect(await page.evaluate(() => window.localStorage.getItem('qym:item-pane:details'))).toBe('open');
+      await page.reload();
+      await expect(pane.getByRole('group', { name: 'Details of rubric_judge' })).toBeVisible();
+    });
+
+    test('R3-3 (round 7, D2): every key of the details is whole in its column, with no ellipsis', async ({
+      page,
+    }) => {
+      const pane = await openItemPane(page, width);
+      const panel = await openMetric(pane, 'rubric_judge');
+      const keys = await panel.locator('[data-part="key"]').evaluateAll((els) =>
+        els.map((k) => ({
+          key: k.textContent ?? '',
           overflow: k.scrollWidth - k.clientWidth,
           ellipsis: getComputedStyle(k).textOverflow,
         })),
       );
-      expect(keys.map((k) => k.key)).toContain('self_consistency_check_result');
-      expect(keys.map((k) => k.key)).toContain('detailed_reasoning_trace');
+      // the reason text (`reasoning`) is in the Reason column of the row, not in the details
+      const names = keys.map((k) => k.key);
+      expect(names.some((k) => k.startsWith('self_consistency_check_result'))).toBe(true);
+      expect(names.some((k) => k.startsWith('detailed_reasoning_trace'))).toBe(true);
+      expect(names.some((k) => k === 'reasoning')).toBe(false);
       for (const k of keys) {
-        expect(k.overflow, String(k.key)).toBeLessThanOrEqual(0);
-        expect(k.ellipsis, String(k.key)).not.toBe('ellipsis');
+        expect(k.overflow, k.key).toBeLessThanOrEqual(0);
+        expect(k.ellipsis, k.key).not.toBe('ellipsis');
       }
     });
 
-    test('R3-8, R3-9, R3-10, R3-11, R3-12: tables, no [0] rows, headers 34, rows 32, sorting, scroll inside, 12 rows then more', async ({
+    test('R3-8, R3-11, R3-12: tables in the details, sorting, 12 rows then "Show 2 more", no sideways scroll of the pane', async ({
       page,
     }) => {
-      const { panel } = await openPanel(page, 'rubric_judge', width);
-      for (const t of ['Score table', 'Criteria', 'Evidence', 'Log table'])
-        await expect(panel.getByRole('grid', { name: t })).toBeVisible();
-      await expect(panel.locator('[aria-expanded]', { hasText: /^\s*\[\d+\]/ })).toHaveCount(0);
+      const pane = await openItemPane(page, width);
+      const panel = await openMetric(pane, 'rubric_judge');
+      // a table is named by its key as written
+      for (const t of ['score_table', 'criteria', 'evidence', 'log_table'])
+        await expect(panel.getByRole('grid', { name: t, exact: true })).toBeVisible();
+      // the short list and the nested group are fields of the details
       for (const k of ['breakdown', 'flags'])
-        await expect(panel.locator('[aria-expanded]', { hasText: k }).first()).toBeVisible();
-      const grid = panel.getByRole('grid', { name: 'Evidence' });
-      const geo = await grid.evaluate((g) => {
-        const head = g
-          .querySelector('[role=columnheader]')!
-          .closest('[role=row]')!
-          .getBoundingClientRect().height;
-        const rows = Array.from(g.querySelectorAll('[role=row]')).filter(
-          (r) => !r.querySelector('[role=columnheader]'),
-        );
-        return { head, rows: rows.map((r) => r.getBoundingClientRect().height) };
-      });
-      console.log(`R3-9 ${width}px head ${geo.head} rows ${geo.rows.join(',')}`);
-      expect(Math.abs(geo.head - 34)).toBeLessThanOrEqual(1);
-      for (const r of geo.rows) expect(Math.abs(r - 32)).toBeLessThanOrEqual(1);
-      expect(geo.rows.length).toBe(3);
-      // sorting: the first body cell of a text column changes
-      const firstCell = () =>
-        grid.locator('[role=row]').nth(1).locator('[role=gridcell]').first().textContent();
-      const before = await firstCell();
-      const sortBtn = grid.getByRole('columnheader', { name: /Doc/ });
-      await expect(sortBtn).toHaveAttribute('aria-sort', /none|ascending|descending/);
-      await sortBtn.click();
-      const after = await firstCell();
-      expect(after).not.toBe(before);
-      // R3-12
-      const log = panel.getByRole('grid', { name: 'Log table' });
+        await expect(panel.locator('[data-part="key"]', { hasText: k }).first()).toBeVisible();
+      const grid = panel.getByRole('grid', { name: 'evidence', exact: true });
+      const bodyRows = grid.locator('[role=row]:has([role=gridcell])');
+      await expect(bodyRows).toHaveCount(3);
+      // sorting: a click on the column title puts the rows in order
+      const firstCell = () => bodyRows.first().locator('[role=gridcell]').first().textContent();
+      expect(await firstCell()).toContain('policy-handbook.pdf');
+      const head = grid.getByRole('columnheader', { name: /doc/ });
+      await expect(head).toHaveAttribute('aria-sort', /none|ascending|descending/);
+      await head.click();
+      await expect(head).toHaveAttribute('aria-sort', /ascending|descending/);
+      const dir = await head.getAttribute('aria-sort');
+      expect(await firstCell()).toContain(dir === 'ascending' ? 'faq.md' : 'policy-handbook.pdf');
+      // R3-12: a long table shows its first 12 rows and a button for the rest
+      const log = panel.getByRole('grid', { name: 'log_table', exact: true });
       await expect(log.locator('[role=row]:has([role=gridcell])')).toHaveCount(12);
       await panel.getByRole('button', { name: 'Show 2 more' }).click();
       await expect(log.locator('[role=row]:has([role=gridcell])')).toHaveCount(14);
-      // R3-10: the panel never scrolls sideways
-      const sw = await panel.evaluate((el) => el.scrollWidth - el.clientWidth);
-      expect(sw).toBeLessThanOrEqual(0);
+      // R3-10: the pane never scrolls sideways (a wide table scrolls in its own box)
+      expect((await sideways(pane)).pane).toBeLessThanOrEqual(0);
     });
 
-    test('R3-14: panel height', async ({ page }) => {
-      const { panel } = await openPanel(page, 'rubric_judge', width);
-      // the criterion's fixture has no 14-row log table: hide it for the measurement
-      await panel
-        .locator('[data-key=log_table]')
-        .evaluate((e) => ((e as HTMLElement).style.display = 'none'));
-      const h = (await panel.boundingBox())!.height;
-      console.log(`R3-14 ${width}px panel height ${h}`);
-      expect(h).toBeLessThanOrEqual(width === 390 ? 1680 : 1040); // amended, see spec R3-14 (1540 -> 1680 in round 8b: the section panel narrows the 390 column by 30 px, measured 1660; owner decision H6; 1530 -> 1540 in round 7: long fact keys wrap instead of ending in an ellipsis)
+    test('R3-6: Arabic details read right-to-left', async ({ page }) => {
+      const pane = await openItemPane(page, width);
+      // the Arabic reason is in the Reason column of the row
+      await expect(metricRow(pane, 'arabic_judge').locator('[dir="rtl"]').first()).toBeVisible();
+      const panel = await openMetric(pane, 'arabic_judge');
+      await expect(
+        panel.locator('[data-part="key"]', { hasText: 'step_by_step_reasoning_notes' }),
+      ).toBeVisible();
+      await expect(panel.locator('[dir="rtl"]').first()).toBeVisible();
+      await expect(panel.getByRole('grid', { name: 'checks', exact: true })).toBeVisible();
     });
 
-    test('R3-16, R3-17, R3-18: matrix reason anchor, row heights, selected row', async ({ page }) => {
-      const { card } = await openPanel(page, 'arabic_judge', width);
-      const m = await card.evaluate((el) => {
-        const grid = el.querySelector('[role=grid][aria-label="Metrics by pass"]')!;
-        const row = grid.querySelector('[data-metric="arabic_judge"]')!;
-        const head = grid.querySelector('[role=columnheader]')!.closest('[role=row]')!;
-        const cell = el.querySelector('[data-cell^="arabic_judge::"]') as HTMLElement;
-        const reasonCell = Array.from(row.querySelectorAll('[role=gridcell]')).pop()!;
-        const text = reasonCell.querySelector('[dir]');
-        const name = row.querySelector('[class*=metricName]')!;
-        const cs = getComputedStyle(cell);
-        const rs = getComputedStyle(row);
-        const ns = getComputedStyle(name);
-        return {
-          rowH: row.getBoundingClientRect().height,
-          headH: head.getBoundingClientRect().height,
-          reasonOffset: text
-            ? text.getBoundingClientRect().left - reasonCell.getBoundingClientRect().left
-            : null,
-          cellWeight: cs.fontWeight,
-          cellFont: cs.fontFamily.includes('mono'),
-          cellOutline: cs.outlineStyle + cs.outlineWidth,
-          rowBg: rs.backgroundColor,
-          rowShadow: rs.boxShadow,
-          nameWeight: ns.fontWeight,
-          nameSize: ns.fontSize,
-        };
-      });
-      console.log(`R3-16/17 ${width}px ${JSON.stringify(m)}`);
-      expect(Math.abs(m.rowH - 32)).toBeLessThanOrEqual(1);
-      expect(Math.abs(m.headH - 34)).toBeLessThanOrEqual(1);
-      expect(m.cellWeight).toBe('600');
-      expect(m.cellFont).toBe(true);
-      expect(m.nameWeight).toBe('400');
-      expect(m.cellOutline).not.toContain('2px');
-      expect(m.rowShadow).not.toBe('none');
-      expect(m.rowBg).not.toBe('rgba(0, 0, 0, 0)');
-      if (width === 1440) expect(m.reasonOffset!).toBeLessThanOrEqual(12.5);
-    });
-
-    test('R3-22: axe finds no serious or critical violation with the panel open (English and Arabic)', async ({
+    test('R3-22: axe finds no serious or critical violation with the details open (English and Arabic)', async ({
       page,
     }) => {
+      const pane = await openItemPane(page, width);
       for (const metric of ['rubric_judge', 'arabic_judge']) {
-        await openPanel(page, metric, width);
-        const v = (await axeSeriousViolations(page, '[data-testid=metric-detail]')).filter(
-          (x) => x.impact === 'serious' || x.impact === 'critical',
-        );
+        await openMetric(pane, metric);
+        const v = (
+          await axeSeriousViolations(page, '[data-testid=item-pane] [data-part=metric-details]')
+        ).filter((x) => x.impact === 'serious' || x.impact === 'critical');
         expect(v, `${metric}\n${describeViolations(v)}`).toEqual([]);
-      }
-    });
-
-    test('R3-21 (round 7, D2): FieldRow labels (Input, Expected, Tags) never overflow their column, they wrap', async ({
-      page,
-    }) => {
-      const { card } = await openPanel(page, 'rubric_judge', width);
-      const over = await card.evaluate((el) =>
-        Array.from(el.querySelectorAll('[role=group][aria-labelledby]'))
-          .map((g) => g.firstElementChild as HTMLElement)
-          .filter((l) => l && l.scrollWidth > l.clientWidth + 1)
-          .map((l) => l.textContent),
-      );
-      expect(over).toEqual([]);
-    });
-
-    test('R3-7 (round 7, D2): output key rows show the whole key (no 28ch cap) and keep 8px before the preview', async ({
-      page,
-    }) => {
-      const { card } = await openPanel(page, 'rubric_judge', width);
-      const rows = await card.evaluate((el) =>
-        Array.from(el.querySelectorAll('section[aria-label=Output] [data-keytree] [data-part=key]')).map(
-          (key) => {
-            const pv = key.nextElementSibling;
-            const sameLine =
-              pv &&
-              Math.min(pv.getBoundingClientRect().bottom, key.getBoundingClientRect().bottom) -
-                Math.max(pv.getBoundingClientRect().top, key.getBoundingClientRect().top) >
-                2;
-            return {
-              maxInline: getComputedStyle(key).maxInlineSize,
-              title: key.getAttribute('title'),
-              overflow: key.scrollWidth - key.clientWidth,
-              gap: pv && sameLine ? pv.getBoundingClientRect().left - key.getBoundingClientRect().right : 99,
-            };
-          },
-        ),
-      );
-      expect(rows.length).toBeGreaterThan(0);
-      for (const r of rows) {
-        expect(r.maxInline).not.toMatch(/ch$/); // the 28ch cap is gone
-        expect(r.title).toBeNull();
-        expect(r.overflow).toBeLessThanOrEqual(0);
-        expect(r.gap).toBeGreaterThanOrEqual(7.5);
       }
     });
   });
 }
-
-test('R3-9b (review fix): table cells have the header padding; adjacent texts are at least 12px apart; the first column lines up with its header', async ({
-  page,
-}) => {
-  for (const width of [1440, 1024, 640]) {
-    const { panel } = await openPanel(page, 'rubric_judge', width);
-    for (const name of ['Evidence', 'Criteria', 'Log table']) {
-      const m = await panel.getByRole('grid', { name }).evaluate((g) => {
-        const textBox = (el: Element) => {
-          const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-            acceptNode: (n) => (n.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
-          });
-          const node = w.nextNode()!;
-          const r = document.createRange();
-          r.selectNodeContents(node);
-          return r.getBoundingClientRect();
-        };
-        const head = Array.from(g.querySelectorAll('[role=columnheader]'));
-        const row = g.querySelector('tr:has([role=gridcell])')!;
-        const cells = Array.from(row.children);
-        // a clipped (ellipsised) text ends at its cell's inner edge
-        const boxes = cells.map((c) => {
-          const b = textBox(c.querySelector('[data-cell]') ?? c);
-          return { left: b.left, right: Math.min(b.right, c.getBoundingClientRect().right - 8) };
-        });
-        const gaps = boxes.slice(1).map((b, i) => b.left - boxes[i]!.right);
-        const headText = textBox(head[0]!);
-        return {
-          pad: getComputedStyle(cells[0]!).paddingLeft,
-          gaps,
-          firstDelta: Math.abs(boxes[0]!.left - headText.left),
-        };
-      });
-      console.log(`R3-9b ${width}px ${name} ${JSON.stringify(m)}`);
-      expect(parseFloat(m.pad), `${name} ${width} padding`).toBeGreaterThanOrEqual(8);
-      for (const g of m.gaps) expect(g, `${name} ${width} gap`).toBeGreaterThanOrEqual(12);
-      expect(m.firstDelta, `${name} ${width} first column vs header`).toBeLessThanOrEqual(1.5);
-    }
-  }
-});

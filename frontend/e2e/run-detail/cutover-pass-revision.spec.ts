@@ -7,7 +7,16 @@
  */
 import { test, expect } from '@playwright/test';
 import { compareUrl, waitLoaded } from '../compare/support';
-import { itemButton, openRun, client, seedProject, seedRepeat, type Seeded, openMetric } from './support';
+import {
+  itemButton,
+  itemPane,
+  metricRow,
+  openRun,
+  client,
+  seedProject,
+  seedRepeat,
+  type Seeded,
+} from './support';
 
 let s: Seeded;
 
@@ -32,22 +41,21 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
   await openRun(page, s.slug, runId, 'pass=1');
   await deletePass(runId, 1, 1); // revision 1 -> 2: only pass 2 remains, behind the page's back
 
-  // stale page: edit an item score
+  // stale page: edit an item score (the pencil tile of the metric row in the item pane)
   await itemButton(page, 2).click();
-  const firstCard = page.locator('[data-testid=item-card]').first();
-  await expect(firstCard.locator('tr[data-metric=quality]')).toBeVisible();
-  const panel = await openMetric(firstCard, 'quality');
-  await panel.getByRole('button', { name: 'Edit score', exact: true }).click();
-  await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
+  const stale = metricRow(itemPane(page), 'quality');
+  await expect(stale).toBeVisible();
+  await stale.getByRole('button', { name: 'Edit the quality score', exact: true }).click();
+  await stale.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
   const refused = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
-  await panel.getByRole('button', { name: 'Save' }).click();
+  await stale.getByRole('button', { name: 'Save' }).click();
   const response = await refused;
   expect(response.status()).toBe(409);
   expect((response.request().postDataJSON() as { expected_pass_version: number }).expected_pass_version).toBe(
     1,
   );
-  await expect(panel.getByRole('alert')).toContainText('Passes changed');
-  await expect(panel.getByRole('textbox')).toBeVisible();
+  await expect(stale.getByRole('alert')).toContainText('Passes changed');
+  await expect(stale.getByRole('textbox')).toBeVisible();
 
   // fresh page: the remaining pass is reachable and its edit goes through under the new version
   await openRun(page, s.slug, runId);
@@ -59,12 +67,11 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
   await pill.click();
   await expect(page).toHaveURL(/pass=1/);
   await itemButton(page, 2).click();
-  const fresh = page.locator('[data-testid=item-card]').first().locator('tr[data-metric=quality]');
-  const freshPanel = await openMetric(page.locator('[data-testid=item-card]').first(), 'quality');
-  await freshPanel.getByRole('button', { name: 'Edit score', exact: true }).click();
-  await freshPanel.getByRole('textbox', { name: 'New quality score' }).fill('0.25');
+  const fresh = metricRow(itemPane(page), 'quality');
+  await fresh.getByRole('button', { name: 'Edit the quality score', exact: true }).click();
+  await fresh.getByRole('textbox', { name: 'New quality score' }).fill('0.25');
   const saved = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
-  await freshPanel.getByRole('button', { name: 'Save' }).click();
+  await fresh.getByRole('button', { name: 'Save' }).click();
   const ok = await saved;
   expect(ok.status()).toBe(200);
   const body = ok.request().postDataJSON() as { pass_number: number; expected_pass_version: number };
@@ -82,20 +89,23 @@ test('compare: an edit from a page loaded before the deletion is refused with th
   await waitLoaded(page);
   await deletePass(a, 1, 1);
 
-  await page
-    .getByTestId('item-row')
-    .nth(1)
-    .locator('[data-part="item-head"]')
+  await page.getByTestId('item-row').nth(1).locator('[data-part="item-head"]').click();
+  // the row opens the item in the pane at the side; each run has its own pencil tile in the Metrics table
+  const pane = page.getByTestId('item-pane');
+  await expect(pane).toBeVisible();
+  // the first run of the comparison is `a`, the run that lost its pass behind the page
+  await pane
+    .getByRole('button', { name: /^Edit the quality score of / })
+    .first()
     .click();
-  const chip = page.locator('[data-metric="quality"]').first();
-  await chip.getByRole('button', { name: /^Edit quality score of/ }).click();
-  await chip.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
+  const form = pane.getByRole('form', { name: 'Edit quality score' });
+  await form.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
   const refused = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
-  await chip.getByRole('button', { name: 'Save' }).click();
+  await form.getByRole('button', { name: 'Save' }).click();
   const response = await refused;
   expect(response.status()).toBe(409);
   expect((response.request().postDataJSON() as { expected_pass_version: number }).expected_pass_version).toBe(
     1,
   );
-  await expect(chip.getByRole('alert')).toContainText('Passes changed');
+  await expect(form.getByRole('alert')).toContainText('Passes changed');
 });

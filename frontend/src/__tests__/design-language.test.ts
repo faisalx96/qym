@@ -537,7 +537,6 @@ describe('visual language (redesign round 2)', () => {
       // Round 8 (compare.md 3.4): the compare page's legacy-parity cards carry a 3 px run / value rail and are one
       // button each; Card's rails and padding do not reproduce the measured recipes.
       'features/compare/components/RunCards.module.css',
-      'features/compare/components/items/OutputCard.module.css',
       'features/compare/components/panel/CategoryCards.module.css',
       'features/compare/components/panel/Errors.module.css',
     ]);
@@ -583,7 +582,9 @@ describe('visual language (redesign round 2)', () => {
     const hovers = [...base.matchAll(/(^|\n)([^{}\n]*a:hover[^{}]*)\{([^{}]*)\}/g)].filter((m) =>
       /text-decoration\s*:\s*underline/.test(m[3]!),
     );
-    expect(hovers.map((m) => m[2]!.trim())).toEqual(["a:hover:where(:not([data-link='block'], [data-link='name']))"]);
+    expect(hovers.map((m) => m[2]!.trim())).toEqual([
+      "a:hover:where(:not([data-link='block'], [data-link='name']))",
+    ]);
     // :where keeps the rule at specificity (0,1,1): a component's own `.x:hover` override must still win
     expect(base).not.toMatch(/a:hover:not\(/);
     expect(read(join(SRC, 'ui/Card/Card.tsx'))).toContain('data-link="block"');
@@ -688,8 +689,8 @@ describe('visual language (redesign round 2)', () => {
     const keyRules: Array<[string, string, boolean]> = [
       ['ui/StructuredValue/KeyTree.module.css', '.key', false],
       ['ui/StructuredValue/StructuredValue.module.css', '.key', false],
-      ['features/run-detail/components/items/MetricStrip.module.css', '.fact dt', false],
-      ['features/run-detail/components/items/MetricStrip.module.css', '.eyebrow', true],
+      ['features/run-detail/components/items/pane/pane.module.css', '.key', false],
+      ['features/run-detail/components/items/pane/pane.module.css', '.metricName', false],
       ['ui/FieldRow/FieldRow.module.css', '.label', true],
     ];
     const problems: string[] = [];

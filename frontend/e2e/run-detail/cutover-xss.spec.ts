@@ -4,10 +4,10 @@
  * below carries a payload that runs script when it reaches an HTML sink as markup, and adds a marker
  * attribute when it breaks out of a quoted attribute. The pages must render all of it as text.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { compareUrl, waitLoaded } from '../compare/support';
 import { PERCENT, seedCustomRun } from './cutover-support';
-import { openRun, seedProject, type Seeded } from './support';
+import { closePane, itemPane, itemRow, openRun, paneBlock, seedProject, type Seeded } from './support';
 
 let s: Seeded;
 let runA: string;
@@ -80,30 +80,35 @@ test('the run page shows text as stored, with opt-in safe rendering', async ({ p
   await expect(
     page.getByRole('region', { name: 'Run summary' }).locator('[title*="data-xss=run_name_a"]'),
   ).toHaveCount(1);
-  await page.getByRole('button', { name: 'Open item #1', exact: true }).click();
-  const card = page.locator('[data-testid=item-card][data-item-id="item-0"]');
-  await expect(card).toContainText(SQL);
-  await expect(card.locator('em, strong')).toHaveCount(0);
+  await itemRow(page, 1).click();
+  const first = itemPane(page, 'item-0');
+  const texts = (pane: Locator) =>
+    pane.locator('section[data-part="input"], section[data-part="expected"], section[data-part="output"]');
+  await expect(paneBlock(first, 'output')).toContainText(SQL);
+  await expect(paneBlock(first, 'expected')).toContainText(SQL);
+  await expect(texts(first).locator('em, strong')).toHaveCount(0);
   await expectInert(page);
+  // the pane lies over the items toolbar: close it before the Display menu is used
+  // A close in the first moments after the open does not hold (seen on the preview app: the page state of ?item=
+  // arrives after the URL, and the item opens again). Let the open step settle first.
+  await page.waitForTimeout(400);
+  await closePane(page);
   // Rendered mode: Markdown is a safe subset, links are http(s) only, and SQL is shown as stored.
   await page.getByRole('button', { name: 'Display' }).click();
   await page.getByRole('radio', { name: 'Rendered' }).click({ force: true });
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Open item #2', exact: true }).click();
-  const prose = page.locator('[data-testid=item-card][data-item-id="item-1"]');
-  await expect(prose.locator('strong').first()).toHaveText('bold');
-  await expect(card).toContainText(SQL);
+  await itemRow(page, 2).click();
+  // one item is open at a time: the pane now shows item 2 (its input is the Markdown prose, its expected the SQL)
+  const prose = itemPane(page, 'item-1');
+  await expect(paneBlock(prose, 'input').locator('strong').first()).toHaveText('bold');
+  await expect(paneBlock(prose, 'expected')).toContainText(SQL);
   await expectInert(page);
 });
 
 test('Compare renders run names and outputs as text', async ({ page }) => {
   await page.goto(compareUrl([runA, runB]));
   await waitLoaded(page);
-  await page
-    .getByTestId('item-row')
-    .nth(0)
-    .locator('[data-part="item-head"]')
-    .click();
+  await page.getByTestId('item-row').nth(0).locator('[data-part="item-head"]').click();
   await expect(page.locator('body')).toContainText(payload('model'));
   await expect(page.locator('body')).toContainText(SQL);
   await expectInert(page);

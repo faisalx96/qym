@@ -140,6 +140,12 @@ export interface DataTableProps<R> {
 
   rowHref?: (row: R) => string | undefined;
   onRowOpen?: (row: R) => void;
+  /**
+   * Open on the click itself. For a row that opens a pane beside the table: the table stays in view, so the open
+   * needs no wait. A row that leaves the page (`rowHref`) keeps the wait of one double-click interval, so a double
+   * click on a word still selects it.
+   */
+  rowOpenNow?: boolean;
   rowState?: (row: R) => RowStateKind | undefined;
   rowActions?: (row: R) => RowAction<R>[];
   /** Extra attributes for a row (test ids, data attributes). */
@@ -458,6 +464,7 @@ function DataTableInner<R>({
   allowUnsorted,
   rowHref,
   onRowOpen,
+  rowOpenNow,
   rowState,
   rowActions,
   rowProps,
@@ -1157,6 +1164,10 @@ function DataTableInner<R>({
     if (openable) {
       if (e.metaKey || e.ctrlKey || e.shiftKey) {
         open(r, e);
+        return;
+      }
+      if (rowOpenNow && !rowHref) {
+        open(r);
         return;
       }
       openTimer.current = setTimeout(() => {

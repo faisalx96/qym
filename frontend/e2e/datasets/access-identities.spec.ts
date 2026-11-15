@@ -115,14 +115,16 @@ test.describe('a member with no access to a restricted dataset (real identities)
       // F1: the cause is the dataset, in the table and on the whole page.
       await expect(page.locator('body')).not.toContainText(/private test set/i);
       await expect(page.locator('body')).toContainText(HIDDEN);
-      // F2: expanding an item renders its card: one redacted line, no spinner.
-      const open = page.getByRole('button', { name: /^Open item #1$/ }).first();
-      await open.click();
-      const card = page.locator('[data-testid=item-card]');
-      await expect(card).toHaveCount(1);
+      // F2: an open item shows in the pane at the side: one redacted line, no loading frame.
+      // The first row is item #1. It is a table row at 1440 px and a card (li) at 390 px.
+      await page.locator('#run-items [data-item-id]').first().click();
+      const pane = page.getByTestId('item-pane');
+      await expect(pane).toHaveCount(1);
+      await expect(pane).toHaveAttribute('aria-label', 'Item #1');
+      await expect(pane.getByTestId('run-item-redacted')).toHaveCount(1);
       await expect(page.getByTestId('run-item-redacted')).toHaveCount(1);
       await expect(page.getByTestId('run-item-redacted')).toHaveText(HIDDEN);
-      await expect(page.getByText('Loading item details…')).toHaveCount(0);
+      await expect(pane.locator('[data-part="pane-skeleton"]')).toHaveCount(0);
       const line = await size(page.getByTestId('run-item-redacted'));
       expect(line.h).toBeLessThan(40); // one line of base text (two at 390 where it may wrap)
       await expect(page.locator('body')).not.toContainText(/private test set/i);

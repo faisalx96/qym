@@ -24,7 +24,9 @@ export async function seedR8(prefix: string): Promise<R8Seed> {
     ['cand-g-flash', 'google/gemini-2.5-flash', 0.05, 10],
   ] as const;
   for (const [i, [name, model, skill, s]] of specs.entries())
-    extra.push(await seedCompareRun(client, token, { name, model, skill, seed: s, taskErrors: i === 1 ? [3] : [] }));
+    extra.push(
+      await seedCompareRun(client, token, { name, model, skill, seed: s, taskErrors: i === 1 ? [3] : [] }),
+    );
   const { base, a, b, c } = seed.runs;
   return { seed, four: [base, a, b, c], eight: [base, a, b, c, ...extra] };
 }
