@@ -5,12 +5,11 @@ export type StateFilter = ItemState;
 export const STATE_OPTIONS: { id: StateFilter; label: string }[] = [
   { id: 'active', label: 'Active' },
   { id: 'disabled', label: 'Disabled' },
-  { id: 'all', label: 'All' },
 ];
 
-/** The URL value of a state: `active` is the default and is omitted. */
+/** The URL value of a state: `all` is the default and is omitted. */
 export function stateUrlValue(state: StateFilter): string | undefined {
-  return state === 'active' ? undefined : state;
+  return state === 'all' ? undefined : state;
 }
 
 /** The count shown in a state option; undefined while the list has no counts yet. */

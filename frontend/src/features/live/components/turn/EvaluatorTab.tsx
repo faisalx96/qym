@@ -1,17 +1,35 @@
+import { modelSeriesOf } from '@/features/runs-list/model';
 import type { ReactNode } from 'react';
 import type { LiveTurnDetail } from '@/api/live';
-import { CopyButton, Disclosure, InlineNotice, JsonTree, StatusMark, Subsection, Tag, Text } from '@/ui';
+import {
+  CopyButton,
+  Disclosure,
+  InlineNotice,
+  JsonTree,
+  KeyValueGrid,
+  EmptyState,
+  StateTag,
+  Subsection,
+  ModelTag,
+  Tag,
+  Text,
+} from '@/ui';
 import { evalMetaOf, recordOf, stringOf, numberOf } from '../../lib/summary';
 import { evaluationProblems } from '../../lib/evaluatorRecord';
-import { useTurnZone } from '../../lib/useTurnZone';
 import { Facts } from './Evidence';
 import { EvaluationScores } from './EvaluationScores';
 import { EvaluationTimings } from './EvaluationTimings';
-import { turnTime } from './presentation';
+import { liveTime, statusWord } from './presentation';
 import styles from './EvaluatorTab.module.css';
 
-export function EvaluatorTab({ data, zone }: { data: LiveTurnDetail; zone?: string }) {
-  const sourceZone = useTurnZone(data.turn.source_id, zone);
+export function EvaluatorTab({
+  data,
+  modelIndex = null,
+}: {
+  data: LiveTurnDetail;
+  zone?: string;
+  modelIndex?: Record<string, number> | null;
+}) {
   const meta = evalMetaOf(data.summary);
   const raw = recordOf(data.summary.eval_meta) ?? {};
   const consumed = new Set<string>();
@@ -32,13 +50,13 @@ export function EvaluatorTab({ data, zone }: { data: LiveTurnDetail; zone?: stri
   };
   fact(
     'Status',
-    <StatusMark
-      label={data.turn.status.replaceAll('_', ' ')}
-      shape={data.turn.status === 'failed' ? 'cross' : data.turn.status === 'completed' ? 'check' : 'pause'}
+    <StateTag
       tone={
-        data.turn.status === 'failed' ? 'danger' : data.turn.status === 'completed' ? 'success' : 'warning'
+        data.turn.status === 'failed' ? 'danger' : data.turn.status === 'completed' ? 'success' : 'neutral'
       }
-    />,
+    >
+      {statusWord(data.turn.status)}
+    </StateTag>,
   );
   fact('Outcome', data.turn.outcome);
   fact('Suite', suite);
@@ -48,7 +66,7 @@ export function EvaluatorTab({ data, zone }: { data: LiveTurnDetail; zone?: stri
     'Manifest',
     manifest ? (
       <span className={styles.inline}>
-        <span>{manifest.slice(0, 12)}</span>
+        <span>{manifest}</span>
         <CopyButton text={manifest} label="Copy manifest hash" />
       </span>
     ) : null,
@@ -61,7 +79,7 @@ export function EvaluatorTab({ data, zone }: { data: LiveTurnDetail; zone?: stri
     ['Received at', data.turn.received_at],
     ['Replaced at', stringOf(data.summary.replaced_at)],
   ] as const) {
-    fact(label, value ? turnTime(value, sourceZone) : null, true);
+    fact(label, value ? liveTime(value) : null);
   }
   fact('Backfill job', backfill, true);
   fact('Re-evaluated from', reevaluated, true);
@@ -106,16 +124,11 @@ export function EvaluatorTab({ data, zone }: { data: LiveTurnDetail; zone?: stri
   return (
     <div className={styles.stack}>
       <Subsection title="What ran">
-        <dl className={styles.facts}>
-          {facts.map(({ label, value, mono }) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd className={mono ? styles.mono : undefined} dir="auto">
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <KeyValueGrid
+          columns={3}
+          dense
+          items={facts.map(({ label, value, mono }) => ({ key: label, label, value, mono }))}
+        />
       </Subsection>
       {modelRows.some(([, value]) => value) || designRules ? (
         <Subsection title="Models">
@@ -124,9 +137,7 @@ export function EvaluatorTab({ data, zone }: { data: LiveTurnDetail; zone?: stri
               value ? (
                 <div key={label} className={styles.inline}>
                   <Text weight={600}>{label}</Text>
-                  <Tag kind="model" dir="auto">
-                    {value}
-                  </Tag>
+                  <ModelTag name={value} series={modelSeriesOf(modelIndex, value, false)} />
                   {label === 'Chart design judge' && designRules ? (
                     <>
                       <Text tone="muted">Rules</Text>
@@ -182,7 +193,7 @@ export function EvaluatorTab({ data, zone }: { data: LiveTurnDetail; zone?: stri
         {data.detail ? (
           <JsonTree data={data.detail} label="Raw evaluation detail" />
         ) : (
-          <Text tone="muted">No raw detail available for this turn.</Text>
+          <EmptyState compact title="No raw detail for this turn" />
         )}
       </Disclosure>
     </div>

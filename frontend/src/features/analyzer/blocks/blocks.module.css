@@ -30,189 +30,19 @@
   color: var(--accent-tertiary-soft);
 }
 
-/* Card */
-.cardHead {
+/* Run and metrics: the run facts (KeyValueGrid), then the metric dropdown and its one status line. */
+.facts {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
   gap: var(--space-md);
-}
-
-.cardTitles {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   min-width: 0;
 }
 
-.cardTitles h3,
-.cardTitles p {
-  margin: 0;
-}
-
-.cardAside {
-  flex: none;
-  white-space: nowrap;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.cardBody {
-  min-width: 0;
-  margin-top: var(--space-md);
-}
-
-/* Run header + metrics */
-.runHeader {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-md);
-}
-
-.runTitle {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 0;
-}
-
-.runTitle h2 {
-  margin: 0;
-}
-
-.runMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-md);
-}
-
-.runActions {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-sm);
-}
-
-.metricBlock {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.metricRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-/* Instructions */
-.varList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  list-style: none;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-base);
-}
-
-.varRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.helperRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-/* Fields mapping */
-.mapRows {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-base);
-}
-
-.mapRow {
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.mapRow:last-child {
-  border-bottom: 0;
-}
-
-.mapRow[data-open] {
-  background: var(--bg-surface);
-}
-
-.mapLine {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.mapLabel {
-  min-width: 112px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.arrow {
-  color: var(--text-dim);
-}
-
-.includeRow {
+.metricField {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm) var(--space-md);
-}
-
-.picker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  max-height: 260px;
-  overflow: auto;
-}
-
-.tree {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  list-style: none;
-}
-
-.treeNode {
-  padding-inline-start: calc(var(--depth, 0) * var(--space-md));
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.metaGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 /* Targets */
@@ -225,12 +55,12 @@
 .filterLine {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-sm) var(--space-xl);
 }
 
 .sliderSlot {
-  flex: 1 1 280px;
+  flex: none;
   min-width: 0;
 }
 
@@ -248,129 +78,13 @@
   gap: var(--space-sm) var(--space-lg);
 }
 
-.listCaption {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.listHead {
-  display: flex;
+/* Targets table: the diagnosis cell (analyzed / human tag, then the causes on one line). */
+.diagnosis {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-sm);
-  min-height: 28px;
-}
-
-.targetList {
-  display: flex;
-  flex-direction: column;
-  list-style: none;
-  border-block: 1px solid var(--border-subtle);
-}
-
-.targetRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-sm);
-  min-height: 40px;
-  padding: var(--space-xs) var(--space-xs);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.targetRow:last-child {
-  border-bottom: 0;
-}
-
-.targetRow[data-active] {
-  background: var(--bg-elevated);
-  box-shadow: inset 2px 0 0 var(--accent-primary);
-}
-
-.targetId {
-  min-width: 56px;
-}
-
-.targetDetail {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs) var(--space-sm);
-  flex: 1 1 200px;
   min-width: 0;
-}
-
-/* Reserved so the "analyzed" / "human" tag appearing after a job moves nothing. */
-.tagSlot {
-  display: inline-flex;
-  flex: none;
-  min-width: 64px;
-}
-
-.targetText {
-  min-width: 0;
-  flex: 1;
-}
-
-.targetList[data-frozen] .targetRow {
-  transition: none;
-}
-
-.targetRow > :last-child:not(.targetDetail) {
-  margin-inline-start: auto;
-}
-
-.chipSlot {
-  display: inline-flex;
-  min-width: 0;
-}
-
-.chipSlot > * {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Phones: exactly two lines per row. Line 1: check, id, metric chip (ellipsised), Preview.
-   Line 2: tag slot and the input preview on one ellipsised line. */
-@media (max-width: 640px) {
-  .targetRow {
-    display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--space-xs) var(--space-sm);
-    min-height: 0;
-  }
-
-  .targetId {
-    min-width: 0;
-  }
-
-  .chipSlot {
-    justify-self: start;
-    max-width: 100%;
-  }
-
-  .targetDetail {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    flex: none;
-  }
-
-  .targetRow > :last-child:not(.targetDetail) {
-    grid-column: 4;
-    grid-row: 1;
-  }
-
-  .targetDetail > [class*='role'] {
-    display: none;
-  }
-
-  .targetText {
-    white-space: nowrap;
-  }
 }
 
 /* Prompt preview */
@@ -388,13 +102,6 @@
 
 .updating {
   min-width: 72px;
-}
-
-.contextRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm) var(--space-md);
 }
 
 .messages {
@@ -416,6 +123,15 @@
 
 .messages[data-expanded] {
   max-height: none;
+}
+
+/* cv5 Q2: in the drawer the messages are not a scroller of their own; the rendered prompt's outline sticks to the
+   drawer body, on the ground of this frame */
+.messages[data-fill] {
+  overflow: visible;
+  --outline-bg: var(--bg-base);
+  /* the drawer body's top padding */
+  --outline-stick: var(--space-md);
 }
 
 .messages:focus-visible {
@@ -456,17 +172,18 @@
   gap: var(--space-xs) var(--space-sm);
 }
 
-/* Action rail: sticky, fixed height, always mounted */
+/* Action rail: sticky, fixed height, always mounted. cv5 K5: no rule above it (owner: "this line has no value"); its
+   own void fill covers the page that scrolls under it. */
 .rail {
   position: sticky;
   bottom: 0;
-  z-index: 2;
+  /* The sticky bar layer (--z-sticky-bar): above the targets table's sticky header and frozen cells, below popovers. */
+  z-index: var(--z-sticky-bar);
   display: flex;
   align-items: center;
   gap: var(--space-md);
   min-height: var(--bar-action-h);
   padding-block: var(--space-sm);
-  border-top: 1px solid var(--border-default);
   background: var(--bg-void);
 }
 
@@ -484,12 +201,12 @@
 }
 
 .railLead {
-  flex: 0 1 460px;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
 .railSelect {
-  flex: 1 1 220px;
+  flex: none;
   min-width: 0;
 }
 
@@ -512,10 +229,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* cv4 Y3: the notice is shown in full; a long one wraps to a second line, never cut with "…". */
 .railText {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.railLink {
+  flex: none;
   white-space: nowrap;
 }
 
@@ -702,69 +424,34 @@
   gap: var(--space-sm);
 }
 
-.details summary {
-  cursor: pointer;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.details summary:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
-/* Collapsible */
-.collapsible {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  min-width: 0;
-}
-
-.collapsibleHead {
-  margin: 0;
-}
-
-.collapsibleBtn {
+/* cv4 Y1: the pass picker of a repeat run: rows between hairlines, the Analyze action at the row end. */
+.passList {
   display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--border-subtle);
+}
+
+.passRow {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm);
-  width: 100%;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-sm);
   min-height: 40px;
-  padding: var(--space-sm) var(--space-md);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--text-primary);
-  text-align: start;
-  cursor: pointer;
-  font: inherit;
+  padding: var(--space-xs);
 }
 
-.collapsibleBtn:hover {
-  background: var(--bg-hover);
-}
-
-.collapsibleBtn:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: -2px;
-}
-
-.collapsibleSummary {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono);
-}
-
-.collapsibleBody {
-  padding: var(--space-sm) var(--space-md) var(--space-md);
+.passRow + .passRow {
   border-top: 1px solid var(--border-subtle);
 }
 
-.collapsibleBody[hidden] {
-  display: none;
-}
-
-.details summary:hover {
-  color: var(--text-primary);
+.passHead {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
 }

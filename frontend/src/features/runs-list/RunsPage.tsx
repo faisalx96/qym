@@ -36,14 +36,12 @@ import { prefetchRunChunkWhenIdle } from '@/app/prefetch';
 import {
   contextForView,
   countActiveFilters,
-  filterSummary,
   DEFAULT_VIEW,
   PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
   parseSort,
 } from './urlState';
-import { defaultDirection, modelOptionLabel, sortString } from './urlState';
-import { datasetLabel } from './FiltersPopover';
+import { defaultDirection, sortString } from './urlState';
 import styles from './RunsPage.module.css';
 
 export function RunsPage() {
@@ -299,11 +297,6 @@ export function RunsPage() {
   useRunsKeyboard(handlers, !dialog);
 
   const filtered = countActiveFilters(view) > 0;
-  const sentence = filterSummary(
-    view,
-    { total: d.projectTotal, filtered: d.total },
-    { owner: (id) => owners[id] ?? id, dataset: datasetLabel },
-  );
   const picked = selectedRows();
   const mayManage = (r: (typeof rows)[number]) => isAdmin || canManage || r.owner?.id === me.id;
   // Delete: every pick must be ours to delete; a pass only while its run is settled, and never all passes of a run.
@@ -327,16 +320,10 @@ export function RunsPage() {
     );
   const cohortOverlap = refs.some((r) => selection.cohortA.some((l) => cohortRefsConflict(l, r)));
 
-  // C069: a search that finds nothing offers the model filter it may have meant ('gpt-4.1' is a model, not a run name)
-  const q = view.q.trim().toLowerCase();
-  const modelHint =
-    q && !view.models.length
-      ? (d.overview?.all_models ?? []).find((m) => modelOptionLabel(m).toLowerCase().includes(q))
-      : undefined;
   const empty = () =>
     d.projectTotal === 0 && !filtered ? (
       <EmptyState
-        title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No evaluation runs found'}
+        title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No runs found'}
         guide={d.data?.freshness.unpublished_runs ? undefined : '/docs/get-started/first-run'}
         body={
           d.data?.freshness.unpublished_runs ? (
@@ -355,30 +342,11 @@ export function RunsPage() {
     ) : (
       <EmptyState
         compact
-        title={view.q ? `No run or dataset name contains "${view.q}"` : 'No runs match current filters'}
+        title={view.q ? `No runs match “${view.q}”` : 'No runs match these filters'}
         body={
           d.data?.freshness.unpublished_runs
             ? 'Run history is preparing. Available runs will appear automatically.'
-            : view.q
-              ? undefined
-              : 'Clear a filter or widen the time range.'
-        }
-        action={
-          filtered ? (
-            <span className={styles.emptyActions}>
-              <Button
-                variant="neutral"
-                onPress={() => setView({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort })}
-              >
-                Clear filters
-              </Button>
-              {modelHint ? (
-                <Button variant="primary" onPress={() => setView({ q: '', models: [modelHint] })}>
-                  Filter by model {modelOptionLabel(modelHint)}
-                </Button>
-              ) : null}
-            </span>
-          ) : undefined
+            : undefined
         }
       />
     );
@@ -444,14 +412,7 @@ export function RunsPage() {
         ),
       }}
       footer={{
-        // C224: the pager already says '1–50 of 271 runs', so the summary shows only for a filter or a search
-        summary:
-          !d.data || filtered || stale ? (
-            <span aria-live="polite">
-              {d.data ? (filtered ? sentence : '') : 'Loading runs…'}
-              {stale ? `${filtered ? ' · ' : ''}showing runs from an earlier refresh` : ''}
-            </span>
-          ) : null,
+        filterNote: d.data && filtered ? `Filtered from ${d.projectTotal} runs` : undefined,
         pagination: {
           total: d.total,
           page,
@@ -466,6 +427,7 @@ export function RunsPage() {
             updatedAt={d.updatedAt}
             freshness={d.data?.freshness}
             failed={stale}
+            loading={!d.data}
             onHelp={cards ? undefined : () => setHelpOpen(true)}
           />
         ),

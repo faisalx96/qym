@@ -103,14 +103,12 @@ test('C-ov-4: the winner bar is 28 high, proportional, named and clickable; the 
   // widths are proportional to wins (flex-grow = wins)
   const ratio = widths.map((w, i) => w / wins[i]!);
   for (const r of ratio) within(r, ratio[0]!, ratio[0]! * 0.06, 'width per win');
-  const seg = await segs
-    .first()
-    .evaluate((e) => ({
-      bg: getComputedStyle(e).backgroundColor,
-      f: getComputedStyle(e.firstElementChild!).fontFamily,
-      s: getComputedStyle(e).fontSize,
-      w: getComputedStyle(e).fontWeight,
-    }));
+  const seg = await segs.first().evaluate((e) => ({
+    bg: getComputedStyle(e).backgroundColor,
+    f: getComputedStyle(e.firstElementChild!).fontFamily,
+    s: getComputedStyle(e).fontSize,
+    w: getComputedStyle(e).fontWeight,
+  }));
   expect(seg.f).toMatch(/mono/i);
   expect(seg.s).toBe('11px');
   expect(Number(seg.w)).toBe(650);

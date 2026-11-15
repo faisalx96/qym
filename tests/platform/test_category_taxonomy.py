@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-import sys
-from unittest.mock import MagicMock
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.db.models import RunItem, RunItemScore
 from qym_platform.services.llm_analyzer import (

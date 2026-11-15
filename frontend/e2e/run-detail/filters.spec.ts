@@ -44,9 +44,9 @@ test.describe('chart filters (scenario 3)', () => {
     await expect.poll(() => itemsCount(page)).toEqual([n, 240]);
     // the Overview follows the filter: the card now counts the filtered items
     await expect(card).toContainText(`${n} items`);
-    // the chip can be removed, as can the whole filter via the banner
-    await expect(page.getByRole('button', { name: /Remove filter Failing/ })).toBeVisible();
-    await banner.getByRole('button', { name: 'Clear filter' }).click();
+    // the tag names the filter; the one Clear is in the sticky nav (C-44)
+    await expect(page.locator('[data-run-filters]').getByText(/Failing/)).toBeVisible();
+    await page.getByTestId('nav-clear-filters').click();
     await expect(banner).toHaveCount(0);
     await expect.poll(() => params(page).get('show')).toBeNull();
     expect(await itemsCount(page)).toEqual([240, 240]);
@@ -145,13 +145,13 @@ test.describe('rule builder (scenario 5)', () => {
     await expect.poll(() => params(page).get('filters') ?? '').toContain('"value":"1000"');
     const raw = params(page).get('filters')!;
     expect(JSON.parse(raw).rules.children).toHaveLength(2);
-    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters2');
     const [n] = await itemsCount(page);
     expect(n).toBeLessThan(240);
     await page.reload();
     await expect(page.getByTestId('items-count')).toBeVisible();
     expect((await itemsCount(page))[0]).toBe(n);
-    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters2');
   });
 
   test('a ?filters= deep link applies, shows the chip and count, and is removable by keyboard', async ({
@@ -161,11 +161,10 @@ test.describe('rule builder (scenario 5)', () => {
     const [n] = await itemsCount(page);
     expect(n).toBeGreaterThan(0);
     expect(n).toBeLessThan(240);
-    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters (2)');
-    const chip = page.getByRole('button', { name: /Remove filter 2 rules/ });
+    await expect(page.getByTestId('nav-open-filters')).toContainText('Filters2');
+    const chip = page.locator('[data-run-filters]').getByText(/2 rules/);
     await expect(chip).toBeVisible();
-    await chip.focus();
-    await page.keyboard.press('Enter');
+    await page.getByTestId('nav-clear-filters').click();
     await expect(chip).toHaveCount(0);
     await expect.poll(() => itemsCount(page)).toEqual([240, 240]);
     await expect.poll(() => params(page).get('filters')).toBeNull();

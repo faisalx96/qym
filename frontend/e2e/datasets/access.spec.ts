@@ -170,7 +170,7 @@ test.describe('a viewer (A1-25 to A1-31)', () => {
     await asViewer(page, false);
     await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=settings`);
     await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveAttribute('readonly', '');
-    await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
     await expect(page.getByTestId('delete-dataset')).toHaveCount(0);
     await expect(
       page.getByText('Only the dataset creator or a project manager can delete a dataset.'),

@@ -140,7 +140,7 @@ function Toaster() {
           <span className={styles.message}>{t.message}</span>
           {t.action ? (
             <Button
-              variant="ghost"
+              variant="neutral"
               className={styles.action}
               onPress={() => {
                 t.action?.onClick();

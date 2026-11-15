@@ -14,6 +14,9 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: true,
+    // userEvent-driven tests take several seconds each on a 4-vCPU CI runner; 5 s (the
+    // default) made them flaky. One budget here instead of per-test overrides.
+    testTimeout: 20_000,
     // Bound the worker pool from the machine's free memory: jsdom workers take
     // 300-500 MB each and the default (one per CPU) has OOM-killed a 15 GB host when
     // several suites ran at once. VITEST_MAX_WORKERS overrides (scripts/heavy.sh sets it).

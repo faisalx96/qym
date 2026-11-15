@@ -7,20 +7,23 @@ import { liveEvidenceTurns } from '@/features/dev/liveFixtures';
 
 describe('shared turn evidence', () => {
   afterEach(() => vi.unstubAllGlobals());
-  it('gives degraded services a warning and a distinct figure', () => {
+  it('uses the main neutral state tag for degraded services', () => {
     render(<ServiceStatus status="degraded" />);
-    const status = screen.getByText('Degraded').closest('[data-tone]');
-    expect(status).toHaveAttribute('data-tone', 'warning');
-    expect(status).toHaveAttribute('data-shape', 'hourglass');
+    const status = screen.getByText('Degraded').closest('[data-kind]');
+    expect(status).toHaveAttribute('data-kind', 'state');
+    expect(status).not.toHaveAttribute('data-tone');
+    expect(status).not.toHaveAttribute('data-shape');
   });
   it.each([
-    ['failed', 'danger', 'cross'],
-    ['ok', 'success', 'check'],
-    ['skipped', 'neutral', 'pause'],
-  ])('preserves the %s status', (status, tone, shape) => {
+    ['failed', 'danger'],
+    ['ok', 'success'],
+    ['skipped', null],
+  ])('preserves the %s status', (status, tone) => {
     const { container } = render(<ServiceStatus status={status} />);
-    expect(container.firstChild).toHaveAttribute('data-tone', tone);
-    expect(container.firstChild).toHaveAttribute('data-shape', shape);
+    if (tone) expect(container.firstChild).toHaveAttribute('data-tone', tone);
+    else expect(container.firstChild).not.toHaveAttribute('data-tone');
+    expect(container.firstChild).toHaveAttribute('data-kind', 'state');
+    expect(container.firstChild).not.toHaveAttribute('data-shape');
   });
   it('shows both languages with explicit directions and fixed labels', () => {
     render(<Bilingual en="English analysis" ar="التحليل العربي" />);

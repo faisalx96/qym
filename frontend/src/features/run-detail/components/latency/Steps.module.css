@@ -12,32 +12,24 @@
   padding-block: var(--space-xs);
 }
 
+/* The title and its caption, then the table toolbar on its own row (cv4 C2-1). */
 .head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-}
-
-.titles {
-  display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.title,
-.desc {
-  margin: 0;
+  gap: var(--space-md);
 }
 
 .tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+/* Export: the right end of the toolbar, as the CSV button of the Items bar. */
+.toolsEnd {
+  display: inline-flex;
+  margin-inline-start: auto;
 }
 
 .scroller {
@@ -45,7 +37,7 @@
 }
 
 .table {
-  --cols: minmax(220px, 280px) minmax(0, 1fr) 80px 92px 96px 64px;
+  --cols: minmax(220px, 280px) minmax(0, 1fr) 96px 112px 116px 76px;
 
   display: flex;
   flex-direction: column;
@@ -57,12 +49,15 @@
   grid-template-columns: var(--cols);
   align-items: center;
   min-height: 36px;
-  border-bottom: 1px solid var(--border-subtle);
   transition: background-color var(--transition-fast);
 }
 
 .row:last-child {
   border-bottom: 0;
+}
+
+.row:nth-child(odd):not(.axisRow) {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step-report), transparent);
 }
 
 .row:not(.axisRow):hover {
@@ -71,7 +66,6 @@
 
 .row[data-phase] {
   min-height: 40px;
-  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
 }
 
 .row[data-flash] {
@@ -79,8 +73,9 @@
 }
 
 .axisRow {
-  min-height: 28px;
-  border-bottom-color: var(--border-default);
+  min-height: var(--table-header-height);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .cell,
@@ -101,7 +96,9 @@
 .stepHead {
   color: var(--text-muted);
   font-size: var(--font-sm);
-  font-weight: 600;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .num {
@@ -109,7 +106,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-base);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: center;
   white-space: nowrap;
 }
 
@@ -128,7 +125,9 @@
   color: var(--text-muted);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
-  font-weight: 600;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   white-space: nowrap;
   cursor: pointer;
   transition: color var(--transition-fast);
@@ -229,12 +228,9 @@ button.label:focus-visible {
   color: inherit;
 }
 
+/* cv4 X16: the group's leaf count is the one count badge (CountTile, with its own start margin), as the tab counts. */
 .count {
-  margin-left: 6px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  font-weight: 600;
+  vertical-align: middle;
 }
 
 .chev {

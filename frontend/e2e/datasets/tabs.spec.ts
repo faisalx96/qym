@@ -195,7 +195,7 @@ test.describe('settings', () => {
     const p = await createProject(request, 'Set General', uniqueSlug('setgen'));
     const d = await createDataset(request, p.slug, 'Settings DS');
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?tab=settings`);
-    const save = page.getByRole('button', { name: 'Save changes' });
+    const save = page.getByRole('button', { name: 'Save', exact: true });
     await expect(save).toBeDisabled();
     await page.getByRole('textbox', { name: 'Description' }).fill('now described');
     const tags = page.getByRole('textbox', { name: 'Tags' });

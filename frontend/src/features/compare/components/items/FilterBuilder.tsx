@@ -286,7 +286,7 @@ function Group({
         <Button
           icon={<Icon name="plus" size={12} />}
           size="sm"
-          variant="ghost"
+          variant="neutral"
           onPress={() =>
             onChange(path, (n) => ({
               ...(n as FilterGroup),

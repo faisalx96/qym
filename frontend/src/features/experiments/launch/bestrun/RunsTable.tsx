@@ -1,5 +1,6 @@
 import type { BestRunRow } from '@/api/launch';
-import { DataTable, ScoreBar, Tag, TwoLine, type Column } from '@/ui';
+import { metricDir } from '@/features/datasets/lib/metricDir';
+import { DataTable, ScoreValue, Tag, TwoLine, type Column } from '@/ui';
 import { formatAge, formatScore, versionText } from '../model';
 import { shortId, sweepText } from './lib';
 import styles from './bestrun.module.css';
@@ -58,8 +59,16 @@ export function RunsTable({
       header: metric || 'Score',
       type: 'score',
       width: 120,
+      align: 'center',
       priority: 1,
-      cell: (r) => <ScoreBar value={r.score} text={formatScore(r.score)} direction="none" />,
+      cell: (r) => (
+        <ScoreValue
+          variant="plain"
+          value={r.score}
+          text={formatScore(r.score)}
+          direction={metricDir(r.direction)}
+        />
+      ),
     },
     {
       id: 'pass',
@@ -93,7 +102,14 @@ export function RunsTable({
       priority: 3,
       cell: (r) => sweepText(r.params) || '—',
     },
-    { id: 'age', header: 'Age', type: 'date', width: 80, priority: 3, cell: (r) => formatAge(r.age_seconds) },
+    {
+      id: 'age',
+      header: 'Age',
+      type: 'date',
+      width: 120,
+      priority: 3,
+      cell: (r) => formatAge(r.age_seconds),
+    },
   ];
   return (
     <div className={styles.tableWrap}>

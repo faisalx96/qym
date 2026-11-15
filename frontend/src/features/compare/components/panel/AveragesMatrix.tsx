@@ -4,6 +4,7 @@ import { formatLatency, formatMetricValue, metricBand, metricDirectionLabel } fr
 import { useMediaQuery } from '@/features/shell';
 import { Icon } from '@/ui';
 import { useCompare } from '../../CompareContext';
+import { latencyChange } from '../../lib/baseline';
 import type { DeltaKind, MetricColumn } from '../../lib/baseline';
 import { columnName } from '../../lib/columnName';
 import { buildColumnRows, type ColumnRow } from '../../lib/panelData';
@@ -67,9 +68,12 @@ export function AveragesMatrix() {
         <>
           <span className={styles.plainValue}>{r.latency === null ? '—' : formatLatency(r.latency)}</span>
           {!r.isBaseline && !unpaired && r.latencyRel !== null ? (
-            <span className={styles.latDelta} data-part="averages-delta">
-              {r.latencyRel < -0.02 ? '▼' : r.latencyRel > 0.02 ? '▲' : '≈'} {r.latencyRel >= 0 ? '+' : '−'}
-              {Math.abs(r.latencyRel * 100).toFixed(0)}%
+            <span
+              className={styles.latDelta}
+              data-part="averages-delta"
+              data-verdict={latencyChange(r.latencyRel).verdict}
+            >
+              {latencyChange(r.latencyRel).text}
             </span>
           ) : null}
         </>

@@ -37,7 +37,13 @@ interface Group {
 
 /** The ids of a service's task list as the validation reads them (nothing before it was read). */
 function taskListOf(payload: EnvTasksPayload | undefined): EnvData['taskList'] {
-  return payload ? { status: payload.status, ids: payload.tasks.map((t) => t.id) } : undefined;
+  return payload
+    ? {
+        status: payload.status,
+        ids: payload.tasks.map((t) => t.id),
+        names: Object.fromEntries(payload.tasks.map((t) => [t.id, t.name])),
+      }
+    : undefined;
 }
 
 function toEnvData(env: EvalEnvironment, group: Group | undefined, tasks?: EnvTasksPayload): EnvData {

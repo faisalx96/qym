@@ -17,7 +17,6 @@ from base64 import b64encode
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import itsdangerous
 import pytest
@@ -31,8 +30,6 @@ ROOT = Path(__file__).resolve().parents[2]
 for src in (ROOT / "packages" / "platform", ROOT / "packages" / "sdk"):
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
 from qym_platform.db.base import Base
@@ -439,6 +436,7 @@ def _spa_asset_name() -> str:
     return sorted((spa_dir() / "assets").glob("*.js"))[0].name
 
 
+@pytest.mark.bundle
 def test_private_responses_are_not_cached(app):
     with _browser(app) as client:
         _signup(client)
@@ -452,6 +450,7 @@ def test_private_responses_are_not_cached(app):
         assert "no-store" not in asset.headers.get("cache-control", "")
 
 
+@pytest.mark.bundle
 def test_static_assets_stay_cacheable_under_a_root_path(monkeypatch):
     """Behind an ingress prefix the mounted app sees /qym/assets/...; assets must
     still skip no-store or every page view re-downloads them."""

@@ -215,7 +215,8 @@ test.describe('virtualization', () => {
 
   test('the Pagination size control switches the page size', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await page.getByRole('combobox', { name: 'items per page' }).selectOption('50');
+    await page.getByRole('button', { name: /items per page/ }).click();
+    await page.getByRole('option', { name: '50 / page' }).click();
     await expect(page.getByText('1–50 of 240 items')).toBeVisible();
   });
 });

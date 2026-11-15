@@ -51,7 +51,7 @@ test('Retry failed over several jobs confirms once, asks for the HIGH acknowledg
   });
   await gotoApp(page, expPath(project.slug, `/${x.id}`));
   await page.getByTestId('exp-actions').click();
-  await page.getByRole('menuitem', { name: 'Retry failed (2)' }).click();
+  await page.getByRole('menuitem', { name: /^Retry failed\s?2$/ }).click();
   const confirm = page.locator('[role="alertdialog"],[role="dialog"]').last();
   await expect(confirm.getByRole('heading', { name: 'Retry 2 jobs?' })).toBeVisible();
   await confirm.getByRole('button', { name: 'Retry jobs' }).click();
@@ -94,5 +94,6 @@ test('a matrix cell hands its job to the default preset editor, which opens on t
       `/projects/${project.slug}/environments/${env.id}/default-preset/edit\\?.*promote=job.*id=${job.id}`,
     ),
   );
-  await expect(page.getByRole('complementary', { name: 'Review and publish' })).toBeVisible();
+  await expect(page.locator('[data-part=customize][data-mode=editor]')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Compared with' })).toBeVisible();
 });

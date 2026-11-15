@@ -4,8 +4,8 @@
  */
 import type { ReactNode } from 'react';
 import { isTerminalJob, type CredentialState, type ExperimentDetail } from '@/api/experiments';
-import { Eyebrow, Text, StatusMark } from '@/ui';
-import { Callout } from '../launch/components/Callout';
+import { formatHeaderDate, toDate } from '@/lib/dates';
+import { Eyebrow, Flag, InlineNotice, StateTag, Text } from '@/ui';
 import {
   CREDENTIALS_TITLE,
   CRED_API_KEY,
@@ -13,18 +13,14 @@ import {
   TOKEN_ENV_KEY,
   TOKEN_UNAVAILABLE_REASON,
   notSentLead,
+  notSentReason,
   notSentTail,
-  revokedWarning,
 } from './copy';
 import styles from './detail.module.css';
 
-/** `HH:mm` for today, `20 Oct 12:41` for another day. */
-export function revokedLabel(iso: string, now = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  if (d.toDateString() === now.toDateString()) return time;
-  return `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })} ${time}`;
+/** 'Nov 5, 2026, 23:37' (lib/dates header form). */
+export function revokedLabel(iso: string): string {
+  return toDate(iso) ? formatHeaderDate(iso) : '';
 }
 
 export interface TokenFacts {
@@ -67,19 +63,17 @@ function CredBadge({
   label?: string;
   sent?: boolean;
 }) {
-  if (state.state === 'none') return <StatusMark tone="neutral" shape="ring" label="not issued" />;
+  if (state.state === 'none') return <StateTag tone="neutral">Not issued</StateTag>;
   if (state.state === 'revoked')
     return (
       <>
-        <StatusMark tone="warning" shape="pause" label="revoked" title={state.revoked_at ?? undefined} />
+        <Flag icon="ban" title={state.revoked_at ?? undefined}>
+          Revoked
+        </Flag>
         {label ? <Text as="span" variant="sm" tone="muted">{` ${label}`}</Text> : null}
       </>
     );
-  return sent ? (
-    <StatusMark tone="success" shape="full" label="active" />
-  ) : (
-    <StatusMark tone="warning" shape="hourglass" label="not sent" />
-  );
+  return sent ? <StateTag tone="success">Active</StateTag> : <StateTag tone="warning">Not sent</StateTag>;
 }
 
 /**
@@ -105,21 +99,23 @@ export function Credentials({ detail }: { detail: ExperimentDetail }) {
   let notice: ReactNode = null;
   if (facts.revokedStillNeeded) {
     notice = (
-      <Callout tone="warning">
-        <span data-testid="token-notice">{revokedWarning(at(token))}</span>
-      </Callout>
+      <InlineNotice
+        tone="warning"
+        lead={`Dataset read token revoked ${at(token)}.`}
+        data-testid="token-notice"
+      >
+        Retry the blocked jobs to issue a new one.
+      </InlineNotice>
     );
   } else if (facts.notDeclared.length) {
     notice = (
-      <Callout tone="info">
-        <span data-testid="token-notice">
-          {notSentLead(facts.notDeclared)}{' '}
-          <Text variant="base" as="span" mono>
-            {TOKEN_ENV_KEY}
-          </Text>
-          {notSentTail(facts.notDeclared)}
-        </span>
-      </Callout>
+      <InlineNotice tone="warning" lead={notSentLead(facts.notDeclared)} data-testid="token-notice">
+        {notSentReason(facts.notDeclared)}{' '}
+        <Text variant="base" as="span" mono>
+          {TOKEN_ENV_KEY}
+        </Text>
+        {notSentTail(facts.notDeclared)}
+      </InlineNotice>
     );
   }
   return (

@@ -158,15 +158,33 @@ export async function goStep(page: Page, step: StepId): Promise<void> {
 
 export const nameBox = (page: Page): Locator => page.getByRole('textbox', { name: 'Experiment name' });
 export const dialog = (page: Page): Locator => page.locator('[role="dialog"],[role="alertdialog"]').last();
-export const review = (page: Page): Locator => page.getByRole('complementary', { name: 'Review' });
 /**
- * The Launch button: the Review rail's, or the compact launch bar's where the rail gives way (the settings step
- * and every narrow layout). Never both at once.
+ * The Review step's content (Summary, runs, Changes, Checks). It exists on the Review step only (round 9, point 4):
+ * call `toReview(page)` first, or read the run count and the first problem from `launchBar(page)` on any step.
+ */
+export const review = (page: Page): Locator => page.getByTestId('review-step').or(page.getByTestId('publish-review'));
+/** The one bottom bar (home view and every step). */
+export const launchBar = (page: Page): Locator => page.locator('[data-part=launch-bar]');
+/**
+ * The launch of the bar: home "Launch as is" (`bar-launch`); the last step's primary slot "Launch N runs" or, in the editor,
+ * "Publish vN" (`bar-continue` with `data-action`). Round 10: earlier steps have no launch, go to the review first (`toReview`).
  */
 export const launchButton = (page: Page): Locator =>
-  review(page)
-    .getByRole('button', { name: /^Launch/ })
-    .or(page.getByRole('region', { name: 'Launch', exact: true }).getByRole('button', { name: /^Launch/ }));
+  page.locator(
+    '[data-part=bar-launch], [data-part=bar-continue][data-action=launch], [data-part=bar-continue][data-action=publish]',
+  );
+
+/** Opens the Review step (the last one) through the rail and waits for its content. */
+export async function toReview(page: Page): Promise<void> {
+  const jump = page.getByRole('button', { name: /Go to step/ });
+  if (await jump.isVisible()) {
+    await jump.click();
+    await page.getByRole('option', { name: /Review and (launch|publish)/ }).click();
+  } else {
+    await rail(page).getByRole('button', { name: /Review and (launch|publish)/ }).click();
+  }
+  await expect(review(page)).toBeVisible({ timeout: 25_000 });
+}
 
 /** Opens a collapsed section / settings group heading button (no-op when already open). */
 export async function ensureOpen(button: Locator): Promise<void> {
@@ -211,9 +229,9 @@ export async function openGroup(page: Page, title: string): Promise<void> {
   await ensureOpen(page.getByRole('heading', { name: title, level: 4 }).getByRole('button'));
 }
 
-/** Waits until the review pane's dry run settled to Ready. */
+/** Waits until the dry run settled to Ready (the bar's status line, on any step). */
 export async function expectReady(page: Page): Promise<void> {
-  await expect(review(page).getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });
+  await expect(launchBar(page).getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });
 }
 
 /** Max Attempts of the primary endpoint: an integer setting nobody sets in the seeded presets. */

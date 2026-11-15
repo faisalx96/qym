@@ -54,8 +54,17 @@
 }
 
 .item[data-disabled] {
-  opacity: 0.45;
   cursor: not-allowed;
+}
+/* A locked item fades its icon, text and trailing icon; the reason box (the wrap's ::after) stays at full opacity. */
+.item[data-disabled] > .icon,
+.item[data-disabled] .text,
+.item[data-disabled] > svg {
+  opacity: 0.45;
+}
+.reasonItem {
+  flex: 1;
+  min-width: 0;
 }
 
 .icon {
@@ -84,4 +93,62 @@
   height: 1px;
   margin: var(--space-xs) 0;
   background: var(--border-subtle);
+}
+
+/* cv5 N: a grouped, two-level menu (the prompt outline). Its items take the Select option's --font-base, so the group
+   label (the switch-group label: --font-sm, 600, muted, sentence case) reads as a label, not an item; a level-0 item is
+   600, a level-1 item regular and indented under it. Taller than the space: the list scrolls. */
+.menu[data-grouped] {
+  max-height: inherit;
+  overflow-y: auto;
+}
+
+.menu[data-grouped] .item {
+  font-size: var(--font-base);
+}
+
+.section + .section {
+  margin-top: var(--space-xs);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.groupLabel {
+  padding: var(--space-xs) var(--space-sm) 2px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.item[data-level='0'] {
+  font-weight: 600;
+}
+
+.item[data-level='1'] {
+  padding-inline-start: calc(var(--space-sm) + var(--space-md));
+  font-weight: 450;
+}
+
+/* quiet text at the row end ("not sent", "none") */
+.end {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: none;
+  font-weight: 450;
+  color: var(--text-muted);
+}
+
+/* the checked item of a menu that shows where the person is: primary text, the accent check at the row end (the
+   Select option recipe) */
+.check {
+  display: inline-flex;
+  flex: none;
+  width: 12px;
+  color: var(--accent-primary);
+}
+
+.item[data-selected] {
+  color: var(--text-primary);
+  font-weight: 600;
 }

@@ -97,13 +97,13 @@ function Inner({
               {section.items.slice(0, 5).map((item) => (
                 <li key={item}>{item}</li>
               ))}
-              {section.items.length > 5 ? <li>… and {section.items.length - 5} more</li> : null}
+              {section.items.length > 5 ? <li>and {section.items.length - 5} more</li> : null}
             </ul>
           </section>
         ))}
         {actionable > 0 ? (
           <Textarea
-            label="Reason (optional)"
+            label="Reason"
             placeholder="Why are you cancelling?"
             value={reason}
             onChange={(v) => setReason(v.slice(0, 1000))}

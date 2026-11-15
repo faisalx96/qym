@@ -1,59 +1,22 @@
 /* Run-page cards: review history, experiment, versioning, lock notices. */
-.title {
-  margin: 0;
-  font-size: var(--font-md);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
+/* The Experiment title (CardTitle, cv4 X1) and its Official run flag on one line. */
 .titleRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.copy {
-  margin-top: 2px;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.list {
-  list-style: none;
-  margin: var(--space-sm) 0 0;
-  padding: 0;
-}
-
-.entry {
-  padding: var(--space-sm) 0;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.entry:first-child {
-  border-top: 0;
-}
-
-.entryHead {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
 }
 
-.actor {
-  color: var(--text-primary);
-}
-
-.when {
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
+/* cv5 Z6: the review log is the shared Timeline; the title is the state Tag and its words, the detail the comment. */
+.entryTitle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .comment {
-  margin-top: var(--space-xs);
+  display: block;
   font-size: var(--font-base);
   color: var(--text-secondary);
   white-space: pre-wrap;
@@ -61,7 +24,7 @@
 }
 
 .note {
-  margin-top: var(--space-xs);
+  display: block;
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
@@ -91,19 +54,6 @@
   font-family: var(--font-mono);
   font-size: var(--font-base);
   color: var(--text-primary);
-}
-
-.expHead {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
 }
 
 .disabledHint {
@@ -150,19 +100,6 @@
   background: var(--bg-elevated);
   font-family: var(--font-mono);
   font-size: var(--font-base);
-}
-
-.notice {
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.notice b {
-  color: var(--text-primary);
 }
 
 .flat {

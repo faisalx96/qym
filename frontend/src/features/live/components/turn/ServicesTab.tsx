@@ -1,7 +1,17 @@
 import type { CSSProperties } from 'react';
 import { stringsOf } from '../../lib/evidenceValues';
 import type { LiveTurnDetail } from '@/api/live';
-import { ClampedText, DataTable, InlineNotice, StatusMark, Subsection, Tag, Text, type Column } from '@/ui';
+import {
+  ClampedText,
+  DataTable,
+  EmptyState,
+  InlineNotice,
+  StateTag,
+  Subsection,
+  Tag,
+  Text,
+  type Column,
+} from '@/ui';
 import {
   booleanOf,
   recordOf,
@@ -12,8 +22,7 @@ import {
   type ToolFailure,
 } from '../../lib/summary';
 import { faultLabel, matchToolFailures, serviceEvidence } from '../../lib/serviceEvidence';
-import { Facts, ServiceStatus } from './Evidence';
-import { ThresholdScore } from './ThresholdScore';
+import { Facts, MetricValue, ServiceStatus } from './Evidence';
 import styles from './ServicesTab.module.css';
 
 function Fault({ value }: { value: string | null }) {
@@ -47,7 +56,7 @@ function Failure({ failure }: { failure: ToolFailure }) {
       {failure.error ? (
         <ClampedText text={failure.error} lines={3} code={false} />
       ) : (
-        <Text tone="muted">No error message recorded.</Text>
+        <EmptyState compact title="No error message recorded" />
       )}
     </div>
   );
@@ -70,11 +79,7 @@ function ToolEnvelope({ summary }: { summary: Record<string, unknown> }) {
         </Text>
       ) : null}
       {matched !== null ? (
-        <StatusMark
-          label={matched ? 'Matched' : 'Did not match'}
-          tone={matched ? 'success' : 'warning'}
-          shape={matched ? 'check' : 'cross'}
-        />
+        <StateTag tone={matched ? 'success' : 'warning'}>{matched ? 'Matched' : 'Did not match'}</StateTag>
       ) : null}
       {(
         [
@@ -124,7 +129,7 @@ export function ServicesTab({ data }: { data: LiveTurnDetail }) {
       ),
     },
     { id: 'status', header: 'Status', cell: (row) => <ServiceStatus status={row.status} /> },
-    { id: 'score', header: 'Score', cell: (row) => <ThresholdScore value={row.score} spec={spec(row)} /> },
+    { id: 'score', header: 'Score', cell: (row) => <MetricValue value={row.score} spec={spec(row)} /> },
     { id: 'fault', header: 'Fault', cell: (row) => <Fault value={row.fault} /> },
     {
       id: 'why',
@@ -190,7 +195,7 @@ export function ServicesTab({ data }: { data: LiveTurnDetail }) {
                 <Text weight={600} dir="auto">
                   {label(service)}
                 </Text>
-                <ThresholdScore value={service.score} spec={spec(service)} />
+                <MetricValue value={service.score} spec={spec(service)} />
               </div>
             ))}
           </div>
@@ -210,13 +215,13 @@ export function ServicesTab({ data }: { data: LiveTurnDetail }) {
           />
         </>
       ) : (
-        <Text tone="muted">No services available for this turn.</Text>
+        <EmptyState compact title="No services for this turn" />
       )}
       <Subsection
         title="Tools"
         aside={
           count !== null ? (
-            <Text mono>{tools ? `${failures} of ${count} calls failed` : `${count} calls`}</Text>
+            <Text>{tools ? `${failures} of ${count} calls failed` : `${count} calls`}</Text>
           ) : undefined
         }
       >
@@ -244,7 +249,7 @@ export function ServicesTab({ data }: { data: LiveTurnDetail }) {
               ))}
             </ol>
           ) : (
-            <Text tone="muted">No tool calls recorded.</Text>
+            <EmptyState compact title="No tool calls recorded" />
           )
         ) : (
           <Text tone="muted">Call list not available for this turn</Text>

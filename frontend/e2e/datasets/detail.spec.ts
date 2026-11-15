@@ -265,7 +265,7 @@ test.describe('detail: items table', () => {
     await rowOf(page, 'num-1').click();
     const pane = page.locator('[data-item-pane=num-1]');
     await expect(pane).toBeVisible();
-    await expect(pane.getByTestId('pane-save')).toBeDisabled();
+    await expect(pane.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     const input = pane
       .locator('section')
       .filter({ has: page.getByRole('textbox', { name: 'Input', exact: true }) });
@@ -273,7 +273,7 @@ test.describe('detail: items table', () => {
     await input.getByRole('radiogroup').getByText('JSON').click();
     await expect(input.getByTestId('type-tag')).toHaveText('string → number');
     await expect(input).toContainText('will be saved as number');
-    await pane.getByTestId('pane-save').click();
+    await pane.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('button', { name: 'Save with new type' }).click();
     await expect(page.getByText('Item num-1 saved')).toBeVisible();
 
@@ -305,8 +305,8 @@ test.describe('detail: items table', () => {
     await expect(pane).toContainText('Unsaved changes');
     await box.press('Escape');
     const guard = page
-      .getByRole('dialog', { name: 'Discard the unsaved changes?' })
-      .or(page.getByRole('alertdialog', { name: 'Discard the unsaved changes?' }));
+      .getByRole('dialog', { name: 'Discard unsaved changes?' })
+      .or(page.getByRole('alertdialog', { name: 'Discard unsaved changes?' }));
     await expect(guard).toBeVisible();
     await guard.getByRole('button', { name: 'Keep editing' }).click();
     await expect(pane).toBeVisible();
@@ -445,7 +445,7 @@ test.describe('detail: items table', () => {
     await rowOf(page, 'q-000').click();
     const pane = page.locator('[data-item-pane]');
     await expect(pane).toBeVisible();
-    await expect(pane.getByTestId('pane-save')).toHaveCount(0);
+    await expect(pane.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
     await expect(pane.locator('textarea')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(pane).toHaveCount(0);

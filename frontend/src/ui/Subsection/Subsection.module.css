@@ -25,6 +25,12 @@
   margin: 0;
 }
 
+/* cv4 F10: the middle report title role, between the section title and the card title (beats the Text variant). */
+.sub .head .title {
+  font-size: var(--font-subsection);
+  line-height: 1.25;
+}
+
 .desc {
   flex: 1 1 16rem;
   min-width: 0;

@@ -524,6 +524,7 @@ def test_run_payload_includes_dataset_version_and_aliases(client_and_session):
         run = session.query(Run).filter(Run.id == "run-ver").first()
         fields = _dataset_version_fields(run, _dataset_version_info_map(session, [run]))
         assert fields["dataset_version"] == "v1"
+        assert fields["dataset_version_status"] == "published"
         assert "production" in fields["dataset_aliases"]
 
     # A run with no dataset_version_id yields empty fields, not an error.
@@ -541,6 +542,7 @@ def test_run_payload_includes_dataset_version_and_aliases(client_and_session):
         )
         fields = _dataset_version_fields(bare, _dataset_version_info_map(session, [bare]))
         assert fields["dataset_version"] is None
+        assert fields["dataset_version_status"] is None
         assert fields["dataset_aliases"] == []
 
 
@@ -621,6 +623,9 @@ def test_dataset_score_payloads_carry_the_declared_metric_directions(client_and_
     A row of one run carries that run's declared directions. A value that spans
     runs carries a direction only when every run that scored it declares the
     same one; a run that declares none, or runs that disagree, leave it None.
+    The Items tab skips a run that declares none: there a metric is None only
+    when declared directions disagree or no run declares one (``old``: run-a
+    declares maximize, run-c declares none, so Items gives maximize).
     """
     client, SessionLocal = client_and_session
     created = client.post("/v1/datasets", headers=_bearer(), json={"name": "Dir DS", "slug": "dir-ds"})
@@ -692,7 +697,7 @@ def test_dataset_score_payloads_carry_the_declared_metric_directions(client_and_
 
     items = client.get("/v1/datasets/dir-ds/versions/v1/items", headers=_bearer())
     assert items.status_code == 200, items.text
-    assert items.json()["metric_directions"] == shared
+    assert items.json()["metric_directions"] == {**shared, "old": "maximize"}
 
     runs = client.get(f"/v1/datasets/dir-ds/versions/v1/items/{item.json()['item']['item_id']}/runs", headers=_bearer())
     assert runs.status_code == 200, runs.text

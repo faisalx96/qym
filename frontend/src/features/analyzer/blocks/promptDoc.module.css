@@ -1,0 +1,576 @@
+/* cv5 Q2: the analyzer prompt rendered as a document for a person. Sans body at a reading measure, the type scale's
+   roles for headings (one accent role: the 3px bar of a top-level section, as Subsection), JSON in the --json-*
+   colours, item data and code in an elevated well. Tokens only. Every line is one block (.ln), so a change mark
+   covers exactly the lines that the change added. */
+.doc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  text-align: start;
+  min-width: 0;
+}
+
+.ln {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+/* an empty line keeps its height */
+.ln:empty::before {
+  content: '\a0';
+}
+
+/* A line that the last settings change added: the pane's soft accent wash, no motion. */
+.ln[data-added],
+.titleText[data-added],
+.fact[data-added] > * {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  color: var(--text-primary);
+}
+
+.para,
+.term,
+.numbered,
+.list,
+.facts,
+.group,
+.mdHeading {
+  max-width: var(--field-measure);
+}
+
+.para,
+.term,
+.mdHeading,
+.rule,
+.traceGroupHead,
+.stepHead,
+.partHead,
+.groupHead {
+  margin: 0;
+}
+
+/* trailing colons, list markers and separators: kept, quiet */
+.tail {
+  color: var(--text-muted);
+  font-weight: 450;
+}
+
+/* ── sections ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.section[data-level='1'] {
+  margin-top: var(--space-sm);
+}
+
+.heading {
+  margin: 0;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.toggle[aria-expanded='true'] .chevron {
+  transform: rotate(90deg);
+}
+
+.toggle:hover .chevron,
+.toggle:hover .titleText {
+  color: var(--text-primary);
+}
+
+.titleText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  margin-inline-start: auto;
+  flex: none;
+  padding-inline-start: var(--space-sm);
+  font-size: var(--font-sm);
+  font-weight: 450;
+  letter-spacing: normal;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Top-level block (ANALYSIS RULES, EVALUATION ITEM DATA, ...): the section header role at the pane's size, with the
+   Subsection accent bar; a hairline under it. */
+.section[data-level='1'] > .heading {
+  padding: var(--space-xs) 0 var(--space-xs) var(--space-sm);
+  border-inline-start: 3px solid var(--accent-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-md);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+/* A part of the item data or one reference document: the small tracked label role. */
+.section[data-level='2'] > .heading {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.section[data-level='2'] > .heading .toggle:hover .titleText {
+  color: var(--text-primary);
+}
+
+.section[data-level='2'] {
+  margin-top: var(--space-xs);
+}
+
+.section[data-role='document'] > .heading {
+  letter-spacing: normal;
+}
+
+.docName {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.body[hidden] {
+  display: none;
+}
+
+/* ── prose structures ── */
+.termBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* the choices of a response field sit under its name, past the number */
+.termChoices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-inline-start: 3ch;
+}
+.term {
+  color: var(--text-secondary);
+}
+
+.termNo {
+  margin-inline-end: var(--space-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.termName {
+  font-family: var(--font-mono);
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item,
+.numbered {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  column-gap: var(--space-xs);
+}
+
+.numbered {
+  grid-template-columns: 3ch minmax(0, 1fr);
+}
+
+.marker {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.itemBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.itemHead {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-sm);
+  margin: 0;
+}
+
+.fact {
+  display: contents;
+}
+
+.fact dt {
+  color: var(--text-muted);
+}
+
+.fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.groupHead {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.group > .list {
+  padding-inline-start: 2ch;
+}
+
+.mdHeading {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.rule {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* ── data: JSON, code and item text in an elevated well ── */
+.code,
+.text {
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  min-width: 0;
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+}
+
+.code .ln {
+  unicode-bidi: plaintext;
+}
+
+.text {
+  white-space: pre-wrap;
+  color: var(--text-primary);
+}
+
+.text[dir='rtl'] {
+  line-height: 1.7;
+}
+
+/* ── trace evidence: groups, steps on a hairline rail, CALL / OUTPUT labels ── */
+.traceGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.traceGroupHead {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-inline-start: var(--space-md);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.stepHead {
+  color: var(--text-muted);
+}
+
+.stepNo {
+  font-variant-numeric: tabular-nums;
+}
+
+.stepName {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.stepBody,
+.part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.partHead {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* ── outline (cv5 N, owner 2026-11-14: "this navbar sucks!!"): one tree, message → section → part of the item data ──
+   A wide pane: a slim sticky rail at the start of the body. A narrow pane and the drawer: one location line, the
+   dropdown trigger, that opens the same tree in the shared menu. */
+.prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.prompt[data-form='rail'] {
+  display: grid;
+  /* wide enough for "Reference documents  not sent" on one line */
+  grid-template-columns: clamp(196px, 27%, 212px) minmax(0, 1fr);
+  column-gap: var(--space-md);
+  align-items: start;
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* The rail: sticky at the top of the scroller, its own scroll when the tree is taller than the pane
+   (--rail-max: the scroller's height, measured). */
+.rail {
+  position: sticky;
+  top: 0;
+  max-height: var(--rail-max, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-block: var(--space-xs);
+}
+
+.railGroup + .railGroup {
+  margin-top: var(--space-md);
+}
+
+/* The message name: the switch-group label (--font-sm, 600, muted), above the track, not a row */
+.railName {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* the sections hang on one hairline track: the tree reads by its indent, not by weight alone */
+.railList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.railRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-xs);
+  width: calc(100% + 1px);
+  min-height: 24px;
+  margin-inline-start: -1px;
+  padding: 3px var(--space-xs) 3px var(--space-sm);
+  border: 0;
+  /* the selected bar sits on the track */
+  border-inline-start: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: start;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* a part of the item data: indented under its section, regular weight */
+.railRow[data-depth='1'] {
+  padding-inline-start: calc(var(--space-sm) + var(--space-md));
+  font-weight: 450;
+}
+
+.railLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.railRow:hover {
+  color: var(--text-primary);
+}
+
+/* the parent section of the part in view */
+.railRow[data-trail] {
+  color: var(--text-primary);
+}
+
+/* the section in view: accent text and a 2px start bar (the vertical tab list's selected row) */
+.railRow[aria-current] {
+  color: var(--accent-primary);
+  border-inline-start-color: var(--accent-primary);
+}
+
+.railRow:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+/* a section that is not in the prompt: muted, its state at the row end */
+.railRow[data-state] {
+  font-weight: 450;
+  color: var(--text-muted);
+}
+
+.railRow[data-state][aria-current] {
+  color: var(--accent-primary);
+}
+
+/* cv5 Q4: the row of a hovered or focused Prompt contents switch: the soft accent wash (the document marks the section) */
+.railRow[data-peek] {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  color: var(--text-primary);
+}
+
+/* the menu row of a section that is not in the prompt (the rail's muted row) */
+.mutedLabel {
+  color: var(--text-muted);
+}
+
+.rowState {
+  margin-inline-start: auto;
+  font-size: var(--font-sm);
+  font-weight: 450;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* a section that holds a line of the last change: a small accent dot at the row end (the added lines' colour) */
+.changeDot {
+  display: inline-block;
+  flex: none;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.changeDot + .rowState {
+  margin-inline-start: 0;
+}
+
+/* The narrow form: one line under the pane head, sticky at the top of the scroller (--outline-stick: the scroller's
+   top padding); a hairline only while text runs under it. */
+.locationBar {
+  position: sticky;
+  top: calc(-1 * var(--outline-stick, 0px));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding-block: var(--space-xs);
+  border-bottom: 1px solid transparent;
+  background: var(--outline-bg, var(--bg-surface));
+}
+
+.locationBar[data-scrolled] {
+  border-bottom-color: var(--border-subtle);
+}
+
+.location {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* cv5 Q4: the section of a hovered or focused Prompt contents switch: an accent edge around it, no motion */
+.section[data-peek],
+.noteLine[data-peek] {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+/* cv5 N: a section that is not in the prompt keeps its place in the document as one quiet line. Interface text, not
+   prompt text: not selectable, so a copy of the page text never takes it. */
+.noteLine {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  user-select: none;
+}
+
+/* aligned with the heading text of its level (after the 3px bar of a section, after the chevron of a part) */
+.noteLine[data-depth='0'] {
+  padding-inline-start: calc(3px + var(--space-sm));
+}
+
+.noteLine[data-depth='1'] {
+  padding-inline-start: calc(12px + var(--space-xs));
+}
+
+.noteName {
+  font-weight: 600;
+}

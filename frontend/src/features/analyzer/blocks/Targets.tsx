@@ -1,21 +1,22 @@
 import { useMemo, useState } from 'react';
 import {
   Button,
-  Checkbox,
-  Chip,
+  DataTable,
   Disclosure,
   EmptyState,
   LinkButton,
   NumberField,
-  Pagination,
   promptPreview,
+  ScoreValue,
   Slider,
   Switch,
   Tag,
   Text,
+  type Column,
+  type Key,
 } from '@/ui';
 import { projectPath } from '@/app/routes';
-import { existingAnalysis, isHumanMetricAnalysis } from '../model/targets';
+import { existingAnalysis, isHumanMetricAnalysis, type AnalyzerRow } from '../model/targets';
 import { rootCauseCategories } from '../model/rootCause';
 import { targetKeyOf, type RunWorkspace } from '../workspace/useRunWorkspace';
 import { useRunDirection } from './direction';
@@ -54,7 +55,9 @@ export function TargetFilters({
             unit="%"
             value={settings.maxScorePct}
             onChange={(v) => update({ maxScorePct: v })}
-            width="100%"
+            // cv5 Q5: label, a 280px track and the value on one line; it never spans the section
+            layout="inline"
+            trackWidth={280}
           />
         </div>
         <div className={s.switchRow}>
@@ -110,18 +113,32 @@ export function TargetFilters({
 /** The item's input as one readable line (the same prompt reading as the run detail), never raw JSON. */
 const preview = (value: unknown): string => promptPreview(value, 160);
 
-/** Failing targets, one compact row each, 10 per page. */
+interface TargetRow {
+  key: string;
+  row: AnalyzerRow;
+  metric: string;
+}
+
+/**
+ * Failing targets as one standard data table (cv4 D2): check (up to 3 for Test), item, metric, score, diagnosis,
+ * input. 10 per page, the shared pager in the footer. With the prompt pane (cv5 K4) a row click shows that target in
+ * the pane and the row is the table's current row; without it, a row click and the eye tile open the preview drawer.
+ */
 export function TargetList({
   ws,
   slug,
   onPreview,
+  onSelect,
 }: {
   ws: RunWorkspace;
   slug: string;
+  /** Narrow screen: open the preview drawer on this target. */
   onPreview?: (key: string) => void;
+  /** Wide screen: show this target in the prompt pane. */
+  onSelect?: (key: string) => void;
 }) {
   const [page, setPage] = useState(1);
-  const targets = useMemo(
+  const targets = useMemo<TargetRow[]>(
     () =>
       ws.matched.flatMap(({ row, metrics }) =>
         metrics.map((metric) => ({ row, metric, key: targetKeyOf(row.item_id, metric) })),
@@ -133,6 +150,66 @@ export function TargetList({
   const current = Math.min(page, pages);
   const rows = targets.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
   const direction = useRunDirection();
+  const { sessionAnalyzed, focusKey, testKeys } = ws;
+  // The Diagnosis column shows only while some target has one (with "Skip analyzed" on, none has until a job runs).
+  const anyDiagnosis = useMemo(
+    () => targets.some((t) => sessionAnalyzed.has(t.key) || existingAnalysis(t.row, t.metric) != null),
+    [targets, sessionAnalyzed],
+  );
+
+  const columns = useMemo<Column<TargetRow>[]>(
+    () => [
+      {
+        id: 'item',
+        header: 'Item',
+        type: 'id',
+        width: 120,
+        priority: 1,
+        cardTitle: true,
+        hideable: false,
+        cell: (t) => <span data-row-primary="">{t.row.item_id}</span>,
+      },
+      {
+        id: 'metric',
+        header: 'Metric',
+        width: 150,
+        priority: 2,
+        cell: (t) => t.metric,
+      },
+      {
+        id: 'score',
+        header: 'Score',
+        type: 'score',
+        width: 90,
+        align: 'center',
+        priority: 2,
+        cell: (t) => (
+          <ScoreValue
+            value={t.row.metric_scores[t.metric]}
+            direction={directionOf(t.row.metric_directions[t.metric])}
+            variant="plain"
+          />
+        ),
+      },
+      ...(anyDiagnosis ? [diagnosisColumn(sessionAnalyzed)] : []),
+      {
+        id: 'input',
+        header: 'Input',
+        flex: true,
+        minWidth: 240,
+        priority: 3,
+        cell: (t) => {
+          const text = preview(t.row.input);
+          return (
+            <Text variant="base" tone="secondary" as="span" dir={direction(text)} truncate>
+              {text}
+            </Text>
+          );
+        },
+      },
+    ],
+    [direction, sessionAnalyzed, anyDiagnosis],
+  );
 
   if (!ws.settings.selectedMetrics.length) {
     return (
@@ -169,90 +246,99 @@ export function TargetList({
     );
   }
   const items = ws.matched.length;
+  const checked = new Set<Key>(testKeys);
   return (
-    <div className={s.stack}>
-      <div className={s.listHead}>
-        <Text variant="sm" tone="muted" as="p" role="status" className={s.listCaption}>
-          {`${items} ${items === 1 ? 'item' : 'items'} with failed metric targets${ws.settings.limit ? ` · limit ${ws.settings.limit}` : ''}${ws.sessionAnalyzed.size ? ` · ${ws.sessionAnalyzed.size} ${ws.sessionAnalyzed.size === 1 ? 'target' : 'targets'} analyzed this session` : ''}`}
-        </Text>
-        {ws.frozen && !ws.runner.busy ? (
-          <Button size="sm" onPress={ws.refreshTargets}>
-            Refresh targets
-          </Button>
-        ) : null}
-      </div>
-      <ul className={s.targetList} aria-label="Targets" data-frozen={ws.frozen ? '' : undefined}>
-        {rows.map(({ row, metric, key }) => {
-          const text = preview(row.input);
-          const score = row.metric_scores[metric];
-          const analysis = existingAnalysis(row, metric);
-          const causes = analysis ? rootCauseCategories(analysis) : [];
-          const human = analysis ? isHumanMetricAnalysis(row.item_metadata, metric) : false;
-          const justNow = !analysis && ws.sessionAnalyzed.has(key);
-          return (
-            <li key={key} className={s.targetRow} data-active={ws.focusKey === key ? '' : undefined}>
-              <Checkbox
-                hideLabel
-                aria-label={`Include ${metric} of ${row.item_id} in Test Selected`}
-                isSelected={ws.testKeys.includes(key)}
-                isDisabled={!ws.testKeys.includes(key) && ws.testKeys.length >= 3}
-                onChange={() => ws.toggleTest(key)}
-              />
-              <Text variant="sm" mono tone="muted" as="span" className={s.targetId}>
-                {row.item_id}
-              </Text>
-              <span className={s.chipSlot}>
-                <Chip
-                  isSelected={ws.focusKey === key}
-                  onChange={() => ws.setFocusKey(key)}
-                  aria-label={`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}, preview target of ${row.item_id}`}
-                >
-                  {`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}`}
-                </Chip>
-              </span>
-              <span className={s.targetDetail}>
-                <span className={s.tagSlot}>
-                  {analysis || justNow ? (
-                    <Tag kind="data" tone={human ? 'success' : 'info'}>
-                      {human ? 'human' : 'analyzed'}
-                    </Tag>
-                  ) : null}
-                </span>
-                {causes.slice(0, 2).map((c) => (
-                  <Tag key={c} kind="role">
-                    {c}
-                  </Tag>
-                ))}
-                <Text
-                  variant="base"
-                  tone="secondary"
-                  as="span"
-                  dir={direction(text)}
-                  className={s.targetText}
-                  truncate
-                >
-                  {text}
-                </Text>
-              </span>
-              {onPreview ? (
-                <Button
-                  size="sm"
-                  onPress={() => onPreview(key)}
-                  aria-label={`Preview prompt of ${metric} on ${row.item_id}`}
-                >
-                  Preview
-                </Button>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-      {total > PAGE_SIZE ? (
-        <Pagination total={total} page={current} pageSize={PAGE_SIZE} noun="targets" onPageChange={setPage} />
-      ) : null}
-      <Text variant="sm" tone="muted" as="p">
-        Check up to 3 targets to test them together.
-      </Text>
-    </div>
+    <DataTable<TargetRow>
+      aria-label="Targets"
+      columns={columns}
+      rows={rows}
+      rowKey={(t) => t.key}
+      storageKey="analysis.targets.v1"
+      density="regular"
+      densityLocked
+      stripe="report"
+      columnMenu={false}
+      groupBand={false}
+      responsive="cards"
+      selection={{
+        selected: checked,
+        onChange: (next) => {
+          // Keep the order of the checks; new keys follow in table order (the header box adds this page's rows).
+          const kept = testKeys.filter((k) => next.has(k));
+          const added = rows.map((t) => t.key).filter((k) => next.has(k) && !kept.includes(k));
+          ws.setTests([...kept, ...added]);
+        },
+        isDisabled: (t) => !checked.has(t.key) && testKeys.length >= 3,
+      }}
+      rowLabel={(t) => `Include ${t.metric} of ${t.row.item_id} in Test Selected`}
+      selectAllLabel="Check the targets of this page to test (up to 3)"
+      onRowOpen={onSelect ? (t) => onSelect(t.key) : onPreview ? (t) => onPreview(t.key) : undefined}
+      activeKey={onSelect ? focusKey : undefined}
+      rowActions={
+        onPreview
+          ? (t) => [
+              {
+                id: 'preview',
+                label: `Preview prompt of ${t.metric} on ${t.row.item_id}`,
+                icon: 'eye',
+                primary: true,
+                onPress: () => onPreview(t.key),
+              },
+            ]
+          : undefined
+      }
+      rowProps={(t) => ({
+        'data-target': t.key,
+        'data-previewed': focusKey === t.key ? '' : undefined,
+      })}
+    >
+      <DataTable.Footer
+        filterNote={`${items} ${items === 1 ? 'item' : 'items'} with failed metric targets${ws.settings.limit ? ` · limit ${ws.settings.limit}` : ''}${sessionAnalyzed.size ? ` · ${sessionAnalyzed.size} analyzed this session` : ''}`}
+        pagination={{ total, page: current, pageSize: PAGE_SIZE, noun: 'targets', onPageChange: setPage }}
+        trailing={
+          ws.frozen && !ws.runner.busy ? (
+            <Button size="sm" onPress={ws.refreshTargets}>
+              Refresh targets
+            </Button>
+          ) : null
+        }
+      />
+    </DataTable>
   );
+}
+
+/** The run's metric direction in ScoreValue's words. */
+function directionOf(direction: string | undefined): 'maximize' | 'minimize' {
+  return ['minimize', 'lower', 'lower_is_better'].includes(String(direction ?? '').toLowerCase())
+    ? 'minimize'
+    : 'maximize';
+}
+
+/** Diagnosis column: the analyzed / human tag of a target, then up to two causes on one line. */
+function diagnosisColumn(sessionAnalyzed: ReadonlySet<string>): Column<TargetRow> {
+  return {
+    id: 'diagnosis',
+    header: 'Diagnosis',
+    width: 200,
+    priority: 2,
+    cell: (t) => {
+      const analysis = existingAnalysis(t.row, t.metric);
+      const causes = analysis ? rootCauseCategories(analysis) : [];
+      const human = analysis ? isHumanMetricAnalysis(t.row.item_metadata, t.metric) : false;
+      const justNow = !analysis && sessionAnalyzed.has(t.key);
+      if (!analysis && !justNow) return null;
+      return (
+        <span className={s.diagnosis}>
+          <Tag kind="data" tone={human ? 'success' : 'info'}>
+            {human ? 'human' : 'analyzed'}
+          </Tag>
+          {causes.length ? (
+            <Text variant="sm" tone="muted" as="span" truncate>
+              {causes.slice(0, 2).join(', ')}
+            </Text>
+          ) : null}
+        </span>
+      );
+    },
+  };
 }

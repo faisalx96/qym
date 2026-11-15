@@ -21,6 +21,7 @@ import {
 import { formatNumericValue } from '@/lib/format';
 import {
   AnalysisCell,
+  BoltLabel,
   DatasetCell,
   DateCell,
   DurationCell,
@@ -169,8 +170,9 @@ function runCell(col: ColumnDef, row: RunRow, p: RunsTableProps, h: CellHandlers
 }
 
 /**
- * A child row shows the pass's own values in the run's columns. Task, Model, Dataset, Owner, Experiment and
- * Version are facts of the run and stay empty; the group columns (Pass@k ...) belong to the strip.
+ * A child row shows the pass's own values in the run's columns. Task, Model, Dataset and Owner are facts of the run:
+ * a pass row repeats them with the run row's chips (cv4 B2: the owner wants them filled, not empty). Experiment and
+ * Version stay empty; the group columns (Pass@k ...) belong to the strip.
  */
 function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
   const id = col.id;
@@ -205,6 +207,14 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
       return <PassNameCell run={run} pass={pass} status={status} />;
     case 'status':
       return <PassStatus run={run} pass={pass} status={status} />;
+    case 'task':
+      return <TaskTag name={run.task_name} />;
+    case 'model':
+      return <ModelCell row={run} />;
+    case 'dataset':
+      return <DatasetCell row={run} />;
+    case 'owner':
+      return <OwnerCell row={run} />;
     case 'time':
       return <PassDate pass={pass} />;
     case 'analysis':
@@ -364,7 +374,8 @@ export function RunsTable(p: RunsTableProps) {
       const rank = def.id.startsWith('metric-') ? metricRank++ : 0;
       return {
         id: def.id,
-        header: def.label,
+        header: def.bolt ? <BoltLabel label={def.label} /> : def.label,
+        label: def.label,
         hint: def.label,
         group: bandOf(def),
         sort: def.sortKey ? { key: def.sortKey, first: defaultDirection(def.sortKey) } : undefined,
@@ -465,15 +476,7 @@ export function RunsTable(p: RunsTableProps) {
         rowKey={(r) => r.key}
         loading={p.loading}
         refreshing={p.dimmed}
-        empty={
-          p.emptyState ?? (
-            <EmptyState
-              compact
-              title="No runs match current filters"
-              body="Clear a filter or widen the time range."
-            />
-          )
-        }
+        empty={p.emptyState ?? <EmptyState compact title="No runs match these filters" />}
         sort={{ key: p.sort.field, direction: p.sort.direction }}
         allowUnsorted
         onSortChange={(s) => (s ? p.onSort(s.key, s.direction) : p.onSort(null))}
@@ -581,6 +584,8 @@ export function RunsTable(p: RunsTableProps) {
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
         title={`Delete pass ${deleting?.n ?? ''}?`}
+        requireText={`Pass ${deleting?.n ?? ''}`}
+        inputLabel={`Type Pass ${deleting?.n ?? ''} to confirm`}
         description="The pass and its scores are removed from this run permanently. The run's means are recomputed."
         confirmLabel="Delete pass"
         tone="danger"

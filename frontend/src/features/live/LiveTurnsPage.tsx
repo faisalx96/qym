@@ -40,9 +40,10 @@ export function LiveTurnsPage({ slug, source }: { slug: string; source: string }
           meta={[<SourceControl key="source" slug={slug} source={source} status={overview.data?.status} />]}
           actions={
             <LinkButton
+              variant="accent"
               href={liveTurnsCsvUrl(slug, filters, source)}
               download
-              icon={<Icon name="download" size={14} />}
+              icon={<Icon name="download" size={12} />}
               data-live-block="export"
             >
               Export CSV

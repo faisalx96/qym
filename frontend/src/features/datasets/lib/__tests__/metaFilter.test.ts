@@ -53,7 +53,7 @@ describe('URL round trip (A3-9, QA1-22)', () => {
     expect(route.meta).toEqual(['domain:finance', 'tags:a', 'tags:b']);
     expect(route.metaMode).toEqual(['tags:any']);
     expect(route.state).toBe('disabled');
-    expect(parseDatasetRoute('qa', new URLSearchParams('state=bogus')).state).toBe('active');
+    expect(parseDatasetRoute('qa', new URLSearchParams('state=bogus')).state).toBe('all');
   });
   it('merges the values of one path and applies its mode', () => {
     expect(parseMetaFilters(['tags:billing', 'tags:refund', 'domain:finance'], ['tags:any'])).toEqual([

@@ -30,7 +30,7 @@ test.describe('profile (J5)', () => {
       new RegExp(`/projects/${p.slug}$`),
     );
     const loads = trackPageLoads(page);
-    await expect(row.getByRole('button', { name: /^Open / })).toBeVisible();
+    await expect(row.getByRole('button', { name: /^Open / })).toHaveCount(0);
     await row.getByRole('button', { name: /^Settings for / }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${p.slug}/settings$`));
     await expect(page.locator('[data-settings-page]')).toBeVisible();

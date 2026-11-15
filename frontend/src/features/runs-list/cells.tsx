@@ -5,13 +5,13 @@ import { Button as AriaButton } from 'react-aria-components';
 import type { RunPass, RunRow } from '@/api/dashboardTypes';
 import {
   ActionTile,
+  Flag,
   HelpMarker,
   Icon,
   IconButton,
   RowMenu,
   RunStatusBadge,
   ScoreValue,
-  DatasetTag,
   ModelTag,
   RunName,
   Tag,
@@ -26,10 +26,10 @@ import { useRunIntent } from '@/app/prefetch';
 import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
-import { DatasetCountTag } from '@/features/run-detail/components/DatasetChip';
+import { DatasetCountTag, DatasetVersionTag } from '@/features/run-detail/components/DatasetChip';
 import { AnalysisSpark, AnalyzeAction, analyzeState } from './AnalyzeAction';
 import { useRunsCtx } from './context';
-import { modelKeyOf, modelShape, modelSlot, plainModelName, smartDigits, STATUS_LABEL } from './model';
+import { modelKeyOf, modelShape, modelSlot, plainModelName, STATUS_LABEL } from './model';
 import { isActiveRun, isStoppingRun } from './polling';
 import { rememberRunFile } from './selection';
 import styles from './cells.module.css';
@@ -81,7 +81,14 @@ export function DatasetCell({ row }: { row: RunRow }) {
         testId="dataset-count-tag"
       />
     );
-  return <DatasetTag name={row.dataset_name} version={row.dataset_version} aliases={row.dataset_aliases} />;
+  return (
+    <DatasetVersionTag
+      name={row.dataset_name}
+      version={row.dataset_version}
+      status={row.dataset_version_status}
+      aliases={row.dataset_aliases}
+    />
+  );
 }
 
 export function VersionCell({ row }: { row: RunRow }) {
@@ -91,6 +98,16 @@ export function VersionCell({ row }: { row: RunRow }) {
     <Tag kind="version" title={text}>
       {text}
     </Tag>
+  );
+}
+
+/** A trace or system column title (19-03): the zap Icon, 12px, in the header colour, then the words. */
+export function BoltLabel({ label }: { label: string }) {
+  return (
+    <span className={styles.boltLabel}>
+      <Icon name="zap" size={12} />
+      {label}
+    </span>
   );
 }
 
@@ -373,7 +390,7 @@ export function MetricCell({
         value={v}
         type={type}
         direction={dir}
-        text={formatPercent(v, smartDigits(v, row.metric_neighbor_values?.[metric]))}
+        text={formatPercent(v, 1)}
         error={error}
       />
       {marker}
@@ -436,18 +453,20 @@ export function RunNameCell({
         <span className={styles.chevronSpacer} aria-hidden="true" />
       )}
       <RunName
+        className={styles.runNameWrap}
         to={runHref(runPath(slug, row.run_id), listContext)}
         name={name}
         runId={row.run_id}
         onClick={() => rememberRunFile(row.run_id)}
+        data-row-primary=""
         {...intent}
         {...textDirAttrs(name)}
       />
       {repeat ? <Tag kind="count">×{row.samples}</Tag> : null}
       {row.origin === 'official' ? (
-        <Tag kind="accent" title="Run launched by an official experiment">
+        <Flag tone="info" icon="shield" title="Run launched by an official experiment">
           Official
-        </Tag>
+        </Flag>
       ) : null}
       {latency && repeat ? <RunLatencyTag /> : null}
     </span>

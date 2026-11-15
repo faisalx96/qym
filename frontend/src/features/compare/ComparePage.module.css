@@ -10,16 +10,16 @@
   display: contents;
 }
 
-/* Title block (round 8): title, one subtitle, one meta line; Export (and the mode tabs) on the title row. */
+/* Title block (E-01): title and Export HTML on row one, the meta line, then the view and Baseline controls. */
 .titleBlock {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--space-md);
 }
 
 .title {
+  flex: 1 1 auto;
   margin: 0;
   color: var(--text-primary);
   font-size: var(--font-title);
@@ -30,6 +30,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-sm) var(--space-md);
 }
 
@@ -42,13 +43,14 @@
   gap: var(--space-sm);
 }
 
-.mono {
-  font-family: var(--font-mono);
-}
-
-.actions {
+.controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.controls:empty {
+  display: none;
 }

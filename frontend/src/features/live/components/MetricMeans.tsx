@@ -31,7 +31,7 @@ export function MetricMeans({ overview }: { overview: LiveOverview }) {
                   : formatLatency(mean)
                 : numeric
                   ? mean.toFixed(2)
-                  : formatPercentValue(mean, 0);
+                  : formatPercentValue(mean, 1);
           return (
             <div key={spec.metric_name} className={styles.metricRow} data-live-metric={spec.metric_name}>
               <span dir="auto">{spec.label}</span>

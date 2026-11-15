@@ -1,9 +1,9 @@
 /** A filter that came from a click upstream (count button, winner / distribution segment, category or error card) says so here (C-items-2). */
 import type { ReactNode } from 'react';
+import { InlineNotice } from '@/ui';
 import { useCompare } from '../../CompareContext';
 import { activeChips } from '../../lib/activeChips';
 import { columnName } from '../../lib/columnName';
-import styles from './ItemsBanner.module.css';
 
 const UPSTREAM = (key: string) =>
   key === 'baseline' ||
@@ -41,14 +41,13 @@ export function ItemsBanner() {
     </>
   );
   return (
-    <div
-      className={styles.banner}
-      role="status"
+    <InlineNotice
+      tone="info"
+      icon="info"
       data-part="baseline-delta-banner"
       data-testid="baseline-delta-banner"
     >
-      <span>{sentence}</span>
-      {/* K6 (C154): one Clear, in the sticky nav */}
-    </div>
+      {sentence}
+    </InlineNotice>
   );
 }

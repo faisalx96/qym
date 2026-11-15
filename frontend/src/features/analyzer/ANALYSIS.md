@@ -1,16 +1,22 @@
 # Auto-analysis workspace
 
-`/projects/:slug/analysis?run=ID` is ONE page: PageHeader, one tab row (Analyze run, Diagnosis categories,
-Production rules, Documents), then Setup, Targets, Results and a sticky action rail. No stepper.
+`/projects/:slug/analysis?run=ID` is ONE page in the shared constrained (centred) container: PageHeader, one tab row
+(Analyze run, Diagnosis categories, Production rules, Documents), then Setup, Targets, Results (framed
+`ReportSection`s, as on the run page) and a sticky action rail. No stepper.
 
-- **Setup** (one card, hairline groups): run header + sample select + metrics, instructions with `{variable}`
-  mapping rows, and a closed `Disclosure` "Input mapping" (INPUT / EXPECTED / OUTPUT, include toggles).
-- **Targets**: max score, Skip analyzed, Re-analyze human labels, a closed "More options" Disclosure (timeout,
-  limit, max issues), compact one-row-per-target list (10 per page), per-row Preview.
+- **Setup** (one `ReportSection`, four `Subsection`s in reading order, cv4 D4): **Run and metrics** (Task, Model,
+  Dataset, Run ID as a `KeyValueGrid`; Pass select and View run in the head; one `MultiSelect` "Metrics"),
+  **Input mapping** (INPUT / EXPECTED / OUTPUT rows, always shown; item bodies load when a JSON field picker opens or a
+  `{variable}` exists), **Prompt contents** (Item data: Error, Scores, Metric metadata; Context: Rules, Project
+  documents, Trace evidence; one switch per line), **Instructions** (textarea and `{variable}` rows).
+- **Targets** (`ReportSection`): max score, Skip analyzed, Re-analyze human labels, a closed "More options" Disclosure
+  (timeout, limit, max issues), then a `DataTable`: check (max 3, for Test), Item, Metric, Score, Diagnosis (only
+  while a target has one), Input, Preview row action; 10 per page with the shared pager in the footer. A row click
+  opens the prompt preview of that target.
 - **Results**: reserved slot (`--results-slot-min-height`); job card (progress, then summary) and test cards
   render into it. Nothing above it ever moves.
 - **Action rail** (`blocks/ActionRail.tsx`, `--bar-action-h`): connection, "Prompt preview . N chars"
-  (opens `PreviewDrawer`), Test selected, and exactly one primary per phase: Analyze N items (accent) /
+  (opens `PreviewDrawer`, 760 px; its Context switches are the same `ws.settings` as Prompt contents), Test selected, and exactly one primary per phase: Analyze N items (accent) /
   Cancel analysis (danger) / View run (accent) / Analyze again (accent after a failure). Notices (no connection,
   view only) are text in the rail. At 390 px Test and Preview move to an overflow menu.
 - **Phase**: `useAnalysisPhase` derives idle | testing | starting | running | cancelling | done | failed |

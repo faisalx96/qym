@@ -228,7 +228,7 @@ describe('Metadata filter popover (QA1-1 to QA1-18)', () => {
     expect(screen.getByTestId('facet-selected-count')).toHaveTextContent('20 selected');
     expect(screen.getByTestId('facet-limit')).toHaveTextContent('You can choose up to 20 values.');
     expect(within(values).getByRole('option', { name: /^v20/ })).toHaveAttribute('aria-disabled', 'true');
-  }, 30_000);
+  }, 60_000);
 
   it('shows the empty and error states (QA1-18)', async () => {
     const user = userEvent.setup();

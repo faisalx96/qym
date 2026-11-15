@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useFeedbackRequest } from '@/api/feedback';
+import { ROUTES } from '@/app/routes';
 import { constrained } from '@/features/shell/layout';
 import { ErrorState } from '@/ui';
 import { DraftPage } from './DraftPage';
@@ -28,6 +29,7 @@ export function FeedbackItemRoute() {
           error={q.error}
           title="Couldn’t open this request"
           notFoundMessage="This request does not exist or is not yours"
+          parent={{ to: ROUTES.feedback, label: 'Feedback' }}
           onRetry={() => void q.refetch()}
         />
       </div>

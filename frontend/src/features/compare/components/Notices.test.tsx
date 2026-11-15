@@ -1,5 +1,5 @@
 /** Cutover of test_compare_baseline_browser.py::test_baseline_from_the_link_and_a_dataset_version_notice (the notice half). */
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { buildCompareModel } from '../lib/model';
 import { makePayload } from '../lib/__tests__/fixtures';
@@ -25,8 +25,8 @@ const build = (v1: string | undefined, v2: string | undefined) => {
 describe('Compare data notice', () => {
   it('names the dataset and both versions when the runs used different versions of it', () => {
     model = build('v3', 'v4');
-    render(<Notices />);
-    const note = screen.getByRole('note');
+    const { container } = render(<Notices />);
+    const note = container.querySelector('[data-notice="different-data"]')!;
     expect(note).toHaveTextContent('different versions of golden');
     expect(note).toHaveTextContent('v3');
     expect(note).toHaveTextContent('v4');

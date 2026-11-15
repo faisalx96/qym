@@ -21,11 +21,14 @@ const JOB_FIGURES: Record<string, [StatusTone, StatusShape]> = {
   FAILED: ['danger', 'cross'],
   TIMED_OUT: ['danger', 'cross'],
   BLOCKED: ['warning', 'hourglass'],
-  CANCELLING: ['warning', 'orbit'],
+  CANCELLING: ['info', 'orbit'],
   CANCELLED: ['warning', 'pause'],
 };
 
 const label = (status: string) => status.toLowerCase().replace(/_/g, ' ');
+
+/** Words that differ from the status code: a job handed to the Evaluation Service reads "Sent". */
+const JOB_LABELS: Record<string, string> = { SUBMITTED: 'Sent' };
 
 export function ExperimentStatusBadge({ status }: { status: string }) {
   const [tone, shape] = EXPERIMENT_FIGURES[status] ?? ['neutral', 'ring'];
@@ -34,5 +37,7 @@ export function ExperimentStatusBadge({ status }: { status: string }) {
 
 export function JobStatusBadge({ status }: { status: string }) {
   const [tone, shape] = JOB_FIGURES[status] ?? ['neutral', 'ring'];
-  return <StatusMark tone={tone} shape={shape} label={label(status)} data-status={status} />;
+  return (
+    <StatusMark tone={tone} shape={shape} label={JOB_LABELS[status] ?? label(status)} data-status={status} />
+  );
 }

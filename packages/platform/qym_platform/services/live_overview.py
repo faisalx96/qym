@@ -31,6 +31,7 @@ def utcnow() -> datetime:
     return utc_now_naive()
 
 
+
 def source_status(
     source: LiveSource, settings: PlatformSettings, now: datetime
 ) -> dict[str, Any]:
@@ -62,6 +63,7 @@ def source_status(
         "last_heartbeat_at": to_api_timestamp(source.last_heartbeat_at),
         "last_poll_at": to_api_timestamp(source.last_poll_at),
         "last_turn_at": to_api_timestamp(source.last_turn_at),
+        "today": source_today(source, now).isoformat(),
         "worker": source.worker,
     }
 

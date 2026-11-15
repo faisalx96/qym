@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { projectPath } from '@/app/routes';
 import type { AnalysisConfig } from '@/api/analysis';
-import { Button, DropdownMenu, IconButton, LinkButton, Select, Text } from '@/ui';
+import { ActionTile, Button, CountTile, DropdownMenu, Icon, LinkButton, Select, Text, TextLink } from '@/ui';
 import type { PhaseView } from '../useAnalysisPhase';
 import type { RunnerState } from '../useAnalysisRunner';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -20,9 +20,28 @@ function notice(config: AnalysisConfig, ws: RunWorkspace): string | null {
 }
 
 /**
- * Sticky action rail: connection, prompt preview, Test, and exactly one primary
- * action per phase (Analyze N / Cancel analysis / View run). Always mounted with a
- * fixed height; every phase renders into the same three slots.
+ * The analyzer model's options (cv5 K5): the model name first, the connection under it. The default connection is
+ * the first option, so the trigger takes the "changed" tint only when the person picks another one.
+ */
+function modelItems(config: AnalysisConfig) {
+  const conns = [...config.llm_connections].sort(
+    (a, b) => Number(b.id === config.default_connection_id) - Number(a.id === config.default_connection_id),
+  );
+  const models = conns.map((c) => c.llm_model);
+  return conns.map((c) => ({
+    key: c.id,
+    // Two connections with one model: the connection name tells them apart in the closed control too.
+    label: models.filter((m) => m === c.llm_model).length > 1 ? `${c.llm_model} (${c.name})` : c.llm_model,
+    description: c.llm_api_key_set ? c.name : `${c.name} · key missing`,
+    disabled: !c.llm_api_key_set,
+  }));
+}
+
+/**
+ * Sticky action rail (cv5 K5): one calm row. The analyzer model (labelled, the one dropdown look), the prompt preview
+ * button only when there is no prompt pane, the status, then the actions at the end: Test (neutral) and exactly one
+ * primary action per phase (Analyze N / Cancel analysis / View run). Always mounted with a fixed height; every phase
+ * renders into the same three slots.
  */
 export function ActionRail({
   ws,
@@ -37,14 +56,21 @@ export function ActionRail({
   phase: PhaseView;
   slug: string;
   runId: string;
-  onPreview: () => void;
+  /** Opens the preview drawer; absent while the prompt pane shows the preview (no button then). */
+  onPreview?: () => void;
 }) {
   const { runner, test, preview } = ws;
   const job = runner.job;
   const noTargets = ws.targetCount === 0;
   const locked = phase.live || test.testing;
   // C213: with nothing ticked the test takes the first target, and the label says so
-  const testLabel = ws.testKeys.length ? `Test selected (${ws.testKeys.length})` : 'Test the first target';
+  const testLabel: ReactNode = ws.testKeys.length ? (
+    <>
+      Test selected<CountTile>{ws.testKeys.length}</CountTile>
+    </>
+  ) : (
+    'Test the first target'
+  );
   const sum = job && phase.finished ? summarize(job) : null;
   const blocked = notice(config, ws);
 
@@ -87,6 +113,7 @@ export function ActionRail({
   );
 
   const analyzeLabel = `Analyze ${ws.targetCount} ${ws.targetCount === 1 ? 'item' : 'items'}`;
+  // cv5 Y1: the one main action of each state is the solid primary button; the other start action is neutral.
   let primary;
   if (phase.phase === 'running' || phase.phase === 'cancelling') {
     primary = (
@@ -108,7 +135,7 @@ export function ActionRail({
         </Button>
         <LinkButton
           size="sm"
-          variant="accent"
+          variant="primary"
           to={viewRunTo(slug, runId, job?.pass_number)}
           className={s.railPrimary}
         >
@@ -122,7 +149,7 @@ export function ActionRail({
         <LinkButton size="sm" to={viewRunTo(slug, runId, job?.pass_number)} className={s.railSecondary}>
           View run
         </LinkButton>
-        <Button size="sm" variant="accent" onPress={runner.dismiss} className={s.railPrimary}>
+        <Button size="sm" variant="primary" onPress={runner.dismiss} className={s.railPrimary}>
           Analyze again
         </Button>
       </>
@@ -133,7 +160,7 @@ export function ActionRail({
         <span className={s.railTest}>{testButton}</span>
         <Button
           size="sm"
-          variant="accent"
+          variant="primary"
           onPress={() => void ws.analyze()}
           isDisabled={locked || !ws.llmReady || noTargets}
           loading={phase.phase === 'starting'}
@@ -150,26 +177,24 @@ export function ActionRail({
     <section className={s.rail} aria-label="Analysis actions" data-phase={phase.phase}>
       <div className={s.railLead}>
         <Select
-          label="LLM connection"
-          hideLabel
-          items={config.llm_connections.map((c) => ({
-            key: c.id,
-            label: `${c.name} · ${c.llm_model}${c.llm_api_key_set ? '' : ' · key missing'}`,
-            disabled: !c.llm_api_key_set,
-          }))}
+          label="Analyzer model"
+          triggerVariant="bar"
+          showValue="always"
+          placement="top"
+          items={modelItems(config)}
           value={ws.connectionId}
           onChange={(k) => k != null && ws.setConnectionId(String(k))}
           isDisabled={locked || config.llm_connections.length === 0}
-          width="100%"
           className={s.railSelect}
           searchable={false}
-          placeholder="No connection"
         />
-        <Button size="sm" onPress={onPreview} isDisabled={!preview.hasTarget} className={s.railPreview}>
-          {preview.characters != null
-            ? `Prompt preview · ${preview.characters.toLocaleString(APP_LOCALE)} chars`
-            : 'Prompt preview'}
-        </Button>
+        {onPreview ? (
+          <Button size="sm" onPress={onPreview} isDisabled={!preview.hasTarget} className={s.railPreview}>
+            {preview.characters != null
+              ? `Prompt preview · ${preview.characters.toLocaleString(APP_LOCALE)} chars`
+              : 'Prompt preview'}
+          </Button>
+        ) : null}
       </div>
       <div className={s.railStatus}>
         {phase.live && phase.phase !== 'starting' ? (
@@ -190,13 +215,13 @@ export function ActionRail({
           title={status}
         >
           {status}
-          {status && !config.llm_connections.length && config.can_operate_analyzer ? (
-            <>
-              {' '}
-              <Link to={`${projectPath(slug, 'settings')}?tab=llm`}>Open LLM connections</Link>
-            </>
-          ) : null}
         </Text>
+        {/* Its own element after the notice, so a long notice never cuts the link (cv4 D5). */}
+        {status && !config.llm_connections.length && config.can_operate_analyzer ? (
+          <TextLink to={`${projectPath(slug, 'settings')}?tab=llm`} className={s.railLink}>
+            Open LLM connections
+          </TextLink>
+        ) : null}
       </div>
       <div className={s.railActions}>
         {primary}
@@ -205,17 +230,31 @@ export function ActionRail({
             <DropdownMenu
               label="More analysis actions"
               placement="top end"
-              trigger={<IconButton label="More analysis actions" icon="more" />}
+              trigger={
+                <Button size="sm" variant="neutral" icon={<Icon name="more" size={14} />}>
+                  Actions
+                </Button>
+              }
               items={[
                 {
                   id: 'test',
                   label: test.testing ? 'Cancel test' : testLabel,
+                  icon: <ActionTile icon="play" />,
                   disabled: test.testing ? false : locked || !ws.llmReady || noTargets,
                 },
-                { id: 'preview', label: 'Prompt preview', disabled: !preview.hasTarget },
+                ...(onPreview
+                  ? [
+                      {
+                        id: 'preview',
+                        label: 'Prompt preview',
+                        icon: <ActionTile icon="eye" />,
+                        disabled: !preview.hasTarget,
+                      },
+                    ]
+                  : []),
               ]}
               onAction={(id) => {
-                if (id === 'preview') onPreview();
+                if (id === 'preview') onPreview?.();
                 else if (test.testing) test.cancel();
                 else void test.run();
               }}
@@ -289,6 +328,8 @@ export function CompactJobRail({
             <Button size="sm" onPress={onOpen} className={s.railSecondary}>
               Open results
             </Button>
+            {/* cv5 Y1: the compact rail sits on a guidance tab, which has its own primary create action, so View run is
+                the accent button there (one solid green button in a view) */}
             <LinkButton
               size="sm"
               variant="accent"

@@ -1,16 +1,15 @@
 import { Link } from 'react-router-dom';
 import type { LiveTurnDetail } from '@/api/live';
-import { Text } from '@/ui';
+import { EmptyState, Text } from '@/ui';
 import { DiagnosisLabel } from './Evidence';
 import { QuestionContext } from './QuestionContext';
-import { turnHref, turnTime } from './presentation';
+import { liveTime, turnHref } from './presentation';
 import styles from '../../turn.module.css';
 
 export function ConversationTab({
   data,
   slug,
   source,
-  zone,
 }: {
   data: LiveTurnDetail;
   slug: string;
@@ -24,13 +23,13 @@ export function ConversationTab({
     <>
       <QuestionContext summary={data.summary} />
       {!siblings.length ? (
-        <Text tone="muted">No conversation available for this turn.</Text>
+        <EmptyState compact title="No conversation for this turn" />
       ) : (
         <ol className={styles.conversation} aria-label="Conversation turns">
           {siblings.map((sibling) => (
             <li key={sibling.turn_id} data-current={sibling.current ? '' : undefined}>
               <div className={styles.inline}>
-                <span className={styles.number}>{turnTime(sibling.turn_at, zone)}</span>
+                <span className={styles.time}>{liveTime(sibling.turn_at)}</span>
                 <DiagnosisLabel value={sibling.label} specs={data.specs} />
                 {sibling.current ? <Text weight={600}>Current turn</Text> : null}
               </div>

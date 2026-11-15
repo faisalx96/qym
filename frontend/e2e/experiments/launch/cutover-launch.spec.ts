@@ -88,7 +88,7 @@ test('a saved preset fills every field of the configuration sections and what is
   );
 
   const ev = await openSection(page, 'Evaluation configurations');
-  await expect(ev.getByRole('textbox', { name: 'Samples' })).toHaveValue('3');
+  await expect(ev.getByRole('textbox', { name: 'Passes' })).toHaveValue('3');
   await expect(ev.getByRole('textbox', { name: 'Max Retries', exact: true })).toHaveValue('4');
   await expect(ev.getByRole('textbox', { name: 'Metadata key 1' })).toHaveValue('team');
   await expect(ev.getByRole('textbox', { name: 'Metadata value 1' })).toHaveValue('rag');

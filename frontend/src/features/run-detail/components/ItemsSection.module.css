@@ -7,25 +7,6 @@
   min-width: 0;
 }
 
-.aside {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-}
-
-.banner {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  font-size: var(--font-base);
-  color: var(--text-primary);
-}
-
 .srOnly {
   position: absolute;
   top: 0;
@@ -41,6 +22,7 @@
 .sticky {
   display: flex;
   flex-direction: column;
+  justify-content: center; /* one row of controls sits on the bar's centre line at every width */
   gap: var(--space-sm);
   background: var(--panel-bg, var(--bg-void));
 }

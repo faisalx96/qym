@@ -10,7 +10,7 @@ test('admin users: filter by email and name, empty message', async ({ page, requ
   await gotoApp(page, '/admin/users');
   const grid = page.getByRole('grid', { name: 'Users' });
   await expect(grid).toBeVisible();
-  const filter = page.getByRole('searchbox', { name: 'Filter users' });
+  const filter = page.getByRole('searchbox', { name: 'Search users' });
   await filter.fill(`${tag}-3@`);
   await expect(grid.getByRole('row')).toHaveCount(2); // header + the match
   await filter.fill(`filter person 4`);
@@ -26,7 +26,7 @@ test('admin projects: filter by name or slug', async ({ page, request }) => {
   const tag = uniqueSlug('pflt');
   for (let i = 0; i < 9; i++) await createProject(request, `Filterable ${i}`, `${tag}-${i}`);
   await gotoApp(page, '/admin/projects');
-  const filter = page.getByRole('searchbox', { name: 'Filter projects' });
+  const filter = page.getByRole('searchbox', { name: 'Search projects' });
   await filter.fill(`${tag}-5`);
   await expect(page.getByRole('grid').getByRole('row')).toHaveCount(2);
   await filter.fill('zzz-none');

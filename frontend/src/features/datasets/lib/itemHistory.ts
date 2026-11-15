@@ -2,8 +2,12 @@ import type { ItemLineageResponse, ItemRevision } from '@/api/datasets';
 
 type Lineage = ItemLineageResponse['lineage'];
 
+/** Revision ids come from the API as integers (typed as strings): compare numbers as numbers (cv5 Z6 crash fix). */
+const byId = (a: string | number, b: string | number) =>
+  typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b));
+
 const byTimeDesc = (a: { created_at: string; id: string }, b: { created_at: string; id: string }) =>
-  b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
+  b.created_at.localeCompare(a.created_at) || byId(b.id, a.id);
 
 /**
  * The item history newest first (C189): versions newest first, and the revisions in each version newest first. Each

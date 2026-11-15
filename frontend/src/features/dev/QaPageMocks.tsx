@@ -125,7 +125,7 @@ function DatasetPage({
           <UserPill
             key="p"
             user={{ id: 'u1', email: 'dev@local', display_name: 'Dev User' }}
-            label="Published by:"
+            label="Published by"
           />,
           'updated Oct 21, 2026',
         ]}

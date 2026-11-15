@@ -18,20 +18,6 @@
   gap: var(--space-sm);
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.title {
-  flex: 1;
-  margin: 0;
-  font-size: var(--font-base);
-  font-weight: 650;
-  color: var(--text-primary);
-}
-
 .issues {
   display: flex;
   flex-direction: column;
@@ -62,7 +48,6 @@
 }
 
 .conf {
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
   color: var(--text-muted);
 }

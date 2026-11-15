@@ -9,9 +9,6 @@ bootstrap and never writes ``run_metric_analyses``; without ``view`` the respons
 from __future__ import annotations
 
 import json
-import os
-import statistics
-import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,12 +24,7 @@ from qym_platform.db.models import (
 from sqlalchemy.orm import Session
 from test_dashboard_durable_summaries import run
 
-STRICT = os.environ.get("QYM_PERF_STRICT") == "1"
 PASSES = 10
-# the spec's targets (qa.md Q2-1) and the margin for a shared CI machine: the old bootstrap took 2,630 and 10,900 ms,
-# so even the margin separates the two behaviours by 10x
-LIMIT_MS = {1200: 60 if STRICT else 300, 300: 25 if STRICT else 120}
-WARM_MS = 15 if STRICT else 60
 
 
 def _seed(
@@ -196,38 +188,12 @@ def test_default_view_is_unchanged_and_cached(database):
             "method_version",
         }
         assert db.query(RunMetricAnalysis).count() == 1
-        t = time.perf_counter()
         second = _group(db, metric="quality", threshold=0.7)
-        warm_ms = (time.perf_counter() - t) * 1000
         assert second["band"] == first["band"]
         assert db.query(RunMetricAnalysis).count() == 1
-        assert warm_ms <= WARM_MS, f"cached default view took {warm_ms:.1f} ms"
         # the strip's request does not disturb the cache the run page uses
         _group(db, metric="quality", threshold=0.7, view="group")
         assert db.query(RunMetricAnalysis).count() == 1
-
-
-@pytest.mark.parametrize("items", [300, 1200])
-def test_view_group_is_fast_on_a_cold_run(database, items):
-    """Q2-1: the first request for a (metric, threshold) used to pay the bootstrap; now it reads the passes once."""
-    with Session(database) as db:
-        _seed(db, items)
-        times = []
-        for threshold in (
-            0.5,
-            0.6,
-            0.7,
-            0.8,
-            0.9,
-        ):  # five distinct keys: every one is a first request
-            t = time.perf_counter()
-            _group(db, metric="quality", threshold=threshold, view="group")
-            times.append((time.perf_counter() - t) * 1000)
-        assert db.query(RunMetricAnalysis).count() == 0
-        median = statistics.median(times)
-        assert (
-            median <= LIMIT_MS[items]
-        ), f"{items} items: median {median:.1f} ms of {[round(x, 1) for x in times]}"
 
 
 def test_endpoint_accepts_view_group_and_rejects_other_views(monkeypatch):

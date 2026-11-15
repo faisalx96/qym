@@ -37,8 +37,13 @@ def test_maintenance_and_terminal_closure_coexist(
     responses = []
     maintenance_seen = threading.Event()
     delivered = threading.Event()
+    # After the first 503 the stream's retries wait here: they would otherwise race the force-stop
+    # on the shared TestClient and its single SQLite connection (a 10 s stall, now and then).
+    resume = threading.Event()
 
     def post(url, body, key, **kwargs):
+        if maintenance_seen.is_set():
+            resume.wait(10)
         response = client.post(
             f"/v1/runs/{run_id}/events",
             content=body,
@@ -68,6 +73,7 @@ def test_maintenance_and_terminal_closure_coexist(
             )
             assert stopped.status_code == 200
         settings.maintenance_mode = False
+        resume.set()
         if force_stop:
             stream._thread.join(10)
             assert not stream._thread.is_alive()
@@ -90,4 +96,5 @@ def test_maintenance_and_terminal_closure_coexist(
                 assert run.status == RunWorkflowStatus.RUNNING
                 assert count == 1
     finally:
+        resume.set()
         stream.close()

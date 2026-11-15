@@ -12,9 +12,9 @@ const counts = { active: 124, disabled: 6, all: 130 };
 
 describe('state in the URL (A2-2)', () => {
   it('omits the default', () => {
-    expect(stateUrlValue('active')).toBeUndefined();
+    expect(stateUrlValue('all')).toBeUndefined();
     expect(stateUrlValue('disabled')).toBe('disabled');
-    expect(stateUrlValue('all')).toBe('all');
+    expect(stateUrlValue('active')).toBe('active');
   });
 });
 

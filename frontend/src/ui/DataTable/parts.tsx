@@ -15,8 +15,6 @@ export interface ToolbarProps {
   filters?: ReactNode;
   /** Active filter chip strip. */
   chips?: ReactNode;
-  /** "43 runs" style count. */
-  count?: ReactNode;
   /** Extra controls on the right (Select, Export …). */
   trailing?: ReactNode;
   /** Full-width rows under the main line (filter facets, chips). */
@@ -38,13 +36,12 @@ const DENSITIES: { id: Density; label: string }[] = [
   { id: 'comfortable', label: 'Comfortable' },
 ];
 
-/** Search, filters, chips, count, then the built-in Columns and Density menus. */
+/** Search, filters, chips, then the built-in Columns and Density menus. A list toolbar shows no count (D-11). */
 export function Toolbar({
   search,
   filters,
   chips,
   rows,
-  count,
   trailing,
   columnsMenu,
   densityMenu,
@@ -79,7 +76,7 @@ export function Toolbar({
       )}
       {bulkActions}
       {bulkOwnSummary ? null : (
-        <Button variant="ghost" onPress={clearSelection}>
+        <Button variant="neutral" onPress={clearSelection}>
           Clear selection
         </Button>
       )}
@@ -99,10 +96,7 @@ export function Toolbar({
         {/* visibility: hidden also takes these controls out of the Tab order */}
         <div className={styles.toolbarHidden} aria-hidden="true">
           {main}
-          <div className={styles.toolbarEnd}>
-            {count ? <span className={styles.count}>{count}</span> : null}
-            {trailing}
-          </div>
+          <div className={styles.toolbarEnd}>{trailing}</div>
         </div>
       </div>
     );
@@ -126,7 +120,6 @@ export function Toolbar({
         </>
       )}
       <div className={styles.toolbarEnd}>
-        {count ? <span className={styles.count}>{count}</span> : null}
         {trailing}
         {showColumns ? (
           <ColumnsMenu columns={columns} model={model} reorderable={reorderable} suspended={suspended} />
@@ -164,7 +157,7 @@ export function SelectionBar() {
         {bulkActions}
       </div>
       <div className={styles.toolbarEnd}>
-        <Button variant="ghost" onPress={clearSelection}>
+        <Button variant="neutral" onPress={clearSelection}>
           Clear selection
         </Button>
       </div>
@@ -176,22 +169,43 @@ export interface FooterProps {
   /** Test id / accessible name of the footer landmark. */
   testId?: string;
   ariaLabel?: string;
-  /** "1-50 of 423 runs". */
-  summary?: ReactNode;
+  /** "Filtered from 423 runs" at the far left, while a search or filter narrows the list (D-10). */
+  filterNote?: string;
   pagination?: PaginationProps;
   /** "Last updated 16:30:12" and similar. */
   trailing?: ReactNode;
+  /** A control centred in the footer (the 'Show N more' button, docs 3.4). Shown only when there is no pagination. */
+  center?: ReactNode;
 }
 
-export function Footer({ summary, pagination, trailing, testId, ariaLabel }: FooterProps) {
+export function Footer({
+  filterNote,
+  pagination,
+  center,
+  trailing,
+  testId,
+  ariaLabel,
+}: FooterProps) {
   const { selectedCount } = useDataTableCtx();
   return (
-    <footer className={styles.footer} data-dt-footer="" data-testid={testId} aria-label={ariaLabel}>
+    <footer
+      className={styles.footer}
+      data-dt-footer=""
+      data-testid={testId}
+      aria-label={ariaLabel}
+      data-center={center && !pagination ? '' : undefined}
+    >
       <div className={styles.footerStart}>
-        {summary ? <span className={styles.count}>{summary}</span> : null}
+        {filterNote ? <span className={styles.filterNote}>{filterNote}</span> : null}
         {selectedCount > 0 ? <span className={styles.count}>{selectedCount} selected</span> : null}
       </div>
-      {pagination ? <Pagination {...pagination} /> : <span />}
+      {pagination ? (
+        <Pagination {...pagination} />
+      ) : center ? (
+        <div className={styles.footerCenter}>{center}</div>
+      ) : (
+        <span />
+      )}
       <div className={styles.footerEnd}>{trailing}</div>
     </footer>
   );

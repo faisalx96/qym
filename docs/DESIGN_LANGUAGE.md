@@ -45,6 +45,8 @@ Semantic colors (`--success/--warning/--error/--metric-error/--info`), the 5-ste
 (`--score-1..5`), chart colors (`--chart-1..8`), and accents
 (`--accent-primary/secondary/tertiary/tertiary-soft`) are for state and data
 encoding — they are not part of the hierarchy ramp and don't substitute for it.
+`--info` is the same blue as `--accent-secondary` (one blue). `--role-admin` (gold, `#e0bc4a`) on a `--tint-gold` (17%)
+fill is the admin role Tag only (see "Tag" and "Tint recipe").
 
 Runs error indicators use the original ⚠ glyph: `--error` for task failures and
 `--metric-error` for metric failures. Retry counts use ↻ with `--info`.
@@ -56,8 +58,11 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 | Page title | `--font-title` | 22px / 600–650 | primary | One per page. No page invents its own title size. |
 | Stat / hero value | `--font-stat` | 26px / 700 | primary or score color | Mono, `tabular-nums`. |
 | Modal / empty-state title, mid-tier value | `--font-xl` | 18px / 600–650 | primary | Also emphasized inline stats (e.g. drawer aggregates). |
+| Report section title | `--font-section` | 22px / 650 | primary | `ReportSection` only (cv4 F10): the biggest of the three report title roles. |
+| Subsection title | `--font-subsection` | 16px / 650 | primary | `Subsection`, with its 3px accent bar (cv4 F10). |
+| Card title | `--font-card-title` | 14px / 600 | primary | `CardTitle` (cv4 F10); a local card title (`ChartCard`) uses the same token. |
 | Section header | `--font-lg` | 15px / 600 | primary | |
-| Card title / sub-header | `--font-md` | 13px / 600 | primary | Also form inputs. |
+| Sub-header, form input | `--font-md` | 13px / 600 | primary | Also form inputs. |
 | Body / table cell / code | `--font-base` | 12px / 400 | secondary | |
 | Meta / caption / label / **table header** | `--font-sm` | 11px / 400 (labels 600–650) | muted | Uppercase labels get `letter-spacing: 0.05em`. |
 | Badge / pill | `--font-xs` | 10px / 650 | semantic | Tag chrome (and the retired Badge) only — nothing else may be 10px. |
@@ -67,6 +72,10 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 (`SectionHeader`'s default level; the run, compare, analysis, charts and admin sections), a panel or group heading is
 `--font-lg` 15/600 (Overview panels, per-task chart cards, run-detail group titles such as "Response time" and "By pass"),
 and a small label is `--font-md` 13/600 uppercase and tracked. No page writes its own heading size.
+**Report title roles (cv4 F10, owner 2026-11-12: "this should be the biggest, then smaller, smallest").** On the run and
+compare pages three title roles nest in three clear steps: the `ReportSection` title 22/650 (`--font-section`), the
+`Subsection` title 16/650 (`--font-subsection`) and the card title 14/600 (`--font-card-title`, `ui/Card` `CardTitle`:
+title, one muted caption directly below it, controls on the title row). A feature sets no title size of its own.
 
 Major analytical sections use a sentence-case section title (`--font-xl`) followed
 by a concise muted `--font-base` description, through the `Section` recipe below. Do not introduce a major section
@@ -89,12 +98,16 @@ entry is a deliberate exemption, named in the commit message.
 - Body text is weight 450 (Plex Sans is variable, 400 to 700) with font hinting on (no
   `text-rendering: geometricPrecision`): at 400, and with hinting off, 11 to 13px text drew thin and blurred under
   Windows ClearType next to the first qym's Segoe UI (round 10). Explicit weights (500, 600, 650, 700) are unchanged.
+  The `Text` primitive uses the body weight 450 unless its variant or weight prop sets another.
 - `--font-sans` — everything humans read: names, descriptions, prose, buttons,
   headers, labels.
 - `--font-mono` — **data only**: IDs, row numbers, JSON, code, metric/latency
-  values, timestamps, version strings. The runs list's Date column is the exception: sans with `tabular-nums`
-  (round 10: the mono face spread the date and time apart). Never for prose or UI chrome. When in
-  doubt: if it could contain a sentence, it's sans.
+  values, timestamps, version strings. A date in a table cell is the exception, day-only cells included: sans with
+  `tabular-nums` (the runs list's Date recipe; round 10: the mono face spread the date and time apart), mono never.
+  Date-time values in Live (status line, turns Time, turn header, worker strip) use the same sans tabular recipe.
+  A phrase with a count or a time ("23 users", "15 items · 8 runs", "Last turn 17:45", "conversation 004 · turn 3 of
+  3", a date) is sans with `tabular-nums`; only a bare id or value is mono. Signed change counts stay mono.
+  Never for prose or UI chrome. When in doubt: if it could contain a sentence, it's sans.
 - One typeface family, three scripts: **IBM Plex Sans** (Latin), **IBM Plex Sans Arabic** and
   **IBM Plex Mono**, self-hosted as subsetted woff2 in `src/styles/fonts/` (SIL OFL, licence texts beside
   the files; choice and measurements in `docs/internal/ui-migration/redesign2/typeface-study.md`).
@@ -129,13 +142,16 @@ removed on purpose; one token name means one value everywhere.
 
 ### Spacing, surfaces, borders
 
-- Spacing: `--space-xs/sm/md/lg/xl` (4/8/14/20/32px).
+- Spacing: `--space-xs/sm/md/lg/xl` (4/8/14/20/32px). Stacked cards: `--space-lg` (20px). Sections:
+  `--section-gap` (32px) with a hairline.
 - Surfaces (dark → light): `--bg-void` page ground, `--bg-base` content area,
   `--bg-surface` cards/panels, `--bg-elevated` table headers/inputs/nested
   surfaces, `--bg-hover`/`--bg-active` interaction states.
 - Borders: `--border-subtle` (default hairlines), `--border-default`
   (popovers), `--border-strong` (emphasis/dividers). A field-like control's edge is `--control-edge`
   (`--border-subtle`) at rest and `--control-edge-hover` (`--border-default`) on hover (round 10).
+- Table stripes: `--stripe-step` (2%, page lists) and `--stripe-step-report` (1%, tables in a run, compare or
+  experiment report section) mix `--text-primary` into the row base (see "Data table").
 
 ---
 
@@ -203,7 +219,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 **Focus and hit targets (C087, C202).** Only a focused control draws a ring: a tab button, a field, a button; a tab
 area, a list or a panel never outlines as a whole. Every small control has a 24x24 hit area without changing its drawn
 size (a checkbox box, an info marker, the pager arrows, the row `>` handle, which is 32px on a touch screen). Delete sits
-in the row menu, apart from the other row actions.
+in the row menu, apart from the other row actions. Never write `outline: var(--focus-ring)` (a box-shadow value).
+Controls: 2px accent ring 2px outside; rows: 2px inside.
 
 **Ctrl K (C043).** The palette lists projects, pages (with aliases: "trash" finds Deleted runs, "overview" the
 Dashboard; Queue, Environments and Deleted datasets included) and actions; from 2 characters it also shows the current
@@ -213,33 +230,121 @@ preselected.
 - **Control** (`TextField`, `Select`, `MultiSelect`, `SearchField`, `NumberField`,
   `Textarea`, `Button`, `LinkButton`, `SegmentedControl`): one aligned density,
   `--control-height` (24px) and `--control-radius`, `--font-sm`, sans. There are
-  no compact or roomy variants. Buttons come in neutral, accent (primary) and
-  danger tones; a danger action states what will be deleted. A neutral button is quiet at rest
-  (`--bg-elevated`, no border or ring, round 9) and brighter on hover (`--bg-active`), never the
-  reverse: a resting fill brighter than its hover reads as already pressed (round 8). Field-like controls (text field,
-  select, filter trigger, segmented control, date and time field) share that `--bg-elevated` fill with a soft
-  `--control-edge` (round 10: the `--border-default` outlines read as too bold next to the borderless buttons). A
-  disabled neutral or ghost button keeps the flat shape at half its fill with muted text and no outline (round 10: an
-  outline made a locked button look like another, louder style).
+  no compact or roomy variants. Buttons come in four tones: primary, accent, neutral, danger. There is no text-only
+  (ghost) tone: a show-more, expand or earlier toggle is a neutral button, also in a table cell (Q44 B). A button that
+  grows a list says "Show N more"; hidden tags in a row show a "+N more" count tag (Q49 C, resolution 4). A danger
+  action states what will be deleted. No button draws an outline ring at rest (round 10), also the Analyze done and
+  running states. **Depth by fill, not by outline (cv5 H1, owner 2026-11-13: "I don't like this border for every button").** Two
+  kinds of control and three steps of visual weight at rest: well < neutral button < primary. No control draws an
+  outline ring to say what it is.
+  - A **well** is a control that you type in or pick a value from: `TextField`, `SearchField`, `Textarea`, the
+    `Select` and `MultiSelect` trigger (field and bar), the `SegmentedControl` track, the date and time field. It has
+    the `--control-fill` fill (`--bg-elevated`, one step over the ground) and the `--control-edge` hairline (the text
+    colour at 4%, so it reads the same on every ground and has the soft strength of `--border-subtle`, the edge of the round 1 build; owner 2026-11-14). Hover = `--control-edge-hover` (a trigger also takes
+    `--control-fill-hover`); focus or open = the accent edge.
+  - A **neutral button** is a raised surface: the `--button-fill` fill (`--bg-active`, cv5 Y7) two steps lighter than a
+    well and `--button-depth` (a 1px highlight on its top inner edge, `--button-highlight` at 9% so that it is
+    visible, and a 1px dark line under it). On the page ground it is at least as defined as a well beside it. It
+    has no edge ring. Its label is `--button-text`, a step under `--text-primary` (cv4 F6: "this white text is too
+    bright"). Hover = `--button-fill-hover` and the primary label; a button whose panel is open (`aria-expanded`,
+    for example Columns, Density, Display) keeps that hover look while the panel is open, in every variant (cv5 Y14);
+    pressed = `--button-fill-pressed` and no highlight;
+    never the reverse (a resting fill brighter than its hover reads as already pressed, round 8). A neutral button
+    next to a dropdown still reads as a button: by its fill, its highlight and its label weight, not by an outline.
+  - **Tinted** buttons (accent, meta, danger) are a tint fill only: `--tint-soft` at rest, `--tint-strong` on hover; no
+    edge and no highlight. **Primary** is the solid accent, `--accent-primary-hover` on hover.
+  - **On an inset card:** a `ReportSection` body (inset cards at `--bg-elevated`) makes the well and button fills
+    translucent (the text colour at 4% and 10%), so a well is one step and a button two steps over whichever ground it
+    sits on: a control never melts into a card. A feature never sets a control's fill, edge, height or font size.
+  The menu actions Select all and None are the same neutral recipe at `--control-height-sm`. A disabled neutral button
+  keeps the flat shape at half its fill with muted text and no depth.
   **Which button** (round 11, owner: "one unified rule set"): `primary` (solid green) is the one action that commits a
   card or form: Save, Create, Add, New project. `accent` (green tint) runs something useful without saving: Test
   connection, Run preset, Unarchive. `neutral` cancels, discards, compares or navigates: Cancel, Discard, View diff.
   `danger` (red tint) deletes or replaces: Delete, Archive, Revoke, Restore default. A disabled primary, accent or
   danger button keeps its own colour at 45% opacity, so a locked Save is still the green Save and a locked Restore
   default is still red. A creating action carries the plus glyph (New project, Add connection, Add environment).
+  Make live, Send, Start conversation, Add model and Run backfill commit, so they are primary. Exception (cv5 Y2): when
+  the view has a section create action (primary, for example "Add rule" in the Rules draft), the commit of that view
+  ("Publish") is the accent button, so that the view has one solid green button. A dialog footer that
+  runs a job reads Cancel (neutral), Preview (accent), the commit (primary). Create draft always carries the plus
+  Icon. A confirm that disables, deletes or revokes is danger. An export or download only reads data: on a page it is
+  the accent button with the `download` Icon, also when it opens a format menu (no chevron, cv5 Z1). A Download
+  in a dialog footer is the primary.
   **Button rules (C049, C234, C136, C166, C232; enforced in `design-language.test.ts`):** Delete, Archive, Disable and
   Revoke are `danger` everywhere; Cancel is neutral; the red `× Clear n` of a filter bar stays red (owner, Oct 26 and
-  Nov 1). Every button is 24px: `size="md"` draws 32px only inside a dialog footer (`[data-dialog-footer]`, set by
-  `Dialog`), so a page that asks for `md` still gets 24px. A page's main action is `primary`, 24px, with the `plus`
-  `Icon`, named "New <object>" or "Add <part>". A disabled button says why on hover through `disabledReason` ("No
-  changes to save", "Select two runs"). Labels and placeholders carry no "…" (progress words such as "Saving…" stay),
-  and a glyph is always an `Icon`: no typed "+", "×", "←" or "→" in a button.
+  Nov 1), and it is the only clear control of a filter row: no × per filter (Live turns, runs). Every button inside a
+  dialog footer (`[data-dialog-footer]`, set by `Dialog`) is 32px; elsewhere every button is 24px, so a page that asks
+  for `md` still gets 24px. In a dialog footer, Cancel is neutral; the commit is primary; a second action (Preview,
+  Test) is accent before it. A page's main action is `primary`, 24px, with the `plus`
+  `Icon`, named "New <object>" or "Add <part>". A disabled `Button`, `LinkButton` or `IconButton` says why on hover
+  through `disabledReason` (C166; "No changes to save", "Select two runs"); a disabled icon in a table row shows its
+  hint as the reason. A count in a control is `CountTile` after the label, centred; never in parentheses (cv5 Y6: also in a checkbox
+  label, "Project documents [1]"; a button that opens a picker reads "Label · value": "Choose metadata · All",
+  "Choose examples · 0 of 2"). The same
+  action uses the same words in the page button, the switcher and the palette. Labels and placeholders carry no "…"
+  (progress words such as "Saving…" stay), and a glyph is always an `Icon`: no typed "+", "×", "←" or "→" in a button.
+  The `zap` Icon marks latency and trace columns; the typed ⚡ is not used. The category key marker is the `diamond`
+  Icon in `--text-muted`. Icon size follows the control: 12px in a labelled 24px button and in menu tiles, 14px in an
+  icon-only 24px button and for the three-dot glyph, 16px only in a 32px dialog footer.
+  **Links** (Q43 A): a text link to another page or section ends with the 12px `chevron-right` Icon; a button never
+  does. The one component is `TextLink` (`ui/TextLink`, cv4 F13): accent text at 600, the end chevron, no underline,
+  `--accent-primary-hover` on hover ("Read the guide ›", "Open LLM connections ›"). A link that must look like a button
+  is a `LinkButton`. A control that opens a new tab ends with the `external` Icon (12px); no typed ↗. A link that stands
+  on its own after a sentence ("Read the guide", "How tracing works", "Open LLM connections") is a `TextLink`; a link
+  inside a sentence ("Unarchive it to make changes") stays a plain link (cv4 Y15).
+  **Focus ring after a pointer (cv4 Y14):** the ring is for keyboard focus only. A React Aria button that gets focus
+  back after a menu closed by a mouse choice shows no ring: `button[data-rac]` follows `data-focus-visible`, not the
+  browser's `:focus-visible`.
+  **Back button:** a neutral 24px `LinkButton` with the `prev` Icon (12px) at its start (Q28 A). Editor pages
+  (Environment, New experiment, default preset editor) keep one at the end of the title row; an empty or error state
+  uses it as its action. No text-only back link, no typed arrow.
+  **Save state (cv4 F14):** a form or card footer shows no state text while nothing changed (no "All changes saved");
+  it shows text only for unsaved changes, while saving, or for an error. No divider line above a save row.
+  **Sticky bar over a table:** a page's sticky action bar uses `z-index: var(--z-sticky-bar)`, above the sticky header
+  and pinned layers of `DataTable` and under every popover; no local z-index number.
+  **Glass section nav (cv4 C1-2, X12, Y10, Y18):** the sticky section nav of the run page and of Compare is glass:
+  `--bg-void` at `--glass-mix` over `backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))`, a
+  hairline at the lower edge and a `--tint-faint` top sheen; opaque without backdrop-filter. The saturation stays near
+  100%, so a strong colour under the bar does not read as a smudge. A nav link travels to its section with an eased
+  scroll (280 to 640 ms by distance, live target); the pressed link stays active; a wheel, touch, pointer or key press
+  stops it; a new travel ends the re-alignment of the last one, so the page never snaps back; no motion under
+  `prefers-reduced-motion`.
+  **Fields:** Required is the red * from `isRequired` on every field primitive, `Textarea` included. No field says
+  (required), (optional) or Optional. Forms never draw native select, input or textarea; they use the primitives.
   Brand colour
   belongs to an integration action only (e.g. Langfuse), never to generic
   controls. The 42px authentication fields (`TextField`),
   textareas, sliders and composite controls are separate recipes and do not
   inherit `--control-height`. In a mixed header action cluster, actions and an
   adjacent status badge share the 24px control height.
+
+- **Glossary** (copy): run (never eval run, evaluation run); pass (never sample) for one repeat of a run; issue = one
+  root-cause finding (run page and Reviews); Diagnosis stays only for Live diagnosis labels and Auto-analysis
+  categories.
+
+- **One dropdown (cv4 F5, owner 2026-11-12: "I need all drop-downs to be this").** `Select` (one choice) and
+  `MultiSelect` (many) are the only dropdowns; their reference is the Runs filter trigger. Closed: a well (cv5 H1): 24px, `--control-fill`,
+  1px `--control-edge`, `--font-sm`, the chevron at the end in `--text-muted`; hover = `--control-fill-hover` and the
+  hover edge; open = the accent edge and the chevron turned up in the accent. Open: one panel (`--card-bg`, 1px
+  `--border-default`, `--dropdown-radius`, `--shadow-popover`), 32px option rows in `--font-base` secondary text,
+  `--bg-hover` under the pointer; a `Select` marks the chosen row with primary text at 600 and the accent check at its
+  end, a `MultiSelect` with its checkboxes. `triggerVariant="bar"` puts the label inside the trigger (no label above it).
+  No native `<select>` anywhere, the page size of `Pagination` and the card-mode sort of `DataTable` included.
+  A bar `Select` for a choice that always has a value (a sort order, a view) passes `showValue="always"`, so the
+  trigger reads "Sort · Index" at the default too, and its cap is 320px (a filter trigger stays at 168px) so the label
+  and the value stay on one line ("Analyzer model · gpt-4o-mini", cv5 Z2); a filter whose first item means "all" shows only its label until
+  set (cv4 Y6). A bar trigger takes the accent only when the choice differs from the page default; a `MultiSelect`
+  whose default is a selection (all metrics) says so with `isDefault` (cv4 Y12).
+  **Menu trigger (cv5 H6, owner 2026-11-13: "We have these drop-down styles and then we have these. This is
+  inconsistent").** A control that opens a menu or a panel of choices and ends with a chevron is a menu trigger, and
+  every menu trigger has the one dropdown trigger look (a well). A `Button` never ends with a chevron. A trigger that
+  is not a `Select` or a `MultiSelect` (More filters, a Popover of filter fields) is
+  `BarTrigger` from `ui`: `<Popover label="More filters" trigger={<BarTrigger label="More filters" />}>…</Popover>`; with a set
+  value it reads `More filters · 2` and takes the accent (`value`, `active`). Enforced in `design-language-v3.test.ts`
+  (no `Button` with an end `chevron-down`). A button with a glyph that opens a menu or a panel stays a
+  button and loses the chevron (cv5 Z1): Export with its `download` glyph, Columns and Density with `list`, Display with
+  `menu`, a menu of actions with `more` ("⋯ Actions", "⋯ All matching").
 
 - **Multiselect** (`MultiSelect`): content in fixed order: search, actions
   (Select all and None/Clear, neutral 20px buttons at rest, round 10), then `--dropdown-option-height` option rows.
@@ -249,9 +354,44 @@ preselected.
   value narrows to the rest, ticking them all again is no filter, and None (or unticking the last one) matches
   nothing (`noneKey`). No hint line explains it; filter lists always have the search.
 
+- **On/off chips** (`ToggleChips`, cv5 H4, owner 2026-11-13: "we need a new UI element for toggling things"): a
+  small set (about 8 or fewer) of options that are each on or off and that the person must see at one time (the
+  Auto-analysis metrics, the run page categories). Each chip is a well (`--control-fill`, `--control-edge`, the control
+  radius; never a pill) with a 14px check box at its start: an empty box is off, the accent box with a check is on, so
+  the state reads without colour. The accent is on the check box only (cv5 Y8): the chip body stays the neutral well
+  in both states, so an on chip never reads as the selected segment of a `SegmentedControl` beside it. On = the
+  accent box and the primary label; off = the empty box and the muted label. Each chip is a button with
+  `aria-pressed`; `min` keeps the last options on (the shared `Tooltip` of the chip says "Keep at least one on"; hover and keyboard
+  focus open it, no native title, cv5 Y9). A visible label before the
+  chips names the group through `aria-labelledby` (cv5 Z4); `aria-label` only when no label is on screen. Uses (cv5):
+  analyzer metrics (`min={1}`), input mapping keys ("Full value" first, it excludes the key chips), run page
+  Categories keys (`count`, `min={1}`). It is not a `Tag` (static, no
+  box) and not a `SegmentedControl` (one track, one choice). More options, or a filter, is a `MultiSelect`.
+
+- **Timeline** (`Timeline`, cv5 H5, owner 2026-11-13 on the dataset Change log: "I really like this. I want this to be
+  a standard element"): the one element for a dated list of events about one entity, and for a list of versions in
+  order. A row is the time (muted, tabular figures, optional), a mark on a 2px `--border-default` rail (a 20px circle
+  with an Icon, or a 10px dot; the tone only when the event matters: accent, success, info, warning, danger), the
+  event text in secondary with its key words in primary (the caller marks them), and, directly after it, a quiet
+  `meta` (the person, a count); no row lines, the rail starts at the first mark and ends at the last. Selectable
+  (`onSelect`, `activeKey`): the whole row is the hit area, hover is `--row-hover`, the open row `--row-selected` with
+  a primary title and `aria-current`; row `actions` stay above the hit area. Do not build a local event list with
+  its own rail. Options (cv5 Z3): `revealActions` shows a row's actions only on row hover, on focus inside the row,
+  for the selected row and while its menu is open (always on touch); a caller never hides them with its own
+  selectors. `markAlign="start"` puts the mark, the time and the actions on the title line of a two-line row (a
+  version with its meta under the title). A toned dot is solid in its tone; on the selected fill a toned mark keeps
+  an 80% edge and a solid dark base (`--bg-void`) under a 12% tint, so a success or accent mark stays visible on the
+  accent wash (cv5 Y12); a green `Flag` on `--row-selected` measures 5.8:1, so the selected row keeps that token. `rowData` puts
+  `data-*` hooks on a row. Users (cv5 Z6): the dataset Change log, the rule versions, the item History tab (one
+  timeline newest first: each revision with its diff in `detail` and Revert in `actions`, then the event that drafted
+  its version), the feedback request History, the run review log (the state words stay `StateTag`s), the Live worker
+  settings versions (Restore in `actions`) and the review revision history. A list with two lines per row uses
+  `markAlign="start"`.
+
 - **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
   underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and
-  Left/Right/Home/End from React Aria). The selected tab is green, label and 2px underline (a danger tab is red); the
+  Left/Right/Home/End from React Aria). There is one tab look. A vertical tab list shows the selected item as a green
+  label with a 2px green bar on the start edge, no fill. The selected tab is green, label and 2px underline (a danger tab is red); the
   list's baseline is an inset 1px shadow, so the underline sits inside the list and is never clipped, and the list never
   shows a scrollbar unless the tabs really overflow (round 10). In-place view/metric/repeat/time
   switching uses `SegmentedControl`: 24px high, only the selected option has the
@@ -269,10 +409,12 @@ preselected.
   one trigger row (chevron, `--font-md` title, muted `--font-sm` summary such as
   "Default fields") and a panel that animates its height in `--transition-fast`
   (none under `prefers-reduced-motion`). Use it instead of a nested card for
-  advanced settings; never inside another Disclosure.
+  advanced settings; never inside another Disclosure. Use `Disclosure` for every expandable group; native `<details>`
+  is not used outside `features/docs`. The title uses the Disclosure trigger style; a count or a short fact goes in
+  summary.
 
 - **Steppers and disclosure motion** (`Stepper`, `Collapse`): a wizard's progress rail is
-  `Stepper`: an ordered list of always-clickable buttons (`aria-current="step"`), a 4px
+  `Stepper` (wizard progress is always `ui/Stepper`; no numbered discs): an ordered list of always-clickable buttons (`aria-current="step"`), a 4px
   bar per step that fills with a `scaleX` transition (logical origin, flips in RTL), a
   `--accent-primary` bar for done and current steps, info and danger count tags, and a
   compact "Step n of N" form with a jump select below 760px. Disclosures animate with
@@ -284,15 +426,29 @@ preselected.
 
 - **Action rail** (auto-analysis, `features/analyzer/blocks/ActionRail`): a page-level sticky bottom bar of
   `--action-rail-height`, always mounted, with a fixed primary-button width (`--action-primary-width`) so
-  label changes never move neighbours. Exactly one accent button per state. The sections above it reserve
-  their space (`--results-slot-min-height`) so state changes insert nothing above existing content.
+  label changes never move neighbours. Exactly one primary button per state (cv5 Y1: "Analyze N items", "View run",
+  "Analyze again"); the other start action of the state ("Test the first target") is neutral. The compact job rail of a
+  guidance tab uses the accent button, because that tab has its own primary create action. The sections above it reserve
+  their space (`--results-slot-min-height`) so state changes insert nothing above existing content. No rule above
+  the bar (cv5 K5). The analyzer model is a labelled bar `Select` with `showValue="always"` ("Analyzer model ·
+  gpt-4o-mini"); with the prompt pane on screen the bar has no Prompt preview button.
+
+- **Slider** (`Slider`): a threshold control, accent fill, 14px thumb, the value in mono accent. It never spans a
+  section (cv5 Q5, owner: "this slider is too wide"): a stacked slider is capped at 360px, and an `inline` slider
+  (label, track, value on one control line) takes `trackWidth` for a fixed track (the auto-analysis "Max score" uses
+  280px, beside its switches on one line).
 
 - **Pagination** (`Pagination`): every paginated view uses it. Borderless
   rounded-square icon buttons for First, Previous, Next, Last around a direct
-  page entry (28x24px, growing only with the digit count) and total, mono; no
+  page entry (cv4 F3: `--control-height-sm` 20px high, 22px wide, growing only with the digit count, a soft
+  `--control-edge`, in proportion with the 11px pager text and the 14px arrows) and total, mono; the page size is a
+  `Select`; no
   connected pill and no visible action names. The Runs view pins it inside the
   status bar with the range summary. Pass page-size options only where changing
-  the size is supported. After a page change in an item-by-item detail view the
+  the size is supported. Every list footer shows the range and page buttons in the centre, also on one page; the far
+  left holds only "Filtered from N <noun>" while a search or filter narrows the list; no count text and no sentence in
+  a footer. A list that the server truncates shows "Showing the first N of M <noun>" in the same far-left place while
+  it truncates; that note wins over "Filtered from" (CR-D10). After a page change in an item-by-item detail view the
   scroll host returns to the start of the whole Items section (below the sticky
   section nav), after layout has settled.
 
@@ -301,16 +457,26 @@ preselected.
   surface. Hover and keyboard focus change only the glyph colour (Qym green);
   no tile, tint, ring or glow on pointer hover. Keyboard focus keeps the thin
   focus outline. Semantic actions keep their meaning (approve/submit green,
-  reject/delete red). The one exception is `tile` (table row actions only): the
-  tone's `--tint-soft` 20px square at rest and `--tint-strong` on hover, focus and press,
+  reject/delete red): danger and reject glyphs are red at rest; hover only brightens them (`--error-hover`). The one
+  exception is `tile`: every row action of a table or a row list (rules, diagnosis subcategories, documents) is a
+  tile; a harmful action (archive, revoke, remove, cancel, delete, force stop, disable) is a red tile, every other
+  action a green tile (Q26 A). A tile is the
+  tone's `--tint-tile` (16%) square of `--tile-size` (22px) with a `--tile-glyph` (13px) glyph, the tone at
+  `--tile-glyph-mix` toward the surface, at rest, and `--tint-tile-hover` with the glyph lifted toward white on hover,
+  focus and press (cv4 F9, owner: "too dim, too small"; cv5 H2, owner: "a teeny tiny bit less bold, smaller, less
+  bright"), the row's action group at full opacity at rest (no 0.6 rest
+  fade), a disabled tile at full opacity with a neutral fill and the `--text-muted` glyph (readable, not missing),
   the glyph in the tone (accent, `--error` for danger, `--accent-tertiary` for `meta`, the auto-analysis purple).
-  `ActionTile` draws the same square with no action of its own, as the glyph of a `RowMenu` item. Help markers and
+  Cancel of a Live worker job uses `ban`. A per-row action in a form (sweep, reset, remove) is an `IconButton`, not a
+  text link and not a tile.
+  `ActionTile` draws the 20px square with a 12px glyph and no action of its own, as the glyph of a `RowMenu` item. Help markers and
   passive icons are not icon actions.
   Revoking a key or token and disabling a user use the `ban` glyph (a circle with a slash), never a bare square or a
-  cross (round 10). A row action menu that would hold one action with a glyph, or a delete, shows it as an icon
+  cross (round 10). Removing a person from an access list uses the danger `ban` tile, as revoking a key. Closing a
+  side panel is the close glyph on every page (Q29 A). A row action menu that would hold one action with a glyph, or a delete, shows it as an icon
   instead; a lone action with no glyph stays in the menu (round 10).
   Every copy action is `CopyButton` with the shared overlapping-rectangles
-  glyph from `Icon`.
+  glyph from `Icon`. The glyph flip is the only copy feedback: no toast.
 
 - **Explanations** (`HelpMarker`, `Tooltip`): the focusable 12px
   `--info-marker-size` marker with a tooltip (`role="tooltip"`). Hover/focus
@@ -324,7 +490,14 @@ preselected.
   Tab kept inside, Escape closing, and focus returned to the trigger (React
   Aria provides this; do not hand-roll). Destructive confirms start on Cancel.
   A closed drawer that stays mounted is `inert`. Never close a modal by toggling
-  `display`.
+  `display`. An information dialog is 440px for text and 760px for media; a full editor or a large value is `wide`
+  (1100px, cv4 X9). A picker with a filter row and a table is `xl` (1200px, cv5 Q7, owner: "the modal needs more
+  space!"): the rule writer's Approved examples dialog puts its filters on one row with the labels inside the controls
+  (search, Source, Task, Dataset, Model, Run, Reviewer as bar triggers, then "Confidence [min] – [max] %" as one
+  compact range), the selection summary, Select all filtered, View selected and Choose prompt fields on the next line,
+  and the 12 rows of a page without an inner scroll; the confidence column is centred. A dialog is as high as its content: an editor in it grows with its value from a minimum to a
+  maximum and then scrolls inside, so a 3-line value never opens a tall empty dialog (cv4 Y19). Drawer widths: 360px (sm) or 560px (md);
+  trace drawers are wide with the heavy scrim.
 
 ### 3.2 Surfaces and layout
 
@@ -338,7 +511,20 @@ preselected.
   `isSelected` draws the accent border and a soft accent fill while the rail keeps its tone; focus is the 2px accent
   outline. `fill` makes the card a flex column whose body takes the remaining height (a card a grid row stretches gives
   the extra height to its plot, never to empty space under it). An interactive card holds no other interactive element. Never restyle a card per page: pass layout via
-  `className`, meaning via props.
+  `className`, meaning via props. A card that frames one table uses `Card flush` with the title in the Card header and
+  an embedded `DataTable` (no card in a card): the table is flush with the card edges and has no frame of its own (one
+  frame, Q40 B).
+
+- **Bottom action bar** (round 10, point 4): a bottom action bar is the next sibling of the content (the page gap above it),
+  `position: sticky; bottom: 0`, never `margin-block-start: auto` and never a page stretched to the scroller to push it down; it
+  rides at the viewport bottom only while the content overflows (owner 2026-11-03: a pinned bar left a 374 to 735 px band on a
+  tall screen). A negative end margin may cancel the page's bottom padding so the bar still ends at the viewport bottom at the
+  end of a long page.
+
+- **Option box** (round 9, point 1): a selectable box inside a card (an environment, a dataset entry) is `--bg-elevated` with
+  `--border-default` (1.10:1 and 1.59:1 on `--bg-surface`), padding `--space-sm` `--space-md`, hover `--bg-hover`, selected =
+  accent border + `--rail-width` rail + `--tint-soft` accent tint over `--bg-elevated` (the Start-from card recipe), flagged =
+  `--error` border + rail with a `--error` line of text. Never `--bg-base` inside a card: a box darker than its card reads as a hole.
 
 - **Calm surface** (run detail, applies everywhere): a container (card, drawer, expanded item) is the only filled layer; inside
   it at most one more fill level, reserved for code and JSON viewers, inputs and the selected or open state. Parts are
@@ -351,6 +537,10 @@ preselected.
   `--bar-link-h` 36px (round 8, owner decision H5: it carries links only, no selects or buttons); an action bar (the experiment home launch bar,
   the analysis action rail, the run items toolbar) is `--bar-action-h`. Pages set `min-height` from the token, never a
   number. Enforced by `design-language.test.ts`.
+  The action-bar family is one recipe (`LaunchBar`, round 9, point 3): `--bg-elevated`, `--border-default`, `--shadow-popover`,
+  `--bar-action-h`, every button 24px; the 42px surface-coloured step nav is retired. A wizard bar keeps **the same slots on
+  every step** (Back, Skip to review, Continue, status, Cancel, Launch): a slot that does not apply is disabled, never removed,
+  and the labels do not change (the destination is the accessible name).
 
 - **Page hero** (`PageHeader`): `Text` roles: title `--font-title` / 650 /
   primary; description `--font-base` / muted, one line with ellipsis; meta line
@@ -365,14 +555,16 @@ preselected.
   when the run has no such data. The quick-filter sidebar (`--report-sidebar-width`
   300px, 320px from 1920px) exists only while the reader has narrowed the item
   set (a scope: any chip, rule or search; sort, page, metric and layout are not
-  scope). The `ScopeBar` above the report lists "N of M items" with removable
-  chips, Clear all, View N items and the Hide / Show toggle (stored in
+  scope). The `ScopeBar` above the report lists "N of M items" with its
+  chips (no ×, no Clear all: the one Clear is the red "× Clear n" in the sticky section nav, C-44), View N items and the
+  Hide / Show toggle (stored in
   `localStorage qym:report-sidebar-hidden`). Under 1200px the sidebar is a
   `Drawer` (360px) opened from the ScopeBar. The sidebar's first group lists the active
   chips (the ScopeBar then shows only the count and actions; below 1200px the sticky
   ScopeBar carries the chips). Lazy section bodies are not in the DOM until they near the
   viewport, so browser find-in-page cannot see them and the scrollbar thumb grows as they mount. Sidebar and ScopeBar fade with
-  `--transition-fast` and not at all under `prefers-reduced-motion`.
+  `--transition-fast` and not at all under `prefers-reduced-motion`. Both Quick filters panels (run and compare) have
+  an `h2` at `--font-lg` and a close (×) hide button.
 
 - **Section and section divider** (`Section`, `SectionHeader`; owner round, October 2026: "a reusable component for
   sections and section dividers"): every titled block of a page outside the run and compare reports (admin tabs,
@@ -383,18 +575,33 @@ preselected.
   a page area (right under the tabs or the page header) has no line, so nothing doubles the tab underline.
   `SectionHeader` draws no divider and no lead-in of its own (inside a card it is just the header). Parents stack
   sections with no gap of their own. The run and compare reports use the framed `ReportSection` below instead.
+  `SectionHeader` takes a `count` prop: the block's count as `Tag kind="count"` right after the title (see "Tag"). A
+  closed-by-default section uses the Section header with a neutral Show / Hide button at its end.
 - **Settings card** (`SettingsCard`, project settings; round 10, as the old settings page): every settings tab opens
   the same way, a card with a title, one description line and the block's main action (Add, Create) on the title
   row's end side, then the controls. A tab has one Add button, in its card header; its empty state does not repeat it.
   Facts about the project (slug, role, members, runs, created) live once, in the page header meta. The Danger zone is
   the last section of General, a card like the others with no red rail; only its Archive and Delete buttons are red
   (round 11). Members show the person, a role tag and an Edit action that changes the role in a dialog, as admin users
-  do (round 11). The AI prompt editor is a `Textarea` with `quietFocus` (a click in brightens the border to
-  `--border-strong` instead of the green ring; keyboard focus keeps the ring) and spell check off (round 11).
+  do (round 11). The AI prompt editor is a plain `Textarea` with the visible label "Prompt", the normal green focus ring
+  and spell check off (cv4 A5). The single-line fields of one card share one field width (320px): a `Select` is not
+  wider than the text field above it (cv4 Y20).
+  **Create action (cv4 A2):** a table section creates its entity from one primary button at the end of its section
+  header; the button opens a dialog. No inline create form above a table. The same for a list with an editor beside it
+  (cv5 Q6, owner: "why is add category there?"): Diagnosis categories ends its header row with "Add category" (a
+  one-field `FormDialog`), and the search box heads the list column at the list's width. A list whose toolbar spans
+  the list (the Rules draft: search, then "Add rule" at the list's end) keeps the action there; the Documents tab
+  creates from its drop zone.
   **One footer and two title recipes (C145, C235):** a card that saves settings ends with `SaveFooter` (pass `save` to
-  `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "All changes saved"), the 24px
-  primary Save at the end, disabled with the reason "No changes to save" until something changed; Discard or Test sit
-  before Save. Titles come in two recipes only: `SettingsCard` (13px, `--font-md`) for blocks that edit settings and
+  `SettingsCard`): the state text at the start ("Unsaved changes" in the warning colour, "Saving"; nothing at rest, the
+  `SaveFooter` default since cv4 X4), the 24px
+  primary Save at the end, disabled with the reason "No changes to save" until something changed. Every card and every
+  form that saves ends with `SaveFooter`: state text left, Save right (Q34 A). The button reads Save; only the Live
+  worker reads "Save as vN": its Settings card uses the save footer with "No changes since vN-1" as its saved state at
+  the start (Q30 A). The footer belongs to the card it saves, never a separate bar. A page with several framed sections
+  saves from the footer of the section that holds the identity fields (Environment: Connection). No sticky save bar.
+  Dataset Settings and Access cards follow the Settings card recipe: 13px titles, labels above fields, `SaveFooter`, no
+  red rail on the Danger zone. Titles come in two recipes only: `SettingsCard` (13px, `--font-md`) for blocks that edit settings and
   `Section` (18px) for read-mostly blocks. The run page title is the page title at 22px (`--font-title`).
 - **Person** (`UserName`; round 11): a user is an initials disc in the person's series colour (the same person is the
   same colour everywhere), then the name; lists that must tell two people apart add the email after the name, muted
@@ -403,12 +610,107 @@ preselected.
 - **Report section** (`ReportSection`; the run page and the compare page, `CompareSection` is retired; round 8b, owner
   decision H6): every top-level section is a framed panel: `--bg-surface`, 1px `--border-subtle`, `--radius-md`, 14px
   padding, 20px under the previous panel, the first panel with no lead-in. It opens with a `section-head` inside the
-  panel (no rule): a `--font-xl` / 650 primary title, one muted `--font-sm` description line, the section controls on the right, then
+  panel (no rule): a `--font-section` (22px, cv4 F10) / 650 primary title, one muted `--font-sm` description line, the section controls on the right, then
   14px to the body. A card inside the body is an inset card: `--bg-elevated` with no visible outline. The primitive owns
   every distance: pages set no gap between sections, sections add no margin of their own. Reason (section 6 amendment
   rule): measured on both pages, the old 1.33:1 hairline was as faint as the card borders in the bodies and the compare
   page had 28px and no mark between sections; one framed section replaces two recipes (measured: 20px between panels,
   50px from the last pixel of a body to the next title (14 padding + 1 border + 20 gap + 1 border + 14 padding), first screen of the compare page unchanged within its ceilings).
+
+- **Dataset detail** (cv4 E, X7 to X9, X15, Y8, Y19): **lineage tree:** a child version hangs from its parent with an
+  elbow line (2px `--border-strong`, soft corner) from a trunk under the parent's version name to the child's first
+  line; no indent bars; the card of the version open on the page takes the selected outline (`Card isSelected`, the
+  first qym's green outline, cv4 X15). **Change log:** the shared `Timeline` in a card (cv5 H5, see "Timeline"): the
+  person (`UserPill`) is the event's `meta`; marks carry meaning only and the accent is for publish and the production
+  alias.
+  **JSON while editing:** a JSON field colours its text while it is edited, with the token colours of `JsonViewer`; the read-only view uses the same colours.
+  **JSON syntax colours (cv5 H3, owner 2026-11-13: "this blue is okay, this white is not okay"):** one token set,
+  `--json-*`, the roles of the first qym dataset view: key `--json-key` (blue), string `--json-string` (green, the
+  accent), number `--json-number` (purple), true/false `--json-boolean` (blue), null `--json-null` (muted), punctuation
+  `--json-punct` (secondary). `JsonViewer`, the dataset item pane, item page, expand dialog and edit mode use only these;
+  a string value is never plain white. **Field expand:** the expand button of a field card opens
+  the same editor and state in a `wide` dialog as high as the value (see "Dialog"): the editor floor is the card's
+  96px, so a 3-line value opens a short dialog; up to 640px, then it scrolls (cv5 Y15). **Item pane:** the pane's item is
+  the table's current row (`DataTable activeKey`); the row actions stay while the pane is open.
+
+- **Auto-analysis, Analyze run** (cv4 D, Y1, Y3, Y11, Y12, Y16): Setup, Targets and Results are `ReportSection`s. Setup
+  holds four `Subsection`s in reading order: Run and metrics (the facts, then the metrics as `ToggleChips` after a muted
+  "Metrics" label that names the group, `min={1}`, cv5 K1), Input mapping (always open; the labels take one fixed column, so every select starts at the same
+  x), Prompt contents, Instructions. Targets is a `DataTable` (report stripe, regular rows, the pager in its footer, a
+  row click opens the prompt preview); its count is a `CountTile` right after the section title. A repeat run without
+  a pass lists its passes as rows between hairlines, each with its Analyze action at the row end. **Switch group:** the
+  group label (`--font-sm`, 600, muted) sits above its switches, one switch per line; in a one-row copy (a drawer) the
+  pairs are `--space-xl` apart, so each label reads with its own switch. The sticky rail's notice is shown in full and
+  wraps; it is never cut with "…". **Input mapping keys (cv5 K2):** a field with a single value shows only its
+  dropdown; a JSON field shows a `ToggleChips` row under it, "Full value" first (on by default), then one chip for each
+  top-level key; a key on switches Full value off, and the reverse. A mapping row is the label column, then the
+  dropdown; no chevron between them (cv5 Y11: it read as a link).
+  **Prompt pane (cv5 K3):** the panel surface of the report sections, sticky at `--space-md`, its height measured to
+  the viewport bottom, with its own scroll. The head shows the title, the char count `Tag kind="count"`, a quiet status
+  text (Updating / N lines added · M removed / No change to the prompt) and Copy. Lines added by the last change get
+  the accent at `--tint-soft` behind the text, with no motion. With the pane on screen a target row click shows that
+  target in the pane (`DataTable activeKey`); the eye tile is only for the narrow layout (drawer).
+  **Pane target (cv5 Q1, owner 2026-11-14: "what's the point of this?"):** with the pane on screen there is no target
+  dropdown: the head names the target in one quiet `--font-sm` muted line, the ids and the score mono
+  ("sql-003 · result_similarity · 0.71"); the target row at the left stays the active row. The guidance tabs show the
+  same line and no "Change" control (the last row chosen, else the first target). The drawer keeps its target `Select`,
+  because the drawer covers the table.
+  **Rendered prompt (cv5 Q2, owner: "rendered and structured ... rather than some text dump"):** the head's second line
+  ends with a `SegmentedControl` Rendered | Raw (default Rendered, remembered per viewer in `localStorage
+  qym:prompt-view`, shared with the drawer). Raw is the exact text, mono; Copy always copies the exact raw text.
+  Rendered is a document: `model/promptDoc.ts` reads the markers of the platform's prompt builder
+  (`services/llm_analyzer.py`): the top-level blocks (ANALYSIS RULES, EVALUATION ITEM DATA, REFERENCE DOCUMENTS,
+  Respond ONLY ..., Additional Instructions, any all-caps heading line after a blank line), the item data parts (INPUT,
+  EXPECTED OUTPUT, ACTUAL OUTPUT, ERROR, TRACE EVIDENCE, SELECTED METRIC RESULT, ITEM METADATA, SELECTED METADATA), the
+  trace (Agent trace / Evaluation trace, "Step N — name", CALL / OUTPUT / THINKING), the response fields ("1. category -
+  ..."), lists with their "Description / Use when / Approved examples" facts (a definition grid), numbered rules,
+  documents, JSON and Markdown tables. A top-level heading is `--font-md` 650 primary with the Subsection's 3px accent
+  bar and a hairline under it (the one accent role); a part of the item data is the small tracked label (`--font-sm`
+  650 muted); the body is sans `--font-base` at `--field-measure`; JSON, code and item values sit in a `--bg-elevated`
+  well, JSON in the `--json-*` colours (`ui/JsonText`). Each heading toggles its section; a part or a document longer
+  than 80 lines starts closed and shows "N lines". The outline (see below) jumps to a section and opens it. The rendered
+  view hides and changes no character: a closed section is `hidden`, not removed, trailing colons and list markers stay
+  (muted), and a unit test checks that the page text equals the raw text. Change marks work in both views: an added
+  line is marked inside its section, and a closed section that holds one opens. Text that matches no known structure
+  is clean paragraphs; a parser failure is plain text, never an error.
+  **Prompt contents (cv5 Q4, owner: "there is a big bug to which thing these map to"):** one switch sends one section
+  of the prompt and has that section's name, the name the pane's outline uses: Item data = Metric result (SELECTED
+  METRIC RESULT), Metric metadata with its "Keys · All / Custom" picker (the target metric's own metadata: inside the
+  metric result for all keys, its own SELECTED METRIC METADATA block for chosen keys; the keys are the union over the
+  analysed metrics and each target reads its own metric's keys, never another metric's), Item metadata (ITEM
+  METADATA); Context = Analysis rules, Reference documents, Trace evidence. There is no Error switch: a target is never
+  an item with a task error, so it could change nothing. Hover or focus of a switch marks its section in the pane (a
+  1px accent outline at `--space-xs` offset, brought into view, no motion) and its rail row (the soft accent wash). A
+  switched-off section is never silently missing: the outline keeps its row with a muted "not sent"; a switch that is
+  on but finds nothing for this target says "none".
+  **The outline (cv5 N, owner 2026-11-14: "this navbar sucks!!"):** one tree with two levels under each message:
+  message (System, User) → section → part of the item data (`model/outline.ts`). It is never wrapped rows of words.
+  *Wide pane* (messages area 600px and more, so the default pane on a 2048px window shows it): a rail at the start of the pane body, sticky, its
+  own scroll when taller than the pane, `clamp(196px, 27%, 212px)` wide (one line for "Reference documents  not sent"),
+  the document takes the rest. The message name is the switch-group label (`--font-sm`, 600, muted, sentence case)
+  above the rows, not a row. The sections are a list of buttons on one 1px `--border-subtle` track: a section
+  `--font-base` 600 secondary, a part of the item data 450 and indented by `--space-md`, so the tree reads by its
+  indent, not by weight alone. The section in view is `aria-current="location"`: accent text and a 2px accent bar on
+  the track (the vertical tab list's selected row); its parent section takes the primary text. Up / Down / Home / End
+  move the focus; the focus ring is the 2px accent outline. *Narrow pane and the drawer:* no rail; one line at the
+  top of the scroll region, sticky, a `--border-subtle` hairline only while text runs under it: the current location
+  in the dropdown trigger look (`BarTrigger`, "System · Item data · Input"), which opens the same tree in the shared
+  `DropdownMenu` (group labels, level-1 rows indented, the current row checked). *Both forms:* a section that is not in
+  the prompt keeps its row, muted, with "not sent" or "none" at the row end, and the row jumps to one quiet
+  `--font-sm` muted line at its place in the document ("Reference documents: not sent"; "none for this target").
+  That line is interface text, not prompt text: it is not selectable, never in Copy, the Raw view or the round trip. A
+  section that holds a line of the last change shows a 6px accent dot at the row end (rail and menu). No pills, no
+  fills other than the hover wash.
+  **Grouped menu (`DropdownMenu`, cv5 N):** `group` puts consecutive items under a quiet group label (the switch-group
+  label) with a hairline between groups; a grouped menu's rows take `--font-base` (the Select option); `level` 0 / 1
+  makes a two-level list (600, then 450 indented); `end` is quiet row-end text; `selectedId` checks the current item
+  (`menuitemradio`, the accent check at the row end) while an action still runs `onAction`.
+  **Rule versions (cv5 L2, L3, Z5):** the Rules tab's versions are a selectable `Timeline`, newest first, with
+  `revealActions` (the row menu) and `markAlign="start"`. Each version has an icon mark: draft `edit` (warning),
+  production `star` (success), another released version `check` (neutral). A released version is read-only: the
+  header shows the grey lock Flag "Read-only" and one action, "Create draft from vN" (primary), or "Open draft vN"
+  (neutral) when a draft exists. A draft header shows only Publish. Generate rules and its sources show only on an
+  editable draft.
 
 - **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
   body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
@@ -420,7 +722,8 @@ preselected.
   `ScoreBar marker` draws a baseline tick; `Drawer` takes `eyebrow`, `meta` and `scrim="heavy"`.
 
 - **Text blocks** (`TextBlock`, `JsonViewer`, `KeyValueGrid`): see Text
-  direction above; code and JSON are mono. `KeyValueGrid variant="tiles"` puts each pair on a `--bg-elevated`
+  direction above; code and JSON are mono. A `KeyValueGrid` label sits above its value in normal case (see "Labels
+  above values"). `KeyValueGrid variant="tiles"` puts each pair on a `--bg-elevated`
   tile (the run "Execution context"); an item `kind` of `config` or `metadata` adds a suffix and the `meta` tone,
   `tone` adds a 3px start rail on a tile, `icon` a leading glyph.
 
@@ -431,47 +734,113 @@ preselected.
 the dots under Arabic letters show, and Arabic inside a tag reads in the sans face at 11px. Every number and date is
 formatted in the one app locale (`APP_LOCALE`); ESLint rejects a `toLocale*` call without a locale.
 
+**Dates, ages and units.** Live follows `lib/dates` like every page: instants on the viewer
+clock in the table form, Live day keys month first through `formatDayKey`/`formatShortDayKey`, never the word UTC
+(owner Q04 C, Nov 2026). A Live day is a day in the source's `day_key_timezone`. Freshness has one helper,
+`formatAgo`; no feature writes its own ago text. An age column (Created, Age) uses `formatAgo` in every table, the
+best-run picker too (Q55 B). Log and history rows are table rows: table form, sans tabular. Units: no space between a
+time value and its unit anywhere (850ms, 13s, every 60s, 5h); sizes keep a space (23.9 GB). The Live turns list shows
+whole seconds from 1 s to 59 s.
+
 **People, models and tags (C144, C165, C051, C238).** A person is always `UserName` (an initials disc in the person's
 series colour, then the name): the runs Owner, the run header, admin, API keys, datasets, presets, Reviews and Deleted
-runs. Task, dataset and model names are `TaskTag`, `DatasetTag` and `ModelTag` at 11px (`--font-sm`); count and role
+runs. Pass the user id to every `UserName`. A table of people shows `UserName`; dataset Access adds `showEmail`. This
+also covers: Trash Deleted column, Experiments and Queue Created by, the experiment header creator, the run review
+history pop-up, Compare run card Owner, Feedback list submitter and request page header, Live worker Jobs Who and
+Versions rows, feedback request History actor, analyzer rule versions, dataset Access Person column. The sidebar
+account disc is the `UserName` disc at 28px. A label before a person is sentence case, no colon ("Published by",
+"Drafted by", "Edited by"). Task, dataset and model names are `TaskTag`, `DatasetTag` and `ModelTag` at 11px (`--font-sm`); count and role
 tags stay at 10px. A model's colour comes from one source, the project's model index (`useModelIndex` and `modelSlot`),
-on every page. A count is `Tag kind="count"` (a failure count is `tone="danger"`), a fact such as Baseline,
+on every page. Every `ModelTag` passes `series` from `modelSeriesOf(useModelIndex(slug), ...)`; a `ModelTag` with no
+`series` prop is a bug. A count is `Tag kind="count"` (a failure count is `tone="danger"`), a fact such as Baseline,
 Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill.
 
-- **Status mark** (`StatusMark`, `RunStatusBadge`): the one status component. Every lifecycle or state of a
-  run, pass, job, experiment, review, request, version, credential, environment or save is a `StatusMark`. No pill,
-  outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project marks) in the status
-  tone, then the word with its first letter upper-cased (the rest as the caller gives it, so OK stays OK), `--font-base` / 600, `--tone-text`, at least `--badge-height` tall. The
-  figure's shape is the non-colour cue: `full` completed or succeeded, `check` approved or ready, `cross` failed or
-  rejected, `pause` stopped, cancelled, archived, disabled or revoked, `orbit` running, submitting, cancelling or
-  checking (the ring with its first pixel lit; static: an infinite animation would keep the page from settling),
-  `ring` pending, queued, not run or unknown, `hourglass` waiting on someone (submitted, paused, blocked, not sent), `dot` draft
-  or unsaved. Tones as the Status row of "Colour as information". Passive: no hover. Each domain keeps its own
-  status → tone and figure map next to its component (`RunStatusBadge`, `JobStatusBadge`, `ReviewStatusMark`, …).
+- **Which style shows a state** (status rules, owner decision 2026-11-12). Ask in order; the first yes gives the style:
+  1. A step of a process (run, pass, job, experiment, analysis, review, feedback request, version)? A `StatusMark`.
+  2. A condition now, or the result of a check (health of an environment or worker, a connection, a credential, a
+     setting that is configured or not, an item's Pass or Fail, a SQL statement or check, a service call, a canary, a
+     turn diagnosis, a comparison verdict, a decision in a review log)? A `StateTag`.
+  3. An exception on an item that is normally on (archived project, disabled user, item or environment, revoked key or
+     token)? A grey `Flag` after the item's name: `archive` glyph for Archived, `ban` for Disabled and Revoked. The
+     normal state shows nothing, and a table has no Status column for an on/off state.
+  4. A save state? Plain text: `--text-muted`, `--error` only when the save failed. No figure.
 
-- **On/off state** (archived project, disabled user or item, revoked key or token): only the exception shows, as a
-  `StatusMark` (`warning`, `pause`) after the item's name. The normal state shows nothing, and a table has no Status
-  column for an on/off state. A single item's settings page shows the exception the same way, in its header.
+  A row may show a `StatusMark` and a `StateTag` together: a job can be Running on an environment that is Healthy.
+
+- **Status mark** (`StatusMark`, `RunStatusBadge`): the step of a process, and only that. No pill,
+  outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project marks) in the status
+  tone, then the word with its first letter upper-cased (the rest as the caller gives it, so OK stays OK), `--font-base` / 600, `--tone-text`, at least `--badge-height` tall.
+  Passive: no hover. Each domain keeps its own status → tone and figure map next to its component (`RunStatusBadge`,
+  `JobStatusBadge`, `ReviewStatusMark`, …). `StatusMark` has no `data-tone` override; the `tone` prop is the only
+  colour. One meaning per tone and figure:
+  - `info` + `orbit`: working now (running, submitting, analyzing, cancelling, stopping, retrying, cancel requested).
+    The orbit is the ring with its first pixel lit; static: an infinite animation would keep the page from settling.
+  - `warning`: a person is involved. `hourglass` waits for a person (submitted, awaiting review, blocked, new, a paused
+    maintenance job that waits for Start); `dot` draft or not submitted yet; `pause` a person stopped it (stopped,
+    cancelled); `full` partial or completed with errors.
+  - `neutral` + `ring`: not started (queued, pending, not run, planned, unknown). `neutral` + `pause`: paused or
+    replaced by the system, with no person (a worker job that the worker paused, a superseded proposal).
+  - `success`: ended well (`full` completed, succeeded, done; `check` approved, accepted).
+  - `danger` + `cross`: ended badly (failed, timed out, rejected, declined).
+  - Words: a job sent to the Evaluation Service is Sent (never Submitted, which is a run sent for review); a review that
+    waits for a reviewer is Awaiting review (never Pending, which is a run that has not started).
+  - Version (dataset and rule): Draft = `warning` + `dot`; the version in use is the `success` Flag "Production" with
+    the `star` icon; a released version that is not in use shows nothing, so green shows only on the version in use.
+
+- **State tag** (`StateTag`, `ui/Tag`): a condition now or the result of a check (rule 2 above). The tinted `Tag`
+  (`kind="state"`), sans, sentence case, no figure: a log line or a health never reads as a step. One meaning per tone:
+  `info` active now (the word Running is always `info`, also Live and Checking), `success` good (Healthy, OK, Pass,
+  Configured, Approved in a review log), `warning` needs a look (Not configured, Not received, Gap), `danger` bad
+  (Error, Fail, Stale, Rejected in a review log), neutral unknown, skipped, not yet or no verdict. A priority keeps its
+  own scale. The environment of a live source is a StateTag (cv5 M2): production `success`, staging or another
+  pre-production environment `info`, an unknown name neutral (`features/live/lib/environment.ts`).
 
 - **Flag** (`Flag`): a fact attached to an item that is not a lifecycle (Private test set, Restricted, View only,
   Duplicate, Needs examples, Irreversible, a purge due date). An optional 12px glyph and the word in the tone
-  colour, `--font-base`, 600 (neutral: `--text-muted`, 500). No pill, outline or fill. Passive.
+  colour, `--font-base`, 600 (neutral: `--text-muted`, 500). No pill, outline or fill. Passive. Required is
+  `RequiredFlag`: the red star of form fields, then the grey word Required. Never a role Tag.
 
 - **Badge** (`Badge`): retired. No status, flag or label in feature code uses the pill; the design-language test
   blocks a new `<Badge>` outside `features/dev` mock pages. Counts and categories (priority, kind, diff counts,
   change types) are a `Tag`.
+
+- **Service-reported key/value data** (round 10, point 3): versioning details and any other key/value data a service reports
+  are drawn as reported: every key, in the payload's order, the key as written (no humanised label, no `text-transform`); a
+  missing key is not drawn ("not set" is not a value); no fixed key list in the UI. Long values and objects take the whole row
+  of the grid; JSON is compact mono, cut at 48 characters with the whole text in its title.
 
 - **Tag** (`Tag`): roles, provenance, versions, passive metadata and compact
   counts; 20px minimum, borderless, `--control-radius`, tinted or elevated
   fill. Roles, counts, data and versions are mono; other tags are sans. A tag
   may grow vertically when its content wraps. `kind` says what the label is: `task`, `version` and `config` are
   definition metadata and take the `meta` (purple) tone; `dataset` is neutral; `model` (+ `series`) renders the series
-  dot; `origin` is neutral (official is `tone="info"`). A `role` tag takes its tone from the role, so an admin never
-  reads as a member: admin `info` (blue), manager `accent` (green), member neutral (round 10). A changed AI prompt shows
+  dot; `origin` is neutral; Official is a Flag: info tone, shield icon. A `role` tag takes its tone from the role, so an admin never
+  reads as a member: admin gold (`--role-admin` on a `--tint-gold` fill), manager accent (green), member neutral
+  (round 10). `kind="role"` is only for member roles. A category or a cap is `kind="data"` in sentence case. A changed AI prompt shows
   `custom` in the `meta` tone (purple: it is configuration) and a shipped prompt shows no tag, by the on/off rule; the
   green `default` on an LLM connection marks the connection in use, a selection (round 11). Passive: no hover. Task,
   dataset and model names are 500 (round 10); a model tag's name is `--text-secondary` and its dot is flush (no ring),
-  6px before the name.
+  6px before the name. The repeat multiplier is ×N.
+  **Counts.** A count that describes a block sits right after its title as `Tag kind="count"` (danger for failures);
+  never muted text at the far end. A signed change count (+5, −1, ~2) is `Tag kind="count"` in its tone; a phrase with
+  a count stays sans. Inside a meta line or a sentence, a count is plain text; no bold number. AI confidence is the
+  phrase N% confidence in muted text. A problem count in a line of counts is a count tag in its tone, the neutral
+  counts stay text (cv5 M5, Z7): the Experiments Jobs cell reads "ok/total", then "N failed" (danger) and "N cancelled"
+  (warning); the experiment Queue strip "N queued · N running" then "N blocked" (warning); a remote queue head "N
+  orphans" and "N stale" (warning). A problem count of 0 is not shown: no colour on a count that is not a problem.
+  **Overflow** (`MoreTag`; Q02 C, Q49 C): hidden tags in a row end with a "+N more" count-tag button (run header
+  settings with a chevron, table tag cells); in the run scope bar it is a passive `Tag kind="count"`. A list that
+  grows says "Show N more" (`Button`, see "Show more"). A dialog list ends with plain "and N more".
+
+- **Count box** (`CountTile`): one recipe for a count next to a label (tab, nav link, list option, a Categories field
+  chip): grey box, mono, number in the exact centre; `tone="danger"` is the red tint with a readable numeral ("Errors
+  18"). It is the one count badge (cv4 F12): no plain "· 3" count text after a label.
+
+- **Level tag**: a `Tag` that starts with a three-bar level glyph; high red, medium orange, low grey; used for
+  Feedback Priority and Complexity.
+
+- **Labels above values** (Q06 B): a label above a value is small, grey, normal case (`KeyValueGrid`, run header
+  facts); only table column titles, block titles and the `Eyebrow` are uppercase.
 
 - **Chip** (`Chip`): interactive filters only; `--chip-height`, rounded outline,
   sans `--font-sm` / 600, counts mono. Passive metadata never uses the chip
@@ -483,16 +852,22 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   muted, uppercase, `letter-spacing` 0.05em-0.12em.
 
 - **Stat card / stat value** (`Text`, `StatStrip`): label `--font-sm` / 600 /
-  muted / uppercase; value `--font-stat` / 700 / mono / `tabular-nums`
+  muted / normal case (Q06 B); value `--font-stat` / 700 / mono / `tabular-nums`
   (primary, or a `--score-N` colour when it encodes a score). Mid-tier stats in
-  drawers and tiles use `--font-xl`.
+  drawers and tiles use `--font-xl`. The unit glyph is smaller and muted but sits with no gap (3.1s); percentile
+  marks read p50 2.3s, lowercase.
 
 - **Connected statistics** (`StatStrip`): primary summary bands; the strip owns
   the outer border, cells have dividers and no card borders, labels sit above
   mono values, and a leading icon aligns to the top of the label/value stack.
   Tiny card-footer metadata, the Runs-table repeat-run group metrics row, and
   compact model-card metric matrices are not stat strips. With a section
-  heading, use the compact one-row variant.
+  heading, use the compact one-row variant. It is the one band for every summary of numbers (icon tile, label,
+  number, optional sub-line); labels are 13/600 `--text-secondary` with the icon tile. The number is never coloured by
+  tone; the tile colour follows Q13 (plain grey, done green tick, problem red above 0, Problems orange above 0). A
+  sub-line only for a fact. The "mini" variant is for a card. Kind cards are the named exception. Queue environment
+  cards use the StatStrip band. Live day numbers are a StatStrip band. A number that is a link is white and turns
+  green on hover with no underline.
 
 - **Stat tiles** (`ui/StatTiles`, round 10: the first qym's strip): seven or fewer equal cells in one framed strip
   (1px `--border-subtle`, `--radius-md`), parted by hairlines (the repeat analysis). Each cell: a `--font-md` 600
@@ -504,7 +879,7 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
 
 - **Subsection** (`ui/Subsection`, round 10): a named part inside a report section (Repeat performance, Between
   metrics, Across passes, Response time, Inside the traces): a 3px `--accent-primary` bar at the inline start, the
-  `--font-md` / 650 title and one muted `--font-sm` line on the same line, controls at the end, then the body; 20px
+  `--font-subsection` (16px) / 650 title (cv4 F10) and one muted `--font-sm` line on the same line, controls at the end, then the body; 20px
   between two subsections. It is the one sub-grouping recipe of the report pages; a card title is never a subsection.
 
 - **Section boundary** (`ui/SectionBoundary`, round 10): every report section's body renders inside one, so a render
@@ -521,19 +896,39 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
   shows the band as a `--tint-soft` fill (cards, stat strips, compare averages); the
   number and the `Band n of 5` title stay the non-colour cue. `variant="plain"` is the band-coloured number alone,
   for table cells: the runs table shows a score as that number, centred under its header, with no bar (rounds 8, 9);
-  the run Items table does the same in 120px columns (C149). **Pass threshold (C220):** where a metric declares a pass
+  the run Items table does the same in 120px columns (C149), and so does the dataset Items table. `ScoreValue` defaults
+  to one decimal: one decimal in every table, ties allowed; no adaptive decimals. A score in a table cell is the plain
+  number, centred, never a `ScoreBar`. Whole percents only on axes, thresholds, ranges and shares. Live follows the
+  same score format: one decimal, band colour, centred in tables; spec precision does not change percent digits.
+  **Pass threshold (C220):** where a metric declares a pass
   threshold, the run Items scores and the Overview ring and mean are plain `--success` when the value passes and
   `--error-text` when it fails (`ScoreValue verdict`, `BandValue verdict`, the ring's `data-tone`); the title names the
   verdict. Bands stay everywhere a threshold does not apply.
 
 - **Run name and entities**: a run is written by `RunName` (sans, a link when it has a target, mono only when the label is a
   bare id) and the task, dataset and model by `TaskTag`, `DatasetTag` and `ModelTag`, on every surface (runs list,
-  overview, admin, run header, compare cards, analysis header). An input shows as `promptPreview` (its prompt line, never
-  raw JSON) wherever it is a table cell (dataset items, analysis targets).
+  overview, admin, run header, compare cards, analysis header, Reviews rows, Live turn evaluator line, Live worker
+  summary, Live Judges and unregistered dataset names). A name that opens a page is white at rest, green on hover, no
+  underline (Q35 A). An input shows as `promptPreview` (its prompt line, never
+  raw JSON) wherever it is a table cell (dataset items, analysis targets, run Items).
+
+- **Dataset with version** (`DatasetVersionTag`, cv4 B1, X2; the first qym's "name | v1 | prod"): the dataset tag
+  shows the name, then the version after a 1px `--border-strong` divider, mono, 600, written "v" + number; each other
+  alias follows after its own divider in muted mono. The version's colour is its status (owner, 13 Nov), with the
+  tones of the datasets `VersionBadge`: `--success` when the `production` alias points at that version, `--info` for a
+  published version, `--warning` for a draft, `--text-secondary` when the status is not known. No "Production" word or
+  Flag follows the tag: the tooltip names the status. The API sends the status as `dataset_version_status` (and
+  `status` in each `datasets` entry). The runs table Dataset column, the run header Dataset fact and the hero dataset
+  chip of a union run use it. A run with no version shows only the name. An alias segment is written `@alias` (the
+  at-sign of the run label, in `--text-dim`), with the tooltip "Alias X: a name that points at vN" (cv5 M3). One alias
+  form everywhere (cv5 Y5): `@alias` in the dataset tag, in the hero chip, in the version switcher (each version row
+  shows its aliases) and in the Lineage alias tags; each place keeps its own surface. The hint of the alias segment is
+  the shared `Tooltip` (hover and keyboard focus open it), and the tag's title does not repeat the alias.
 
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
   (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for
-  colour-blind readers) and the name (`run_name`, label as fallback, truncated, full label in the tooltip). Run
+  colour-blind readers) and the name (`run_name`, label as fallback, truncated, full label in the tooltip). A cohort side
+  is the `RunTag` swatch and letter; no role Tag and no Side pill. Run
   colour is identity, never verdict: text is never run-coloured. Elements that belong to a run carry
   `useRunMark(index)` (`data-mark`, `data-series`, hover and keyboard focus-visible handlers) inside the page's
   `SeriesHighlightRoot`, so hovering a run dims every other run's cards, cells, rows and legend entries (no layout
@@ -542,23 +937,47 @@ Latency-sensitive or Required is a `Flag`, and no page draws its own filled pill
 
 ### 3.4 Data tables
 
+**Search placement (cv4 F15, owner 2026-11-12).** On a page with a card grid (Projects, Datasets) the search box is in
+the page header action row, immediately before the primary action. On a page with a table the search box is the
+first control of the table toolbar. `SearchField` has one look and one height (24px) on every page and surface.
+
 **List toolbars (C152).** Every list toolbar starts with a 260px search (runs, experiments, queue, deleted runs,
-reviews), then its filters.
+reviews), then its filters. The search is `SearchField` at `var(--search-width)`, labelled "Search <things>". Every list
+search sets `shortcut="/"`: it shows the "/" hint (`ui/Kbd`, 11px) and the "/" key focuses it. Pickers inside a card
+or popover stay full width. No raw `<input type="search">` in feature code. A list count shows only in the footer
+range; a toolbar has no count. A count tag after a card title or a name is not a list count.
 
 - **Data table** (`DataTable`, own `<table>` markup, `role="grid"`; `treegrid` when rows expand): sticky header
-  `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650;
+  `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650 (a
+  header's minimum width is measured on the drawn header string, never on its accessible `label`: round 10, D10-8);
   body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
-  Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (two-line
-  and wrapped cells raise the minimum to comfortable); zebra alternates `--bg-base` and `--bg-surface` by logical row;
-  rows part on a faint hairline (`--row-line`, 55% of `--border-subtle`), none under zebra stripes and none under the
-  last row, where the frame closes the table (round 10: a full-strength line on every row read as a grid of boxes);
-  admin tables are locked to comfortable rows with no density menu (round 10);
-  hover `--bg-hover`; selected `--bg-selected` plus a 2px accent bar; `rowState` draws a 3px rail (error, warn, live,
-  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are centred, header and values, in every
+  Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (a two-line
+  `secondary` cell raises the minimum to comfortable); a wrap cell clamps with no block padding. **Density and wrap
+  (cv4 E1, X6):** a wrapping column (`Column.wrap`) follows the density: compact one line, regular two, comfortable up
+  to five; a comfortable row of such a table is at least four lines high, so the three densities look different even
+  for short text. A wrapping column never forces one row height for all densities. **Current row (cv4 X7):** a page's
+  current row (the item an open side pane shows) is `activeKey`: it takes the focused-row tone and `aria-current` and
+  never moves DOM focus. Every table stripes
+  every second logical row at any row count: a page list mixes `--stripe-step` (2%) of `--text-primary` into the row
+  base, a table in a run, compare or experiment report section mixes `--stripe-step-report` (1%); no row lines under
+  stripes; the hovered row (`--bg-hover`) is always brighter than a stripe. Every admin table, Maintenance included,
+  is locked to comfortable rows with no density menu (round 10); a leading identicon in a regular table is the 30px
+  chip (cell 4, gap 1);
+  **row ladder (cv4 F11):** stripe (faint, neutral) < hover `--row-hover` (`--bg-hover` with a 6% accent tint, so a
+  hovered row never reads as a stripe; child rows and an open parent use it too) < selected `--row-selected` (a 15%
+  accent wash) plus a 2px accent bar; every first-cell rail (open group, child rows, selected bar, state rail, the
+  start of the focus frame) is drawn on the first visible cell, also when the select column is reserved at 0px;
+  **row primary text (cv4 F4):** in a clickable row the primary cell (`Column.primary`, default the `cardTitle` or
+  first priority-1 column, or any element with `data-row-primary`, `RunName` links included) turns `--accent-primary`
+  while the row is hovered or holds keyboard focus, never underlined; **flush corner (cv4 F2):** under a toolbar (or
+  over a footer) the body is square at that edge, so the header row and the rows sit flush with the card edge; `rowState` draws a 3px rail (error, warn, live,
+  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table; `live` is
+  not drawn when a Status column already shows the live step (Experiments, cv5 M4). Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are centred, header and values, in every
   table (C236: the default for numeric column types in `ui/DataTable/model.ts`; `align` overrides it); a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
   `--table-group-height` band above the header unless the table passes `groupBand={false}` (the runs, run Items,
-  Charts and dataset Items tables: one header line, the groups still label the Columns menu; C253). Sort glyph, header menu and resize divider show on hover/focus only;
+  Charts, dataset Items and dataset Runs tables: one header line, the groups still label the Columns menu; C253). Trace
+  and system column titles start with the `zap` Icon (12px, header colour); no typed glyph in any label. Sort glyph, header menu and resize divider show on hover/focus only;
   pinned columns (start/end) are opaque. The boundary has **no line** (round 9): while content is scrolled under a
   frozen edge, the pinned cells on that edge (the last start cell and the first end cell of the header, the group band
   and every body row) darken toward it with an 8px `--pin-shade` gradient inside their own box, in the cell padding.
@@ -582,7 +1001,12 @@ reviews), then its filters.
   The handle opens that row's cell in place (the usual opaque cell, focus on its first action; Escape, the handle
   or a press outside folds it). Scrolled to the end, or with no overflow, the column renders as usual, with its
   title (`Actions`, end-aligned; the title is hidden while folded). A fold
-  column never shows a boundary line or shade, in any state. A row with nothing to act on has no handle. **Row
+  column never shows a boundary line or shade, in any state. A row with nothing to act on has no handle. The
+  `rowActions` column of every `DataTable` is a fold column: no pinned shade, one handle on the hovered row while
+  columns remain past the end (Q37 A). **cv4 X8:** the column folds only while the columns past the end are at least as
+  wide as the column itself (with less, it stays open: a see-through cell would show its own empty slot as a dark
+  strip); the row paints its tone under a folded cell; one handle shows at a time (the focused row's only while no row
+  is hovered). A one-tile action column that must stay whole (the run Items Trace column) is pinned at the end. **Row
   actions** (owner decision, Nov 1: "all action buttons inside >"): the runs Actions column is a `Column.menuColumn`
   (a fold column with no body) whose cell is one `RowMenu`: a borderless 20px handle (`chevron-right`, named
   "Actions for <row>", `--bg-elevated`) on the hovered or focused row (every row on a touch screen) that opens one
@@ -591,10 +1015,13 @@ reviews), then its filters.
   Submit (`send`, accent; never a check, which reads as a status), the review items (Approve `check`, Reject `close`
   danger, Unapprove and Unreject `retry`, Transfer ownership on the review menu's `file` tile), then Delete (`trash`,
   danger) after a separator. No tile sits in the row itself. Pass rows carry the same handle and menu (Open
-  auto-analysis, Open pass, Delete pass).
+  auto-analysis, Open pass, Delete pass). `DataTable` draws `rowActions` as tiles (see "Icon action"). Every action
+  menu item starts with its `ActionTile`; export items show the file-type glyph (`sheet` CSV, `xgrid` Excel, `braces`
+  JSON, `braces-lines` JSON Lines, `picture` SVG, `html-file` HTML) (Q01 A). A menu item shows the `external` Icon
+  only when it opens a new tab. No open action beside a name or a row that already opens the same page (Q07 B).
   **Keyboard** (`singleTabStop`, the runs table, C089): the rows are one Tab stop (the grid pattern): arrows and j/k
   move between rows, Enter opens, F2 moves focus into the focused row's links and buttons (Tab walks them) and Escape
-  returns to the row. The first Tab into the table shows a `Skip to pagination` button at its top start (hidden until
+  returns to the row. A focused row draws one closed 2px accent ring inside its edge. The first Tab into the table shows a `Skip to pagination` button at its top start (hidden until
   focused). A cell keeps `--space-xs` of block room inside its clip, so a control's full 2px focus ring shows (C090). Wide
   tables expose only the persistent mirrored horizontal scrollbar rail (never both native and mirror), which is the
   overflow cue. Below 640px tables that declare
@@ -617,9 +1044,26 @@ reviews), then its filters.
   frozen column wider than the scroller would scroll away with the content). The header menu has Freeze / Unfreeze, Move left / right / to start, Hide, and
   `Alt+Shift+Arrow` moves the focused header. Layout (order, pins, widths, hidden, density) is one object saved under
   `qym:data-table:v2:<storageKey>:<userId>`; an unscoped layout is adopted once. Handles and freeze toggles hide under 640px.
+  **Cells.** Progress is `ProgressCell`: bar, done/total, a red count tag for failures (not on a Failed row). A
+  per-row setting shows as a Tag with a pencil tile that turns it into an inline `Select` (Members role, Access level);
+  no `SegmentedControl` in a table row.
+
+- **Grouped table and table toolbar** (cv4 B5, C2-1, C2-8): a grouped table draws each group as an ordinary row, with
+  the stripe and hover of every row; a click anywhere on the group row, or Enter, opens or closes it, and the chevron
+  stays as the keyboard toggle; group rows have no fill of their own. A table toolbar is one row in this order: the
+  search box, the toggles and selects (each select with its label inside, `triggerVariant="bar"`), the count, and
+  Export at the right end.
+
+- **Report tables**: a raw table or div grid inside a report section (Trace statistics, Categories Compare, Averages,
+  Step latency, sweep tables, experiment View as table, run Step timings) uses the `DataTable` header recipe and the
+  report stripe; numbers are centred; no row lines. A short list of choices (launch environments) uses the table stripe
+  on every second row and no row lines.
+
+- **Show more**: one neutral sm `Button`, centred under the list, "Show N more" / "Show fewer"; tags in a row use the
+  "+N more" count tag (Q02 C, Q49 C).
 
 - **Filter bar** (`features/runs-list/FilterBar`, `MultiSelect triggerVariant="bar"`, toolbar `rows` slot): row 1 is search,
-  Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint when active),
+  Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, the dot its own flex item with the same gap on both sides (cv5 Y13), accent tint when active),
   `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset, User, Version)
   and, right after them, one `× Clear n` in the danger tone, the count on its own red disc. There is no chip line (round 8: each trigger already names
   its value, and the status-bar sentence lists every filter). The table controls (Select, Columns, Density) centre on
@@ -632,6 +1076,14 @@ reviews), then its filters.
   rows (round 10): the count (or Cohort A, locked, and Cohort B, green once it balances A), then Compare, Cohort,
   Submit, Delete and Clear, each a visible button with its icon, the ready action green, then `Done selecting` and the
   guidance. The score columns are the metrics of the filtered runs, so a filter drops the scores none of them has.
+  The red `× Clear n` is `ui/ClearFiltersButton`; a single-value filter is `Select triggerVariant="bar"`; a checkbox
+  never filters a list. Every list filter bar (runs, experiments, queue, feedback, trash, admin runs, dataset items,
+  live turns, worker problems, reviews) follows the two-row recipe; Live turns uses the same facet triggers. A filter
+  with its own fields (Metric bounds, Service status) expands them in place in a row under its trigger, applied on
+  change; no popover and no Done button. A day picker expands in place after its trigger, as the runs Range does; no
+  popover. Who made an item (Mine, "Created by") and item state are filters, never a switch (Q56 A); a switch stays
+  only for a time range or a source. A two-state scope (item state) is a filter button with every value ticked by
+  default, counts centred in boxes; no segmented switch.
 
 - **Project dashboard** (`features/runs-list/OverviewPage`, round 10): the KPI band, the Trend card, then two panels of
   parts with one hairline between them: Live runs over Recent runs, and Pending reviews beside Approved runs. A run is
@@ -656,11 +1108,18 @@ reviews), then its filters.
   `[data-mark][data-series]` of another series dims. Encodings: scores take bands (`bucketTone`), outcomes pass = band 5,
   fail = band 1, task error = an open `--error` ring on the axis, latency bulk is `--bg-active` and only the tail is
   `--score-3` (p90) and `--score-2` (p95), series come from `--chart-1..8`. A scatter shows two faint quadrant washes
-  (fast and passing, slow and failing) and a legend with the same swatches. Hit areas are at least 24px.
+  (fast and passing, slow and failing) and a legend with the same swatches. Hit areas are at least 24px. No native SVG
+  `<title>` for a value; every chart hover box is `TipBody` (title, label/value rows, optional hint). An empty chart
+  card keeps the plot height and centres an `EmptyState` title and one sentence (no layout jump). A latency bar is one
+  flat colour; the percentile strip is blocks, never a blend. A heatmap cell with no value is empty with a muted dash;
+  "no data" is never the loudest cell.
 
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
-  `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
-  of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`, round 5 R1 "well and foot"): each bucket is a
+  `ChartCard` (a `Card fill` that opens with a `CardTitle`: title left, then meta, legend and the card's own controls
+  right; a plot slot of at least 146px that grows with a stretched grid row). **Card header (cv4 C2-3, X1, X16):** the
+  title, its caption directly below; the controls at the end of the title row, a legend at the end of the caption row;
+  no rule under a chart card header (the title row is the first line of the card body). A legend sits in the card header at the end, before the
+  card controls; a date window sits muted after the title. Bars use one column recipe (`BarColumns`, round 5 R1 "well and foot"): each bucket is a
   two-row grid, the well (flex column `[spacer][count][bar]`, the spacer taking `1 - p` and the bar `p` of the free
   height, `--p` = count / max) and a foot of one constant height per plot (`--foot` = 4px + 14px per line: axis label,
   optional note and sub line). The well's bottom border (1px `--border-default`, bridged across the 4px gaps) is the drawn
@@ -688,9 +1147,10 @@ reviews), then its filters.
   overlay in tab order. Rows (`BoxTrack`) draw the same glyph per pass and per step. Box plot cards flow in their own grid rows under the
   histograms (`slot="box"`: 80px plot, no 146px minimum).
 
-- **Categories** (run detail, round 10): a control row (a `SegmentedControl` Cards | Compare, stored in
-  `?category_view=`, Cards by default; the metric and its overall average; one Sort button, worst first by default,
-  that orders both views). **Cards** shows up to three keys at first (the widest spread first), turned on and off with
+- **Categories** (run detail, round 10, cv4 C2-4 to C2-6, Y4): a control row (a `SegmentedControl` Cards | Compare,
+  stored in `?category_view=`, Cards by default; in Cards the key checkboxes, each key's value count a `CountTile`, then
+  the "Overall average" tick key directly after them); both views list values best first; no sort button and no
+  "overall N%" text. **Cards** shows up to three keys at first (the widest spread first), turned on and off with
   checkboxes (never pills); each key is a title and a grid of value cards: the value name in its band colour, Average,
   Items and Latency, and a 6px bar with the overall-average tick; a card toggles the item filter (accent outline when
   on). **Compare** ranks one key, chosen with a `SegmentedControl` "Category" (up to 5 keys that fit the column,
@@ -709,43 +1169,60 @@ Recipes that exist only on the run report. They compose the primitives above and
   a popover, C027; there is no Review history card and no Reviews nav link) and actions ("Compare with reference" in
   accent when the run has a reference, C034; one neutral "Actions" menu that holds the review action for the viewer's
   role first, Export HTML, Transfer ownership and Delete in red, each item with its `ActionTile`; the pager; all 24px).
+  The same neutral "Actions" menu is the header menu of every page and bar (dataset, auto-analysis rail, launch
+  wizard). The experiment header follows the run header: the main action and Actions sit at the end of the title row.
   A stop reason, or a rejected run's reject comment (C047), is one muted line under it. Band 2
   seven labelled facts (`dl`, 7 / 4 / 2 columns by column width), every value at the tag height and 600 so plain values sit
-  level with tagged ones; the model tag carries the model recipe (series dot and tint). Band 3 `KeyValueTag` chips (24px
-  passive key / value, key at most 20 characters, value at most 30) in the groups Versioning, Config, Metadata, clamped to
-  two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`). The card is the first qym's: a 2px
+  level with tagged ones; the model tag carries the model recipe (series dot and tint). Each fact column is as wide as
+  its content; when the row is too narrow a value wraps inside its column, never cut. Band 3 `KeyValueTag` chips (24px
+  passive key / value; the key is capped at 20 characters and the full value wraps inside the chip, never cut, C-25) in the groups Versioning, Config, Metadata. Closed,
+  the band shows the first row of chips; hidden setting tags show a "+N more" count tag (`MoreTag`) with
+  `chevron-down` that opens the grid in place (Q02 C; `qym:run-hero-more`). Open, it is one grid: the group labels in
+  the first column and, beside each, a dense 4-column `KeyValueGrid`, every group's values at the same x; a neutral
+  "Show less" button with `chevron-up` ends the band. The card is the first qym's: a 2px
   accent gradient along the top edge (accent, secondary, tertiary, fading out) and a faint accent wash from the top-left
   corner; no status rail.
 
-- **Overview cards** (round 10, the first qym's card; C012): a 40px score ring in the band colour (or plain pass/fail
-  where a threshold applies, C220) and the mean, the metric name under them, the scored count ("N scored", no error
-  count) at the top end, then one full-width line with the error note (a warning glyph and "3 task errors counted as
-  0%") and the key of the hatch the bars draw for errored items, then the plot. Task-errored items count as 0, as
-  declared: an empty `pass_scores` is a plain item row, not a repeat aggregate. No header band, no side rail. Three cards to a row at 1440. A plain
-  number (a numeric metric, tokens per item when the traces carry tokens) is the same frame with the mean, "mean per
-  item", a Total · Min · Median · Max line and the box plot. Cost per item is not shown (a default every attempt reports).
+- **Run page filters**: the run page has one clear control, the red `× Clear n` (`Clear`, then the
+  count on its red disc) in the sticky nav; tags and notices below it have no clear of their own.
 
-- **Repeat run analysis** (round 10, the first qym's order): the page metric and the Pass if threshold (an inline
-  `Slider`: dark thumb with an accent ring that glows on hover, the value in the accent), the stat tiles, the By pass
-  table, then the "Repeat performance" subsection: Performance across attempts (Compare / Pass@k / Pass^k / Average,
-  Chart | Table; a line-sample legend with "95% CI" under the head; every point labelled when the plot is at least 640px;
-  y in fifths; "Attempts allowed") beside Pass distribution (one description line, no caption). **By pass** is a
-  `DataTable` with `hoverEdge` (the row under the pointer draws an accent edge), nothing resizable: Pass (a dot and the
-  pass, a link), every metric (the page metric first) centred with a fixed 44px slot for its best / worst tag, ⚡ Avg
-  latency, ⚡ Median latency, Errors (red above 0), Items. The per-pass score spread lives in Deep analysis, "Across
-  passes".
+- **Overview cards** (cv4 C1-3, C1-4, Y9; the first qym's card): one anatomy for every card. Title row: the metric name
+  as the `CardTitle` (it wraps and is never cut), the count Tag ("N scored", "N items") and, for a box plot, the help
+  marker at the end. Number row: a score's 40px ring and mean at `--font-stat` in its band colour (plain green or red
+  against a pass threshold) with the plot's hatch key ("Errored items") at the row's end; a plain number's mean at
+  `--font-stat` in the box plot's tone (`--chart-1`) with the key "◇ mean per item". Then the plot: a histogram, or a
+  strip of equal columns (Total, Min, Median, Max) with hairlines over the box plot. Foot: a hairline, then the error
+  note; when one card of a grid has a note, every card of that grid keeps the foot line, so the plots stay level. When
+  every score card has the same note, the note and the hatch key show once, in one line under the grid, and the cards
+  have no foot (cv4 Y9). Task-errored items count as 0, as declared. No header band, no side rail. Cost per item is not
+  shown.
+
+- **Repeat run analysis** (round 10, cv4 C1-5 to C1-7, Y13): the stat tiles, the By pass table, then the "Repeat
+  performance" subsection: Performance across attempts (Compare / Pass@k / Pass^k / Average, Chart | Table; a
+  line-sample legend with "95% CI" under the head; every point labelled when the plot is at least 640px; "Attempts
+  allowed") beside Pass distribution. No metric or "Pass if" readout under the title (the sticky nav holds both). The
+  y axis fits the shown series and their band (`curveAxis`: 15% margin, 1/2/5 steps, clamped to 0 to 100%; fifths of 0
+  to 100% when the curves cover 60% of the range or more), so a narrow band does not look flat. **By pass** is a
+  `DataTable` with `hoverEdge`, nothing resizable: Pass (a dot and the pass, a link), every metric (the page metric
+  first) centred, Avg latency, Median latency (`zap` Icon), Errors (red above 0), Items. The best value of each metric
+  column has a `--success` tint (`--tint-soft`) behind it and the worst an `--error` tint, with no word; passes compare
+  on the shown, rounded value, so every tie is tinted (cv4 Y13); a title and a hidden word keep the meaning for screen
+  readers. The per-pass score spread lives in Deep analysis, "Across passes".
 
 - **Deep analysis** (round 10; C221, C167 Nov 1): "Between metrics", the correlation matrix beside the relationship
   scatter from 1000px of column; the scatter's X and Y pickers and r sit in its head, its legend on its own row under the
   head. The matrix is a heatmap of strength only: one `--chart-1` ramp by |r| on a fixed 0 to 1 scale (strength is
   neither good nor bad, and teal and purple are not data), the sign in the number (+0.20, −0.15), a blank diagonal, and
   a small "|r| 0 to 1" key under it. The scatter fits both axes to the data with 5% padding (a threshold line, when the
-  chart draws one, stays inside). For a repeat run, "Across passes": the page metric's box per pass.
+  chart draws one, stays inside). For a repeat run, "Across passes": the page metric's box per pass, on an axis fitted
+  to the passes' whiskers with `curveAxis` (margin, clean steps; the full 0 to 100% only when they cover 90% of it, cv4
+  Y7), so the boxes do not sit in one half of the plot. Both Deep cards follow the card header recipe.
 
-- **Errors** (round 10): one group per kind (Task, Metric, Trace, Analysis): a 24px icon tile and the title in the kind's
-  colour (`--error`, `--metric-error`, `--warning`, `--accent-tertiary`), its total, and one muted line on what the kind
-  means for the numbers; then message cards in a grid (no table, no sideways scroll): the message and its detail, the
-  count in `--font-xl` mono in the kind's colour with "errors · N items", and a 4px bar of its share of the kind. A card
+- **Errors** (round 10, cv4 C2-7, X1): one group per kind (Task, Metric, Trace, Analysis): a 24px icon tile, then a
+  `CardTitle` with the kind in its colour (`--error`, `--metric-error`, `--warning`, `--accent-tertiary`) and its
+  total, and the meaning for the numbers as its caption; then message cards in a grid (no table, no sideways scroll):
+  the message and its detail, the count in `--font-xl` mono in the kind's colour (no "errors · N items" subtext; the
+  item count is in the hover text), and a 4px bar of its share of the kind. A card
   toggles the item filter (`aria-pressed`, an outline in the kind's colour).
 
 - **Items table header and ItemBar** (round 3 P4): the column header sticks at the sticky line only over collapsed rows. For an
@@ -756,7 +1233,7 @@ Recipes that exist only on the run report. They compose the primitives above and
   the hook writes `--head-shift` on the bar itself (a custom property is inherited: written on the item it restyled every descendant on every
   scroll event), and the bar is its own layer only while it is shifted (round 7, D1).
 
-- **Items table columns** (review group R2): #, Status (a `StatusMark`, no tinted pill), Input, one 120px centred score
+- **Items table columns** (review group R2): #, Status (the item result as a `StateTag`), Input, one 120px centred score
   column per metric (page metric first), Latency, then the open-trace action: a green action tile (`IconButton tile`) with
   the `trace` glyph and the tooltip "Open trace", in a normal last column that scrolls with the table (not pinned, C230).
   There is no Reason column (C017). The `list` glyph is for filters only; the compare output cards' Trace button uses
@@ -795,17 +1272,23 @@ Recipes that exist only on the run report. They compose the primitives above and
 
 ### 3.7 Loading, empty and failed states
 
-**Confirm dialogs (C146).** One rule by risk: type the name for a permanent loss (delete a project or a dataset);
-one click for a change that can be undone (a deleted run goes to Deleted runs); a named confirm for a change that
-others use ("Delete the environment “prod”?"). Every confirm title is a question. There is no Undo toast (the owner
-rejected it for runs, C099).
+**Confirm dialogs (C146).** One rule by risk: type the name for a permanent loss (delete a project) and for a whole
+dataset (the one restorable exception, Q57 A); one click for a change that can be undone (a deleted run goes to Deleted
+runs; a draft item; a version an admin can restore); a named confirm for a change that others use ("Delete the
+environment “prod”?"). Every `ConfirmDialog` has a question title. A dialog that asks for a decision (reject, publish,
+backfill, save as preset) also has a question title; a form dialog that creates or edits keeps its action name.
+Unsaved changes: one dialog everywhere, "Discard unsaved changes?", buttons "Keep editing" and "Discard changes".
+There is no Undo toast (the owner rejected it for runs, C099).
 
 **One pattern per state (C018, C156, C059, C182, C181).** A failure names its cause (`ErrorState` shows the cause for
 every kind). A missing thing reads "<Thing> not found" (`notFoundTitle`), one sentence of cause and one link to its
-parent list (`parent`), with no HTTP line and no Retry; a load failure is titled "Couldn’t load <thing>". Error titles
+parent list (`parent`), with no HTTP line and no Retry; a not-found shows a dim icon above the title and a grey
+back-arrow link to its parent list, never a code or request line. A load failure is titled "Couldn’t load <thing>"; a
+`DataTable` with an error always names the thing (`errorTitle`). Error titles
 use "Couldn’t", never "Could not", "Unable to" or "Failed to". A table never shows its empty state while its query is
 pending (`tableLoading`), and an unknown count is not zero: no tab count, '–' in a line. An empty state or a settings card
-with a docs page carries a "Read the guide" link (`guide`). A failed write is one plain sentence
+with a docs page carries a "Read the guide" link (`guide`); the link of an `EmptyState` ends with the `chevron-right`
+Icon (Q43 A). A failed write is one plain sentence
 (`actionErrorMessage`, `errorSentence`: "Couldn’t save the rules. The server had a problem. Try again."), never the
 browser or server text as is, and a 422 lands on its field (`fieldErrorsOf`; `FormDialog` does it).
 
@@ -813,7 +1296,13 @@ browser or server text as is, and a 422 lands on its field (`fieldErrorsOf`; `Fo
   after the pending delay (`useDelayedPending`, 300 ms) and respects
   `prefers-reduced-motion`. `EmptyState` is for a successful empty result only:
   glyph icon in `--text-dim`, low opacity, title `--font-xl` / 650 / primary,
-  body `--font-md` / muted, line-height 1.5 or more.
+  body `--font-md` / muted, line-height 1.5 or more. Action buttons sit in one centred row with `--space-sm` between
+  them. A table, card, run section or Live tab with nothing is a compact `EmptyState` title (no icon) centred in its
+  body. An empty title never ends with a full stop. Filtered to nothing: "No <things> match these filters"; searched
+  to nothing: "No <things> match “query”". A filtered empty list shows one title and no action: no button in the
+  table, the red `Clear n` in the filter bar is the one clear. Auto-refreshing lists show the muted toolbar note
+  "Updates automatically"; the runs list footer is the one exception and reads "Last updated <formatAgo>". The
+  experiment Job history card has no toolbar: it keeps the note in its card head (CR-C41).
 
 - **Failed requests** (`ErrorState`, `StaleBanner`): a failed load is never an
   empty or "not found" state. `ErrorState` names the cause (session ended, no
@@ -825,24 +1314,33 @@ browser or server text as is, and a 422 lands on its field (`fieldErrorsOf`; `Fo
 - **Inline notice** (`InlineNotice`, owner note on RF2, Nov 1): one subtle line
   under a page title that says what happened to the object on the page, such as
   a failed or stopped run. A 3px rail and a glyph in the tone (`danger` failed,
-  `warning` stopped), a `--tint-faint` wash, the lead words (`Failed.`,
+  `warning` stopped, `info` (blue) a fact about the current view, `neutral` (grey) a hint), a `--tint-faint` wash, the lead words (`Failed.`,
   `Stopped:`) in `--tone-text` / 600, the rest in `--text-secondary` at
   `--font-sm`. A link to the details (See Errors) ends the line in the tone's
-  text colour. No border box, no title, never a banner or a toast.
+  text colour. No border box, no title, never a banner or a toast. A filter has one Clear: the red `Clear n` of the
+  bar or sticky nav. A stale Live source is one `danger` InlineNotice above the neutral status card (lead `Stale.`),
+  never a red card; the status card then shows no Stale tag (the notice says it with its detail, cv5 Y17). Compare notes are InlineNotice lines (warning, danger, info); no bordered note boxes. `Callout`
+  uses the same recipe (rail, glyph, wash, lead in tone text); there is no bordered callout box. The dataset Note is
+  one line: tone-coloured title, then the reason.
 
 ### 3.8 Colour as information
 
 One colour, one meaning per page. A hue appears as data only in its own encoding; teal (`--accent-primary`) is
-interaction (selected, primary action, link, focus, sort), never data. Colour is never the only cue: bands keep the
+interaction (selected, primary action, link, focus, sort), never data. Teal never colours a data value or a version
+number. Colour is never the only cue: bands keep the
 number and the `Band n of 5` title, deltas keep the arrow and sign, severities keep their glyph (task warning, metric
 cross, trace clock, analysis sparkle), series keep their letter or name.
 
 | Encoding | Meaning | Tokens | Applied through | Rule |
 |---|---|---|---|---|
 | Band | quality of a value | `--score-1..5` | `ScoreValue` (text, pill), `ScoreBar`, `RateBar`, histogram buckets, `Card band`, stat values | direction-aware (`lib/metrics.ts`); a metric with no direction or a raw number stays neutral; an errored value shows Error in `--error` / `--metric-error`, never a band |
-| Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft/archived/disabled, neutral submitted/pending | `StatusMark` (`RunStatusBadge`) | the pixel figure's shape is the non-colour cue; running is the orbit figure |
-| Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts |
-| Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` | 3px rail, glyph, title colour | rail and glyph, never a filled card |
+| Status | step of a run, job, review, version | `--accent-secondary` working now, `--warning` a person is involved (waits: hourglass; stopped or cancelled: pause; draft: dot), neutral not started (ring) or paused by the system (pause), `--success` ended well, `--error` ended badly | `StatusMark` (`RunStatusBadge`) | the pixel figure's shape is the non-colour cue; running is the orbit figure |
+| State | condition now or result of a check | `--accent-secondary` active now (Running, Live, Checking), `--success` good, `--warning` needs a look, `--error` bad, neutral unknown or none | `StateTag` | tinted Tag, no figure; a boolean score is the Pass (success) or Fail (danger) `StateTag`, never coloured True/False words |
+| Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts; a delta in a table is a sign and an arrow in text, never a pill; item counts in the compare Averages cell use chevron Icons in the verdict colour (`--success` / `--error-text`), not typed arrows, and a change within the noise band shows no glyph there; relative latency is coloured words, +12% slower (`--error-text`) / −8% faster (`--success`), 2% or less muted, no arrow |
+| Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` (`--info` is the same blue as `--accent-secondary`: one blue) | 3px rail, glyph, title colour | rail and glyph, never a filled card; severity is a status mark in a table cell and a glyph before an inline tag; a category is never tinted by severity |
+| Kind (latency) | which kind of step | `--k-*` map to `--chart-N`: LLM sky (1), Eval pink (2), Retrieval amber (4), Agent lime (6), Guard cyan (7), Other slate (8); Tools orange (`--warning`) | latency kind marks | never teal, purple or a score colour; purple is not a kind colour |
+| Verdict (Live diagnosis) | how a Live answer was judged | Correct `--success`, Partially correct `--warning`, Wrong `--error` (danger); Refused `--text-muted`, Unanswerable `--text-dim` (solid) | diagnosis labels and charts | Live diagnoses are verdicts; the ingest spec tone is not a colour; hatch = worker gap only |
+| Priority | how urgent a request is | Low neutral, Medium `--warning` (orange), High and Critical danger | Level tag | one priority scale |
 | Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is sky blue (teal is reserved for selection, links and the primary action), never relied on alone |
 | Definition metadata | what was run | `--accent-tertiary` (purple) | `Tag kind=task|version|config`, `KeyValueGrid kind` | purple is only this, and the auto-analysis entry points (Analyze, N causes, Open auto-analysis), which keep their purple (owner decision, Nov 1) |
 
@@ -858,7 +1356,8 @@ and `data-series` (1 to 8) to `--tone` and `--tone-text` (the AA-safe text varia
 `--accent-tertiary-soft` for meta). A primitive then writes one rule:
 `background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent); color: var(--tone-text);`. The tint steps are
 `--tint-faint` 6% (row or card wash for danger and live only, and the inline notice), `--tint-soft` 12% (Badge, Tag, Chip selected, pill, icon
-tile), `--tint-strong` 20% (hover or pressed on a tinted fill, selected pill). No raw `rgba()` outside `tokens.css`
+tile), `--tint-strong` 20% (hover or pressed on a tinted fill, selected pill). `--tint-gold` (17%, under
+`--role-admin`) is the one admin exception: the admin role Tag only. No raw `rgba()` outside `tokens.css`
 (scrims and scrollbars are tokens). At most one tint fill per row-height region (row action tiles excepted: each action is its own tile); never zebra-tint; a card inside a card
 is not allowed.
 
@@ -890,9 +1389,38 @@ page-wide totals between the hero and the tabs; it is the same on every tab, so 
 (admin; tab-specific numbers belong in that tab's content). Constrained pages (settings,
 admin, projects, overview, models) use the `constrained` container, capped at
 `--page-max-w` (1233px, the width the report pages fill at 1440), from
-`@/features/shell/layout`; a text-first page (profile) asks for `narrow`
-(`--page-narrow-w`). Data-dense pages (runs, charts, datasets, compare) use
-`fullWidth` with their own layout. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
+`@/features/shell/layout`. Every page uses one frame: 20px top and side padding. Constrained pages are capped at
+`--page-max-w` and centred in the content area (cv4 F1, owner 2026-11-12, reverses E-42 "start at the left edge"): on a
+screen wider than the cap the free space is equal at both sides. A feature does not set its own `margin` on a
+constrained page. Profile is a constrained page. Data-dense pages (runs, charts, datasets, compare) use
+`fullWidth` with their own layout. Auto-analysis with a run open, viewport ≥ 1500 px, is one stable workspace with a
+side pane (cv5 K3, Z11): `fullWidth`, two columns on every tab, the tab content at `minmax(0,1fr)` and the prompt pane
+at 36% up to 760px, with a `--space-lg` gap. A splitter in the gap (cv5 Q3, owner: "a size slider between it and the
+main section") sets the pane width: `role="separator"`, pointer drag, Left / Right 16px (Shift 64px), Home / End to the
+limits, double click or Enter back to the default; the `ui/SplitPane` look (an accent line on hover, drag and focus),
+with a short `--border-strong` grip at rest, sticky with the pane and as tall as it. The pane keeps at least 440px and
+the tab content 600px (the grid clamps a remembered width). The width is the person's (`localStorage
+qym:analyzer-pane-width`) and one value for the four tabs; the shell owns it, so a tab change never moves the pane. The pane column belongs to the page shell, so a tab change never
+moves, remounts or scrolls the pane, and the header and the tabs never move. Categories, rules and documents are part
+of the prompt: a save on a guidance tab reloads the pane, which marks the change. On the Rules tab a draft adds one
+quiet line under the pane's target ("The prompt uses the production rules (vN). A draft changes it when you
+publish."), not a banner. Before the run loads, the pane column holds a placeholder pane, so the columns do not move.
+No run open (the project guidance page) or a narrower screen: centred page, no pane, prompt preview in the drawer. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
+
+- **Title and path.** The page title is the page name that the last crumb shows (Dashboard). Project settings is the
+  one sanctioned exception: it shows the project name (30-05b). Tabs of one page share one crumb parent: Experiments,
+  Queue and Environments all read Project › Experiments › <tab>. An item or turn page ends its path with the object id
+  that its title shows; the parent before it is a link. A turn page title is "Turn <id>"; the user question is the
+  description line.
+- **Actions.** An object page puts its actions at the end of the title row (run, experiment). A page action shows
+  once, in the page header; a card does not repeat it. Compare page: the export action sits at the end of the title
+  row; page controls (Compare | Sweep, Baseline) sit in one toolbar row under the meta line. Editor pages and the empty
+  Compare page keep one back control: a neutral `LinkButton` with the `prev` Icon (Q28 A, see "Back button"). Other
+  pages use the breadcrumb.
+- **List pages** put search and sort in a toolbar row above a table. A card grid page puts its search in the
+  `PageHeader` actions, immediately before the primary action (cv4 F15 replaces 25-03 / Q65 A for card grids).
+- **Spacing.** A page that stacks blocks with a flex gap sets the `PageHeader` margin to 0, so one gap separates the
+  header from the content.
 
 Styles live in the page or component's CSS Module next to its `.tsx`, built from
 tokens and primitives. Class names are local (CSS Modules), so no prefixing is
@@ -983,8 +1511,10 @@ rules for any future surface, not for the pages that taught them.
   boundary's extent equals its owner's box.
 - **A hover that turns text green adds no underline** (round 8). The colour step is the hover cue (run names, pass
   and chart row links, compare rows). Running-text links, which are green at rest, keep the hover underline (base.css).
+  A name or id that opens a page uses `a[data-link="name"]`: white at rest, green on hover, no underline (Q35 A). No
+  `--accent-secondary` (blue) link anywhere. A green link (View all) takes `--accent-primary-hover` on hover.
 
-- **Nothing decorative where a glyph or a word will do** (round 8). Status is a `StatusMark`, not a pill; a filter's
+- **Nothing decorative where a glyph or a word will do** (round 8). A step is a `StatusMark` and a condition or result a `StateTag` (see "Which style shows a state"); a filter's
   value is written on its trigger, not repeated as a chip line; a score in a table is its number, not a bar; a project
   mark sits flush on its surface (the `Identicon` chip has no fill of its own); a three-dot menu glyph is drawn with
   4-unit dots so it is legible at 14px.
@@ -994,7 +1524,8 @@ rules for any future surface, not for the pages that taught them.
   Long names break at their words (a soft break after `_`, `-` and `.` and before a camelCase capital), with
   `overflow-wrap: anywhere` only as the fallback for a single very long word. Data is shown as written: no
   `text-transform` on a key or value (uppercasing a camelCase key hides its word boundaries); eyebrow styling is for
-  fixed UI labels only. Criterion: `scrollWidth <= clientWidth`, computed `text-overflow` is not `ellipsis`, rendered text
+  fixed UI labels only. A key shown to people goes through its label map or `humanizeKey`. A run setting value wraps
+  inside its tag; it is never cut with an ellipsis. Criterion: `scrollWidth <= clientWidth`, computed `text-overflow` is not `ellipsis`, rendered text
   equals the source string.
 - **Text does not give up width to controls.** In a row that holds a name and its actions, the name has a non-shrinking
   basis and the actions wrap under it when the row is narrow; `min-width: 0` goes only on the element that is meant to
@@ -1002,7 +1533,8 @@ rules for any future surface, not for the pages that taught them.
   first. Criterion: 0 px of overlap between the painted text of any two siblings; a value starts after its key's last line.
 - **A loading frame is the loaded layout.** Placeholders render the same DOM as the loaded state with skeleton values, and
   their count follows the data (the number of rows that will arrive), not a cap. A frame that is "about the right height"
-  shifts at some width or some count. Criterion: the container's height at the placeholder frame equals its height at
+  shifts at some width or some count. A loading frame never shows invented values (FB-0000, —) or Loading words; it
+  draws `Skeleton` shapes in the loaded layout. Criterion: the container's height at the placeholder frame equals its height at
   the loaded frame, 0 +- 1 px, at every width and at the largest realistic count.
 - **A request returns what its view renders.** A lightweight component never shares the request path of an expensive
   derived analysis; a `view=` parameter or a separate route serves the subset, the full computation stays on the surface
@@ -1026,7 +1558,7 @@ rules for any future surface, not for the pages that taught them.
   Criterion: bar bottom = axis y at 0 px for 1 to 20 buckets; row height identical with and without the optional part.
 - **Fill the container.** A visual inside a fluid card spans the card; fixed pixel widths and heights belong to tokens
   (row heights, bar heights), not to charts or grids. A row of controls uses one control height and aligns its items on
-  the centre line. Criterion: chart width = card content width at every width from 1440 to 390; control spread = 0.
+  the centre line. Buttons in a row are 8px apart. Criterion: chart width = card content width at every width from 1440 to 390; control spread = 0.
 - **The default view is the primary content.** A tab set, a drawer or a detail opens on what the user came for (the
   content, not its metadata; the item, not its settings), and a remembered choice never promotes a secondary tab to the
   default. Criterion: the first painted tab after navigation is the content tab, regardless of stored state.
@@ -1035,6 +1567,19 @@ rules for any future surface, not for the pages that taught them.
   question once. When a defect cannot be reproduced in the test environment (a trackpad fling on a compositor thread in
   headless Chromium), the spec says so, fixes the structural cause anyway, and the reviewer verifies on the owner's
   device rather than closing the point on a measurement that could not fail.
+
+- **A control the user needs on every step appears on every step.** Optional controls are disabled in place; a bar that gains
+  buttons on some pages is read as a different page (owner QA 2026-10-28, point 3). Criterion: the part count of the bar is
+  identical on every step. The step bar's primary slot changes its label, never its position: Continue on every step, the
+  launch or publish on the last. A launch shortcut on earlier steps is not a control the user needs on every step (owner
+  2026-11-03; round 10: Skip to review and Cancel at the far left, Back and the primary slot at the far right).
+- **A step shows its own content only.** The summary and the launch decision live in the bar (run count, first problem) and on
+  the Review step; a review card under an unrelated step is a layout workaround, not a design (owner QA 2026-10-28, point 4).
+  Criterion: the review exists on the Review step only; the other steps use the full column width.
+- **Facts in cells, not sentences.** A list of runs is a table with one fact per cell (`#`, environment, dataset, one column per
+  swept setting, task, priority), and a column that carries one value for every run is not drawn. A swept setting's column is
+  named as the form names it; a value is the value the user picked (a connection's name), never a platform abbreviation
+  (round 10, owner 2026-11-03). Criterion: one row per run, 0 disclosures.
 
 ---
 

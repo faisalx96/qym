@@ -1,5 +1,6 @@
 /** Per-run averages (matrix) and the trace statistics table. */
 import { useMemo } from 'react';
+import { Icon } from '@/ui';
 import { formatLatency } from '@/lib/metrics';
 import { useCompare } from '../../CompareContext';
 import { columnName } from '../../lib/columnName';
@@ -70,7 +71,12 @@ function TraceStatsTable() {
                       title={v !== null && v === starred && valid.length > 1 ? 'Best across runs' : undefined}
                     >
                       {v === null ? '—' : fmtTrace(v, r.format)}
-                      {v !== null && v === starred && valid.length > 1 ? ' ★' : ''}
+                      {v !== null && v === starred && valid.length > 1 ? (
+                        <>
+                          {' '}
+                          <Icon name="star" size={12} />
+                        </>
+                      ) : null}
                     </span>
                   </td>
                 ))}

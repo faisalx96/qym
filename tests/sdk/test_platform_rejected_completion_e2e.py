@@ -14,8 +14,6 @@ import asyncio
 import io
 import json
 import os
-import sys
-from unittest.mock import MagicMock
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
 
@@ -34,8 +32,6 @@ from qym.platform import client as client_module
 from qym.platform.client import PlatformEventStream
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
 from qym_platform.db.base import Base

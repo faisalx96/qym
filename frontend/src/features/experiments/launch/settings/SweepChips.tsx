@@ -4,7 +4,7 @@
  * axes of the Sweeps section.
  */
 import { useId, useState } from 'react';
-import { Button, Icon } from '@/ui';
+import { Button, Icon, TextField } from '@/ui';
 import { plural } from '../../lib/format';
 import {
   addSweepValues,
@@ -141,16 +141,16 @@ export function SweepChips({
             <p className={styles.hint}>No values yet</p>
           )}
           <div className={styles.sweepRow}>
-            <input
-              className={[styles.control, styles.sweepInput].join(' ')}
-              data-mono={numeric ? '' : undefined}
-              type="text"
-              spellCheck={false}
+            <TextField
+              className={styles.sweepInput}
+              label={`Add values to ${label}`}
+              hideLabel
+              mono={numeric}
+              spellCheck="false"
               inputMode={numeric ? 'decimal' : undefined}
               placeholder={numeric ? 'Add values: 0.5, 0.7' : 'Add a value'}
-              aria-label={`Add values to ${label}`}
               value={typed}
-              onChange={(e) => setTyped(e.target.value)}
+              onChange={setTyped}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -179,17 +179,17 @@ export function SweepChips({
           {numeric && range.open ? (
             <div id={`${id}-range`} className={styles.sweepRow}>
               {(['start', 'stop', 'step'] as const).map((k) => (
-                <input
+                <TextField
                   key={k}
-                  className={[styles.control, styles.rangeInput].join(' ')}
-                  data-mono=""
-                  type="text"
+                  className={styles.rangeInput}
+                  label={`${k[0]?.toUpperCase() + k.slice(1)} of the range for ${label}`}
+                  hideLabel
+                  mono
                   inputMode="decimal"
-                  spellCheck={false}
+                  spellCheck="false"
                   placeholder={k[0]?.toUpperCase() + k.slice(1)}
-                  aria-label={`${k[0]?.toUpperCase() + k.slice(1)} of the range for ${label}`}
                   value={range[k]}
-                  onChange={(e) => setRange((r) => ({ ...r, [k]: e.target.value }))}
+                  onChange={(v) => setRange((r) => ({ ...r, [k]: v }))}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();

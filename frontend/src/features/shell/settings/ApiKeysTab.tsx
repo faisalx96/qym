@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { experimentPath } from '@/features/experiments/paths';
 import {
@@ -14,21 +14,23 @@ import { ApiError } from '@/lib/http';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
+  Card,
+  type Column,
   ConfirmDialog,
   DataTable,
+  Disclosure,
   ErrorState,
+  Flag,
   RelativeTime,
   Skeleton,
   Stack,
-  StatusMark,
   Tag,
   Text,
   TextField,
-  useToast,
-  type Column,
-  Card,
+  TextLink,
   TwoLine,
   UserName,
+  useToast,
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
@@ -36,9 +38,31 @@ import { EXPERIMENT_DELETED } from './copy';
 import { SecretRevealDialog } from '../dialogs';
 import styles from './settings.module.css';
 
-/** On/off state of a key or token: only the exception shows, after the name (no Status column). */
+/** Rows of the main table and of the closed group under it, split by `isGrouped`. */
+function splitRows<T>(rows: T[] | undefined, isGrouped: (row: T) => boolean) {
+  const own: T[] = [];
+  const grouped: T[] = [];
+  for (const row of rows ?? []) (isGrouped(row) ? grouped : own).push(row);
+  return { own, grouped };
+}
+
+/** The closed group of platform-issued credentials; nothing when the project has none. */
+function IssuedGroup({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  if (count === 0) return null;
+  return (
+    <Disclosure title={title} summary={`${count} · issued at launch, revoked when the experiment settles`}>
+      {children}
+    </Disclosure>
+  );
+}
+
+/** On/off state of a key or token: only the exception shows, a grey Flag after the name (no Status column). */
 function RevokedMark({ at }: { at: string | null | undefined }) {
-  return at ? <StatusMark tone="warning" shape="pause" label="Revoked" data-status="revoked" /> : null;
+  return at ? (
+    <Flag icon="ban" data-status="revoked">
+      Revoked
+    </Flag>
+  ) : null;
 }
 
 export function ApiKeysTab() {
@@ -70,6 +94,8 @@ function KeysCard({
   const [name, setName] = useState('');
   const [secret, setSecret] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<ApiKey | null>(null);
+  const { slug } = useProjectContext();
+  const { own, grouped } = useMemo(() => splitRows(keys.data, (k) => k.kind === 'experiment'), [keys.data]);
   const columns: Column<ApiKey>[] = [
     {
       id: 'name',
@@ -108,6 +134,43 @@ function KeysCard({
       cell: (k) => <RelativeTime iso={k.created_at} />,
     },
   ];
+  const experimentColumns: Column<ApiKey>[] = [
+    columns[0]!,
+    {
+      id: 'experiment',
+      header: 'Experiment',
+      flex: true,
+      minWidth: 140,
+      priority: 1,
+      cell: (k) =>
+        k.experiment_id && k.experiment_name ? (
+          <Link
+            data-link="name"
+            className={styles.tokenLink}
+            to={experimentPath(slug, k.experiment_id)}
+            data-testid="key-experiment-link"
+          >
+            {k.experiment_name}
+          </Link>
+        ) : (
+          <span data-testid="key-experiment-deleted">{EXPERIMENT_DELETED}</span>
+        ),
+    },
+    ...columns.slice(1),
+  ];
+  const rowActions = (k: ApiKey) =>
+    !k.revoked_at && (canManage || k.creator?.id === me.id)
+      ? [
+          {
+            id: 'revoke',
+            label: `Revoke ${k.name || 'key'}`,
+            icon: 'ban' as const,
+            primary: true,
+            danger: true,
+            onPress: setRevoking,
+          },
+        ]
+      : [];
   return (
     <Card
       as="section"
@@ -121,7 +184,7 @@ function KeysCard({
             </Text>
             <Text variant="sm">
               Used by the SDK (QYM_API_KEY) to push runs into this project.{' '}
-              <Link to="/docs/get-started/api-keys">Read the guide</Link>
+              <TextLink to="/docs/get-started/api-keys">Read the guide</TextLink>
             </Text>
           </div>
         </div>
@@ -168,32 +231,36 @@ function KeysCard({
           />
         ) : keys.isPending ? (
           showSkeleton ? (
-            <Skeleton kind="table" rows={2} />
+            <>
+              <Skeleton kind="table" rows={2} />
+              <Skeleton kind="rows" rows={1} rowHeight={34} />
+            </>
           ) : null
         ) : (
-          <DataTable<ApiKey>
-            density="regular"
-            rowActions={(k) =>
-              !k.revoked_at && (canManage || k.creator?.id === me.id)
-                ? [
-                    {
-                      id: 'revoke',
-                      label: `Revoke ${k.name || 'key'}`,
-                      icon: 'ban',
-                      primary: true,
-                      danger: true,
-                      onPress: setRevoking,
-                    },
-                  ]
-                : []
-            }
-            aria-label="API keys"
-            columns={columns}
-            rows={keys.data}
-            rowKey={(k) => k.id}
-            storageKey="settings-api-keys"
-            empty="No API keys yet."
-          />
+          <>
+            <DataTable<ApiKey>
+              density="regular"
+              rowActions={rowActions}
+              aria-label="API keys"
+              columns={columns}
+              rows={own}
+              rowKey={(k) => k.id}
+              storageKey="settings-api-keys"
+              empty="No API keys yet"
+            />
+            <IssuedGroup title="Evaluation Service keys" count={grouped.length}>
+              <DataTable<ApiKey>
+                density="regular"
+                rowActions={rowActions}
+                aria-label="Evaluation Service keys"
+                columns={experimentColumns}
+                rows={grouped}
+                rowKey={(k) => k.id}
+                storageKey="settings-api-keys-experiment"
+                empty="No Evaluation Service keys"
+              />
+            </IssuedGroup>
+          </>
         )}
       </div>
       <SecretRevealDialog
@@ -236,6 +303,10 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
   const [name, setName] = useState('');
   const [secret, setSecret] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<DatasetReadToken | null>(null);
+  const { own, grouped } = useMemo(
+    () => splitRows(tokens.data, (t) => t.kind === 'experiment'),
+    [tokens.data],
+  );
   const columns: Column<DatasetReadToken>[] = [
     {
       id: 'name',
@@ -251,13 +322,16 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
             primary={
               <span className={styles.tokenName}>
                 {t.name || 'Unnamed token'}
-                <Tag data-testid="token-kind-chip">experiment</Tag>
+                <Tag kind="data" data-testid="token-kind-chip">
+                  Experiment
+                </Tag>
                 <RevokedMark at={t.revoked_at} />
               </span>
             }
             secondary={
               t.experiment ? (
                 <Link
+                  data-link="name"
                   className={styles.tokenLink}
                   to={experimentPath(slug, t.experiment.id)}
                   data-testid="token-experiment-link"
@@ -305,6 +379,19 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
       cell: (t) => <RelativeTime iso={t.created_at} />,
     },
   ];
+  const rowActions = (t: DatasetReadToken) =>
+    !t.revoked_at
+      ? [
+          {
+            id: 'revoke',
+            label: `Revoke ${t.name || 'token'}`,
+            icon: 'ban' as const,
+            primary: true,
+            danger: true,
+            onPress: setRevoking,
+          },
+        ]
+      : [];
   return (
     <Card
       as="section"
@@ -364,28 +451,28 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
             compact
           />
         ) : tokens.isPending ? null : (
-          <DataTable<DatasetReadToken>
-            density="regular"
-            rowActions={(t) =>
-              !t.revoked_at
-                ? [
-                    {
-                      id: 'revoke',
-                      label: `Revoke ${t.name || 'token'}`,
-                      icon: 'ban',
-                      primary: true,
-                      danger: true,
-                      onPress: setRevoking,
-                    },
-                  ]
-                : []
-            }
-            aria-label="Dataset read tokens"
-            columns={columns}
-            rows={tokens.data}
-            rowKey={(t) => t.id}
-            empty="No read tokens."
-          />
+          <>
+            <DataTable<DatasetReadToken>
+              density="regular"
+              rowActions={rowActions}
+              aria-label="Dataset read tokens"
+              columns={columns}
+              rows={own}
+              rowKey={(t) => t.id}
+              empty="No read tokens"
+            />
+            <IssuedGroup title="Experiment tokens" count={grouped.length}>
+              <DataTable<DatasetReadToken>
+                density="regular"
+                rowActions={rowActions}
+                aria-label="Experiment tokens"
+                columns={columns}
+                rows={grouped}
+                rowKey={(t) => t.id}
+                empty="No experiment tokens"
+              />
+            </IssuedGroup>
+          </>
         )}
       </div>
       <SecretRevealDialog

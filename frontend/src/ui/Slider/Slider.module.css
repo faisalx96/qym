@@ -3,6 +3,12 @@
   min-width: 120px;
 }
 
+/* cv5 Q5 (owner: "this slider is too wide"): a stacked slider never spans a section; a caller's width stays below
+   this cap. */
+.slider:not([data-layout]) {
+  max-width: 360px;
+}
+
 .head {
   display: flex;
   align-items: center;
@@ -92,6 +98,10 @@
   order: 2;
   flex: 1 1 auto;
   min-width: 80px;
+}
+
+.slider[data-layout='inline'][data-track-width] .track {
+  flex: 0 0 var(--slider-track-w);
 }
 
 .slider[data-layout='inline'] .output {

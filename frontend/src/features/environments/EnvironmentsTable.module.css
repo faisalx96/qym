@@ -24,9 +24,16 @@
   font-weight: 600;
   cursor: pointer;
   text-align: start;
+  text-decoration: none;
 }
 
 .nameLink:hover {
+  color: var(--accent-primary);
+}
+
+/* The row is the target: hovering or focusing anywhere in it turns the name green (A-17: never underlined). */
+tr:hover .nameLink,
+tr:focus-visible .nameLink {
   color: var(--accent-primary);
 }
 
@@ -53,30 +60,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
-}
-
-.health {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.dot {
-  width: var(--space-sm);
-  height: var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--text-muted);
-  flex: none;
-}
-
-.health[data-status='ok'] .dot {
-  background: var(--success);
-}
-
-.health[data-status='error'] .dot {
-  background: var(--error);
 }
 
 .healthCell {

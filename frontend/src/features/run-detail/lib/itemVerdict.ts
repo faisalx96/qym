@@ -1,12 +1,13 @@
 /** The one verdict of an item for its bar: "Fail", "Pass", or "7 of 10 passed" for an all-passes repeat item. */
 import type { FilterContext } from './filterRules';
 import { scopeRowToPass } from './passScope';
-import { rowStatus } from './rowDisplay';
+import { rowStatus, type StatusKind } from './rowDisplay';
 import type { Row } from '../types';
 
 export interface ItemVerdict {
   label: string;
   tone: 'success' | 'danger' | 'warning' | undefined;
+  kind: StatusKind | 'aggregate';
 }
 
 export function itemVerdict(ctx: FilterContext, row: Row, metric: string | null): ItemVerdict {
@@ -21,11 +22,13 @@ export function itemVerdict(ctx: FilterContext, row: Row, metric: string | null)
     return {
       label: `${passed} of ${samples} passed`,
       tone: passed === samples ? 'success' : passed === 0 ? 'danger' : 'warning',
+      kind: 'aggregate',
     };
   }
   const s = rowStatus(ctx, row, metric);
   return {
     label: s.label,
     tone: s.kind === 'pass' ? 'success' : s.kind === 'fail' || s.kind === 'error' ? 'danger' : undefined,
+    kind: s.kind,
   };
 }

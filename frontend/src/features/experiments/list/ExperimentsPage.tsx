@@ -16,7 +16,7 @@ import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { tableLoading, useDelayedPending } from '@/lib/pending';
 import {
-  Checkbox,
+  ClearFiltersButton,
   DataTable,
   EmptyState,
   Icon,
@@ -29,13 +29,14 @@ import {
   UserCell,
   type Column,
   SearchField,
+  Tag,
 } from '@/ui';
 import { LATENCY_FILTER_LABEL } from '../copy';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { ConnectFirst } from '../components/ConnectFirst';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
-import { baseSourceLabel, jobsText, plural, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
+import { baseSourceLabel, tallyJobCounts, titleCase, versioningLabel } from '../lib/format';
 import { loadLaunchPage } from '../lazy';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
@@ -135,6 +136,8 @@ export function ExperimentsPage() {
             </span>
           }
           secondary={x.description}
+          // cv5 Z8: the description wraps to two lines, no "…" cut
+          secondaryLines={2}
         />
       ),
     },
@@ -157,6 +160,11 @@ export function ExperimentsPage() {
       id: 'environments',
       header: 'Environments',
       width: 200,
+      // cv5 Z8: the list of environment names wraps and gives width back (flex, down to 160px), so at 1440px the Name
+      // column keeps room for its description
+      flex: true,
+      minWidth: 160,
+      wrap: true,
       priority: 2,
       cell: (x) => <EnvironmentNames ids={x.environment_ids} envById={envById} />,
     },
@@ -167,7 +175,13 @@ export function ExperimentsPage() {
       type: 'text',
       width: 180,
       priority: 3,
-      cell: (x) => <UserCell name={x.created_by_email} />,
+      cell: (x) => (
+        <UserCell
+          id={x.created_by_user_id}
+          name={x.created_by_name}
+          email={x.created_by_email}
+        />
+      ),
     },
     {
       id: 'age',
@@ -186,6 +200,8 @@ export function ExperimentsPage() {
       to={launchPath(slug)}
       variant="primary"
       size="md"
+      isDisabled={noActiveEnv}
+      disabledReason="Add an environment first"
       icon={<Icon name="plus" size={12} />}
       onPointerEnter={prefetchLaunch}
       onFocus={prefetchLaunch}
@@ -195,17 +211,23 @@ export function ExperimentsPage() {
   );
 
   const emptyAll = Boolean(query.data) && !filtered && total === 0;
-  const filters = (
-    <div className={styles.filters} role="group" aria-label="Filter experiments">
-      <SearchField
-        label="Search experiments"
-        placeholder="Search experiments"
-        value={search}
-        onChange={setSearch}
-        width={260}
-      />
+  const searchField = (
+    <SearchField
+      label="Search experiments"
+      placeholder="Search experiments"
+      value={search}
+      onChange={setSearch}
+      width="var(--search-width)"
+      shortcut="/"
+    />
+  );
+  const activeCount =
+    (status ? 1 : 0) + Object.keys(versioning).length + (mine ? 1 : 0) + (latency ? 1 : 0) + (needle ? 1 : 0);
+  const filterRow = (
+    <div className={styles.filterRow} role="group" aria-label="Filter experiments">
       <Select
         label="Status"
+        triggerVariant="bar"
         items={[
           { key: ALL, label: 'All statuses' },
           ...EXPERIMENT_STATUSES.map((s) => ({ key: s, label: titleCase(s) })),
@@ -219,7 +241,6 @@ export function ExperimentsPage() {
           })
         }
         searchable={false}
-        width={150}
       />
       {versioningKeys.map((key) => {
         const selected = versioning[key];
@@ -229,39 +250,55 @@ export function ExperimentsPage() {
           <span key={key} title={`Evaluation Service versioning: ${key}`} data-exp-versioning={key}>
             <Select
               label={versioningLabel(key)}
+              triggerVariant="bar"
               items={[{ key: ALL, label: 'All values' }, ...options.map((v) => ({ key: v, label: v }))]}
               value={selected ?? ALL}
               onChange={(k) => setVersioning(key, !k || k === ALL ? null : String(k))}
-              width={170}
             />
           </span>
         );
       })}
-      <Checkbox
-        isSelected={mine}
-        onChange={(on) =>
+      <Select
+        label="Created by"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'Everyone' },
+          { key: 'me', label: 'Me' },
+        ]}
+        value={mine ? 'me' : ''}
+        onChange={(k) =>
           update((next) => {
-            if (on) next.set('mine', '1');
+            if (k === 'me') next.set('mine', '1');
             else next.delete('mine');
             resetPage(next);
           })
         }
-      >
-        Created by me
-      </Checkbox>
-      <Checkbox
-        isSelected={latency}
-        data-testid="filter-latency"
-        onChange={(on) =>
+      />
+      <Select
+        label="Latency-sensitive"
+        triggerVariant="bar"
+        searchable={false}
+        items={[
+          { key: '', label: 'All' },
+          { key: '1', label: LATENCY_FILTER_LABEL },
+        ]}
+        value={latency ? '1' : ''}
+        onChange={(k) =>
           update((next) => {
-            if (on) next.set('latency', '1');
+            if (k === '1') next.set('latency', '1');
             else next.delete('latency');
             resetPage(next);
           })
         }
-      >
-        {LATENCY_FILTER_LABEL}
-      </Checkbox>
+      />
+      <ClearFiltersButton
+        count={activeCount}
+        onClear={() => {
+          setSearch('');
+          setParams({}, { replace: true });
+        }}
+      />
     </div>
   );
 
@@ -282,13 +319,6 @@ export function ExperimentsPage() {
           rowKey={(x) => x.id}
           rowHref={(x) => experimentPath(slug, x.id)}
           rowActions={(x) => [
-            {
-              id: 'open',
-              label: 'Open',
-              icon: 'external',
-              primary: true,
-              onPress: () => navigate(experimentPath(slug, x.id)),
-            },
             ...(readOnly
               ? []
               : [
@@ -299,12 +329,12 @@ export function ExperimentsPage() {
                   },
                 ]),
           ]}
-          rowState={(x) => (LIVE_EXPERIMENT_STATUSES.includes(x.status) ? 'live' : undefined)}
           minWidth={1000}
           density="regular"
           loading={tableLoading(query.isPending, showSkeleton)}
           refreshing={query.isFetching && !showSkeleton && live}
           error={query.isError && !query.data ? query.error : undefined}
+          errorTitle="Couldn’t load experiments"
           onRetry={() => void query.refetch()}
           isFiltered={filtered}
           empty={
@@ -338,42 +368,43 @@ export function ExperimentsPage() {
           filteredEmpty={
             <EmptyState
               compact
-              title="No matching experiments"
-              body="Nothing matches these filters."
-              action={
-                <button
-                  type="button"
-                  className={styles.linkButton}
-                  onClick={() => setParams({}, { replace: true })}
-                >
-                  Clear filters
-                </button>
+              title={
+                needle ? `No experiments match “${search.trim()}”` : 'No experiments match these filters'
               }
             />
           }
         >
           <DataTable.Toolbar
-            filters={filters}
+            search={searchField}
+            rows={filterRow}
             trailing={
               live ? (
                 <Text variant="sm" tone="muted">
-                  Refreshes automatically while experiments run
+                  Updates automatically
                 </Text>
               ) : null
             }
           />
           <DataTable.Footer
-            summary={query.data ? plural(total, 'experiment') : undefined}
+            filterNote={needle ? `Filtered from ${loaded.length} experiments` : undefined}
             pagination={
-              query.data && total > PAGE_SIZE
-                ? {
-                    total,
-                    page,
-                    pageSize: PAGE_SIZE,
-                    noun: 'experiments',
-                    onPageChange: (p) =>
-                      update((next) => (p > 1 ? next.set('page', String(p)) : next.delete('page'))),
-                  }
+              query.data
+                ? needle
+                  ? {
+                      total: experiments.length,
+                      page: 1,
+                      pageSize: Math.max(1, experiments.length),
+                      noun: 'experiments',
+                      onPageChange: () => {},
+                    }
+                  : {
+                      total,
+                      page,
+                      pageSize: PAGE_SIZE,
+                      noun: 'experiments',
+                      onPageChange: (p) =>
+                        update((next) => (p > 1 ? next.set('page', String(p)) : next.delete('page'))),
+                    }
                 : undefined
             }
           />
@@ -392,15 +423,16 @@ function EnvironmentNames({ ids, envById }: { ids: string[]; envById: Map<string
     })
     .join(', ');
   return (
-    <span className={styles.truncate} title={text}>
-      {text}
-    </span>
+    // the column wraps (cv5 Z8); the title keeps the full list for a clamped cell
+    <span title={text}>{text}</span>
   );
 }
 
 /**
  * One Jobs column (C139): a bar split by outcome (succeeded green, failed red, cancelled amber, running blue; queued
- * jobs leave the track empty) and "5/6 · 1 failed". A failed experiment no longer shows a full green bar.
+ * jobs leave the track empty), then "5/6" and the failed and cancelled counts as count tags (cv5 M5, design language
+ * §3.3: a failure count is danger; cancelled is a stop by a person, the warning tone of the status rules). A failed
+ * experiment no longer shows a full green bar.
  */
 function JobsCell({ counts }: { counts: Experiment['job_counts'] }) {
   const t = tallyJobCounts(counts);
@@ -434,7 +466,19 @@ function JobsCell({ counts }: { counts: Experiment['job_counts'] }) {
             ))
           : null}
       </span>
-      <span className={styles.jobsText}>{jobsText(t)}</span>
+      <span className={styles.jobsText}>
+        {t.ok}/{total}
+      </span>
+      {t.failed ? (
+        <Tag kind="count" tone="danger" data-count="failed">
+          {t.failed} failed
+        </Tag>
+      ) : null}
+      {t.cancelled ? (
+        <Tag kind="count" tone="warning" data-count="cancelled">
+          {t.cancelled} cancelled
+        </Tag>
+      ) : null}
     </span>
   );
 }

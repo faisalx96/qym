@@ -51,6 +51,7 @@ def job_dict(
             if user_name is not None
             else _user_name(object_session(job), job.requested_by_user_id)
         ),
+        "requested_by_user_id": job.requested_by_user_id,
         "requested_at": to_api_timestamp(job.requested_at),
         "updated_at": to_api_timestamp(job.updated_at),
         "started_at": to_api_timestamp(job.started_at),
@@ -80,6 +81,7 @@ def control_document(
             "version": summary["version"],
             "created_at": summary["created_at"],
             "created_by": summary["created_by"],
+            "created_by_user_id": summary["created_by_user_id"],
             "values": row.values,
             "secrets_digest": digest,
             "errors": errors,

@@ -13,13 +13,34 @@ import {
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
-import { Button, ConfirmDialog, EmptyState, ErrorState, Skeleton, Tag, Text, useToast } from '@/ui';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  Skeleton,
+  Text,
+  Timeline,
+  useToast,
+  type TimelineItem,
+} from '@/ui';
 import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge } from '../components/VersionSwitcher';
 import { orderItemHistory, showsTypeChange } from '../lib/itemHistory';
 import { formatDate, sameValue, storedType } from '../lib/itemValue';
+import { formatTableDate } from '@/lib/dates';
 import styles from './ItemHistoryTab.module.css';
+
+/** The rail mark of a revision (cv5 Z6): a tone only for a removal (danger) or a disable (warning). */
+const REVISION_MARK: Record<ItemRevision['change_type'], Pick<TimelineItem, 'icon' | 'tone'>> = {
+  created: { icon: 'plus' },
+  updated: { icon: 'edit' },
+  deleted: { icon: 'trash', tone: 'danger' },
+  disabled: { icon: 'ban', tone: 'warning' },
+  enabled: { icon: 'check' },
+};
 
 const FIELDS: { key: 'input' | 'expected_output' | 'metadata' | 'labels'; label: string }[] = [
   { key: 'input', label: 'input' },
@@ -63,122 +84,114 @@ export function ItemHistoryTab({
   const newestId = current?.revisions[0]?.id;
   const num = (r: ItemRevision) => numberOf.get(r.id) ?? r.revision_number;
 
+  // cv5 Z6: one Timeline, newest first, as the dataset Change log: each revision (its diff under it, Revert at the
+  // end of its line), then the event that drafted its version
+  const items: TimelineItem[] = lineage.flatMap(({ version: v, revisions }) => [
+    ...revisions.map((r): TimelineItem => {
+      const stateChange = r.change_type === 'disabled' || r.change_type === 'enabled';
+      const changed = stateChange
+        ? []
+        : FIELDS.filter((f) =>
+            r.change_type === 'updated' ? !sameValue(r.before?.[f.key], r.after?.[f.key]) : true,
+          );
+      const typeChanged = showsTypeChange(r)
+        ? FIELDS.filter(
+            (f) => r.before && r.after && storedType(r.before[f.key]) !== storedType(r.after[f.key]),
+          )
+        : [];
+      const actor =
+        r.actor ??
+        (r.actor_email
+          ? { id: r.actor_user_id ?? '', email: r.actor_email, display_name: r.actor_name ?? r.actor_email }
+          : null);
+      const canRevert =
+        editable &&
+        v.id === version.id &&
+        r.id !== newestId &&
+        r.change_type !== 'deleted' &&
+        !stateChange &&
+        r.after;
+      return {
+        key: `r${r.id}`,
+        rowData: {
+          'data-revision': String(r.revision_number),
+          'data-testid': stateChange ? `rev-${r.change_type}` : undefined,
+        },
+        time: formatTableDate(r.created_at),
+        timeTitle: formatDate(r.created_at),
+        dateTime: r.created_at,
+        ...REVISION_MARK[r.change_type],
+        title: (
+          <span>
+            <span className={styles.key}>#{num(r)}</span> {r.change_type}
+            {r.change_type === 'updated' && changed.length ? ` ${changed.map((f) => f.label).join(', ')}` : ''}
+          </span>
+        ),
+        meta: <UserPill user={actor} />,
+        detail: (
+          <span className={styles.body}>
+            {typeChanged.length ? (
+              <Text as="span" variant="sm" tone="warning">
+                type changed:{' '}
+                {typeChanged
+                  .map((f) => `${f.label} ${storedType(r.before?.[f.key])} → ${storedType(r.after?.[f.key])}`)
+                  .join(', ')}
+              </Text>
+            ) : null}
+            {stateChange ? (
+              <Text variant="base" tone="secondary" as="span" className={styles.reasonText}>
+                {r.change_type === 'disabled' && r.after?.reason?.trim()
+                  ? `Reason: ${r.after.reason.trim()}`
+                  : 'No reason given'}
+              </Text>
+            ) : null}
+            {changed.map((f) => (
+              <FieldDiff
+                key={f.key}
+                field={f.label}
+                before={r.before?.[f.key]}
+                after={r.after?.[f.key]}
+                onlyAfter={r.change_type === 'created'}
+                onlyBefore={r.change_type === 'deleted'}
+              />
+            ))}
+          </span>
+        ),
+        actions: canRevert ? (
+          <Button
+            variant="neutral"
+            size="sm"
+            onPress={() => setRevert(r)}
+            data-testid={`revert-${r.revision_number}`}
+          >
+            ↩ Revert to this
+          </Button>
+        ) : undefined,
+      };
+    }),
+    {
+      key: `v${v.id}`,
+      time: formatTableDate(v.created_at),
+      timeTitle: formatDate(v.created_at),
+      dateTime: v.created_at,
+      icon: 'plus',
+      title: (
+        <span className={styles.versionTitle}>
+          <span>
+            <span className={styles.key}>{v.version}</span> drafted
+          </span>
+          <VersionBadge version={v} />
+        </span>
+      ),
+      meta: <UserPill user={v.created_by} />,
+    },
+  ]);
+
   return (
-    <div className={styles.wrap} data-item-history>
-      {lineage.map(({ version: v, revisions }) => (
-        <section key={v.id} className={styles.versionCard} aria-label={`${v.version} revisions`}>
-          <header className={styles.versionHead}>
-            <span className={styles.versionLabel}>{v.version}</span>
-            <VersionBadge version={v} />
-            <UserPill user={v.created_by} label="Drafted By:" />
-            <span className={styles.when}>{formatDate(v.created_at)}</span>
-          </header>
-          {revisions.length ? (
-            <ol className={styles.revisions}>
-              {revisions.map((r) => {
-                const stateChange = r.change_type === 'disabled' || r.change_type === 'enabled';
-                const changed = stateChange
-                  ? []
-                  : FIELDS.filter((f) =>
-                      r.change_type === 'updated' ? !sameValue(r.before?.[f.key], r.after?.[f.key]) : true,
-                    );
-                const typeChanged = showsTypeChange(r)
-                  ? FIELDS.filter(
-                      (f) =>
-                        r.before && r.after && storedType(r.before[f.key]) !== storedType(r.after[f.key]),
-                    )
-                  : [];
-                return (
-                  <li
-                    key={r.id}
-                    className={styles.revision}
-                    data-revision={r.revision_number}
-                    data-testid={stateChange ? `rev-${r.change_type}` : undefined}
-                  >
-                    <div className={styles.revHead}>
-                      <Tag
-                        tone={
-                          r.change_type === 'created' || r.change_type === 'enabled'
-                            ? 'success'
-                            : r.change_type === 'deleted'
-                              ? 'danger'
-                              : 'warning'
-                        }
-                      >
-                        {r.change_type}
-                      </Tag>
-                      <Tag kind="count">#{num(r)}</Tag>
-                      <UserPill
-                        user={
-                          r.actor ??
-                          (r.actor_email
-                            ? {
-                                id: r.actor_user_id ?? '',
-                                email: r.actor_email,
-                                display_name: r.actor_name ?? r.actor_email,
-                              }
-                            : null)
-                        }
-                        label="Edited By:"
-                      />
-                      <span className={styles.when}>{formatDate(r.created_at)}</span>
-                      {typeChanged.length ? (
-                        <Text as="span" variant="sm" tone="warning">
-                          type changed:{' '}
-                          {typeChanged
-                            .map(
-                              (f) =>
-                                `${f.label} ${storedType(r.before?.[f.key])} → ${storedType(r.after?.[f.key])}`,
-                            )
-                            .join(', ')}
-                        </Text>
-                      ) : null}
-                      {editable &&
-                      v.id === version.id &&
-                      r.id !== newestId &&
-                      r.change_type !== 'deleted' &&
-                      !stateChange &&
-                      r.after ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onPress={() => setRevert(r)}
-                          data-testid={`revert-${r.revision_number}`}
-                        >
-                          ↩ Revert to this
-                        </Button>
-                      ) : null}
-                    </div>
-                    {stateChange ? (
-                      <Text variant="base" tone="secondary" as="p" className={styles.reasonText}>
-                        {r.change_type === 'disabled' && r.after?.reason?.trim()
-                          ? `Reason: ${r.after.reason.trim()}`
-                          : 'No reason given'}
-                      </Text>
-                    ) : null}
-                    <div className={styles.diffs}>
-                      {changed.map((f) => (
-                        <FieldDiff
-                          key={f.key}
-                          field={f.label}
-                          before={r.before?.[f.key]}
-                          after={r.after?.[f.key]}
-                          onlyAfter={r.change_type === 'created'}
-                          onlyBefore={r.change_type === 'deleted'}
-                        />
-                      ))}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : (
-            <Text variant="sm" tone="muted">
-              No direct edits recorded in this version.
-            </Text>
-          )}
-        </section>
-      ))}
+    <div data-item-history>
+      <Card>
+        <Timeline aria-label="Item history" markAlign="start" items={items} />
+      </Card>
       <ConfirmDialog
         open={revert !== null}
         onOpenChange={(o) => !o && setRevert(null)}

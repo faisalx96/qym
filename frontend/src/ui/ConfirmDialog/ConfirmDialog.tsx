@@ -140,7 +140,7 @@ function ConfirmDialogInner({
                       {item.meta ? <span className={styles.meta}>{item.meta}</span> : null}
                     </li>
                   ))}
-                  {warn.more ? <li className={styles.meta}>+{warn.more} more</li> : null}
+                  {warn.more ? <li className={styles.meta}>and {warn.more} more</li> : null}
                 </ul>
               </>
             ) : null}

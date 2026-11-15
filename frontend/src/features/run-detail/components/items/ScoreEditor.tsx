@@ -132,14 +132,14 @@ export function ScoreEditor({
           }
         }}
       />
-      <Button size="sm" variant="accent" type="submit" loading={mutation.isPending}>
+      <Button size="sm" variant="primary" type="submit" loading={mutation.isPending}>
         Save
       </Button>
       <Button size="sm" variant="neutral" onPress={onDone}>
         Cancel
       </Button>
       {edited ? (
-        <Button size="sm" variant="ghost" onPress={reset} isDisabled={mutation.isPending}>
+        <Button size="sm" variant="neutral" onPress={reset} isDisabled={mutation.isPending}>
           Reset to scorer value
         </Button>
       ) : null}

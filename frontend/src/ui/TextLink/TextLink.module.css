@@ -1,0 +1,27 @@
+/* TextLink (cv4 F13): accent text, end chevron, no underline; hover brightens the text (no movement on hover). */
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 2px;
+  color: var(--accent-primary);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+
+.link:hover {
+  color: var(--accent-primary-hover);
+  text-decoration: none;
+}
+
+.arrow {
+  flex: none;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

@@ -9,6 +9,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
 import {
   Button,
+  ClearFiltersButton,
+  CountTile,
   DropdownMenu,
   Icon,
   IconButton,
@@ -81,7 +83,8 @@ export function useScrollSpy(navRef: React.RefObject<HTMLElement | null>, ids: S
 }
 
 export interface SectionNavProps {
-  onSection: (id: SectionId) => void;
+  /** Scroll to a section; a promise that settles when a smooth travel ends (cv4 C1-1). */
+  onSection: (id: SectionId) => void | Promise<void>;
 }
 
 function NavFilters() {
@@ -107,7 +110,7 @@ function NavFilters() {
             icon={<Icon name="list" size={12} />}
             data-testid="nav-open-filters"
           >
-            Filters{count ? ` (${count})` : ''}
+            Filters{count ? <CountTile>{count}</CountTile> : null}
           </Button>
         }
       >
@@ -121,9 +124,7 @@ function NavFilters() {
         />
       </Popover>
       {count > 0 ? (
-        <Button size="sm" variant="ghost" onPress={() => api.clearFilters()} data-testid="nav-clear-filters">
-          Clear ({count})
-        </Button>
+        <ClearFiltersButton count={count} onClear={() => api.clearFilters()} testId="nav-clear-filters" />
       ) : null}
     </>
   );
@@ -253,7 +254,19 @@ export function SectionNav({ onSection }: SectionNavProps) {
   const entries = useSectionEntries();
   const navRef = useRef<HTMLElement>(null);
   const ids = entries.map((e) => e.id);
-  const active = useScrollSpy(navRef, ids);
+  const spied = useScrollSpy(navRef, ids);
+  // C1-1: while a nav click travels, the link pressed stays the active one (the scroll-spy would step through
+  // every section it passes); the spy takes over again when the travel ends or the reader stops it.
+  const [pinned, setPinned] = useState<SectionId | null>(null);
+  const travel = useRef(0);
+  const go = (id: SectionId) => {
+    const n = ++travel.current;
+    setPinned(id);
+    void Promise.resolve(onSection(id)).finally(() => {
+      if (travel.current === n) setPinned(null);
+    });
+  };
+  const active = pinned ?? spied;
   const { rowRef, measureRef, visible, overflow } = useFittedLinks(entries, active);
   const run = payload.run;
   // The page's sticky offsets (filter bar, scroll margins) follow the nav's real height.
@@ -290,7 +303,7 @@ export function SectionNav({ onSection }: SectionNavProps) {
           '',
           `${window.location.pathname}${window.location.search}#run-section-${id}`,
         );
-        onSection(id);
+        go(id);
       }}
     >
       {label}
@@ -304,9 +317,9 @@ export function SectionNav({ onSection }: SectionNavProps) {
       className={styles.nav}
       aria-label="Run sections"
       data-run-nav=""
-      data-compact={active !== 'summary' ? '' : undefined}
+      data-compact={spied !== 'summary' ? '' : undefined}
     >
-      <span className={styles.identity} aria-hidden={active === 'summary' ? true : undefined}>
+      <span className={styles.identity} aria-hidden={spied === 'summary' ? true : undefined}>
         <span className={styles.name}>{run.run_name || run.run_id}</span>
         <RunStatusBadge status={status} label={String(run.status || '').toLowerCase()} />
       </span>
@@ -324,9 +337,17 @@ export function SectionNav({ onSection }: SectionNavProps) {
             }
             items={overflow.map((e) => ({
               id: e.id,
-              label: typeof e.count === 'number' ? `${e.label} (${e.count})` : e.label,
+              label:
+                typeof e.count === 'number' ? (
+                  <>
+                    {e.label}
+                    <CountTile>{e.count}</CountTile>
+                  </>
+                ) : (
+                  e.label
+                ),
             }))}
-            onAction={(id) => onSection(id as SectionId)}
+            onAction={(id) => go(id as SectionId)}
           />
         ) : null}
       </span>
@@ -349,7 +370,7 @@ export function SectionNav({ onSection }: SectionNavProps) {
         <IconButton
           label="Back to top"
           icon={<Icon name="chevron-up" size={14} />}
-          onPress={() => onSection('summary')}
+          onPress={() => go('summary')}
           data-testid="nav-top"
         />
       </span>

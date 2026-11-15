@@ -7,10 +7,23 @@ import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { useCrumbLabel } from '@/lib/crumb-label';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Card, Eyebrow, Icon, PageHeader, StatStrip, TabPanel, Tabs, Tag, Text, TextBlock } from '@/ui';
-import { StatusBadge, cap } from './badges';
+import {
+  Card,
+  Eyebrow,
+  Icon,
+  PageHeader,
+  TabPanel,
+  Tabs,
+  Tag,
+  Text,
+  TextBlock,
+  Timeline,
+  UserName,
+  type TimelineItem,
+} from '@/ui';
+import { COMPLEXITY_LEVEL, LevelTag, PRIORITY_LEVEL, StatusBadge, cap } from './badges';
 import { MsgItem } from './Chat';
-import { clock, dateTime, eventText, shortDate } from './format';
+import { clock, dateTime, eventText, headerDate, shortDate } from './format';
 import { RelatedList } from './RelatedList';
 import { RequestLink } from './RequestLink';
 import { TriagePanel } from './TriagePanel';
@@ -27,20 +40,41 @@ function Section({ label, text }: { label: string; text: string }) {
   );
 }
 
+/** The mark of each history event (cv5 Z6: the shared Timeline, as the dataset Change log). */
+function eventMark(e: FeedbackEvent): Pick<TimelineItem, 'icon' | 'tone'> {
+  const to = String((e.after as Record<string, unknown> | null)?.status ?? '');
+  switch (e.kind) {
+    case 'submitted':
+      return { icon: 'plus' };
+    case 'declined':
+      return { icon: 'ban', tone: 'danger' };
+    case 'status':
+      return to === 'done' ? { icon: 'check', tone: 'success' } : { icon: 'swap' };
+    case 'duplicate':
+    case 'duplicate_cleared':
+      return { icon: 'link' };
+    default:
+      return { icon: 'edit' };
+  }
+}
+
 export function HistoryCard({ events }: { events: FeedbackEvent[] }) {
   return (
     <Card as="section" aria-label="History" header={<Text variant="md">History</Text>} data-testid="history">
-      <ol className={styles.events}>
-        {events.map((e) => (
-          <li key={e.id} className={styles.event} data-event={e.kind}>
-            <span className={styles.eventHead}>
-              <strong>{e.actor || 'System'}</strong> <span>{eventText(e)}</span>
-              <time>{dateTime(e.created_at)}</time>
-            </span>
-            {e.note ? <span className={styles.eventNote}>{e.note}</span> : null}
-          </li>
-        ))}
-      </ol>
+      <Timeline
+        aria-label="Request history"
+        markAlign="start"
+        items={events.map((e) => ({
+          key: String(e.id),
+          time: dateTime(e.created_at),
+          timeTitle: headerDate(e.created_at),
+          dateTime: e.created_at,
+          ...eventMark(e),
+          title: eventText(e),
+          meta: e.actor ? <UserName id={e.actor_user_id} name={e.actor} /> : 'System',
+          detail: e.note ? <span dir="auto">{e.note}</span> : undefined,
+        }))}
+      />
     </Card>
   );
 }
@@ -63,7 +97,7 @@ function targetMeta(d: FeedbackDetail) {
     link = t.accessible ? (
       <>
         {' · '}
-        <Link to={to} className={styles.idLink} data-testid="target-link">
+        <Link to={to} className={styles.idLink} data-link="name" data-testid="target-link">
           {label}
         </Link>
       </>
@@ -134,7 +168,30 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
           </Tag>,
           <StatusBadge key="st" status={r.status} />,
           targetMeta(detail),
-          `${r.submitter.name} · ${dateTime(r.confirmed_at ?? r.created_at)}`,
+          ...(r.priority
+            ? [
+                <LevelTag
+                  key="pr"
+                  label="Priority"
+                  value={cap(r.priority)}
+                  level={PRIORITY_LEVEL[r.priority]}
+                  title={sentence('priority')}
+                />,
+              ]
+            : []),
+          ...(r.complexity
+            ? [
+                <LevelTag
+                  key="cx"
+                  label="Complexity"
+                  value={r.complexity}
+                  level={COMPLEXITY_LEVEL[r.complexity]}
+                  title={sentence('complexity')}
+                />,
+              ]
+            : []),
+          <UserName key="by" id={r.submitter.id} name={r.submitter.name} />,
+          headerDate(r.confirmed_at ?? r.created_at),
         ]}
       />
       {declined ? (
@@ -167,13 +224,6 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
           {tab === 'request' ? (
             <div className={styles.split} data-request-split>
               <div className={styles.stackCol}>
-                <StatStrip
-                  aria-label="Priority and complexity"
-                  items={[
-                    { label: 'Priority', value: priority, sub: sentence('priority') },
-                    { label: 'Complexity', value: r.complexity ?? '—', sub: sentence('complexity') },
-                  ]}
-                />
                 <Card as="section" aria-label="Request details" data-testid="request-card">
                   <div className={styles.sections}>
                     <Section label="Description" text={r.description} />

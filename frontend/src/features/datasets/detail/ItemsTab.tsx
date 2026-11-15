@@ -3,7 +3,14 @@
  * with metric columns; private test sets show the locked state and never
  * request items.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { Key } from 'react-aria-components';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -20,33 +27,34 @@ import { tableLoading, useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
 import {
+  ActionTile,
   Button,
-  Chip,
+  ClearFiltersButton,
   ConfirmDialog,
   DataTable,
   DropdownMenu,
   EmptyState,
   Icon,
+  MultiSelect,
   promptPreview,
-  ScoreBar,
+  ScoreValue,
   SearchField,
-  SegmentedControl,
+  Select,
   TagsCell,
   useToast,
   type Column,
   type RowAction,
-  StatusMark,
+  Flag,
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
+import { cellPreviewText, type RowDensity } from '../lib/cellPreview';
 import { menuLabel } from '../lib/batchCopy';
-import { STATE_OPTIONS, stateCount, stateTotalText, stateUrlValue, type StateFilter } from '../lib/itemState';
+import { STATE_OPTIONS, stateCount, stateUrlValue, type StateFilter } from '../lib/itemState';
 import {
   addMetaFilter,
-  metaChipLabel,
   metaFiltersToParams,
   metaModesToParams,
   parseMetaFilters,
-  removeMetaFilter,
   type MetaFilter,
 } from '../lib/metaFilter';
 import type { BatchAction } from '@/api/datasets';
@@ -79,7 +87,17 @@ export interface ItemsTabProps {
   onCreateDraft?: () => void;
   /** "All matching" menu: open the batch dialog for the current criteria. */
   onBatch?: (action: BatchAction, criteria: BatchCriteria) => void;
+  /**
+   * The item open in the pane (cv4 E2): its row is the highlighted row and scrolls into view when the pane steps to
+   * another item. The row actions stay while the pane is open (cv4 X8): the shared table folds the actions column
+   * only when the columns past the end cover it, so no empty strip shows, and it shows one fold handle at a time.
+   */
+  activeKey?: string | null;
 }
+
+/** A double click on these does not open the item page (cv4 E3). */
+const NO_OPEN_TARGET =
+  'a, button, input, textarea, select, label, [role="button"], [role="checkbox"], [role="menuitem"], td[data-pseudo]';
 
 export function ItemsTab({
   slug,
@@ -96,6 +114,7 @@ export function ItemsTab({
   onFilterChange,
   onCreateDraft,
   onBatch,
+  activeKey = null,
 }: ItemsTabProps) {
   const [params, setParams] = useSearchParams();
   const route = parseDatasetRoute(dataset.slug, params);
@@ -143,7 +162,7 @@ export function ItemsTab({
       search: route.search || undefined,
       sort: route.sort || undefined,
       label: route.label || undefined,
-      state: route.state === 'active' ? undefined : route.state,
+      state: route.state,
       meta: metaParams.length ? metaParams : undefined,
       meta_mode: metaModes.length ? metaModes : undefined,
     },
@@ -156,6 +175,34 @@ export function ItemsTab({
   useEffect(() => {
     onRows?.(items);
   }, [items, onRows]);
+
+  // cv4 E2: the pane's row follows the pane. When the pane steps to another item, its row scrolls into view, and a
+  // keyboard focus that was on the old row moves with it.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const shownKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeKey) {
+      shownKey.current = null;
+      return;
+    }
+    if (shownKey.current === activeKey) return;
+    const host = wrapRef.current;
+    const row = host?.querySelector<HTMLElement>(`tbody tr[data-row-key="${CSS.escape(activeKey)}"]`);
+    if (!host || !row) return;
+    shownKey.current = activeKey;
+    const focused = document.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      focused !== row &&
+      host.contains(focused) &&
+      focused.matches('tbody tr')
+    )
+      row.focus({ preventScroll: true });
+    row.scrollIntoView?.({ block: 'nearest' });
+  }, [activeKey, items]);
+
+  // cv4 E3: a double click on a row opens the item page; a drag (a text selection) does not.
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
   const hasUserIds = useMemo(() => items.some((i) => i.item_id && !/^item-\d+$/.test(i.item_id)), [items]);
   const sort = parseItemSort(route.sort);
 
@@ -169,7 +216,7 @@ export function ItemsTab({
         {
           search: route.search || undefined,
           label: route.label || undefined,
-          state: route.state === 'active' ? undefined : route.state,
+          state: route.state,
           meta: metaParams.length ? metaParams : undefined,
           meta_mode: metaModes.length ? metaModes : undefined,
         },
@@ -181,28 +228,22 @@ export function ItemsTab({
     }
   }
 
-  // QA1-29: after Add filter focus lands on the new chip, after a removal on the Metadata button. The popover
-  // returns focus to its trigger when it closes (in a later frame), so the move runs again after that.
+  // QA1-29: after Add filter focus returns to the Metadata trigger.
   const pendingFocus = useRef<string | null>(null);
   useEffect(() => {
     const target = pendingFocus.current;
     if (target === null) return;
     pendingFocus.current = null;
     const move = () => {
-      const el =
-        target === ''
-          ? document.querySelector<HTMLElement>('[data-testid="metadata-filter"]')
-          : document.querySelector<HTMLElement>(
-              `[data-testid="meta-chip"][data-meta-path="${CSS.escape(target)}"]`,
-            );
+      const el = document.querySelector<HTMLElement>('[data-testid="metadata-filter"]');
       if (el && document.activeElement !== el) el.focus();
     };
     // not cancelled by a re-render: the route object (and so metaFilters) is new on every render
     for (const delay of [0, 80, 200]) setTimeout(move, delay);
   }, [metaFilters]);
 
-  function setMeta(next: MetaFilter[], focusPath = '') {
-    pendingFocus.current = focusPath;
+  function setMeta(next: MetaFilter[]) {
+    pendingFocus.current = '';
     onFilterChange?.();
     setParams(
       (prev) => {
@@ -224,7 +265,7 @@ export function ItemsTab({
     setParams(
       (prev) => {
         const params = new URLSearchParams(prev);
-        for (const key of ['search', 'label', 'meta', 'meta_mode', 'page']) params.delete(key);
+        for (const key of ['search', 'label', 'meta', 'meta_mode', 'state', 'page']) params.delete(key);
         return params;
       },
       { replace: true },
@@ -253,6 +294,22 @@ export function ItemsTab({
     return `${datasetPath(slug, dataset.slug)}?${next.toString()}`;
   };
 
+  const rowOf = (target: EventTarget | null): DatasetItem | undefined => {
+    const el = target instanceof HTMLElement ? target : null;
+    if (!el || el.closest(NO_OPEN_TARGET)) return undefined;
+    const tr = el.closest<HTMLElement>('tbody tr[data-row-key]');
+    if (!tr || !wrapRef.current?.contains(tr)) return undefined;
+    return items.find((i) => i.item_id === tr.dataset.rowKey);
+  };
+  const openPageOnDoubleClick = (e: ReactMouseEvent) => {
+    const item = rowOf(e.target);
+    if (!item) return;
+    const at = pressAt.current;
+    if (at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > 4) return;
+    window.getSelection()?.removeAllRanges();
+    navigate(itemHref(item));
+  };
+
   if (!visible) {
     return (
       <EmptyState
@@ -264,12 +321,14 @@ export function ItemsTab({
   }
 
   const noCriteria = !route.search && !route.label && metaFilters.length === 0;
+  const filterCount =
+    (route.search ? 1 : 0) + (route.label ? 1 : 0) + metaFilters.length + (route.state !== 'all' ? 1 : 0);
   const counts = query.data?.counts;
   if (
     query.data &&
     query.data.total === 0 &&
     noCriteria &&
-    route.state === 'active' &&
+    route.state === 'all' &&
     (counts?.all ?? 0) === 0
   ) {
     return (
@@ -298,6 +357,7 @@ export function ItemsTab({
     );
   }
 
+  const showIdColumn = hasUserIds || route.state !== 'active';
   const openItem = (item: DatasetItem) => (onOpenItem ?? ((i: DatasetItem) => navigate(itemHref(i))))(item);
 
   const columns: Column<DatasetItem>[] = [
@@ -317,7 +377,7 @@ export function ItemsTab({
         </span>
       ),
     },
-    ...(hasUserIds || route.state !== 'active'
+    ...(showIdColumn
       ? [
           {
             id: 'item_id',
@@ -326,11 +386,17 @@ export function ItemsTab({
             sort: 'item_id',
             width: route.state !== 'active' ? 180 : 140,
             priority: 2,
+            // cv4 E13: the item id is the row's primary text (green while the row is hovered or focused)
+            cardTitle: true,
             cell: (item: DatasetItem) => (
               <span className={styles.idCell}>
-                <span dir="ltr">{item.item_id}</span>
+                <span dir="ltr" data-row-primary="">
+                  {item.item_id}
+                </span>
                 {item.state === 'disabled' ? (
-                  <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+                  <Flag icon="ban" data-status="disabled">
+                    Disabled
+                  </Flag>
                 ) : null}
               </span>
             ),
@@ -343,9 +409,12 @@ export function ItemsTab({
       sort: 'input',
       flex: true,
       minWidth: 220,
-      wrap: 2,
       priority: 1,
-      cell: (item) => <Preview value={item.input} wrap />,
+      // the shared table clamps the text to the lines of the density (cv4 X6)
+      wrap: true,
+      // without an id column the input is the row's primary text (cv4 E13)
+      cardTitle: !showIdColumn,
+      cell: (item, ctx) => <Preview value={item.input} density={ctx.density} primary={!showIdColumn} />,
     },
     {
       id: 'expected',
@@ -353,9 +422,9 @@ export function ItemsTab({
       sort: 'expected',
       flex: true,
       minWidth: 180,
-      wrap: 2,
       priority: 2,
-      cell: (item) => <Preview value={item.expected_output} wrap />,
+      wrap: true,
+      cell: (item, ctx) => <Preview value={item.expected_output} density={ctx.density} />,
     },
     {
       id: 'metadata',
@@ -390,11 +459,14 @@ export function ItemsTab({
       type: 'score',
       sort: `metric:${m}`,
       width: 130,
+      align: 'center',
       priority: 2,
       cell: (item) => (
-        <ScoreBar
+        <ScoreValue
           value={item.result_summary?.metrics?.[m]?.avg ?? null}
+          type="score"
           direction={metricDir(directions[m])}
+          variant="plain"
         />
       ),
     })),
@@ -420,15 +492,10 @@ export function ItemsTab({
 
   const rowActions = (): RowAction<DatasetItem>[] => [
     {
-      id: 'open',
-      label: 'Open item page',
-      icon: 'external',
-      primary: true,
-      onPress: (it) => navigate(itemHref(it)),
-    },
-    {
       id: 'copy',
       label: 'Copy as JSON',
+      icon: 'copy',
+      primary: true,
       onPress: (it) =>
         void copyText(
           formatJson({
@@ -469,12 +536,27 @@ export function ItemsTab({
     meta: metaFilters,
   };
   return (
-    <div className={styles.wrap} data-items-tab aria-busy={query.isFetching || undefined}>
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- a double click on a row opens the item page (cv4 E3); the keyboard path is Enter, then the pane's Open page
+    <div
+      ref={wrapRef}
+      className={styles.wrap}
+      data-items-tab
+      aria-busy={query.isFetching || undefined}
+      onPointerDownCapture={(e) => {
+        pressAt.current = { x: e.clientX, y: e.clientY };
+      }}
+      onMouseDown={(e) => {
+        // the second press of a double click opens the page: it must not also select a word
+        if (e.detail > 1 && rowOf(e.target)) e.preventDefault();
+      }}
+      onDoubleClick={openPageOnDoubleClick}
+    >
       <DataTable<DatasetItem>
         aria-label={`Items in ${version.version}`}
         storageKey="datasets.items.v3"
         groupBand={false}
-        density="compact"
+        // cv4 E1: regular (two lines of item text) is the default, the look before the densities were told apart
+        density="regular"
         rows={items}
         rowKey={(i) => i.item_id}
         columns={columns}
@@ -482,7 +564,11 @@ export function ItemsTab({
         onSortChange={(s) => setQuery({ sort: s ? itemSortKey(s.key, s.direction) : null, page: null })}
         onRowOpen={openItem}
         rowActions={rowActions}
-        rowProps={(item) => ({ 'data-state': item.state === 'disabled' ? 'disabled' : undefined })}
+        // cv4 E2, X7: with the pane open, the highlighted row is the pane's item, not the row clicked or focused last
+        activeKey={activeKey}
+        rowProps={(item) => ({
+          'data-state': item.state === 'disabled' ? 'disabled' : undefined,
+        })}
         selection={
           selection
             ? {
@@ -498,6 +584,7 @@ export function ItemsTab({
         loading={tableLoading(query.isPending && visible, showSkeleton)}
         refreshing={query.isFetching && query.isPlaceholderData}
         error={query.isError ? query.error : undefined}
+        errorTitle="Couldn’t load items"
         onRetry={() => void query.refetch()}
         isFiltered={filtered}
         empty={
@@ -516,12 +603,7 @@ export function ItemsTab({
         filteredEmpty={
           <EmptyState
             compact
-            title="No items match these filters"
-            action={
-              <Button variant="neutral" onPress={clearFilters}>
-                Clear filters
-              </Button>
-            }
+            title={route.search ? `No items match “${route.search}”` : 'No items match these filters'}
           />
         }
         className={styles.table}
@@ -535,80 +617,51 @@ export function ItemsTab({
               placeholder="Search items"
               value={search}
               onChange={setSearch}
-              width={260}
+              width="var(--search-width)"
+              shortcut="/"
               data-testid="items-search"
             />
           }
-          filters={
-            <>
+          rows={
+            <div className={styles.filterRow} role="group" aria-label="Item filters">
+              <span data-testid="items-state">
+                <MultiSelect
+                  label="State"
+                  triggerVariant="bar"
+                  emptyMeansAll
+                  items={STATE_OPTIONS.map((o) => ({
+                    key: o.id,
+                    label: o.label,
+                    count: stateCount(counts, o.id),
+                  }))}
+                  value={route.state === 'all' ? new Set<Key>() : new Set<Key>([route.state])}
+                  onChange={(next) => {
+                    onFilterChange?.();
+                    const state: StateFilter = next.size === 1 ? ([...next][0] as StateFilter) : 'all';
+                    setQuery({ state: stateUrlValue(state) ?? null, page: null });
+                  }}
+                />
+              </span>
+              <Select
+                label="Label"
+                hideLabel
+                triggerVariant="bar"
+                items={[{ key: '', label: 'All' }, ...version.labels.map((l) => ({ key: l, label: l }))]}
+                value={route.label}
+                onChange={(key) => {
+                  onFilterChange?.();
+                  setQuery({ label: key ? String(key) : null, page: null });
+                }}
+              />
               <MetadataFilter
                 slug={slug}
                 datasetRef={dataset.slug}
                 version={version.version}
                 filters={metaFilters}
-                onAdd={(f) => setMeta(addMetaFilter(metaFilters, f), f.path)}
+                onAdd={(f) => setMeta(addMetaFilter(metaFilters, f))}
               />
-              <span data-testid="items-state">
-                <SegmentedControl<StateFilter>
-                  label="Item state"
-                  options={STATE_OPTIONS.map((o) => {
-                    const n = stateCount(counts, o.id);
-                    return {
-                      value: o.id,
-                      label: (
-                        <>
-                          {o.label}
-                          {n === undefined ? null : <span className={styles.countLabel}>{n}</span>}
-                        </>
-                      ),
-                    };
-                  })}
-                  value={route.state}
-                  onChange={(next) => {
-                    onFilterChange?.();
-                    setQuery({ state: stateUrlValue(next) ?? null, page: null });
-                  }}
-                />
-              </span>
-            </>
-          }
-          chips={
-            route.label || metaFilters.length ? (
-              <div className={styles.chipRow} data-testid="filter-chips">
-                {route.label ? (
-                  <Chip
-                    isSelected
-                    onRemove={() => {
-                      onFilterChange?.();
-                      setQuery({ label: null, page: null });
-                    }}
-                    removeLabel="Clear label filter"
-                  >
-                    label: {route.label}
-                  </Chip>
-                ) : null}
-                {metaFilters.map((f) => (
-                  <Chip
-                    key={f.path}
-                    isSelected
-                    onRemove={() => setMeta(removeMetaFilter(metaFilters, f))}
-                    removeLabel={`Remove filter ${metaChipLabel(f)}`}
-                    data-testid="meta-chip"
-                    data-meta-path={f.path}
-                  >
-                    {metaChipLabel(f)}
-                  </Chip>
-                ))}
-              </div>
-            ) : null
-          }
-          count={
-            query.data ? (
-              <span aria-live="polite">
-                {stateTotalText(route.state, counts, query.data.total)}
-                {route.search ? ` matching “${route.search}”` : ''}
-              </span>
-            ) : null
+              <ClearFiltersButton count={filterCount} onClear={clearFilters} />
+            </div>
           }
           trailing={
             <>
@@ -626,10 +679,11 @@ export function ItemsTab({
                 <DropdownMenu
                   label="Actions on all matching items"
                   trigger={
+                    // cv5 Z1: a menu of actions reads as the header's "⋯ Actions" button, no chevron
                     <Button
                       variant="neutral"
                       size="sm"
-                      iconEnd={<Icon name="chevron-down" size={12} />}
+                      icon={<Icon name="more" size={12} />}
                       data-testid="all-matching"
                     >
                       All matching
@@ -639,16 +693,19 @@ export function ItemsTab({
                     {
                       id: 'disable',
                       label: menuLabel('disable', counts?.active ?? 0),
+                      icon: <ActionTile icon="ban" />,
                       disabled: !counts?.active,
                     },
                     {
                       id: 'enable',
                       label: menuLabel('enable', counts?.disabled ?? 0),
+                      icon: <ActionTile icon="check" />,
                       disabled: !counts?.disabled,
                     },
                     {
                       id: 'delete',
                       label: menuLabel('delete', counts?.all ?? 0),
+                      icon: <ActionTile icon="trash" tone="danger" />,
                       tone: 'danger',
                       separatorBefore: true,
                       disabled: !counts?.all,
@@ -662,6 +719,11 @@ export function ItemsTab({
         />
         {/* Add item and Import live in the dataset header only (C116) */}
         <DataTable.Footer
+          filterNote={
+            query.data && (!noCriteria || route.state === 'disabled') && total < version.item_count
+              ? `Filtered from ${version.item_count} items`
+              : undefined
+          }
           pagination={{
             total,
             page: route.page + 1,
@@ -698,10 +760,24 @@ export function ItemsTab({
   );
 }
 
-/** Mono one-line preview; Arabic text flows RTL. Hovering for 700 ms shows the full value. */
-/** A cell preview: item text in the sans face; `mono` for JSON such as metadata (C153). */
-export function Preview({ value, wrap, mono }: { value: unknown; wrap?: boolean; mono?: boolean }) {
-  const text = promptPreview(value);
+/**
+ * A cell preview: item text in the sans face; `mono` for JSON such as metadata (C153). Arabic text flows RTL. Hovering
+ * for 700 ms shows the full value. With `density` (a wrapping table column) the text wraps; the shared table clamps it
+ * to the lines of that density (cv4 E1, X6).
+ */
+export function Preview({
+  value,
+  density,
+  mono,
+  primary,
+}: {
+  value: unknown;
+  density?: RowDensity;
+  mono?: boolean;
+  /** The row's primary text (cv4 E13). */
+  primary?: boolean;
+}) {
+  const text = density ? cellPreviewText(value, density) : promptPreview(value);
   const dir = textDirAttrs(text);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -712,8 +788,10 @@ export function Preview({ value, wrap, mono }: { value: unknown; wrap?: boolean;
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
     <span
-      className={wrap ? styles.previewWrap : styles.preview}
+      className={density ? styles.previewWrap : styles.preview}
       data-mono={mono ? '' : undefined}
+      data-density={density}
+      data-row-primary={primary ? '' : undefined}
       {...dir}
       onMouseEnter={(e) => {
         if (!text) return;

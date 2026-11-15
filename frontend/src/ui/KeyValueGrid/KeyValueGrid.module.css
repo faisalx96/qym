@@ -1,4 +1,4 @@
-/* Key/value grid: --font-sm uppercase labels, --font-base values. */
+/* Key/value grid: --font-sm normal-case labels, --font-base values. */
 .grid {
   display: grid;
   gap: var(--space-md) var(--space-lg);
@@ -40,8 +40,6 @@
   gap: var(--space-xs);
   font-size: var(--font-sm);
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -53,7 +51,6 @@
 /* Config/metadata keys carry the definition-metadata (meta) colour on the kind suffix only. */
 .kind {
   color: var(--tone-text, var(--text-muted));
-  letter-spacing: 0.05em;
 }
 
 .kind::before {

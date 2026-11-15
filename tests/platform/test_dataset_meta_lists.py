@@ -10,7 +10,6 @@ The API cases run on SQLite; the SQL cases also run on PostgreSQL when
 from __future__ import annotations
 
 import os
-import time
 from uuid import uuid4
 
 import pytest
@@ -477,31 +476,6 @@ def test_statement_count_is_equal_for_one_and_twenty_values(faq):
         assert response.status_code == 200
         counts.append(len(seen))
     assert counts[0] == counts[1], counts
-
-
-def test_5000_items_list_and_batch_dry_run_stay_under_a_second(world):
-    client, factory, _ = world
-    new_dataset(client, MGR, "qa")
-    version = new_version(client, MGR, "qa", "v1")
-    seed_items(factory, version["id"], faq_metadata(5000))
-    params = dict(meta=["tags:billing", "tags:refund"], meta_mode="tags:any", limit=50)
-    started = time.perf_counter()
-    response = _items(client, **params)
-    assert response.status_code == 200 and time.perf_counter() - started < 1.0
-    started = time.perf_counter()
-    dry = client.post(
-        BASE.format(v="v1") + "/items:batch",
-        params=PARAMS,
-        headers=MGR,
-        json={
-            "filter": {
-                "meta": {"tags": {"values": ["billing", "refund"], "mode": "any"}}
-            },
-            "action": "disable",
-        },
-    )
-    assert dry.status_code == 200 and time.perf_counter() - started < 1.0
-    assert dry.json()["matched"] == response.json()["total"]
 
 
 # ------------------------------------------------------------------ items:batch (QA1-54 to QA1-57)

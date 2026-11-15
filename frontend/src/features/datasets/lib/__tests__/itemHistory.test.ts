@@ -23,6 +23,13 @@ describe('orderItemHistory (C189)', () => {
     expect(['a', 'b', 'c', 'd'].map((id) => numberOf.get(id))).toEqual([1, 2, 3, 4]);
   });
 
+  it('cv5 Z6: integer revision ids at the same time sort as numbers (the API sends integers)', () => {
+    const same = '2026-10-01T10:00';
+    const n = (id: number) => rev(id as unknown as string, same);
+    const { lineage } = orderItemHistory([ver('v1', '2026-10-01', [n(9), n(10), n(2)])]);
+    expect(lineage[0]!.revisions.map((r) => r.id)).toEqual([10, 9, 2]);
+  });
+
   it('shows a type change only on an update', () => {
     expect(showsTypeChange(rev('x', '', 'created'))).toBe(false);
     expect(showsTypeChange(rev('x', '', 'deleted'))).toBe(false);

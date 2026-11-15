@@ -1,4 +1,4 @@
-import { useAnalysisConfig, type AnalysisScope } from '@/api/analysis';
+import { useAnalysisConfig, type AnalysisScope, type RuleVersion } from '@/api/analysis';
 import { DiagnosisPanel } from './guidance/DiagnosisPanel';
 import { DocumentsPanel } from './guidance/DocumentsPanel';
 import { RulesPanel } from './guidance/RulesPanel';
@@ -10,11 +10,14 @@ export function GuidanceArea({
   slug,
   canManage,
   tab,
+  onRuleVersion,
 }: {
   scope: AnalysisScope;
   slug: string;
   canManage: boolean;
   tab: Exclude<AnalyzerScope, 'run'>;
+  /** The rule version open on the Rules tab (cv5 Z11, for the prompt pane's note). */
+  onRuleVersion?: (version: RuleVersion | null) => void;
 }) {
   const config = useAnalysisConfig(scope);
   const c = config.data;
@@ -26,7 +29,7 @@ export function GuidanceArea({
         canManage={canManage && (c?.can_manage_category_catalog ?? true)}
       />
     );
-  if (tab === 'rules') return <RulesPanel scope={scope} canManage={canManage} />;
+  if (tab === 'rules') return <RulesPanel scope={scope} canManage={canManage} onOpenVersion={onRuleVersion} />;
   return (
     <DocumentsPanel
       scope={scope}

@@ -4,6 +4,7 @@
   /* Row separators are a faint hairline, and none where zebra stripes already separate the rows: a full-strength line
      on every row read as a grid of boxes (round 10). */
   --row-line: color-mix(in srgb, var(--border-subtle) 55%, transparent);
+  --zebra-step: var(--stripe-step);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -25,6 +26,11 @@
   --row-line: transparent;
 }
 
+/* D-01: a table inside a run, compare or experiment report section takes the fainter report stripe. */
+.card[data-stripe='report'] {
+  --zebra-step: var(--stripe-step-report);
+}
+
 .card[data-variant='embedded'] {
   border: 0;
   border-radius: 0;
@@ -39,6 +45,19 @@
   flex: 1 1 auto;
   border-radius: inherit;
   overflow: hidden;
+}
+
+/* cv4 F2: the header row and the rows sit flush with the card edge. A toolbar above (or a footer below) already has the
+   card's round corner, so the body under it is square at that edge: a round body corner left an empty wedge between the
+   toolbar and the header row ("at the corner there is an empty space"). */
+.toolbar ~ .bodyHost {
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
+}
+
+.bodyHost:has(~ .footer) {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
 }
 
 .scroller {
@@ -401,6 +420,13 @@
   height: max(var(--row-h), var(--row-comfortable));
 }
 
+/* cv4 X6: a wrapping column (`Column.wrap`) follows the density: compact 1 line, regular 2, comfortable up to 5 (the
+   cell's --lines). A comfortable row of such a table is a real step up, at least four text lines high, so the three
+   densities look different even for short text. Child combinators: a nested table keeps its own density. */
+.table[data-wrap-tall] > .tbody > tr > td {
+  height: max(var(--row-h), calc(4 * 1.35em + 2 * var(--space-sm)));
+}
+
 .cell {
   line-height: 1.35; /* one line box for sans and mono cells so values share a baseline */
   min-width: 0;
@@ -427,6 +453,9 @@
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.35;
+  /* D-05: no block room, so a clamped cell shows no pixels of a third line */
+  padding-block: 0;
+  margin-block: 0;
 }
 
 .twoLine {
@@ -590,14 +619,15 @@
 }
 
 /* Round 10: the handle shows on the row under the pointer, the focused row and an open cell only, so at rest no handle
-   covers the scores scrolling under the column (a touch screen, with no hover, keeps every handle). */
+   covers the scores scrolling under the column (a touch screen, with no hover, keeps every handle). cv4 X8: one row
+   only: the focused row shows its handle while no other row is under the pointer. */
 .bodyHost[data-scroll-end] .foldHandle {
   display: inline-flex;
   pointer-events: auto;
   opacity: 0;
 }
 .bodyHost[data-scroll-end] .tr:hover .foldHandle,
-.bodyHost[data-scroll-end] .tr[data-focused] .foldHandle,
+.bodyHost[data-scroll-end] .tbody:not(:has(> .tr:hover)) > .tr[data-focused] .foldHandle,
 .bodyHost[data-scroll-end] .fold[data-open] .foldHandle,
 .bodyHost[data-scroll-end] .foldHandle:focus-visible {
   opacity: 1;
@@ -656,7 +686,7 @@
 }
 
 .tr:hover .rowMenuHandle,
-.tr[data-focused] .rowMenuHandle,
+.tbody:not(:has(> .tr:hover)) > .tr[data-focused] .rowMenuHandle,
 .card2:hover .rowMenuHandle,
 .card2:focus-within .rowMenuHandle,
 .rowMenuHandle[aria-expanded='true'],
@@ -686,6 +716,13 @@
   pointer-events: none;
 }
 
+/* cv4 X8: the row itself carries its tone, so whatever shows through a folded cell is the row, never the card. */
+.bodyHost[data-scroll-end] .tbody > .tr {
+  background:
+    linear-gradient(var(--row-tint, transparent), var(--row-tint, transparent)),
+    var(--row-base, var(--bg-base));
+}
+
 .tr {
   scroll-margin-top: var(--table-header-height);
   --row-base: var(--bg-base);
@@ -693,7 +730,7 @@
 }
 
 .tr[data-zebra] {
-  --row-base: var(--card-bg);
+  --row-base: color-mix(in srgb, var(--text-primary) var(--zebra-step), var(--bg-base));
 }
 
 .tr[data-clickable] {
@@ -701,7 +738,7 @@
 }
 
 .tr:hover {
-  --row-base: var(--bg-hover);
+  --row-base: var(--row-hover);
 }
 
 /* hoverEdge: the row under the pointer draws an accent hairline above and below it and a 2px accent edge at its start */
@@ -711,7 +748,7 @@
     inset 0 -1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
 
-.card[data-hover-edge] .tr:hover > .td:first-child {
+.card[data-hover-edge] .tr:hover > :is(.td:first-child:not([data-collapsed]), .td[data-collapsed] + .td) {
   box-shadow:
     inset 2px 0 0 var(--accent-primary),
     inset 0 1px 0 color-mix(in srgb, var(--accent-primary) 45%, transparent),
@@ -719,7 +756,7 @@
 }
 
 .tr[data-focused] {
-  --row-base: var(--bg-hover);
+  --row-base: var(--row-hover);
 }
 
 .tr[data-state='error'] {
@@ -731,10 +768,10 @@
 }
 
 .tr[data-selected] {
-  --row-tint: var(--bg-selected);
+  --row-tint: var(--row-selected, var(--bg-selected));
 }
 
-.tr[data-selected] td:first-child,
+.tr[data-selected] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td),
 .tr[data-selected] td[data-pseudo='select'] {
   box-shadow:
     inset 2px 0 0 var(--accent-primary),
@@ -745,23 +782,28 @@
   --row-base: var(--card-bg);
 }
 
+/* cv4 F11: an open parent row still shows the hover tone under the pointer (the rule above came later and won). */
+.tr[aria-expanded='true']:hover {
+  --row-base: var(--row-hover);
+}
+
 /* Row state rail on the first cell. */
-.tr[data-state='error'] td:first-child {
+.tr[data-state='error'] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 3px 0 0 var(--error),
     var(--pin-line, 0 0 0 transparent);
 }
-.tr[data-state='warn'] td:first-child {
+.tr[data-state='warn'] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 3px 0 0 var(--warning),
     var(--pin-line, 0 0 0 transparent);
 }
-.tr[data-state='live'] td:first-child {
+.tr[data-state='live'] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 3px 0 0 var(--info),
     var(--pin-line, 0 0 0 transparent);
 }
-.tr[data-state='new'] td:first-child {
+.tr[data-state='new'] :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 3px 0 0 var(--accent-primary),
     var(--pin-line, 0 0 0 transparent);
@@ -775,7 +817,7 @@
     var(--pin-line, 0 0 0 transparent);
 }
 
-.tr:focus-visible td:first-child {
+.tr:focus-visible :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset 2px 0 0 var(--accent-primary),
     inset 0 2px 0 var(--accent-primary),
@@ -789,6 +831,23 @@
     inset 0 2px 0 var(--accent-primary),
     inset 0 -2px 0 var(--accent-primary),
     var(--pin-line, 0 0 0 transparent);
+}
+
+/* E-49: one closed ring. After a collapsed (0px) select cell, the first visible cell draws the start edge. */
+.tr:focus-visible td[data-collapsed] + td {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
+}
+
+/* E-49: at the scroll end the folded fold cell keeps the end edge (beats the fold rule that drops its shadow). */
+.bodyHost[data-scroll-end] .tr:focus-visible .td[data-fold]:not(:has(.fold[data-open])) {
+  box-shadow:
+    inset -2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary);
 }
 
 .selectionCluster {
@@ -819,20 +878,7 @@
   justify-content: flex-end;
   gap: 2px;
   width: 100%;
-  opacity: 0.6; /* resting state: present, quiet; full strength on hover/focus/selection */
-  transition: opacity var(--transition-fast);
-}
-.tr[data-selected] .rowActions,
-.tr:hover .rowActions,
-.tr:focus-within .rowActions,
-.rowActions:focus-within {
-  opacity: 1;
-}
-
-@media (hover: none) {
-  .rowActions {
-    opacity: 1;
-  }
+  /* cv4 F9: full strength at rest; a 0.6 rest opacity made the tiles dim (the revoke tile all but vanished) */
 }
 
 .detailRow > td {
@@ -1075,9 +1121,11 @@
   padding-block: var(--space-sm);
 }
 
+/* D-10: the pager sits in the exact centre; the start (filter note) and end slots share the free space. */
 .footer {
   min-height: var(--table-footer-height);
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   border-top: 1px solid var(--border-subtle);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
@@ -1091,6 +1139,39 @@
   flex-wrap: wrap;
   gap: var(--space-sm);
   min-width: 0;
+}
+
+.footerEnd {
+  justify-content: flex-end;
+}
+
+/* Narrow screens keep the flex footer: the note, the pager and the end items wrap. */
+@media (width < 640px) {
+  .footer {
+    display: flex;
+    justify-content: space-between;
+  }
+}
+
+/* A-01: a centred control (the 'Show N more' button): the start and end parts take equal widths, so it sits in the
+   middle of the footer. */
+.footer[data-center] > .footerStart,
+.footer[data-center] > .footerEnd {
+  flex: 1 1 0;
+}
+.footer[data-center] > .footerEnd {
+  justify-content: flex-end;
+}
+.footerCenter {
+  display: flex;
+  justify-content: center;
+  flex: none;
+}
+
+/* D-10: the filter note at the far left of the footer. */
+.filterNote {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
 .toolbarMain {
@@ -1124,9 +1205,9 @@
   gap: var(--space-xs);
 }
 
+/* E-37: a phrase with a count is sans (inherited), with tabular figures. */
 .count,
 .selCount {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-sm);
   color: var(--text-muted);
@@ -1202,22 +1283,6 @@
   padding: var(--space-xs) var(--space-sm);
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-subtle);
-}
-.cardSortLabel {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-.cardSortSelect {
-  height: var(--control-height);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--card-bg);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-base);
 }
 .cards {
   margin: 0;
@@ -1474,15 +1539,15 @@
 
 .childRow:hover,
 .childRow[data-focused] {
-  --row-base: var(--bg-hover);
+  --row-base: var(--row-hover);
 }
 
 .childRow > td {
   color: var(--text-secondary);
 }
 
-.tr[data-group-open]:not([data-state]) > td:first-child,
-.childRow > td:first-child {
+.tr[data-group-open]:not([data-state]) > :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td),
+.childRow > :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td) {
   box-shadow:
     inset var(--rail-width) 0 0 var(--accent-primary),
     var(--pin-line, 0 0 0 transparent);
@@ -1493,7 +1558,7 @@
   font-weight: 600;
 }
 
-.childRow[data-selected] > td:first-child,
+.childRow[data-selected] > :is(td:first-child:not([data-collapsed]), td[data-collapsed] + td),
 .childRow[data-selected] > td[data-pseudo='select'] {
   box-shadow:
     inset var(--rail-width) 0 0 var(--accent-primary),

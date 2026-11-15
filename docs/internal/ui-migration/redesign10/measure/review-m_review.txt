@@ -1,0 +1,69 @@
+1440 {
+ "card": 1193,
+ "columns": [
+  ":48",
+  ":225.8",
+  "Linked: vary together:451.5",
+  ":225.8",
+  ":240",
+  "#:48",
+  "ENVIRONMENT:225.8",
+  "Primary model:225.8",
+  "Milvus Search Threshold:225.8",
+  "Timeout:225.8",
+  "PRIORITY:240"
+ ],
+ "rows": 12,
+ "rowH": 32,
+ "firstRows": [
+  "1 | staging | gpt-4o prod | 0.5 | 10 | Priority of run 1 Normal Low Normal High",
+  "2 | production | gpt-4o prod | 0.5 | 10 | Priority of run 2 Normal Low Normal High",
+  "3 | staging | gpt-4o prod | 0.5 | 30 | Priority of run 3 Normal Low Normal High"
+ ],
+ "tagSample": [
+  "0.5 w=21.6 font=12px ellipsis=clip clipped=false",
+  "10 w=14.4 font=12px ellipsis=clip clipped=false"
+ ],
+ "scroll": "1191/1191",
+ "swept": "Primary model + Milvus Search Threshold: | gpt-4o prod + 0.5, | claude-sonnet eval + 0.7 | linked | Timeout: | 10, | 30, | 60",
+ "changes": "Changes from the starting point | Sweeps: Primary model + Milvus Search Threshold (linked), Timeout | Edit"
+}
+dry-run axes [{"pointers":["/slot_bindings/endpoint:primary","/env_overrides/MILVUS_SEARCH_THRESHOLD"],"linked":true,"length":2,"values":[[{"connection_id":"017cb93c-04e0-41f3-854b-1d63cb2fd3b1","name":"gpt-4o prod","model":"gpt-4o"},0.5],[{"connection_id":"4b921afc-c2cf-4fbc-a5c8-f803d838dd7e","name":"claude-sonnet eval","model":"claude-sonnet"},0.7]]},{"pointers":["/env_overrides/LLM_OVERRIDES/endpoints/primary/timeout"],"linked":false,"length":3,"values":[[10],[30],[60]]}] job0 {"label":"primary=gpt-4o thr=0.5 timeout=10","params":{"slot_bindings":{"endpoint:primary":{"connection_id":"017cb93c-04e0-41f3-854b-1d63cb2fd3b1","name":"gpt-4o prod","model":"gpt-4o"}},"sweep":{"/slot_bindings/endpoint:primary":{"connection_id":"017cb93c-04e0-41f3-854b-1d63cb2fd3b1","name":"gpt-4o prod","model":"gpt-4o"},"/env_overrides/MILVUS_SEARCH_THRESHOLD":0.5,"/env_overrides/LLM_OVERRIDES/endpoints/primary/timeout":10}}}
+1024 {
+ "card": 777,
+ "columns": [
+  ":48",
+  ":121.8",
+  "Linked: vary together:243.5",
+  ":121.8",
+  ":240",
+  "#:48",
+  "ENVIRONMENT:121.8",
+  "Primary model:121.8",
+  "Milvus Search Threshold:121.8",
+  "Timeout:121.8",
+  "PRIORITY:240"
+ ],
+ "rows": 12,
+ "rowH": 32,
+ "firstRows": [
+  "1 | staging | gpt-4o prod | 0.5 | 10 | Priority of run 1 Normal Low Normal High",
+  "2 | production | gpt-4o prod | 0.5 | 10 | Priority of run 2 Normal Low Normal High",
+  "3 | staging | gpt-4o prod | 0.5 | 30 | Priority of run 3 Normal Low Normal High"
+ ],
+ "tagSample": [
+  "0.5 w=21.6 font=12px ellipsis=clip clipped=false",
+  "10 w=14.4 font=12px ellipsis=clip clipped=false"
+ ],
+ "scroll": "775/775",
+ "swept": "Primary model + Milvus Search Threshold: | gpt-4o prod + 0.5, | claude-sonnet eval + 0.7 | linked | Timeout: | 10, | 30, | 60",
+ "changes": "Changes from the starting point | Sweeps: Primary model + Milvus Search Threshold (linked), Timeout | Edit"
+}
+390 {
+ "card": 279,
+ "cards": 12,
+ "cardH": 160,
+ "firstCard": "Run | 1 | Environment | staging | Primary model | gpt-4o prod | Milvus Search Threshold | 0.5 | Timeout | 10 | Priority | Priority of run 1 | Normal |   | Low | Normal | High",
+ "swept": "Primary model + Milvus Search Threshold: | gpt-4o prod + 0.5, | claude-sonnet eval + 0.7 | linked | Timeout: | 10, | 30, | 60",
+ "changes": "Changes from the starting point | Sweeps: Primary model + Milvus Search Threshold (linked), Timeout | Edit"
+}

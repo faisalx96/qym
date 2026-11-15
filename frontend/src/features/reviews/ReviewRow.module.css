@@ -38,9 +38,12 @@
 }
 
 .main:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: 2px;
-  border-radius: var(--control-radius);
+  outline: none;
+}
+
+.row:has(.main:focus-visible) {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
 }
 
 .top {
@@ -67,9 +70,8 @@
 
 .conf {
   margin-inline-start: auto;
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .summary {
@@ -82,9 +84,11 @@
 }
 
 .ctx {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--font-sm);
   color: var(--text-muted);
 }

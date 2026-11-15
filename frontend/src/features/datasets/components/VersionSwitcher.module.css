@@ -27,7 +27,7 @@
 .pillVersion {
   font-family: var(--font-mono);
   font-weight: 650;
-  color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .pillName {

@@ -1,8 +1,10 @@
 /**
- * The Items bar: search · show · sort · Display, with the count and the active chips (UX_DECISION). The page metric,
- * its Pass if threshold, the Filters rules and Clear live in the sticky nav only (C039, C154).
+ * The Items bar: search · show · sort · Display, with the count and the active chips (UX_DECISION), and the bar's
+ * end slot (the CSV export, cv4 C2-8). Every control is one 24px box with its label inside it, so the row and the
+ * count share one centre line. The page metric, its Pass if threshold, the Filters rules and Clear live in the sticky
+ * nav only (C039, C154).
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useSyncedInput } from '../../hooks/useSynced';
 import { Button, Chip, Icon, MultiSelect, SearchField, SegmentedControl, Select, Popover, Text } from '@/ui';
 import { setTextMode, type TextMode } from '@/lib/text';
@@ -35,7 +37,7 @@ export interface DisplayState {
   onTextMode: (m: TextMode) => void;
 }
 
-export function FilterBar({ display }: { display: DisplayState }) {
+export function FilterBar({ display, end }: { display: DisplayState; end?: ReactNode }) {
   const { api, model, items, payload } = useRunPage();
   const { view, defs, selectedMetric: metric } = api;
   const [displayOpen, setDisplayOpen] = useState(false);
@@ -73,7 +75,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}
-          width="clamp(18ch, 14vw, 22ch)"
+          width="var(--search-width)"
         />
         {datasetItems.length > 1 ? (
           <span data-testid="dataset-filter">
@@ -107,21 +109,23 @@ export function FilterBar({ display }: { display: DisplayState }) {
         <span className={styles.showSelect}>
           <Select
             label="Show"
+            triggerVariant="bar"
+            showValue="always"
             items={showOptions.map((o) => ({ key: o.value, label: o.label }))}
             value={view.show}
             onChange={(k) => k && api.setView({ show: String(k) as ItemShow })}
-            width="9ch"
           />
         </span>
         <Select
           label="Sort"
+          triggerVariant="bar"
+          showValue="always"
           items={SORT_VALUES.reduce(
             (acc, v) => [...acc, { key: v, label: SORT_LABELS[v] }],
             [{ key: 'index', label: SORT_LABELS.index }],
           )}
           value={view.sort}
           onChange={(k) => k && api.setView({ sort: String(k) as SortBy })}
-          width="clamp(10ch, 8vw, 12ch)"
         />
         <Popover
           label="Display"
@@ -188,7 +192,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
         </Popover>
       </div>
       <div className={styles.chips}>
-        <Text variant="sm" tone="muted" aria-live="polite" data-testid="items-count">
+        <Text variant="sm" tone="muted" aria-live="polite" data-testid="items-count" className={styles.count}>
           {union
             ? `${items.length.toLocaleString('en-US')} items`
             : `${items.length.toLocaleString('en-US')} of ${payload.snapshot.rows.length.toLocaleString('en-US')} items`}
@@ -196,17 +200,13 @@ export function FilterBar({ display }: { display: DisplayState }) {
         {chips.length ? (
           <span className={styles.chipList}>
             {chips.map((chip) => (
-              <Chip
-                key={chip.key}
-                isSelected
-                removeLabel={`Remove filter ${chip.label}`}
-                onRemove={() => api.replaceView(chip.clear(view))}
-              >
+              <Chip key={chip.key} isSelected>
                 {chip.label}
               </Chip>
             ))}
           </span>
         ) : null}
+        {end ? <span className={styles.end}>{end}</span> : null}
       </div>
     </div>
   );

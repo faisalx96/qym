@@ -36,9 +36,14 @@ describe('RuleBuilder score values', () => {
     expect(screen.getByText('%')).toBeInTheDocument();
     await user.clear(input);
     await user.type(input, '75');
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
-    const last = onChange.mock.calls.at(-1)![0] as FilterGroup;
-    expect(last.children[0]).toMatchObject({ field: 'metric:accuracy', oper: 'gt', value: '0.75' });
+    // Each keystroke can call onChange; wait for the last one, not the first.
+    await waitFor(() =>
+      expect((onChange.mock.lastCall?.[0] as FilterGroup | undefined)?.children[0]).toMatchObject({
+        field: 'metric:accuracy',
+        oper: 'gt',
+        value: '0.75',
+      }),
+    );
   });
 
   it('a count keeps its own units', () => {

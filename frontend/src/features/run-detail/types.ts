@@ -50,6 +50,8 @@ export interface RunDatasetEntry {
   dataset_slug: string | null;
   dataset_version_id?: string | null;
   version: string | null;
+  /** The version's status now (absent on an older payload). */
+  status?: 'draft' | 'published' | 'archived' | null;
   /** Aliases that point at the version now. */
   aliases?: string[];
   /** The alias used to resolve the version at run time. */
@@ -97,6 +99,7 @@ export interface Run {
   task_name?: string;
   dataset_name?: string;
   dataset_version?: string | number | null;
+  dataset_version_status?: 'draft' | 'published' | 'archived' | null;
   dataset_aliases?: string[];
   dataset_slug?: string | null;
   model_name?: string;
@@ -132,6 +135,8 @@ export interface Run {
   experiment?: RunExperiment | null;
   versioning_details?: Record<string, unknown>;
   live_revision?: string;
+  /** With `live_revision`: the deployment's probe interval in seconds. */
+  live_refresh_seconds?: number;
   items_restricted?: boolean;
   /** why item contents are hidden: an admin-only private test set, or a restricted dataset the reader cannot open */
   items_restricted_reason?: 'private_test_set' | 'dataset_access' | null;
@@ -309,6 +314,8 @@ export interface LiveStatus {
   ended_at?: string | null;
   last_event_at?: string | null;
   revision: string;
+  /** The deployment's probe interval (QYM_RUN_LIVE_REFRESH_SECONDS); the page follows it. */
+  live_refresh_seconds?: number;
   server_time?: string;
 }
 

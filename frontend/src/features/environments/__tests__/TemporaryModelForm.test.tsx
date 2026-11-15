@@ -66,7 +66,7 @@ describe('TemporaryModelForm', () => {
     render(<TemporaryModelForm onSubmit={vi.fn()} onCancel={onCancel} />);
     await user.type(screen.getByLabelText(/^API key/), 'sk-secret');
     await user.click(screen.getByRole('button', { name: 'Add model' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter a model name.');
+    expect(screen.getByText('Enter a model name.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect((screen.getByLabelText(/^API key/) as HTMLInputElement).value).toBe('');
     expect(onCancel).toHaveBeenCalled();

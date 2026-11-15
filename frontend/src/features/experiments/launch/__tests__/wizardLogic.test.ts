@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { homeStatus } from '../entry/HomeBar';
 import { entryKey, locationKey } from '../state/useStep';
-import { heldOnHome, parseStep, stepOfItem, stepOfSection } from '../wizard/steps';
+import { EDITOR_STEPS, heldOnHome, parseStep, stepLabel, stepOfItem, stepOfSection } from '../wizard/steps';
 import type { ValidationItem } from '../model';
 
 const item = (over: Partial<ValidationItem>): ValidationItem => ({
@@ -21,6 +21,15 @@ describe('wizard steps', () => {
     expect(parseStep('models')).toBe('models');
     expect(parseStep('nonsense')).toBe('where');
     expect(parseStep('')).toBe('where');
+  });
+
+  it('C-8-1 the preset editor has five steps with the wizard ids; an id it does not have is step 1', () => {
+    const ids = EDITOR_STEPS.map((s) => s.id);
+    expect(ids).toEqual(['where', 'models', 'settings', 'evaluation', 'review']);
+    expect(parseStep('settings', ids)).toBe('settings');
+    expect(parseStep('start', ids)).toBe('where');
+    expect(stepLabel('where', EDITOR_STEPS)).toBe('Environment and dataset');
+    expect(stepLabel('review', EDITOR_STEPS)).toBe('Review and publish');
   });
 
   it('maps sections and review items to steps', () => {

@@ -39,9 +39,8 @@ export function DatasetTag({
 }) {
   if (!name) return <span className={styles.none}>—</span>;
   const v = version === null || version === undefined || version === '' ? null : String(version);
-  const title = [name, v ? `version ${v}` : null, aliases?.length ? `aliases: ${aliases.join(', ')}` : null]
-    .filter(Boolean)
-    .join(' · ');
+  // cv5 Y5: the title does not repeat the aliases; each alias tag shows `@alias`
+  const title = [name, v ? `version ${v}` : null].filter(Boolean).join(' · ');
   return (
     <span className={[styles.group, className].filter(Boolean).join(' ')}>
       <Tag kind="dataset" title={title} className={styles.entity}>
@@ -53,7 +52,7 @@ export function DatasetTag({
       </Tag>
       {aliases?.map((a) => (
         <Tag key={a} className={styles.alias}>
-          {a}
+          {`@${a}`}
         </Tag>
       ))}
     </span>
@@ -144,6 +143,7 @@ export function RunName({
       to={to}
       className={cls}
       data-id={id}
+      data-row-primary=""
       title={tip}
       onClick={onClick}
       onPointerEnter={onPointerEnter}

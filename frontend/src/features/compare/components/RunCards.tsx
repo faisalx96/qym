@@ -1,12 +1,12 @@
 /** Run cards (round 8, legacy parity): one box per run, the same four-up card at any run count: identity, health, configuration. */
-import { Button, Icon, Popover, RunStatusBadge, Tag, Text } from '@/ui';
+import { Button, Icon, IconButton, Popover, RunStatusBadge, StatStrip, Tag, Text, UserName } from '@/ui';
 import type { RunPayload } from '@/features/run-detail/types';
 import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
 import { datasetsTitle } from '@/features/run-detail/lib/heroModel';
 import { datasetVersionLabel, formatDateParts } from '@/lib/format';
 import { runSeries, useCompare } from '../CompareContext';
 import { runShortName } from '../lib/labels';
-import { MIN_COMPARE_RUNS, passRefBase } from '../lib/refs';
+import { MIN_COMPARE_RUNS } from '../lib/refs';
 import { runDatasetCount } from '../lib/datasetSets';
 import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
 import { RunCardActions } from './RunCardActions';
@@ -28,14 +28,6 @@ function takeFocusNext(base: string): boolean {
 
 export function RunCards() {
   const { model, c, baseline, cohorts } = useCompare();
-  const sideOf = (base: string): 'A' | 'B' | null =>
-    !cohorts
-      ? null
-      : cohorts.left.some((r) => passRefBase(r) === base)
-        ? 'A'
-        : cohorts.right.some((r) => passRefBase(r) === base)
-          ? 'B'
-          : null;
   const payloads = new Map((c.query.data?.runs ?? []).map((p) => [p.run.file_path || p.run.run_id, p]));
   const cards = model.bases
     .map((base) => {
@@ -75,8 +67,6 @@ export function RunCards() {
           <RunCard
             key={card.base}
             {...card}
-            side={sideOf(card.base)}
-            sideLabel={cohorts ? (sideOf(card.base) === 'A' ? cohorts.leftLabel : cohorts.rightLabel) : ''}
             isBase={!model.unpaired && baseline.base === card.base}
             removable={removable}
             onRemove={() => remove(card.base, at)}
@@ -106,15 +96,11 @@ function RunCard({
   payload,
   name,
   title,
-  side,
-  sideLabel,
   isBase,
   removable,
   onRemove,
   registerRemove,
 }: CardData & {
-  side: 'A' | 'B' | null;
-  sideLabel: string;
   isBase: boolean;
   removable: boolean;
   onRemove: () => void;
@@ -138,7 +124,7 @@ function RunCard({
         : [run.dataset_name ?? '', datasetVersionLabel(run.dataset_version)].filter(Boolean).join(' '),
       true,
     ],
-    ['Started', started.date === '—' ? '' : `${started.date}, ${started.time}`, false],
+    ['Started', started.date === '—' ? '' : started.full, false],
     ['Runtime', runtime === '—' ? '' : runtime, true],
   ];
   return (
@@ -156,46 +142,81 @@ function RunCard({
         <div className={styles.top}>
           <RunTag index={idx} name={name} title={title} baseline={isBase} bare />
           <span className={styles.badges}>
-            {side ? (
-              <span className={styles.side} title={`Side ${side}: ${sideLabel}`}>
-                Side {side}
-              </span>
-            ) : null}
             <span data-part="run-status">
               <RunStatusBadge status={status} label={status.charAt(0) + status.slice(1).toLowerCase()} />
             </span>
             {isBase ? null : <RunCardActions run={run} name={name} />}
           </span>
           {removable ? (
-            <button
-              type="button"
+            <IconButton
               ref={registerRemove}
+              label={`Remove ${name} from the comparison`}
+              icon="close"
+              tone="reject"
               className={styles.remove}
               data-part="run-remove"
-              aria-label={`Remove ${name} from the comparison`}
-              onClick={onRemove}
-            >
-              <Icon name="close" size={14} />
-            </button>
+              onPress={onRemove}
+            />
           ) : null}
         </div>
         {counts.executions ? (
           <div>
-            <dl className={styles.strip} data-part="run-stat-strip">
-              <Stat label="Executions" value={counts.executions.total} />
-              <Stat label="Succeeded" value={counts.executions.succeeded} />
-              <Stat label="Errors" value={counts.executions.errors} danger={counts.executions.errors > 0} />
-            </dl>
+            <div data-part="run-stat-strip">
+              <StatStrip
+                variant="mini"
+                aria-label="Run counts"
+                items={[
+                  {
+                    key: 'executions',
+                    label: 'Executions',
+                    value: counts.executions.total,
+                    icon: <Icon name="list" size={12} />,
+                  },
+                  {
+                    key: 'succeeded',
+                    label: 'Succeeded',
+                    value: counts.executions.succeeded,
+                    icon: <Icon name="check" size={12} />,
+                    tone: 'success',
+                  },
+                  {
+                    key: 'errors',
+                    label: 'Errors',
+                    value: counts.executions.errors,
+                    icon: <Icon name="warning" size={12} />,
+                    tone: counts.executions.errors > 0 ? 'danger' : undefined,
+                  },
+                ]}
+              />
+            </div>
             <p className={styles.passes} data-part="run-passes">
               {counts.items} items × {counts.executions.passes} passes
             </p>
           </div>
         ) : (
-          <dl className={styles.strip} data-part="run-stat-strip">
-            <Stat label="Items" value={counts.items} />
-            <Stat label="Completed" value={counts.completed} />
-            <Stat label="Errors" value={counts.errors} danger={counts.errors > 0} />
-          </dl>
+          <div data-part="run-stat-strip">
+            <StatStrip
+              variant="mini"
+              aria-label="Run counts"
+              items={[
+                { key: 'items', label: 'Items', value: counts.items, icon: <Icon name="list" size={12} /> },
+                {
+                  key: 'completed',
+                  label: 'Completed',
+                  value: counts.completed,
+                  icon: <Icon name="check" size={12} />,
+                  tone: 'success',
+                },
+                {
+                  key: 'errors',
+                  label: 'Errors',
+                  value: counts.errors,
+                  icon: <Icon name="warning" size={12} />,
+                  tone: counts.errors > 0 ? 'danger' : undefined,
+                },
+              ]}
+            />
+          </div>
         )}
         <dl className={styles.facts} data-part="run-meta">
           {facts.map(([k, v, mono]) => (
@@ -205,22 +226,17 @@ function RunCard({
                 className={mono ? styles.mono : undefined}
                 title={k === 'Datasets' ? datasetsTitle(run.datasets ?? []) : undefined}
               >
-                {v || '—'}
+                {k === 'Owner' && v ? (
+                  <UserName id={run.owner?.id} name={v} email={run.owner?.email} />
+                ) : (
+                  v || '—'
+                )}
               </dd>
             </div>
           ))}
         </dl>
       </article>
     </li>
-  );
-}
-
-function Stat({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
-  return (
-    <div className={styles.stat} data-danger={danger || undefined}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
   );
 }
 

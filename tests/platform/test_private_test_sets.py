@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from cryptography.fernet import Fernet
@@ -21,8 +20,6 @@ ROOT = Path(__file__).resolve().parents[2]
 for src in (ROOT / "packages" / "platform", ROOT / "packages" / "sdk"):
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-if "openai" not in sys.modules:
-    sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
 from qym_platform.db.base import Base
@@ -186,6 +183,42 @@ MEMBER = _as("member@example.com")
 def _leaks(response) -> bool:
     text = response.text
     return any(secret in text for secret in (SECRET_INPUT, SECRET_EXPECTED, SECRET_OUTPUT))
+
+
+def test_restricted_dataset_redaction_keeps_the_metadata_labels_only():
+    """A reader without access to a restricted dataset keeps the category labels of
+    the item metadata (the run page's breakdown by category needs them) and
+    nothing that could quote the item; a private test set clears the metadata."""
+    from qym_platform.permissions import DATASET_ACCESS_PLACEHOLDER, category_metadata
+
+    metadata = {
+        "topic": "math",
+        "difficulty": 3,
+        "flagged": True,
+        "tags": ["a", "b"],
+        "owner": None,
+        "note": "the question quotes " + SECRET_INPUT,
+        "root_cause_detail": SECRET_INPUT,
+        "source_text": "x" * 200,
+        "metric_analyses": {"m": {"finding": SECRET_INPUT}},
+        "trace_stats": {"spans": 3},
+        "mixed": ["a", {"text": SECRET_INPUT}],
+    }
+    assert category_metadata(metadata) == {
+        "topic": "math",
+        "difficulty": 3,
+        "flagged": True,
+        "tags": ["a", "b"],
+        "owner": None,
+    }
+    row = {"item_id": "a", "input": SECRET_INPUT, "item_metadata": dict(metadata)}
+    redact_item_content(row, "dataset_access")
+    assert row["input"] == DATASET_ACCESS_PLACEHOLDER
+    assert row["item_metadata"] == category_metadata(metadata)
+    assert SECRET_INPUT not in str(row)
+    private = {"item_id": "a", "input": SECRET_INPUT, "item_metadata": dict(metadata)}
+    redact_item_content(private, "private_test_set")
+    assert private["item_metadata"] == {}
 
 
 def test_redact_item_content_recurses_and_marks_payload():

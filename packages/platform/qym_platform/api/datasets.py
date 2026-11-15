@@ -1054,19 +1054,30 @@ def _item_result_summaries(
 
 
 def _shared_metric_directions(
-    db: Session, run_metrics: Iterable[tuple[str, str]]
+    db: Session,
+    run_metrics: Iterable[tuple[str, str]],
+    *,
+    ignore_undeclared: bool = False,
 ) -> Dict[str, Optional[str]]:
     """Each metric's declared direction, when all its runs declare the same one.
 
     ``run_metrics`` holds the (run id, metric name) pairs behind a value that
     spans runs. A run that declares no direction, or runs that disagree, give
     the metric None, so the page shows its value without a colour.
+
+    With ``ignore_undeclared`` a run that declares no direction is skipped: the
+    metric is None only when two declared directions disagree, or when no run
+    declares one.
     """
     pairs = set(run_metrics)
     declared = metric_directions(db, {run_id for run_id, _ in pairs})
     found: Dict[str, set[Optional[str]]] = defaultdict(set)
     for run_id, metric in pairs:
-        found[metric].add(declared.get(run_id, {}).get(metric))
+        directions = found[metric]  # keeps the metric when no run declares one
+        direction = declared.get(run_id, {}).get(metric)
+        if direction is None and ignore_undeclared:
+            continue
+        directions.add(direction)
     return {
         metric: next(iter(values)) if len(values) == 1 else None
         for metric, values in sorted(found.items())
@@ -1087,7 +1098,9 @@ def _version_metric_directions(
         .distinct()
         .all()
     )
-    return _shared_metric_directions(db, (tuple(pair) for pair in pairs))
+    return _shared_metric_directions(
+        db, (tuple(pair) for pair in pairs), ignore_undeclared=True
+    )
 
 
 def _version_metric_names(db: Session, version: DatasetVersion) -> list[str]:

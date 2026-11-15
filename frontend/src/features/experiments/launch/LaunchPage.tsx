@@ -35,7 +35,7 @@ function LaunchBody({
   onCancel: () => void;
 }) {
   const { flags, baseState, doc } = useLaunch();
-  const { step, goToStep, next, prev } = useStep();
+  const { step, goToStep } = useStep();
   // Phones drop the header link (the breadcrumb has Experiments) so the title is not pushed down.
   const narrow = useMediaQuery('(max-width: 760px)');
 
@@ -73,14 +73,14 @@ function LaunchBody({
       actions={
         <>
           <Button
-            variant="ghost"
+            variant="neutral"
             icon={<Icon name="chevron-left" size={12} />}
             onPress={() => goToStep(null)}
           >
             Start
           </Button>
           {narrow ? null : (
-            <LinkButton to={experimentsPath(slug)} variant="ghost">
+            <LinkButton to={experimentsPath(slug)} variant="neutral" icon={<Icon name="prev" size={12} />}>
               All experiments
             </LinkButton>
           )}
@@ -93,7 +93,7 @@ function LaunchBody({
       description="Pick where it runs and what to start from. You can change anything in Customize."
       actions={
         narrow ? undefined : (
-          <LinkButton to={experimentsPath(slug)} variant="ghost">
+          <LinkButton to={experimentsPath(slug)} variant="neutral" icon={<Icon name="prev" size={12} />}>
             All experiments
           </LinkButton>
         )
@@ -107,9 +107,8 @@ function LaunchBody({
       {step ? (
         <LaunchWizard
           step={step}
-          next={next}
-          prev={prev}
           onGo={(target) => goToStep(target)}
+          onBack={() => goToStep(null)}
           onCancel={onCancel}
         />
       ) : (
@@ -120,9 +119,9 @@ function LaunchBody({
         onOpenChange={(open) => {
           if (!open && blocker.state === 'blocked') blocker.reset();
         }}
-        title="Leave without launching?"
+        title="Discard unsaved changes?"
         description="Your changes to this experiment will be lost."
-        confirmLabel="Leave"
+        confirmLabel="Discard changes"
         cancelLabel="Keep editing"
         tone="danger"
         onConfirm={() => {
@@ -163,7 +162,7 @@ export function LaunchPage() {
       title="New experiment"
       description="Pick where it runs and what to start from. You can change anything in Customize."
       actions={
-        <LinkButton to={experimentsPath(slug)} variant="ghost">
+        <LinkButton to={experimentsPath(slug)} variant="neutral" icon={<Icon name="prev" size={12} />}>
           All experiments
         </LinkButton>
       }

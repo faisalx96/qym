@@ -33,26 +33,6 @@
   padding-block: var(--space-xs);
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-height: var(--chip-height);
-}
-
-.titles {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.title,
-.desc {
-  margin: 0;
-}
-
 /* The page metric, named quietly: it is set in the sticky section nav. */
 .metricName {
   flex: none;
@@ -99,7 +79,6 @@
 }
 
 .heroValue small {
-  margin-left: var(--space-xs);
   color: var(--text-muted);
   font-size: var(--font-md);
   font-weight: 600;
@@ -151,11 +130,9 @@
   border-radius: 4px;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--score-5) 38%, var(--bg-surface)) 0%,
-    color-mix(in srgb, var(--score-4) 42%, var(--bg-surface)) var(--p50),
-    color-mix(in srgb, var(--score-3) 62%, var(--bg-surface)) var(--p90),
-    color-mix(in srgb, var(--score-2) 75%, var(--bg-surface)) var(--p95),
-    color-mix(in srgb, var(--score-1) 85%, var(--bg-surface)) 100%
+    color-mix(in srgb, var(--text-secondary) 52%, transparent) 0 var(--p90),
+    color-mix(in srgb, var(--score-3) 92%, transparent) var(--p90) var(--p95),
+    color-mix(in srgb, var(--score-2) 95%, transparent) var(--p95) 100%
   );
 }
 
@@ -335,7 +312,7 @@
 }
 
 .bar:not([data-empty]) {
-  background: linear-gradient(to bottom, var(--top), var(--base));
+  background: var(--top);
 }
 
 .bar[data-empty] {

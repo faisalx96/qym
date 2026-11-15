@@ -57,7 +57,7 @@ test('C-cohort-1: two sides, 2 columns from 1024, 1 column at 390, at most 95 hi
     await expect(banner).toContainText('Compare sides');
     const sides = part(page, 'cohort-side');
     await expect(sides).toHaveCount(2);
-    await expect(sides.first()).toContainText('A / left');
+    await expect(sides.first().locator('[data-part="run-letter"]')).toHaveText('A');
     await expect(sides.first()).toContainText('Weak');
     await expect(sides.first()).toContainText('2 runs');
     await expect(sides.first().getByRole('button', { name: 'Rename cohort A' })).toBeVisible();
@@ -107,25 +107,23 @@ test('C-run-2/3/4: card head, stat strip and the six meta rows', async ({ page }
   const x = card.locator('[data-part="run-remove"]');
   within((await box(x)).w, 24, 1, 'remove width');
   within((await box(x)).h, 24, 1, 'remove height');
-  // strip: 3 cells x 36
-  const cells = card.locator('[data-part="run-stat-strip"] > div');
+  // strip: 3 mini cells, no frame; the number stays white, only the tile is red when errors > 0
+  const cells = card.locator('[data-part="run-stat-strip"] [role="group"] > div');
   await expect(cells).toHaveCount(3);
-  for (let i = 0; i < 3; i++) within((await box(cells.nth(i))).h, 36, 1, `strip cell ${i}`);
   const val = await cells
     .nth(0)
-    .locator('dd')
+    .locator('[class*="value"]')
     .evaluate((e) => ({ f: getComputedStyle(e).fontFamily, w: getComputedStyle(e).fontWeight }));
   expect(val.f).toMatch(/mono/i);
   expect(Number(val.w)).toBe(650);
-  // errors > 0 is red text, 0 is not
-  const errCol = (i: number) =>
+  const errTile = (i: number) =>
     part(page, 'run-card')
       .nth(i)
-      .locator('[data-part="run-stat-strip"] > div')
+      .locator('[data-part="run-stat-strip"] [role="group"] > div')
       .nth(2)
-      .locator('dd')
-      .evaluate((e) => getComputedStyle(e).color);
-  expect(await errCol(0)).not.toBe(await errCol(3));
+      .locator('[class*="icon"]')
+      .evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(await errTile(0)).not.toBe(await errTile(3));
   // meta: Task, Model, Owner, Dataset, Started, Runtime = 6 x 20
   const meta = card.locator('[data-part="run-meta"]');
   await expect(meta.locator('dt')).toHaveText(['Task', 'Model', 'Owner', 'Dataset', 'Started', 'Runtime']);
@@ -135,7 +133,7 @@ test('C-run-2/3/4: card head, stat strip and the six meta rows', async ({ page }
 test('K2 (C062): a repeat run counts executions, with items × passes under the strip', async ({ page }) => {
   await openCompare(page, [s.seed.runs.repeat3, s.seed.runs.base], 1440);
   const card = part(page, 'run-card').first();
-  await expect(card.locator('[data-part="run-stat-strip"] dt')).toHaveText([
+  await expect(card.locator('[data-part="run-stat-strip"] [role="group"] > div > [class*="label"]')).toHaveText([
     'Executions',
     'Succeeded',
     'Errors',

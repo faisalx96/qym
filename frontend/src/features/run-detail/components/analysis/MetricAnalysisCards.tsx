@@ -6,7 +6,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError } from '@/lib/http';
 import { useIssueAction, useIssueBlocksQuery } from '@/api/runs';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, Disclosure, Icon, ReviewStatusMark, Tag, Textarea, useToast } from '@/ui';
+import { Button, CardTitle, Disclosure, Icon, ReviewStatusMark, Tag, Textarea, useToast } from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
 import { useRunPage } from '../../RunContext';
@@ -107,20 +107,27 @@ function Card({
       data-metric={metric}
     >
       <div className={styles.stack}>
-        <header className={styles.head}>
-          <h5 className={styles.title}>{metric}</h5>
-          {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
-          {canEdit && !form ? (
-            <Button
-              icon={<Icon name="plus" size={12} />}
-              size="sm"
-              variant="neutral"
-              onPress={() => setForm({ key: '', issue: null })}
-            >
-              Add issue
-            </Button>
-          ) : null}
-        </header>
+        <CardTitle
+          as="h5"
+          title={metric}
+          aside={
+            analysis?.error || (canEdit && !form) ? (
+              <>
+                {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
+                {canEdit && !form ? (
+                  <Button
+                    icon={<Icon name="plus" size={12} />}
+                    size="sm"
+                    variant="neutral"
+                    onPress={() => setForm({ key: '', issue: null })}
+                  >
+                    Add issue
+                  </Button>
+                ) : null}
+              </>
+            ) : undefined
+          }
+        />
         {analysis?.error ? <p className={styles.errorText}>{String(analysis.error)}</p> : null}
         {issues.length === 0 && !analysis?.error ? (
           <p className={styles.muted}>No issues recorded for this metric.</p>
@@ -147,7 +154,7 @@ function Card({
             return (
               <li key={key} className={styles.issue} data-testid="issue" data-status={status}>
                 <div className={styles.issueHead}>
-                  <Tag kind="accent">{issue.category || 'Uncategorized'}</Tag>
+                  <Tag kind="data">{issue.category || 'Uncategorized'}</Tag>
                   {issue.subcategory ? <span className={styles.sub}>{issue.subcategory}</span> : null}
                   <ReviewStatusMark status={status} />
                   {issue.confidence != null ? (
@@ -163,11 +170,12 @@ function Card({
                           <Button
                             size="sm"
                             variant="accent"
+                            icon={<Icon name="check" size={12} />}
                             onPress={() => decide(issue, key, 'approve')}
                             isDisabled={action.isPending || !!block}
                             aria-label={`Approve issue ${issue.category}`}
                           >
-                            ✓ Approve
+                            Approve
                           </Button>
                           <Button
                             size="sm"
@@ -209,7 +217,7 @@ function Card({
                 {isRejecting ? (
                   <div className={styles.rejectForm} data-testid="reject-form">
                     <Textarea
-                      label="Why reject it? (optional)"
+                      label="Why reject it?"
                       value={rejecting.comment}
                       onChange={(comment) => setRejecting({ key, comment })}
                       rows={2}
@@ -343,9 +351,7 @@ function LegacyDiagnosis({ md }: { md: Record<string, unknown> }) {
   return (
     <section className={styles.metricRow} aria-label="Legacy diagnosis">
       <div className={styles.stack}>
-        <header className={styles.head}>
-          <h5 className={styles.title}>Diagnosis (legacy)</h5>
-        </header>
+        <CardTitle as="h5" title="Diagnosis (legacy)" />
         <p className={styles.finding}>
           {rootCauseCategories(md).join(', ')}
           {md.root_cause_detail ? ` · ${String(md.root_cause_detail)}` : ''}

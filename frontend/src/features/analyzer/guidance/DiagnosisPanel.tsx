@@ -16,8 +16,12 @@ import {
   Button,
   ConfirmDialog,
   EmptyState,
+  Disclosure,
   ErrorState,
+  FormDialog,
   Icon,
+  IconButton,
+  InlineNotice,
   SearchField,
   SectionHeader,
   SegmentedControl,
@@ -30,9 +34,7 @@ import {
   TextField,
   useToast,
   Flag,
-  StatusMark,
-  type StatusShape,
-  type StatusTone,
+  type TextTone,
 } from '@/ui';
 import {
   approvalSignature,
@@ -44,6 +46,7 @@ import {
   type CategoryDraft,
   type SubDraft,
 } from '../model/catalog';
+import { SaveFooter } from '@/features/shell/settings/SettingsCard';
 import { rootCauseIssues } from '../model/rootCause';
 import s from './guidance.module.css';
 import d from './diagnosis.module.css';
@@ -56,7 +59,8 @@ interface Draft {
   value: CatalogDraft;
 }
 
-type SaveBadge = { tone: StatusTone; shape: StatusShape; label: string };
+/** A save state is plain text (status rules 2026-11-12): muted, the error colour only for a failed save. */
+type SaveBadge = { tone: TextTone; label: string };
 
 const clone = (draft: CatalogDraft): CatalogDraft => ({
   ...draft,
@@ -111,7 +115,6 @@ function DiagnosisEditor({
   const [query, setQuery] = useState('');
   const [section, setSection] = useState('guidance');
   const [subFilter, setSubFilter] = useState<'all' | 'approved'>('all');
-  const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
   const [newSub, setNewSub] = useState('');
   const [removing, setRemoving] = useState<string | null>(null);
@@ -221,24 +224,21 @@ function DiagnosisEditor({
   }
 
   const badge: SaveBadge = save.isPending
-    ? { tone: 'info', shape: 'orbit', label: 'Saving…' }
+    ? { tone: 'muted', label: 'Saving…' }
     : conflict
-      ? { tone: 'danger', shape: 'cross', label: 'Conflict' }
+      ? { tone: 'danger', label: 'Conflict' }
       : failure
-        ? { tone: 'danger', shape: 'cross', label: 'Save failed' }
+        ? { tone: 'danger', label: 'Save failed' }
         : showProblems && hasProblems
-          ? { tone: 'warning', shape: 'dot', label: 'Taxonomy required' }
-          : dirty
-            ? { tone: 'warning', shape: 'dot', label: 'Unsaved changes' }
-            : { tone: 'success', shape: 'full', label: 'Saved' };
+          ? { tone: 'warning', label: 'Taxonomy required' }
+          : { tone: 'muted', label: dirty ? 'Unsaved changes' : 'Saved' };
 
-  function addCategory() {
-    const name = newName.trim();
-    if (!name) return;
-    if (categories.some((c) => c.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
-      toast.show(`“${name}” already exists`, { tone: 'error' });
-      return;
-    }
+  /** cv5 Q6: from the Add category dialog; a name in use is the dialog's error, the dialog stays open. */
+  function addCategory(raw: string): string | void {
+    const name = raw.trim();
+    if (!name) return 'Enter a category name';
+    if (categories.some((c) => c.name.toLocaleLowerCase() === name.toLocaleLowerCase()))
+      return `“${name}” already exists`;
     edit((v) => ({
       ...v,
       categories: [
@@ -248,7 +248,6 @@ function DiagnosisEditor({
     }));
     setSelected(name);
     setSection('guidance');
-    setNewName('');
     setAdding(false);
   }
 
@@ -293,84 +292,82 @@ function DiagnosisEditor({
       )
     : [];
 
+  const saveFoot = (
+    <div className={d.saveFoot}>
+      <SaveFooter
+        dirty={dirty}
+        saving={save.isPending}
+        onSave={() => void submit()}
+        hideSave={!canManage}
+        meta={
+          conflict || failure || (showProblems && hasProblems) ? (
+            <Text variant="sm" as="span" tone={badge.tone} role="status" data-testid="catalog-save-state">
+              {badge.label}
+            </Text>
+          ) : undefined
+        }
+      />
+    </div>
+  );
+
   return (
     <div className={s.diag}>
+      {/* cv5 Q6 (owner: "why is add category there?"): the section's create action ends its header row */}
       <SectionHeader
         title="Diagnosis categories"
         description={`${categories.length} ${categories.length === 1 ? 'category' : 'categories'} · ${totalExamples} approved ${totalExamples === 1 ? 'example' : 'examples'}`}
         aside={
-          <div className={d.saveCluster}>
-            <StatusMark
-              tone={badge.tone}
-              shape={badge.shape}
-              label={badge.label}
-              role="status"
-              data-testid="catalog-save-state"
-            />
+          canManage ? (
             <Button
-              variant="accent"
               size="sm"
-              isDisabled={!canManage || !dirty || save.isPending}
-              onPress={() => void submit()}
+              variant="primary"
+              icon={<Icon name="plus" size={12} />}
+              onPress={() => setAdding(true)}
             >
-              Save changes
+              Add category
             </Button>
-          </div>
+          ) : null
         }
       />
+      <FormDialog
+        open={adding}
+        onOpenChange={setAdding}
+        title="Add category"
+        description="The category joins the catalog with its guidance to fill in. Save the catalog to use it."
+        fields={[{ name: 'name', label: 'Category name', required: true, autoFocus: true }]}
+        confirmLabel="Add"
+        onSubmit={(values) => addCategory(String(values.name ?? ''))}
+      />
       {!canManage ? (
-        <div className={s.banner} role="note">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            Project manager access is required to edit categories. You can read the catalog and its examples.
-          </Text>
-        </div>
+        <InlineNotice tone="neutral" icon="info">
+          Project manager access is required to edit categories. You can read the catalog and its examples.
+        </InlineNotice>
       ) : null}
       {conflict ? (
-        <div className={s.banner} role="alert" data-tone="danger">
-          <Icon name="warning" size={14} />
-          <div className={s.bannerText}>
-            <Text variant="md" weight={600}>
-              The catalog changed while you were editing
-            </Text>
-            <Text variant="base" tone="secondary">
-              {`Someone saved revision ${conflict.version}. Your edits are still here. Reload to take theirs (your edits are discarded) or overwrite theirs with yours.`}
-            </Text>
-          </div>
+        <InlineNotice tone="danger" lead="The catalog changed while you were editing.">
+          {`Someone saved revision ${conflict.version}. Your edits are still here. Reload to take theirs (your edits are discarded) or overwrite theirs with yours.`}{' '}
           <Button size="sm" onPress={() => void reloadLatest()}>
             Reload latest
-          </Button>
+          </Button>{' '}
           <Button size="sm" variant="danger" onPress={() => void submit(conflict.version)}>
             Overwrite with my edits
           </Button>
-        </div>
+        </InlineNotice>
       ) : null}
-      {failure ? (
-        <div className={s.banner} role="alert" data-tone="danger">
-          <Icon name="warning" size={14} />
-          <Text variant="base" tone="secondary">
-            {failure}
-          </Text>
-        </div>
-      ) : null}
+      {failure ? <InlineNotice tone="danger">{failure}</InlineNotice> : null}
       {showProblems && hasProblems ? (
-        <div className={s.banner} role="alert" data-tone="warning">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            {`Add both Description and Use when for: ${[...problems.categories, ...problems.subcategories].join(', ')}.`}
-          </Text>
-        </div>
+        <InlineNotice tone="warning" icon="info">
+          {`Add both Description and Use when for: ${[...problems.categories, ...problems.subcategories].join(', ')}.`}
+        </InlineNotice>
       ) : null}
       {newApprovals ? (
-        <div className={s.banner} role="status" data-tone="warning">
-          <Icon name="info" size={14} />
-          <Text variant="base" tone="secondary">
-            New approvals are available. Their examples are shown below; save or discard your edits to refresh
-            the catalog.
-          </Text>
-        </div>
+        <InlineNotice tone="warning" icon="info">
+          New approvals are available. Their examples are shown below; save or discard your edits to refresh
+          the catalog.
+        </InlineNotice>
       ) : null}
 
+      {/* the search box heads the list column, at the list's width */}
       <div className={d.tools}>
         <SearchField
           label="Search categories"
@@ -378,58 +375,28 @@ function DiagnosisEditor({
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}
-          width={240}
+          width="100%"
         />
-        {canManage ? (
-          adding ? (
-            <form
-              className={d.addForm}
-              onSubmit={(e) => {
-                e.preventDefault();
-                addCategory();
-              }}
-            >
-              <TextField
-                label="New category name"
-                hideLabel
-                placeholder="New category"
-                value={newName}
-                onChange={setNewName}
-                autoFocus
-              />
-              <Button
-                size="sm"
-                variant="accent"
-                type="submit"
-                isDisabled={!newName.trim()}
-                disabledReason="Enter a category name"
-              >
-                Add
-              </Button>
-              <Button size="sm" variant="ghost" onPress={() => setAdding(false)}>
-                Cancel
-              </Button>
-            </form>
-          ) : (
-            <Button size="sm" icon={<Icon name="plus" size={12} />} onPress={() => setAdding(true)}>
-              Add category
-            </Button>
-          )
-        ) : null}
       </div>
 
       {categories.length === 0 ? (
-        <EmptyState
-          compact
-          title="No categories yet"
-          body="Add a category, or approve diagnoses in Reviews."
-        />
+        <>
+          <EmptyState
+            compact
+            title="No categories yet"
+            body="Add a category, or approve diagnoses in Reviews."
+          />
+          {dirty ? saveFoot : null}
+        </>
       ) : !active ? (
-        <EmptyState
-          compact
-          title="No matching categories"
-          body={`No category name contains “${query.trim()}”.`}
-        />
+        <>
+          <EmptyState
+            compact
+            title="No matching categories"
+            body={`No category name contains “${query.trim()}”.`}
+          />
+          {dirty ? saveFoot : null}
+        </>
       ) : (
         <Tabs
           label="Categories"
@@ -556,19 +523,18 @@ function DiagnosisEditor({
                               ) : null}
                               <span className={s.spacer} />
                               {canManage && !x.exampleOnly ? (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  aria-label={`Remove subcategory ${x.name}`}
+                                <IconButton
+                                  tile
+                                  tone="danger"
+                                  icon="trash"
+                                  label={`Remove subcategory ${x.name}`}
                                   onPress={() =>
                                     editCategory(active.name, (c) => ({
                                       ...c,
                                       subs: c.subs.filter((y) => y.name !== x.name),
                                     }))
                                   }
-                                >
-                                  <Icon name="trash" size={12} />
-                                </Button>
+                                />
                               ) : null}
                             </div>
                             {x.exampleOnly ? (
@@ -615,14 +581,18 @@ function DiagnosisEditor({
                         });
                         return (
                           <li key={x.id}>
-                            <details className={d.example}>
-                              <summary>
-                                <span className={d.mono}>{x.item_id ?? `#${x.id}`}</span>
-                                {x.metric_name ? <Tag kind="data">{x.metric_name}</Tag> : null}
-                                <span>
-                                  {issues[0]?.finding || x.note || x.detail || 'Approved correction'}
-                                </span>
-                              </summary>
+                            <Disclosure
+                              className={d.example}
+                              title={
+                                <>
+                                  <span className={d.mono}>{x.item_id ?? `#${x.id}`}</span>{' '}
+                                  {x.metric_name ? <Tag kind="data">{x.metric_name}</Tag> : null}{' '}
+                                  <span>
+                                    {issues[0]?.finding || x.note || x.detail || 'Approved correction'}
+                                  </span>
+                                </>
+                              }
+                            >
                               <dl className={d.exampleBody}>
                                 {(
                                   [
@@ -642,7 +612,7 @@ function DiagnosisEditor({
                                     </div>
                                   ))}
                               </dl>
-                            </details>
+                            </Disclosure>
                           </li>
                         );
                       })}
@@ -656,6 +626,7 @@ function DiagnosisEditor({
                   )}
                 </TabPanel>
               </Tabs>
+              {saveFoot}
             </div>
           </TabPanel>
         </Tabs>

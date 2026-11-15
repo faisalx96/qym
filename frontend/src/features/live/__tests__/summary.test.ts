@@ -455,15 +455,13 @@ describe('live turn evidence presentation', () => {
       summary: { judges: { a: { compliance: { overall: 0 } } } },
     };
     const { container } = render(createElement(TurnTiles, { data }));
-    expect(screen.getAllByRole('listitem')).toHaveLength(6);
+    expect(container.querySelectorAll('[data-tile]')).toHaveLength(6);
     expect(container.querySelectorAll('[data-live-stat]')).toHaveLength(6);
     expect(container.querySelector('[data-live-stat="rows"]')).toHaveTextContent('0');
-    expect(container.querySelector('[data-tile="compliance_a"] [data-part="value"]')).toHaveTextContent('0%');
-    expect(container.querySelector('[data-tile="compliance_b"] [data-part="value"]')).toHaveTextContent(
-      '38%',
-    );
-    expect(container.querySelector('[data-tile="latency"] [data-part="value"]')).toHaveTextContent('0ms');
-    expect(container.querySelector('[data-tile="rows"] [data-part="value"]')).toHaveTextContent('0');
+    expect(container.querySelector('[data-tile="compliance_a"] [data-live-stat]')).toHaveTextContent('0%');
+    expect(container.querySelector('[data-tile="compliance_b"] [data-live-stat]')).toHaveTextContent('38.0%');
+    expect(container.querySelector('[data-tile="latency"] [data-live-stat]')).toHaveTextContent('0ms');
+    expect(container.querySelector('[data-tile="rows"] [data-live-stat]')).toHaveTextContent('0');
   });
 
   it('renders the approved diagnosis and changes all seven panels through URL tabs', async () => {
@@ -471,7 +469,7 @@ describe('live turn evidence presentation', () => {
     const { container } = renderTurn();
     expect(container.querySelector('[data-live-block="turn-header"] [data-live-question]')).toHaveAttribute(
       'dir',
-      'auto',
+      'rtl',
     );
     expect(document.title).toContain(turnDetail.turn.question);
     expect(screen.getByRole('link', { name: /Product trace/ })).toHaveAttribute(
@@ -489,7 +487,7 @@ describe('live turn evidence presentation', () => {
     const judgeA = screen.getByLabelText('Judge A compliance');
     expect(
       within(judgeA).getByText('Overall compliance').closest('dt')?.nextElementSibling,
-    ).toHaveTextContent('42%');
+    ).toHaveTextContent('42.0%');
     await user.click(screen.getByRole('tab', { name: 'Charts' }));
     expect(screen.getByRole('img', { name: /bar chart/ })).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Services and tools' }));
@@ -1163,10 +1161,10 @@ describe('root cause and judge facets', () => {
     const region = block(container, 'deviations');
     expect(region.getByText('Missing filter.')).toHaveAttribute('dir', 'ltr');
     expect(region.getByText('الشرط مفقود.')).toHaveAttribute('dir', 'rtl');
-    expect(region.getByText('No reasoning available for this judge.')).toBeInTheDocument();
+    expect(region.getByText('No reasoning available for this judge')).toBeInTheDocument();
   });
 
-  it('renders new judge facets, pass scores, common facts and SQL navigation without disclosures', () => {
+  it('renders new judge facets, band scores, common facts and SQL navigation without disclosures', () => {
     const data = liveEvidenceTurns['chart-summary'];
     const { container } = renderTurn(data, 'tab=judges&list=day%3D2026-11-01');
     expect(screen.getByLabelText('Judge comparison')).toHaveTextContent(
@@ -1176,8 +1174,8 @@ describe('root cause and judge facets', () => {
     for (const side of ['a', 'b'] as const) {
       const judge = block(container, `judge-${side}`);
       const card = container.querySelector(`[data-live-block="judge-${side}"]`)!;
-      expect(card.querySelectorAll('[data-verdict="pass"]')).toHaveLength(3);
-      expect(judge.getByText(`judge-${side}`)).toHaveAttribute('data-kind', 'model');
+      expect(card.querySelectorAll('[data-band]')).toHaveLength(3);
+      expect(judge.getByText(`judge-${side}`).closest('[data-kind]')).toHaveAttribute('data-kind', 'model');
       expect(judge.getByText('Followed manifest')).toBeInTheDocument();
       expect(judge.getByText('Results match')).toBeInTheDocument();
       expect(judge.getByText('1/1')).toBeInTheDocument();
@@ -1192,7 +1190,7 @@ describe('root cause and judge facets', () => {
     expect(screen.queryByText('Cross-review score')).not.toBeInTheDocument();
   });
 
-  it('falls back to old score checks and applies the spec threshold including zero', () => {
+  it('falls back to old score checks and uses main score bands including zero', () => {
     const data = structuredClone(turnDetail);
     data.specs = data.specs.map((spec) =>
       spec.metric_name === 'compliance_a' ? { ...spec, pass_threshold: 0.7 } : spec,
@@ -1211,9 +1209,9 @@ describe('root cause and judge facets', () => {
     const judge = block(container, 'judge-a');
     expect(judge.getByText('Followed manifest').closest('dt')?.nextElementSibling).toHaveTextContent('No');
     expect(judge.getByText('SQL well formed').closest('dt')?.nextElementSibling).toHaveTextContent('Yes');
-    expect(judge.getByText('0%').closest('[data-verdict]')).toHaveAttribute('data-verdict', 'fail');
-    expect(judge.getByText('70%').closest('[data-verdict]')).toHaveAttribute('data-verdict', 'pass');
-    expect(judge.getByText('69%').closest('[data-verdict]')).toHaveAttribute('data-verdict', 'fail');
+    expect(judge.getByText('0.0%').closest('[data-band]')).toHaveAttribute('data-band', '1');
+    expect(judge.getByText('70.0%').closest('[data-band]')).toHaveAttribute('data-band', '3');
+    expect(judge.getByText('69.0%').closest('[data-band]')).toHaveAttribute('data-band', '3');
     expect(container.querySelector('[data-live-block="judge-facts"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-judge-facet="route"]')).not.toBeInTheDocument();
     expect(screen.getByRole('tabpanel')).not.toHaveTextContent('undefined');

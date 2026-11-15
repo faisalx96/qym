@@ -1,8 +1,7 @@
 import { forwardRef } from 'react';
-import { Text } from '@/ui';
+import { ReportSection, Text } from '@/ui';
 import type { PhaseView } from '../useAnalysisPhase';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
-import { Card } from './Card';
 import { JobCard } from './JobStatus';
 import { TestResults } from './TestResults';
 import s from './blocks.module.css';
@@ -16,8 +15,8 @@ export const ResultsSlot = forwardRef<HTMLDivElement, { ws: RunWorkspace; phase:
   function ResultsSlot({ ws, phase }, ref) {
     const job = ws.runner.job;
     return (
-      <div ref={ref} className={s.resultsSlot} id="analysis-results">
-        <Card title="Results" className={s.resultsCard}>
+      <div ref={ref} className={s.resultsSlot}>
+        <ReportSection id="analysis-results" title="Results" className={s.resultsCard}>
           <div className={s.stack}>
             {job ? <JobCard job={job} phase={phase} /> : null}
             {ws.runner.startError ? (
@@ -27,7 +26,7 @@ export const ResultsSlot = forwardRef<HTMLDivElement, { ws: RunWorkspace; phase:
             ) : null}
             <TestResults ws={ws} quiet={Boolean(job) || Boolean(ws.runner.startError)} />
           </div>
-        </Card>
+        </ReportSection>
       </div>
     );
   },

@@ -1,6 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import { Button, Card, Text, type CardTone } from '@/ui';
+import { Button, Card, type CardTone, Text, TextLink } from '@/ui';
 import styles from './settings.module.css';
 
 export interface SettingsCardProps {
@@ -15,7 +14,8 @@ export interface SettingsCardProps {
   action?: ReactNode;
   /** A custom footer. A card that saves settings passes `save` instead (C145: one footer recipe). */
   footer?: ReactNode;
-  /** The one settings footer: state text at the start, a 24px Save at the end, disabled until there are changes. */
+  /** The one save row: state text at the start, a 24px Save at the end, disabled until there are changes. It ends
+   *  the card body, with no divider line above it (cv4 A4). */
   save?: SaveFooterProps;
   tone?: CardTone;
   children?: ReactNode;
@@ -46,7 +46,7 @@ export function SettingsCard({
       id={anchor}
       aria-labelledby={id}
       tone={tone}
-      footer={save ? <SaveFooter {...save} /> : footer}
+      footer={footer}
       header={
         <div className={styles.cardHeader}>
           <div>
@@ -59,7 +59,7 @@ export function SettingsCard({
                 {guide ? (
                   <>
                     {description ? ' ' : null}
-                    <Link to={guide}>Read the guide</Link>
+                    <TextLink to={guide}>Read the guide</TextLink>
                   </>
                 ) : null}
               </Text>
@@ -70,7 +70,11 @@ export function SettingsCard({
       }
       {...rest}
     >
-      <div className={styles.cardBody}>{children}</div>
+      {/* The save row ends the body: no divider line above it (cv4 A4). */}
+      <div className={styles.cardBody}>
+        {children}
+        {save ? <SaveFooter {...save} /> : null}
+      </div>
     </Card>
   );
 }
@@ -80,7 +84,7 @@ export interface SaveFooterProps {
   dirty: boolean;
   saving?: boolean;
   onSave: () => void;
-  /** Default 'Save'; name the object when the card holds more than one thing ('Save rules'). */
+  /** Always 'Save'. Only the Live worker passes its version label ('Save as v4'). */
   label?: string;
   /** Extra facts before the state text (a character count, when it was last edited). */
   meta?: ReactNode;
@@ -88,9 +92,20 @@ export interface SaveFooterProps {
   secondary?: ReactNode;
   /** No Save at all (read-only or no permission); the state text stays. */
   hideSave?: boolean;
+  /** The state text when nothing is unsaved. Default '' = no text: the disabled Save already says it (cv4 A4, X4).
+   *  Pass a fact only when it adds something ("No changes since v3"). */
+  savedText?: string;
+  /** Locks Save even with changes (a required field is empty, a blocker). Pass disabledReason with it. */
+  isDisabled?: boolean;
+  /** Why Save is locked (default 'No changes to save'). */
+  disabledReason?: string;
 }
 
-/** C145: every settings card ends the same way: what state it is in, then Save. */
+/**
+ * C145: every settings card ends the same way: its state, then Save. cv4 A4, X4: the state text shows
+ * only when there is something to say (unsaved changes, saving). With nothing changed the row shows only the meta and
+ * the disabled Save.
+ */
 export function SaveFooter({
   dirty,
   saving,
@@ -99,22 +114,30 @@ export function SaveFooter({
   meta,
   secondary,
   hideSave,
+  savedText = '',
+  isDisabled,
+  disabledReason,
 }: SaveFooterProps) {
+  const hasState = Boolean(saving || dirty || savedText);
+  // Read-only with nothing to say: no empty row.
+  if (hideSave && !meta && !hasState) return null;
   return (
     <div className={styles.saveFooter} data-save-footer>
       <div className={styles.saveState}>
         {meta}
-        <span data-dirty={dirty ? '' : undefined}>
-          {saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved'}
-        </span>
+        {hasState ? (
+          <span data-dirty={dirty ? '' : undefined} data-save-state>
+            {saving ? 'Saving…' : dirty ? 'Unsaved changes' : savedText}
+          </span>
+        ) : null}
       </div>
       {hideSave ? null : (
         <div className={styles.cardAction}>
           {secondary}
           <Button
             variant="primary"
-            isDisabled={!dirty}
-            disabledReason="No changes to save"
+            isDisabled={!dirty || Boolean(isDisabled)}
+            disabledReason={disabledReason ?? 'No changes to save'}
             loading={saving}
             onPress={onSave}
           >

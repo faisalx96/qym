@@ -78,7 +78,7 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             Cancel
           </Button>
           <Button
-            variant="accent"
+            variant="primary"
             isDisabled={!ready || !selected.length}
             disabledReason={!ready ? 'Loading the items' : 'Select at least one column'}
             onPress={() => {

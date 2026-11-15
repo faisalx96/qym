@@ -14,6 +14,8 @@ import { EvalFlagsMocks } from './EvalFlagsMocks';
 import { QaExperimentsMocks } from './QaExperimentsMocks';
 import { MultiLaunchMocks } from './MultiLaunchMocks';
 import { AiFeedbackMocks } from './AiFeedbackMocks';
+import { Round9Mocks } from './Round9Mocks';
+import { Round10Mocks } from './Round10Mocks';
 import { LiveMocks } from './LiveMocks';
 import type { Key } from 'react-aria-components';
 import {
@@ -278,7 +280,6 @@ export default function UiGalleryPage() {
             <Button variant="accent">Accent</Button>
             <Button variant="primary">Primary</Button>
             <Button variant="danger">Delete run</Button>
-            <Button variant="ghost">Ghost</Button>
             <Button variant="neutral" isDisabled>
               Disabled
             </Button>
@@ -318,7 +319,7 @@ export default function UiGalleryPage() {
               href="https://example.com"
               target="_blank"
               rel="noreferrer"
-              icon={<Icon name="external" size={12} />}
+              iconEnd={<Icon name="external" size={12} />}
             >
               External
             </LinkButton>
@@ -480,10 +481,9 @@ export default function UiGalleryPage() {
             </Text>
           </Disclosure>
         </Case>
-        <Case label="Tabs (dense)">
+        <Case label="Tabs (counts)">
           <Tabs
             label="Datasets"
-            variant="dense"
             selected={tab === 'members' ? 'b' : 'a'}
             onSelect={() => {}}
             items={[
@@ -967,6 +967,8 @@ export default function UiGalleryPage() {
       <QaExperimentsMocks Section={Section} Case={Case} />
       <MultiLaunchMocks Section={Section} Case={Case} />
       <AiFeedbackMocks Section={Section} Case={Case} />
+      <Round9Mocks Section={Section} Case={Case} />
+      <Round10Mocks Section={Section} Case={Case} />
       <Section id="live" title="Live evaluation (round 2026-11)">
         <LiveMocks />
       </Section>
@@ -1000,7 +1002,6 @@ function ReportGalleryDemo() {
           shown={6}
           total={24}
           chips={status.map((s) => ({ key: s, label: `Status: ${s}`, onClear: () => setStatus([]) }))}
-          onClearAll={() => setStatus([])}
           onJumpToItems={() => {}}
           sidebarOpen={open}
           onToggleSidebar={() => setOpen((o) => !o)}

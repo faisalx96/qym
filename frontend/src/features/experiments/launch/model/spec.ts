@@ -5,12 +5,14 @@
  */
 import { applyEvaluatorEdits } from './evaluator';
 import { bindingToSpec, docSecretRefs } from './bindings';
-import { activeTasks, datasetPairs, pairToJson } from './datasets';
+import { datasetPairs, pairToJson, specTask } from './datasets';
+import { liveJobPriorities } from './jobPriorities';
 import { datasetValue } from './document';
 import { buildOverrides, deepCopy, isPlainObject, stableStringify } from './pointers';
 import type { SecretStore } from './secrets';
 import type {
   BaseSourcePayload,
+  DryRunJob,
   EvaluatorPanel,
   JsonObject,
   JsonValue,
@@ -43,8 +45,8 @@ export function buildSpec(doc: LaunchDocument, panel?: EvaluatorPanel | null): L
     evaluator['datasets'] = pairs.map(pairToJson);
     evaluator['run_shape'] = doc.selection.runShape;
   }
-  const tasks = activeTasks(doc);
-  if (Object.keys(tasks).length) evaluator['task'] = { ...tasks };
+  const task = specTask(doc);
+  if (task) evaluator['task'] = typeof task === 'string' ? task : { ...task };
   const slotBindings: Record<string, JsonValue> = {};
   for (const key of Object.keys(doc.bindings)) slotBindings[key] = bindingToSpec(doc.bindings[key] as never);
   const values: Record<string, JsonValue> = {};
@@ -115,6 +117,8 @@ export interface RequestOptions {
    * validates that every `$secret` ref resolves). Default true.
    */
   secretsInDryRun?: boolean;
+  /** The runs of the last dry run: `job_priorities` names only runs that exist there. */
+  jobs?: readonly DryRunJob[];
 }
 
 export function buildLaunchRequest(
@@ -142,6 +146,8 @@ export function buildLaunchRequest(
   };
   if (doc.description.trim()) body.description = doc.description.trim();
   if (doc.priority) body.priority = doc.priority as Priority;
+  const perRun = liveJobPriorities(doc, options.jobs);
+  if (perRun.length) body.job_priorities = perRun;
   if (options.acknowledgePreemption) body.acknowledge_preemption = true;
   // Platform-owned: a request field, never part of the editable document.
   if (doc.latencySensitive) body.latency_sensitive = true;
@@ -173,6 +179,7 @@ export function dryRunKey(doc: LaunchDocument, panel?: EvaluatorPanel | null): s
     spec: specKey(doc, panel),
     name: doc.name.trim(),
     priority: doc.priority,
+    jobPriorities: doc.jobPriorities,
     latency: doc.latencySensitive,
     description: doc.description.trim(),
   });

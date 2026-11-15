@@ -4,7 +4,7 @@ import { useDocumentTitle } from '../hooks';
 import { constrained } from '../layout';
 import { plural } from '../plural';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Identicon, PageHeader, StatusMark, TabPanel, Tabs, Tag, Text } from '@/ui';
+import { Flag, Identicon, PageHeader, TabPanel, Tabs, Tag, Text } from '@/ui';
 import { GeneralTab } from './GeneralTab';
 import { MembersTab } from './MembersTab';
 import { ApiKeysTab } from './ApiKeysTab';
@@ -63,13 +63,9 @@ export function ProjectSettingsPage() {
           // on/off state: only the exception shows
           ...(readOnly
             ? [
-                <StatusMark
-                  key="status"
-                  tone="warning"
-                  shape="pause"
-                  label="Archived"
-                  data-status="archived"
-                />,
+                <Flag key="status" icon="archive" data-status="archived">
+                  Archived
+                </Flag>,
               ]
             : []),
         ]}

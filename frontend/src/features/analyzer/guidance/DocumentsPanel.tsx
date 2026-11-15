@@ -16,6 +16,7 @@ import {
   EmptyState,
   ErrorState,
   Icon,
+  IconButton,
   SectionHeader,
   Skeleton,
   Switch,
@@ -162,7 +163,8 @@ export function DocumentsPanel({
             data-testid="document-input"
             onChange={(e) => void onFiles(e.target.files)}
           />
-          <Button size="sm" loading={uploading} onPress={() => input.current?.click()}>
+          {/* cv5 L1: adding documents is the tab's create action, so it is the primary button */}
+          <Button size="sm" variant="primary" loading={uploading} onPress={() => input.current?.click()}>
             Choose files
           </Button>
         </div>
@@ -221,14 +223,13 @@ export function DocumentsPanel({
                   {d.selected ? 'Included' : 'Excluded'}
                 </Switch>
                 {canManage ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Delete ${d.name}`}
+                  <IconButton
+                    tile
+                    tone="danger"
+                    icon="trash"
+                    label={`Delete ${d.name}`}
                     onPress={() => setDeleting(d)}
-                  >
-                    <Icon name="trash" size={12} />
-                  </Button>
+                  />
                 ) : null}
               </li>
             ))}
@@ -267,6 +268,8 @@ export function DocumentsPanel({
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
         title="Delete document?"
+        requireText={deleting?.name}
+        inputLabel={`Type ${deleting?.name ?? ''} to confirm`}
         description={
           deleting
             ? `${deleting.name} will be removed from this project and from future analyses.`

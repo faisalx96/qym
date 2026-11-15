@@ -28,14 +28,14 @@ async function expectNoSerious(page: Page, label: string): Promise<void> {
 }
 
 test.describe('axe (14)', () => {
-  test('the page, the Input mapping disclosure, the preview drawer, a test result and a finished job', async ({
+  test('the page, the Input mapping rows, the preview drawer, a test result and a finished job', async ({
     page,
     request,
   }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
     await expectNoSerious(page, 'page');
 
     // detected variable row + open path picker
@@ -43,11 +43,10 @@ test.describe('axe (14)', () => {
     const vars = page.getByLabel('Detected variables');
     await vars.getByRole('button', { name: /\{rubric\} source/ }).click();
     await page.getByRole('option', { name: 'input', exact: true }).click();
-    await vars.getByRole('button', { name: 'Full value' }).click();
-    await expect(page.getByRole('group', { name: '{rubric} fields' })).toBeVisible();
+    await expect(page.getByRole('group', { name: '{rubric}: keys to send' })).toBeVisible();
     await expectNoSerious(page, 'page with a variable and its picker');
 
-    await page.getByRole('button', { name: /^Input mapping/ }).click();
+    // cv4 D4, X13: the Input mapping rows are always shown (no disclosure)
     await expect(page.getByRole('button', { name: /Input source/ })).toBeVisible();
     await page.getByRole('button', { name: /^More options/ }).click();
     await expectNoSerious(page, 'disclosures open');
@@ -139,11 +138,12 @@ test.describe('keyboard (14)', () => {
     await expect(previewDrawer(page)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(previewBtn).toBeFocused();
-    // the Input mapping disclosure toggles with Space
-    const mapping = page.getByRole('button', { name: /^Input mapping/ });
-    await mapping.focus();
+    // cv4 X13: the Input mapping rows are always shown; their first select opens with Space
+    const source = page.getByRole('button', { name: /Input source/ });
+    await source.focus();
     await page.keyboard.press('Space');
-    await expect(mapping).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('option', { name: 'output', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
   });
 
   test('arrow keys move between the guidance tabs; Escape closes dialogs', async ({ page, request }) => {
@@ -216,7 +216,7 @@ test.describe('layout', () => {
     const seed = await seedAnalyzer(request, { withArabic: true });
     await gotoApp(page, analysisUrl(seed.slug, seed.arabicId!));
     await waitWorkspace(page);
-    const first = page.getByRole('list', { name: 'Targets' }).getByRole('listitem').first();
+    const first = page.getByRole('grid', { name: 'Targets' }).locator('tbody tr').first();
     const text = first.locator('[dir="rtl"]', { hasText: 'اعرض' });
     await expect(text).toHaveCount(1);
     await expect(text).toHaveCSS('direction', 'rtl');
@@ -245,7 +245,7 @@ test.describe('layout', () => {
     };
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
     await expectFits('page');
     await page.getByRole('textbox', { name: 'Additional instructions' }).fill('Use {rubric}');
     await expectFits('with a variable');

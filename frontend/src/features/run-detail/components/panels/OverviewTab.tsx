@@ -1,14 +1,13 @@
 /**
- * Overview: one card per metric. Round 10 restores the first qym's card: a score ring and the mean on the first line,
- * the metric name under them, the scored count at the top end, then one line with the error note and the hatch key
- * (C012), then the plot. No side rail, no
- * header band. A plain-number metric (and tokens, when the traces carry them) is the same frame with the mean and a
- * Total, Min, Median and Max line over the box plot. Cost per item is not shown: every attempt reports it by default,
- * so it says nothing about the run. Where the metric has a pass threshold, the ring and the mean are plain green
- * (passes) or red (fails) against it instead of a band (C220).
+ * Overview: one card per metric. cv4 C1-3 and C1-4 give every card one anatomy, top to bottom: the metric name as the
+ * card title with the count at the end; the main number (a score's ring and mean in its band colour, or plain green or
+ * red against a pass threshold, C220; a plain number's mean in the box plot's tone, keyed by the plot's mean diamond);
+ * the plot (histogram with its hatch key at the end of the number row, or the Total, Min, Median and Max strip over the
+ * box plot); then a foot under a hairline with the error note. No side rail, no header band. Tokens show only when the
+ * traces carry them. Cost per item is not shown: every attempt reports it by default, so it says nothing about the run.
  */
 import { useMemo } from 'react';
-import { Card, HelpMarker, Icon, Tag } from '@/ui';
+import { Card, CardTitle, EmptyState, HelpMarker, Icon, Tag } from '@/ui';
 import { useRunPage } from '../../RunContext';
 import { metricBand } from '@/lib/metrics';
 import { metricPassesFor } from '../../lib/filterRules';
@@ -56,28 +55,51 @@ function ScoreRing({
   );
 }
 
-/** The hatch the bars use for errored items, as a key beside the error note. */
+/** The hatch the bars use for errored items: the plot's key, at the end of the main number's row. */
 function HatchKey() {
   return (
     <span className={styles.hatchKey} title="Hatched part of a bar: items counted with an error">
       <span className={styles.hatchSwatch} aria-hidden="true" />
-      in the bars
+      Errored items
     </span>
   );
 }
 
-function ErrorNote({ note, hatch }: { note: MetricCardModel['errorNote']; hatch?: boolean }) {
-  if (!note) return null;
+/**
+ * cv4 C1-3: the card's foot, under the plot after a hairline: the error note (how errors count in the mean).
+ * `reserve` keeps an empty foot's line, so the plots of a row stay level when one card has no note.
+ */
+function CardFoot({ note, reserve }: { note: MetricCardModel['errorNote']; reserve?: boolean }) {
+  if (!note && !reserve) return null;
   return (
-    <span className={styles.cardNote} title={note.title}>
-      <Icon name="warning" size={12} />
-      <span>{note.text}</span>
-      {hatch ? <HatchKey /> : null}
-    </span>
+    <div className={styles.cardFoot} data-empty={note ? undefined : ''}>
+      {note ? (
+        <span className={styles.cardNote} title={note.title}>
+          <Icon name="warning" size={12} />
+          <span>{note.text}</span>
+        </span>
+      ) : (
+        '\u00a0'
+      )}
+    </div>
   );
 }
 
-function ScoreCard({ card }: { card: MetricCardModel }) {
+/** cv4 C1-3, C1-4: the card's title row: the name as the card title (CardTitle, cv4 X1), the count at the end. */
+function CardHead({ title, hint, end }: { title: string; hint?: string; end: React.ReactNode }) {
+  return <CardTitle title={<span title={hint}>{title}</span>} aside={end} />;
+}
+
+function ScoreCard({
+  card,
+  reserveFoot,
+  sharedNote = false,
+}: {
+  card: MetricCardModel;
+  reserveFoot: boolean;
+  /** cv4 Y9: the grid shows the note and the hatch key once, under the cards; the card has neither. */
+  sharedNote?: boolean;
+}) {
   const filters = useChartFilters();
   const { api } = useRunPage();
   const band =
@@ -98,7 +120,8 @@ function ScoreCard({ card }: { card: MetricCardModel }) {
       data-testid="metric-card"
       data-metric={card.metric}
     >
-      <div className={styles.metricHead}>
+      <CardHead title={card.metric} hint={card.directionLabel} end={<Tag kind="count">{card.badge}</Tag>} />
+      <div className={styles.metricScore}>
         {card.avg !== null && card.kind !== 'empty' ? (
           <ScoreRing
             value={card.avg}
@@ -106,22 +129,21 @@ function ScoreCard({ card }: { card: MetricCardModel }) {
             tone={verdict ? (verdict === 'pass' ? 'success' : 'danger') : null}
           />
         ) : null}
-        <div className={styles.metricTitle}>
-          {card.avg === null ? (
-            <span className={styles.plain}>{card.avgText}</span>
-          ) : (
-            <BandValue value={card.avg} type={card.type} direction={card.direction} verdict={verdict}>
-              {card.avgText}
-            </BandValue>
-          )}
-          <span className={styles.metricName} title={card.directionLabel}>
-            {card.metric}
-          </span>
-        </div>
-        <Tag kind="count">{card.badge}</Tag>
+        {card.avg === null ? (
+          <span className={styles.heroValue}>{card.avgText}</span>
+        ) : (
+          <BandValue
+            value={card.avg}
+            type={card.type}
+            direction={card.direction}
+            verdict={verdict}
+            className={styles.heroValue}
+          >
+            {card.avgText}
+          </BandValue>
+        )}
+        {card.kind === 'score' && card.errorNote && !sharedNote ? <HatchKey /> : null}
       </div>
-      {/* C012: the error note and the hatch key share one full-width line under the head */}
-      <ErrorNote note={card.errorNote} hatch={card.kind === 'score'} />
       <div className={styles.metricPlot}>
         {card.kind === 'score' && card.buckets ? (
           <Histogram
@@ -141,6 +163,7 @@ function ScoreCard({ card }: { card: MetricCardModel }) {
         ) : null}
         {card.kind === 'empty' ? <p className={styles.slotEmpty}>No scored items</p> : null}
       </div>
+      {sharedNote ? null : <CardFoot note={card.errorNote} reserve={reserveFoot} />}
     </Card>
   );
 }
@@ -155,12 +178,14 @@ function NumberCard({
   entries,
   field,
   note,
+  reserveFoot = false,
 }: {
   title: string;
   kind: BoxKind;
   entries: BoxEntry[];
   field: string;
   note?: MetricCardModel['errorNote'];
+  reserveFoot?: boolean;
 }) {
   const values = useMemo(() => entries.map((e) => e.v), [entries]);
   const stats = useMemo(() => boxStats(values), [values]);
@@ -182,19 +207,23 @@ function NumberCard({
       data-testid={metric ? 'metric-card' : 'trace-card'}
       data-metric={metric ?? kind}
     >
-      <div className={styles.metricHead}>
-        <div className={styles.metricTitle}>
-          <span className={styles.plain}>{entries.length ? fmt(stats.mean) : '—'}</span>
-          <span className={styles.metricName}>
-            {title} <span className={styles.metricSub}>· mean per item</span>
-          </span>
-        </div>
-        <span className={styles.metricEnd}>
-          <Tag kind="count">{entries.length} items</Tag>
-          <HelpMarker label={BOX_HELP.label}>{BOX_HELP.text}</HelpMarker>
+      <CardHead
+        title={title}
+        end={
+          <>
+            <Tag kind="count">{entries.length} items</Tag>
+            <HelpMarker label={BOX_HELP.label}>{BOX_HELP.text}</HelpMarker>
+          </>
+        }
+      />
+      {/* C1-4: the mean is the main number; its key is the plot's hollow diamond, so the number names a mark */}
+      <div className={styles.metricScore} data-tone={entries.length ? 'series' : undefined}>
+        <span className={styles.heroValue}>{entries.length ? fmt(stats.mean) : '—'}</span>
+        <span className={styles.meanKey}>
+          <span className={styles.meanGlyph} aria-hidden="true" />
+          mean per item
         </span>
       </div>
-      <ErrorNote note={note ?? null} />
       {entries.length ? (
         <dl className={styles.numberFacts}>
           {facts.map(([k, v]) => (
@@ -208,6 +237,7 @@ function NumberCard({
       <div className={styles.metricBox}>
         <BoxCardBody entries={entries} kind={kind} name={title} field={field} />
       </div>
+      <CardFoot note={note ?? null} reserve={reserveFoot} />
     </Card>
   );
 }
@@ -232,21 +262,39 @@ export function OverviewTab() {
     [cards, api.ctx, rows],
   );
   const tokens = useMemo(() => traceEntries(rows, 'tokens'), [rows]);
-  if (!cards.length) return <p className={styles.note}>No scored items for the current filters.</p>;
+  if (!cards.length) return <EmptyState compact title="No scored items for these filters" />;
   // Box plot cards (numeric metrics, tokens) share their own rows: a short plot never sits beside a tall histogram,
   // so no card stretches over dead space (round 5 R2).
   const scoreCards = cards.filter((c) => c.kind !== 'numeric');
   const numericCards = cards.filter((c) => c.kind === 'numeric');
   // tokens only when the traces carry token counts (round 10: not applicable means not shown)
   const showTokens = tokens.length >= MIN_TRACE_ITEMS && tokens.some((t) => t.v > 0);
+  // a row whose cards all lack a note has no foot; one note keeps the foot line on every card of that grid
+  const scoreNotes = scoreCards.some((c) => c.errorNote);
+  // cv4 Y9: the same note on every score card is said once, in one line under the grid, with the hatch key
+  const firstNote = scoreCards[0]?.errorNote ?? null;
+  const sharedNote =
+    firstNote && scoreCards.length > 1 && scoreCards.every((c) => c.errorNote?.text === firstNote.text)
+      ? firstNote
+      : null;
+  const numberNotes = numericCards.some((c) => c.errorNote);
   return (
     <div className={styles.overviewStack}>
       {scoreCards.length ? (
         <div className={styles.metricGrid} data-count={scoreCards.length}>
           {scoreCards.map((c) => (
-            <ScoreCard key={c.metric} card={c} />
+            <ScoreCard key={c.metric} card={c} reserveFoot={scoreNotes} sharedNote={!!sharedNote} />
           ))}
         </div>
+      ) : null}
+      {sharedNote ? (
+        <p className={styles.gridNote} data-testid="overview-shared-note">
+          <span className={styles.cardNote} title={sharedNote.title}>
+            <Icon name="warning" size={12} />
+            <span>{sharedNote.text}</span>
+          </span>
+          {scoreCards.some((c) => c.kind === 'score') ? <HatchKey /> : null}
+        </p>
       ) : null}
       {numericCards.length || showTokens ? (
         <div className={styles.metricGrid} data-count={numericCards.length + +showTokens}>
@@ -258,10 +306,17 @@ export function OverviewTab() {
               entries={numeric.get(c.metric) ?? []}
               field={`metric:${c.metric}`}
               note={c.errorNote}
+              reserveFoot={numberNotes}
             />
           ))}
           {showTokens ? (
-            <NumberCard title="Tokens per item" kind="tokens" entries={tokens} field="tokens" />
+            <NumberCard
+              title="Tokens per item"
+              kind="tokens"
+              entries={tokens}
+              field="tokens"
+              reserveFoot={numberNotes}
+            />
           ) : null}
         </div>
       ) : null}

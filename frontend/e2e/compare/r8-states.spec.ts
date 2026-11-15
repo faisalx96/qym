@@ -34,7 +34,12 @@ for (const width of [1440, 390]) {
     const frame = page.getByTestId('compare-skeleton');
     await expect(frame).toBeVisible();
     await expect(part(page, 'run-grid').locator('[role="status"]')).toHaveCount(4);
-    within((await box(part(page, 'run-grid').locator('[role="status"]').first())).h, width === 1440 ? 242 : 254, 4, 'run placeholder');
+    within(
+      (await box(part(page, 'run-grid').locator('[role="status"]').first())).h,
+      width === 1440 ? 242 : 254,
+      4,
+      'run placeholder',
+    );
     const loading = {
       runs: (await box(part(page, 'section-runs'))).h,
       averages: (await box(part(page, 'section-averages'))).h,
@@ -85,7 +90,7 @@ test('C-state-3: runs missing: the count, up to five ids then "+ N more", a Back
   await expect(alert).toContainText('7 of the runs in this link were deleted or are not visible to you');
   for (const id of ids.slice(0, 5)) await expect(alert).toContainText(id);
   await expect(alert).not.toContainText(ids[5]!);
-  await expect(alert).toContainText('+ 2 more');
+  await expect(alert).toContainText('and 2 more');
   await expect(alert).toContainText('404');
   await expect(page.getByRole('link', { name: /Back to runs/ })).toBeVisible();
   await noSidewaysScroll(page);

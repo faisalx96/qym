@@ -1,12 +1,12 @@
 /**
  * The metrics of an expanded item (round 3 P5): one matrix, metric rows by pass columns (or Score and Reason for one
- * pass), a Mean column, 8 rows then "Show N more metrics". A value opens ONE detail panel under the matrix (reason, judge
+ * pass), a Mean column, 8 rows then "Show N more". A value opens ONE detail panel under the matrix (reason, judge
  * metadata, edit). The matrix is a DataTable grid; cells are buttons with a roving tabindex (arrows, Home / End,
  * Enter / Space open, Escape closes).
  */
 import { useMemo, useRef, useState } from 'react';
 import { formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
-import { Button, DataTable, Icon, IconButton, ScoreValue, Tag, type Column } from '@/ui';
+import { Button, CardTitle, DataTable, Icon, IconButton, ScoreValue, Tag, type Column } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   DEFAULT_METRIC_ROWS,
@@ -160,7 +160,7 @@ export function MetricMatrix({
       ? '—'
       : model.metricTypes[r.metric] === 'numeric'
         ? formatNumericValue(r.mean)
-        : formatPercent(r.mean, 0);
+        : formatPercent(r.mean, 1);
   const columns: Column<MatrixRow>[] = [
     {
       id: 'metric',
@@ -247,18 +247,20 @@ export function MetricMatrix({
   const editable = canEdit && !!pick;
   return (
     <div ref={rootRef} className={styles.matrix}>
-      <div className={styles.head}>
-        <h3 className={styles.title}>Metrics</h3>
-        <span className={styles.summary} data-testid="matrix-summary">
-          {matrixSummary({
-            shown: visible.length,
-            total: rows.length,
-            passes: multi ? passes.length : 1,
-            belowThreshold,
-            differing,
-          })}
-        </span>
-      </div>
+      <CardTitle
+        title="Metrics"
+        description={
+          <span data-testid="matrix-summary">
+            {matrixSummary({
+              shown: visible.length,
+              total: rows.length,
+              passes: multi ? passes.length : 1,
+              belowThreshold,
+              differing,
+            })}
+          </span>
+        }
+      />
       <div
         ref={gridRef}
         className={styles.gridHost}
@@ -275,7 +277,7 @@ export function MetricMatrix({
           density="compact"
           densityLocked
           columnMenu={false}
-          zebra={false}
+          stripe="report"
           variant="embedded"
           stickyHeader={false}
           responsive="scroll"
@@ -288,12 +290,12 @@ export function MetricMatrix({
       {rows.length > DEFAULT_METRIC_ROWS ? (
         <Button
           size="sm"
-          variant="ghost"
+          variant="neutral"
           className={styles.more}
           onPress={() => setExpandedRows((v) => !v)}
           aria-expanded={expandedRows}
         >
-          {expandedRows ? 'Show fewer metrics' : `Show ${rows.length - DEFAULT_METRIC_ROWS} more metrics`}
+          {expandedRows ? 'Show fewer' : `Show ${rows.length - DEFAULT_METRIC_ROWS} more`}
         </Button>
       ) : null}
       {pick && pickRow && pickCell && pickPass ? (

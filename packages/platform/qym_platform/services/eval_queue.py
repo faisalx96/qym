@@ -66,7 +66,7 @@ from ..db.models import (
     Run,
     RunItem,
 )
-from .eval_dispatcher import is_stale_remote, stale_remote_job_ids
+from .eval_dispatcher import is_stale_remote, priority_rank, stale_remote_job_ids
 from .eval_experiments import ACTIVE_JOB_STATUSES, TERMINAL_JOB_STATUSES
 from .eval_remote_queue import read_snapshot
 from .eval_service_client import (
@@ -101,11 +101,16 @@ ERROR_MESSAGE_MAX = 300
 
 
 def dispatch_order() -> Tuple[Any, ...]:
-    """``ORDER BY`` of ``EvalDispatcher.claim`` (keep the two in sync), plus ``id``."""
+    """``ORDER BY`` of ``EvalDispatcher.claim`` (keep the two in sync), plus ``id``.
+
+    Priority between experiments is the Evaluation Service's job; within one
+    experiment (same ``created_at``) HIGH runs are submitted first.
+    """
     job = EvalExperimentJob
     return (
         func.coalesce(job.next_attempt_at, job.created_at),
         job.created_at,
+        priority_rank(),
         job.combo_index,
         job.dataset_index,
         job.id,
@@ -175,7 +180,10 @@ def queue_positions(db: Session, environment_ids: Iterable[str]) -> Dict[str, in
 
 
 def job_priority(job: EvalExperimentJob, experiment: EvalExperiment) -> str:
-    """The priority the job is (or will be) submitted with."""
+    """The priority the job is (or will be) submitted with: its own, else the body's, else the experiment's."""
+    own = getattr(job, "priority", None)
+    if isinstance(own, str) and own:
+        return own.upper()
     body = job.request_body if isinstance(job.request_body, Mapping) else {}
     value = body.get("priority")
     if isinstance(value, str) and value:

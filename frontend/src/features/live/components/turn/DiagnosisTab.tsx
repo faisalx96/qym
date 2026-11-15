@@ -1,6 +1,7 @@
 import type { LiveTurnDetail } from '@/api/live';
 import { formatDurationMs } from '@/lib/format';
-import { Tag, Text, TextBlock } from '@/ui';
+import { modelSeriesOf } from '@/features/runs-list/model';
+import { EmptyState, ModelTag, Tag, Text, TextBlock } from '@/ui';
 import { chartsOf, evalMetaOf, judgeOf, numberOf, recordOf, servicesOf, stringOf } from '../../lib/summary';
 import { ChartEvidenceBody } from './ChartsTab';
 import { Bilingual, EvidenceCard, MetricValue, ServiceStatus } from './Evidence';
@@ -11,7 +12,13 @@ import { SqlCompare } from './SqlCompare';
 import { TurnFacts } from './TurnFacts';
 import styles from '../../turn.module.css';
 
-export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
+export function DiagnosisTab({
+  data,
+  modelIndex,
+}: {
+  data: LiveTurnDetail;
+  modelIndex?: Record<string, number> | null;
+}) {
   const { turn, summary, specs } = data;
   const judges = { a: judgeOf(summary, 'a'), b: judgeOf(summary, 'b') };
   const deviations = { a: deviationEvidence(summary, 'a'), b: deviationEvidence(summary, 'b') };
@@ -49,14 +56,14 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
               ) : judge?.reasoningEn || judge?.reasoningAr ? (
                 <Bilingual en={judge.reasoningEn || null} ar={judge.reasoningAr || null} />
               ) : (
-                <Text tone="muted">No reasoning available for this judge.</Text>
+                <EmptyState compact title="No reasoning available for this judge" />
               )}
             </div>
           );
         })}
       </EvidenceCard>
       <EvidenceCard title="SQL comparison" block="sql-comparison">
-        <SqlCompare data={data} compact />
+        <SqlCompare data={data} compact modelIndex={modelIndex} />
       </EvidenceCard>
       <div className={styles.threeColumns}>
         <EvidenceCard title="Final answer" block="answer">
@@ -80,7 +87,7 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
           {chart ? (
             <ChartEvidenceBody chart={chart} specs={specs} reading={false} size="thumb" />
           ) : (
-            <Text tone="muted">No charts available for this turn.</Text>
+            <EmptyState compact title="No charts for this turn" />
           )}
         </EvidenceCard>
         <EvidenceCard title="Services on this turn" block="turn-services">
@@ -103,12 +110,16 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
               </div>
             ))
           ) : (
-            <Text tone="muted">No services available for this turn.</Text>
+            <EmptyState compact title="No services for this turn" />
           )}
           <div className={styles.evaluator} data-live-block="evaluator-line">
-            <span dir="auto">
-              {judgeModels.length ? judgeModels.join(' · ') : 'Judge models unavailable'}
-            </span>
+            {judgeModels.length ? (
+              judgeModels.map((model, i) => (
+                <ModelTag key={i} name={model!} series={modelSeriesOf(modelIndex ?? null, model!, false)} />
+              ))
+            ) : (
+              <span>Judge models unavailable</span>
+            )}
             {codeVersion ? (
               <Tag kind="version" dir="auto">
                 {codeVersion}
@@ -119,7 +130,7 @@ export function DiagnosisTab({ data }: { data: LiveTurnDetail }) {
                 {manifest}
               </Tag>
             ) : null}
-            <span className={styles.number}>
+            <span>
               Attempt {attempt ?? '—'} · {duration === 0 ? '0ms' : formatDurationMs(duration)}
             </span>
           </div>

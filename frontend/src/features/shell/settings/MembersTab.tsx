@@ -209,7 +209,7 @@ export function MembersTab() {
           rows={members.data}
           rowKey={(m) => m.user_id}
           storageKey="settings-members"
-          empty="No members yet."
+          empty="No members yet"
         />
       )}
       {removing ? (

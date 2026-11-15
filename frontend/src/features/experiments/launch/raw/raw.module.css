@@ -23,7 +23,8 @@
   box-shadow: var(--focus-ring);
 }
 
-.fallback {
+/* E-25: ui/Textarea puts className on its field wrapper; the plain editor rules style the textarea inside it. */
+.fallback textarea {
   display: block;
   box-sizing: border-box;
   width: 100%;

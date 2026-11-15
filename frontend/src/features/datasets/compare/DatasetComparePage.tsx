@@ -34,7 +34,7 @@ import {
   Tag,
   Text,
   useToast,
-  StatusMark,
+  Flag,
 } from '@/ui';
 import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
@@ -132,7 +132,7 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
             <LinkButton
               to={datasetPath(slug, dataset.slug)}
               variant="neutral"
-              icon={<Icon name="chevron-left" size={12} />}
+              icon={<Icon name="prev" size={12} />}
             >
               Back to the dataset
             </LinkButton>
@@ -216,10 +216,10 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
               searchable="auto"
               width={220}
             />
-            <LinkButton to={datasetPath(slug, dataset.slug, { v: base.version })} variant="ghost">
+            <LinkButton to={datasetPath(slug, dataset.slug, { v: base.version })} variant="neutral">
               Open base
             </LinkButton>
-            <LinkButton to={datasetPath(slug, dataset.slug, { v: head.version })} variant="ghost">
+            <LinkButton to={datasetPath(slug, dataset.slug, { v: head.version })} variant="neutral">
               Open head
             </LinkButton>
             <DownloadDiff
@@ -261,7 +261,7 @@ function DownloadDiff({
   const toast = useToast();
   return (
     <Button
-      variant="neutral"
+      variant="accent"
       icon={<Icon name="download" size={12} />}
       loading={busy}
       data-testid="download-diff"
@@ -402,14 +402,19 @@ function plural(n: number) {
   return `${n} item${n === 1 ? '' : 's'}`;
 }
 
-/** An item whose state differs between the two versions: Active → Disabled (spec A2-46). */
+/**
+ * An item whose state differs between the two versions: Active → Disabled (spec A2-46). Both sides are grey Flags
+ * (status rules: an on/off state is a grey Flag). Disabled carries the ban glyph, Active has no glyph.
+ */
 function StateDiff({ before, after }: { before?: 'active' | 'disabled'; after?: 'active' | 'disabled' }) {
   const name = (v?: string) => (v === 'disabled' ? 'Disabled' : 'Active');
   const badge = (v?: string) =>
     v === 'disabled' ? (
-      <StatusMark tone="warning" shape="pause" label={name(v)} data-status="disabled" />
+      <Flag icon="ban" data-status="disabled">
+        {name(v)}
+      </Flag>
     ) : (
-      <StatusMark tone="success" shape="full" label={name(v)} />
+      <Flag data-status="active">{name(v)}</Flag>
     );
   return (
     <div
@@ -458,7 +463,7 @@ function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaul
           {fields.length ? ` · fields: ${fields.map(fieldLabel).join(', ')}` : ''}
         </span>
         <span className={styles.rowSide}>
-          <UserPill user={entry.edited_by} label="Edited By:" />
+          <UserPill user={entry.edited_by} label="Edited by" />
         </span>
       </button>
       {open ? (
@@ -521,7 +526,7 @@ function ItemRow({
               : ''}
         </span>
         <span className={styles.rowSide}>
-          <UserPill user={item.edited_by} label="Edited By:" />
+          <UserPill user={item.edited_by} label="Edited by" />
         </span>
       </button>
       {open ? (

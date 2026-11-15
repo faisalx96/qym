@@ -176,18 +176,13 @@ test.describe('union run page', () => {
     await page.getByTestId('show-items-link').first().click();
     await expect(page).toHaveURL(/dataset=support-tickets%40v1/);
     await expect(page.getByTestId('items-count')).toHaveText('412 items');
-    await expect(
-      page.getByRole('button', { name: 'Remove filter Dataset: support-tickets v1' }),
-    ).toBeVisible();
+    await expect(page.locator('[data-run-filters]').getByText('Dataset: support-tickets v1', { exact: true })).toBeVisible();
     // the page-wide scope follows; the Datasets section is the breakdown of the whole run and does not
     await expect(page.locator('#run-section-overview')).toContainText('over 412 of 946 items');
     await expect(page.locator('#run-section-datasets')).toContainText('All datasets');
     expect(requests.filter((u) => u.includes('/datasets'))).toEqual([]);
-    // removing the chip returns to all
-    // (the quick-filters sidebar that a scope opens sits over the bar's right end at 1440: press through the DOM)
-    await page
-      .getByRole('button', { name: 'Remove filter Dataset: support-tickets v1' })
-      .dispatchEvent('click');
+    // the one Clear in the sticky nav returns to all (C-44: the tag has no ×)
+    await page.getByTestId('nav-clear-filters').click();
     await expect(page.getByTestId('items-count')).toHaveText('946 items');
     await expect(page).not.toHaveURL(/dataset=/);
     // the URL form works as a link
@@ -304,8 +299,8 @@ test.describe('union run page', () => {
     const expected = { 1440: 6, 1024: 10, 390: 10 } as const;
     for (const width of WIDTHS) {
       await open(page, width, url(many));
-      const more = page.getByRole('button', { name: /^\+ \d+ more$/ });
-      await expect(more).toHaveText(`+ ${expected[width]} more`);
+      const more = page.getByRole('button', { name: /^\+\d+ more$/ });
+      await expect(more).toHaveText(`+${expected[width]} more`);
       const hero = await size(page, '[data-testid=run-hero]');
       expect(hero.h).toBeGreaterThan(150);
       // pressing it shows every chip

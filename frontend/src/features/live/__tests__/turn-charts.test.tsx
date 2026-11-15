@@ -89,7 +89,7 @@ describe('live chart screenshots', () => {
         <DiagnosisTab data={{ ...data, summary: {} }} />
       </MemoryRouter>,
     );
-    expect(screen.getByText('No charts available for this turn.')).toBeInTheDocument();
+    expect(screen.getByText('No charts for this turn')).toBeInTheDocument();
     expect(container.querySelector('[data-live-chart-image]')).not.toBeInTheDocument();
   });
 

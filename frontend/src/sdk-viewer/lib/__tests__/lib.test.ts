@@ -68,8 +68,8 @@ describe('stats', () => {
   });
   it('formats', () => {
     expect(formatLatency(null)).toBe('—');
-    expect(formatLatency(344.15)).toBe('344 ms');
-    expect(formatLatency(1500)).toBe('1.50 s');
+    expect(formatLatency(344.15)).toBe('344ms');
+    expect(formatLatency(1500)).toBe('1.50s');
     expect(formatElapsed(75)).toBe('1:15');
     expect(formatElapsed(3725)).toBe('1:02:05');
   });

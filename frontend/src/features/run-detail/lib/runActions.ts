@@ -45,7 +45,7 @@ export function runActionItems(status: string | null | undefined, viewer: RunAct
       if (s === 'REJECTED') items.push({ id: 'unreject', label: 'Unreject', icon: 'retry' });
     }
   }
-  items.push({ id: 'export', label: 'Export HTML', icon: 'download' });
+  items.push({ id: 'export', label: 'Export HTML', icon: 'html-file' });
   if (!viewer.readOnly && viewer.canManage)
     items.push({ id: 'transfer', label: 'Transfer ownership', icon: 'file' });
   if (!viewer.readOnly && (viewer.isAdmin || viewer.canManage || viewer.isOwner))

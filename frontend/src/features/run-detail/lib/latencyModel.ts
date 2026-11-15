@@ -172,7 +172,7 @@ export interface LatencyPin {
 
 /** About how wide a pin chip draws, in px: per pin the padding, the sans key, the gap and the mono value. */
 const pinChipWidth = (set: LatencyPin[]) =>
-  set.reduce((t, p) => t + 46 + 8 * durParts(p.ms)[0].length, 2 + (set.length - 1));
+  set.reduce((t, p) => t + 46 + 8 * formatDuration(p.ms).length, 2 + (set.length - 1));
 
 /** The p50, p90 and p95 pins of the latency spectrum, at their positions from fastest (0) to slowest (100). */
 export function latencyPins(L: LatencySummary): LatencyPin[] {

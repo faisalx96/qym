@@ -15,6 +15,7 @@ import {
   Checkbox,
   ConfirmDialog,
   DataTable,
+  EmptyState,
   ErrorState,
   Icon,
   Skeleton,
@@ -206,7 +207,13 @@ export function LlmConnectionsTab() {
             rows={list.data}
             rowKey={(c) => c.id}
             storageKey="settings-llm"
-            empty="No LLM connections yet. Add one to run auto-analysis and experiments."
+            empty={
+              <EmptyState
+                compact
+                title="No LLM connections yet"
+                body="Add one to run auto-analysis and experiments."
+              />
+            }
           />
         )}
       </SettingsCard>
@@ -241,6 +248,8 @@ export function LlmConnectionsTab() {
           open
           onOpenChange={(o) => !o && setDeleting(null)}
           title={`Delete “${deleting.name}”?`}
+          requireText={deleting.name}
+          inputLabel={`Type ${deleting.name} to confirm`}
           tone="danger"
           description="Analyses and experiments configured with this connection will need another one."
           confirmLabel="Delete connection"
@@ -337,8 +346,9 @@ export function ConnectionForm({
               // the button rule (round 11): Test runs something without saving (accent), Save commits (primary)
               <Button
                 variant="accent"
-                icon={<Icon name="play" size={14} />}
+                icon={<Icon name="play" size={12} />}
                 isDisabled={!baseUrl.trim() || !model.trim() || (needsKey && !key) || (!key && !initial)}
+                disabledReason="Fill in base URL, model and key"
                 loading={testing}
                 onPress={async () => {
                   if (!checked()) return;
@@ -358,7 +368,7 @@ export function ConnectionForm({
               </Button>
             ) : null}
             <Button type="submit" variant="primary" loading={busy} isDisabled={!complete}>
-              {initial ? 'Save changes' : 'Add connection'}
+              {initial ? 'Save' : 'Add connection'}
             </Button>
           </div>
         }

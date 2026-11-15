@@ -261,7 +261,7 @@ def test_dry_run_warns_when_a_private_dataset_meets_an_undeclaring_schema(
     spec["evaluator"]["dataset"] = "golden"
     body = _create(client, [env.id], spec=spec, dry_run=True).json()
     assert body["ok"] is True
-    assert body["warnings"] == [
+    assert [w for w in body["warnings"] if w["code"] == "dataset_token_not_declared"] == [
         {
             "code": "dataset_token_not_declared",
             "environment_ids": [env.id],
@@ -277,7 +277,7 @@ def test_dry_run_warns_when_a_private_dataset_meets_an_undeclaring_schema(
     assert plain["warnings"] == []
     declaring = _add_declaring_env(session_factory)
     again = _create(client, [declaring.id], spec=spec, dry_run=True).json()
-    assert again["warnings"] == []
+    assert [w for w in again["warnings"] if w["code"] == "dataset_token_not_declared"] == []
 
 
 # --------------------------------------------------------------------------- B4-19

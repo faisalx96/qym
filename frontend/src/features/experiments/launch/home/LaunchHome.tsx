@@ -6,6 +6,7 @@ import { EnvironmentPicker } from '../entry/EnvironmentPicker';
 import { HomeBar } from '../entry/HomeBar';
 import { LatencyControl } from '../entry/LatencyControl';
 import { StartFrom } from '../entry/StartFrom';
+import { TaskCard } from '../entry/TaskCard';
 import { useLaunch } from '../LaunchContext';
 import type { WizardStepId } from '../wizard/steps';
 import styles from '../entry/entry.module.css';
@@ -21,22 +22,27 @@ export function LaunchHome({ onCustomize }: { onCustomize: (step: WizardStepId) 
       {readOnly ? (
         <Callout tone="warning">This project is archived, so nothing can be launched.</Callout>
       ) : null}
+      <TaskCard />
       <div className={styles.where}>
-        <Card>
-          <div className={panel.cardStack}>
-            <EnvironmentPicker />
-            {envRecords.length ? (
-              <div className={styles.latencyBlock} data-testid="home-latency">
-                <LatencyControl />
-              </div>
-            ) : null}
-          </div>
-        </Card>
-        <Card>
-          <div className={panel.cardStack}>
-            <DatasetsCard />
-          </div>
-        </Card>
+        <div data-part="env-section" className={styles.whereCell}>
+          <Card>
+            <div className={panel.cardStack}>
+              <EnvironmentPicker />
+              {envRecords.length ? (
+                <div className={styles.latencyBlock} data-testid="home-latency">
+                  <LatencyControl />
+                </div>
+              ) : null}
+            </div>
+          </Card>
+        </div>
+        <div data-part="dataset-section" className={styles.whereCell}>
+          <Card>
+            <div className={panel.cardStack}>
+              <DatasetsCard />
+            </div>
+          </Card>
+        </div>
       </div>
       {envRecords.length ? (
         <Card>

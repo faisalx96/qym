@@ -6,7 +6,7 @@ import { createProject, gotoApp, uniqueSlug } from '../helpers';
 test('create project: a whitespace-only name is rejected, nothing is created', async ({ page }) => {
   await gotoApp(page, '/');
   await page.getByRole('button', { name: 'New project' }).first().click();
-  const dlg = page.getByRole('dialog', { name: 'Create project' });
+  const dlg = page.getByRole('dialog', { name: 'New project' });
   const posts: string[] = [];
   page.on('request', (r) => {
     if (r.method() === 'POST' && r.url().endsWith('/v1/projects')) posts.push(r.url());
@@ -32,7 +32,7 @@ test('LLM connection form takes focus on open and returns it to Add when closed'
 test('prompt drafts: leaving the tab with unsaved edits asks first', async ({ page, request }) => {
   const p = await createProject(request, 'UX Prompt Guard', uniqueSlug('uxprm'));
   await gotoApp(page, `/projects/${p.slug}/settings?tab=prompts`);
-  const editor = page.getByRole('textbox', { name: 'LLM analyzer prompt' });
+  const editor = page.getByRole('textbox', { name: 'Prompt', exact: true });
   await editor.fill('A short custom prompt');
   await page.getByRole('tab', { name: 'General' }).click();
   const dlg = page.getByRole('alertdialog', { name: 'Discard unsaved changes?' });

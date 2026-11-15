@@ -15,15 +15,12 @@
   padding-block: var(--space-xs);
 }
 
-.head {
+.headEnd {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-md);
-}
-
-.title {
-  margin: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* Kind glyphs: the icon of a kind of work on a tint of its colour. */
@@ -78,7 +75,6 @@
 }
 
 .total small {
-  margin-left: 2px;
   color: var(--text-muted);
   font-size: var(--font-sm);
 }
@@ -307,7 +303,6 @@
 }
 
 .kvalue small {
-  margin-left: 2px;
   color: var(--text-muted);
   font-size: var(--font-sm);
   font-weight: 600;
@@ -367,6 +362,9 @@
 }
 
 .linkButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   padding: 0;
   border: 0;
   background: none;

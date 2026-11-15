@@ -198,6 +198,13 @@
   flex: none;
 }
 
+.runName > .runNameWrap {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* The leading slot of a run without passes: the chevron spacer's box (inline-block, 24 px, no height) with the
    latency tag centred in it, so the head's line box (the card layout baseline-aligns it) and the name do not move. */
 .leadSlot {
@@ -232,9 +239,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-base);
   text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   border-radius: 2px;
 }
 
@@ -246,4 +251,11 @@
 .runLink:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
+}
+
+/* C-23: a trace or system column title: the zap Icon, then the words. */
+.boltLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
 }

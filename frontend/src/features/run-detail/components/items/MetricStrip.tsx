@@ -69,14 +69,14 @@ function DetailTable({ title, rawKey, table }: { title: string; rawKey: string; 
         density="compact"
         densityLocked
         columnMenu={false}
-        zebra={false}
+        stripe="report"
         variant="embedded"
         stickyHeader={false}
         responsive="scroll"
       />
       {table.rows.length > TABLE_PAGE && !all ? (
-        <Button size="sm" variant="ghost" className={styles.moreRows} onPress={() => setAll(true)}>
-          {`Show ${table.rows.length - TABLE_PAGE} more rows`}
+        <Button size="sm" variant="neutral" className={styles.moreRows} onPress={() => setAll(true)}>
+          {`Show ${table.rows.length - TABLE_PAGE} more`}
         </Button>
       ) : null}
       {table.total > TABLE_ROW_CAP && (all || table.rows.length <= TABLE_PAGE) ? (

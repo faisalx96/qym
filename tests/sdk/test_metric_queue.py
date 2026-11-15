@@ -527,7 +527,8 @@ def test_stuck_metric_never_stalls_tasks_across_passes():
     barrier gates tasks only, scoring drains on its own.
     """
     recorder = _Recorder()
-    release = asyncio.Event()
+    # Built inside the loop: on Python 3.9 an asyncio.Event binds to the loop current at creation.
+    release: dict = {}
     task_calls: List[tuple] = []
     seen = {"passes": set()}
 
@@ -539,7 +540,7 @@ def test_stuck_metric_never_stalls_tasks_across_passes():
         # First scored item of the run blocks until every task has run.
         if not seen["passes"]:
             seen["passes"].add("blocked")
-            await release.wait()
+            await release["event"].wait()
         return 1.0
 
     evaluator = Evaluator(
@@ -552,6 +553,7 @@ def test_stuck_metric_never_stalls_tasks_across_passes():
     )
 
     async def _go():
+        release["event"] = asyncio.Event()
         run = asyncio.create_task(evaluator.arun(show_tui=False, auto_save=False))
         # All 9 task executions (3 items x 3 passes) finish while the first
         # metric is still stuck.
@@ -560,7 +562,7 @@ def test_stuck_metric_never_stalls_tasks_across_passes():
             await asyncio.sleep(0.01)
         assert len(task_calls) == 9, task_calls
         assert not recorder.completed  # nothing scored yet
-        release.set()
+        release["event"].set()
         return await asyncio.wait_for(run, 10.0)
 
     result = asyncio.run(_go())

@@ -2,12 +2,13 @@ import { useState } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDialog';
 import { SlotEditorDialog } from '@/features/environments/SlotEditor';
+import { HealthTag } from '@/features/environments/cells';
 import { Button, Checkbox, Icon, LinkButton, Tag } from '@/ui';
+import { titleCase } from '../../lib/format';
 import { environmentPath } from '../../paths';
 import { pairCount, PSEUDO, pointerToFieldName, unitsFor } from '../model';
 import { useLaunch } from '../LaunchContext';
-import { EnvTask } from './TaskRow';
-import { EnvVersions } from './VersionsBlock';
+import { EnvRefresh, EnvVersions } from './VersionsBlock';
 import styles from './entry.module.css';
 
 /** What a ticked environment will receive when the experiment names two or more dataset versions. */
@@ -37,15 +38,10 @@ function EnvironmentTags({
 }) {
   return (
     <span className={styles.envTags}>
-      {env.health_status === 'ok' ? (
-        <Tag tone="success">Healthy</Tag>
-      ) : env.health_status === 'error' ? (
-        <Tag tone="danger" title={env.health_error ?? undefined}>
-          Unhealthy
-        </Tag>
-      ) : (
-        <Tag>Not checked</Tag>
-      )}
+      <HealthTag
+        status={env.health_status}
+        title={env.health_status === 'error' ? (env.health_error ?? undefined) : undefined}
+      />
       {!env.current_schema_id ? <Tag tone="warning">No schema</Tag> : null}
       {env.model_slots?.needs_confirmation ? <Tag tone="warning">Needs LLM grouping</Tag> : null}
       {checking ? <Tag tone="info">Checking schema…</Tag> : null}
@@ -54,7 +50,7 @@ function EnvironmentTags({
           Schema check failed
         </Tag>
       ) : null}
-      <Tag>Priority up to {env.max_priority}</Tag>
+      <Tag kind="data">Priority up to {titleCase(env.max_priority)}</Tag>
       {env.official_preset_version != null ? (
         <Tag kind="version">Default preset v{env.official_preset_version}</Tag>
       ) : null}
@@ -68,7 +64,7 @@ function EnvironmentTags({
 }
 
 /**
- * The environments checkbox list: health, schema, grouping and preset tags, "Details", "+ New environment".
+ * The environments checkbox list: health, schema, grouping and preset tags, "Details", "+ Add environment".
  * A ticked environment's box also shows the Evaluation Service versions it would record (`EnvVersions`).
  */
 export function EnvironmentPicker() {
@@ -83,7 +79,13 @@ export function EnvironmentPicker() {
     slug,
     reloadSlots,
     registerField,
+    review,
   } = useLaunch();
+  // Environments the chosen task is not offered by: flagged here, in the Task section and in the review.
+  const flagged = new Map<string, string>();
+  for (const item of review.items)
+    if ((item.rule === 'task_unsupported' || item.rule === 'task_unknown') && item.environmentId)
+      flagged.set(item.environmentId, item.message);
   const pairs = pairCount(doc);
   const [adding, setAdding] = useState(false);
   const [grouping, setGrouping] = useState<EvalEnvironment | null>(null);
@@ -98,8 +100,15 @@ export function EnvironmentPicker() {
         {envRecords.map((env) => {
           const selected = doc.environmentIds.includes(env.id);
           const status = schemaStatus[env.id];
+          const flag = selected ? flagged.get(env.id) : undefined;
           return (
-            <li key={env.id} className={styles.env} data-selected={selected}>
+            <li
+              key={env.id}
+              className={styles.env}
+              data-part="env-box"
+              data-state={flag ? 'flagged' : selected ? 'selected' : 'unselected'}
+              data-selected={selected}
+            >
               <Checkbox isSelected={selected} isDisabled={readOnly} onChange={(on) => toggleEnv(env.id, on)}>
                 {env.name}
               </Checkbox>
@@ -119,9 +128,12 @@ export function EnvironmentPicker() {
                     Group LLM settings
                   </Button>
                 ) : null}
+                {selected ? <EnvRefresh env={env} projectId={projectId} /> : null}
                 <LinkButton
                   to={environmentPath(slug, env.id)}
-                  variant="ghost"
+                  variant="neutral"
+                  size="sm"
+                  iconEnd={<Icon name="external" size={12} />}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Details of ${env.name} (opens in a new tab)`}
@@ -130,7 +142,11 @@ export function EnvironmentPicker() {
                 </LinkButton>
               </span>
               {selected ? <EnvVersions env={env} projectId={projectId} /> : null}
-              {selected ? <EnvTask env={env} projectId={projectId} /> : null}
+              {flag ? (
+                <p className={styles.envFlag} data-part="env-flag" role="alert">
+                  {flag}
+                </p>
+              ) : null}
             </li>
           );
         })}
@@ -140,8 +156,13 @@ export function EnvironmentPicker() {
       </p>
       {canManage && !readOnly ? (
         <div>
-          <Button size="sm" variant="neutral" icon={<Icon name="plus" />} onPress={() => setAdding(true)}>
-            New environment
+          <Button
+            size="sm"
+            variant="neutral"
+            icon={<Icon name="plus" size={12} />}
+            onPress={() => setAdding(true)}
+          >
+            Add environment
           </Button>
         </div>
       ) : null}

@@ -1,4 +1,4 @@
-import { Button, CopyButton, Dialog, Stack, Text, useToast } from '@/ui';
+import { Button, CopyButton, Dialog, Stack, Text } from '@/ui';
 import styles from './SecretRevealDialog.module.css';
 
 export interface SecretRevealDialogProps {
@@ -23,7 +23,6 @@ export function SecretRevealDialog({
   noun,
   description,
 }: SecretRevealDialogProps) {
-  const toast = useToast();
   return (
     <Dialog
       open={open && secret !== null}
@@ -51,11 +50,7 @@ export function SecretRevealDialog({
             onFocus={(e) => e.target.select()}
             data-secret
           />
-          <CopyButton
-            text={secret ?? ''}
-            label={`Copy ${noun}`}
-            onCopied={() => toast.show(`${noun} copied`, { tone: 'success' })}
-          />
+          <CopyButton text={secret ?? ''} label={`Copy ${noun}`} />
         </div>
       </Stack>
     </Dialog>

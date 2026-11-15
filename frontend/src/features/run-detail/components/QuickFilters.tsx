@@ -51,7 +51,7 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
           <Text as="h2" variant="lg">
             Quick filters
           </Text>
-          <IconButton label="Hide quick filters" icon="chevron-right" onPress={onHide} />
+          <IconButton label="Hide quick filters" icon="close" onPress={onHide} />
         </div>
       ) : null}
       <Text variant="sm" tone="muted">

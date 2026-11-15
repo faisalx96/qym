@@ -132,7 +132,7 @@ test.describe('not-found pages (A25)', () => {
 
   test('"All projects" on a missing project is a link too', async ({ page }) => {
     await gotoApp(page, '/projects/no-such-project-xyz');
-    const back = page.getByRole('link', { name: 'All projects' });
+    const back = page.locator('[data-project-not-found]').getByRole('link', { name: 'Projects' });
     await expect(back).toBeVisible();
     await back.focus();
     await page.keyboard.press('Enter');
@@ -358,7 +358,7 @@ test.describe('create project dialog (C7)', () => {
       .getByRole('button', { name: /Create project|New project/ })
       .first()
       .click();
-    const dialog = page.getByRole('dialog', { name: 'Create project' });
+    const dialog = page.getByRole('dialog', { name: 'New project' });
     await dialog.getByRole('textbox', { name: /^Name/ }).fill('مشروع');
     await expect(dialog.getByRole('textbox', { name: /^Slug/ })).toHaveValue('project');
   });
@@ -370,7 +370,11 @@ test.describe('review rules for plain members (E9)', () => {
     await actAs(page, 'MEMBER');
     await gotoApp(page, `/projects/${p.slug}/settings`);
     await expect(page.getByText('Correction review rules')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Save rules' })).toHaveCount(0);
+    await expect(
+      page
+        .getByRole('region', { name: 'Correction review rules' })
+        .getByRole('button', { name: 'Save', exact: true }),
+    ).toHaveCount(0);
     await expect(page.getByText('Only project managers can change these rules.')).toBeVisible();
   });
 });

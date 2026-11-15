@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import type { LiveTurnDetail } from '@/api/live';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Button, CopyButton, SegmentedControl, StatusMark, Tag, Text, TextBlock } from '@/ui';
+import {
+  Button,
+  EmptyState,
+  CopyButton,
+  SegmentedControl,
+  StateTag,
+  ModelTag,
+  Tag,
+  Text,
+  TextBlock,
+} from '@/ui';
 import { clauseDiff, pairStatements, sqlDiff, type Segment } from '../../lib/sqlDiff';
 import { booleanOf, judgeOf, recordOf, sqlPartsOf, stringOf, type SqlPart } from '../../lib/summary';
 import { SqlParts, SqlPreview } from './Evidence';
@@ -47,13 +58,7 @@ function differenceLabel(pair: Pair) {
 }
 
 function Verdict({ value, yes, no }: { value: boolean | null | undefined; yes: string; no: string }) {
-  return value == null ? null : (
-    <StatusMark
-      tone={value ? 'success' : 'danger'}
-      shape={value ? 'check' : 'cross'}
-      label={value ? yes : no}
-    />
-  );
+  return value == null ? null : <StateTag tone={value ? 'success' : 'danger'}>{value ? yes : no}</StateTag>;
 }
 
 function Notices({ part, agent }: { part: SqlPart; agent: boolean }) {
@@ -94,6 +99,7 @@ function Pane({
   label,
   agent = false,
   model,
+  modelIndex,
   segments,
   hook,
 }: {
@@ -101,6 +107,7 @@ function Pane({
   label: string;
   agent?: boolean;
   model?: string | null;
+  modelIndex?: Record<string, number> | null;
   segments?: Segment[];
   hook?: string;
 }) {
@@ -108,11 +115,7 @@ function Pane({
     <div className={styles.pane} data-live-block={hook} data-sql-pane={agent ? 'agent' : 'judge'}>
       <div className={styles.line}>
         <Text weight={600}>{label}</Text>
-        {model ? (
-          <Tag kind="model" dir="auto">
-            {model}
-          </Tag>
-        ) : null}
+        {model ? <ModelTag name={model} series={modelSeriesOf(modelIndex ?? null, model, false)} /> : null}
         {part?.text != null ? <CopyButton text={part.text} label={`Copy ${label} SQL`} /> : null}
       </div>
       {part ? (
@@ -185,12 +188,14 @@ function PairRow({
   pair,
   side,
   model,
+  modelIndex,
   total,
   compact,
 }: {
   pair: Pair;
   side: Side;
   model?: string | null;
+  modelIndex?: Record<string, number> | null;
   total: number;
   compact: boolean;
 }) {
@@ -245,6 +250,7 @@ function PairRow({
           part={pair.judge}
           label={label}
           model={model}
+          modelIndex={modelIndex}
           segments={pair.diff?.right}
           hook={compact ? 'judge-sql' : undefined}
         />
@@ -272,7 +278,15 @@ function noComparisonReason(summary: Record<string, unknown>) {
 }
 
 /** Full statement comparison, or the most-different pair plus links for Diagnosis. */
-export function SqlCompare({ data, compact = false }: { data: LiveTurnDetail; compact?: boolean }) {
+export function SqlCompare({
+  data,
+  compact = false,
+  modelIndex,
+}: {
+  data: LiveTurnDetail;
+  compact?: boolean;
+  modelIndex?: Record<string, number> | null;
+}) {
   const { params } = useSearchParamsState();
   const location = useLocation();
   const navigate = useNavigate();
@@ -422,7 +436,7 @@ export function SqlCompare({ data, compact = false }: { data: LiveTurnDetail; co
           </span>
         </div>
       ) : (
-        <Text tone="muted">No SQL available for Judge {side.toUpperCase()}.</Text>
+        <EmptyState compact title={`No SQL available for Judge ${side.toUpperCase()}`} />
       )}
       {(compact ? (selected ? [selected] : []) : comparison.pairs).map((pair) => (
         <PairRow
@@ -430,6 +444,7 @@ export function SqlCompare({ data, compact = false }: { data: LiveTurnDetail; co
           pair={pair}
           side={side}
           model={judge?.model}
+          modelIndex={modelIndex}
           total={comparison.pairs.length}
           compact={compact}
         />
@@ -455,18 +470,14 @@ export function SqlCompare({ data, compact = false }: { data: LiveTurnDetail; co
             return (
               <div key={index} className={styles.pair}>
                 <div className={styles.line}>
-                  <StatusMark
-                    tone={part.status === 'error' ? 'danger' : part.executed ? 'success' : 'neutral'}
-                    shape={part.status === 'error' ? 'cross' : part.executed ? 'check' : 'pause'}
-                    label={
-                      part.status ??
+                  <StateTag tone={part.status === 'error' ? 'danger' : part.executed ? 'success' : 'neutral'}>
+                    {part.status ??
                       (part.executed === true
                         ? 'Executed'
                         : part.executed === false
                           ? 'Not executed'
-                          : 'Execution unknown')
-                    }
-                  />
+                          : 'Execution unknown')}
+                  </StateTag>
                   <span>
                     <span className={styles.number}>{part.rows ?? '—'}</span> rows
                   </span>

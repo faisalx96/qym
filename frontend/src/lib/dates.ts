@@ -4,6 +4,7 @@
  *   headers    'Sep 14, 2026, 19:05'
  *   a day      'Sep 14, 2026'           (a date with no time of day, such as Created or Granted)
  *   freshness  '5m ago'                 ('just now', '3h ago', '2d ago'; older than 30 days falls back to a day)
+ *   day keys   'Nov 5, 2026' / 'Nov 5'   (Live calendar days, no zone shift)
  * Times are 24-hour. Every page formats dates through this module.
  */
 
@@ -60,6 +61,22 @@ export function formatDay(value: string | number | Date | null | undefined): str
   return d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : '—';
 }
 
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** A calendar day key 'YYYY-MM-DD' as 'Nov 5, 2026', with no time-zone shift (Live days). */
+export function formatDayKey(key: string): string {
+  const m = DAY_KEY.exec(key);
+  if (!m) return key;
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+}
+
+/** A day key as 'Nov 5' (ranges). */
+export function formatShortDayKey(key: string): string {
+  const m = DAY_KEY.exec(key);
+  if (!m) return key;
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}`;
+}
+
 /** Freshness: 'just now', '5m ago', '3h ago', '2d ago'; past 30 days the day itself. */
 export function formatAgo(
   value: string | number | Date | null | undefined,
@@ -73,4 +90,59 @@ export function formatAgo(
   if (s < 86_400) return `${Math.round(s / 3600)}h ago`;
   const days = Math.round(s / 86_400);
   return days <= 30 ? `${days}d ago` : formatDay(d);
+}
+
+/** Calendar keys and diagnostic timestamps in an explicitly selected source zone. */
+
+export function safeZone(zone?: string | null): string {
+  if (!zone) return 'UTC';
+  try {
+    new Intl.DateTimeFormat(APP_LOCALE, { timeZone: zone });
+    return zone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+function parts(date: Date, zone?: string | null) {
+  return Object.fromEntries(
+    new Intl.DateTimeFormat(APP_LOCALE, {
+      timeZone: safeZone(zone),
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(date)
+      .map(({ type, value }) => [type, value]),
+  );
+}
+
+export function zoneToday(zone?: string | null, now: Date = new Date()): string {
+  const { year, month, day } = parts(now, zone);
+  return `${year}-${month}-${day}`;
+}
+
+export function zoneTime(iso: string, zone?: string | null): string {
+  const date = toDate(iso);
+  if (!date) return '—';
+  const { hour, minute } = parts(date, zone);
+  return `${hour}:${minute}`;
+}
+
+export function zoneDateTime(iso: string, zone?: string | null, includeSeconds = false): string {
+  const date = toDate(iso);
+  if (!date) return '—';
+  const { year, month, day, hour, minute, second } = parts(date, zone);
+  return `${year}-${month}-${day} ${hour}:${minute}${includeSeconds ? `:${second}` : ''}`;
+}
+
+export function zoneLabel(zone?: string | null): string {
+  const name = safeZone(zone);
+  if (['Etc/UTC', 'Etc/Universal', 'Etc/Zulu'].includes(name)) return 'UTC';
+  if (name.startsWith('Etc/')) return name;
+  return name.split('/').at(-1)!.replaceAll('_', ' ');
 }

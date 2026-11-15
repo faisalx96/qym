@@ -169,15 +169,14 @@ for (const viewport of viewports) {
       await page.evaluate(() => document.fonts.ready);
       const filters = page.locator('[data-live-block="filters"]');
       const filterBox = (await filters.boundingBox())!;
-      expect(Math.abs(filterBox.height - (viewport.width === 390 ? 87 : 49))).toBeLessThanOrEqual(1);
+      if (viewport.width === 1440) expect(Math.abs(filterBox.height - 56)).toBeLessThanOrEqual(1);
+      else expect(filterBox.height).toBeGreaterThanOrEqual(55);
+      const searchBox = (await filters.getByRole('searchbox').boundingBox())!;
+      const groupBox = (await filters.getByRole('group', { name: 'Turn filters' }).boundingBox())!;
+      expect(Math.abs(groupBox.y - (searchBox.y + searchBox.height + 8))).toBeLessThanOrEqual(1);
       await expect(filters.getByRole('group', { name: 'Active filters' })).toHaveCount(0);
       await noPageOverflow(page);
-      // A compact filter strip owns its horizontal overflow; it never widens the page.
-      const strip = filters.getByRole('group', { name: 'Turn filters' });
-      await strip.evaluate((element) => {
-        element.scrollLeft = element.scrollWidth;
-      });
-      await expect(filters.getByRole('button', { name: /Charts$/ })).toBeVisible();
+      await expect(filters.getByRole('button', { name: /Charts/ })).toBeVisible();
       const frame = page.getByRole('region', { name: 'Live turns (scrollable)', exact: true });
       await expect(frame).toBeVisible();
       expect(await frame.evaluate((element) => element.scrollWidth)).toBeGreaterThan(

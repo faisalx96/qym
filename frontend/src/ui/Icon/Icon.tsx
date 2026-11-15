@@ -71,7 +71,15 @@ export type IconName =
   | 'tool'
   | 'chain'
   | 'guardrail'
-  | 'embedding';
+  | 'embedding'
+  | 'sheet'
+  | 'xgrid'
+  | 'braces'
+  | 'braces-lines'
+  | 'picture'
+  | 'html-file'
+  | 'zap'
+  | 'diamond';
 
 const PATHS: Record<IconName, string> = {
   'chevron-down': 'M6 9l6 6 6-6',
@@ -156,6 +164,19 @@ const PATHS: Record<IconName, string> = {
   chain: 'M5 4h6v6H5zM13 14h6v6h-6zM8 10v2a2 2 0 0 0 2 2h3',
   guardrail: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
   embedding: 'M4 8l8-4 8 4-8 4zM4 12l8 4 8-4M4 16l8 4 8-4',
+  /* Export file types (A-09, Q01 A). */
+  sheet: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 12h8v6H8zM12 12v6M8 15h8',
+  xgrid: 'M4 4h16v16H4zM4 9.5h16M4 14.5h16M9.5 4v16',
+  braces:
+    'M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1',
+  'braces-lines':
+    'M7 3H6a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M17 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1M9 8h6M9 12h6M9 16h6',
+  picture: 'M4 4h16v16H4zM9 7.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM20 15l-5-5L4 20',
+  'html-file':
+    'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M10 12l-2.5 2.5L10 17M14 12l2.5 2.5L14 17',
+  /* C-23: the zap glyph; E-30: the diamond (stroke only). */
+  zap: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  diamond: 'M12 3l9 9-9 9-9-9z',
 };
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

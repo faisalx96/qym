@@ -1,23 +1,8 @@
-/* Archived read-only banner (shell.css 550-561). */
+/* Archived read-only notice: an InlineNotice between the topbar and the page. */
 .banner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-lg);
-  background: color-mix(in srgb, var(--warning) var(--tint-soft), transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
-  color: var(--text-primary);
-  font-size: var(--font-sm);
+  margin: var(--space-sm) var(--space-lg) 0;
 }
 
 .banner a {
   text-decoration: underline;
-}
-
-.banner svg {
-  color: var(--warning);
-  flex: none;
-}
-.banner strong {
-  color: var(--text-primary);
 }

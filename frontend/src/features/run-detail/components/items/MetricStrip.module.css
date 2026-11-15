@@ -127,11 +127,9 @@
 .eyebrow {
   max-inline-size: 100%;
   font-size: var(--font-sm);
-  font-weight: 650;
-  letter-spacing: 0.05em;
+  font-weight: 600;
   line-height: 1.5;
   overflow-wrap: anywhere;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -231,7 +229,7 @@
 }
 
 .moreRows {
-  align-self: flex-start;
+  align-self: center;
 }
 
 .editor {

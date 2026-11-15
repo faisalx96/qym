@@ -15,6 +15,7 @@ import { useDebounced } from '../useDebounced';
 import type { RunnerState } from '../useAnalysisRunner';
 import {
   STD_VARIABLES,
+  metadataTree,
   pathsToTree,
   scanFieldPaths,
   scanMetadataGroups,
@@ -107,17 +108,20 @@ export function useRunWorkspace(
   /* configuration -> payload */
   const customVars = useMemo(() => customVarsOf(settings), [settings]);
   const trees: FieldTrees = useMemo(() => {
+    const metadata = scanMetadataGroups(data.rows, settings.selectedMetrics[0]);
     const treeFor = (field: string): PathNode[] =>
       field === 'input' || field === 'expected' || field === 'output' || field === 'error'
         ? pathsToTree(scanFieldPaths(data.rows, field))
-        : [];
+        : field === 'metric_metadata'
+          ? metadataTree(metadata, settings.selectedMetrics)
+          : [];
     const std = Object.fromEntries(
       STD_VARIABLES.map((v) => [v.key, treeFor(settings.std[v.key].field)]),
     ) as Record<StdVariable, PathNode[]>;
     const custom = Object.fromEntries(
       customVars.map((name) => [name, treeFor(settings.custom[name]?.field ?? '')]),
     );
-    return { std, custom, metadata: scanMetadataGroups(data.rows, settings.selectedMetrics[0]) };
+    return { std, custom, metadata };
   }, [data.rows, settings.std, settings.custom, settings.selectedMetrics, customVars]);
   const cfg: PlaygroundConfigPayload = useMemo(() => buildConfigPayload(settings, trees), [settings, trees]);
 
@@ -263,6 +267,8 @@ export function useRunWorkspace(
       cur.includes(key) ? cur.filter((k) => k !== key) : cur.length >= 3 ? cur : [...cur, key],
     );
   }, []);
+  /** Replace the checked targets (the table's header checkbox): keeps the order given, at most 3. */
+  const setTests = useCallback((keys: string[]) => setTestKeys(keys.slice(0, 3)), []);
 
   return {
     settings,
@@ -284,6 +290,7 @@ export function useRunWorkspace(
     setFocusKey,
     testKeys: liveTestKeys,
     toggleTest,
+    setTests,
     connectionId,
     setConnectionId,
     preview: {

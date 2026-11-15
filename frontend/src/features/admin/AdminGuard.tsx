@@ -14,7 +14,7 @@ export function AdminGuard() {
           title="Admin access required"
           body="Only platform administrators can open this page."
           action={
-            <LinkButton to="/" variant="neutral">
+            <LinkButton to="/" variant="neutral" icon={<Icon name="prev" size={12} />}>
               Back to projects
             </LinkButton>
           }

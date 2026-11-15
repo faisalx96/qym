@@ -35,3 +35,36 @@ export function useCurrentCrumbLabel(): string {
     () => '',
   );
 }
+
+/* E-05: a second slot for the item crumb of a dataset item page ("… › <dataset> › Item #3"). */
+let currentItem = '';
+const itemListeners = new Set<() => void>();
+
+function setItem(next: string) {
+  if (next === currentItem) return;
+  currentItem = next;
+  itemListeners.forEach((l) => l());
+}
+
+/** Publish `label` as the item crumb while mounted (empty or missing publishes nothing). */
+export function useItemCrumbLabel(label: string | null | undefined): void {
+  useEffect(() => {
+    if (!label) return;
+    setItem(label);
+    return () => {
+      if (currentItem === label) setItem('');
+    };
+  }, [label]);
+}
+
+/** The item crumb the mounted page published ('' when none). */
+export function useCurrentItemCrumbLabel(): string {
+  return useSyncExternalStore(
+    (cb) => {
+      itemListeners.add(cb);
+      return () => itemListeners.delete(cb);
+    },
+    () => currentItem,
+    () => '',
+  );
+}

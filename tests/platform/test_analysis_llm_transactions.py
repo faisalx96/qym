@@ -126,6 +126,14 @@ def env(request, monkeypatch):
         admin = create_engine(url)
         with admin.begin() as conn:
             conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+        # Build the tables without the idle timeout: create_all is one long transaction, and on a
+        # busy CI runner a pause between its statements can pass 0.5 s, which made Postgres close
+        # the connection during setup. The test's own engine below keeps the real timeout.
+        setup_engine = create_engine(
+            url, connect_args={"options": f"-csearch_path={schema}"}
+        )
+        Base.metadata.create_all(setup_engine)
+        setup_engine.dispose()
         timeout_ms = int(IDLE_TIMEOUT_SECONDS * 1000)
         engine = create_engine(
             url,
@@ -152,7 +160,8 @@ def env(request, monkeypatch):
             admin.dispose()
 
     request.addfinalizer(cleanup)
-    Base.metadata.create_all(engine)
+    if request.param == "sqlite":
+        Base.metadata.create_all(engine)
     tracker = TransactionTracker(engine, kill_after)
     factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     monkeypatch.setattr(
@@ -227,9 +236,11 @@ def _seed(factory, *, samples: int = 1, pass_analysis: bool = False) -> None:
                 input={"prompt": "hello"},
                 expected={"answer": "world"},
                 output={"answer": "nope"},
-                item_metadata={}
-                if pass_analysis
-                else {"metric_analyses": {"judge": dict(saved_analysis)}},
+                item_metadata=(
+                    {}
+                    if pass_analysis
+                    else {"metric_analyses": {"judge": dict(saved_analysis)}}
+                ),
             )
         )
         db.add(
@@ -250,9 +261,11 @@ def _seed(factory, *, samples: int = 1, pass_analysis: bool = False) -> None:
                     metric_name="judge",
                     pass_number=pass_number,
                     score_numeric=0.2,
-                    meta={PASS_ANALYSIS_META_KEY: dict(saved_analysis)}
-                    if pass_analysis
-                    else {},
+                    meta=(
+                        {PASS_ANALYSIS_META_KEY: dict(saved_analysis)}
+                        if pass_analysis
+                        else {}
+                    ),
                 )
             )
         db.add(
@@ -377,9 +390,7 @@ def test_background_analysis_job_saves_after_a_long_model_call(env, monkeypatch)
     assert _aggregation_status(factory)["status"] == "succeeded"
 
 
-def test_sync_analyze_endpoint_saves_after_a_long_model_call(
-    env, client, monkeypatch
-):
+def test_sync_analyze_endpoint_saves_after_a_long_model_call(env, client, monkeypatch):
     factory, tracker = env
     _seed(factory)
     observed = _fake_llm(monkeypatch, tracker)
@@ -432,9 +443,7 @@ def test_saved_analysis_aggregation_saves_after_a_long_model_call(
     assert _aggregation_status(factory)["status"] == "succeeded"
 
 
-def test_saved_pass_aggregation_saves_after_a_long_model_call(
-    env, client, monkeypatch
-):
+def test_saved_pass_aggregation_saves_after_a_long_model_call(env, client, monkeypatch):
     factory, tracker = env
     _seed(factory, samples=2, pass_analysis=True)
     observed = _fake_llm(monkeypatch, tracker)
@@ -448,9 +457,7 @@ def test_saved_pass_aggregation_saves_after_a_long_model_call(
     _assert_no_transaction_during_llm(observed, tracker, "aggregate")
     with factory() as db:
         score = (
-            db.query(RunItemPassScore)
-            .filter_by(run_id="run-1", pass_number=1)
-            .one()
+            db.query(RunItemPassScore).filter_by(run_id="run-1", pass_number=1).one()
         )
         assert score.meta[PASS_ANALYSIS_META_KEY]["root_cause_detail"] == (
             "Canonical detail"
@@ -529,8 +536,7 @@ def test_rule_inference_job_appends_to_rules_edited_during_the_model_call(
     assert result["generated_rule_count"] == 1
     with factory() as db:
         titles = [
-            rule["title"]
-            for rule in db.get(ProjectAnalysisRuleVersion, draft_id).rules
+            rule["title"] for rule in db.get(ProjectAnalysisRuleVersion, draft_id).rules
         ]
     assert titles == ["Existing", "Concurrent", "Cite evidence"]
 

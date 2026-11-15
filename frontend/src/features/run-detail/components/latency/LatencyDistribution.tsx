@@ -4,7 +4,8 @@
  * a pin filters to the items at or above it.
  */
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { Card, ChartTooltipHost, Chip, Text, useMarkTip } from '@/ui';
+import { formatDuration } from '@/lib/format';
+import { Card, CardTitle, ChartTooltipHost, Chip, useMarkTip } from '@/ui';
 import {
   durParts,
   durText,
@@ -74,7 +75,7 @@ function Pin({
       onClick={onPick}
     >
       <em>{pin.key}</em>
-      <b>{durParts(pin.ms)[0]}</b>
+      <b>{formatDuration(pin.ms)}</b>
     </button>
   );
 }
@@ -246,21 +247,18 @@ export function LatencyDistribution({ items, L }: { items: LatencyItem[]; L: Lat
   return (
     <Card as="section" className={styles.box} aria-label="Latency distribution">
       <div className={styles.inner}>
-        <div className={styles.head}>
-          <div className={styles.titles}>
-            <Text variant="md" weight={600} as="h4" className={styles.title}>
-              Latency distribution
-            </Text>
-            <Text variant="sm" tone="muted" as="p" className={styles.desc}>
-              Each item’s run time, without evaluation. Click or drag across bars to filter the page.
-            </Text>
-          </div>
-          {filter ? (
-            <Chip isSelected removeLabel="Clear the latency filter" onRemove={clear}>
-              {latencyFilterLabel(filter)}
-            </Chip>
-          ) : null}
-        </div>
+        <CardTitle
+          as="h4"
+          title="Latency distribution"
+          description="Each item’s run time, without evaluation. Click or drag across bars to filter the page."
+          aside={
+            filter ? (
+              <Chip isSelected removeLabel="Clear the latency filter" onRemove={clear}>
+                {latencyFilterLabel(filter)}
+              </Chip>
+            ) : undefined
+          }
+        />
         <ChartTooltipHost className={styles.lathead}>
           <div className={styles.hero}>
             <span className={styles.eyebrow}>

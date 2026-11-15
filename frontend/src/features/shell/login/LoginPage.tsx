@@ -49,7 +49,7 @@ export function LoginPage() {
             <Text variant="xl" as="h1" id="login-title">
               Sign in to qym
             </Text>
-            <Text variant="sm">Evaluation runs, datasets and reviews for your projects.</Text>
+            <Text variant="sm">Runs, datasets and reviews for your projects.</Text>
           </header>
           {providers.isPending ? (
             showSkeleton ? (

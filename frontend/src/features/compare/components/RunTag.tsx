@@ -34,6 +34,8 @@ export interface RunTagProps {
   compact?: boolean;
   /** Full label for the tooltip. */
   title?: string;
+  /** Letter to show in place of the context letter of index (cohort sides 'A' / 'B'). */
+  letter?: string;
   /** Inside an element that already carries `useRunMark`: no marks or handlers of its own. */
   bare?: boolean;
   className?: string;
@@ -47,6 +49,7 @@ function Inner({
   baseline,
   compact,
   title,
+  letter: letterProp,
   className,
   rest,
 }: RunTagProps & { rest: object }) {
@@ -68,7 +71,7 @@ function Inner({
           data-part="run-letter"
           aria-hidden
         >
-          {letter(index)}
+          {letterProp ?? letter(index)}
         </span>
       ) : null}
       {showName && name ? (

@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useMediaQuery } from '@/features/shell';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Card, Skeleton, Stepper } from '@/ui';
 import { plural } from '../../lib/format';
 import { EntryBlock } from '../entry/EntryBlock';
@@ -8,16 +7,25 @@ import { StaticSections } from '../components/LaunchSection';
 import panel from '../components/launch.module.css';
 import { useLaunch } from '../LaunchContext';
 import styles from '../LaunchPage.module.css';
-import { axesOf, buildSpec, datasetChanged, diffCount } from '../model';
-import { ReviewPane } from '../review/ReviewPane';
-import { WizardBar } from '../review/WizardBar';
+import {
+  axesOf,
+  buildSpec,
+  datasetChanged,
+  defaultRunPriority,
+  diffCount,
+  highRunCount,
+  launchLabel,
+} from '../model';
+import { StepsBar, type BarPrimary } from '../review/LaunchBar';
+import barStyles from '../review/launchBar.module.css';
+import { ReviewStep } from '../review/ReviewStep';
 import { EvaluationSection } from '../sections/EvaluationSection';
 import { ModelsSection } from '../sections/ModelsSection';
 import { RawJsonSection } from '../sections/RawJsonSection';
 import { SettingsSection } from '../sections/SettingsSection';
 import { SweepsSection } from '../sections/SweepsSection';
 import { StepPanel } from './StepPanel';
-import { stepLabel, stepOfItem, WIZARD_STEPS, type WizardStepId } from './steps';
+import { stepLabel, stepOfItem, WIZARD_STEPS, type WizardStepDef, type WizardStepId } from './steps';
 import wizard from './wizard.module.css';
 
 function scrollParent(el: HTMLElement | null): HTMLElement | null {
@@ -28,22 +36,77 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-interface Props {
+export interface WizardProps {
+  /** `launch` = Customize an experiment; `editor` = the default-preset editor (the same wizard, another step set). */
+  mode?: 'launch' | 'editor';
+  steps?: readonly WizardStepDef[];
   step: WizardStepId;
-  next: WizardStepId | null;
-  prev: WizardStepId | null;
   onGo: (step: WizardStepId) => void;
+  /** Back from the first step: the start view (launch) or the environment page (editor). */
+  onBack: () => void;
   onCancel: () => void;
+  /** The last step's action in the bar's primary slot (default: Launch N runs); earlier steps show Continue there. */
+  primary?: BarPrimary;
+  /** The bar's status slot (default: the run count and the first problem). */
+  status?: ReactNode;
+  /** A step's own body (editor: Environment and dataset); `undefined` = the shared body. */
+  renderStep?: (step: WizardStepId) => ReactNode | undefined;
+  /** The review step's body (editor: Review and publish); default: the launch review. */
+  review?: ReactNode;
+}
+
+/** The bar's status slot in launch mode: the run count and the first problem (a link that opens its step), or Ready. */
+function LaunchStatus({ onGo, needsAck }: { onGo: (step: WizardStepId) => void; needsAck: boolean }) {
+  const { review, focusIssue } = useLaunch();
+  const first = review.items[0];
+  return (
+    <>
+      <span className={barStyles.runs} aria-live="polite">
+        {plural(review.count.runs, 'run')} to launch
+      </span>
+      {first ? (
+        <button type="button" className={barStyles.problem} onClick={() => focusIssue(first)}>
+          {`Fix ${plural(review.items.length, 'problem')} first`}
+          <span className={barStyles.long}>{`: ${first.label}`}</span>
+        </button>
+      ) : needsAck ? (
+        <button
+          type="button"
+          className={barStyles.problem}
+          data-part="bar-ack"
+          onClick={() => {
+            onGo('review');
+            setTimeout(() => document.querySelector<HTMLElement>('[data-part=review-ack] input')?.focus(), 0);
+          }}
+        >
+          Acknowledge the preemption to launch
+        </button>
+      ) : (
+        <span className={barStyles.ok}>{review.status || 'Ready'}</span>
+      )}
+    </>
+  );
 }
 
 /**
- * Customize: the six-step wizard (C171). The stepper sits above both columns, so it keeps one width on every step;
- * one step is on screen at a time, the review stays in view, and one bottom bar under both columns holds Back,
- * Continue and Launch in the same place on every step.
+ * Customize: the wizard. One step on screen at a time over a progress rail and one bottom bar with the same
+ * slots on every step. The review lives on its own step; the other steps show their own content full width.
+ * The default-preset editor mounts it with `mode="editor"` (another step set, review and primary action).
  */
-export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
-  const { doc, ctx, review, flags, sectionSummary } = useLaunch();
-  const wide = useMediaQuery('(min-width: 1200px)');
+export function LaunchWizard({
+  mode = 'launch',
+  steps: stepList = WIZARD_STEPS,
+  step,
+  onGo,
+  onBack,
+  onCancel,
+  primary,
+  status,
+  renderStep,
+  review: reviewBody,
+}: WizardProps) {
+  const { doc, ctx, review, flags, sectionSummary, isLaunching, launch, readOnly, preview, preemptionAck } =
+    useLaunch();
   const swept = useMemo(
     () => axesOf(buildSpec(doc, ctx.evaluatorPanel)).axes.length,
     [doc, ctx.evaluatorPanel],
@@ -53,9 +116,9 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
   const [badgeSlot, setBadgeSlot] = useState<HTMLElement | null>(null);
   const rail = useRef<HTMLDivElement>(null);
   const announce = useMemo(() => {
-    const index = WIZARD_STEPS.findIndex((s) => s.id === step) + 1;
-    return `Step ${index} of ${WIZARD_STEPS.length}: ${stepLabel(step)}`;
-  }, [step]);
+    const index = stepList.findIndex((s) => s.id === step) + 1;
+    return `Step ${index} of ${stepList.length}: ${stepLabel(step, stepList)}`;
+  }, [step, stepList]);
 
   // A step change: the heading takes focus, and the view does not scroll (C171) unless the rail is above the view,
   // where it jumps (no glide) so the new step reads from its top. The stage keeps the previous step's height for a
@@ -111,7 +174,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
     }
     return out;
   }, [review.items]);
-  const steps = WIZARD_STEPS.map((s) => {
+  const steps = stepList.map((s) => {
     let changes = 0;
     if (s.id === 'where')
       changes =
@@ -127,6 +190,8 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
   });
 
   const loading = hasEnv && flags.envsLoading;
+  const editor = mode === 'editor';
+  const custom = renderStep?.(step);
   let body;
   switch (step) {
     case 'where':
@@ -135,10 +200,14 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           key={step}
           ref={heading}
           stepId={step}
-          title="Where it runs"
-          description="Name the experiment, set its priority and pick the environments and dataset."
+          title={stepLabel(step, stepList)}
+          description={
+            editor
+              ? 'What the draft is compared with, the task and the dataset.'
+              : 'Name the experiment, set its priority and pick the task, the environments and the dataset.'
+          }
         >
-          <EntryBlock />
+          {custom ?? <EntryBlock />}
         </StepPanel>
       );
       break;
@@ -169,10 +238,14 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           key={step}
           ref={heading}
           stepId={step}
-          title="Review and launch"
-          description="Check the summary, then launch."
+          title={stepLabel(step, stepList)}
+          description={
+            editor
+              ? 'Check the summary, write the release notes, then publish.'
+              : 'Check the summary and set a priority per run, then launch.'
+          }
         >
-          <ReviewPane onCancel={onCancel} rawAction={false} hideLaunch />
+          {reviewBody ?? <ReviewStep />}
           {hasEnv ? (
             <StaticSections>
               <RawJsonSection />
@@ -182,7 +255,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
       );
       break;
     default: {
-      const title = stepLabel(step);
+      const title = stepLabel(step, stepList);
       body = (
         <StepPanel key={step} ref={heading} stepId={step} title={title} onBadgeSlot={setBadgeSlot}>
           {!hasEnv ? (
@@ -198,7 +271,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
               {step === 'settings' ? (
                 <>
                   <SettingsSection />
-                  {swept ? <SweepsSection /> : null}
+                  {swept && !editor ? <SweepsSection /> : null}
                 </>
               ) : null}
               {step === 'evaluation' ? <EvaluationSection inWizard /> : null}
@@ -209,47 +282,50 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
     }
   }
 
-  // The settings step holds wide override tables: it takes the full width and the review shrinks to the launch
-  // bar (plus the summary under the step), instead of a 22rem rail that clips the table's right columns.
-  const compactReview = step === 'settings';
-  const showAside = wide && step !== 'review' && !compactReview;
-  const reviewBelow = !showAside && step !== 'review';
+  // Priority: the review step's acknowledgement is needed while any run is High (launch mode only).
+  const highRuns = editor
+    ? 0
+    : highRunCount(doc, preview.data?.jobs, defaultRunPriority(doc, ctx, preview.data));
+  const needsAck = highRuns > 0 && !preemptionAck;
+  const launchPrimary: BarPrimary = primary ?? {
+    label: launchLabel(review.count.runs, isLaunching),
+    disabled: readOnly || !review.canLaunch || review.items.length > 0 || needsAck,
+    reason:
+      review.items.length > 0
+        ? 'Fix the problems first'
+        : needsAck
+          ? 'Confirm that High runs can preempt other work'
+          : undefined,
+    loading: isLaunching,
+    onPress: () => void launch(),
+  };
   return (
-    <div className={styles.wizard}>
-      <div ref={rail} className={wizard.rail}>
-        <Stepper
-          aria-label="Steps"
-          steps={steps}
-          current={step}
-          onSelect={(id) => onGo(id as WizardStepId)}
+    <div className={styles.layout} data-part="customize" data-mode={mode}>
+      <div className={styles.main}>
+        <div ref={rail} className={wizard.rail}>
+          <Stepper
+            aria-label="Steps"
+            steps={steps}
+            current={step}
+            onSelect={(id) => onGo(id as WizardStepId)}
+          />
+        </div>
+        <div className={wizard.live} role="status" aria-live="polite">
+          {announce}
+          {review.items.length ? `, ${plural(review.items.length, 'problem')} to fix` : ''}
+        </div>
+        <div ref={stage}>{body}</div>
+        <StepsBar
+          steps={stepList}
+          step={step}
+          onBack={onBack}
+          onGo={onGo}
+          onCancel={onCancel}
+          primary={launchPrimary}
+          action={editor ? 'publish' : 'launch'}
+          status={status ?? <LaunchStatus onGo={onGo} needsAck={needsAck && review.items.length === 0} />}
         />
       </div>
-      <div className={wizard.live} role="status" aria-live="polite">
-        {announce}
-        {review.items.length ? `, ${plural(review.items.length, 'problem')} to fix` : ''}
-      </div>
-      <div
-        className={`${styles.layout} ${showAside ? '' : styles.layoutSingle}`}
-        data-compact-review={compactReview ? '' : undefined}
-      >
-        <div className={styles.main}>
-          <div ref={stage}>{body}</div>
-          {reviewBelow ? <ReviewPane onCancel={onCancel} hideActions /> : null}
-        </div>
-        {showAside ? (
-          <div className={styles.aside}>
-            <ReviewPane onCancel={onCancel} hideLaunch />
-          </div>
-        ) : null}
-      </div>
-      <WizardBar
-        step={step}
-        next={next}
-        prev={prev}
-        onGo={onGo}
-        onCancel={onCancel}
-        showCancel={reviewBelow}
-      />
     </div>
   );
 }

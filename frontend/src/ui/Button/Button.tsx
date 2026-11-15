@@ -1,8 +1,9 @@
 import { forwardRef, useId, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react-aria-components';
 import styles from './Button.module.css';
+import './reasonPlacement';
 
-export type ButtonVariant = 'neutral' | 'accent' | 'danger' | 'ghost' | 'primary' | 'meta';
+export type ButtonVariant = 'neutral' | 'accent' | 'danger' | 'primary' | 'meta';
 export type ButtonSize = 'sm' | 'md';
 
 export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style' | 'children'> {
@@ -22,7 +23,7 @@ export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style'
 
 /**
  * The one button. neutral/accent/danger = .qym-inline-action recipes;
- * primary = filled accent (.btn-primary); ghost = text only.
+ * primary = filled accent (.btn-primary). There is no text-only tone.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {

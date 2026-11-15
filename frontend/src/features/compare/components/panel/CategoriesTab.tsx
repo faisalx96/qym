@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { useSearchParamsState } from '@/lib/url-state';
 import { formatLatency, formatMetricValue } from '@/lib/metrics';
-import { Chip, ReportSection, SegmentedControl, Tag, Text } from '@/ui';
+import { Chip, Icon, ReportSection, SegmentedControl, Tag, Text } from '@/ui';
 import { AUTO_CATEGORIES, categoryDelta, categoryGroups, categoryKeys } from '../../lib/breakdown';
 import { useCompare } from '../../CompareContext';
 import { columnName } from '../../lib/columnName';
@@ -96,7 +96,7 @@ export function CategoriesSection() {
         return (
           <section key={key} aria-label={`By ${key}`}>
             <h3 className={styles.catKey}>
-              <span aria-hidden="true">◆</span> {key} <Tag kind="data">{metric}</Tag>
+              <Icon name="diamond" size={12} className={styles.keyMark} /> {key} <Tag kind="data">{metric}</Tag>
             </h3>
             {c.view.catView === 'cards' ? (
               <CategoryCards

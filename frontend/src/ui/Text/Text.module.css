@@ -2,7 +2,7 @@
 .text {
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-weight: 400;
+  font-weight: 450; /* E-35: the body weight */
 }
 
 .text[data-variant='title'] {

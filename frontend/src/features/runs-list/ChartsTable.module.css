@@ -19,17 +19,13 @@
   padding-inline-start: var(--space-lg);
 }
 
+/* The run's name: white at rest; green while its row is hovered or focused (the shared data-row-primary rule). */
 .rowLink {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-primary);
   text-decoration: none;
-}
-
-.rowLink:hover {
-  color: var(--accent-primary);
-  text-decoration: none; /* the colour step is the hover cue: no underline */
 }
 
 .rowLink:focus-visible {
@@ -110,10 +106,6 @@
 }
 .series[data-muted] {
   --bar: var(--border-strong);
-}
-
-.wrap [data-chart-group] > td {
-  background: var(--bg-elevated);
 }
 
 /* A score cell: the band-coloured number alone, centred; the best value of the column is bold (C149). */

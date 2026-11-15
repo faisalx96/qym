@@ -109,17 +109,19 @@ describe('ExperimentsPage versioning facets', () => {
     const user = userEvent.setup();
     mount('/projects/demo/experiments');
     await waitFor(() => expect(names()).toHaveLength(2));
-    expect(screen.getByRole('button', { name: /Agent version/ })).toHaveTextContent('All values');
-    expect(screen.getByRole('button', { name: /KB version/ })).toHaveTextContent('All values');
+    // R10 C-3-10: the key as reported; D-16: a bar trigger shows only its label until a value is set
+    expect(screen.getByRole('button', { name: /agent_version/ })).toHaveTextContent(/^agent_version$/);
+    expect(screen.getByRole('button', { name: /kb_version/ })).toHaveTextContent(/^kb_version$/);
+    expect(screen.queryByText(/KB version/)).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: /KB version/ }));
+    await user.click(screen.getByRole('button', { name: /kb_version/ }));
     await user.click(await screen.findByRole('option', { name: '381' }));
     await waitFor(() => expect(names()).toHaveLength(1));
     expect(names()[0]).toContain('Nightly');
     expect(requests.at(-1)!.searchParams.getAll('versioning')).toEqual(['kb_version=381']);
     expect(screen.getByTestId('where').textContent).toContain('versioning=kb_version%3D381');
 
-    await user.click(screen.getByRole('button', { name: /KB version/ }));
+    await user.click(screen.getByRole('button', { name: /kb_version/ }));
     await user.click(await screen.findByRole('option', { name: 'All values' }));
     await waitFor(() => expect(names()).toHaveLength(2));
     expect(requests.at(-1)!.searchParams.has('versioning')).toBe(false);
@@ -130,7 +132,40 @@ describe('ExperimentsPage versioning facets', () => {
     const requests = stubPlatform();
     mount('/projects/demo/experiments?versioning=kb_version%3D381');
     await waitFor(() => expect(names()).toHaveLength(1));
-    expect(screen.getByRole('button', { name: /KB version/ })).toHaveTextContent('381');
+    expect(screen.getByRole('button', { name: /kb_version/ })).toHaveTextContent('381');
     expect(requests.at(-1)!.searchParams.getAll('versioning')).toEqual(['kb_version=381']);
+  });
+});
+
+describe('ExperimentsPage rows (cv5 M4, M5)', () => {
+  it('shows the failed and cancelled jobs as count tags and no live rail on a running row', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://platform.test');
+        if (/\/eval-environments/.test(url.pathname)) return json({ environments: [] });
+        return json({
+          experiments: [
+            {
+              ...experiment('Sweep'),
+              status: 'RUNNING',
+              job_counts: { SUCCEEDED: 1, FAILED: 1, CANCELLED: 2, RUNNING: 1 },
+            },
+          ],
+          total: 1,
+          versioning_facets: {},
+        });
+      }),
+    );
+    mount('/projects/demo/experiments');
+    await waitFor(() => expect(names()).toHaveLength(1));
+    const row = within(screen.getByRole('grid', { name: 'Experiments' })).getAllByRole('row')[1]!;
+    // the Status column says Running; the row draws no second live mark
+    expect(row).not.toHaveAttribute('data-state');
+    expect(row.querySelector('[data-count="failed"]')).toHaveTextContent('1 failed');
+    expect(row.querySelector('[data-count="failed"]')).toHaveAttribute('data-tone', 'danger');
+    expect(row.querySelector('[data-count="cancelled"]')).toHaveTextContent('2 cancelled');
+    expect(row.querySelector('[data-count="cancelled"]')).toHaveAttribute('data-tone', 'warning');
+    expect(row).toHaveTextContent('1/5');
   });
 });

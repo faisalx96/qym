@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useBlocker, useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/app/routes';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import {
   feedbackKeys,
@@ -116,6 +117,7 @@ export function DraftPage({ refId }: { refId: string }) {
           error={detail.error ?? messages.error}
           title="Couldn’t open this request"
           notFoundMessage="This request does not exist or is not yours"
+          parent={{ to: ROUTES.feedback, label: 'Feedback' }}
           onRetry={() => {
             void detail.refetch();
             void messages.refetch();
@@ -382,12 +384,14 @@ function DraftConversation({
         title="New feedback"
         description="Answer the assistant’s questions. Nothing is submitted until you confirm a proposal."
         meta={[
-          <Tag key="s">{subjectTag}</Tag>,
+          <Tag key="s" kind="data">
+            {subjectTag}
+          </Tag>,
           'Draft, only you can see it',
           `Deleted after ${info.retention_days} days without a submit`,
         ]}
         actions={
-          <Button variant="ghost" size="md" onPress={() => setDiscard(true)}>
+          <Button variant="danger" size="md" onPress={() => setDiscard(true)}>
             Discard draft
           </Button>
         }
@@ -397,7 +401,7 @@ function DraftConversation({
           This draft is from {ageDays} {ageDays === 1 ? 'day' : 'days'} ago. The assistant remembers the
           conversation. It is deleted in {info.days_left} {info.days_left === 1 ? 'day' : 'days'} if you do
           not submit it.{' '}
-          <Button size="sm" variant="ghost" onPress={() => setWelcome(false)}>
+          <Button size="sm" variant="neutral" onPress={() => setWelcome(false)}>
             Dismiss
           </Button>
         </Callout>
@@ -468,9 +472,11 @@ function DraftConversation({
       <ConfirmDialog
         open={blocker.state === 'blocked'}
         onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
-        title="Leave this page?"
+        title="Discard unsaved changes?"
         description="You changed the proposal. Your edits are lost if you leave; the draft itself is kept."
-        confirmLabel="Leave"
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        tone="danger"
         onConfirm={() => {
           if (blocker.state === 'blocked') blocker.proceed();
         }}

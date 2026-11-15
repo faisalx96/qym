@@ -49,12 +49,6 @@
   text-align: start;
 }
 
-.why summary {
-  cursor: pointer;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
 .why p {
   margin: var(--space-xs) 0 0;
   font-size: var(--font-base);

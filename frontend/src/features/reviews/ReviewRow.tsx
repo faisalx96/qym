@@ -1,6 +1,8 @@
 /** One 56px queue row. Checkbox, select button and decision actions are siblings (no nested interactive). */
+import { useModelIndex } from '@/api/dashboard';
 import type { CorrectionRow } from '@/api/reviews';
-import { Checkbox, IconButton, Tag, Tooltip } from '@/ui';
+import { Checkbox, DatasetTag, IconButton, ModelTag, Tag, TaskTag, Tooltip } from '@/ui';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import { textDirAttrs } from '@/lib/text';
 import { correctionPriority } from './lib/filters';
 import { ReviewStatusMark } from './DetailPane';
@@ -34,11 +36,12 @@ export function ReviewRow({
   onReject,
   onReset,
 }: ReviewRowProps) {
+  const modelIndex = useModelIndex(row.project_slug);
   const priority = correctionPriority(row);
   const issue = row.human_root_cause_issues?.[0] ?? row.ai_root_cause_issues?.[0];
   const summary = issue
     ? [issue.category, issue.subcategory, issue.finding].filter(Boolean).join(' · ')
-    : 'No diagnosis';
+    : 'No issue';
   const blocked = Boolean(row.review_block);
   const decideDisabled = busy || blocked;
   const blockTip = row.review_block ?? '';
@@ -53,7 +56,7 @@ export function ReviewRow({
       <Checkbox
         isSelected={selected}
         onChange={onToggleSelected}
-        aria-label={`Select diagnosis ${row.id}`}
+        aria-label={`Select issue ${row.id}`}
         hideLabel
         className={styles.check}
       />
@@ -79,16 +82,23 @@ export function ReviewRow({
           {row.self_reviewed ? <Tag>Self-approved</Tag> : null}
           {row.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
           {typeof row.ai_confidence === 'number' ? (
-            <span className={styles.conf}>{Math.round(row.ai_confidence * 100)}%</span>
+            <span className={styles.conf}>{Math.round(row.ai_confidence * 100)}% confidence</span>
           ) : null}
         </span>
         <span className={styles.summary} {...textDirAttrs(summary)}>
           {summary}
         </span>
         <span className={styles.ctx}>
-          {[showProject ? row.project_name : null, row.task, row.dataset, row.model]
-            .filter(Boolean)
-            .join(' · ')}
+          {showProject ? <span>{row.project_name}</span> : null}
+          <TaskTag name={row.task} />
+          <DatasetTag name={row.dataset} />
+          {row.model ? (
+            <ModelTag
+              name={row.model}
+              reasoning={!!row.has_reasoning}
+              series={modelSeriesOf(modelIndex, row.model, !!row.has_reasoning)}
+            />
+          ) : null}
         </span>
       </button>
       <span className={styles.actions}>
@@ -96,7 +106,7 @@ export function ReviewRow({
           <>
             <Tooltip content={blocked ? blockTip : 'Approve'}>
               <IconButton
-                label={`Approve diagnosis ${row.id}`}
+                label={`Approve issue ${row.id}`}
                 icon="check"
                 tone="approve"
                 isDisabled={decideDisabled}
@@ -105,7 +115,7 @@ export function ReviewRow({
             </Tooltip>
             <Tooltip content={blocked ? blockTip : REJECT_TIP}>
               <IconButton
-                label={`Reject diagnosis ${row.id}`}
+                label={`Reject issue ${row.id}`}
                 icon="close"
                 tone="reject"
                 isDisabled={decideDisabled}
@@ -116,7 +126,7 @@ export function ReviewRow({
         ) : (
           <Tooltip content={blocked ? blockTip : 'Reset to pending'}>
             <IconButton
-              label={`Reset diagnosis ${row.id}`}
+              label={`Reset issue ${row.id}`}
               icon="retry"
               isDisabled={decideDisabled}
               onPress={onReset}

@@ -1,7 +1,7 @@
 /** The wizard step in the URL: `?step=` absent = the home view, present = Customize at that step. */
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { STEP_IDS, parseStep, WIZARD_STEPS, type WizardStepId } from '../wizard/steps';
+import { parseStep, WIZARD_STEPS, type WizardStepDef, type WizardStepId } from '../wizard/steps';
 
 /** The params that define a form (a change is a new form); `step` never does. */
 export function entryKey(search: string): string {
@@ -24,10 +24,18 @@ export interface StepApi {
   prev: WizardStepId | null;
 }
 
-export function useStep(): StepApi {
+/**
+ * `steps` is the active step list (the wizard's, or the preset editor's); `homeless` = no home view: a missing
+ * `?step=` is the first step (the editor opens on it).
+ */
+export function useStep(steps: readonly WizardStepDef[] = WIZARD_STEPS, homeless = false): StepApi {
   const [params, setParams] = useSearchParams();
   const raw = params.get('step');
-  const step = useMemo(() => parseStep(raw), [raw]);
+  const ids = useMemo(() => steps.map((s) => s.id), [steps]);
+  const step = useMemo(() => {
+    const parsed = parseStep(raw, ids);
+    return parsed ?? (homeless ? (ids[0] ?? 'where') : null);
+  }, [raw, ids, homeless]);
   const goToStep = useCallback<StepApi['goToStep']>(
     (target, opts) => {
       setParams(
@@ -42,11 +50,11 @@ export function useStep(): StepApi {
     },
     [setParams],
   );
-  const index = step ? STEP_IDS.indexOf(step) : -1;
+  const index = step ? ids.indexOf(step) : -1;
   return {
     step,
     goToStep,
-    next: index >= 0 ? (WIZARD_STEPS[index + 1]?.id ?? null) : null,
-    prev: index > 0 ? (WIZARD_STEPS[index - 1]?.id ?? null) : null,
+    next: index >= 0 ? (steps[index + 1]?.id ?? null) : null,
+    prev: index > 0 ? (steps[index - 1]?.id ?? null) : null,
   };
 }

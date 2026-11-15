@@ -27,28 +27,23 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--control-radius);
   background: var(--bg-surface);
+  padding-inline: var(--space-md);
 }
 
 .groupHeader {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  cursor: pointer;
   font-size: var(--font-md);
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.groupHeader:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: -2px;
 }
 
 .groupBody {
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--border-subtle);
+  margin-inline: calc(-1 * var(--space-md));
 }
 
 .field {

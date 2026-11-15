@@ -29,7 +29,9 @@ test.describe('Test Selected (6)', () => {
     const seed = await seedAnalyzer(request);
     const t = trackErrors(page);
     await openRun(page, seed.slug, seed.runId);
-    await rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })
+      .click();
     const card = page.getByRole('article', { name: 'Test result for item item-1' });
     await expect(card).toBeVisible();
     await expect(card).toContainText('82% confidence');
@@ -55,7 +57,7 @@ test.describe('Test Selected (6)', () => {
       else await expect(box).toBeDisabled(); // the fourth is refused
     }
     const body = page.waitForRequest((r) => r.url().includes('/analyze-test'));
-    await rail(page).getByRole('button', { name: 'Test selected (3)' }).click();
+    await rail(page).getByRole('button', { name: /^Test selected\s?3$/ }).click();
     expect(((await body).postDataJSON() as { item_ids: string[] }).item_ids).toEqual([
       'item-1',
       'item-2',
@@ -67,11 +69,15 @@ test.describe('Test Selected (6)', () => {
   test('Cancel test aborts a slow connection', async ({ page, request }) => {
     const seed = await seedAnalyzer(request, { model: 'slow-model' });
     await openRun(page, seed.slug, seed.runId);
-    await rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })
+      .click();
     await expect(page.getByText('Testing against the connection')).toBeVisible();
     await rail(page).getByRole('button', { name: 'Cancel test' }).click();
     await expect(page.getByText('Test cancelled.')).toBeVisible();
-    await expect(rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })).toBeEnabled();
+    await expect(
+      rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }),
+    ).toBeEnabled();
   });
 });
 
@@ -86,7 +92,7 @@ test.describe('Analyze job (7)', () => {
     const created = page.waitForResponse(
       (r) => r.url().endsWith('/analysis-jobs') && r.request().method() === 'POST',
     );
-    const targets = page.getByRole('list', { name: 'Targets' }).getByRole('listitem');
+    const targets = page.getByRole('grid', { name: 'Targets' }).locator('tbody tr');
     const before = await targets.count();
     await rail(page).getByRole('button', { name: 'Analyze 4 items' }).click();
     expect((await created).status()).toBe(202);

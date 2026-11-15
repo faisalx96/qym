@@ -11,6 +11,8 @@ import {
   ActionTile,
   Button,
   Checkbox,
+  CountTile,
+  Icon,
   RowMenu,
   SectionHeader,
   Card,
@@ -72,19 +74,30 @@ export function MatrixCard({
             <Button
               variant="neutral"
               isDisabled={!liveRunIds.length || selected.length === liveRunIds.length}
+              disabledReason="Every run is selected"
               onPress={onSelectAll}
             >
               Select all runs
             </Button>
-            <Button variant="neutral" isDisabled={!selected.length} onPress={onClear}>
+            <Button
+              variant="neutral"
+              isDisabled={!selected.length}
+              disabledReason="No runs selected"
+              onPress={onClear}
+            >
               Clear
             </Button>
-            <Button variant="accent" isDisabled={selected.length < 2} onPress={onCompare}>
-              Compare selected ({selected.length})
+            <Button
+              variant="accent"
+              isDisabled={selected.length < 2}
+              disabledReason="Select two runs to compare"
+              onPress={onCompare}
+            >
+              Compare selected<CountTile>{selected.length}</CountTile>
             </Button>
           </div>
         </div>
-        <Card flush className={styles.tableWrap}>
+        <div className={styles.tableWrap}>
           <table className={styles.matrix}>
             <caption className={styles.srOnly}>
               Latest attempt of each combination in each environment
@@ -146,7 +159,7 @@ export function MatrixCard({
               ))}
             </tbody>
           </table>
-        </Card>
+        </div>
       </div>
     </Card>
   );
@@ -223,7 +236,7 @@ function MatrixCell({
       label: 'Cancel',
       tone: 'danger',
       separatorBefore: true,
-      icon: <ActionTile icon="stop" tone="danger" />,
+      icon: <ActionTile icon="ban" tone="danger" />,
       disabled: !canControl || busy,
     });
   const onAction = (id: string) => {
@@ -259,14 +272,14 @@ function MatrixCell({
         ) : null}
         <JobStatusBadge status={job.status} />
         {earlier ? (
-          <button
-            type="button"
-            className={styles.earlier}
-            title="Show earlier attempts in the job history"
-            onClick={() => onShowAttempts(job)}
+          <Button
+            variant="neutral"
+            size="sm"
+            icon={<Icon name="retry" size={12} />}
+            onPress={() => onShowAttempts(job)}
           >
-            ↻ {earlier} earlier
-          </button>
+            {earlier} earlier
+          </Button>
         ) : null}
         <span className={styles.cellMenu}>
           <RowMenu label={`Actions: ${comboLabel} on ${env.name}`} items={items} onAction={onAction} />

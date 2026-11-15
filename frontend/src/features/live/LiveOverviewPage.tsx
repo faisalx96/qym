@@ -1,10 +1,13 @@
+import { useModelIndex } from '@/api/dashboard';
 import { overviewFrames, useCachedOverview, useLiveOverview } from './lib/overview';
 import { useProjectContext } from '@/features/shell/ProjectContext';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { ErrorState, PageHeader, Skeleton } from '@/ui';
+import { projectPath } from '@/app/routes';
+import { ErrorState, InlineNotice, LinkButton, PageHeader, Skeleton } from '@/ui';
+import { staleText } from './lib/stale';
 import { SourceControl } from './components/SourceControl';
 import { DaySwitcher } from './components/DaySwitcher';
 import { StatusLine } from './components/StatusLine';
@@ -15,6 +18,7 @@ import { ServiceHealth } from './components/ServiceHealth';
 import { Canaries } from './components/Canaries';
 import { TrendChart } from './components/TrendChart';
 import { DaysTable } from './components/DaysTable';
+import { zoneToday } from './lib/zone';
 import styles from './live.module.css';
 
 export function LiveOverviewPage({
@@ -36,6 +40,7 @@ export function LiveOverviewPage({
   const requestedDaysPage = Number(get('days_page', '1'));
   const daysPage = Number.isSafeInteger(requestedDaysPage) && requestedDaysPage > 0 ? requestedDaysPage : 1;
   const query = useLiveOverview(slug, { source, day, trendDays, daysPage });
+  const modelIndex = useModelIndex(slug);
   const showSkeleton = useDelayedPending(query.isPending);
   const overview = query.data;
   const zone = overview?.status.day_key_timezone ?? sourceZone;
@@ -50,9 +55,17 @@ export function LiveOverviewPage({
           title="Live evaluation"
           description="Every real user turn, evaluated as it happens"
           meta={[
-            <SourceControl key="source" slug={slug} source={source} status={overview?.status} />,
-            <DaySwitcher key="day" day={day} zone={zone} />,
+            // cv5 Y4: the source and the day are controls side by side, one meta item: no "·" separator between them
+            <span key="controls" className={styles.headerControls}>
+              <SourceControl slug={slug} source={source} status={overview?.status} />
+              <DaySwitcher day={day} today={overview?.status.today ?? zoneToday(zone)} />
+            </span>,
           ]}
+          actions={
+            <LinkButton to={`${projectPath(slug, 'live/worker')}?${new URLSearchParams({ source })}`}>
+              Manage worker
+            </LinkButton>
+          }
         />
       </div>
       {query.isError ? (
@@ -85,7 +98,12 @@ export function LiveOverviewPage({
         </div>
       ) : overview ? (
         <>
-          <StatusLine status={overview.status} slug={slug} source={source} />
+          {overview.status.stale ? (
+            <InlineNotice tone="danger" lead="Stale." data-testid="live-stale-notice">
+              {`${staleText(overview.status)}.`}
+            </InlineNotice>
+          ) : null}
+          <StatusLine status={overview.status} slug={slug} source={source} modelIndex={modelIndex} />
           <DayNumbers overview={overview} linkTo={linkTo} />
           <div className={styles.mixRow}>
             <DiagnosisMix overview={overview} linkTo={linkTo} />

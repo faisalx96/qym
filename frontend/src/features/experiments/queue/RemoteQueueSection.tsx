@@ -15,6 +15,7 @@ import {
 import { useProjectContext } from '@/features/shell';
 import {
   Button,
+  CountTile,
   DataTable,
   ErrorState,
   Icon,
@@ -25,7 +26,7 @@ import {
   TwoLine,
   useToast,
   type Column,
-  Card,
+  Section,
 } from '@/ui';
 import { experimentPath } from '../paths';
 import { relTime } from '../lib/format';
@@ -49,26 +50,31 @@ export function RemoteQueueSection({
   const stale = data?.environments.reduce((n, e) => n + e.stale_count, 0) ?? 0;
   const panelId = 'remote-queue-panel';
   return (
-    <Card as="section" className={styles.queueCard} aria-label="Remote queue">
-      <button
-        type="button"
-        className={styles.toggle}
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
-        <span className={styles.title}>Remote queue</span>
-        <span className={styles.sub}>
-          What the Evaluation Service holds, including jobs this project no longer tracks.
-        </span>
-        {open && data ? (
-          <span className={styles.tags}>
-            {orphans ? <Tag tone="warning">{plural(orphans, 'orphan')}</Tag> : null}
-            {stale ? <Tag tone="warning">{stale} stale</Tag> : null}
-          </span>
-        ) : null}
-      </button>
+    <Section
+      id="remote-queue"
+      title="Remote queue"
+      description="What the Evaluation Service holds, including jobs this project no longer tracks."
+      className={styles.queueSection}
+      actions={
+        <>
+          {open && data ? (
+            <span className={styles.tags}>
+              {orphans ? <Tag tone="warning">{plural(orphans, 'orphan')}</Tag> : null}
+              {stale ? <Tag tone="warning">{stale} stale</Tag> : null}
+            </span>
+          ) : null}
+          <Button
+            variant="neutral"
+            iconEnd={<Icon name={open ? 'chevron-up' : 'chevron-down'} size={12} />}
+            aria-expanded={open}
+            aria-controls={panelId}
+            onPress={() => setOpen((o) => !o)}
+          >
+            {open ? 'Hide' : 'Show'}
+          </Button>
+        </>
+      }
+    >
       {open ? (
         <div id={panelId} className={styles.body}>
           {query.isPending ? <Skeleton kind="table" count={3} label="Loading remote queue" /> : null}
@@ -90,7 +96,7 @@ export function RemoteQueueSection({
           ))}
         </div>
       ) : null}
-    </Card>
+    </Section>
   );
 }
 
@@ -140,7 +146,17 @@ function RemoteEnv({
       header: 'Priority',
       width: 90,
       priority: 3,
-      cell: (i) => (i.priority ? titleCase(i.priority) : '—'),
+      cell: (i) =>
+        i.priority ? (
+          <Tag
+            tone={i.priority.toUpperCase() === 'HIGH' ? 'danger' : undefined}
+            data-job-priority={i.priority.toUpperCase()}
+          >
+            {titleCase(i.priority)}
+          </Tag>
+        ) : (
+          '—'
+        ),
     },
     {
       id: 'match',
@@ -150,7 +166,11 @@ function RemoteEnv({
       cell: (i) =>
         i.match ? (
           <TwoLine
-            primary={<Link to={experimentPath(slug, i.match.experiment_id)}>{i.match.experiment_name}</Link>}
+            primary={
+              <Link to={experimentPath(slug, i.match.experiment_id)} data-link="name">
+                {i.match.experiment_name}
+              </Link>
+            }
             secondary={
               <>
                 Local status {titleCase(i.match.status)}{' '}
@@ -189,8 +209,19 @@ function RemoteEnv({
         </Text>
         <span className={styles.meta}>
           {env.fetched_at ? `fetched ${relTime(env.fetched_at)}` : 'never fetched'}
-          {env.stale ? ' · refreshing' : ''} · {plural(env.orphan_count, 'orphan')} · {env.stale_count} stale
+          {env.stale ? ' · refreshing' : ''}
         </span>
+        {/* cv5 Z7: orphans and stale jobs are problems: count tags in the warning tone, none when the count is 0 */}
+        {env.orphan_count ? (
+          <Tag kind="count" tone="warning">
+            {plural(env.orphan_count, 'orphan')}
+          </Tag>
+        ) : null}
+        {env.stale_count ? (
+          <Tag kind="count" tone="warning">
+            {env.stale_count} stale
+          </Tag>
+        ) : null}
         {env.fetch_error ? <span className={styles.err}>Last refresh failed: {env.fetch_error}</span> : null}
       </div>
       <DataTable
@@ -202,7 +233,8 @@ function RemoteEnv({
         density="regular"
         bulkActions={
           <Button size="sm" variant="danger" isDisabled={!ids.length} onPress={() => setConfirm(true)}>
-            Cancel selected {stale ? 'remote jobs' : 'orphans'} ({ids.length})
+            Cancel selected {stale ? 'remote jobs' : 'orphans'}
+            <CountTile>{ids.length}</CountTile>
           </Button>
         }
         selection={
@@ -213,7 +245,15 @@ function RemoteEnv({
         aria-label={`Remote jobs on ${env.environment_name}`}
         empty={<Text tone="secondary">The service holds no queued or running jobs.</Text>}
       >
-        <DataTable.Footer summary={plural(env.items.length, 'remote job')} />
+        <DataTable.Footer
+          pagination={{
+            total: env.items.length,
+            page: 1,
+            pageSize: Math.max(1, env.items.length),
+            noun: 'remote jobs',
+            onPageChange: () => {},
+          }}
+        />
       </DataTable>
       {!canCancel ? (
         <Text variant="sm" tone="muted">

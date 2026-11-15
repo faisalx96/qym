@@ -132,11 +132,11 @@ export function useQueueKeys(handlers: QueueKeyHandlers, enabled = true): void {
 }
 
 export const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ['j', 'k'], label: 'Next / previous diagnosis' },
+  { keys: ['j', 'k'], label: 'Next / previous issue' },
   { keys: ['↓', '↑'], label: 'Same, when a card is focused' },
-  { keys: ['a'], label: 'Approve the current diagnosis' },
+  { keys: ['a'], label: 'Approve the current issue' },
   { keys: ['r'], label: 'Reject (with a comment)' },
-  { keys: ['e'], label: 'Edit the human diagnosis' },
+  { keys: ['e'], label: 'Edit the human issue' },
   { keys: ['o', 'Enter'], label: 'Expand / collapse details' },
   { keys: ['x'], label: 'Select / unselect for bulk actions' },
   { keys: ['Shift', 'A'], label: 'Approve the selection' },

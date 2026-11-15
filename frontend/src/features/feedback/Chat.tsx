@@ -15,7 +15,13 @@ function ToolText({ item }: { item: LogItem }) {
       {ids.map((id, i) => (
         <span key={id}>
           {i > 0 ? ' ' : null}
-          <Link to={`/feedback/${id}`} className={styles.idLink} data-link-sm="" data-request-link={id}>
+          <Link
+            to={`/feedback/${id}`}
+            className={styles.idLink}
+            data-link="name"
+            data-link-sm=""
+            data-request-link={id}
+          >
             {id}
           </Link>
         </span>
@@ -157,7 +163,7 @@ export const Chat = forwardRef<HTMLTextAreaElement, ChatProps>(function Chat(p, 
         data-testid="chat-log"
       >
         {p.onLoadEarlier ? (
-          <Button size="sm" variant="ghost" onPress={p.onLoadEarlier} data-testid="load-earlier">
+          <Button size="sm" variant="neutral" onPress={p.onLoadEarlier} data-testid="load-earlier">
             Show earlier messages
           </Button>
         ) : null}
@@ -210,9 +216,9 @@ export const Chat = forwardRef<HTMLTextAreaElement, ChatProps>(function Chat(p, 
             </Button>
           ) : (
             <Button
-              variant="accent"
+              variant="primary"
               isDisabled={!canSend}
-              icon={<Icon name="next" size={14} />}
+              icon={<Icon name="next" size={12} />}
               onPress={p.onSend}
             >
               Send

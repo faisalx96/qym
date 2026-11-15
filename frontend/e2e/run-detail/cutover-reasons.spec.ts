@@ -79,7 +79,7 @@ test('the filtered list explains where a reason comes from, and the filter can b
     'task error → scorer error → reason → explanation → label → no reason recorded',
   );
   await page.keyboard.press('Escape');
-  await banner.getByRole('button', { name: 'Clear filter' }).click();
+  await page.getByTestId('nav-clear-filters').click();
   await expect(banner).toBeHidden();
 });
 
@@ -131,11 +131,7 @@ test('compare: structured item metadata never renders as [object Object]', async
   const [a, b] = [await make('cmp-meta-a'), await make('cmp-meta-b')];
   await page.goto(compareUrl([a, b]));
   await waitLoaded(page);
-  await page
-    .getByTestId('item-row')
-    .nth(0)
-    .locator('[data-part="item-head"]')
-    .click();
+  await page.getByTestId('item-row').nth(0).locator('[data-part="item-head"]').click();
   // scalars and lists show as badges; the structured value shows as nothing wrong, never as [object Object]
   await expect(page.locator('body')).toContainText('hard');
   await expect(page.locator('body')).toContainText('finance');

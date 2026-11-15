@@ -83,6 +83,7 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
                   <span className={styles.rowVersion}>{v.version}</span>
                   <span className={styles.rowName}>{v.name || <em>unnamed</em>}</span>
                   <VersionBadge version={v} />
+                  <AliasTags version={v} />
                 </span>
                 <span className={styles.rowMeta}>
                   <span data-testid="version-row-items">
@@ -100,17 +101,22 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
   );
 }
 
+/**
+ * A version's mark: Production is the success star Flag, Draft is the warning dot StatusMark. A published version that
+ * is not in use shows nothing (status rules, 2026-11-12), so callers must not wrap the badge in a separator of its own.
+ */
 export function VersionBadge({ version }: { version: DatasetVersion }) {
   if (isProduction(version))
     return (
-      <Flag tone="info" icon="star">
+      <Flag tone="success" icon="star">
         Production
       </Flag>
     );
   if (version.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
-  return <StatusMark tone="neutral" shape="full" label="Published" />;
+  return null;
 }
 
+/** The other aliases of a version (production is the VersionBadge): `@alias`, the one alias form of the app (cv5 Y5). */
 export function AliasTags({ version }: { version: DatasetVersion }) {
   const others = version.aliases.filter((a) => a !== 'production');
   if (!others.length) return null;
@@ -118,7 +124,7 @@ export function AliasTags({ version }: { version: DatasetVersion }) {
     <>
       {others.map((a) => (
         <Tag key={a} kind="version">
-          {a}
+          {`@${a}`}
         </Tag>
       ))}
     </>

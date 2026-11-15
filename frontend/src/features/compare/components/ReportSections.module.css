@@ -35,13 +35,23 @@
 }
 
 .link[aria-current='location'] {
-  color: var(--text-primary);
-  background: var(--bg-elevated);
+  color: var(--accent-primary);
   font-weight: 650;
 }
 
 .count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-xs);
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
+  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--font-sm);
-  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
 }

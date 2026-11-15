@@ -37,7 +37,7 @@ test('J still steps to the neighbouring run when the shortcuts are on', async ({
 test('"/" in the trace drawer only focuses the span filter while the shortcuts are on', async ({ page }) => {
   await openRun(page, s.slug, runs[0]!);
   await page.getByRole('button', { name: 'Open trace of item #1', exact: true }).first().click();
-  const filter = page.getByPlaceholder(/Filter spans/);
+  const filter = page.getByPlaceholder('Search spans');
   await expect(filter).toBeVisible();
   await page.getByRole('button', { name: 'Expand all' }).focus();
   await page.keyboard.press('/');

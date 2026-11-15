@@ -285,8 +285,12 @@ test.describe('polish', () => {
     await page.goto(`/compare?cohortA=${base}&cohortA=${a}&cohortB=${b}&cohortB=${c}`);
     await waitLoaded(page);
     const cards = page.getByTestId('run-card');
-    await expect(cards.filter({ hasText: 'Side A' })).toHaveCount(2);
-    await expect(cards.filter({ hasText: 'Side B' })).toHaveCount(2);
+    await expect(
+      cards.filter({ has: page.locator('[data-part="run-letter"]', { hasText: /^A\d$/ }) }),
+    ).toHaveCount(2);
+    await expect(
+      cards.filter({ has: page.locator('[data-part="run-letter"]', { hasText: /^B\d$/ }) }),
+    ).toHaveCount(2);
   });
 
   test('390px: the sticky bar holds the links, then the page controls on a second row; the Baseline select sits by the page title', async ({

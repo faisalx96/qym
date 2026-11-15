@@ -16,12 +16,16 @@
 
 .table th,
 .table td {
-  border-block-end: 1px solid var(--border-subtle);
   text-align: start;
 }
 
-.table tbody tr:last-child > * {
-  border-block-end: 0;
+/* D-02: one line under the header, no row lines; every second body row takes the report stripe. */
+.table thead th {
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.table tbody tr:nth-child(even) > * {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step-report), var(--card-bg));
 }
 
 .metricHead,
@@ -153,6 +157,14 @@
   font-family: var(--font-mono);
   font-size: var(--font-sm);
   color: var(--text-muted);
+}
+
+.latDelta[data-verdict='slower'] {
+  color: var(--error-text);
+}
+
+.latDelta[data-verdict='faster'] {
+  color: var(--success);
 }
 
 /* ── 390: a block per metric, a line per run (cell >= 44 high, no sideways scroll) ── */

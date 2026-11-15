@@ -85,6 +85,10 @@ describe('overview loading and error states', () => {
     failed = false;
     await userEvent.setup().click(screen.getByRole('button', { name: /retry/i }));
     await waitFor(() => expect(document.querySelector('[data-live-stat="turns"]')).toHaveTextContent('47'));
+    expect(screen.getByRole('link', { name: 'Manage worker' })).toHaveAttribute(
+      'href',
+      `/projects/demo/live/worker?${new URLSearchParams({ source })}`,
+    );
   });
 
   it('reserves the measured first-load frames through their CSS variables', async () => {
@@ -198,24 +202,24 @@ it.each([false, true])('changes the source and reloads the %s page numbers', asy
     }),
   );
   const { container } = mount(turns);
-  if (turns) expect(await screen.findByText('47 of 47 turns on 1 Nov 2026')).toBeVisible();
+  if (turns) expect(await screen.findByText('47 of 47 turns on Nov 1, 2026')).toBeVisible();
   else
     await waitFor(() => expect(container.querySelector('[data-live-stat="turns"]')).toHaveTextContent('47'));
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: /Live source/ }));
   await user.click(screen.getByRole('option', { name: 'Development worker' }));
   expect(screen.getByLabelText('URL')).toHaveTextContent('source=worker-dev');
-  if (turns) expect(await screen.findByText('3 of 3 turns on 1 Nov 2026')).toBeVisible();
+  if (turns) expect(await screen.findByText('3 of 3 turns on Nov 1, 2026')).toBeVisible();
   else
     await waitFor(() => expect(container.querySelector('[data-live-stat="turns"]')).toHaveTextContent('3'));
 });
 
 it.each([
-  ['Asia/Riyadh', '2026-11-10', 'Riyadh'],
-  ['UTC', '2026-11-09', 'UTC'],
-  [undefined, '2026-11-09', 'UTC'],
-  ['Invalid/Zone', '2026-11-09', 'UTC'],
-])('waits for source info before requesting the default day in %s', async (zone, expectedDay, label) => {
+  ['Asia/Riyadh', '2026-11-10'],
+  ['UTC', '2026-11-09'],
+  [undefined, '2026-11-09'],
+  ['Invalid/Zone', '2026-11-09'],
+])('waits for source info before requesting the default day in %s', async (zone, expectedDay) => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-11-09T22:30:00Z'));
   const status = { ...liveOverview.status, day_key_timezone: zone };
@@ -255,9 +259,10 @@ it.each([
   });
   await screen.findByRole('grid', { name: 'Days' });
   expect(
-    requests.filter((url) => url.pathname.endsWith('/overview')).map((url) => url.searchParams.get('day')),
+    requests
+      .filter((url) => url.pathname.endsWith('/live/overview'))
+      .map((url) => url.searchParams.get('day')),
   ).toEqual([expectedDay]);
-  expect(screen.getByText(`Day (${label})`)).toBeVisible();
-  expect(screen.getByText((text) => text.endsWith(`${label} · hatched baseline: worker gap`))).toBeVisible();
+  expect(screen.getByRole('columnheader', { name: 'Day' })).toBeVisible();
   expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled();
 });

@@ -83,7 +83,8 @@ describe('JsonFields', () => {
     expect(field('SETTING · 0 · weight')).toHaveValue('5');
     expect(field('SETTING · 1 · weight')).toHaveValue('5');
 
-    await user.selectOptions(field('SETTING · * · enabled (all items)'), 'false');
+    await user.click(screen.getByRole('button', { name: /SETTING · \* · enabled \(all items\)/ }));
+    await user.click(screen.getByRole('option', { name: 'false' }));
     expect((latest as Array<{ enabled: boolean }>).map((i) => i.enabled)).toEqual([false, false]);
 
     await user.clear(field('SETTING · 1 · name'));
@@ -145,7 +146,8 @@ describe('JsonFields', () => {
     await user.clear(field('SETTING · tables · 1'));
     await user.type(field('SETTING · tables · 1'), 'z');
     expect((latest as { tables: string[] }).tables).toEqual(['a', 'z']);
-    await user.selectOptions(field('SETTING · nested · on'), 'true');
+    await user.click(screen.getByRole('button', { name: /SETTING · nested · on/ }));
+    await user.click(screen.getByRole('option', { name: 'true' }));
     expect((latest as { nested: unknown }).nested).toEqual({ on: true });
 
     // The top-level "Add key" comes last (after the nested object's own).

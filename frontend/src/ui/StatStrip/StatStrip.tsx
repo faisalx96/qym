@@ -22,7 +22,7 @@ export interface StatStripItem {
   help?: string;
   /** Rendered in a 24px tile tinted from `tone` (muted when there is no tone). */
   icon?: ReactNode;
-  /** Colours the value and the icon tile: one tone, one meaning (DESIGN_LANGUAGE "Colour as information"). */
+  /** Colours the icon tile only; the number stays --text-primary (D-29, resolution 3). */
   tone?: StatTone;
   /** A change pill under the value (arrow, sign and label: colour is never the only cue). */
   trend?: StatTrend;
@@ -35,11 +35,13 @@ export interface StatStripItem {
   barBand?: 1 | 2 | 3 | 4 | 5;
   /** Group label: consecutive items sharing a group sit under one small heading, groups divided by a hairline. */
   group?: string;
+  /** Extra data-* attributes on the cell (test and e2e hooks, e.g. data-live-service). */
+  data?: Record<`data-${string}`, string>;
 }
 
 export interface StatStripProps {
   items: StatStripItem[];
-  variant?: 'band' | 'compact-header' | 'compact';
+  variant?: 'band' | 'compact-header' | 'compact' | 'mini';
   /** Flash a faint tint on a cell whose value changed (live runs). */
   live?: boolean;
   'aria-label'?: string;
@@ -47,9 +49,49 @@ export interface StatStripProps {
 
 const ARROW = { good: '▲', bad: '▼', flat: '≈' } as const;
 
+/** A label and its help marker; the marker stays on the line of the last word when the label wraps (E-52). */
+function LabelWithHelp({ label, help }: { label: ReactNode; help: string }) {
+  const marker = <HelpMarker label={String(label)}>{help}</HelpMarker>;
+  if (typeof label !== 'string' || !label.includes(' '))
+    return (
+      <span className={styles.labelTail}>
+        <span>{label}</span>
+        {marker}
+      </span>
+    );
+  const cut = label.lastIndexOf(' ') + 1;
+  return (
+    <>
+      <span>{label.slice(0, cut)}</span>
+      <span className={styles.labelTail}>
+        <span>{label.slice(cut)}</span>
+        {marker}
+      </span>
+    </>
+  );
+}
+
 function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; variant: string }) {
   const flat = typeof item.value === 'string' || typeof item.value === 'number' ? item.value : null;
   const flash = useFlashOnChange(flat, live);
+  if (variant === 'mini') {
+    // D-29 mini: the label, then the tile and the number; no help, sub-line, bar, trend or press.
+    return (
+      <div className={styles.item} data-tone={item.tone} data-variant={variant} {...item.data}>
+        <span className={styles.label}>{item.label}</span>
+        <span className={styles.miniRow}>
+          {item.icon ? (
+            <span className={styles.icon} aria-hidden="true">
+              {item.icon}
+            </span>
+          ) : null}
+          <span className={styles.value} data-changed={flash ? '' : undefined}>
+            {item.value}
+          </span>
+        </span>
+      </div>
+    );
+  }
   const body = (
     <>
       {item.icon ? (
@@ -59,10 +101,11 @@ function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; var
       ) : null}
       <span className={styles.stack}>
         <span className={styles.label}>
-          <span>{item.label}</span>
           {item.help && !item.onPress ? (
-            <HelpMarker label={String(item.label)}>{item.help}</HelpMarker>
-          ) : null}
+            <LabelWithHelp label={item.label} help={item.help} />
+          ) : (
+            <span>{item.label}</span>
+          )}
         </span>
         <span className={styles.value} data-changed={flash ? '' : undefined}>
           {item.value}
@@ -85,7 +128,7 @@ function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; var
       </span>
     </>
   );
-  const common = { 'data-tone': item.tone, 'data-variant': variant };
+  const common = { 'data-tone': item.tone, 'data-variant': variant, ...item.data };
   if (item.onPress) {
     return (
       <div className={styles.item} {...common} data-selected={item.isSelected ? '' : undefined}>

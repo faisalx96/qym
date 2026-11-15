@@ -7,11 +7,13 @@ import { useMemo, useState } from 'react';
 import { isItemTaskError } from '@/lib/metrics';
 import {
   Button,
+  CardTitle,
   CopyButton,
   Icon,
   KeyTree,
   LinkButton,
   SegmentedControl,
+  StateTag,
   Tag,
   TextBlock,
   allPaths,
@@ -19,6 +21,7 @@ import {
   useJsonView,
 } from '@/ui';
 import { bodyText } from '../../lib/itemText';
+import { verdictTone } from '../../lib/verdictMark';
 import { latencyLabel, rowStatus } from '../../lib/rowDisplay';
 import { shownPasses } from '../../lib/passSelection';
 import { useRunPage } from '../../RunContext';
@@ -85,73 +88,75 @@ export function OutputRegion({
   void row;
   return (
     <section className={styles.region} aria-label="Output" data-kind="output">
-      <div className={styles.head}>
-        <h3 className={styles.title}>Output</h3>
-        <span className={styles.meta}>
-          {multi
+      <CardTitle
+        title="Output"
+        description={
+          multi
             ? `${cols.length} of ${passes.length} passes shown`
             : [
                 single.latency_ms != null ? latencyLabel(single.latency_ms) : null,
                 keyCount(passes[0]!.pass) ? `${keyCount(passes[0]!.pass)} keys` : null,
               ]
                 .filter(Boolean)
-                .join(' · ')}
-        </span>
-        <span className={styles.headActions}>
-          {!multi && single.trace_id ? (
+                .join(' · ')
+        }
+        aside={
+          <>
+            {!multi && single.trace_id ? (
+              <Button
+                size="sm"
+                variant="neutral"
+                icon={<Icon name="list" size={12} />}
+                onPress={() => ui.openTrace(single.item_id, model.viewPass)}
+              >
+                Trace
+              </Button>
+            ) : null}
+            {!multi && langfuseUrl ? (
+              <LinkButton
+                size="sm"
+                variant="neutral"
+                href={langfuseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                iconEnd={<Icon name="external" size={12} />}
+              >
+                Open in Langfuse
+              </LinkButton>
+            ) : null}
+            {!multi ? (
+              <CopyButton text={bodyText(outputs.get(passes[0]!.pass)!.value)} label="Copy output" />
+            ) : null}
+            <SegmentedControl
+              label="Output view"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'sections', label: 'Sections' },
+                { value: 'raw', label: 'Raw' },
+              ]}
+            />
             <Button
               size="sm"
               variant="neutral"
-              icon={<Icon name="list" size={12} />}
-              onPress={() => ui.openTrace(single.item_id, model.viewPass)}
+              aria-label="Expand all output keys"
+              isDisabled={view === 'raw' || !anyStructured}
+              onPress={expandAll}
             >
-              Trace
+              Expand all
             </Button>
-          ) : null}
-          {!multi && langfuseUrl ? (
-            <LinkButton
+            <Button
               size="sm"
               variant="neutral"
-              href={langfuseUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              icon={<Icon name="external" size={12} />}
+              aria-label="Collapse all output keys"
+              isDisabled={view === 'raw' || !anyStructured}
+              onPress={() => setOpen(new Set(defaultOpen))}
             >
-              Open in Langfuse
-            </LinkButton>
-          ) : null}
-          {!multi ? (
-            <CopyButton text={bodyText(outputs.get(passes[0]!.pass)!.value)} label="Copy output" />
-          ) : null}
-          <SegmentedControl
-            label="Output view"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: 'sections', label: 'Sections' },
-              { value: 'raw', label: 'Raw' },
-            ]}
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label="Expand all output keys"
-            isDisabled={view === 'raw' || !anyStructured}
-            onPress={expandAll}
-          >
-            Expand all
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label="Collapse all output keys"
-            isDisabled={view === 'raw' || !anyStructured}
-            onPress={() => setOpen(new Set(defaultOpen))}
-          >
-            Collapse all
-          </Button>
-        </span>
-      </div>
+              Collapse all
+            </Button>
+          </>
+        }
+      />
       {multi ? <PassRail passes={railPasses} selected={selected} onToggle={onToggle} /> : null}
       {row.output_received === false ? (
         <p className={styles.note} role="note">
@@ -188,9 +193,15 @@ export function OutputRegion({
                 {multi ? (
                   <div className={styles.colHead}>
                     <Tag kind="count">Pass {c.pass}</Tag>
-                    <Tag tone={tone} title={status.title || undefined}>
-                      {status.kind === 'pass' ? 'Pass' : status.kind === 'fail' ? 'Fail' : status.label}
-                    </Tag>
+                    <StateTag tone={verdictTone(status.kind)} title={status.title || undefined}>
+                      {status.kind === 'pass'
+                        ? 'Pass'
+                        : status.kind === 'fail'
+                          ? 'Fail'
+                          : status.kind === 'error'
+                            ? 'Error'
+                            : status.label}
+                    </StateTag>
                     {c.scoped.latency_ms != null ? (
                       <span className={styles.latency}>{latencyLabel(c.scoped.latency_ms)}</span>
                     ) : null}

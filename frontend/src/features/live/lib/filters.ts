@@ -1,4 +1,5 @@
 import type { LiveFilters, LiveMetricSpec, LiveTurnsPage } from '@/api/live';
+import { formatDayKey } from '@/lib/dates';
 import { diagnosisSpec } from './mix';
 
 interface FilterChip {
@@ -23,17 +24,7 @@ export function filterChips(
   const add = (key: keyof LiveFilters, label: string, ...related: (keyof LiveFilters)[]) => {
     chips.push({ key, label, onRemove: (f) => remove(f, key, ...related) });
   };
-  const dateLabel = (day: string) => {
-    const date = new Date(`${day}T00:00:00Z`);
-    return Number.isNaN(date.getTime())
-      ? day
-      : date.toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-          timeZone: 'UTC',
-        });
-  };
+  const dateLabel = (day: string) => formatDayKey(day);
   if (filters.day) add('day', dateLabel(filters.day));
   if (filters.from || filters.to) {
     add(

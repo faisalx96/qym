@@ -1,5 +1,5 @@
 import type { FeedbackEvent, FeedbackStatus } from '@/api/feedback';
-import { formatAgo, formatShortDay, formatTableDate, formatTime } from '@/lib/dates';
+import { formatAgo, formatHeaderDate, formatShortDay, formatTableDate, formatTime } from '@/lib/dates';
 
 /** 'Sep 14' (lib/dates, C048). */
 export function shortDate(iso: string | null | undefined): string {
@@ -14,6 +14,11 @@ export function clock(iso: string | null | undefined): string {
 /** Table form 'Sep 14 · 19:05' (lib/dates). */
 export function dateTime(iso: string | null | undefined): string {
   return iso ? formatTableDate(iso) : '';
+}
+
+/** Header form 'Sep 14, 2026, 19:05' (lib/dates). */
+export function headerDate(iso: string | null | undefined): string {
+  return iso ? formatHeaderDate(iso) : '';
 }
 
 /** Freshness, then the day (lib/dates). */

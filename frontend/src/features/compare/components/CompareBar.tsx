@@ -2,7 +2,7 @@
  * The one sticky element of the page: the section links, then the page-level controls on the right (K6, C154):
  * Metric, the Pass if slider, Filters and one red Clear. No section repeats them.
  */
-import { Button, Icon, Slider, Tag } from '@/ui';
+import { Button, ClearFiltersButton, Icon, Slider, Tag } from '@/ui';
 import { useCompare } from '../CompareContext';
 import { clearedView } from '../lib/activeChips';
 import { activeFilterCount } from '../lib/filters';
@@ -48,7 +48,7 @@ function PageControls() {
         <Button
           size="sm"
           variant="neutral"
-          icon={<Icon name="list" size={14} />}
+          icon={<Icon name="list" size={12} />}
           aria-expanded={filtersOpen}
           data-part="items-filters-btn"
           onPress={() => {
@@ -61,18 +61,11 @@ function PageControls() {
           {count ? <Tag kind="count">{count}</Tag> : null}
         </Button>
       ) : null}
-      {clearCount ? (
-        // Clear stays red, with its count on a red disc (owner, Nov 1)
-        <Button
-          size="sm"
-          variant="danger"
-          icon={<Icon name="close" size={12} />}
-          data-part="items-clear-btn"
-          onPress={() => c.setView(clearedView())}
-        >
-          Clear <span className={styles.clearCount}>{clearCount}</span>
-        </Button>
-      ) : null}
+      <ClearFiltersButton
+        count={clearCount}
+        onClear={() => c.setView(clearedView())}
+        data-part="items-clear-btn"
+      />
     </div>
   );
 }

@@ -206,7 +206,7 @@ function VersionLine({ state, env }: { state: VersionState; env: string }) {
         </dl>
       )}
       <span className={entry.versionRefresh}>
-        <Button variant="ghost" size="sm" aria-label={`Refresh versions of ${env}`} onPress={noop}>
+        <Button variant="neutral" size="sm" aria-label={`Refresh versions of ${env}`} onPress={noop}>
           Refresh
         </Button>
       </span>
@@ -290,7 +290,7 @@ export function EnvBox({
         ) : null}
       </span>
       <span className={entry.envActions}>
-        <Button size="sm" variant="ghost" onPress={noop}>
+        <Button size="sm" variant="neutral" onPress={noop}>
           Details
         </Button>
       </span>
@@ -533,7 +533,7 @@ function NewExperimentHeader() {
       title="New experiment"
       description="Pick where it runs and what to start from. You can change anything in Customize."
       actions={
-        <Button variant="ghost" size="sm" onPress={noop}>
+        <Button variant="neutral" size="sm" onPress={noop}>
           All experiments
         </Button>
       }
@@ -688,7 +688,7 @@ export function ReviewMock({
           <ul className={review.changes}>
             <li className={review.change}>
               <span>Datasets changed</span>
-              <Button size="sm" variant="ghost" onPress={noop}>
+              <Button size="sm" variant="neutral" onPress={noop}>
                 Edit
               </Button>
             </li>
@@ -723,7 +723,7 @@ export function ReviewMock({
           )}
         </section>
         <div className={review.actions}>
-          <Button variant="ghost" onPress={noop}>
+          <Button variant="neutral" onPress={noop}>
             Cancel
           </Button>
           <Button variant="neutral" onPress={noop}>
@@ -786,7 +786,7 @@ function Step1Page({ review: pane }: { review: ReactNode }) {
             </div>
           </div>
           <div className={styles.stepNav}>
-            <Button variant="ghost" onPress={noop}>
+            <Button variant="neutral" onPress={noop}>
               Cancel
             </Button>
             <Button variant="neutral" onPress={noop}>
@@ -839,7 +839,7 @@ function RawJsonCard({ error }: { error?: string }) {
           </Callout>
         ) : null}
         <div className={review.actions}>
-          <Button variant="ghost" onPress={noop}>
+          <Button variant="neutral" onPress={noop}>
             Revert to form
           </Button>
           <Button variant="neutral" onPress={noop}>
@@ -1118,12 +1118,12 @@ function DetailPage() {
           'Base: Default preset v1',
           'production, staging, qa-lab',
         ]}
+        actions={
+          <Button variant="danger" onPress={noop}>
+            Cancel experiment
+          </Button>
+        }
       />
-      <div className={detail.headerActions}>
-        <Button variant="danger" size="md" onPress={noop}>
-          Cancel experiment
-        </Button>
-      </div>
       <Card as="section" aria-label="Datasets and task" tone="meta">
         <div className={panel.cardStack}>
           <KeyValueGrid
@@ -1174,11 +1174,11 @@ function DetailPage() {
       <StatStrip
         aria-label="Job totals"
         items={[
-          { key: 'jobs', label: 'Jobs', value: 9 },
-          { key: 'ok', label: 'Succeeded', value: 2, tone: 'success' },
-          { key: 'failed', label: 'Failed', value: 0 },
-          { key: 'live', label: 'In progress', value: 3, tone: 'accent' },
-          { key: 'cancelled', label: 'Cancelled', value: 0 },
+          { key: 'jobs', label: 'Jobs', value: 9, icon: <Icon name="flask" /> },
+          { key: 'ok', label: 'Succeeded', value: 2, tone: 'success', icon: <Icon name="check" /> },
+          { key: 'failed', label: 'Failed', value: 0, icon: <Icon name="close" /> },
+          { key: 'live', label: 'In progress', value: 3, tone: 'info', icon: <Icon name="clock" /> },
+          { key: 'cancelled', label: 'Cancelled', value: 0, tone: 'warning', icon: <Icon name="stop" /> },
         ]}
       />
       <MatrixMock />
@@ -1187,7 +1187,7 @@ function DetailPage() {
           <SectionHeader
             id="mock-history-title"
             title="Job history"
-            description="Refreshing automatically while jobs are queued or running. Grouped by dataset version."
+            description="Updates automatically. Grouped by dataset version."
           />
           <JobsTable />
         </div>

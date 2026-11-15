@@ -1,5 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useLiveSources, useLiveTurn, type LiveTurnsPage } from '@/api/live';
+import { useModelIndex } from '@/api/dashboard';
+import { useLiveTurn, type LiveTurnsPage } from '@/api/live';
+import { projectPath } from '@/app/routes';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
@@ -31,17 +33,13 @@ const tabs = [
 export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: string; turnId: string }) {
   const queryClient = useQueryClient();
   const query = useLiveTurn(slug, turnId, source);
+  const modelIndex = useModelIndex(slug);
   const { get, replaceUrlQuery } = useSearchParamsState();
   const selected = get('tab', 'diagnosis');
   const tab = tabs.some((item) => item.id === selected) ? selected : 'diagnosis';
   const showSkeleton = useDelayedPending(query.isPending);
   useDocumentTitle(`${query.data?.turn.question ?? 'Turn'} · Live`);
   const data = query.data;
-  const sources = useLiveSources(slug);
-  const sourceInfo = sources.data?.sources.find(
-    (item) => item.key === source || item.id === source || item.id === data?.turn.source_id,
-  );
-  const zone = sourceInfo?.day_key_timezone;
   const chartSlots =
     query.isPending && tab === 'charts'
       ? (queryClient
@@ -56,6 +54,10 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
           error={query.error}
           title="Couldn’t load this turn"
           notFoundMessage="This turn is not in qym"
+          parent={{
+            to: `${projectPath(slug, 'live/turns')}?source=${encodeURIComponent(source)}`,
+            label: 'Turns',
+          }}
           onRetry={() => void query.refetch()}
         />
       ) : null}
@@ -113,7 +115,7 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
         </div>
       ) : data ? (
         <>
-          <TurnHeader data={data} slug={slug} source={source} zone={zone} />
+          <TurnHeader data={data} slug={slug} source={source} />
           <TurnTiles data={data} />
           <div data-live-block="tabs">
             <Tabs
@@ -123,13 +125,13 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
               onSelect={(next) => replaceUrlQuery({ tab: next === 'diagnosis' ? null : next })}
             >
               <TabPanel id="diagnosis" className={styles.panel}>
-                <DiagnosisTab data={data} />
+                <DiagnosisTab data={data} modelIndex={modelIndex} />
               </TabPanel>
               <TabPanel id="answer" className={styles.panel}>
-                <AnswerSqlTab data={data} />
+                <AnswerSqlTab data={data} modelIndex={modelIndex} />
               </TabPanel>
               <TabPanel id="judges" className={styles.panel}>
-                <JudgesTab data={data} />
+                <JudgesTab data={data} modelIndex={modelIndex} />
               </TabPanel>
               <TabPanel id="charts" className={styles.panel}>
                 <ChartsTab data={data} />
@@ -138,10 +140,10 @@ export function LiveTurnPage({ slug, source, turnId }: { slug: string; source: s
                 <ServicesTab data={data} />
               </TabPanel>
               <TabPanel id="conversation" className={styles.panel}>
-                <ConversationTab data={data} slug={slug} source={source} zone={zone} />
+                <ConversationTab data={data} slug={slug} source={source} />
               </TabPanel>
               <TabPanel id="evaluator" className={styles.panel}>
-                <EvaluatorTab data={data} />
+                <EvaluatorTab data={data} modelIndex={modelIndex} />
               </TabPanel>
             </Tabs>
           </div>

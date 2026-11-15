@@ -1,6 +1,6 @@
 import type { LiveTurnDetail } from '@/api/live';
 import { splitBilingual } from '@/lib/text';
-import { Card, Eyebrow, KeyValueGrid, Tag, Text } from '@/ui';
+import { EmptyState, Card, Eyebrow, KeyValueGrid, Tag, Text } from '@/ui';
 import {
   comparisonRows,
   numberOf,
@@ -54,7 +54,7 @@ export function DiagnosisVerdict({ data }: { data: LiveTurnDetail }) {
         {en || ar ? (
           <Bilingual en={en || null} ar={ar || null} />
         ) : (
-          <Text tone="muted">No diagnosis explanation available for this turn.</Text>
+          <EmptyState compact title="No diagnosis explanation available for this turn" />
         )}
         <Text as="h3" variant="md" weight={600}>
           How we got here

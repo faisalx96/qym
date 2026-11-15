@@ -1,6 +1,6 @@
 import { Button, Select } from '@/ui';
 import type { BestRunScopePayload } from '@/api/launch';
-import { keyWords, runCount } from './lib';
+import { runCount } from './lib';
 import styles from './bestrun.module.css';
 
 const ANY = '__any__';
@@ -74,18 +74,15 @@ export function ScopePrompt({
           value={dataset && draft.versionId ? draft.versionId : ANY}
           onChange={(k) => onDraft({ ...draft, versionId: k === ANY || k == null ? '' : String(k) })}
         />
-        {Object.keys(versioning)
-          .sort()
-          .map((key) => {
-            const words = keyWords(key);
-            const label = words.charAt(0).toUpperCase() + words.slice(1);
+        {Object.keys(versioning).map((key) => {
+            // the key as reported (round 10, C-3-10), in the payload's order
             return (
               <Select
                 key={key}
                 className={styles.select}
-                label={label}
+                label={key}
                 items={[
-                  { key: ANY, label: `Any ${words}` },
+                  { key: ANY, label: 'Any value' },
                   ...(versioning[key] ?? []).map((v) => ({
                     key: v.value,
                     label: `${v.value} · ${runCount(v.run_count)}`,

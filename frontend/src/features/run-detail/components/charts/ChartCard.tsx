@@ -1,15 +1,17 @@
 /**
- * ChartCard (round 3 P1): the one card every chart on the run page lives in. A `Card fill` with a header slot
- * (title on the left; meta, legend and the card's own controls on the right) and the plot as its body. The plot slot
+ * ChartCard (round 3 P1): the one card every chart on the run page lives in. A `Card fill` that opens with a `CardTitle`
+ * (title on the left; meta, legend and the card's own controls on the right; no rule under it, cv4 X1 and X16) and the plot as its body. The plot slot
  * is at least 146px high and grows with a grid-stretched card, so extra height goes to the plot, never to empty space.
  */
 import type { ReactNode } from 'react';
-import { Card, HelpMarker, type CardBand, type CardSeries, type CardTone } from '@/ui';
+import { Card, CardTitle, HelpMarker, type CardBand, type CardSeries, type CardTone } from '@/ui';
 import styles from './ChartCard.module.css';
 
 export interface ChartCardProps {
   /** Card title (also the section's accessible name). */
   title: string;
+  /** Muted text right after the title (a date window). */
+  titleMeta?: ReactNode;
   /** Accessible name of the card when it differs from the visible title (default: the title). */
   ariaLabel?: string;
   /** Native tooltip of the title (e.g. the metric's direction). */
@@ -39,6 +41,7 @@ export interface ChartCardProps {
 
 export function ChartCard({
   title,
+  titleMeta,
   ariaLabel,
   titleHint,
   meta,
@@ -64,23 +67,27 @@ export function ChartCard({
       tone={tone}
       series={series}
       className={[styles.chartCard, className].filter(Boolean).join(' ')}
-      header={
-        <div className={styles.head}>
-          <span className={styles.title} title={titleHint}>
-            {title}
-          </span>
-          {legend || controls || meta || help ? (
-            <span className={styles.headRight}>
+      {...rest}
+    >
+      <CardTitle
+        className={styles.head}
+        title={
+          <>
+            <span title={titleHint}>{title}</span>
+            {titleMeta ? <span className={styles.titleMeta}>{titleMeta}</span> : null}
+          </>
+        }
+        aside={
+          legend || controls || meta || help ? (
+            <>
               {legend}
               {controls}
               {meta}
               {help ? <HelpMarker label={help.label}>{help.text}</HelpMarker> : null}
-            </span>
-          ) : null}
-        </div>
-      }
-      {...rest}
-    >
+            </>
+          ) : undefined
+        }
+      />
       {intro ? <div className={styles.intro}>{intro}</div> : null}
       <div className={styles.slot} data-slot={slot === 'box' ? 'box' : slot ? 'plot' : 'free'}>
         {children}

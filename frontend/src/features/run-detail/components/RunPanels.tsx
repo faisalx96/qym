@@ -2,18 +2,32 @@
 import { useState } from 'react';
 import { projectPath } from '@/app/routes';
 import { JobStatusBadge } from '@/features/experiments/components/StatusBadges';
-import { Card, Flag, LinkButton, StatusMark, Tag, type StatusShape, type StatusTone } from '@/ui';
+import {
+  Card,
+  CardTitle,
+  Disclosure,
+  Flag,
+  InlineNotice,
+  LinkButton,
+  StateTag,
+  Tag,
+  Timeline,
+  UserName,
+  type StateTagTone,
+  type TimelineItem,
+} from '@/ui';
+import { formatTableDate } from '@/lib/dates';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
 
-/** Each review event as a StatusMark (C174): the figure is the non-colour cue. */
-const ACTIONS: Record<string, { label: string; tone: StatusTone; shape: StatusShape }> = {
-  submit: { label: 'Submitted', tone: 'neutral', shape: 'hourglass' },
-  approve: { label: 'Approved', tone: 'success', shape: 'check' },
-  reject: { label: 'Rejected', tone: 'danger', shape: 'cross' },
-  unapprove: { label: 'Approval withdrawn', tone: 'warning', shape: 'ring' },
-  unreject: { label: 'Rejection withdrawn', tone: 'warning', shape: 'ring' },
+/** Each review event is a decision in a log, so a StateTag: Approved success, Rejected danger, all others neutral. */
+const ACTIONS: Record<string, { label: string; tone: StateTagTone }> = {
+  submit: { label: 'Submitted', tone: 'neutral' },
+  approve: { label: 'Approved', tone: 'success' },
+  reject: { label: 'Rejected', tone: 'danger' },
+  unapprove: { label: 'Approval withdrawn', tone: 'neutral' },
+  unreject: { label: 'Rejection withdrawn', tone: 'neutral' },
 };
 
 export function who(u: { display_name?: string; email?: string; id?: string } | null | undefined): string {
@@ -31,54 +45,71 @@ export function selfApprovals(events: ReviewHistoryEvent[]): Set<number> {
   return out;
 }
 
-function HistoryEntry({ event, selfApproved }: { event: ReviewHistoryEvent; selfApproved: boolean }) {
+/** The rail mark of each review event (cv5 Z6): the glyph names the step, the tone repeats only a decision. */
+const MARKS: Record<string, Pick<TimelineItem, 'icon' | 'tone'>> = {
+  submit: { icon: 'send' },
+  approve: { icon: 'check', tone: 'success' },
+  reject: { icon: 'close', tone: 'danger' },
+  unapprove: { icon: 'retry' },
+  unreject: { icon: 'retry' },
+};
+
+function reviewItem(event: ReviewHistoryEvent, i: number, selfApproved: boolean): TimelineItem {
   const action = ACTIONS[event.action] ?? {
     label: String(event.action || 'Changed'),
     tone: 'neutral' as const,
-    shape: 'ring' as const,
   };
-  return (
-    <li className={styles.entry} data-action={event.action}>
-      <div className={styles.entryHead}>
-        <StatusMark tone={action.tone} shape={action.shape} label={action.label} />
-        <span className={styles.actor}>{who(event.actor)}</span>
+  return {
+    key: String(i),
+    time: event.at ? formatTableDate(event.at) : undefined,
+    timeTitle: event.at ? formatIsoDateTime(event.at) : undefined,
+    dateTime: event.at ?? undefined,
+    ...(MARKS[event.action] ?? { icon: 'edit' }),
+    title: (
+      <span className={styles.entryTitle} data-action={event.action}>
+        <StateTag tone={action.tone}>{action.label}</StateTag>
+        {event.on_behalf_of ? <span>on behalf of {who(event.on_behalf_of)}</span> : null}
+        {event.to_status && (event.action === 'unapprove' || event.action === 'unreject') ? (
+          <span>returned the run to {String(event.to_status).toLowerCase()}</span>
+        ) : null}
+      </span>
+    ),
+    meta: (
+      <>
+        <UserName id={event.actor?.id} name={who(event.actor)} email={event.actor?.email} />
         {selfApproved ? (
           <Flag tone="warning" icon="user" title="The same person submitted and approved this run">
             Self-approved
           </Flag>
         ) : null}
-        {event.on_behalf_of ? <span>on behalf of {who(event.on_behalf_of)}</span> : null}
-        {event.to_status && (event.action === 'unapprove' || event.action === 'unreject') ? (
-          <span>returned the run to {String(event.to_status).toLowerCase()}</span>
-        ) : null}
-        {event.at ? (
-          <time className={styles.when} dateTime={event.at}>
-            {formatIsoDateTime(event.at)}
-          </time>
-        ) : null}
-      </div>
-      {event.comment ? <div className={styles.comment}>“{event.comment}”</div> : null}
-      {event.recorded === false ? (
-        <div className={styles.note}>
-          Reconstructed from the approval record; earlier changes were not kept.
-        </div>
-      ) : null}
-    </li>
-  );
+      </>
+    ),
+    detail:
+      event.comment || event.recorded === false ? (
+        <>
+          {event.comment ? <span className={styles.comment}>“{event.comment}”</span> : null}
+          {event.recorded === false ? (
+            <span className={styles.note}>Reconstructed from the approval record; earlier changes were not kept.</span>
+          ) : null}
+        </>
+      ) : undefined,
+  };
 }
 
 /**
  * The run's review log, oldest first (C027: it opens from the hero's History button; there is no Review history
- * card). Comments render as text, never HTML.
+ * card), as the shared Timeline (cv5 Z6). Comments render as text, never HTML.
  */
 export function ReviewLogList({ events }: { events: ReviewHistoryEvent[] }) {
   const self = selfApprovals(events);
   return (
-    <ol className={styles.list} data-testid="review-log">
-      {events.map((event, i) => (
-        <HistoryEntry key={i} event={event} selfApproved={self.has(i)} />
-      ))}
-    </ol>
+    <div data-testid="review-log">
+      <Timeline
+        aria-label="Review history"
+        markAlign="start"
+        items={events.map((event, i) => reviewItem(event, i, self.has(i)))}
+      />
+    </div>
   );
 }
 
@@ -169,7 +200,9 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
     [
       'Experiment',
       experimentHref ? (
-        <a href={experimentHref}>{String(p.experiment_name ?? experimentId.slice(0, 8))}</a>
+        <a href={experimentHref} data-link="name">
+          {String(p.experiment_name ?? experimentId.slice(0, 8))}
+        </a>
       ) : (
         String(p.experiment_name ?? (experimentId.slice(0, 8) || '—'))
       ),
@@ -195,45 +228,47 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
   if (p.error) fields.push(['Job error', String(p.error), true]);
   return (
     <Card as="section" aria-labelledby="rxp-title" data-testid="experiment-panel">
-      <div className={styles.expHead}>
-        <div>
-          <div className={styles.titleRow}>
-            <h2 className={styles.title} id="rxp-title">
-              Experiment
-            </h2>
-            <Tag kind="accent">Official run</Tag>
-          </div>
-          <div className={styles.copy}>
-            Launched by qym on a registered environment. Settings show this run’s combination.
-          </div>
-        </div>
-        <div className={styles.actions}>
-          {experimentHref ? (
-            <LinkButton to={experimentHref} variant="neutral" size="sm">
-              Open experiment
-            </LinkButton>
-          ) : null}
-          {rerunHref ? (
-            <LinkButton
-              to={rerunHref}
-              variant="accent"
-              size="sm"
-              title="Open the launch form prefilled with this run’s configuration"
-            >
-              Run again
-            </LinkButton>
-          ) : (
-            <span className={styles.disabledHint} title="The experiment no longer exists">
-              Run again unavailable
-            </span>
-          )}
-          {promoteHref && promotable ? (
-            <LinkButton to={promoteHref} variant="neutral" size="sm">
-              Promote to default preset
-            </LinkButton>
-          ) : null}
-        </div>
-      </div>
+      <CardTitle
+        as="h2"
+        id="rxp-title"
+        title={
+          <span className={styles.titleRow}>
+            Experiment
+            <Flag tone="info" icon="shield">
+              Official run
+            </Flag>
+          </span>
+        }
+        description="Launched by qym on a registered environment. Settings show this run’s combination."
+        aside={
+          <>
+            {experimentHref ? (
+              <LinkButton to={experimentHref} variant="neutral" size="sm">
+                Open experiment
+              </LinkButton>
+            ) : null}
+            {rerunHref ? (
+              <LinkButton
+                to={rerunHref}
+                variant="accent"
+                size="sm"
+                title="Open the launch form prefilled with this run’s configuration"
+              >
+                Run again
+              </LinkButton>
+            ) : (
+              <span className={styles.disabledHint} title="The experiment no longer exists">
+                Run again unavailable
+              </span>
+            )}
+            {promoteHref && promotable ? (
+              <LinkButton to={promoteHref} variant="neutral" size="sm">
+                Promote to default preset
+              </LinkButton>
+            ) : null}
+          </>
+        }
+      />
       {!p.job_available ? (
         <p className={styles.note}>
           The launch job is no longer available; showing the configuration stored on the run.
@@ -248,10 +283,9 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
         ))}
       </dl>
       {p.remote_result != null ? (
-        <details className={styles.result} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-          <summary>Service result</summary>
+        <Disclosure className={styles.result} title="Service result" open={open} onOpenChange={setOpen}>
           <pre className={styles.json}>{JSON.stringify(p.remote_result, null, 2)}</pre>
-        </details>
+        </Disclosure>
       ) : null}
     </Card>
   );
@@ -262,13 +296,13 @@ export function RunNotices({ run, readOnly }: { run: Run; readOnly: boolean }) {
   return (
     <>
       {readOnly ? (
-        <div className={styles.notice} role="note" data-testid="read-only-notice">
-          <b>{READ_ONLY_COPY.lead}</b> {READ_ONLY_COPY.body}
-        </div>
+        <InlineNotice tone="neutral" icon="info" lead={READ_ONLY_COPY.lead} data-testid="read-only-notice">
+          {READ_ONLY_COPY.body}
+        </InlineNotice>
       ) : lock ? (
-        <div className={styles.notice} role="note" data-testid="scores-locked-notice">
-          <b>{lock.lead}</b> {lock.body}
-        </div>
+        <InlineNotice tone="neutral" icon="info" lead={lock.lead} data-testid="scores-locked-notice">
+          {lock.body}
+        </InlineNotice>
       ) : null}
     </>
   );

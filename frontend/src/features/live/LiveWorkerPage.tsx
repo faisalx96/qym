@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
+import { useModelIndex } from '@/api/dashboard';
 import { useLiveSources } from '@/api/live';
 import {
   useCancelWorkerJob,
@@ -21,6 +22,7 @@ import { ErrorState, PageHeader, Skeleton, useToast } from '@/ui';
 import { SourceControl } from './components/SourceControl';
 import { StatusStrip } from './components/worker/StatusStrip';
 import { SettingsForm } from './components/worker/SettingsForm';
+import { WorkerActions } from './components/worker/WorkerActions';
 import { HistoryBlock } from './components/worker/HistoryBlock';
 import { JobsBlock } from './components/worker/JobsBlock';
 import { PROBLEMS_PAGE_SIZE, ProblemsBlock, type ProblemsProps } from './components/worker/ProblemsBlock';
@@ -32,6 +34,7 @@ import styles from './worker.module.css';
 
 export interface WorkerPageViewProps extends ProblemsProps, WorkerCallbacks {
   busy: WorkerBusy;
+  modelIndex?: Record<string, number> | null;
   sourceControl?: ReactNode;
   jobsLimit?: number;
 }
@@ -39,6 +42,7 @@ export interface WorkerPageViewProps extends ProblemsProps, WorkerCallbacks {
 export function WorkerPageView({
   read,
   busy,
+  modelIndex,
   sourceControl,
   onState,
   onKey,
@@ -53,28 +57,33 @@ export function WorkerPageView({
   const [range, setRange] = useState(false);
   return (
     <div className={`${fullWidth} ${liveStyles.page}`}>
-      <PageHeader title="Worker" meta={sourceControl ? [sourceControl] : undefined} />
+      <PageHeader
+        title="Worker"
+        meta={sourceControl ? [sourceControl] : undefined}
+        actions={
+          <WorkerActions read={read} busy={busy} onState={onState} onBackfill={() => setRange(true)} />
+        }
+      />
       <div className={styles.grid}>
-        <StatusStrip
-          read={read}
-          busy={busy}
-          onState={onState}
-          onKey={onKey}
-          onBackfill={() => setRange(true)}
-        />
+        <StatusStrip read={read} />
         <ProblemsBlock {...problems} read={read} />
         <JobsBlock
           jobs={read.jobs}
           workerJob={read.running?.job}
-          zone={read.status.day_key_timezone}
           busy={busy}
-          onBackfill={() => setRange(true)}
           onCancelJob={onCancelJob}
           jobsLimit={jobsLimit}
           onJobsLimit={onJobsLimit}
         />
         <div className={styles.settingsRow}>
-          <SettingsForm read={read} busy={busy.save} onSave={onSave} />
+          <SettingsForm
+            read={read}
+            busy={busy.save}
+            busyKey={busy.key}
+            onSave={onSave}
+            onKey={onKey}
+            modelIndex={modelIndex}
+          />
           <HistoryBlock
             versions={read.versions}
             runningVersion={read.running?.settings_version_applied}
@@ -165,6 +174,7 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
   const restore = useRestoreWorkerSettings(slug, source);
   const createJob = useCreateWorkerJob(slug, source);
   const cancelJob = useCancelWorkerJob(slug, source);
+  const modelIndex = useModelIndex(slug);
   useEffect(() => {
     if (location.hash === '#problems' && query.data)
       document.getElementById('problems')?.scrollIntoView?.({ block: 'start' });
@@ -213,6 +223,7 @@ function WorkerPage({ slug, source }: { slug: string; source: string }) {
         source={source}
         status={status}
         sourceControl={sourceControl}
+        modelIndex={modelIndex}
         events={events.data?.events ?? []}
         eventsTotal={events.data?.total}
         eventsFilters={filters}

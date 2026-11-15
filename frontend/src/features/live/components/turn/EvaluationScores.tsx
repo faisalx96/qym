@@ -3,8 +3,7 @@ import type { LiveTurnDetail } from '@/api/live';
 import { splitBilingual } from '@/lib/text';
 import { Button, DataTable, Subsection, Text, TextBlock, type Column } from '@/ui';
 import { MetricDetailBody } from '@/features/run-detail/components/items/MetricStrip';
-import { Bilingual } from './Evidence';
-import { ThresholdScore } from './ThresholdScore';
+import { Bilingual, MetricValue } from './Evidence';
 import styles from './EvaluatorTab.module.css';
 
 type Score = LiveTurnDetail['scores'][number];
@@ -55,7 +54,7 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
         !row.skipped && row.score_numeric === null && (row.label || typeof row.score_raw === 'string') ? (
           <Text dir="auto">{row.label ?? String(row.score_raw)}</Text>
         ) : (
-          <ThresholdScore value={row.skipped ? null : row.score_numeric} spec={row.spec} />
+          <MetricValue value={row.skipped ? null : row.score_numeric} spec={row.spec} />
         ),
     },
     {
@@ -113,7 +112,7 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
             'aria-controls': row.id === selected ? panelId : undefined,
           })}
           rowClassName={(row) => (row.id === selected ? styles.selected : undefined)}
-          empty={<Text tone="muted">No evaluation scores available for this turn.</Text>}
+          empty="No evaluation scores for this turn"
         />
         {score ? (
           <section
@@ -123,8 +122,8 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
           >
             <div className={styles.inline}>
               <Text weight={600}>{score.spec?.label ?? score.metric_name}</Text>
-              <ThresholdScore value={score.skipped ? null : score.score_numeric} spec={score.spec} />
-              <Button variant="ghost" onPress={close}>
+              <MetricValue value={score.skipped ? null : score.score_numeric} spec={score.spec} />
+              <Button variant="neutral" onPress={close}>
                 Close
               </Button>
             </div>

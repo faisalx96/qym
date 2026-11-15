@@ -7,14 +7,16 @@ import { forwardRef, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { stepLatencyUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import {
+  ActionTile,
   Button,
   Card,
+  CardTitle,
   ChartTooltipHost,
+  CountTile,
   DropdownMenu,
   Icon,
   SearchField,
   SegmentedControl,
-  Text,
   useMarkTip,
   Tag,
 } from '@/ui';
@@ -206,23 +208,21 @@ export const StepTimings = forwardRef<
     <Card as="section" ref={ref} id="lt-steps" className={styles.box} aria-label="Step timings">
       <div className={styles.inner}>
         <div className={styles.head}>
-          <div className={styles.titles}>
-            <Text variant="md" weight={600} as="h4" className={styles.title}>
-              Step timings
-            </Text>
-            <Text variant="sm" tone="muted" as="p" className={styles.desc}>
-              How long one call of each step takes, and how much it varies.
-            </Text>
-          </div>
-          <div className={styles.tools}>
+          <CardTitle
+            as="h4"
+            title="Step timings"
+            description="How long one call of each step takes, and how much it varies."
+          />
+          {/* cv4 C2-1: the table toolbar on its own row, as the Items bar: search first, the toggles, Export at the end */}
+          <div className={styles.tools} role="toolbar" aria-label="Step timings view">
             <SearchField
-              label="Find a step or model"
+              label="Search steps and models"
               hideLabel
-              placeholder="Find a step or model"
+              placeholder="Search steps and models"
               value={view.query}
               onChange={(query) => patch({ query })}
               onClear={() => patch({ query: '' })}
-              width={200}
+              width="var(--search-width)"
             />
             <SegmentedControl
               label="Group steps"
@@ -242,20 +242,31 @@ export const StepTimings = forwardRef<
               value={view.scale}
               onChange={(scale) => patch({ scale })}
             />
-            <DropdownMenu
-              label="Export step timings"
-              trigger={
-                <Button variant="accent" icon={<Icon name="download" size={12} />}>
-                  Export
-                </Button>
-              }
-              items={[
-                { id: 'csv-summary', label: 'CSV summary' },
-                { id: 'csv-spans', label: 'CSV raw spans' },
-                { id: 'svg', label: 'SVG plot', disabled: !rows.length },
-              ]}
-              onAction={onExport}
-            />
+            <span className={styles.toolsEnd}>
+              <DropdownMenu
+                label="Export step timings"
+                trigger={
+                  <Button
+                    variant="accent"
+                    icon={<Icon name="download" size={12} />}
+                  >
+                    Export
+                  </Button>
+                }
+                items={[
+                  { id: 'csv-summary', label: 'CSV summary', icon: <ActionTile icon="sheet" /> },
+                  { id: 'csv-spans', label: 'CSV raw spans', icon: <ActionTile icon="sheet" /> },
+                  {
+                    id: 'svg',
+                    label: 'SVG plot',
+                    icon: <ActionTile icon="picture" />,
+                    disabled: !rows.length,
+                    disabledReason: rows.length ? undefined : 'No step matches the search',
+                  },
+                ]}
+                onAction={onExport}
+              />
+            </span>
           </div>
         </div>
         {tree.length ? (
@@ -297,7 +308,7 @@ export const StepTimings = forwardRef<
                           </small>
                         </>
                       ) : null}
-                      {isGroup ? <span className={styles.count}>{countLeaves(node)}</span> : null}
+                      {isGroup ? <CountTile className={styles.count}>{countLeaves(node)}</CountTile> : null}
                     </span>
                   );
                   return (

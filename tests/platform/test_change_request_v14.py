@@ -69,7 +69,7 @@ def test_the_request_example_of_section_3_1_is_accepted_and_sent_as_documented(c
     example = _example('"datasets"', "jsonc")
     entries = [{k: v for k, v in e.items() if v is not None} for e in example["datasets"]]
     production, _staging = two_envs
-    res = _create(client, [production.id], spec=multi_spec(entries, task=example["task"]))
+    res = _create(client, [production.id], spec=multi_spec(entries, task=example["task"], run_shape="combined"))
     assert res.status_code == 200, res.text
     (job,) = _jobs(session_factory, res.json()["id"])
     sent = job.request_body["evaluator"]

@@ -11,14 +11,16 @@ export interface TooltipProps {
   content: ReactNode;
   delay?: number;
   placement?: AriaTooltipProps['placement'];
-  /** A focusable React Aria trigger (Button/IconButton). */
+  /** No tooltip for now; the trigger keeps its DOM node (cv5 Y9: a chip that only sometimes has a reason). */
+  isDisabled?: boolean;
+  /** A focusable React Aria trigger (Button/IconButton, or any element inside `Focusable`). */
   children: ReactNode;
 }
 
 /** Plain tooltip for icon-only actions; hover + focus. */
-export function Tooltip({ content, delay = 400, placement = 'top', children }: TooltipProps) {
+export function Tooltip({ content, delay = 400, placement = 'top', isDisabled, children }: TooltipProps) {
   return (
-    <TooltipTrigger delay={delay}>
+    <TooltipTrigger delay={delay} isDisabled={isDisabled}>
       {children}
       <AriaTooltip className={styles.tooltip} placement={placement} offset={6}>
         <OverlayArrow className={styles.arrow}>

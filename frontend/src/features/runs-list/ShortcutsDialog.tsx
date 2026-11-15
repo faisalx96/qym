@@ -16,7 +16,6 @@ export function ShortcutsDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Keyboard shortcuts"
-      size="sm"
       description="Shortcuts never fire inside inputs, dialogs or open menus."
       data-testid="shortcuts-dialog"
     >

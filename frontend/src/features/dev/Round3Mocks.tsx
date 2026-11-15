@@ -130,7 +130,7 @@ export function RunHeaderMock({ width }: { width?: number }) {
             ))}
           </div>
           <Button
-            variant="ghost"
+            variant="neutral"
             size="sm"
             className={styles.moreBtn}
             aria-expanded={more}
@@ -722,10 +722,10 @@ function KeyRow({
         </button>
         {isOpen && nested && kids.length ? (
           <span className={styles.keyActions}>
-            <Button variant="ghost" size="sm" onPress={() => setMany(kids, true)}>
+            <Button variant="neutral" size="sm" onPress={() => setMany(kids, true)}>
               Expand all
             </Button>
-            <Button variant="ghost" size="sm" onPress={() => setMany(kids, false)}>
+            <Button variant="neutral" size="sm" onPress={() => setMany(kids, false)}>
               Collapse all
             </Button>
           </span>
@@ -938,10 +938,10 @@ export function ItemDetailsMock({ variant }: { variant: 'en1' | 'ar10' | 'en10' 
                 { value: 'raw', label: 'Raw' },
               ]}
             />
-            <Button variant="ghost" size="sm" onPress={() => setMany(allPaths(cols), true)}>
+            <Button variant="neutral" size="sm" onPress={() => setMany(allPaths(cols), true)}>
               Expand all
             </Button>
-            <Button variant="ghost" size="sm" onPress={() => setMany(allPaths(cols), false)}>
+            <Button variant="neutral" size="sm" onPress={() => setMany(allPaths(cols), false)}>
               Collapse all
             </Button>
           </span>
@@ -1095,7 +1095,7 @@ export function ItemDetailsMock({ variant }: { variant: 'en1' | 'ar10' | 'en10' 
           </div>
         </div>
         <Button
-          variant="ghost"
+          variant="neutral"
           size="sm"
           className={styles.moreMetrics}
           onPress={() => setMoreMetrics((v) => !v)}

@@ -187,7 +187,7 @@ test.describe('latency filter (scenario 10)', () => {
     await bars.nth(Math.floor(n / 2)).click();
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(60);
     await expect.poll(() => params(page).get('filters') ?? '').toContain('latency');
-    await expect(page.getByRole('button', { name: /Remove filter .*(ms|s)/i }).first()).toBeVisible();
+    await expect(page.locator('[data-run-filters]').getByText(/(ms|s)/i).first()).toBeVisible();
     await page.getByTestId('nav-clear-filters').click();
     await expect.poll(() => itemsCount(page)).toEqual([60, 60]);
   });

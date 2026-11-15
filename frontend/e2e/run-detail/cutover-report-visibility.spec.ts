@@ -72,18 +72,18 @@ test('run page: errors, root causes and categories vanish with the filtered data
   await search.fill('clean question');
   await expect.poll(() => itemsCount(page)).toEqual([1, 4]);
   await tab(page, 'Errors');
-  await expect(page.getByText('No errors in the current view.')).toBeVisible();
+  await expect(page.getByText('No errors in this view')).toBeVisible();
   await tab(page, 'Root cause');
   await expect(page.getByText('Reasoning Error')).toHaveCount(0);
   await expect(page.getByText(/No root causes recorded yet/)).toBeVisible();
   await tab(page, 'Categories');
-  await expect(page.getByText('No metadata categories to break down.')).toBeVisible();
+  await expect(page.getByText('No metadata categories to break down')).toBeVisible();
 
   // nothing matches: no scored items, and the search box stays to change it
   await search.fill('no matching question');
   await expect.poll(() => itemsCount(page)).toEqual([0, 4]);
   await tab(page, 'Overview');
-  await expect(page.getByText('No scored items for the current filters.')).toBeVisible();
+  await expect(page.getByText('No scored items for these filters')).toBeVisible();
   await expect(search).toBeVisible();
 
   // clearing brings every report back

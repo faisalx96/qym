@@ -1,7 +1,7 @@
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
-import { useCurrentCrumbLabel } from '@/lib/crumb-label';
+import { useCurrentCrumbLabel, useCurrentItemCrumbLabel } from '@/lib/crumb-label';
 import { LIST_PARAM, normalizeContext } from '@/lib/runs-order';
 import { Icon } from '@/ui';
 import { ProjectSwitcher } from './ProjectSwitcher';
@@ -21,6 +21,7 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
   const { pathname } = useLocation();
   const [params] = useSearchParams();
   const pageLabel = useCurrentCrumbLabel();
+  const itemLabel = useCurrentItemCrumbLabel();
   const crumbs: { label: string; to?: string; mono?: boolean }[] = [];
   if (project) {
     if (route.page === 'run-detail' && route.runId) {
@@ -64,6 +65,11 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
           : { label: pageLabel || 'Environment' },
       );
       if (nested) crumbs.push({ label: 'Default preset' });
+    } else if (route.page === 'environments') {
+      crumbs.push(
+        { label: 'Experiments', to: projectPath(project.slug, 'experiments') },
+        { label: 'Environments' },
+      );
     } else if (route.page === 'datasets' && params.get('view') === 'deleted') {
       // C233: Datasets is a crumb, so Deleted datasets needs no in-page back link
       crumbs.push(
@@ -71,10 +77,10 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
         { label: 'Deleted datasets' },
       );
     } else if (route.page === 'datasets' && /\/datasets\/[^/]+/.test(pathname)) {
-      crumbs.push(
-        { label: 'Datasets', to: projectPath(project.slug, 'datasets') },
-        { label: pageLabel || 'Dataset' },
-      );
+      const item = params.get('item');
+      crumbs.push({ label: 'Datasets', to: projectPath(project.slug, 'datasets') });
+      if (item) crumbs.push({ label: pageLabel || 'Dataset', to: pathname }, { label: itemLabel || item });
+      else crumbs.push({ label: pageLabel || 'Dataset' });
     } else {
       crumbs.push({ label: route.label });
     }

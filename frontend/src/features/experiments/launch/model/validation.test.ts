@@ -128,7 +128,7 @@ describe('local errors', () => {
     d = updateMetaRow(d, metaRowsOf(d, evaluatorPanel)[0]!.id, { key: 'qym_x', raw: '1' }, evaluatorPanel);
     const items = localErrors(d, ctx);
     expect(items.map((i) => [i.label, i.stepId])).toEqual([
-      ['Evaluation inputs › Samples', 'eval'],
+      ['Evaluation inputs › Passes', 'eval'],
       ['Run metadata › qym_x', 'eval'],
     ]);
   });

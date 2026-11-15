@@ -90,10 +90,11 @@ describe('overview service and history blocks', () => {
             `/live/turns?${new URLSearchParams({ day: '2026-11-01', source: 'worker', ...filters })}`
           }
         />
+        <Location />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: '80% Search' })).toHaveAttribute(
-      'href',
+    fireEvent.click(screen.getByRole('button', { name: /Search/ }));
+    expect(screen.getByLabelText('URL')).toHaveTextContent(
       '/live/turns?day=2026-11-01&source=worker&service=search&service_status=not_ok',
     );
     expect(container.querySelector('[data-live-service="search"] [data-band]')).not.toBeNull();
@@ -109,10 +110,10 @@ describe('overview service and history blocks', () => {
     const { container } = render(<Canaries canaries={canaries} specs={specs} />);
     const marks = [...container.querySelectorAll('[data-live-canary]')];
     expect(marks.map((mark) => mark.getAttribute('data-live-canary'))).toEqual(['failed', 'search', 'other']);
-    expect(marks[0]).toHaveTextContent('Failed failed120 ms');
-    expect(marks[1]).toHaveTextContent('Search ok0 ms');
-    expect(marks[2]).toHaveTextContent('Other skipped—');
-    expect(marks[2]?.querySelector('[data-shape="pause"][data-tone="neutral"]')).not.toBeNull();
+    expect(marks[0]).toHaveTextContent('Failed Failed120ms');
+    expect(marks[1]).toHaveTextContent('Search OK0ms');
+    expect(marks[2]).toHaveTextContent('Other Skipped—');
+    expect(marks[2]?.querySelector('[data-kind="state"]:not([data-tone])')).not.toBeNull();
     expect(canaries[0]?.canary).toBe('search');
     expect(screen.queryByText('No canary results for this day')).toBeNull();
   });
@@ -147,21 +148,21 @@ describe('overview service and history blocks', () => {
     expect(container.querySelectorAll('[data-live-trend-day]')).toHaveLength(5);
     const gap = container.querySelector('[data-live-trend-day="2026-10-29"]')!;
     expect(gap).toHaveAttribute('data-live-gap', 'true');
-    expect(gap.querySelector('[data-part="baseline"]')?.getAttribute('style')).toContain(
+    expect(gap.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
       'repeating-linear-gradient',
     );
-    expect(gap.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain('var(--error) 0% 100%');
+    expect(gap.querySelector('[data-part="baseline"]')).toBeNull();
     expect(gap.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '1');
     expect(gap).toHaveStyle({ '--p': '0.25' });
     expect(container.querySelector('[data-live-trend-day="2026-10-28"] [data-part="axis"]')).toHaveAttribute(
       'data-text',
-      '28 Oct',
+      'Oct 28',
     );
     expect(container.querySelector('[data-live-trend-day="2026-11-01"] [data-part="axis"]')).toHaveAttribute(
       'data-text',
-      '1 Nov',
+      'Nov 1',
     );
-    expect(screen.getByText(/hatched baseline: worker gap/)).toBeVisible();
+    expect(gap).toHaveAccessibleName(/worker gap/);
     expect(container.querySelector('[data-live-trend-day="2026-10-31"]')).toHaveAttribute(
       'data-live-gap',
       'false',
@@ -172,9 +173,9 @@ describe('overview service and history blocks', () => {
     expect(points[2]).toHaveAttribute('cx', '90%');
     expect(points[2]).toHaveAttribute('cy', '100%');
     expect(points[0]?.closest('svg')).toHaveAttribute('aria-hidden', 'true');
-    fireEvent.click(screen.getByRole('radio', { name: '30' }));
+    fireEvent.click(screen.getByRole('radio', { name: '30d' }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('source=worker&days_page=2&trend_days=30');
-    fireEvent.click(screen.getByRole('button', { name: /2026-10-28: 4 turns/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Oct 28, 2026: 4 turns/ }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('trend_days=30&day=2026-10-28');
     expect(screen.getByText('Problem', { exact: true })).toBeVisible();
   });
@@ -202,15 +203,19 @@ describe('overview service and history blocks', () => {
     );
     const legendTones = values.map(({ label, tone }) => {
       const entry = screen.getByText(label, { exact: true }).closest('[data-tone]');
-      expect(entry).toHaveAttribute('data-tone', tone);
-      return entry?.getAttribute('data-tone');
+      expect(entry).toHaveAttribute(
+        'data-tone',
+        tone === 'accent' ? 'success' : tone === 'meta' ? 'neutral' : tone,
+      );
+      if (tone === 'meta') expect(entry).toHaveAttribute('data-dark');
+      return `${entry?.getAttribute('data-tone')}:${entry?.hasAttribute('data-dark')}`;
     });
     expect(new Set(legendTones).size).toBe(values.length);
     expect(screen.getByText('Undiagnosed').closest('[data-tone]')).toHaveAttribute('data-tone', 'neutral');
     expect(container.querySelector('[data-part="baseline"]')).toBeNull();
   });
 
-  it('keeps a zero count and baseline marker for an empty gap day', () => {
+  it('keeps an empty gap distinct with main hatch styling', () => {
     const { container } = render(
       <MemoryRouter>
         <TrendChart
@@ -222,8 +227,10 @@ describe('overview service and history blocks', () => {
         />
       </MemoryRouter>,
     );
-    expect(container.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '0');
-    expect(container.querySelector('[data-part="baseline"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '');
+    expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
+      'repeating-linear-gradient',
+    );
     expect(container.querySelector('[data-live-trend-day]')).toHaveStyle({ '--p': '0' });
   });
 
@@ -240,7 +247,7 @@ describe('overview service and history blocks', () => {
       </MemoryRouter>,
     );
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
-      'var(--accent-primary) 0% 50%',
+      'var(--success) 0% 50%',
     );
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
       'var(--text-muted) 50% 100%',
@@ -316,14 +323,16 @@ describe('overview service and history blocks', () => {
       </MemoryRouter>,
     );
     const open = container.querySelector('[data-live-day="2026-10-28"]')!;
-    expect(open.querySelector('[data-tone="danger"][data-shape="cross"]')).toHaveAttribute(
+    expect(open.querySelector('[data-kind="state"][data-tone="danger"]')).toHaveAttribute(
       'title',
       'Open day, worker not heard from',
     );
     expect(open).toHaveTextContent('Stale');
-    expect(container.querySelector('[data-live-day="2026-10-30"] [data-shape="full"]')).not.toBeNull();
     expect(
-      container.querySelector('[data-live-day="2026-10-29"] [data-tone="warning"][data-shape="hourglass"]'),
+      container.querySelector('[data-live-day="2026-10-30"] [data-kind="state"][data-tone="success"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-live-day="2026-10-29"] [data-kind="state"][data-tone="warning"]'),
     ).not.toBeNull();
   });
 
@@ -336,14 +345,16 @@ describe('overview service and history blocks', () => {
     );
     expect(screen.getByRole('columnheader', { name: 'Quality' })).toBeInTheDocument();
     const gap = container.querySelector('[data-live-day="2026-10-29"]')!;
-    expect(gap.querySelector('[data-tone="warning"][data-shape="hourglass"]')).toHaveAttribute(
+    expect(gap.querySelector('[data-kind="state"][data-tone="warning"]')).toHaveAttribute(
       'title',
-      'Worker gap: 7200 s between heartbeats',
+      'Worker gap: 7200s between heartbeats',
     );
     const running = container.querySelector('[data-live-day="2026-10-28"]')!;
-    expect(running.querySelector('[data-shape="orbit"]')).not.toBeNull();
+    expect(running.querySelector('[data-kind="state"][data-tone="info"]')).toHaveTextContent('Running');
     expect(running.querySelector('[data-mark][data-tone="danger"]')).not.toBeNull();
-    expect(container.querySelector('[data-live-day="2026-10-30"] [data-shape="full"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-live-day="2026-10-30"] [data-kind="state"][data-tone="success"]'),
+    ).toHaveTextContent('Closed');
     fireEvent.click(
       within(screen.getByRole('navigation', { name: 'days pagination' })).getByRole('button', {
         name: 'Next page',

@@ -85,7 +85,7 @@ export function GlobalModelCard() {
           ) : null}
           <span className={styles.spacer} />
           {g ? (
-            <Button variant="ghost" onPress={() => void apply(null)}>
+            <Button variant="neutral" onPress={() => void apply(null)}>
               Clear
             </Button>
           ) : null}

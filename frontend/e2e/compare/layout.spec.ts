@@ -67,7 +67,7 @@ test('20 runs: an expanded item shows 8 cards and "Show all 20 runs" reveals the
   await waitLoaded(page);
   await page.locator('[data-part="item-head"]').first().click();
   await expect(page.getByTestId('output-card')).toHaveCount(8);
-  await page.getByRole('button', { name: 'Show all 20 runs' }).click();
+  await page.getByRole('button', { name: 'Show 12 more' }).click();
   await expect(page.getByTestId('output-card')).toHaveCount(20);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
 });

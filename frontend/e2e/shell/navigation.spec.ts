@@ -323,7 +323,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
   test('unknown project slug shows the project not-found panel', async ({ page }) => {
     await gotoApp(page, `/projects/${uniqueSlug('nope')}/settings`);
     await expect(page.locator('[data-project-not-found="not_found"]')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'All projects' })).toBeVisible();
+    await expect(page.locator('[data-project-not-found]').getByRole('link', { name: 'Projects' })).toBeVisible();
   });
 
   test('unknown app path shows the 404 panel', async ({ page }) => {

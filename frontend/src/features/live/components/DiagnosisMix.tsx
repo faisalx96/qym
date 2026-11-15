@@ -33,6 +33,7 @@ export function DiagnosisMix({
                 <Mark
                   key={segment.value}
                   tone={segment.tone}
+                  data-dark={segment.dark ? '' : undefined}
                   className={styles.mixSegment}
                   style={{ flex: segment.share }}
                   data-live-label={segment.value}
@@ -54,6 +55,7 @@ export function DiagnosisMix({
                 to={linkTo({ label: segment.value })}
                 className={styles.legendItem}
                 data-tone={segment.tone}
+                data-dark={segment.dark ? '' : undefined}
               >
                 <span className={styles.swatch} aria-hidden="true" />
                 <span dir="auto">{segment.label}</span>

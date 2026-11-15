@@ -7,6 +7,14 @@
   margin-block: var(--space-md);
 }
 
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
 .envCards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
@@ -32,17 +40,6 @@
   gap: var(--space-sm);
   align-items: center;
   justify-content: space-between;
-}
-
-.counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-lg);
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
 }
 
 .note2 {
@@ -84,12 +81,7 @@
 }
 
 .link {
-  color: var(--accent-primary);
   text-decoration: none;
-}
-
-.link:hover {
-  text-decoration: underline;
 }
 
 .envCell {

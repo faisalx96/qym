@@ -156,7 +156,7 @@ export function IssueForm({ onClose, row, metric, issue, passNumber }: IssueForm
           </Button>
         ) : null}
         <Button
-          variant="accent"
+          variant="primary"
           onPress={() => submit(issue ? 'edit' : 'add')}
           loading={mutation.isPending}
           data-testid="issue-save"

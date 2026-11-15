@@ -105,6 +105,7 @@ export interface FeedbackEvent {
   id: number;
   kind: 'submitted' | 'status' | 'priority' | 'complexity' | 'duplicate' | 'duplicate_cleared' | 'declined';
   actor: string;
+  actor_user_id?: string | null;
   before: Record<string, unknown>;
   after: Record<string, unknown>;
   note: string;

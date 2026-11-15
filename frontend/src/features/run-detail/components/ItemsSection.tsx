@@ -1,7 +1,7 @@
 /** The Items section: header, filter bar, filter banner, virtualized table or heatmap, deep link to ?item=. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
-import { Button, HelpMarker, ReportSection } from '@/ui';
+import { HelpMarker, InlineNotice, ReportSection } from '@/ui';
 import { useItemDetails } from '../hooks/useItemDetails';
 import { REASON_ORDER } from '../lib/itemReasons';
 import { emptyFilters, type SortBy } from '../lib/filterRules';
@@ -131,29 +131,21 @@ export function ItemsSection() {
         id="run-items"
         title="Items"
         description="Every input, outcome and metric. Filters apply to the table and to every section above."
-        aside={
-          // RF3 (C113): auto-analysis starts from the Root cause section and the header's Actions menu
-          <span className={styles.aside}>
-            <CsvExport />
-          </span>
-        }
       >
         <div ref={sectionRef} className={styles.section}>
           <div className={styles.sticky} data-run-filters="">
-            <FilterBar display={{ textMode, onTextMode: setTextMode }} />
+            {/* cv4 C2-8: the CSV export is the right end of the toolbar row, not the section head */}
+            <FilterBar display={{ textMode, onTextMode: setTextMode }} end={<CsvExport />} />
           </div>
           <DirectionNote metric={metric} />
           {showBanner && metric ? (
-            <div className={styles.banner} role="status" data-testid="filter-banner">
+            <InlineNotice tone="info" icon="info" data-testid="filter-banner">
               Filtered to {items.length.toLocaleString('en-US')} items that {bannerKinds[view.show]} {metric}
               <HelpMarker label="How the reason is chosen">
                 The reason shown for a failing item comes from the first source that exists:{' '}
                 {REASON_ORDER.map((r) => r.source).join(' → ')}.
               </HelpMarker>
-              <Button size="sm" variant="ghost" onPress={() => api.setView({ show: 'all' })}>
-                Clear filter
-              </Button>
-            </div>
+            </InlineNotice>
           ) : null}
           {view.view === 'heatmap' && model.samples > 1 ? (
             <Heatmap

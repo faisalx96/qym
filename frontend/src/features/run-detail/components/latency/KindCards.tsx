@@ -3,8 +3,7 @@
  * numbers in the kind's colour. Each number opens its breakdown by call site, tool or evaluator.
  */
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, Icon } from '@/ui';
+import { Card, Icon, TextLink } from '@/ui';
 import { FAMILY_LABEL, FAMILY_TONE, kindPanels, type Family, type LatencyData } from '../../lib/latencyModel';
 import { FAMILY_ICON, Glyph } from './kinds';
 import { cssVars } from './Tip';
@@ -71,7 +70,7 @@ export function KindCards({ D, onOpenSteps }: { D: LatencyData; onOpenSteps: (fa
                     {rows.length > shown.length ? ` · top ${shown.length} of ${rows.length}` : ''}
                   </span>
                   <button type="button" className={styles.linkButton} onClick={() => onOpenSteps(p.family)}>
-                    Open in Step timings →
+                    Open in Step timings <Icon name="chevron-right" size={12} />
                   </button>
                 </div>
                 {shown.map(({ g, v }, i) => (
@@ -101,7 +100,7 @@ export function KindCards({ D, onOpenSteps }: { D: LatencyData; onOpenSteps: (fa
       {!captured ? (
         <p className={styles.note}>
           LLM and tool spans were not captured for this run.{' '}
-          <Link to="/docs/sdk-guide/results">How tracing works</Link>
+          <TextLink to="/docs/sdk-guide/results">How tracing works</TextLink>
         </p>
       ) : null}
     </div>

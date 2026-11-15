@@ -44,7 +44,7 @@
   --metric-error: #eab308;
   --error: #ef4444;
   --error-dim: #7f1d1d;
-  --info: #3b82f6;
+  --info: var(--accent-secondary); /* B-36: one blue, the Running blue */
 
   /* 5-color score scale (red → orange → yellow → lime → green) */
   --score-1: #ef4444; /* 0-39%: red */
@@ -81,12 +81,33 @@
   /* Canonical interactive component geometry.
      One aligned density is used across forms and analysis toolbars. */
   --control-height: 24px;
+  --control-height-sm: 20px; /* cv4 F3: a small box inside a control row (the pager's page number) */
   --control-radius: 5px;
-  /* A field-like control's edge (text field, select, filter trigger, segmented control): a soft hairline at rest over
-     the --bg-elevated fill, one step stronger on hover; focus and an active filter use the accent (round 10: the
-     --border-default outlines read as too bold next to the borderless buttons). */
-  --control-edge: var(--border-subtle);
-  --control-edge-hover: var(--border-default);
+  /* cv5 H1 (owner 2026-11-13: "I don't like this border for every button"): depth by fill, not by outline.
+     Two kinds of control, three steps of visual weight at rest: well < neutral button < primary.
+     - A well is a control you type in or pick a value from (text and search field, Select and MultiSelect trigger,
+       the SegmentedControl track, date and time field): the --control-fill fill (one step over the ground) and a
+       hairline edge with low contrast. Hover = the edge one step stronger (a trigger also lifts its fill one step);
+       focus or open = the accent edge.
+     - A neutral button is a raised surface with no outline: a fill one step lighter than a well, a 1px highlight on
+       its top inner edge and a 1px dark line under it. Hover = a lighter fill and the primary label; pressed = a darker
+       fill and no highlight. Its label stays a step under --text-primary (cv4 F6).
+     The edges and the highlight are translucent, so they read the same on every ground. A ReportSection body
+     redefines the fills translucent too: a control on an inset card (--bg-elevated) still separates from the card. */
+  --control-fill: var(--bg-elevated);
+  --control-fill-hover: var(--bg-hover);
+  /* The well edge at 4% (owner 2026-11-14: the edge of the round 1 build was softer; 4% over the well fill gives the
+     strength of --border-subtle, the edge before cv5). cv5 Y7: the neutral button one fill step up
+     (--bg-active) with a visible top highlight (9%), so on the page ground a button is as defined as a well beside it */
+  --control-edge: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --control-edge-hover: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --button-fill: var(--bg-active);
+  --button-fill-hover: color-mix(in srgb, var(--text-primary) 6%, var(--bg-active));
+  --button-fill-pressed: var(--bg-hover);
+  --button-highlight: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  --button-lowlight: color-mix(in srgb, var(--bg-void) 55%, transparent);
+  --button-depth: inset 0 1px 0 var(--button-highlight), 0 1px 0 var(--button-lowlight);
+  --button-text: #cdcdd8; /* 7.9:1 on --bg-active (the --button-fill) */
   --analysis-action-gap: 5px;
   --analysis-icon-optical-offset: 0.25px;
   --analysis-action-padding-start: 9px;
@@ -113,7 +134,6 @@
   --action-primary-width: 168px;
   --results-slot-min-height: 160px;
   --chars-tag-width: 96px;
-  --analysis-content-width: 1440px;
 
   /* Auto-analysis extensions to the upstream component geometry. */
   --dropdown-width: 240px;
@@ -126,7 +146,6 @@
   --motion-step-out: 140ms;
   --ease-standard: ease;
   --page-max-w: 1233px; /* every report and settings page; the one page width */
-  --page-narrow-w: 1120px; /* text-first pages (profile): an explicit `narrow` container */
   --settings-prompt-rail-width: 200px;
   --settings-prompt-tab-width: 240px;
   --settings-prompt-editor-min-height: 280px;
@@ -145,6 +164,10 @@
   --font-xl: 18px;
   --font-title: 22px;
   --font-stat: 26px;
+  /* cv4 F10 (owner 2026-11-12): the three title roles of a report page, three clear steps. Section > subsection > card. */
+  --font-section: 22px; /* ReportSection title (Overview, Deep analysis): the page title size, a report section is a page part */
+  --font-subsection: 16px; /* Subsection title (Between metrics), with its accent bar */
+  --font-card-title: 14px; /* CardTitle (Time budget, Metric correlation) */
 
   /* Shared width for the charts view label/control column */
 
@@ -270,6 +293,14 @@
   --focus-ring: 0 0 0 2px rgba(0, 212, 170, 0.15);
   --shadow-popover: 0 12px 28px rgba(0, 0, 0, 0.38);
   --shadow-dialog: 0 20px 60px rgba(0, 0, 0, 0.5);
+  /* cv4 X12: glass, the surface of a sticky page nav (run page, Compare): the page ground at --glass-mix opacity over a
+     blur of what scrolls under it. */
+  --glass-mix: 64%;
+  --glass-blur: 16px;
+  --glass-saturate: 110%; /* cv4 Y18: 140% made strong colours under the nav read as smudges */
+  /* cv4: a sticky bar of a page (an action bar under a table) stacks over the sticky header and pinned-column layers
+     of ui/DataTable (up to 6), under every popover. */
+  --z-sticky-bar: 10;
   --z-dropdown: 100;
   --z-dialog: 9998;
   --z-toast: 9999;
@@ -287,9 +318,14 @@
   --row-regular: 40px;
   --row-comfortable: 52px;
   --table-header-height: 34px;
+  --search-width: 260px; /* list and report searches (C152) */
   --table-group-height: 24px;
   --table-footer-height: 40px;
   --bg-selected: rgba(0, 212, 170, 0.08);
+  /* cv4 F11: one row ladder for data tables. Stripe (--stripe-step, faint and neutral) < hover (a stronger, accent
+     tinted tone) < selected (the strongest accent wash, with the 2px accent rail). Three states never look the same. */
+  --row-hover: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-hover));
+  --row-selected: color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 
 /* ── Visual language (redesign round 2; DESIGN_LANGUAGE §3 "Colour as information") ──
@@ -299,6 +335,26 @@
   --tint-faint: 6%; /* row/section wash (danger and live only) */
   --tint-soft: 12%; /* Badge, Tag, Chip selected, score pill, icon tile fill */
   --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
+  /* cv5 H2 (owner 2026-11-13: "a teeny tiny bit less bold ... smaller ... less bright"): the row action tile one small
+     step back from cv4 F9 (24px, 14px glyph, --tint-strong), still brighter than before cv4 (20px, 12px, 0.6 opacity). */
+  --tile-size: 22px;
+  --tile-glyph: 13px;
+  --tint-tile: 16%; /* the rest fill of a row action tile */
+  --tile-glyph-mix: 88%; /* the rest glyph: the tone at this share, the rest the surface */
+  --tint-tile-hover: 30%; /* hover/pressed on a row action tile */
+  /* cv5 H3 (owner 2026-11-13, on the dataset item pane: "this blue is okay, this white is not okay"): one set of JSON
+     syntax colours, the roles of the first qym dataset view (.dsx-jtok-*): keys blue, strings green, numbers purple,
+     true/false blue, null quiet, punctuation secondary. ui/JsonViewer and the dataset FieldEditor use only these. */
+  --json-key: var(--accent-secondary);
+  --json-string: var(--accent-primary);
+  --json-number: var(--accent-tertiary-soft);
+  --json-boolean: var(--accent-secondary);
+  --json-null: var(--text-muted);
+  --json-punct: var(--text-secondary);
+  --tint-gold: 17%; /* the admin role fill: at 12% gold reads brown on the dark surface (Q16) */
+  --role-admin: #e0bc4a; /* admin role tag (Q16 B) */
+  --stripe-step: 2%; /* page list stripe: --text-primary mixed into the row base (resolution 14, owner tunes) */
+  --stripe-step-report: 1%; /* report-table stripe: half the page stripe */
   --error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary)); /* 5.15:1 on a 12% error tint */
 
   --chart-6: #a3e635;

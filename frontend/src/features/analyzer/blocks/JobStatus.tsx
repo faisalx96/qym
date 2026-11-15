@@ -95,6 +95,13 @@ export function shortOutcome(sum: ReturnType<typeof summarize>): string {
   return sum.failed ? `${base}, ${sum.failed} failed` : base;
 }
 
+/** The mark of a running job's phase that is not working now; every other phase (Retrying too) is info + orbit. */
+const RUNNING_PHASE_MARK: Record<string, [StatusTone, StatusShape]> = {
+  queued: ['neutral', 'ring'],
+  completed: ['success', 'full'],
+  failed: ['danger', 'cross'],
+};
+
 export function statusLabel(job: AnalysisJob): { text: string; tone: StatusTone; shape: StatusShape } {
   const sum = summarize(job);
   if (job.status === 'completed') {
@@ -105,13 +112,12 @@ export function statusLabel(job: AnalysisJob): { text: string; tone: StatusTone;
         : { text: 'Completed', tone: 'success', shape: 'full' };
   }
   if (job.status === 'cancelling') return { text: 'Cancelling', tone: 'info', shape: 'orbit' };
-  if (job.status === 'cancelled') return { text: 'Cancelled', tone: 'neutral', shape: 'pause' };
+  if (job.status === 'cancelled') return { text: 'Cancelled', tone: 'warning', shape: 'pause' };
   if (job.status === 'failed') return { text: 'Failed', tone: 'danger', shape: 'cross' };
-  return {
-    text: PHASE[job.progress.phase] ?? 'Running',
-    tone: job.progress.phase === 'retrying' ? 'warning' : 'info',
-    shape: 'orbit',
-  };
+  // a running job's phase keeps its own mark: Queued waits to start, Completed and Failed have ended
+  const phase = job.progress.phase;
+  const [tone, shape] = RUNNING_PHASE_MARK[phase] ?? ['info', 'orbit'];
+  return { text: PHASE[phase] ?? 'Running', tone, shape };
 }
 
 /**

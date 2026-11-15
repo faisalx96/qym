@@ -230,7 +230,8 @@ describe('primitive module contracts', () => {
       'color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent)',
       'height: 100%',
     ],
-    Pagination: ['height: var(--control-height)', 'min-width: 160px', 'font-family: var(--font-mono)'],
+    // cv4 F3: the page number box is the small control height (20px), in proportion with the pager text
+    Pagination: ['height: var(--control-height-sm)', 'min-width: 160px', 'font-family: var(--font-mono)'],
     Badge: [
       'min-height: var(--badge-height)',
       'border: 1px solid',
@@ -338,11 +339,23 @@ describe('primitive module contracts', () => {
     );
   });
 
-  it('IconButton tile (row actions) is the soft tint at rest and the strong tint on hover', () => {
+  it('IconButton tile (row actions) is the tile tint at rest and the tile hover tint on hover (cv4 F9, cv5 H2)', () => {
     const css = ui('IconButton');
     const rest = css.split('.iconAction[data-tile] {')[1]?.split('}')[0] ?? '';
-    expect(rest).toContain('color-mix(in srgb, var(--tile-tone) var(--tint-soft), transparent)');
-    expect(css).toMatch(/\.iconAction\[data-tile\]\[data-hovered\],[^{]*\{[^}]*var\(--tint-strong\)/);
+    expect(rest).toContain('color-mix(in srgb, var(--tile-tone) var(--tint-tile), transparent)');
+    expect(rest).toContain('width: var(--tile-size)');
+    // one small step back from cv4 (24px, 14px glyph), still over before cv4 (20px, 12px glyph)
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    const px = (t: string) => Number(tokens.match(new RegExp(`${t}:\\s*(\\d+)px`))?.[1]);
+    expect(px('--tile-size')).toBeGreaterThan(20);
+    expect(px('--tile-size')).toBeLessThan(24);
+    expect(px('--tile-glyph')).toBeGreaterThan(12);
+    expect(px('--tile-glyph')).toBeLessThan(14);
+    expect(css).toMatch(/\.iconAction\[data-tile\]\[data-hovered\],[^{]*\{[^}]*var\(--tint-tile-hover\)/);
+    // a disabled tile stays readable: no fade
+    const off = css.split('.iconAction[data-tile][data-disabled] {')[1]?.split('}')[0] ?? '';
+    expect(off).toContain('opacity: 1;');
+    expect(off).toContain('color: var(--text-muted);');
   });
 
   it('DataTable keeps the .qdt-table header/cell recipe', () => {
@@ -494,7 +507,7 @@ describe('visual language (redesign round 2)', () => {
 
   it('tones.css maps every tone, band and series to --tone/--tone-text', () => {
     const css = read(join(SRC, 'styles/tones.css'));
-    for (const t of ['success', 'info', 'warning', 'danger', 'accent', 'meta', 'neutral'])
+    for (const t of ['success', 'info', 'warning', 'danger', 'accent', 'meta', 'neutral', 'gold'])
       expect(css, `tone ${t}`).toContain(`[data-tone='${t}']`);
     for (let b = 1; b <= 5; b += 1) expect(css, `band ${b}`).toContain(`[data-band='${b}']`);
     for (let n = 1; n <= 8; n += 1) expect(css, `series ${n}`).toContain(`[data-series='${n}']`);
@@ -566,11 +579,11 @@ describe('visual language (redesign round 2)', () => {
 
   it('keeps the hover underline for running text only (QG1-9, QG1-16)', () => {
     const base = read(join(SRC, 'styles/base.css'));
-    expect(base).toContain("a:hover:where(:not([data-link='block']))");
+    expect(base).toContain("a:hover:where(:not([data-link='block'], [data-link='name']))");
     const hovers = [...base.matchAll(/(^|\n)([^{}\n]*a:hover[^{}]*)\{([^{}]*)\}/g)].filter((m) =>
       /text-decoration\s*:\s*underline/.test(m[3]!),
     );
-    expect(hovers.map((m) => m[2]!.trim())).toEqual(["a:hover:where(:not([data-link='block']))"]);
+    expect(hovers.map((m) => m[2]!.trim())).toEqual(["a:hover:where(:not([data-link='block'], [data-link='name']))"]);
     // :where keeps the rule at specificity (0,1,1): a component's own `.x:hover` override must still win
     expect(base).not.toMatch(/a:hover:not\(/);
     expect(read(join(SRC, 'ui/Card/Card.tsx'))).toContain('data-link="block"');
@@ -730,7 +743,7 @@ describe('buttons (C049, C136, C166, C232)', () => {
 
   it('is 24px everywhere and 32px only in a dialog footer', () => {
     const css = read(join(SRC, 'ui/Button/Button.module.css'));
-    expect(css).toContain(":global([data-dialog-footer]) .button[data-size='md']");
+    expect(css).toContain(':global([data-dialog-footer]) .button {');
     expect(css).not.toMatch(/^\.button\[data-size='md'\]/m);
     expect(read(join(SRC, 'ui/Dialog/Dialog.tsx'))).toContain('data-dialog-footer');
   });
@@ -739,6 +752,11 @@ describe('buttons (C049, C136, C166, C232)', () => {
     const tsx = read(join(SRC, 'ui/Button/Button.tsx'));
     expect(tsx).toContain('disabledReason');
     expect(read(join(SRC, 'ui/Button/Button.module.css'))).toContain('content: attr(data-reason)');
+    // A-22: IconButton and LinkButton give the same hover reason
+    for (const f of ['ui/IconButton/IconButton.tsx', 'ui/LinkButton/LinkButton.tsx']) {
+      expect(read(join(SRC, f)), f).toContain('disabledReason');
+      expect(read(join(SRC, f)), f).toContain('reasonWrap');
+    }
   });
 
   it('keeps the solid accent fill for primary buttons; a selected segment is an accent wash', () => {

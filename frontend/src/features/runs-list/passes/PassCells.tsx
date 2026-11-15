@@ -7,7 +7,6 @@ import { formatPercent, metricDirection } from '@/lib/metrics';
 import { AnalysisSpark, AnalyzeAction, analyzeState } from '../AnalyzeAction';
 import { Mono, passSignalItems, SignalMarkers } from '../cells';
 import { useRunsCtx } from '../context';
-import { smartDigits } from '../model';
 import { passHref } from './links';
 import { queuedText, type QueuedView } from './model';
 import styles from './PassCells.module.css';
@@ -24,6 +23,7 @@ export function PassNameCell({ run, pass, status }: { run: RunRow; pass: RunPass
       <Link
         to={passHref(slug, listContext, run.run_id, n)}
         className={styles.passLink}
+        data-row-primary=""
         aria-label={`Pass ${n} of ${run.samples} of run ${runName(run)}`}
       >
         Pass {n}
@@ -47,13 +47,7 @@ export function QueuedNameCell({ queued }: { queued: QueuedView }) {
 }
 
 export function QueuedStatus({ queued }: { queued: QueuedView }) {
-  return (
-    <StatusMark
-      tone={queued.notRun ? 'warning' : 'neutral'}
-      shape="ring"
-      label={queued.notRun ? 'Not run' : 'Queued'}
-    />
-  );
+  return <StatusMark tone="neutral" shape="ring" label={queued.notRun ? 'Not run' : 'Queued'} />;
 }
 
 /** The pass status, then its signals, drawn as a run's and linking to the pass's Errors section (C028, C115). */
@@ -131,7 +125,7 @@ export function PassMetricCell({ run, pass, metric }: { run: RunRow; pass: RunPa
         value={v}
         type={type}
         direction={metricDirection(run.metric_specs?.[metric])}
-        text={formatPercent(v, smartDigits(v, undefined))}
+        text={formatPercent(v, 1)}
       />
       {marker}
     </span>
@@ -189,7 +183,7 @@ export function PassActions({
 
 export function ErrorRetry({ onRetry }: { onRetry: () => void }) {
   return (
-    <Button variant="ghost" onPress={onRetry}>
+    <Button variant="neutral" onPress={onRetry}>
       Retry
     </Button>
   );

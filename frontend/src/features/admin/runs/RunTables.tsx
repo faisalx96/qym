@@ -21,7 +21,8 @@ function runHref(run: AdminRunSummary): string {
 function RunCell({ run }: { run: AdminRunSummary }) {
   return (
     <span className={styles.runInline} data-testid="admin-run-cell">
-      <RunName to={runHref(run)} name={runName(run)} runId={run.run_id} />
+      {/* The row's primary text turns green while the row is hovered or focused (cv4 A3, BRIEF §3). */}
+      <RunName to={runHref(run)} name={runName(run)} runId={run.run_id} data-row-primary="" />
       {run.task_name ? <TaskTag name={run.task_name} /> : null}
     </span>
   );
@@ -35,7 +36,6 @@ export interface RunTableProps {
   emptyState: string;
   storageKey: string;
   'aria-label': string;
-  footerSummary?: string;
   pagination?: PaginationProps;
   /** A toolbar over the table (the recent runs search and Project filter, C093). */
   toolbar?: ReactNode;
@@ -50,7 +50,6 @@ export function RunTable({
   emptyState,
   storageKey,
   variant,
-  footerSummary,
   pagination,
   toolbar,
   'aria-label': label,
@@ -134,7 +133,7 @@ export function RunTable({
               {
                 id: 'force-stop',
                 label: stoppingIds?.has(r.run_id) ? `Stopping ${runName(r)}` : `Force stop ${runName(r)}`,
-                icon: 'stop',
+                icon: 'ban',
                 primary: true,
                 danger: true,
                 disabled: Boolean(stoppingIds?.has(r.run_id)),
@@ -145,7 +144,7 @@ export function RunTable({
       rowState={(r) => (variant === 'live' ? 'live' : /^FAILED$/i.test(r.status) ? 'error' : undefined)}
     >
       {toolbar}
-      <DataTable.Footer summary={footerSummary} pagination={pagination} />
+      <DataTable.Footer pagination={pagination} />
     </DataTable>
   );
 }

@@ -1,0 +1,25 @@
+{"check":"C-3-11 axe home five keys","w":1440,"serious":[]}
+{"check":"C-3-11 axe home five keys","w":390,"serious":[]}
+{"check":"review 1440x1000","rows":["name:32","base:32","task:32","env:32","ds:32","swept:70.6","prio:32","versions:106.8"],"summaryBottom":704.8,"runsHeadBottom":834.5,"run2Bottom":898.5,"barTop":944,"versionsEnvs":["staging: agent_version,image_version,kb_version","production: agent_version,kb_version"],"cellsAt10px":0,"tagsInCells":0,"axisCellOverflow":0,"axisCells":36,"disclosures":12,"selects":24,"table":{"headers":["#:48","ENVIRONMENT:225.8","Primary model:225.8","Milvus Search Threshold:225.8","Timeout:225.8","PRIORITY:240"],"band":[":48",":225.8","Linked: vary together:451.5",":225.8",":240"],"sections":[],"headStyle":["none ls=normal"],"scroll":"1191/1191","clipped":0}}
+{"check":"C-3-11 axe review 1440","serious":[]}
+{"check":"C-2-10 cards 390","cards":12,"heights":[160],"dts":["Run","Environment","Primary model","Milvus Search Threshold","Timeout","Priority"],"dtW":96,"cells":["gpt-4o prod","0.5","10"],"pageOverflow":false,"sweptRow":114.8}
+{"check":"C-3-11 axe review 390","serious":[]}
+{"check":"C-2-2 duplicate names","headers":["#:48","ENVIRONMENT:301","Timeout Endpoints › primary:301","Timeout Endpoints › judge:301","PRIORITY:240"],"band":[":48",":301","Linked: vary together:602",":240"],"sections":["Endpoints › primary 11px/400 rgb(154, 154, 178)","Endpoints › judge 11px/400 rgb(154, 154, 178)"],"headStyle":["none ls=normal"],"scroll":"1191/1191","clipped":0}
+{"check":"C-2-6/C-2-7","w":1440,"swept":6,"envs":2,"scroll":"1191/1191","minFlex":129,"clipped":0,"headers":["#:48","ENVIRONMENT:129","S1:129","S2:129","S3:129","S4:129","S5:129","S6:129","PRIORITY:240"]}
+{"check":"C-2-6/C-2-7","w":1440,"swept":7,"envs":2,"scroll":"1248/1191","minFlex":120,"clipped":0,"headers":["#:48","ENVIRONMENT:120","S1:120","S2:120","S3:120","S4:120","S5:120","S6:120","S7:120","PRIORITY:240"]}
+{"check":"C-2-6/C-2-7","w":1440,"swept":7,"envs":1,"scroll":"1191/1191","minFlex":129,"clipped":0,"headers":["#:48","S1:129","S2:129","S3:129","S4:129","S5:129","S6:129","S7:129","PRIORITY:240"]}
+{"check":"C-2-6/C-2-7","w":1440,"swept":1,"envs":1,"scroll":"1191/1191","minFlex":903,"clipped":0,"headers":["#:48","S1:903","PRIORITY:240"]}
+{"check":"C-2-6/C-2-7","w":1024,"swept":3,"envs":2,"scroll":"775/775","minFlex":121.8,"clipped":0,"headers":["#:48","ENVIRONMENT:121.8","S1:121.8","S2:121.8","S3:121.8","PRIORITY:240"]}
+{"check":"C-2-6/C-2-7","w":1024,"swept":4,"envs":2,"scroll":"888/775","minFlex":120,"clipped":0,"headers":["#:48","ENVIRONMENT:120","S1:120","S2:120","S3:120","S4:120","PRIORITY:240"]}
+{"check":"C-2-6/C-2-7","w":1024,"swept":4,"envs":1,"scroll":"775/775","minFlex":121.8,"clipped":0,"headers":["#:48","S1:121.8","S2:121.8","S3:121.8","S4:121.8","PRIORITY:240"]}
+{"check":"C-4-1","url":"env=800e6ea0-2e25-4581-9c9e-47d69cdee05e","marginTop":"0px","marginBottom":"-32px","position":"sticky","bottom":"0px","ancestors":["page: min-h=0px grow=0 h=1012","home: min-h=auto grow=0 h=884"]}
+{"check":"C-4-1","url":"env=800e6ea0-2e25-4581-9c9e-47d69cdee05e&step=start","marginTop":"0px","marginBottom":"-32px","position":"sticky","bottom":"0px","ancestors":["page: min-h=0px grow=0 h=634","layout: min-h=auto grow=0 h=507","main: min-h=auto grow=0 h=507"]}
+{"check":"C-4-5","samples":["0ms:827.1","101ms:826.8","202ms:826.8","304ms:826.8","406ms:826.8","507ms:826.8","610ms:826.8","711ms:826.8","813ms:627.9","914ms:627.9","1016ms:627.9","1118ms:627.9","1219ms:627.9","1320ms:627.9","1422ms:627.9","1524ms:627.9"],"after":{"barTop":627.9,"contentBottom":613.9,"h2":"H2 Starting point"},"xsBefore":"bar-skip@227 bar-cancel@340 bar-status@418 bar-back@1208 bar-continue@1270","xsAfter":"bar-skip@227 bar-cancel@340 bar-status@418 bar-back@1208 bar-continue@1270"}
+{"check":"C-1-5","name":"launch where Back","url":"/projects/exp-demo/experiments/new?env=800e6ea0-2e25-4581-9c9e-47d69cdee05e","home":1,"h2":"New experiment"}
+{"check":"C-1-5","name":"launch settings Cancel","url":"/projects/exp-demo/experiments","home":0,"h2":"Experiments"}
+{"check":"C-1-5","name":"editor where Back","url":"/projects/exp-demo/environments/afdaa077-f04e-496f-a8c0-c90e68f531ee","home":0,"h2":"staging | Status | Schema"}
+{"check":"C-1-5","name":"editor models Cancel","url":"/projects/exp-demo/environments/afdaa077-f04e-496f-a8c0-c90e68f531ee","home":0,"h2":"staging | Status | Schema"}
+{"check":"C-1-5","name":"launch models Skip","url":"/projects/exp-demo/experiments/new?env=800e6ea0-2e25-4581-9c9e-47d69cdee05e&step=review","home":0,"h2":"Customize experiment | Review and launch"}
+{"check":"C-1-7 models","order":["bar-skip","bar-cancel","bar-status:Fix 2 problems first","bar-back","bar-continue","?:Skip to content\nProj"]}
+{"check":"C-1-7 Enter","focused":"H2 Environment configurations"}
+{"check":"C-1-7 review","order":["bar-cancel","bar-back","bar-continue","?:Skip to content\nProj","shift-tab from cancel -> customize:Show raw JSON"]}

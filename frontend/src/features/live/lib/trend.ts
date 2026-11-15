@@ -1,16 +1,12 @@
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import type { CardTone } from '@/ui';
-import { APP_LOCALE } from '@/lib/dates';
+import { formatShortDayKey } from '@/lib/dates';
 import { formatDurationMs, formatPercentValue } from '@/lib/format';
 import { CHAR_PX } from '@/features/run-detail/components/charts/chartLabels';
 import { diagnosisSpec, mixSegments } from './mix';
 
-const monthFormat = new Intl.DateTimeFormat(APP_LOCALE, { month: 'short', timeZone: 'UTC' });
-
 export function trendDayLabel(day: string, first: boolean): string {
-  return first || day.endsWith('-01')
-    ? `${Number(day.slice(8))} ${monthFormat.format(new Date(`${day}T00:00:00Z`))}`
-    : day.slice(8);
+  return first || day.endsWith('-01') ? formatShortDayKey(day) : day.slice(8);
 }
 
 /** Month boundaries take precedence when the first date label would overlap them. */
@@ -45,7 +41,7 @@ export function formatPrimaryMean(value: number | null, spec: LiveMetricSpec | u
   if (value === null) return '—';
   if (spec?.score_type === 'duration') return formatDurationMs(value);
   if (spec?.score_type === 'percentage' || spec?.score_type === 'boolean') {
-    return formatPercentValue(value, 0);
+    return formatPercentValue(value, 1);
   }
   return value.toFixed(2);
 }
@@ -55,19 +51,24 @@ export function trendColumns(
   specs: LiveMetricSpec[],
 ): {
   day: string;
-  stacks: { value: string | null; label: string; tone: CardTone; n: number }[];
+  stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; n: number }[];
   rate: number | null;
   gap: boolean;
   total: number;
 }[] {
   const spec = diagnosisSpec(specs);
   return trend.map((entry) => {
-    const stacks: { value: string | null; label: string; tone: CardTone; n: number }[] = mixSegments(
-      entry.counts_by_label,
-      spec,
-    ).map(({ value, label, tone, n }) => ({ value, label, tone, n }));
+    const stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; n: number }[] =
+      mixSegments(entry.counts_by_label, spec).map(({ value, label, tone, dark, n }) => ({
+        value,
+        label,
+        tone,
+        dark,
+        n,
+      }));
     const undiagnosed = entry.turns - stacks.reduce((sum, stack) => sum + stack.n, 0);
-    if (undiagnosed > 0) stacks.push({ value: null, label: 'Undiagnosed', tone: 'neutral', n: undiagnosed });
+    if (undiagnosed > 0)
+      stacks.push({ value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: undiagnosed });
     return {
       day: entry.day,
       stacks,

@@ -7,8 +7,6 @@ import {
   type CategoryGroupStat,
 } from './overviewModel';
 
-export type CategoryOrder = 'worst' | 'best';
-
 /** Rows shown before "Show all N values". */
 export const DEFAULT_VISIBLE_VALUES = 6;
 
@@ -22,13 +20,12 @@ export function defaultKey(keys: string[], spreadOf: (key: string) => number): s
   return best?.key ?? keys[0] ?? null;
 }
 
-/** Values ordered worst or best first (direction aware, unscored last). */
+/** Values ordered best first (direction aware, unscored last). The one order of both views (cv4 C2-5). */
 export function orderValues(
   groups: CategoryGroupStat[],
-  order: CategoryOrder,
   direction: 'maximize' | 'minimize' | null,
 ): CategoryGroupStat[] {
-  return sortCategoryGroups(groups, order, direction);
+  return sortCategoryGroups(groups, 'best', direction);
 }
 
 /** The one-sentence insight (null under two scored values). */

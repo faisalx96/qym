@@ -2,7 +2,7 @@
  * The item table on the shared DataTable: windowed rows on the shell scroller (virtualized), expandable
  * item cards, sortable headers, the `?item=` deep link landing, pagination that keeps the `page` param.
  * Review group R2: no Reason column (C017); scores are centred numbers with no bar in 120px columns, plain green or
- * red where the metric has a pass threshold (C149, C220); Status is a StatusMark with no fill; the open-trace
+ * red where the metric has a pass threshold (C149, C220); Status is a StateTag (an item result); the open-trace
  * action is a green tile with the trace glyph in a normal last column (C230); one header line, no group band (C253).
  */
 import { useMemo, useRef, useState } from 'react';
@@ -11,15 +11,14 @@ import {
   DataTable,
   DatasetTag,
   IconButton,
+  promptPreview,
   ScoreValue,
   Skeleton,
-  StatusMark,
+  StateTag,
   Tooltip,
   type Column,
   type Key,
   type SortState,
-  type StatusShape,
-  type StatusTone,
 } from '@/ui';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs } from '@/lib/text';
@@ -27,6 +26,7 @@ import { metricPassesFor, type FilteredItem, type SortBy } from '../../lib/filte
 import { metricHasPassThreshold } from '../../lib/runModel';
 import { latencyLabel, metricCell, rowStatus } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
+import { verdictTone } from '../../lib/verdictMark';
 import type { Row } from '../../types';
 import { defaultPageSize } from '../../lib/itemsPaging';
 import { isUnionRun } from '../../lib/heroModel';
@@ -37,15 +37,6 @@ import styles from './ItemsTable.module.css';
 
 const PAGE_SIZE_KEY = 'qym:run-page-size';
 const PAGE_SIZES = [20, 50, 100, 500];
-
-/** The Status column's StatusMark for an item outcome: the pixel figure is the non-colour cue. */
-const STATUS_MARK: Record<string, [StatusTone, StatusShape]> = {
-  pass: ['success', 'check'],
-  fail: ['danger', 'cross'],
-  error: ['danger', 'cross'],
-  not_received: ['warning', 'pause'],
-  running: ['info', 'orbit'],
-};
 
 function usePageSize(total: number): [number, (n: number) => void] {
   const [chosen, setChosen] = useState<number | null>(() => {
@@ -144,14 +135,10 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       priority: 1,
       cell: ({ row }) => {
         const status = rowStatus(ctx, row, selectedMetric);
-        const [tone, shape] = STATUS_MARK[status.kind] ?? ['neutral', 'ring'];
         return (
-          <StatusMark
-            tone={tone}
-            shape={shape}
-            label={status.kind === 'error' ? 'Error' : status.label}
-            title={status.title || undefined}
-          />
+          <StateTag tone={verdictTone(status.kind)} title={status.title || undefined}>
+            {status.kind === 'error' ? 'Error' : status.label}
+          </StateTag>
         );
       },
     },
@@ -160,15 +147,15 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       header: 'Input',
       flex: true,
       minWidth: 220,
-      wrap: 2,
+      wrap: true,
       priority: 1,
       cell: ({ row }) => {
         const title = row.input_full ?? row.input ?? row.input_preview ?? '';
-        const text = (typeof title === 'string' ? title : JSON.stringify(title)).replace(/\s+/g, ' ').trim();
+        const text = promptPreview(title);
         // the item texts are a later row group: a bone holds the place until it arrives
         if (!text && !textLoaded) return <Skeleton kind="value" width="70%" label="Loading input" />;
         return (
-          <span title={text} {...textDirAttrs(text)}>
+          <span title={typeof title === 'string' ? title : JSON.stringify(title)} {...textDirAttrs(text)}>
             {text || '—'}
           </span>
         );
@@ -235,6 +222,8 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
             header: 'Trace',
             hideLabel: true,
             width: 48,
+            // cv4 Y17: pinned at the end, so the trace tile stays whole when the metric columns overflow
+            pin: 'end',
             align: 'center',
             resizable: false,
             hideable: false,
@@ -283,9 +272,9 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         rowKey={(it) => it.row.item_id}
         density="regular"
         densityLocked
-        zebra={false}
+        stripe="report"
         responsive="cards"
-        empty="No items match the current filters."
+        empty="No items match these filters"
         sort={sortState(sort)}
         allowUnsorted
         onSortChange={(s) => {

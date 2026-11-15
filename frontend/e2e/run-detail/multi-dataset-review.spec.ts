@@ -105,7 +105,7 @@ for (const w of W) {
     const m: Record<string, unknown> = {};
     await open(page, w, url(many));
     m.hero = await hgt(page, '[data-testid=run-hero]');
-    m.more = await page.getByRole('button', { name: /^\+ \d+ more$/ }).innerText();
+    m.more = await page.getByRole('button', { name: /^\+\d+ more$/ }).innerText();
     await page.locator('#run-section-datasets').scrollIntoViewIfNeeded();
     await expect(page.getByTestId('show-items-link').first()).toBeVisible();
     m.section = await hgt(page, '#run-section-datasets');

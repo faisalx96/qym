@@ -140,6 +140,7 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
           type="submit"
           variant={irreversible ? 'danger' : 'primary'}
           isDisabled={!canSubmit}
+          disabledReason="Fill in the job fields"
           loading={enqueue.isPending}
         >
           {irreversible ? 'Queue irreversible job' : 'Queue job'}

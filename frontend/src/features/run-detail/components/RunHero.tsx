@@ -4,25 +4,27 @@
  * clamped to two lines (three on a phone) with "+ N more". Nothing hides behind a chevron. Round 10: the first qym's
  * gradient top line and wash instead of a status rail; the status sits beside the name; the facts share one height.
  */
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Button,
   Card,
   Collapse,
   CopyButton,
-  DatasetTag,
   Icon,
   InlineNotice,
   isBareRunId,
   JsonPreview,
+  KeyValueGrid,
   KeyValueTag,
   ModelTag,
+  MoreTag,
   RunStatusBadge,
   Tag,
   TaskTag,
   UserName,
 } from '@/ui';
+import { formatAgo } from '@/lib/dates';
 import { readJson, writeJson } from '@/lib/storage';
 import type { LiveRunState } from '../hooks/useLiveRun';
 import { useTicker } from '../hooks/useLiveRun';
@@ -40,32 +42,15 @@ import {
 } from '../lib/heroModel';
 import { runErrorTally } from '../lib/overviewModel';
 import type { RunModel } from '../lib/runModel';
-import { DatasetChip, DatasetCountTag, datasetChipStyles } from './DatasetChip';
+import { DatasetChip, DatasetCountTag, DatasetVersionTag, datasetChipStyles } from './DatasetChip';
 import type { PassSummary, Run } from '../types';
 import { RunPager } from './RunPager';
 import { RejectNote, ReviewLog, RunHeaderActions } from './RunActions';
 import { useRunPage } from '../RunContext';
 import { useModelIndex } from '@/api/dashboard';
 import { useOptionalProject } from '@/features/shell/ProjectContext';
-import { modelSlot } from '@/features/runs-list/model';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import styles from './RunHero.module.css';
-
-type Series = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-
-/** The model's series slot from the project's model index; neutral until the index loads or when the model is absent. */
-function modelSeriesOf(
-  index: Record<string, number> | null,
-  name: string,
-  reasoning: boolean,
-): Series | undefined {
-  if (!index) return undefined;
-  const key = [
-    `${name}|||${reasoning ? 'reasoning' : 'plain'}`,
-    `${name}|||plain`,
-    `${name}|||reasoning`,
-  ].find((k) => k in index);
-  return key ? (modelSlot(key, index) as Series) : undefined;
-}
 
 export interface RunHeroProps {
   run: Run;
@@ -103,10 +88,9 @@ function MetaLink({ to, title, children }: { to: string | null; title?: string; 
 export function LiveIndicator({ live, run }: { live: LiveRunState; run: Run }) {
   const now = useTicker(live.live);
   if (!live.live || !isLiveStatus(run.status)) return null;
-  const secs = live.updatedAt ? Math.max(0, Math.round((now - live.updatedAt) / 1000)) : 0;
   return (
     <span className={styles.live} data-testid="live-indicator">
-      Live · updated {secs}s ago
+      Live · updated {live.updatedAt ? formatAgo(live.updatedAt, now) : 'just now'}
     </span>
   );
 }
@@ -173,61 +157,100 @@ function ContextBand({
       data-testid="hero-context"
     >
       <div className={styles.contextRow}>
-        <div
-          ref={flow}
-          id="run-hero-chips"
-          className={styles.flow}
-          data-open={open ? '' : undefined}
-          data-total={total}
-          data-provisional={provisional ? '' : undefined}
-        >
-          {groups.map((g) => (
-            <div key={g.label} role="list" aria-label={g.label} className={styles.group}>
-              {g.chips.map((c, i) => {
-                const chip = (
-                  <span role="listitem" data-chip="" className={styles.chipItem}>
-                    {c.dataset ? (
+        {open ? (
+          <div className={styles.groupGrid} data-testid="hero-grid">
+            {groups.map((g) => (
+              <Fragment key={g.label}>
+                <span className={styles.groupLabel}>{g.label}</span>
+                <KeyValueGrid
+                  dense
+                  columns={4}
+                  aria-label={g.label}
+                  items={g.chips.map((c) => ({
+                    key: c.key,
+                    label: c.label,
+                    value: c.dataset ? (
                       <DatasetChip entry={c.dataset} slug={slug} />
+                    ) : c.raw !== undefined ? (
+                      <JsonPreview value={c.raw} title={c.key} compact>
+                        {c.text}
+                      </JsonPreview>
                     ) : (
-                      <KeyValueTag label={c.label} text={c.text} title={c.title}>
-                        {c.raw !== undefined ? (
-                          // An object or array value opens its JSON in a dialog, clamped or not (QA 2026-10-21).
-                          <JsonPreview value={c.raw} title={c.key} compact>
-                            {c.text}
-                          </JsonPreview>
-                        ) : undefined}
-                      </KeyValueTag>
-                    )}
-                  </span>
-                );
-                return i === 0 ? (
-                  <span key={c.key} className={styles.lead}>
-                    <span className={styles.groupLabel} aria-hidden="true">
-                      {g.label}
-                    </span>
-                    {chip}
-                  </span>
-                ) : (
-                  <span key={c.key} className={styles.chipWrap}>
-                    {chip}
-                  </span>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-        {showButton ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className={styles.moreBtn}
-            aria-expanded={open}
-            aria-controls="run-hero-more"
-            onPress={toggle}
-            iconEnd={<Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />}
+                      c.text
+                    ),
+                    mono: true,
+                    tone: 'meta',
+                  }))}
+                />
+              </Fragment>
+            ))}
+          </div>
+        ) : (
+          <div
+            ref={flow}
+            id="run-hero-chips"
+            className={styles.flow}
+            data-total={total}
+            data-provisional={provisional ? '' : undefined}
           >
-            {open ? 'Show less' : `+ ${hidden} more`}
-          </Button>
+            {groups.map((g) => (
+              <div key={g.label} role="list" aria-label={g.label} className={styles.group}>
+                {g.chips.map((c, i) => {
+                  const chip = (
+                    <span role="listitem" data-chip="" className={styles.chipItem}>
+                      {c.dataset ? (
+                        <DatasetChip entry={c.dataset} slug={slug} />
+                      ) : (
+                        <KeyValueTag label={c.label} text={c.text} title={c.title}>
+                          {c.raw !== undefined ? (
+                            // An object or array value opens its JSON in a dialog, clamped or not (QA 2026-10-21).
+                            <JsonPreview value={c.raw} title={c.key} compact>
+                              {c.text}
+                            </JsonPreview>
+                          ) : undefined}
+                        </KeyValueTag>
+                      )}
+                    </span>
+                  );
+                  return i === 0 ? (
+                    <span key={c.key} className={styles.lead}>
+                      <span className={styles.groupLabel} aria-hidden="true">
+                        {g.label}
+                      </span>
+                      {chip}
+                    </span>
+                  ) : (
+                    <span key={c.key} className={styles.chipWrap}>
+                      {chip}
+                    </span>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+        {showButton ? (
+          open ? (
+            <Button
+              variant="neutral"
+              size="sm"
+              className={styles.moreBtn}
+              aria-expanded
+              aria-controls="run-hero-more"
+              onPress={toggle}
+              iconEnd={<Icon name="chevron-up" size={12} />}
+            >
+              Show less
+            </Button>
+          ) : (
+            <MoreTag
+              count={hidden}
+              chevron
+              aria-expanded={false}
+              aria-controls="run-hero-more"
+              onPress={toggle}
+            />
+          )
         ) : null}
       </div>
       <Collapse open={open} id="run-hero-more">
@@ -252,7 +275,8 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
   const stopping = !pass && (live.stopRequested || !!run.stop_requested) && liveNow;
   const scopedStatus = pass?.status ?? run.status ?? 'unknown';
   const statusText = stopping ? 'STOPPING…' : String(scopedStatus).toUpperCase();
-  const statusKey = stopping ? 'STOPPED' : String(scopedStatus).toUpperCase();
+  // a stop request on a live run is still working: STOPPING (info + orbit), not the STOPPED pause figure
+  const statusKey = stopping ? 'STOPPING' : String(scopedStatus).toUpperCase();
   const now = useTicker(liveNow);
   const timing = heroTiming(
     { ...run, status: liveNow ? 'RUNNING' : run.status },
@@ -320,7 +344,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
               </Link>
             ) : samples > 1 ? (
               <Tag kind="count" title={`${samples} passes per item`}>
-                x{samples} passes
+                ×{samples}
               </Tag>
             ) : null}
             <CopyButton text={run.run_id} label="Copy run id" />
@@ -406,27 +430,20 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
           </div>
         ) : null}
         {run.items_restricted && run.items_restricted_reason === 'dataset_access' ? (
-          <div className={styles.banner} role="status" data-testid="restricted-dataset-banner">
-            <Icon name="lock" size={14} />
-            <div>
-              <div className={styles.bannerTitle}>Restricted dataset</div>
-              <p className={styles.bannerBody}>
-                This run was evaluated on a dataset you don’t have access to. Scores and latencies are shown,
-                but item inputs, expected outputs, outputs, traces, and analysis are hidden.
-              </p>
-            </div>
-          </div>
+          <InlineNotice
+            tone="warning"
+            icon="lock"
+            lead="Restricted dataset."
+            data-testid="restricted-dataset-banner"
+          >
+            This run was evaluated on a dataset you don’t have access to. Scores and latencies are shown, but
+            item inputs, expected outputs, outputs, traces, and analysis are hidden.
+          </InlineNotice>
         ) : run.items_restricted ? (
-          <div className={styles.banner} role="status" data-testid="private-test-set">
-            <Icon name="info" size={16} />
-            <div>
-              <div className={styles.bannerTitle}>Private test set</div>
-              <p className={styles.bannerBody}>
-                This run was evaluated on a private test set. Scores and latencies are shown, but item inputs,
-                expected outputs, outputs, traces, and analysis are visible to admins only.
-              </p>
-            </div>
-          </div>
+          <InlineNotice tone="warning" icon="info" lead="Private test set." data-testid="private-test-set">
+            This run was evaluated on a private test set. Scores and latencies are shown, but item inputs,
+            expected outputs, outputs, traces, and analysis are visible to admins only.
+          </InlineNotice>
         ) : null}
 
         <dl className={styles.facts} aria-label="Run facts" data-testid="run-hero-strip">
@@ -450,9 +467,10 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
           ) : (
             <Fact label="Dataset">
               <MetaLink to={links.dataset} title={links.datasetTitle}>
-                <DatasetTag
+                <DatasetVersionTag
                   name={run.dataset_name}
                   version={run.dataset_version}
+                  status={run.dataset_version_status}
                   aliases={run.dataset_aliases}
                 />
               </MetaLink>

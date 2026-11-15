@@ -1,6 +1,5 @@
 /** /projects/:slug/environments (brief 06 §2.9): the Evaluation Service deployments of the project. */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { projectPath } from '@/app/routes';
@@ -13,7 +12,6 @@ import { EnvironmentsList } from './EnvironmentsList';
 export function EnvironmentsPage() {
   const { project, slug, canManage, readOnly } = useProjectContext();
   useDocumentTitle(`${project.name} · Environments`);
-  const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const canAdd = canManage && !readOnly;
   return (
@@ -45,7 +43,7 @@ export function EnvironmentsPage() {
         canManage={canManage}
         readOnly={readOnly}
         storageKey="environments.list.v1"
-        onOpen={(env) => navigate(environmentPath(slug, env.id))}
+        rowHref={(env) => environmentPath(slug, env.id)}
       />
       {canAdd ? (
         <AddEnvironmentDialog

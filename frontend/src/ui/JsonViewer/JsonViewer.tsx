@@ -122,7 +122,7 @@ export function JsonTree({ data, expandDepth = 2, label = 'JSON', toolbar = true
       {toolbar ? (
         <div className={styles.toolbar}>
           <Button
-            variant="ghost"
+            variant="neutral"
             onPress={() => {
               setForced('open');
               setGen((g) => g + 1);
@@ -131,7 +131,7 @@ export function JsonTree({ data, expandDepth = 2, label = 'JSON', toolbar = true
             Expand all
           </Button>
           <Button
-            variant="ghost"
+            variant="neutral"
             onPress={() => {
               setForced('closed');
               setGen((g) => g + 1);

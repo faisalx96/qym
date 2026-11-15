@@ -7,6 +7,12 @@ from sqlalchemy import text
 
 from qym_platform.tools.perf import synth
 
+# Seeds a production-shaped PostgreSQL database (about 90 s on CI): opt in with QYM_TEST_SLOW=1.
+pytestmark = [
+    pytest.mark.slow,
+    pytest.mark.skipif(not os.environ.get("QYM_TEST_SLOW"), reason="QYM_TEST_SLOW not set"),
+]
+
 
 def _generate(engine, tmp_path, scale):
     return synth.generate(

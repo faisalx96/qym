@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -31,8 +30,6 @@ def client(monkeypatch):
     monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
     monkeypatch.setenv("QYM_AUTH_LOCAL_ENABLED", "false")
     monkeypatch.setenv("QYM_MAINTENANCE_MODE", "false")
-    if "openai" not in sys.modules:
-        sys.modules["openai"] = MagicMock()
     from fastapi.testclient import TestClient
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker

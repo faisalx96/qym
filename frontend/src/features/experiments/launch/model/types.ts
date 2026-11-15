@@ -175,8 +175,8 @@ export interface EnvData {
   extra?: Record<string, ModelSlot | null>;
   /** What the service accepts beyond guide v1.3 (from its stored evaluator schema). */
   capabilities?: { datasets: boolean; task: boolean };
-  /** The service's tasks as last read (`ids` only; the names live in the launch page's query). */
-  taskList?: { status: 'ok' | 'unsupported' | 'error'; ids: string[] };
+  /** The service's tasks as last read: the ids and, for messages, each id's listed name. */
+  taskList?: { status: 'ok' | 'unsupported' | 'error'; ids: string[]; names?: Record<string, string> };
 }
 
 // ── Presets, best runs, clone ────────────────────────────────────────────
@@ -346,8 +346,13 @@ export interface LaunchSelection {
   extraRefs: string[];
   more: DatasetEntry[];
   runShape: RunShape;
-  /** Task id per environment id; `null` or absent = the worker's default task. */
-  tasks: Record<string, string | null>;
+  /** The one task of the experiment (every ticked environment runs it); `null` = the worker's default task. */
+  task: string | null;
+  /**
+   * A cloned experiment that ran different tasks per environment: kept as it was and shown read-only
+   * (`null` for every experiment launched with one task).
+   */
+  mixedTasks: Record<string, string> | null;
 }
 
 export type BaseKind = 'default' | 'best_run' | 'saved' | 'scratch' | 'clone' | 'official-edit';
@@ -431,6 +436,11 @@ export interface LaunchDocument {
   description: string;
   /** '' = environment default. */
   priority: Priority | '';
+  /**
+   * Runs whose priority differs from `priority` (round 9): `jobKey` -> priority. Only rows the user
+   * changed are kept, so the experiment-level control still moves every other row.
+   */
+  jobPriorities: Record<string, Priority>;
   /** Latency-sensitive run: starts on a quiet gateway and makes other jobs wait (guide v1.3 §2.2). */
   latencySensitive: boolean;
   base: BaseInfo;
@@ -534,8 +544,17 @@ export interface LaunchRequest {
   save_to_project_models: string[];
   priority?: Priority;
   acknowledge_preemption?: boolean;
+  /** Runs whose priority differs from `priority`, by the keys of the dry-run preview. Absent when none. */
+  job_priorities?: JobPriorityRequest[];
   /** Sent only when true. */
   latency_sensitive?: boolean;
+}
+
+export interface JobPriorityRequest {
+  environment_id: string;
+  combo_index: number;
+  dataset_index: number;
+  priority: Priority;
 }
 
 export interface ServerError {
@@ -572,6 +591,8 @@ export interface DryRunJob {
   dataset?: { dataset: string; version?: string | null; alias?: string | null } | null;
   datasets?: Array<{ dataset: string; version?: string | null; alias?: string | null }> | null;
   task?: { id: string; name: string } | null;
+  /** The priority this run is submitted with (the experiment's unless `job_priorities` says otherwise). */
+  priority?: Priority;
   errors?: ServerError[];
   warnings?: Array<{ message: string; [key: string]: unknown }>;
 }

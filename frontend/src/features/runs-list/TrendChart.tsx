@@ -8,6 +8,7 @@ import { useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { Trend } from '@/api/dashboardTypes';
 import { useMeasuredWidth } from '@/features/run-detail/components/charts/Charts';
 import { Text } from '@/ui';
+import { TipBody } from '@/ui/Chart';
 import { trendDomain, trendFormat, trendIsRate } from './trendModel';
 import styles from './TrendChart.module.css';
 
@@ -31,28 +32,12 @@ const BARS_H = 56;
 const BARS_GAP = 22;
 
 function Readout({ p, metric, rate }: { p: Point; metric: string; rate: boolean }) {
-  return (
-    <>
-      <div className={styles.tipDate}>{p.label}</div>
-      <div className={styles.tipRow}>
-        <span className={styles.tipKey} data-series="1" aria-hidden="true" />
-        <strong>{trendFormat(p.mean, rate)}</strong>
-        <span>{metric}</span>
-      </div>
-      <div className={styles.tipRow}>
-        <span className={styles.tipKey} data-series="bar" aria-hidden="true" />
-        <strong>{p.runs}</strong>
-        <span>run{p.runs === 1 ? '' : 's'}</span>
-      </div>
-      {p.success !== null ? (
-        <div className={styles.tipRow}>
-          <span className={styles.tipKey} data-series="none" aria-hidden="true" />
-          <strong>{(p.success * 100).toFixed(0)}%</strong>
-          <span>execution success</span>
-        </div>
-      ) : null}
-    </>
-  );
+  const rows: Array<[string, string]> = [
+    [metric, trendFormat(p.mean, rate)],
+    ['Finished runs', String(p.runs)],
+  ];
+  if (p.success !== null) rows.push(['Execution success', `${(p.success * 100).toFixed(0)}%`]);
+  return <TipBody title={p.label} rows={rows} />;
 }
 
 export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: number }) {

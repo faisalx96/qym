@@ -1,14 +1,25 @@
-import { zoneLabel, zoneTime } from '../../lib/zone';
-import { APP_LOCALE, toDate } from '@/lib/dates';
+import { formatShortDayKey, formatTableDate } from '@/lib/dates';
+import { humanizeKey } from '@/lib/humanizeKey';
+import type { StateTagTone } from '@/ui';
 
-export function workerTime(value: string | null | undefined, zone?: string): string {
-  const date = toDate(value);
-  return date ? `${zoneTime(date.toISOString(), zone)} ${zoneLabel(zone)}` : '—';
+export function workerTime(value: string | null | undefined): string {
+  return formatTableDate(value);
 }
 
 export function workerDay(value: string): string {
-  const date = toDate(value);
-  return date
-    ? `${date.getUTCDate()} ${date.toLocaleDateString(APP_LOCALE, { month: 'short', timeZone: 'UTC' })}`
-    : value;
+  return formatShortDayKey(value);
+}
+
+/**
+ * The worker state as a StateTag (B-11): running = info, paused or any other = neutral. The word is the state in
+ * sentence case ('running' → 'Running'), with ` v<n>` when a settings version is given.
+ */
+export function workerStateTag(
+  state: string,
+  version?: number | null,
+): { tone: StateTagTone; label: string } {
+  return {
+    tone: state === 'running' ? 'info' : 'neutral',
+    label: `${humanizeKey(state)}${version != null ? ` v${version}` : ''}`,
+  };
 }

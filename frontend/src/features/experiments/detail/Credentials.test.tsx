@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ExperimentDetail, ExperimentJob } from '@/api/experiments';
+import { formatHeaderDate } from '@/lib/dates';
 import { Credentials, credentialsNeedAttention, revokedLabel, tokenFacts } from './Credentials';
 import { TOKEN_UNAVAILABLE_REASON } from './copy';
 
@@ -115,10 +116,11 @@ describe('Credentials', () => {
         })}
       />,
     );
+    const when = formatHeaderDate(at.toISOString());
     expect(screen.getByTestId('token-notice').textContent).toBe(
-      'Dataset read token revoked 12:41. Retry the blocked jobs to issue a new one.',
+      `Dataset read token revoked ${when}. Retry the blocked jobs to issue a new one.`,
     );
-    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('Revoked 12:41');
+    expect(screen.getByTestId('cred-dataset-token').textContent).toBe(`Revoked ${when}`);
   });
   it('does not warn about a revoked token of a settled experiment', () => {
     const facts = tokenFacts(
@@ -132,8 +134,7 @@ describe('Credentials', () => {
     );
     expect(facts.revokedStillNeeded).toBe(false);
   });
-  it('formats another day with the date', () => {
-    const now = new Date(2026, 9, 21, 9, 0);
-    expect(revokedLabel(new Date(2026, 9, 20, 12, 41).toISOString(), now)).toBe('20 Oct 12:41');
+  it('formats the revoked time in the header form', () => {
+    expect(revokedLabel(new Date(2026, 9, 20, 12, 41).toISOString())).toBe('Oct 20, 2026, 12:41');
   });
 });

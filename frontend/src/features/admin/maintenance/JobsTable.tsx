@@ -15,15 +15,17 @@ import {
 import { formatDateTime } from '../format';
 import styles from './maintenance.module.css';
 
-/** status → tone and figure. Paused waits for Start (hourglass), so it reads apart from Cancelled (pause). */
+/**
+ * status → tone and figure. Paused waits for an admin to press Start (hourglass), so it reads apart from Cancelled
+ * (pause). Cancel requested is still working (info orbit) until the job stops.
+ */
 const FIGURE: Record<JobStatus, [StatusTone, StatusShape]> = {
   queued: ['neutral', 'ring'],
   running: ['info', 'orbit'],
   paused: ['warning', 'hourglass'],
-  cancel_requested: ['warning', 'orbit'],
+  cancel_requested: ['info', 'orbit'],
   cancelled: ['warning', 'pause'],
-  // C218: success is the normal case, so it is quiet; only failures and waits take a colour
-  succeeded: ['neutral', 'full'],
+  succeeded: ['success', 'full'],
   failed: ['danger', 'cross'],
 };
 
@@ -114,7 +116,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
         storageKey="admin-jobs"
         density="comfortable"
         densityLocked
-        empty="No jobs yet."
+        empty="No jobs yet"
         refreshing={jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status))}
         rowState={(j) => (j.status === 'failed' ? 'error' : j.status === 'running' ? 'live' : undefined)}
         rowActions={(j) => [
@@ -142,7 +144,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
                 {
                   id: 'cancel',
                   label: `Cancel ${j.kind}`,
-                  icon: 'close',
+                  icon: 'ban',
                   primary: true,
                   danger: true,
                   disabled: act.isPending || j.status === 'cancel_requested',
@@ -152,14 +154,22 @@ export function JobsTable({ jobs }: JobsTableProps) {
             : []),
         ]}
       >
-        <DataTable.Footer summary={`${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}`} />
+        <DataTable.Footer
+          pagination={{
+            total: jobs.length,
+            page: 1,
+            pageSize: Math.max(1, jobs.length),
+            noun: 'jobs',
+            onPageChange: () => {},
+          }}
+        />
       </DataTable>
       <Drawer
         open={shown !== null}
         onOpenChange={(o) => !o && setLogJob(null)}
         title={shown ? `${shown.kind} log` : 'Job log'}
         subtitle={shown ? <JobStatusBadge status={shown.status} /> : undefined}
-        width={640}
+        width={560}
       >
         {shown ? (
           <div className={styles.logMeta} data-job-log-drawer>

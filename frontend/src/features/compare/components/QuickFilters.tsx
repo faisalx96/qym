@@ -120,7 +120,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
     <div className={styles.body} data-testid="quick-filters">
       {onHide ? (
         <div className={styles.head}>
-          <Text variant="md" weight={650} tone="primary">
+          <Text as="h2" variant="lg">
             Quick filters
           </Text>
           <IconButton label="Hide quick filters" icon="close" onPress={onHide} />

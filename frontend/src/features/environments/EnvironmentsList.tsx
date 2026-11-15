@@ -1,5 +1,6 @@
-/** The environments table with its row actions (Run default preset, Manage/View, Test). Page and settings share it. */
+/** The environments table with its row actions (Run default preset, Test). Page and settings share it. */
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTestEnvironment } from '@/api/evalEnvironments';
 import { errorMessage, useEvalEnvironments, type EvalEnvironment } from '@/api/evalCommon';
 import { useDelayedPending } from '@/lib/pending';
@@ -14,6 +15,7 @@ import {
   type Column,
   type RowAction,
 } from '@/ui';
+import { titleCase } from '@/features/experiments/lib/format';
 import { DefaultPresetTag, HealthCell, SchemaCell, SlotsStatusTag } from './cells';
 import styles from './EnvironmentsTable.module.css';
 import { canRunDefaultPreset, useRunDefaultPreset } from './runDefaultPreset';
@@ -23,7 +25,8 @@ export interface EnvironmentsListProps {
   slug: string;
   canManage: boolean;
   readOnly: boolean;
-  onOpen: (env: EvalEnvironment) => void;
+  /** Where a row opens (the whole row, and the name as a real link). */
+  rowHref: (env: EvalEnvironment) => string;
   storageKey?: string;
 }
 
@@ -32,7 +35,7 @@ export function EnvironmentsList({
   slug,
   canManage,
   readOnly,
-  onOpen,
+  rowHref,
   storageKey,
 }: EnvironmentsListProps) {
   const list = useEvalEnvironments(projectId);
@@ -89,11 +92,11 @@ export function EnvironmentsList({
       hideable: false,
       priority: 1,
       cell: (env) => (
-        <div className={styles.name}>
+        <div className={styles.name} data-part="env-row-name">
           <span className={styles.nameRow}>
-            <button type="button" className={styles.nameLink} onClick={() => onOpen(env)}>
+            <Link className={styles.nameLink} to={rowHref(env)} data-part="env-row-link" data-link="name">
               {env.name}
-            </button>
+            </Link>
             {env.is_active ? null : <Tag tone="warning">Disabled</Tag>}
           </span>
           {env.description ? (
@@ -144,7 +147,7 @@ export function EnvironmentsList({
       header: 'Priority cap',
       width: 125,
       priority: 3,
-      cell: (env) => <Tag kind="data">{env.max_priority || '—'}</Tag>,
+      cell: (env) => <Tag kind="data">{env.max_priority ? titleCase(env.max_priority) : '—'}</Tag>,
     },
   ];
 
@@ -161,18 +164,13 @@ export function EnvironmentsList({
           },
         ]
       : []),
-    {
-      id: 'manage',
-      label: `${canManage ? 'Manage' : 'View'} ${env.name}`,
-      icon: 'external',
-      primary: true,
-      onPress: onOpen,
-    },
     ...(canEdit
       ? [
           {
             id: 'test',
             label: `Test ${env.name}`,
+            icon: 'wrench',
+            primary: true,
             disabled: testingId === env.id,
             onPress: () => void runTest(env),
           },
@@ -189,6 +187,8 @@ export function EnvironmentsList({
         columns={columns}
         rows={envs}
         rowKey={(env) => env.id}
+        rowHref={rowHref}
+        rowProps={() => ({ 'data-part': 'env-row' })}
         minWidth={980}
         storageKey={storageKey}
         stickyHeader={false}

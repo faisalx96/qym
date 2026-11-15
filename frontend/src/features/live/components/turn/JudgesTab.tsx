@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import type { LiveTurnDetail } from '@/api/live';
-import { Card, InlineNotice, KeyValueGrid, ScoreValue, StatusMark, Tag, Text, TextBlock } from '@/ui';
+import { EmptyState, Card, InlineNotice, KeyValueGrid, ModelTag, StateTag, Text, TextBlock } from '@/ui';
 import {
   booleanOf,
   crossReviewOf,
@@ -12,23 +12,27 @@ import {
   servicesOf,
   verdictOf,
 } from '../../lib/summary';
-import { Bilingual, EvidenceCard } from './Evidence';
+import { Bilingual, EvidenceCard, MetricValue } from './Evidence';
 import { deviationEvidence } from './deviationEvidence';
 import { JudgeDeviations } from './JudgeDeviations';
-import { scoreText } from './presentation';
+import { modelSeriesOf } from '@/features/runs-list/model';
 import styles from './JudgesTab.module.css';
 
 function Check({ value }: { value: boolean | null | undefined }) {
   return (
-    <StatusMark
-      tone={value == null ? 'neutral' : value ? 'success' : 'danger'}
-      shape={value == null ? 'ring' : value ? 'check' : 'cross'}
-      label={value == null ? 'Unknown' : value ? 'Yes' : 'No'}
-    />
+    <StateTag tone={value == null ? 'neutral' : value ? 'success' : 'danger'}>
+      {value == null ? 'Unknown' : value ? 'Yes' : 'No'}
+    </StateTag>
   );
 }
 
-export function JudgesTab({ data }: { data: LiveTurnDetail }) {
+export function JudgesTab({
+  data,
+  modelIndex = null,
+}: {
+  data: LiveTurnDetail;
+  modelIndex?: Record<string, number> | null;
+}) {
   const location = useLocation();
   const agreement = booleanOf(data.summary.judges_agree);
   const confidence =
@@ -43,7 +47,6 @@ export function JudgesTab({ data }: { data: LiveTurnDetail }) {
     const score = data.scores.find((item) => item.metric_name === `compliance_${side}`);
     const meta = recordOf(score?.meta);
     const spec = data.specs.find((item) => item.metric_name === `compliance_${side}`) ?? score?.spec;
-    const threshold = spec?.pass_threshold ?? 0.7;
     const review = crossReviewOf(data.summary, side === 'a' ? 'a_on_b' : 'b_on_a');
     const coverage = judge?.vsAgent?.coverage;
     const route = judge?.routeReview;
@@ -70,19 +73,10 @@ export function JudgesTab({ data }: { data: LiveTurnDetail }) {
                 : axis === 'overall'
                   ? (score?.score_numeric ?? null)
                   : numberOf(meta?.[`${axis}_score`]));
-            const passes =
-              value !== null && (spec?.direction === 'minimize' ? value <= threshold : value >= threshold);
             return {
               key: axis,
               label: `${axis === 'sql' ? 'SQL' : axis === 'response' ? 'Response' : 'Overall'} compliance`,
-              value: (
-                <ScoreValue
-                  value={value}
-                  text={scoreText(value, spec)}
-                  variant="plain"
-                  verdict={value === null ? null : passes ? 'pass' : 'fail'}
-                />
-              ),
+              value: <MetricValue value={value} spec={spec} />,
             };
           })}
         />
@@ -121,13 +115,13 @@ export function JudgesTab({ data }: { data: LiveTurnDetail }) {
         route && (route.verdict || route.reasoningEn || route.reasoningAr) ? (
           <>
             {route.verdict ? (
-              <StatusMark
+              <StateTag
                 tone={
                   route.verdict === 'correct' ? 'success' : route.verdict === 'wrong' ? 'danger' : 'neutral'
                 }
-                shape={route.verdict === 'correct' ? 'check' : route.verdict === 'wrong' ? 'cross' : 'ring'}
-                label={{ correct: 'Correct route', wrong: 'Wrong route', unsure: 'Unsure' }[route.verdict]}
-              />
+              >
+                {{ correct: 'Correct route', wrong: 'Wrong route', unsure: 'Unsure' }[route.verdict]}
+              </StateTag>
             ) : null}
             <Bilingual en={route.reasoningEn || null} ar={route.reasoningAr || null} />
           </>
@@ -139,7 +133,7 @@ export function JudgesTab({ data }: { data: LiveTurnDetail }) {
         judge?.reasoningEn || judge?.reasoningAr ? (
           <Bilingual en={judge.reasoningEn || null} ar={judge.reasoningAr || null} />
         ) : (
-          <Text tone="muted">No reasoning available for this judge.</Text>
+          <EmptyState compact title="No reasoning available for this judge" />
         ),
       review:
         review && (review.agreement !== null || review.betterSql || review.textEn || review.textAr) ? (
@@ -185,7 +179,7 @@ export function JudgesTab({ data }: { data: LiveTurnDetail }) {
                           <TextBlock text={part.subQuestion} dir="auto" code={false} />
                         ) : null}
                         <div className={styles.inline}>
-                          <StatusMark
+                          <StateTag
                             tone={
                               part.executed === true
                                 ? 'success'
@@ -193,20 +187,14 @@ export function JudgesTab({ data }: { data: LiveTurnDetail }) {
                                   ? 'warning'
                                   : 'neutral'
                             }
-                            shape={
-                              part.executed === true ? 'check' : part.executed === false ? 'pause' : 'ring'
-                            }
-                            label={
-                              part.executed === true
-                                ? 'Executed'
-                                : part.executed === false
-                                  ? 'Not executed'
-                                  : 'Execution unknown'
-                            }
-                          />
-                          <Text as="span" mono>
-                            {part.rows ?? '—'} rows
-                          </Text>
+                          >
+                            {part.executed === true
+                              ? 'Executed'
+                              : part.executed === false
+                                ? 'Not executed'
+                                : 'Execution unknown'}
+                          </StateTag>
+                          <Text as="span">{part.rows ?? '—'} rows</Text>
                         </div>
                         {part.error ? (
                           <InlineNotice tone="danger">
@@ -288,7 +276,9 @@ export function JudgesTab({ data }: { data: LiveTurnDetail }) {
               <Text as="h2" variant="md" weight={600}>
                 Judge {side.toUpperCase()}
               </Text>
-              {judge?.model ? <Tag kind="model">{judge.model}</Tag> : null}
+              {judge?.model ? (
+                <ModelTag name={judge.model} series={modelSeriesOf(modelIndex, judge.model, false)} />
+              ) : null}
             </div>
             {facets.map(([key, title]) => (
               <section

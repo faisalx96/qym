@@ -1,10 +1,9 @@
-/* Auto-analysis workspace: one page (Setup, Targets, Results) and a sticky action rail. */
+/* Auto-analysis workspace: one page (Setup, Targets, Results) and a sticky action rail. The shared constrained
+   container sets the width and centres the page (cv4 D1); this rule only stacks the header and the view. */
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  max-width: var(--analysis-content-width);
-  margin-inline: auto;
 }
 
 /* The tab panel is empty (the view is its content), so it must not add spacing under the strip. */
@@ -21,10 +20,112 @@
   background: var(--accent-primary);
 }
 
-.flow {
+/* cv5 K3, Z11: on a wide screen the tab content is the left column and the prompt pane the right one, on every tab of
+   a run (a workspace page with a side pane, as the dataset items page: full width, not centred). The pane column is
+   the shell's, so a tab change never moves or remounts the pane. */
+.shell {
+  min-width: 0;
+}
+
+/* cv5 Q3: the pane width is the person's (--pane-w from the splitter), else 36% up to 760px; the grid keeps 440px
+   for the pane and 600px for the tab content whatever was remembered */
+.shell[data-pane] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(440px, var(--pane-w, min(36%, 760px)), calc(100% - var(--space-lg) - 600px));
+  gap: var(--space-lg);
+  align-items: stretch;
+}
+
+.main,
+.workspace {
+  min-width: 0;
+}
+
+/* the column stretches to the row, so the sticky block inside it follows the scroll */
+.paneCol {
+  min-width: 0;
+}
+
+.paneStick {
+  position: sticky;
+  top: var(--space-md);
+}
+
+.paneSlot {
+  min-width: 0;
+}
+
+/* cv5 Q3: the splitter in the column gap, as tall as the pane. The ui/SplitPane look: at rest a short grip, on hover,
+   drag and focus a 3px accent line; no motion. */
+.resizer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(-1 * var(--space-lg));
+  width: var(--space-lg);
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.resizer::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(50% - 1px);
+  width: 3px;
+  background: transparent;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: calc(50% - 16px);
+  inset-inline-start: calc(50% - 1px);
+  width: 3px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--border-strong);
+}
+
+.resizer:hover::before,
+.resizer[data-dragging]::before,
+.resizer:focus-visible::before {
+  background: var(--accent-primary);
+}
+
+.resizer:hover::after,
+.resizer[data-dragging]::after,
+.resizer:focus-visible::after {
+  background: transparent;
+}
+
+/* The guidance tabs in the left column: at most the constrained page's content width, at the start edge. */
+.guidance {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  min-width: 0;
+}
+
+.guidance[data-wide] {
+  max-width: calc(var(--page-max-w) - 2 * var(--space-lg));
+}
+
+.flow {
+  /* Block flow: the framed sections keep the ReportSection distance (--space-lg); Results and the rail use the same. */
+  display: flow-root;
+  min-width: 0;
+}
+
+.flow > * + * {
+  margin-block-start: var(--space-lg);
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
   min-width: 0;
 }
 
@@ -33,48 +134,6 @@
   opacity: 0.6;
   pointer-events: none;
   transition: opacity var(--arrive-fade) ease;
-}
-
-/* Setup: three hairline-separated groups in one card, never nested cards. */
-.setupGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  min-width: 0;
-  padding-block: var(--space-md);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.group:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.groupWide {
-  min-width: 0;
-  padding-top: var(--space-xs);
-  border-top: 1px solid var(--border-subtle);
-}
-
-@media (min-width: 1500px) {
-  .setupGrid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: var(--space-xl);
-  }
-
-  .group {
-    padding-top: 0;
-    border-top: 0;
-  }
-
-  .groupWide {
-    grid-column: 1 / -1;
-  }
 }
 
 .stack {

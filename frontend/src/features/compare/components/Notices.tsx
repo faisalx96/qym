@@ -1,9 +1,8 @@
 /** Read-only, different-data and alignment notices (brief 05 §3 "Page load / selection"). */
 import { useMemo } from 'react';
-import { Icon, Stack, Text } from '@/ui';
+import { InlineNotice, Stack } from '@/ui';
 import { useCompare } from '../CompareContext';
 import { datasetSetsDiffer, runDatasetCount } from '../lib/datasetSets';
-import styles from './Notices.module.css';
 
 export function Notices() {
   const { model, letter } = useCompare();
@@ -58,47 +57,45 @@ export function Notices() {
     <Stack gap="sm">
       {unpaired ? (
         // C058: runs of different tasks (or datasets) are not paired item by item
-        <div className={styles.note} role="note" data-notice="unpaired" data-testid="compare-unpaired-notice">
-          <strong>{differentTasks ? 'Different tasks' : 'Different datasets'}: items are not paired.</strong>{' '}
+        <InlineNotice
+          tone="warning"
+          lead={`${differentTasks ? 'Different tasks' : 'Different datasets'}: items are not paired.`}
+          data-notice="unpaired"
+          data-testid="compare-unpaired-notice"
+        >
           {unpaired
             .map((u) => `${u.name}: ${[u.task, u.dataset].filter(Boolean).join(' on ') || 'no task'}`)
             .join('; ')}
           . The averages compare the runs as a whole.
-        </div>
+        </InlineNotice>
       ) : null}
       {readOnlyRuns.length ? (
-        <div className={styles.note} role="note" data-notice="read-only">
-          <strong>Read-only.</strong>{' '}
+        <InlineNotice tone="warning" lead="Read-only." data-notice="read-only">
           {readOnlyRuns.length === 1
             ? `“${readOnlyRuns[0]}” belongs to an archived project, so its scores and diagnoses cannot be changed until an admin unarchives the project.`
             : `${readOnlyRuns.length} of these runs belong to archived projects, so their scores and diagnoses cannot be changed until those projects are unarchived.`}
-        </div>
+        </InlineNotice>
       ) : null}
       {datasetsNote ? (
-        <div
-          className={styles.info}
-          role="status"
+        <InlineNotice
+          tone="info"
+          icon="info"
+          lead="The runs evaluated different datasets."
           data-testid="compare-datasets-notice"
           data-notice="different-datasets"
         >
-          <Icon name="info" size={16} />
-          <div>
-            <div className={styles.infoTitle}>The runs evaluated different datasets</div>
-            <p className={styles.infoBody}>
-              {datasetsNote.sentences.length === 2
-                ? datasetsNote.sentences.join(' and ')
-                : `${datasetsNote.sentences.slice(0, -1).join(', ')} and ${datasetsNote.sentences.at(-1)}`}
-              . Items are matched by dataset and item id, so the{' '}
-              {datasetsNote.sentences.length === 2 ? 'two ' : ''}
-              runs share <b>{datasetsNote.shared}</b> {datasetsNote.shared === 1 ? 'item' : 'items'}; the
-              metric averages below are still comparable as run means.
-            </p>
-          </div>
-        </div>
+          {datasetsNote.sentences.length === 2
+            ? datasetsNote.sentences.join(' and ')
+            : `${datasetsNote.sentences.slice(0, -1).join(', ')} and ${datasetsNote.sentences.at(-1)}`}
+          . Items are matched by dataset and item id, so the{' '}
+          {datasetsNote.sentences.length === 2 ? 'two ' : ''}
+          runs share <b>{datasetsNote.shared}</b> {datasetsNote.shared === 1 ? 'item' : 'items'}; the metric
+          averages below are still comparable as run means.
+        </InlineNotice>
       ) : null}
       {data && !datasetsNote && !unpaired ? (
-        <div className={styles.note} role="note" data-notice="different-data">
-          <strong>Different data.</strong> These runs used{' '}
+        <InlineNotice tone="warning" lead="Different data." data-notice="different-data">
+          These runs used{' '}
           {data.multipleDatasets ? 'different datasets' : `different versions of ${data.entries[0]?.dataset}`}
           :{' '}
           {data.entries
@@ -109,26 +106,17 @@ export function Notices() {
             .join('; ')}
           . Score changes can come from the data as well as from the runs, and only items present in both runs
           are paired.
-        </div>
+        </InlineNotice>
       ) : null}
       {model.alignment.status !== 'aligned' ? (
-        <div className={styles.alert} role="alert" data-notice="alignment">
-          <Text variant="md" weight={600}>
-            These runs cannot be aligned item by item
-          </Text>
-          <Text variant="base" tone="muted">
-            They do not share reliable item identities, so item-level comparison is disabled; run-level
-            averages below are still shown.
-          </Text>
-          <ul>
-            {model.alignment.runs.map((r) => (
-              <li key={r.run_name}>
-                <strong>{r.run_name}</strong>
-                {r.issues.length ? ` (${r.issues.join('; ')})` : ''}
-              </li>
-            ))}
-          </ul>
-        </div>
+        <InlineNotice tone="danger" lead="These runs cannot be aligned item by item." data-notice="alignment">
+          {
+            'They do not share reliable item identities, so item-level comparison is disabled; run-level averages below are still shown. '
+          }
+          {model.alignment.runs
+            .map((r) => `${r.run_name}${r.issues.length ? ` (${r.issues.join('; ')})` : ''}`)
+            .join('; ')}
+        </InlineNotice>
       ) : null}
     </Stack>
   );

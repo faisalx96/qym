@@ -57,9 +57,19 @@ export interface Column<R> {
   priority?: 1 | 2 | 3;
   /** Card mode: this column leads the card (default: the first priority-1 column). */
   cardTitle?: boolean;
+  /**
+   * The row's primary text (cv4 F4): the cell gets `data-row-primary`, so its text turns accent while the row is hovered
+   * or holds keyboard focus. Default: in a clickable row (rowHref, onRowOpen, selectOnRowClick, expandOnRowClick) the
+   * `cardTitle` column, else the first priority-1 column. `true` picks a column; `false` stops the default one.
+   */
+  primary?: boolean;
   truncate?: 'end' | 'middle';
-  /** Clamp text to n lines (forces at least the regular row height). */
-  wrap?: number;
+  /**
+   * Wrap the text and clamp it to the lines of the row density (cv4 X6): compact 1, regular 2, comfortable 5
+   * (`WRAP_LINES` in DataTable.tsx). A comfortable row of a table with a wrapping column is at least four lines high. A number caps the
+   * lines at every density. A wrapping column never forces one row height for all densities.
+   */
+  wrap?: boolean | number;
   summary?: ReactNode | ((rows: R[]) => ReactNode);
   /** A filter targets this column: dot in the header. */
   filtered?: boolean;

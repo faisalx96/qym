@@ -4,6 +4,7 @@ import {
   ClampedText,
   CopyButton,
   Dialog,
+  Disclosure,
   Icon,
   IconButton,
   JsonTree,
@@ -14,7 +15,7 @@ import {
   TextBlock,
   parseStructured,
   type TabItem,
-  StatusMark,
+  StateTag,
 } from '@/ui';
 import {
   formatDuration,
@@ -126,10 +127,9 @@ function Messages({ node, only }: { node: SpanNode; only?: 'input' | 'output' })
           }
         >
           {m.reasoning ? (
-            <details className={styles.reasoning}>
-              <summary>Reasoning</summary>
+            <Disclosure className={styles.reasoning} title="Reasoning">
               <TextBlock text={m.reasoning} />
-            </details>
+            </Disclosure>
           ) : null}
           {m.content ? <ClampedText text={m.content} lines={14} /> : null}
           {m.toolCalls.map((t, j) => (
@@ -151,10 +151,9 @@ function Messages({ node, only }: { node: SpanNode; only?: 'input' | 'output' })
       {render(input, 'in')}
       {render(output, 'out')}
       {reasoning && !output.some((m) => m.reasoning) ? (
-        <details className={styles.reasoning}>
-          <summary>Reasoning</summary>
+        <Disclosure className={styles.reasoning} title="Reasoning">
           <TextBlock text={reasoning} />
-        </details>
+        </Disclosure>
       ) : null}
     </div>
   );
@@ -341,23 +340,7 @@ export function SpanDetail({ node }: { node: SpanNode }) {
               .join(' · ')}
           </div>
         </div>
-        <StatusMark
-          tone={
-            statusClass(node.status) === 'error'
-              ? 'danger'
-              : statusClass(node.status) === 'ok'
-                ? 'success'
-                : 'neutral'
-          }
-          shape={
-            statusClass(node.status) === 'error'
-              ? 'cross'
-              : statusClass(node.status) === 'ok'
-                ? 'full'
-                : 'ring'
-          }
-          label={statusClass(node.status) === 'ok' ? 'OK' : (node.status ?? 'unset').toLowerCase()}
-        />
+        <SpanStatusTag status={node.status} />
       </header>
       {errorEvents.map((e, i) => (
         <div key={i} className={styles.exception} role="alert">
@@ -373,5 +356,18 @@ export function SpanDetail({ node }: { node: SpanNode }) {
         ))}
       </Tabs>
     </div>
+  );
+}
+
+/**
+ * A span's status is the result of a call, so a StateTag (status rules 2026-11-12): OK success, Error danger, any
+ * other value (Unset when missing) neutral, in sentence case.
+ */
+function SpanStatusTag({ status }: { status: unknown }) {
+  const cls = statusClass(status);
+  const raw = cls === 'ok' ? 'OK' : String(status ?? 'unset').toLowerCase();
+  const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+  return (
+    <StateTag tone={cls === 'error' ? 'danger' : cls === 'ok' ? 'success' : 'neutral'}>{label}</StateTag>
   );
 }

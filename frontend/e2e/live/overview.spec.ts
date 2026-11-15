@@ -82,7 +82,7 @@ test('service health links to failed service turns, with failed canaries first',
   const canaries = page.locator('[data-live-canary]');
   await expect(canaries).toHaveCount(2);
   await expect(canaries.first()).toHaveAttribute('data-live-canary', 'viz_agent');
-  await expect(canaries.first()).toContainText('failed');
+  await expect(canaries.first()).toContainText('Failed');
   await page.locator('[data-live-service="sql_generation"]').click();
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/projects/${seed.projectSlug}/live/turns`);
   const url = new URL(page.url());
@@ -109,7 +109,7 @@ test('trend includes quiet days, switches its URL window and selects a day; Days
   await expect(page.locator('[data-live-trend-day][data-live-gap="false"]')).toHaveCount(14);
   await expect(page.locator('[data-live-trend-day][data-live-gap="true"]')).toHaveCount(0);
 
-  await page.getByRole('radiogroup', { name: 'Trend period' }).getByText('30', { exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Trend period' }).getByText('30d', { exact: true }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('trend_days')).toBe('30');
   await expect(columns).toHaveCount(30);
   await gotoApp(page, `${overviewUrl}&trend_days=30`);

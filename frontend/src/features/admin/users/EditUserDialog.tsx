@@ -105,7 +105,7 @@ function EditUserDialogInner({
               loading={update.isPending}
               data-edit-user-save
             >
-              {update.isPending ? 'Saving…' : 'Save changes'}
+              {update.isPending ? 'Saving…' : 'Save'}
             </Button>
           </>
         }
@@ -177,11 +177,7 @@ function EditUserDialogInner({
                       onFocus={(e) => e.target.select()}
                       data-secret
                     />
-                    <CopyButton
-                      text={temp}
-                      label="Copy temporary password"
-                      onCopied={() => toast.show('Temporary password copied', { tone: 'success' })}
-                    />
+                    <CopyButton text={temp} label="Copy temporary password" />
                   </div>
                 </div>
               ) : (

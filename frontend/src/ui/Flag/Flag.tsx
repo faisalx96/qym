@@ -25,3 +25,15 @@ export function Flag({ tone = 'neutral', icon, className, children, ...rest }: F
     </span>
   );
 }
+
+/** 'Required' after a slot or field name: the red Field star, then the word in the neutral Flag look (B-12). */
+export function RequiredFlag(props: Omit<FlagProps, 'children' | 'tone' | 'icon'>) {
+  return (
+    <Flag {...props} tone="neutral" title={props.title ?? 'Required'}>
+      <span className={styles.star} aria-hidden="true">
+        *
+      </span>
+      Required
+    </Flag>
+  );
+}

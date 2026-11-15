@@ -8,8 +8,10 @@ import {
   buildQueueStrip,
   cellKey,
   compareHref,
+  datasetText,
   jobGroup,
   jobStats,
+  refText,
   presetConfig,
   pruneSelection,
   temporaryModels,
@@ -363,7 +365,9 @@ describe('format helpers', () => {
     expect(jobsText(tallyJobCounts({ SUCCEEDED: 5, FAILED: 1 }))).toBe('5/6 · 1 failed');
     expect(jobsText(tallyJobCounts({ FAILED: 3 }))).toBe('0/3 · 3 failed');
     expect(jobsText(tallyJobCounts({ SUCCEEDED: 2, RUNNING: 1 }))).toBe('2/3');
-    expect(jobsText(tallyJobCounts({ SUCCEEDED: 1, CANCELLED: 1, FAILED: 1 }))).toBe('1/3 · 1 failed · 1 cancelled');
+    expect(jobsText(tallyJobCounts({ SUCCEEDED: 1, CANCELLED: 1, FAILED: 1 }))).toBe(
+      '1/3 · 1 failed · 1 cancelled',
+    );
   });
   it('writes relative times', () => {
     const now = Date.parse('2026-01-02T00:00:00Z');
@@ -395,5 +399,19 @@ describe('buildQueueStrip', () => {
       { environmentId: 'e2', environmentName: 'e2', queued: 0, running: 1, blocked: 0, position: null },
     ]);
     expect(buildQueueStrip([row('e1', 'FAILED', null)])).toEqual([]);
+  });
+});
+
+describe('dataset labels with the version pinned at launch', () => {
+  it('shows the chosen entry and, in brackets, the version a latest or alias entry resolved to', () => {
+    expect(refText({ version: 'v3', alias: null })).toBe('v3');
+    expect(refText({ version: null, alias: 'production' })).toBe('production');
+    expect(refText({ version: null, alias: null })).toBe('latest');
+    expect(refText({ version: null, alias: null, resolved_version: 'v7' })).toBe('latest (v7)');
+    expect(refText({ version: null, alias: 'production', resolved_version: 'v2' })).toBe('production (v2)');
+    expect(refText({ version: 'v3', alias: null, resolved_version: 'v3' })).toBe('v3');
+    expect(
+      datasetText({ dataset: 'support-tickets', version: null, alias: null, resolved_version: 'v7' }),
+    ).toBe('support-tickets · latest (v7)');
   });
 });

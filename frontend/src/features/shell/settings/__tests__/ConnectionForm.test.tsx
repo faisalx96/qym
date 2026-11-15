@@ -25,7 +25,7 @@ function renderForm() {
     onSubmit,
     baseUrl: screen.getByRole('textbox', { name: /Base URL/ }),
     key: screen.getByLabelText(/API key/),
-    save: screen.getByRole('button', { name: 'Save changes' }),
+    save: screen.getByRole('button', { name: 'Save' }),
   };
 }
 

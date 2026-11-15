@@ -10,6 +10,7 @@ import {
   ErrorState,
   Icon,
   LinkButton,
+  SearchField,
   SegmentedControl,
   Skeleton,
   SplitPane,
@@ -158,7 +159,7 @@ function Row({
           <Tag kind="count">try {node._attemptNumber}</Tag>
         ) : null}
         {model ? <span className={styles.sub}>{model}</span> : null}
-        {tokens ? <span className={styles.sub}>{tokens.toLocaleString('en-US')} tok</span> : null}
+        {tokens ? <span className={styles.sub}>{tokens.toLocaleString('en-US')} tokens</span> : null}
         {err ? <Tag tone="danger">error</Tag> : null}
       </span>
       <span className={styles.dur}>{formatDuration(node.duration_ms)}</span>
@@ -376,16 +377,17 @@ export function TraceDrawer({
   const treeEl = active ? (
     <section className={styles.treePane} aria-label="Spans">
       <div className={styles.treeTools}>
-        <label className={styles.search}>
-          <span className={styles.srOnly}>Filter spans</span>
-          <input
-            ref={searchRef}
-            type="search"
-            className={styles.searchInput}
-            placeholder="Filter spans (/)"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
+        <SearchField
+          ref={searchRef}
+          className={styles.search}
+          label="Search spans"
+          placeholder="Search spans"
+          hint="/"
+          width="100%"
+          value={search}
+          onChange={setSearch}
+          inputProps={{
+            onKeyDown: (e) => {
               if (e.key === 'Escape' && search) {
                 e.stopPropagation();
                 setSearch('');
@@ -393,12 +395,12 @@ export function TraceDrawer({
                 e.preventDefault();
                 scroller?.focus();
               }
-            }}
-          />
-        </label>
+            },
+          }}
+        />
         <Button
           size="sm"
-          variant="ghost"
+          variant="neutral"
           onPress={() =>
             setExpandedBy((s) => ({
               ...s,
@@ -412,7 +414,11 @@ export function TraceDrawer({
         >
           Expand all
         </Button>
-        <Button size="sm" variant="ghost" onPress={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}>
+        <Button
+          size="sm"
+          variant="neutral"
+          onPress={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}
+        >
           Collapse all
         </Button>
       </div>
@@ -483,7 +489,7 @@ export function TraceDrawer({
               href={langfuse}
               target="_blank"
               rel="noopener noreferrer"
-              icon={<Icon name="external" size={12} />}
+              iconEnd={<Icon name="external" size={12} />}
             >
               Open in Langfuse
             </LinkButton>

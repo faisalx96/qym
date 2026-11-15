@@ -77,7 +77,7 @@ test('QC-U43: a dataset deleted after the run keeps its chip and its row, withou
 
 test('QC-U44: twelve datasets give a twelve-row table and a clamped group', async ({ page }) => {
   await open(page, 1440, url(many));
-  await expect(page.getByRole('button', { name: /^\+ 6 more$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^\+6 more$/ })).toBeVisible();
   const section = page.locator('#run-section-datasets');
   await section.scrollIntoViewIfNeeded();
   await expect(section.getByTestId('show-items-link')).toHaveCount(12);

@@ -13,7 +13,7 @@ export function initials(user: DsUser | null | undefined): string {
   return letters.join('') || '?';
 }
 
-/** A person in the datasets area: the shared UserName (C144), after an optional label such as "Drafted By:". */
+/** A person in the datasets area: the shared UserName (C144), after an optional label such as "Drafted by". */
 export function UserPill({ user, label }: { user: DsUser | null | undefined; label?: string }) {
   if (!user) return null;
   return (

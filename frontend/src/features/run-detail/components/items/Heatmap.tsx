@@ -123,11 +123,11 @@ export function Heatmap({
             Showing {items.length.toLocaleString('en-US')} of {all.length.toLocaleString('en-US')} items
           </span>
           {items.length < all.length ? (
-            <Button size="sm" variant="ghost" onPress={() => setLimit((n) => n + PAGE)}>
+            <Button size="sm" variant="neutral" onPress={() => setLimit((n) => n + PAGE)}>
               Show {Math.min(PAGE, all.length - items.length)} more
             </Button>
           ) : (
-            <Button size="sm" variant="ghost" onPress={() => setLimit(PAGE)}>
+            <Button size="sm" variant="neutral" onPress={() => setLimit(PAGE)}>
               Show fewer
             </Button>
           )}

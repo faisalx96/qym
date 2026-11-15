@@ -124,20 +124,6 @@
   font-size: var(--font-base);
 }
 
-.callout {
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-}
-
-.callout[data-tone='error'] {
-  border-color: color-mix(in srgb, var(--error) 55%, var(--border-default));
-  color: var(--text-primary);
-}
-
 .removed {
   display: flex;
   align-items: center;

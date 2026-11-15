@@ -1,8 +1,9 @@
 /** The cohort banner with inline-editable labels, and the metric / baseline / pass controls. */
 import { useState } from 'react';
-import { IconButton, Select, SegmentedControl, Tag, TextField } from '@/ui';
+import { IconButton, Select, SegmentedControl, TextField } from '@/ui';
 import { useCompare } from '../CompareContext';
 import { columnName } from '../lib/columnName';
+import { RunTag } from './RunTag';
 import styles from './SelectionBar.module.css';
 
 function CohortSide({ side }: { side: 'left' | 'right' }) {
@@ -19,9 +20,7 @@ function CohortSide({ side }: { side: 'left' | 'right' }) {
   };
   return (
     <div className={styles.side} data-part="cohort-side">
-      <Tag kind="role">
-        {tag} / {side}
-      </Tag>
+      <RunTag index={side === 'left' ? 0 : 1} letter={tag} showName={false} bare />
       {editing ? (
         <TextField
           label={`Label for cohort ${tag}`}
@@ -153,7 +152,10 @@ export function BaselineSelect() {
         }}
         items={items}
         searchable="auto"
-        width="14rem"
+        // cv5 Y16: the trigger takes the width of its value (a run name is never cut); on a narrow screen it is capped
+        // by its row and the value wraps
+        width="max-content"
+        wrapValue
       />
     </span>
   );

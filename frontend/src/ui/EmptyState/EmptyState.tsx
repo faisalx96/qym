@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import { Text } from '../Text';
+import { TextLink } from '../TextLink';
 import styles from './EmptyState.module.css';
 
 export interface EmptyStateProps {
@@ -32,9 +32,9 @@ export function EmptyState({ icon, title, body, action, guide, compact }: EmptyS
       ) : null}
       {action ? <div className={styles.action}>{action}</div> : null}
       {guide ? (
-        <Link to={guide} className={styles.guide}>
+        <TextLink to={guide} className={styles.guide}>
           Read the guide
-        </Link>
+        </TextLink>
       ) : null}
     </div>
   );

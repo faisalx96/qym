@@ -1,9 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { parseLiveFilters, useLiveSources, useLiveTurns, type LiveTurnDetail } from '@/api/live';
+import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Card, IconButton, PageHeader, Tag } from '@/ui';
+import { Card, Icon, IconButton, PageHeader, Tag } from '@/ui';
+import { EnvironmentTag } from '../EnvironmentTag';
 import { DiagnosisLabel } from './Evidence';
-import { labelFor, traceHref, turnHref, turnTime } from './presentation';
+import { labelFor, liveTime, traceHref, turnHref } from './presentation';
 import styles from '../../turn.module.css';
 
 function ListNavigation({
@@ -50,7 +52,6 @@ export function TurnHeader({
   data,
   slug,
   source,
-  zone,
 }: {
   data: LiveTurnDetail;
   slug: string;
@@ -79,8 +80,9 @@ export function TurnHeader({
   return (
     <div data-live-block="turn-header">
       <PageHeader
-        title={
-          <span className={styles.turnTitle} dir="auto" data-live-question>
+        title={`Turn ${turn.turn_id}`}
+        description={
+          <span data-live-question {...textDirAttrs(turn.question)}>
             {turn.question}
           </span>
         }
@@ -92,26 +94,17 @@ export function TurnHeader({
                 </Tag>,
               ]
             : []),
-          <span key="time" className={styles.number}>
-            {turnTime(turn.turn_at, zone)}
+          <span key="time" className={styles.time}>
+            {liveTime(turn.turn_at)}
           </span>,
-          <span
-            key="user"
-            className={`${styles.number} ${styles.userRef}`}
-            dir="auto"
-            title={user ?? undefined}
-          >
+          <span key="user" className={styles.userRef} dir="auto" title={user ?? undefined}>
             {user ?? '—'}
           </span>,
           ...(turn.conversation_id
             ? [
                 <span key="conversation" title={turn.conversation_id}>
-                  conversation{' '}
-                  <span className={styles.number} dir="auto">
-                    {turn.conversation_id.slice(-3)}
-                  </span>{' '}
-                  · turn{' '}
-                  <span className={styles.number}>
+                  conversation <span dir="auto">{turn.conversation_id.slice(-3)}</span> · turn{' '}
+                  <span>
                     {current >= 0 ? current + 1 : '—'} of {conversation.length}
                   </span>
                 </span>,
@@ -124,24 +117,30 @@ export function TurnHeader({
                 </Tag>,
               ]
             : []),
-          ...(environment
-            ? [
-                <Tag key="environment" kind="data" dir="auto">
-                  {environment}
-                </Tag>,
-              ]
-            : []),
+          ...(environment ? [<EnvironmentTag key="environment" environment={environment} />] : []),
           ...(productTrace
             ? [
-                <a key="product-trace" href={productTrace} target="_blank" rel="noopener noreferrer">
-                  Product trace ↗
+                <a
+                  key="product-trace"
+                  href={productTrace}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.traceLink}
+                >
+                  Product trace <Icon name="external" size={12} />
                 </a>,
               ]
             : []),
           ...(evaluationTrace
             ? [
-                <a key="evaluation-trace" href={evaluationTrace} target="_blank" rel="noopener noreferrer">
-                  Evaluation trace ↗
+                <a
+                  key="evaluation-trace"
+                  href={evaluationTrace}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.traceLink}
+                >
+                  Evaluation trace <Icon name="external" size={12} />
                 </a>,
               ]
             : []),

@@ -46,7 +46,7 @@ export function QuickFilterGroup({
             {onOnly ? (
               <Button
                 size="sm"
-                variant="ghost"
+                variant="neutral"
                 className={styles.only}
                 aria-label={`Only ${o.label}`}
                 onPress={() => onOnly(o.id)}

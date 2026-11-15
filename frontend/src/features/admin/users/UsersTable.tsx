@@ -4,8 +4,8 @@ import { ApiError } from '@/lib/http';
 import {
   ConfirmDialog,
   DataTable,
+  Flag,
   SearchField,
-  StatusMark,
   Tag,
   Text,
   UserName,
@@ -90,6 +90,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
             className={styles.userCell}
             data-user-row={u.id}
             data-highlight={highlightId === u.id || undefined}
+            data-row-primary=""
           >
             <UserName id={u.id} name={u.display_name} email={u.email} />
             {u.id === meId ? (
@@ -99,13 +100,9 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
             ) : null}
             {/* on/off state: only the exception shows, after the name (no Status column) */}
             {u.is_active ? null : (
-              <StatusMark
-                tone="warning"
-                shape="pause"
-                label="Disabled"
-                data-status="disabled"
-                className={styles.offMark}
-              />
+              <Flag icon="ban" data-status="disabled" className={styles.offMark}>
+                Disabled
+              </Flag>
             )}
           </span>
         ),
@@ -137,10 +134,13 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         columns={columns}
         rows={shown}
         rowKey={(u) => u.id}
+        // A row opens its Edit dialog, so the row is clickable and the shared table makes its name the row's
+        // primary text: green while the row is hovered or focused (cv4 A3).
+        onRowOpen={onEdit}
         storageKey="admin-users"
         density="comfortable"
         densityLocked
-        empty="No users yet."
+        empty="No users yet"
         isFiltered={q !== ''}
         filteredEmpty={<Text variant="sm">No users match “{query.trim()}”.</Text>}
         rowActions={(u) => {
@@ -152,6 +152,7 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
               ? {
                   id: 'disable',
                   label: 'You cannot disable your own account',
+                  hint: 'You cannot disable your own account',
                   icon: 'ban',
                   primary: true,
                   danger: true,
@@ -183,17 +184,25 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
           columnsMenu={false}
           search={
             <SearchField
-              label="Filter users"
-              placeholder="Filter by name or email"
+              label="Search users"
+              placeholder="Search users"
               value={query}
               onChange={setQuery}
               onClear={() => setQuery('')}
-              width={320}
+              width="var(--search-width)"
+              shortcut="/"
             />
           }
         />
         <DataTable.Footer
-          summary={q ? `${shown.length} of ${users.length} users` : `${users.length} users`}
+          filterNote={q ? `Filtered from ${users.length} users` : undefined}
+          pagination={{
+            total: shown.length,
+            page: 1,
+            pageSize: Math.max(1, shown.length),
+            noun: 'users',
+            onPageChange: () => {},
+          }}
         />
       </DataTable>
       <ConfirmDialog

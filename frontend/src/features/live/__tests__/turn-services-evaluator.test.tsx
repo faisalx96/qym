@@ -1,3 +1,4 @@
+import { formatTableDate } from '@/lib/dates';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -38,7 +39,9 @@ describe('Services and tools', () => {
         row.getAttribute('data-live-turn-service'),
       ),
     ).toEqual(services.map((service) => service.name));
-    expect(container.querySelector('[data-verdict="fail"]')).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText('Services')).getAllByText('Fail')[0]?.closest('[data-kind="state"]'),
+    ).toHaveAttribute('data-tone', 'danger');
   });
 
   it.each([
@@ -166,7 +169,7 @@ describe('Evaluator record', () => {
     expect(evaluationTiming({ eval_meta: { durations_s: { metrics: 'slow', total: -1 } } }).total).toBeNull();
   });
 
-  it('shows per-metric failures and categorical values and honors lower-is-better thresholds', () => {
+  it('shows per-metric failures and categorical values and uses main formatting for lower-is-better scores', () => {
     const base = liveTurnDetail.scores[0]!;
     const data: LiveTurnDetail = {
       ...liveTurnDetail,
@@ -208,15 +211,12 @@ describe('Evaluator record', () => {
       ],
     };
     const { container } = render(<EvaluatorTab data={data} />);
-    expect(container.querySelector('[data-score-id="501"] [data-verdict]')).toHaveAttribute(
-      'data-verdict',
-      'pass',
-    );
+    expect(container.querySelector('[data-score-id="501"] [data-band]')).toHaveAttribute('data-band', '1');
     expect(container.querySelector('[data-score-id="502"]')).toHaveTextContent('Evaluation failed');
     expect(container.querySelector('[data-score-id="503"]')).toHaveTextContent('answer withheld');
   });
 
-  it('shows what ran, models, source-zone times, attempts and unknown keys without duplicate raw fields', () => {
+  it('shows what ran, models, viewer-clock times, attempts and unknown keys without duplicate raw fields', () => {
     const data = withSummary({
       manifest_hash: '1234567890abcdef',
       replaced_at: '2026-11-09T12:00:00Z',
@@ -242,16 +242,16 @@ describe('Evaluator record', () => {
     expect(
       screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Attempt 2 of 3'),
     ).toHaveTextContent('Attempt 2 of 3');
-    expect(screen.getByText('9 Nov 2026 · 15:00 Riyadh')).toBeInTheDocument();
+    expect(screen.getByText(formatTableDate('2026-11-09T12:00:00Z'))).toBeInTheDocument();
     expect(screen.getAllByText('judge-a')).toHaveLength(1);
-    expect(screen.getByText('1234567890ab')).toBeInTheDocument();
+    expect(screen.getByText('1234567890abcdef')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy manifest hash' })).toBeInTheDocument();
     expect(screen.getByText('keep me')).toBeInTheDocument();
     expect(screen.queryByText('eval_code_version')).not.toBeInTheDocument();
     expect(screen.getByText('No problems during evaluation')).toBeInTheDocument();
   });
 
-  it('reacts to the shell source query arriving late without another request', () => {
+  it('keeps the viewer clock when the shell source query arrives late', () => {
     const client = new QueryClient();
     const data = {
       ...liveTurnDetail,
@@ -262,13 +262,13 @@ describe('Evaluator record', () => {
         <EvaluatorTab data={data} />
       </QueryClientProvider>,
     );
-    expect(screen.getByText('9 Nov 2026 · 10:00 UTC')).toBeInTheDocument();
+    expect(screen.getByText(formatTableDate('2026-11-09T10:00:00Z'))).toBeInTheDocument();
     act(() =>
       client.setQueryData(['project', 'demo', 'live', 'sources'], {
         sources: [{ ...liveOverview.status, id: data.turn.source_id, day_key_timezone: 'Asia/Riyadh' }],
       }),
     );
-    expect(screen.getByText('9 Nov 2026 · 13:00 Riyadh')).toBeInTheDocument();
+    expect(screen.getByText(formatTableDate('2026-11-09T10:00:00Z'))).toBeInTheDocument();
   });
 
   it('uses stage timings first and labels old manifest timings without inventing a stage split', () => {

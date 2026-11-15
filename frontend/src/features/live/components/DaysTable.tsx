@@ -1,14 +1,14 @@
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
+import { formatDayKey } from '@/lib/dates';
 import { useSearchParamsState } from '@/lib/url-state';
-import { DataTable, ScoreValue, StatusMark, Text, type Column } from '@/ui';
+import { humanizeKey } from '@/lib/humanizeKey';
+import { DataTable, ScoreValue, StateTag, Text, type Column } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
 import { formatPrimaryMean } from '../lib/trend';
-import { zoneLabel } from '../lib/zone';
 import styles from '../live.module.css';
 
 export function DaysTable({
-  zone,
   days,
   slug,
   source,
@@ -30,7 +30,7 @@ export function DaysTable({
     specs.find((spec) => spec.is_primary) ?? specs.find((spec) => spec.metric_name === primaryMetric);
   const diagnosis = diagnosisSpec(specs);
   const columns: Column<LiveOverview['days']['rows'][number]>[] = [
-    { id: 'day', header: `Day (${zoneLabel(zone)})`, width: 130, mono: true },
+    { id: 'day', header: 'Day', width: 130, cell: (row) => formatDayKey(row.day) },
     { id: 'turns_seen', header: 'Turns', width: 75, type: 'number' },
     { id: 'evaluated', header: 'Evaluated', width: 90, type: 'number' },
     { id: 'failed', header: 'Failed', width: 75, type: 'number' },
@@ -38,7 +38,7 @@ export function DaysTable({
       id: 'primary_rate',
       header: primary?.label ?? 'Primary rate',
       width: 120,
-      mono: true,
+      align: 'center',
       cell: (row) => (
         <ScoreValue
           value={row.primary_rate}
@@ -64,6 +64,7 @@ export function DaysTable({
                 key={segment.value}
                 className={styles.mixSegment}
                 tone={segment.tone}
+                data-dark={segment.dark ? '' : undefined}
                 style={{ flex: segment.share }}
                 tip={`${segment.label}: ${segment.n} turns`}
                 aria-label={`${segment.label}: ${segment.n} turns`}
@@ -80,31 +81,33 @@ export function DaysTable({
       cell: (row) => {
         if (row.worker_gap) {
           return (
-            <StatusMark
-              tone="warning"
-              shape="hourglass"
-              label="Gap"
-              title={`Worker gap: ${row.max_poll_gap_s} s between heartbeats`}
-            />
+            <StateTag tone="warning" title={`Worker gap: ${row.max_poll_gap_s}s between heartbeats`}>
+              Gap
+            </StateTag>
           );
         }
         if (row.status === 'running' && stale) {
           return (
-            <StatusMark tone="danger" shape="cross" label="Stale" title="Open day, worker not heard from" />
+            <StateTag tone="danger" title="Open day, worker not heard from">
+              Stale
+            </StateTag>
           );
         }
         return (
-          <StatusMark
-            tone={row.status === 'running' ? 'success' : 'neutral'}
-            shape={row.status === 'running' ? 'orbit' : 'full'}
-            label={row.status}
-          />
+          <StateTag
+            tone={row.status === 'running' ? 'info' : row.status === 'closed' ? 'success' : 'neutral'}
+          >
+            {humanizeKey(row.status)}
+          </StateTag>
         );
       },
     },
   ];
   return (
     <div data-live-block="days">
+      <Text as="h3" variant="md" weight={600} className={styles.blockTitle}>
+        Days
+      </Text>
       <DataTable
         aria-label="Days"
         columns={columns}
@@ -117,13 +120,7 @@ export function DaysTable({
         responsive="scroll"
         minWidth={850}
       >
-        <DataTable.Toolbar
-          count={
-            <Text variant="md" weight={600}>
-              Days
-            </Text>
-          }
-        />
+        <DataTable.Toolbar />
         <DataTable.Footer
           pagination={{
             total: days.total,

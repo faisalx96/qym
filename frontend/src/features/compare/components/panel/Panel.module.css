@@ -30,13 +30,20 @@
 }
 
 .table th {
-  padding: var(--space-xs) var(--space-sm);
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  font-weight: 600;
   text-align: start;
   white-space: nowrap;
-  border-bottom: 1px solid var(--border-default);
+}
+
+.table thead th {
+  block-size: var(--table-header-height);
+  padding: 0 var(--space-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .table th[data-active] {
@@ -46,7 +53,6 @@
 .table td,
 .table tbody th {
   padding: var(--space-sm);
-  border-bottom: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: var(--font-base);
   vertical-align: top;
@@ -55,6 +61,10 @@
 .table tbody th {
   color: var(--text-primary);
   font-weight: 500;
+}
+
+.table tr:nth-child(even) > * {
+  background: color-mix(in srgb, var(--text-primary) var(--stripe-step-report), var(--card-bg));
 }
 
 .table tr[data-baseline] > * {
@@ -401,6 +411,11 @@
   color: var(--text-primary);
   font-size: var(--font-md);
   font-weight: 600;
+}
+
+.keyMark {
+  flex: none;
+  color: var(--text-muted);
 }
 
 /* C217: trace stats are numbers, centred like every number column */

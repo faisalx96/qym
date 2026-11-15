@@ -11,17 +11,10 @@
   display: inline-flex;
 }
 
+/* The '/' hint is the ui/Kbd keycap (B-20), shown while the field is empty. */
 .hint {
   display: none;
-  align-items: center;
-  height: 16px;
-  padding: 0 var(--space-xs);
   margin-inline-end: var(--space-xs);
-  border: 1px solid var(--border-default);
-  border-radius: 3px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-xs);
 }
 
 .clear {

@@ -5,7 +5,7 @@ module that needs different behavior (auth env, seed data, database backend)
 defines a fixture with the same name, and that local fixture wins.
 
 qym_platform is imported inside the fixture bodies: some test modules set env
-defaults or stub ``openai`` before they import the app, and loading this file
+defaults before they import the app, and loading this file
 first must not change that order. Plain helpers live in ``_helpers.py``.
 """
 
@@ -23,6 +23,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from _helpers import app_client, setup, sqlite_session_factory
+
+_SPA = Path(__file__).resolve().parents[2] / "packages" / "platform" / "qym_platform" / "_static" / "app"
+
+
+def pytest_runtest_setup(item):
+    """Skip ``@pytest.mark.bundle`` tests until the frontend bundle is built."""
+    if item.get_closest_marker("bundle") and not (_SPA / "index.html").is_file():
+        pytest.skip("frontend bundle not built (npm run --prefix frontend build)")
 
 MIGRATIONS = (
     Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/migrations"

@@ -71,11 +71,11 @@ test.describe('project and run errors (7, 8)', () => {
     await waitWorkspace(page);
   });
 
-  test('unknown run: "Couldn’t load auto-analysis" with an Open Runs link', async ({ page, request }) => {
+  test('unknown run: "Run not found" with a Runs link', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, 'nope'));
-    await expect(page.getByRole('heading', { name: 'Couldn’t load auto-analysis' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute(
+    await expect(page.getByRole('heading', { name: 'Run not found' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Runs', exact: true })).toHaveAttribute(
       'href',
       `/projects/${seed.slug}`,
     );
@@ -117,7 +117,9 @@ test.describe('settings (4, 15, 16, 21)', () => {
     await issues.blur();
     await expect(issues).toHaveValue(beforeIssues);
     const body = page.waitForRequest((r) => r.url().includes('/analyze-test'));
-    await rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })
+      .click();
     expect(((await body).postDataJSON() as { timeout_seconds: number }).timeout_seconds).toBe(Number(before));
   });
 
@@ -129,7 +131,7 @@ test.describe('settings (4, 15, 16, 21)', () => {
     await openRun(page, seed.slug, seed.runId);
     await page.getByRole('button', { name: 'Analyze 4 items' }).click();
     await expect(jobRegion(page)).toContainText('metric analyses succeeded', { timeout: 30_000 });
-    await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Targets' })).toBeVisible();
     await page.getByRole('button', { name: 'Refresh targets' }).click();
     await expect(page.getByRole('link', { name: 'Open Reviews' })).toHaveAttribute(
       'href',
@@ -165,20 +167,20 @@ test.describe('guidance (2, 3, 9)', () => {
     await page.getByRole('button', { name: 'Delete rule Rule 1' }).click();
     const dialog = page.getByRole('alertdialog', { name: 'Delete this rule?' });
     await dialog.getByRole('button', { name: 'Keep' }).click();
-    await expect(page.getByTestId('rule-count')).toContainText('2 rules');
+    await expect(page.getByRole('list', { name: 'Rules' }).getByRole('listitem')).toHaveCount(2);
     await page.getByRole('button', { name: 'Delete rule Rule 1' }).click();
     await page
       .getByRole('alertdialog', { name: 'Delete this rule?' })
       .getByRole('button', { name: 'Delete' })
       .click();
-    await expect(page.getByTestId('rule-count')).toContainText('1 rule ');
+    await expect(page.getByRole('list', { name: 'Rules' }).getByRole('listitem')).toHaveCount(1);
     await toggleBox(page.getByRole('checkbox', { name: 'Select Rule 2' }));
     await page.getByRole('button', { name: /^Delete selected/ }).click();
     await page
       .getByRole('alertdialog', { name: 'Delete this rule?' })
       .getByRole('button', { name: 'Delete' })
       .click();
-    await expect(page.getByTestId('rule-count')).toContainText('0 rules');
+    await expect(page.getByRole('list', { name: 'Rules' }).getByRole('listitem')).toHaveCount(0);
   });
 
   test('diagnosis search keeps list and editor on the same category', async ({ page, request }) => {
@@ -210,13 +212,15 @@ test.describe('connection without a key (11)', () => {
     });
     await openRun(page, seed.slug, seed.runId);
     await rail(page)
-      .getByRole('button', { name: /LLM connection/ })
+      .getByRole('button', { name: /Analyzer model/ })
       .click();
-    const option = page.getByRole('option', { name: /key missing/ });
+    const option = page.getByRole('option', { name: /nokey/ });
     await expect(option).toHaveAttribute('aria-disabled', 'true');
     await option.click({ force: true });
     await page.keyboard.press('Escape');
-    await expect(rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ })).toBeEnabled();
-    await expect(rail(page).getByRole('button', { name: /LLM connection/ })).not.toContainText('nokey');
+    await expect(
+      rail(page).getByRole('button', { name: /^Test (selected \(1\)|the first target)$/ }),
+    ).toBeEnabled();
+    await expect(rail(page).getByRole('button', { name: /Analyzer model/ })).not.toContainText('nokey');
   });
 });

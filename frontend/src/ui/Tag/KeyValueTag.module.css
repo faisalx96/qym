@@ -1,11 +1,13 @@
-/* Passive key / value chip: height --control-height, fill --bg-elevated, no hover. */
+/* Passive key / value chip: at least --control-height, fill --bg-elevated, no hover. The value wraps, never '…' (C-25). */
 .kv {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
   min-inline-size: 0;
   max-inline-size: 100%;
-  block-size: var(--control-height);
+  min-block-size: var(--control-height);
+  block-size: auto;
+  flex-wrap: wrap;
   padding-inline: var(--space-sm);
   border-radius: var(--control-radius);
   background: var(--bg-elevated);
@@ -14,19 +16,15 @@
 .key {
   flex: none;
   max-inline-size: 20ch;
-  overflow: hidden;
   font-size: var(--font-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--text-muted);
 }
 
 .value {
   min-inline-size: 0;
-  overflow: hidden;
   font-family: var(--font-mono);
   font-size: var(--font-base);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--text-primary);
 }

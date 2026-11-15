@@ -1,4 +1,4 @@
-/* Items tab toolbar/table/footer; composes SearchField/DataTable/Pagination/Chip. */
+/* Items tab toolbar/table/footer; composes SearchField/DataTable/Pagination. */
 .wrap {
   display: flex;
   flex-direction: column;
@@ -18,15 +18,19 @@
   text-align: start;
 }
 
+/* cv4 E1, X6: the item text wraps inside a wrapping column; the shared cell clamps it to the lines of the density
+   (compact 1, regular 2, comfortable 5). A block, so Arabic text keeps its own direction and alignment. */
 .previewWrap {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  display: block;
+  white-space: normal;
   overflow-wrap: anywhere;
   unicode-bidi: plaintext;
   text-align: start;
+}
+
+/* comfortable: each field of a structured value on its own line */
+.previewWrap[data-density='comfortable'] {
+  white-space: pre-line;
 }
 
 .empty {
@@ -74,17 +78,12 @@
   gap: var(--space-xs) var(--space-sm);
 }
 
-.countLabel {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  margin-inline-start: var(--space-xs);
-  color: inherit;
-}
-
-.chipRow {
+.filterRow {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-xs);
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
 }
 
 /* Item text reads in the sans face (design-language rule 4); JSON such as metadata stays mono (C153). */

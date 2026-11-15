@@ -259,7 +259,7 @@ test('P5-12b: the matrix is a roving grid (arrows move between cells)', async ({
   await grid.getByRole('button', { name: /^rubric_metric_01, pass 1:/ }).press('Enter');
   await expect(card.getByTestId('metric-detail')).toHaveCount(1);
   // "Show 16 more metrics" reveals the rest
-  await card.getByRole('button', { name: 'Show 16 more metrics' }).click();
+  await card.getByRole('button', { name: 'Show 16 more' }).click();
   await expect(grid.getByRole('row')).toHaveCount(25);
 });
 

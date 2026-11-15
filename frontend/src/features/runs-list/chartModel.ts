@@ -33,12 +33,12 @@ function fmtTraceNum(v: number): string {
   return String(Math.round(v));
 }
 export const TRACE_METRICS: TraceMetricColumn[] = [
-  { key: 'avg_tokens', label: 'Avg Tokens', format: (v) => (v == null ? '—' : fmtTraceNum(v)) },
-  { key: 'avg_llm_calls', label: 'Avg LLM Calls', format: (v) => (v == null ? '—' : v.toFixed(1)) },
-  { key: 'avg_tool_calls', label: 'Avg Tool Calls', format: (v) => (v == null ? '—' : v.toFixed(1)) },
+  { key: 'avg_tokens', label: 'Avg tokens', format: (v) => (v == null ? '—' : fmtTraceNum(v)) },
+  { key: 'avg_llm_calls', label: 'LLM calls', format: (v) => (v == null ? '—' : v.toFixed(1)) },
+  { key: 'avg_tool_calls', label: 'Tool calls', format: (v) => (v == null ? '—' : v.toFixed(1)) },
   {
     key: 'tool_success_rate',
-    label: 'Tool Success Rate',
+    label: 'Tool success',
     format: (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`),
   },
 ];

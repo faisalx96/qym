@@ -1,10 +1,22 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { LiveOverview } from '@/api/live';
 import { formatLatency, formatPercentValue } from '@/lib/format';
 import { metricBand } from '@/lib/metrics';
-import { StatTiles, type StatTile } from '@/ui';
+import { Icon, StatStrip, type CardBand, type StatTone } from '@/ui';
 import { diagnosisSpec } from '../lib/mix';
 import styles from '../live.module.css';
+
+type DayNumber = {
+  key: string;
+  label: string;
+  value: ReactNode;
+  meaning: string;
+  icon: ReactNode;
+  tone?: StatTone;
+  band?: CardBand;
+  sub?: ReactNode;
+};
 
 export function DayNumbers({
   overview,
@@ -24,7 +36,7 @@ export function DayNumbers({
     .slice(0, 2);
   const turns = day.row?.turns_seen ?? day.in_qym;
   const evaluated = day.row?.evaluated;
-  const problemTiles: StatTile[] = problems.map((label) => {
+  const problemTiles: DayNumber[] = problems.map((label) => {
     const key = String(label.value);
     const name = typeof label.label === 'string' ? label.label : key;
     const count = day.label_mix[key] ?? 0;
@@ -32,11 +44,10 @@ export function DayNumbers({
       key,
       label: name,
       value: (
-        <Link to={linkTo({ label: key })} data-tone={count > 0 ? String(label.tone) : undefined}>
-          {count}
-        </Link>
+        <Link to={linkTo({ label: key })}>{count}</Link>
       ),
-      danger: label.tone === 'danger' && count > 0,
+      icon: <Icon name={label.tone === 'danger' ? 'close' : 'warning'} />,
+      tone: count > 0 ? (label.tone === 'danger' ? 'danger' : 'warning') : undefined,
       meaning: `Turns diagnosed as ${name} on this day.`,
     };
   });
@@ -50,21 +61,26 @@ export function DayNumbers({
       key: fallback.key,
       label: fallback.label,
       value: <Link to={linkTo({ status: fallback.status })}>{fallback.count ?? '—'}</Link>,
-      danger: fallback.key === 'failed' && (fallback.count ?? 0) > 0,
+      icon: <Icon name={fallback.key === 'failed' ? 'close' : 'warning'} />,
+      tone: (fallback.count ?? 0) > 0 ? (fallback.key === 'failed' ? 'danger' : 'warning') : undefined,
       meaning: `${fallback.label} evaluations reported by the worker for this day.`,
     });
   }
-  const items: StatTile[] = [
+  const items: DayNumber[] = [
     {
       key: 'turns',
       label: 'Turns',
       value: <Link to={linkTo()}>{turns}</Link>,
+      icon: <Icon name="feedback" />,
+      sub: `${day.in_qym} received in qym`,
       meaning: `${turns} real user turns seen by the worker; ${day.in_qym} received in qym.`,
     },
     {
       key: 'evaluated',
       label: 'Evaluated',
       value: <Link to={linkTo({ status: 'completed' })}>{evaluated ?? '—'}</Link>,
+      icon: <Icon name="eye" />,
+      sub: `${day.row?.incomplete ?? 0} with incomplete evidence`,
       meaning: `${evaluated ?? 'Unknown number of'} turns evaluated; ${day.row?.incomplete ?? 0} still have incomplete evidence.`,
     },
     {
@@ -81,9 +97,10 @@ export function DayNumbers({
               : {},
           )}
         >
-          {formatPercentValue(mean, 0)}
+          {formatPercentValue(mean, 1)}
         </Link>
       ),
+      icon: <Icon name="shield" />,
       band: metricBand(mean, primary?.score_type, primary?.direction ?? null) ?? undefined,
       meaning: primary?.description ?? 'Mean primary metric score for this day. Skipped scores are excluded.',
     },
@@ -92,18 +109,23 @@ export function DayNumbers({
       key: 'latency',
       label: 'Median latency',
       value: <Link to={linkTo({ sort: '-latency_ms' })}>{formatLatency(day.latency.median_ms)}</Link>,
-      meaning: `Median response latency. P90: ${formatLatency(day.latency.p90_ms)}; ${day.latency.over_5min} turns took more than 5 minutes.`,
+      icon: <Icon name="clock" />,
+      meaning: `Median response latency. p90: ${formatLatency(day.latency.p90_ms)}; ${day.latency.over_5min} turns took more than 5 minutes.`,
     },
   ];
   return (
     <div className={styles.tiles} data-live-block="tiles">
-      <StatTiles
+      <StatStrip
         aria-label="Day numbers"
         items={items.map((item) => ({
-          ...item,
+          key: item.key,
+          label: item.label,
           help: item.meaning,
+          icon: item.icon,
+          tone: item.tone,
+          sub: item.sub,
           value: (
-            <span dir="auto" data-live-stat={item.key}>
+            <span dir="auto" data-live-stat={item.key} data-band={item.band}>
               {item.value}
             </span>
           ),

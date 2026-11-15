@@ -12,7 +12,7 @@ test('General: the review rules save to the project and survive a reload', async
   await gotoApp(page, `/projects/${project.slug}/settings`);
   const card = page.locator('section[aria-labelledby="general-rules"]');
   await expect(card).toBeVisible();
-  const save = card.getByRole('button', { name: 'Save rules' });
+  const save = card.getByRole('button', { name: 'Save', exact: true });
   const different = card.getByRole('checkbox', { name: 'Require a different reviewer than the author' });
   await expect(different).not.toBeChecked();
   await expect(save).toBeDisabled();
@@ -38,5 +38,5 @@ test('General: the review rules save to the project and survive a reload', async
     again.getByRole('checkbox', { name: 'Require a different reviewer than the author' }),
   ).toBeChecked();
   await expect(again.getByRole('button', { name: /Approvers/ })).toContainText('Managers only');
-  await expect(again.getByRole('button', { name: 'Save rules' })).toBeDisabled();
+  await expect(again.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 });

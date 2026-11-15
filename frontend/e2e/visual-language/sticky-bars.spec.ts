@@ -17,7 +17,9 @@ test.use({ viewport: { width: 1440, height: 900 } });
 const token = (page: Page, name: string) =>
   page.evaluate((n) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(n)), name);
 
-test('run section nav is --bar-nav-h; the compare jump nav is --bar-link-h (round 8, H5)', async ({ page }) => {
+test('run section nav is --bar-nav-h; the compare jump nav is --bar-link-h (round 8, H5)', async ({
+  page,
+}) => {
   await gotoApp(page, runUrl(tour.slug, tour.runId));
   const nav = page.getByRole('navigation', { name: 'Run sections' });
   await expect(nav).toBeVisible();

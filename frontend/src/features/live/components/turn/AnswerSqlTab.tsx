@@ -4,7 +4,13 @@ import { EvidenceCard } from './Evidence';
 import { SqlCompare } from './SqlCompare';
 import styles from '../../turn.module.css';
 
-export function AnswerSqlTab({ data }: { data: LiveTurnDetail }) {
+export function AnswerSqlTab({
+  data,
+  modelIndex,
+}: {
+  data: LiveTurnDetail;
+  modelIndex?: Record<string, number> | null;
+}) {
   return (
     <>
       <EvidenceCard title="Final answer" block="answer">
@@ -20,7 +26,7 @@ export function AnswerSqlTab({ data }: { data: LiveTurnDetail }) {
         <p className={styles.copy}>
           Result rows: <span className={styles.number}>{data.turn.result_rows ?? '—'}</span>
         </p>
-        <SqlCompare data={data} />
+        <SqlCompare data={data} modelIndex={modelIndex} />
       </EvidenceCard>
     </>
   );

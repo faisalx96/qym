@@ -34,6 +34,7 @@ def test_dynamic_responses_use_a_balanced_gzip_level() -> None:
     assert 4 <= GZIP_COMPRESSLEVEL <= 6
 
 
+@pytest.mark.bundle
 def test_static_mounts_serve_precompressed_assets() -> None:
     app = create_app()
     mounts = {route.path: route.app for route in app.routes if getattr(route, "path", None) in {"/assets"}}
@@ -130,6 +131,7 @@ def test_small_and_binary_assets_are_left_alone(asset_dir: Path) -> None:
     assert mount._gz_cache == {}
 
 
+@pytest.mark.bundle
 def test_real_app_bundle_round_trips() -> None:
     client = _client(STATIC)
     bundle = max(STATIC.glob("*.js"), key=lambda path: path.stat().st_size)

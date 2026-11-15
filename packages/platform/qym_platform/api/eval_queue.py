@@ -21,7 +21,7 @@ checked **per job**. Cancelling an orphan remote job needs a project manager.
             "wait_reason",             # why it isn't progressing, or null
             "error",
             "queue_position",          # 1-based among QUEUED jobs of its environment
-            "created_by_user_id", "created_by_email",
+            "created_by_user_id", "created_by_email", "created_by_name",
             "created_at", "next_attempt_at", "submitted_at", "cancel_requested_at",
             "remote_job_id", "remote_status",
             "can_cancel",              # the caller may cancel this job
@@ -292,7 +292,7 @@ def get_queue(
     positions = eval_queue.queue_positions(db, {j.environment_id for j in jobs})
     runs = eval_queue.linked_runs(db, jobs)
     progress = eval_queue.run_progress(db, runs.values())
-    emails = _user_emails(db, [x.created_by_user_id for _, x in rows])
+    emails, names = _user_emails(db, [x.created_by_user_id for _, x in rows])
     allowed: Dict[str, bool] = {}
     out = []
     for job, experiment in rows:
@@ -322,6 +322,7 @@ def get_queue(
                 "queue_position": positions.get(job.id),
                 "created_by_user_id": experiment.created_by_user_id,
                 "created_by_email": emails.get(experiment.created_by_user_id or ""),
+                "created_by_name": names.get(experiment.created_by_user_id or ""),
                 "created_at": to_api_timestamp(job.created_at),
                 "next_attempt_at": to_api_timestamp(job.next_attempt_at),
                 "submitted_at": to_api_timestamp(job.submitted_at),

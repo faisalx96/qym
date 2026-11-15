@@ -1,17 +1,23 @@
 /* Recipe: DESIGN_LANGUAGE §3 sidebar-nav + editor card. */
-.saveCluster {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+.saveFoot {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-md);
 }
 
+/* E-10: as the last row of the category detail card the hairline runs edge to edge, like the other save footers. */
+.editor > .saveFoot {
+  margin-inline: calc(-1 * var(--space-md));
+  padding-inline: var(--space-md);
+}
+
+/* cv5 Q6: the search box heads the category list: the list column's grid, so both share one width */
 .tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-md);
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: var(--space-lg);
 }
 
+/* the subcategory add row inside the editor */
 .addForm {
   display: flex;
   align-items: center;
@@ -96,14 +102,7 @@
   background: var(--bg-elevated);
   color: var(--text-secondary);
   font-size: var(--font-base);
-}
-
-.example summary {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  cursor: pointer;
+  padding-inline: var(--space-md);
 }
 
 .exampleBody {
@@ -111,7 +110,7 @@
   flex-direction: column;
   gap: var(--space-sm);
   margin: 0;
-  padding: 0 var(--space-md) var(--space-md);
+  padding: 0 0 var(--space-md);
 }
 
 .exampleBody dt {
@@ -131,11 +130,8 @@
 }
 
 @media (max-width: 760px) {
+  .tools,
   .catTabs {
     grid-template-columns: minmax(0, 1fr);
   }
-}
-
-.example summary:hover {
-  background: var(--bg-hover);
 }

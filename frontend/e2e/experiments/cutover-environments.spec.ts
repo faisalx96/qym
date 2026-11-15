@@ -61,7 +61,7 @@ test('the page shows the default preset with its version history and the saved p
   const row = saved.getByRole('row').filter({ hasText: 'Slow timeout' });
   await expect(row).toBeVisible();
   await expect(row).toContainText('v1');
-  await expect(row.getByRole('button', { name: 'Open Slow timeout in the launch form' })).toBeVisible();
-  await row.getByRole('button', { name: 'Open Slow timeout in the launch form' }).click();
+  await expect(row.getByRole('button', { name: 'Open Slow timeout in the launch form' })).toHaveCount(0);
+  await row.click();
   await expect(page).toHaveURL(new RegExp(`/experiments/new\\?.*base=saved.*`));
 });

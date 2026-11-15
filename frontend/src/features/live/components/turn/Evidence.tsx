@@ -8,15 +8,17 @@ import {
   CopyButton,
   DataTable,
   Disclosure,
+  EmptyState,
   KeyValueGrid,
   ScoreValue,
-  StatusMark,
+  StateTag,
   StructuredValue,
   Text,
   TextBlock,
 } from '@/ui';
 import type { AppliedRule, SqlPart, SqlResult } from '../../lib/summary';
-import { labelFor, scoreText } from './presentation';
+import { verdictOf } from '../../lib/mix';
+import { labelFor, scoreText, statusWord } from './presentation';
 import styles from '../../turn.module.css';
 
 export function EvidenceCard({
@@ -45,53 +47,31 @@ export function EvidenceCard({
 
 export function DiagnosisLabel({ value, specs }: { value: string | null; specs: LiveMetricSpec[] }) {
   const label = labelFor(value, specs);
+  const v = verdictOf(label.specTone);
   return (
-    <StatusMark
-      tone="neutral"
-      data-tone={label.tone}
-      shape={
-        label.tone === 'danger'
-          ? 'cross'
-          : label.tone === 'accent' || label.tone === 'success'
-            ? 'check'
-            : 'ring'
-      }
-      label={label.label}
-      dir="auto"
-    />
+    <StateTag tone={v.tone} dir="auto">
+      {label.label}
+    </StateTag>
   );
 }
 
+/** A service or tool call result: OK green, Failed red, anything else (Skipped, unknown, none) grey. */
 export function ServiceStatus({ status }: { status: string | null }) {
   return (
-    <StatusMark
-      tone={
-        status === 'failed'
-          ? 'danger'
-          : status === 'ok'
-            ? 'success'
-            : status === 'degraded'
-              ? 'warning'
-              : 'neutral'
-      }
-      shape={
-        status === 'failed'
-          ? 'cross'
-          : status === 'ok'
-            ? 'check'
-            : status === 'skipped'
-              ? 'pause'
-              : status === 'degraded'
-                ? 'hourglass'
-                : 'ring'
-      }
-      label={status ?? '—'}
-      dir="auto"
-    />
+    <StateTag tone={status === 'failed' ? 'danger' : status === 'ok' ? 'success' : 'neutral'} dir="auto">
+      {status ? statusWord(status) : '—'}
+    </StateTag>
   );
+}
+
+/** A boolean Live score as a check result: 1 = green 'Pass', 0 = red 'Fail', null = '—' (C-19). */
+export function PassFailTag({ value }: { value: number | null }) {
+  if (value === null) return <span>—</span>;
+  return value ? <StateTag tone="success">Pass</StateTag> : <StateTag tone="danger">Fail</StateTag>;
 }
 
 export function MetricValue({ value, spec }: { value: number | null; spec?: LiveMetricSpec | null }) {
+  if (spec?.score_type === 'boolean') return <PassFailTag value={value} />;
   return (
     <ScoreValue
       value={value}
@@ -105,7 +85,7 @@ export function MetricValue({ value, spec }: { value: number | null; spec?: Live
 
 export function Facts({ value, label }: { value: Record<string, unknown> | null; label: string }) {
   if (!value || Object.keys(value).length === 0)
-    return <Text tone="muted">No {label.toLowerCase()} available for this turn.</Text>;
+    return <EmptyState compact title={`No ${label.toLowerCase()} for this turn`} />;
   return (
     <div className={styles.facts}>
       <KeyValueGrid
@@ -181,24 +161,22 @@ export function SqlPreview({ result, expanded = false }: { result: SqlResult; ex
 }
 
 export function SqlParts({ parts }: { parts: SqlPart[] }) {
-  if (!parts.length) return <Text tone="muted">No SQL available for this turn.</Text>;
+  if (!parts.length) return <EmptyState compact title="No SQL for this turn" />;
   return (
     <div className={styles.sqlParts}>
       {parts.map((part, index) => (
         <div key={index}>
           <div className={styles.sqlMeta}>
-            <StatusMark
+            <StateTag
               tone={part.executed === true ? 'success' : part.executed === false ? 'warning' : 'neutral'}
-              shape={part.executed === true ? 'check' : part.executed === false ? 'pause' : 'ring'}
-              label={
-                part.executed === true
-                  ? 'Executed'
-                  : part.executed === false
-                    ? 'Not executed'
-                    : 'Execution unknown'
-              }
-            />
-            <span className={styles.number}>{part.rows ?? '—'} rows</span>
+            >
+              {part.executed === true
+                ? 'Executed'
+                : part.executed === false
+                  ? 'Not executed'
+                  : 'Execution unknown'}
+            </StateTag>
+            <span>{part.rows ?? '—'} rows</span>
             {part.text !== null ? <CopyButton text={part.text} label="Copy SQL" /> : null}
           </div>
           <pre className={styles.sql} dir="ltr">

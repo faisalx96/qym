@@ -122,7 +122,7 @@ export function CreateDraftDialog({
       confirmLabel="Create draft"
       submittingLabel="Creating…"
       fields={[
-        { name: 'name', label: 'Name', autoFocus: true, placeholder: 'Optional, e.g. “fix typos”' },
+        { name: 'name', label: 'Name', autoFocus: true, placeholder: 'e.g. “fix typos”' },
         {
           name: 'from',
           label: 'Copy items from',
@@ -174,7 +174,7 @@ export function PublishDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`Publish ${version.version}`}
+      title={`Publish ${version.version}?`}
       description={`Publishing freezes ${version.version} (${version.item_count.toLocaleString(APP_LOCALE)} items) as a snapshot; runs can target it and it can no longer be edited.`}
       notice={
         version.disabled_count > 0 ? (
@@ -463,7 +463,7 @@ export function DisableItemDialog({
           <Button variant="neutral" size="md" onPress={() => onOpenChange(false)} isDisabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" size="md" loading={busy} onPress={() => void submit()}>
+          <Button variant="danger" size="md" loading={busy} onPress={() => void submit()}>
             {many ? `Disable ${count}` : 'Disable item'}
           </Button>
         </>
@@ -471,7 +471,7 @@ export function DisableItemDialog({
     >
       <Textarea
         ref={field}
-        label="Reason (optional)"
+        label="Reason"
         rows={3}
         value={reason}
         onChange={(v) => setReason(v.slice(0, REASON_MAX))}

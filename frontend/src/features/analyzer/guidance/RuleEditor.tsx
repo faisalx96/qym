@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { estimateTokens, type SaveState, type useDraftRules } from '../useDraftRules';
+import type { SaveState, useDraftRules } from '../useDraftRules';
 import {
   Button,
   Checkbox,
   ConfirmDialog,
+  CountTile,
   EmptyState,
   Icon,
+  IconButton,
   Pagination,
   SearchField,
   Tag,
@@ -14,7 +16,6 @@ import {
   TextField,
 } from '@/ui';
 import s from './rules.module.css';
-import { APP_LOCALE } from '@/lib/dates';
 
 const PAGE = 10;
 
@@ -56,9 +57,6 @@ export function RuleEditor({
 
   return (
     <div className={s.editor}>
-      <Text variant="sm" tone="muted" as="p" data-testid="rule-count">
-        {`${rules.length} ${rules.length === 1 ? 'rule' : 'rules'} · ~${estimateTokens(rules).toLocaleString(APP_LOCALE)} prompt tokens · no rule count limit`}
-      </Text>
       <div className={s.ruleTools}>
         <SearchField
           label="Search rules"
@@ -69,29 +67,30 @@ export function RuleEditor({
             setPage(1);
           }}
           onClear={() => setQuery('')}
-          width={240}
+          width="var(--search-width)"
         />
         {editable ? (
           <>
-            <Checkbox
-              isSelected={allChecked}
-              onChange={(v) => setChecked(v ? new Set(filtered.map((r) => r.key)) : new Set())}
-              isDisabled={filtered.length === 0}
-            >
-              Select all filtered
-            </Checkbox>
-            <Button
-              size="sm"
-              variant="danger"
-              isDisabled={checked.size === 0}
-              disabledReason="Select the rules to delete"
-              onPress={() => setDeleting([...checked])}
-            >
-              {`Delete selected${checked.size ? ` (${checked.size})` : ''}`}
-            </Button>
+            {/* cv5 Y3: the bulk controls have a function only after a rule is checked, so they show only then */}
+            {checked.size ? (
+              <>
+                <Checkbox
+                  isSelected={allChecked}
+                  onChange={(v) => setChecked(v ? new Set(filtered.map((r) => r.key)) : new Set())}
+                  isDisabled={filtered.length === 0}
+                >
+                  Select all filtered
+                </Checkbox>
+                <Button size="sm" variant="danger" onPress={() => setDeleting([...checked])}>
+                  Delete selected<CountTile>{checked.size}</CountTile>
+                </Button>
+              </>
+            ) : null}
             <span className={s.spacer} />
+            {/* cv5 L3: the rule list creates its entity from one primary button (design language "Create action") */}
             <Button
               size="sm"
+              variant="primary"
               icon={<Icon name="plus" size={12} />}
               onPress={() => {
                 const key = add();
@@ -152,14 +151,13 @@ export function RuleEditor({
                   ) : null}
                   {r.inferred_from ? <Tag kind="data">{r.inferred_from}</Tag> : null}
                   {editable ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={`Delete rule ${r.title || 'untitled'}`}
+                    <IconButton
+                      tile
+                      tone="danger"
+                      icon="trash"
+                      label={`Delete rule ${r.title || 'untitled'}`}
                       onPress={() => setDeleting([r.key])}
-                    >
-                      <Icon name="trash" size={12} />
-                    </Button>
+                    />
                   ) : null}
                 </div>
                 {isOpen && !editable ? (
@@ -219,7 +217,9 @@ export function RuleEditor({
           body={
             rules.length
               ? 'Try a different search.'
-              : 'Generate rules after selecting reference documents or approved examples, or add one by hand.'
+              : editable
+                ? 'Add a rule by hand, or generate rules from the sources below.'
+                : 'This version has no rules.'
           }
         />
       )}

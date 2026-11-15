@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EntryBlock } from '../entry/EntryBlock';
 import { StartFrom } from '../entry/StartFrom';
 import { LaunchSection } from '../components/LaunchSection';
-import { ReviewPane } from '../review/ReviewPane';
+import { ReviewStep } from '../review/ReviewStep';
 import { LaunchTestProvider, useLaunch } from '../LaunchContext';
 import { createDocument, pointerToFieldName, type ValidationItem } from '../model';
 import { envRecord, installFakePlatform, newClient, Providers } from './helpers';
@@ -40,7 +40,7 @@ describe('entry block', () => {
     renderWith(<EntryBlock />, { toggleEnv });
     expect(screen.getByRole('group', { name: 'Environments' })).toBeInTheDocument();
     expect(screen.getByText('Healthy')).toBeInTheDocument();
-    expect(screen.getByText('Priority up to HIGH')).toBeInTheDocument();
+    expect(screen.getByText('Priority up to High')).toBeInTheDocument();
     expect(screen.getByText('Default preset v1')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: 'staging' }));
     expect(toggleEnv).toHaveBeenCalledWith('e1', true);
@@ -98,7 +98,7 @@ describe('review: problems', () => {
     renderWith(
       <>
         <EntryBlock />
-        <ReviewPane onCancel={() => {}} />
+        <ReviewStep />
         <Probe />
       </>,
     );
@@ -141,7 +141,7 @@ describe('review: problems', () => {
   });
 
   it('pluralises the run count', () => {
-    renderWith(<ReviewPane onCancel={() => {}} />);
+    renderWith(<ReviewStep />);
     expect(screen.getByText('runs to launch')).toBeInTheDocument();
     act(() => {});
   });

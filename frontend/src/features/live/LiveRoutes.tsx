@@ -53,8 +53,8 @@ export function LiveOverviewRoute() {
       <LiveOverviewPage
         slug={slug}
         source={source}
-        day={get('day') || zoneToday(sourceInfo?.day_key_timezone)}
         zone={sourceInfo?.day_key_timezone}
+        day={get('day') || sourceInfo?.today || zoneToday(sourceInfo?.day_key_timezone)}
       />
     );
   }

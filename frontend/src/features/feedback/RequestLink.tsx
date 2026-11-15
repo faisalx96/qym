@@ -7,6 +7,7 @@ export function RequestLink({ id, small }: { id: string; small?: boolean }) {
     <Link
       to={`/feedback/${id}`}
       className={styles.idLink}
+      data-link="name"
       data-link-sm={small ? '' : undefined}
       data-request-link={id}
     >

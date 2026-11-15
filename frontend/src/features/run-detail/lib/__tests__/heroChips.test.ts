@@ -1,15 +1,15 @@
 /** Round 3 P6: the header chips, their order, caps and summaries. */
 import { describe, expect, it } from 'vitest';
-import { CHIP_KEY_MAX, CHIP_VALUE_MAX, clip, headerChip, headerChips, runNotice } from '../heroModel';
+import { headerChip, headerChips, runNotice } from '../heroModel';
 import type { Run } from '../../types';
 
 const run = (over: Partial<Run>) => ({ run_id: 'r1', ...over }) as Run;
 
 describe('headerChip', () => {
-  it('clips a long key at 20 and a long value at 30 characters and keeps the full text in the title', () => {
+  it('prints a long key and value in full, never cut (C-25: the tag wraps) and keeps the full text in the title', () => {
     const c = headerChip('k'.repeat(40), 'v'.repeat(80));
-    expect(c.label).toHaveLength(CHIP_KEY_MAX);
-    expect(c.text).toHaveLength(CHIP_VALUE_MAX);
+    expect(c.label).toBe('k'.repeat(40));
+    expect(c.text).toBe('v'.repeat(80));
     expect(c.title).toBe(`${'k'.repeat(40)}: ${'v'.repeat(80)}`);
   });
 
@@ -19,10 +19,6 @@ describe('headerChip', () => {
     expect(headerChip('one', { a: 1 }).text).toBe('{ 1 key }');
     expect(headerChip('s', '{"a":1}').text).toBe('{ 1 key }');
     expect(headerChip('sampler', { a: 1 }).title).toBe('sampler: {"a":1}');
-  });
-
-  it('clip leaves short text alone', () => {
-    expect(clip('abc', 5)).toBe('abc');
   });
 });
 

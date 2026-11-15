@@ -30,6 +30,6 @@ test.describe('charts at 390px', () => {
     const card = page.getByTestId('chart-card-text2sql');
     await expect(card).toBeVisible();
     await card.getByRole('radio', { name: 'Grouped' }).click({ force: true });
-    await expect(card.getByRole('button', { name: /^Collapse group|^Expand group/ }).first()).toBeVisible();
+    await expect(card.getByRole('button', { name: /^Collapse |^Expand / }).first()).toBeVisible();
   });
 });

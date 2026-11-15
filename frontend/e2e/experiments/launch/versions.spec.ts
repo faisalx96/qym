@@ -21,6 +21,7 @@ import {
   review,
   seedLaunch,
   type LaunchFixture,
+  toReview,
 } from './launchSupport';
 
 test.setTimeout(90_000);
@@ -55,7 +56,7 @@ test.describe('versions on the home view', () => {
       image_version: 'img-20261101',
       kb_version: 'kb-80',
     });
-    await lineOf(page, 'Alpha').getByRole('button', { name: 'Refresh versions of Alpha' }).click();
+    await page.getByRole('listitem').filter({ hasText: 'Alpha' }).getByRole('button', { name: 'Refresh versions of Alpha' }).click();
     await expect(lineOf(page, 'Alpha')).toContainText('agent-2.0.0');
     // Unticking removes the line from the box.
     await page.getByRole('listitem').filter({ hasText: 'Alpha' }).getByText('Alpha', { exact: true }).click();
@@ -80,7 +81,7 @@ test.describe('versions on the home view', () => {
     page,
   }) => {
     await openHome(page, f.project.slug, `?env=${f.env.id}`);
-    await expect(lineOf(page, 'Alpha').getByRole('button')).toHaveText(['Refresh']);
+    await expect(page.getByRole('listitem').filter({ hasText: 'Alpha' }).getByRole('button', { name: 'Refresh versions of Alpha' })).toHaveText('Refresh');
     await expect(page.getByText('Add versioning details')).toHaveCount(0);
     await page.getByRole('button', { name: 'Customize' }).click();
     await expect(page).toHaveURL(/step=where/);
@@ -89,6 +90,7 @@ test.describe('versions on the home view', () => {
     await goStep(page, 'models');
     await expect(lines(page)).toHaveCount(0);
     await expect(page.getByText('Current versions')).toHaveCount(0);
+    await toReview(page);
     await expect(review(page)).toContainText('Versions');
     await expect(review(page)).toContainText('agent-1.4.2');
   });

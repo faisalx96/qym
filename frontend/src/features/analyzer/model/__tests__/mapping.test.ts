@@ -3,7 +3,6 @@ import {
   collectJsonPaths,
   coverPaths,
   metadataFields,
-  metadataKey,
   pathsToTree,
   slotSource,
   toggleNode,
@@ -54,11 +53,17 @@ describe('json paths', () => {
     expect(slotSource({ field: '', full: true, selected: [] }, tree)).toBeNull();
   });
 
-  it('metadata fields are null until something is deselected', () => {
-    const groups = [{ metric: 'm.x', paths: ['verdict', 'detail.score'] }];
-    expect(metadataFields(groups, { deselected: [] })).toBeNull();
-    expect(metadataFields(groups, { deselected: [metadataKey('m.x', 'verdict')] })).toEqual([
-      'metric_metadata:m%2Ex.detail',
+  it('metadata fields are null until something is deselected, then the target metric\'s own keys (cv5 Q4)', () => {
+    const groups = [
+      { metric: 'm.x', paths: ['verdict', 'detail.score'] },
+      { metric: 'other', paths: ['verdict', 'judge'] },
+    ];
+    expect(metadataFields(groups, ['m.x'], { deselected: [] })).toBeNull();
+    expect(metadataFields(groups, ['m.x'], { deselected: ['verdict'] })).toEqual(['metric_metadata.detail']);
+    // the union over the analysed metrics; never a key bound to another metric
+    expect(metadataFields(groups, ['m.x', 'other'], { deselected: ['verdict'] })).toEqual([
+      'metric_metadata.detail',
+      'metric_metadata.judge',
     ]);
   });
 });

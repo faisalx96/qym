@@ -54,6 +54,7 @@ sure one process runs a given job.
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
 | `QYM_DB_LOCK_TIMEOUT_MS` | `5000` | Lock-wait guard (all roles) |
 | `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | `2` | How often the summary worker rebuilds a live run's dashboard numbers after its events committed. A rebuild never waits for a row held by another transaction (`NOWAIT`): it is skipped and retried after this interval, counted in the worker's `live_refresh_busy`. Raise it under heavy ingest |
+| `QYM_RUN_LIVE_REFRESH_SECONDS` | `15` | How often an open run page probes a live run (`/live-status`) and the floor of its row reloads. The page reads it from the run payload and every probe answer, so a change applies to every viewer on their next load. Each reload of a large repeat run costs the API a few hundred ms; raise this when many people watch long runs |
 | `QYM_REQUEST_TIMING` | `false` | `Server-Timing` header + per-request log line (logger `qym_platform.middleware.timing`, was `qym.timing`) |
 | `QYM_LOG_LEVEL` | `INFO` | Platform log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). See "Logging" |
 | `QYM_LOG_FORMAT` | `text` | `text` or `json` (one JSON object per line). See "Logging" |
@@ -128,6 +129,8 @@ connection** button). It is independent of project LLM connections.
   count, never the rows) and `feedback.agent_connection_updated`, `_tested`, `_removed`.
 - **Export.** `GET /v1/feedback/export?format=csv|xlsx|json|jsonl` (administrators) uses `openpyxl` for `.xlsx`.
 - **Migration `0091`** adds four empty tables (instant DDL); it follows `0090`.
+- **Migration `0093`** adds `eval_experiment_jobs.priority` (nullable `VARCHAR(10)`, quick DDL) and backfills it from each job's stored request body (else the experiment's priority). Every new job stores its resolved priority; a launch may carry `job_priorities` (one entry per run that differs), validated per job against its environment's `max_priority`, the manager rule and the preemption acknowledgement.
+- **Migration `0092`** adds `api_keys.kind` and `api_keys.experiment_id` (quick DDL) and marks the keys minted for experiments (referenced by `eval_experiments.qym_api_key_id` and named `Evaluation Service · …`) as `kind = 'experiment'` with scopes `runs:write` + `datasets:read`. Only those keys have their scopes enforced; user keys stay unscoped.
 
 ## Logging
 
@@ -212,15 +215,15 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0100`, following `0050` through
+The combined migration chain has one head, `0102`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084`, `0086`–`0092`, `0094`, `0095`, `0097`, `0098`, `0099` and `0100` are quick DDL or small job/queue inserts.
-`0093` builds one partial index on `dashboard_change_events`; when that table is over
+Migrations `0058`–`0084`, `0086`–`0097`, `0099`, `0100` and `0102` are quick DDL or small job/queue inserts.
+`0098` builds one partial index on `dashboard_change_events`; when that table is over
 256 MB it queues the build (`create_deferred_indexes`, CONCURRENTLY) instead.
-`0096` builds two covering indexes (`run_item_pass_scores`, and `spans` on every partition);
+`0101` builds two covering indexes (`run_item_pass_scores`, and `spans` on every partition);
 for a table over 256 MB it queues `create_deferred_indexes` instead, which also vacuums
 the finished span partitions.
 `0085` switches `spans` to daily partitions; it locks `spans` for an instant only
@@ -259,15 +262,17 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
-| 0100 | Worker-control tables `live_worker_settings`, `live_jobs`, `live_worker_events` and six `live_sources` columns (quick DDL, no backfill) | None |
-| 0099 | `live_chart_images` for screenshots attached to live turns (quick DDL, no backfill) | None |
-| 0098 | `live_*` tables for the Live evaluation tab (quick DDL, no backfill) | None |
-| 0097 | `projectrole` gains `VIEWER` (Postgres `ALTER TYPE ... ADD VALUE`, outside the transaction; no rewrite) | None. Managers can now give a member the Viewer role (C033) |
-| 0096 | Covering indexes `ix_run_item_pass_scores_cover` (`run_id, metric_name, item_id, pass_number` INCLUDE `score_numeric`) and `ix_span_run_start_cover` on every span partition (`run_id, start_time_ns` INCLUDE the columns step latency reads), so these reads are index-only (C073) | `create_deferred_indexes` — **queued, runs by itself** only for a table over 256 MB: builds each index CONCURRENTLY (span partitions one by one, attached to the parent index), then runs `VACUUM (ANALYZE)` on `run_item_pass_scores` and on the finished span partitions. About 0.6–0.7 GB of index for 3 M spans |
-| 0095 | Empty `run_create_keys` (an `Idempotency-Key` of `POST /v1/runs` and the run it created, kept 24 hours; FK to the run `ON DELETE CASCADE`) | None: clients that send no key create runs as before |
-| 0094 | Empty `run_step_latency_summaries` (the run page's step-latency summary of a run or a pass, keyed by run, pass and rollup, FK to the run `ON DELETE CASCADE`) | None: a summary is built and stored the first time it is read; a late span or a removed pass changes its fingerprint, and the next read builds it again |
-| 0093 | Partial index `ix_dashboard_event_published` on `dashboard_change_events (source_version) WHERE published_at IS NOT NULL` (outbox retention, C074) | `create_deferred_indexes` — **queued, runs by itself** only when the table is over 256 MB: builds the index CONCURRENTLY. Smaller tables get it in the migration |
-| 0092 | — (data only): one `production` row in `project_analysis_rule_aliases` for each project that has published analysis rule versions and no alias, pointing at the newest published version (the one that was live) | None. From now on a project's first publish sets its production version, and later publishes move it only with "Set as production" on (C016) |
+| 0102 | `projectrole` gains `VIEWER` (Postgres `ALTER TYPE ... ADD VALUE`, outside the transaction; no rewrite) | None. Managers can now give a member the Viewer role (C033) |
+| 0101 | Covering indexes `ix_run_item_pass_scores_cover` (`run_id, metric_name, item_id, pass_number` INCLUDE `score_numeric`) and `ix_span_run_start_cover` on every span partition (`run_id, start_time_ns` INCLUDE the columns step latency reads), so these reads are index-only (C073) | `create_deferred_indexes` — **queued, runs by itself** only for a table over 256 MB: builds each index CONCURRENTLY (span partitions one by one, attached to the parent index), then runs `VACUUM (ANALYZE)` on `run_item_pass_scores` and on the finished span partitions. About 0.6–0.7 GB of index for 3 M spans |
+| 0100 | Empty `run_create_keys` (an `Idempotency-Key` of `POST /v1/runs` and the run it created, kept 24 hours; FK to the run `ON DELETE CASCADE`) | None: clients that send no key create runs as before |
+| 0099 | Empty `run_step_latency_summaries` (the run page's step-latency summary of a run or a pass, keyed by run, pass and rollup, FK to the run `ON DELETE CASCADE`) | None: a summary is built and stored the first time it is read; a late span or a removed pass changes its fingerprint, and the next read builds it again |
+| 0098 | Partial index `ix_dashboard_event_published` on `dashboard_change_events (source_version) WHERE published_at IS NOT NULL` (outbox retention, C074) | `create_deferred_indexes` — **queued, runs by itself** only when the table is over 256 MB: builds the index CONCURRENTLY. Smaller tables get it in the migration |
+| 0097 | — (data only): one `production` row in `project_analysis_rule_aliases` for each project that has published analysis rule versions and no alias, pointing at the newest published version (the one that was live) | None. From now on a project's first publish sets its production version, and later publishes move it only with "Set as production" on (C016) |
+| 0096 | Worker-control tables `live_worker_settings`, `live_jobs`, `live_worker_events` and six `live_sources` columns (quick DDL, no backfill) | None |
+| 0095 | `live_chart_images` for screenshots attached to live turns (quick DDL, no backfill) | None |
+| 0094 | `live_*` tables for the Live evaluation tab (quick DDL, no backfill) | None |
+| 0093 | `eval_experiment_jobs.priority` (nullable, no default) | One pass over the existing jobs copies each job's priority from its stored body (one small update per job). |
+| 0092 | `api_keys.kind` (constant default `user`), `api_keys.experiment_id` (nullable FK `ON DELETE SET NULL`, indexed) | Keys referenced by an experiment and named `Evaluation Service · …` become `experiment` keys with scopes `runs:write`, `datasets:read` (a handful of rows). |
 | 0091 | Four empty tables: `feedback_requests`, `feedback_messages`, `feedback_request_events` and the singleton `feedback_agent_connection` (checks, indexes) | None: Feedback shows "not configured" until an administrator saves the connection in Admin → Feedback assistant. |
 | 0090 | `eval_experiment_jobs.dataset_index` (constant default 0, `CHECK >= 0`); the unique key `uq_eval_experiment_job_attempt` widens to `(experiment_id, environment_id, combo_index, dataset_index, attempt)` (PostgreSQL alters in place; SQLite rebuilds the table and restores the run links) | None: existing jobs get `dataset_index = 0`. The downgrade refuses while any job has `dataset_index > 0` (a per-dataset fan-out) |
 | 0089 | Empty `run_datasets` table (the dataset versions of a run over several datasets: one row per entry, FK to the run `ON DELETE CASCADE`, FKs to the dataset and version `ON DELETE SET NULL`); `runs.dataset_count` (constant default 1); `run_items.dataset_position` (nullable `SMALLINT`) | None: no backfill, every existing run reads as a single-dataset run; no index on `run_items` |
@@ -360,7 +365,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0100` and a healthy API. The API process then runs every queued job itself.
+   `0102` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -542,7 +547,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0100`.
+deployment only after the API has migrated to `0102`.
 
 ```yaml
 apiVersion: apps/v1
@@ -804,6 +809,7 @@ workers:
 | `QYM_PRODUCT_EVAL_MAX_WORKERS`, `QYM_PRODUCT_EVAL_*` (concurrency, timeout, run count, default dataset, `MAX_RETAINED_JOBS`) | no | `3`, … | Per workers process |
 | `QYM_JOB_POLL_INTERVAL_SECONDS`, `QYM_SERVICE_HEARTBEAT_SECONDS` | no | `1`, `10` | |
 | `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | no | `2` | Live dashboard rebuild interval (see the single-server table) |
+| `QYM_RUN_LIVE_REFRESH_SECONDS` | no | `15` | Run page probe interval for live runs (see the single-server table) |
 | `QYM_EVAL_JOB_TIMEOUT_SECONDS`, `QYM_EVAL_*` | no | `8100` | Evaluation Service dispatcher |
 | `QYM_SPAN_RETENTION_DAYS`, `QYM_DELETED_RUN_GRACE_DAYS`, `QYM_SPAN_PARTITION_DAYS_AHEAD` | no | `60`, `30`, `14` | Retention runs here |
 | `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | no | `false` | Analyses call the LLM from here |
@@ -895,8 +901,8 @@ up so stored credentials remain decryptable.
 Built from the round's final commits on a laptop with public base images: platform
 image 901 MB (plus the 11 MB frontend assets image), worker image 3.04 GB (Chromium and
 the chart bundle inside). The rehearsal ran `docker/docker-compose.yml` with those
-images only: a fresh PostgreSQL upgraded to `0099` with the platform image, the api
-image migrated `0099 → 0100` on start, the preflight from inside the worker image
+images only: a fresh PostgreSQL upgraded to `0095` with the platform image, the api
+image migrated `0095 → 0096` on start, the preflight from inside the worker image
 registered the source and reported "no settings version", the Worker page saved
 version 1, the preflight passed every check, and the worker container verified and
 applied the version without a restart, then paused and resumed from the page.
@@ -905,7 +911,7 @@ Production images come from CI (amd64, private bases); on macOS bash 3.2,
 
 ### Rollout order
 
-1. Deploy qym with migration `0100` and the two production keys above.
+1. Deploy qym with migration `0096` and the two production keys above.
 2. Create the worker's project API key and put it in the bootstrap Secret.
 3. Run the worker image's `live-preflight` as a Kubernetes Job in the target
    namespace with the bootstrap Secret. Its first lines register the live
@@ -946,7 +952,7 @@ runs**: repeat the preflight Job in the target namespace before changing the
 database configuration.
 
 **Chart screenshots.** qym stores PNG bytes and image metadata in PostgreSQL's
-`live_chart_images` table (migration `0093`). The platform settings
+`live_chart_images` table (migration `0095`). The platform settings
 `QYM_LIVE_CHART_IMAGE_MAX_BYTES` (default 2097152, 2 MiB; minimum 65536) and
 `QYM_LIVE_CHART_IMAGES_PER_TURN` (default 10) cap each image and the number of
 distinct image refs per turn. Budget roughly 150–300 KB per chart: about
@@ -1404,8 +1410,8 @@ with `Environment is disabled`. Jobs already on the service keep being polled.
 **Claim and lease.** Each tick claims up to 20 due jobs in `QUEUED`, `SUBMITTING`,
 `SUBMITTED`, `RUNNING` or `CANCELLING` whose `next_attempt_at` has passed and whose
 lease is free or expired. The claim order is `COALESCE(next_attempt_at, created_at)`,
-then `created_at`, then `combo_index`; the Queue page shows jobs in exactly this order.
-qym does not order by priority, because the service enforces priority. The lease lasts
+then `created_at`, then the job's own priority (HIGH, NORMAL, LOW), then `combo_index`; the Queue page shows jobs in exactly this order.
+Across experiments qym does not order by priority, because the service enforces priority; the rank only decides which runs of one experiment (same `created_at`) are submitted first. The lease lasts
 `LEASE_SECONDS` = 120s and is renewed before each step.
 
 **No in-flight cap.** qym submits every queued job as soon as a dispatcher claims it:

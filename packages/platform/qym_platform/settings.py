@@ -174,6 +174,10 @@ class PlatformSettings(BaseSettings):
     # its events committed (each rebuild is a short transaction). Raise it under
     # heavy ingest to trade dashboard freshness for fewer lock collisions.
     dashboard_live_refresh_seconds: float = Field(default=2.0, gt=0, le=300)
+    # How often a run page probes a live run (``/live-status``) and the floor
+    # of its row reloads. Served to the page in the run payload and the probe
+    # answer, so one deployment value governs every viewer.
+    run_live_refresh_seconds: float = Field(default=15.0, ge=1, le=300)
     service_heartbeat_seconds: float = Field(default=10.0, ge=1, le=300)
 
     # Observability

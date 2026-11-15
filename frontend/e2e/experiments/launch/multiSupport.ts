@@ -130,3 +130,11 @@ export async function composeFour(page: Page): Promise<void> {
   await addDataset(page, 'billing-faq');
   await setVersions(page, 'billing-faq', ['v1', 'v2']);
 }
+
+/** Chooses the experiment's task in the Task section (round 9, one task per experiment). */
+export async function chooseTask(page: Page, name: string | RegExp): Promise<void> {
+  const select = page.locator('[data-part=task-select]').getByRole('button', { name: /Task/ });
+  await expect(select).toBeEnabled();
+  await select.click();
+  await page.getByRole('option', { name }).click();
+}

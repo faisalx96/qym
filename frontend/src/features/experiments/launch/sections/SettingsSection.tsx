@@ -145,6 +145,7 @@ export function SettingsSection() {
         <div className={styles.toolbar} role="search" aria-label="Filter settings">
           <SearchField
             className={styles.toolbarSearch}
+            width="var(--search-width)"
             label="Search settings"
             placeholder="Search settings"
             value={settingsUi.search}

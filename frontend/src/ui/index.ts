@@ -1,5 +1,6 @@
 // Primitive library barrel. One directory per primitive: <Name>/{<Name>.tsx, <Name>.module.css, index.ts}.
 export * from './Icon';
+export * from './CountTile';
 export * from './Text';
 export * from './Stack';
 export * from './Eyebrow';
@@ -14,9 +15,11 @@ export * from './ScopeBar';
 export * from './QuickFilterGroup';
 export * from './TextBlock';
 export * from './Button';
+export * from './ClearFiltersButton';
 export * from './IconButton';
 export * from './CopyButton';
 export * from './LinkButton';
+export * from './TextLink';
 export * from './Kbd';
 export * from './Badge';
 export * from './Card';
@@ -28,6 +31,8 @@ export * from './Flag';
 export * from './Tag';
 export * from './EntityTag';
 export * from './Chip';
+export * from './ToggleChips';
+export * from './Timeline';
 export * from './ScoreValue';
 export * from './Identicon';
 export * from './UserName';

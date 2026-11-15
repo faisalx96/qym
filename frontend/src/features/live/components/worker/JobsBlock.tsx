@@ -1,19 +1,54 @@
 import { useState } from 'react';
 import { jobPreviewSentence, type LiveJob, type LiveWorkerControl } from '@/api/liveWorker';
+import { formatHeaderDate } from '@/lib/dates';
 import { formatRelative } from '@/lib/format';
 import { errorSentence } from '@/lib/http';
-import { Button, ConfirmDialog, DataTable, EmptyState, ErrorState, Tag, Text, type Column } from '@/ui';
-import { zoneDateTime, zoneLabel } from '../../lib/zone';
+import {
+  Button,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  ProgressCell,
+  StatusMark,
+  Tag,
+  Text,
+  Tooltip,
+  UserName,
+  type Column,
+  type StatusShape,
+  type StatusTone,
+} from '@/ui';
 import { workerDay } from './format';
 import { WorkerBlock } from './WorkerBlock';
 import type { WorkerBusy, WorkerCallbacks } from './types';
 import styles from '../../worker.module.css';
 
+/** A worker job state as a StatusMark: [tone, shape, word] (B-05). */
+const WORKER_JOB_MARK: Record<string, [StatusTone, StatusShape, string]> = {
+  queued: ['neutral', 'ring', 'Queued'],
+  running: ['info', 'orbit', 'Running'],
+  cancelling: ['info', 'orbit', 'Cancelling'],
+  paused: ['neutral', 'pause', 'Paused'],
+  done: ['success', 'full', 'Done'],
+  failed: ['danger', 'cross', 'Failed'],
+  cancelled: ['warning', 'pause', 'Cancelled'],
+};
+
+function jobMark(row: LiveJob): [StatusTone, StatusShape, string] {
+  const key =
+    row.status === 'running' && row.cancel_requested
+      ? 'cancelling'
+      : row.status === 'running' && row.progress.paused
+        ? 'paused'
+        : row.status;
+  return WORKER_JOB_MARK[key] ?? ['neutral', 'ring', row.status];
+}
+
 export function JobsBlock({
   jobs,
   workerJob,
-  zone,
-  onBackfill,
   onCancelJob,
   busy,
   jobsLimit,
@@ -23,7 +58,6 @@ export function JobsBlock({
   workerJob?: LiveWorkerControl['job'];
   zone?: string;
   busy: WorkerBusy;
-  onBackfill: () => void;
   jobsLimit: number;
 } & Pick<WorkerCallbacks, 'onCancelJob' | 'onJobsLimit'>) {
   const [cancel, setCancel] = useState<string | null>(null);
@@ -35,11 +69,11 @@ export function JobsBlock({
       priority: 1,
       cell: (row) => (
         <div className={styles.inline}>
-          <Tag>{row.kind === 'backfill_preview' ? 'Preview' : 'Backfill'}</Tag>
+          <Tag kind="data">{row.kind === 'backfill_preview' ? 'Preview' : 'Backfill'}</Tag>
           {row.params.redo?.includes('all') ? (
-            <Tag>redo all</Tag>
+            <Tag kind="data">redo all</Tag>
           ) : row.params.redo?.includes('inconclusive') ? (
-            <Tag>redo inconclusive</Tag>
+            <Tag kind="data">redo inconclusive</Tag>
           ) : null}
         </div>
       ),
@@ -51,7 +85,7 @@ export function JobsBlock({
       cell: (row) => (
         <span className={styles.wrap}>
           {workerDay(row.params.since_day)}
-          {row.params.until_day !== row.params.since_day ? ` to ${workerDay(row.params.until_day)}` : ''}
+          {row.params.until_day !== row.params.since_day ? ` – ${workerDay(row.params.until_day)}` : ''}
         </span>
       ),
     },
@@ -61,22 +95,12 @@ export function JobsBlock({
       priority: 2,
       cell: (row) => (
         <div className={styles.inline}>
-          <Tag
-            tone={
-              row.status === 'running'
-                ? row.cancel_requested
-                  ? 'warning'
-                  : 'accent'
-                : row.status === 'done'
-                  ? 'success'
-                  : row.status === 'failed'
-                    ? 'danger'
-                    : undefined
-            }
-          >
-            {row.status === 'running' && row.cancel_requested ? 'cancelling' : row.status}
-          </Tag>
-          {row.progress.paused ? <Tag>paused</Tag> : null}
+          <StatusMark
+            tone={jobMark(row)[0]}
+            shape={jobMark(row)[1]}
+            label={jobMark(row)[2]}
+            data-status={row.status}
+          />
           {(row.status === 'failed' || row.status === 'cancelled') && row.error ? (
             <Text tone="danger" className={styles.wrap} dir="auto">
               {row.error}
@@ -93,7 +117,6 @@ export function JobsBlock({
         <JobProgress
           key={row.id}
           job={row}
-          zone={zone}
           waitingReason={row.id === workerJob?.blocked_job_id ? workerJob.waiting_reason : undefined}
         />
       ),
@@ -104,7 +127,7 @@ export function JobsBlock({
       priority: 2,
       cell: (row) => (
         <span className={styles.wrap} dir="auto">
-          {row.requested_by ?? '—'}
+          {row.requested_by ? <UserName id={row.requested_by_user_id} name={row.requested_by} /> : '—'}
         </span>
       ),
     },
@@ -134,17 +157,26 @@ export function JobsBlock({
       priority: 2,
       cell: (row) =>
         row.status === 'queued' || row.status === 'running' ? (
-          <Button isDisabled={busy.cancelJob || row.cancel_requested} onPress={() => setCancel(row.id)}>
-            {row.cancel_requested ? 'Cancel requested' : 'Cancel'}
-          </Button>
+          <Tooltip content={row.cancel_requested ? 'Cancel requested' : 'Cancel job'}>
+            <IconButton
+              tile
+              tone="danger"
+              icon="ban"
+              label={row.cancel_requested ? 'Cancel requested' : 'Cancel job'}
+              isDisabled={busy.cancelJob || row.cancel_requested}
+              onPress={() => setCancel(row.id)}
+            />
+          </Tooltip>
         ) : null,
     },
   ];
   return (
-    <WorkerBlock name="jobs" title="Jobs" aside={<Button onPress={onBackfill}>Backfill a day range</Button>}>
+    <WorkerBlock name="jobs" title="Jobs" table>
       {jobs.length ? (
         <DataTable
           aria-label="Worker jobs"
+          variant="embedded"
+          density="regular"
           rows={jobs}
           columns={columns}
           rowKey={(row) => row.id}
@@ -191,7 +223,7 @@ export function JobsBlock({
   );
 }
 
-function JobProgress({ job, zone, waitingReason }: { job: LiveJob; zone?: string; waitingReason?: string }) {
+function JobProgress({ job, waitingReason }: { job: LiveJob; waitingReason?: string }) {
   const p = job.progress;
   const [hadRedone, setHadRedone] = useState((p.redone ?? 0) > 0);
   if (!hadRedone && (p.redone ?? 0) > 0) setHadRedone(true);
@@ -224,6 +256,14 @@ function JobProgress({ job, zone, waitingReason }: { job: LiveJob; zone?: string
       : null;
   return (
     <div className={styles.wrap}>
+      {job.kind === 'backfill' && job.status !== 'queued' ? (
+        <ProgressCell
+          done={p.evaluated ?? 0}
+          total={p.found ?? 0}
+          failed={p.failed ?? 0}
+          showFailed={job.status !== 'failed'}
+        />
+      ) : null}
       {job.status === 'queued'
         ? waitingReason?.trim()
           ? `Waiting: ${waitingReason}`
@@ -253,8 +293,7 @@ function JobProgress({ job, zone, waitingReason }: { job: LiveJob; zone?: string
       ) : null}
       {p.effective_until ? (
         <Text as="div" variant="sm" tone="muted">
-          Covers turns up to {zoneDateTime(p.effective_until, zone)} {zoneLabel(zone)}; later turns are left
-          to the live loop.
+          Covers turns up to {formatHeaderDate(p.effective_until)}; later turns are left to the live loop.
         </Text>
       ) : null}
       {typeof p.listed === 'number' ? (

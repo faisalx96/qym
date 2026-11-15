@@ -12,7 +12,9 @@ Lifecycle, one dedicated key per experiment:
 
 - **Mint** at launch (never for a dry run): ``issue_experiment_api_key`` creates an
   ``ApiKey`` owned by the creator in the experiment's project, named
-  ``Evaluation Service · <experiment name>``, with ``SUBMITTER_KEY_SCOPES``. The token
+  ``Evaluation Service · <experiment name>``, with ``SUBMITTER_KEY_SCOPES`` and
+  ``kind = 'experiment'`` (plus ``experiment_id``), which makes the scopes enforced and
+  lists the key under its own group in the project's API keys tab. The token
   comes from ``security.generate_api_key`` (same format as project keys). Only its
   PBKDF2 hash is in ``api_keys``; the raw token is kept Fernet-encrypted in
   ``eval_experiments.qym_api_key_encrypted`` (``secrets.encrypt_llm_api_key``, so
@@ -65,10 +67,12 @@ from qym_platform.log import get_logger
 
 logger = get_logger(__name__)
 
-# What the SDK needs to create a run and stream its events (``POST /v1/runs``,
-# ``POST /v1/runs/{id}/events``). Scopes aren't enforced today (auth.py); these are
-# recorded so the key stays minimal if enforcement comes back.
-SUBMITTER_KEY_SCOPES = ("runs:write",)
+# Exactly what the worker's SDK calls: ``runs:write`` (``POST /v1/runs``,
+# ``POST /v1/runs/{id}/events``, ``POST /v1/runs:upload``) and ``datasets:read`` (the
+# dataset item reads). ``auth.require_api_key_scope`` enforces them for keys of kind
+# ``experiment``, so a leaked key can do nothing else (no dataset writes or deletes,
+# no run reads).
+SUBMITTER_KEY_SCOPES = ("runs:write", "datasets:read")
 KEY_NAME_PREFIX = "Evaluation Service · "
 KEY_NAME_MAX = 200  # api_keys.name
 # How long a settled experiment's key keeps working, so late run events still land.
@@ -142,6 +146,8 @@ def _mint(
         prefix=prefix,
         key_hash=key_hash,
         scopes=list(SUBMITTER_KEY_SCOPES),
+        kind="experiment",
+        experiment_id=experiment.id,
         created_at=utc_now_naive(),
     )
     db.add(row)

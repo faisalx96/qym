@@ -251,14 +251,6 @@ export function shortModelName(name: string | null | undefined): string {
 
 /* ── round 3 P6: the chips of the run header (versioning, config, metadata) ── */
 
-/** Longest key and value a header chip prints; the full `key: value` is in its title. */
-export const CHIP_KEY_MAX = 20;
-export const CHIP_VALUE_MAX = 30;
-
-export function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, Math.max(1, max - 1))}…` : text;
-}
-
 export interface HeaderChip {
   /** The dataset a Datasets-group chip stands for (it renders as a dataset chip, not a key/value tag). */
   dataset?: RunDatasetEntry;
@@ -311,7 +303,7 @@ function parsedObject(value: unknown): unknown {
   return undefined;
 }
 
-/** One chip for a key and value: scalars print clipped, objects and arrays a one-token summary. */
+/** One chip for a key and value: scalars print in full (they wrap, C-25), objects and arrays a one-token summary. */
 export function headerChip(key: string, value: unknown): HeaderChip {
   const obj = parsedObject(value);
   if (obj !== undefined) {
@@ -319,10 +311,10 @@ export function headerChip(key: string, value: unknown): HeaderChip {
     const text = Array.isArray(obj)
       ? `[ ${n} ${n === 1 ? 'item' : 'items'} ]`
       : `{ ${n} ${n === 1 ? 'key' : 'keys'} }`;
-    return { key, label: clip(key, CHIP_KEY_MAX), text, title: `${key}: ${JSON.stringify(obj)}`, raw: obj };
+    return { key, label: key, text, title: `${key}: ${JSON.stringify(obj)}`, raw: obj };
   }
   const full = stringify(value);
-  return { key, label: clip(key, CHIP_KEY_MAX), text: clip(full, CHIP_VALUE_MAX), title: `${key}: ${full}` };
+  return { key, label: key, text: full, title: `${key}: ${full}` };
 }
 
 /**

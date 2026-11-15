@@ -180,16 +180,6 @@
   overflow: hidden;
 }
 
-.more {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent-primary);
-  font-size: var(--font-sm);
-  cursor: pointer;
-}
-
-.more:focus-visible,
 .caret:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;

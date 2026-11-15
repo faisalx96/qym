@@ -152,6 +152,7 @@ def test_read_without_version_and_with_version(client, session_factory, values):
             "last_heartbeat_at": None,
             "last_poll_at": None,
             "last_turn_at": None,
+            "today": "2026-11-03",
             "worker": {},
         },
         "today": {
@@ -996,3 +997,59 @@ def test_preview_rejects_invalid_redo_combinations(client, redo):
         json={**JOB, "kind": "backfill_preview", "redo": redo},
     )
     assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("with_day", [False, True])
+def test_read_today_uses_source_day_and_selected_source(
+    client, session_factory, with_day
+):
+    with session_factory() as db:
+        # 22:00 UTC on November 3 is already November 4 in the source timezone;
+        # the strip reports the source's today, not the UTC day.
+        db.get(LiveSource, "source").day_key_timezone = "Asia/Riyadh"
+        db.add(
+            LiveSource(
+                id="second",
+                project_id="p",
+                key="second",
+                name="Second",
+                environment="test",
+                is_active=False,
+            )
+        )
+        db.flush()
+        today = NOW.date() + timedelta(days=1)
+        for source_id, day, seen, evaluated, failed, count in [
+            ("source", today, 12, 9, 2, 3),
+            ("source", NOW.date(), 100, 90, 10, 2),
+            ("second", today, 200, 180, 20, 4),
+        ]:
+            if with_day or day != today or source_id != "source":
+                db.add(
+                    LiveDay(
+                        source_id=source_id,
+                        day=day,
+                        turns_seen=seen,
+                        evaluated=evaluated,
+                        failed=failed,
+                    )
+                )
+            for i in range(count):
+                db.add(
+                    LiveTurn(
+                        source_id=source_id,
+                        day=day,
+                        turn_id=f"{day}-{i}",
+                        turn_at=NOW,
+                        status="completed",
+                        question="Question",
+                    )
+                )
+        db.commit()
+    assert read(client, source="worker")["today"] == {
+        "day": "2026-11-04",
+        "turns_seen": 12 if with_day else 0,
+        "evaluated": 9 if with_day else 0,
+        "failed": 2 if with_day else 0,
+        "in_qym": 3,
+    }
