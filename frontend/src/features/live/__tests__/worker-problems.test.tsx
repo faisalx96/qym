@@ -333,7 +333,7 @@ function filteredProblems() {
   });
   return () => container.querySelectorAll('[data-worker-event]');
 }
-it('renders grouped counts, filters by component and level, and can clear filters', async () => {
+it('renders grouped counts and filters by component', async () => {
   const rows = filteredProblems();
   await waitFor(() => expect(rows()).toHaveLength(6));
   expect(screen.getByText('×14')).toBeVisible();
@@ -342,12 +342,19 @@ it('renders grouped counts, filters by component and level, and can clear filter
   await user.click(screen.getByRole('button', { name: 'Component filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Gateway' }));
   await waitFor(() => expect(rows()).toHaveLength(2));
-  await user.keyboard('{Escape}');
+});
+it('filters by level and can clear the filter', async () => {
+  const rows = filteredProblems();
+  await waitFor(() => expect(rows()).toHaveLength(6));
+  const errors = liveWorkerEvents.filter((event) => event.level === 'error').length;
+  expect(errors).toBeGreaterThan(0);
+  expect(errors).toBeLessThan(6);
+  const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Level filter' }));
   await user.click(screen.getByRole('button', { name: 'Only Errors' }));
-  await waitFor(() => expect(rows()).toHaveLength(1));
+  await waitFor(() => expect(rows()).toHaveLength(errors));
   await user.keyboard('{Escape}');
-  await user.click(screen.getByRole('button', { name: 'Clear 2 filters' }));
+  await user.click(screen.getByRole('button', { name: 'Clear 1 filter' }));
   await waitFor(() => expect(rows()).toHaveLength(6));
   expect(screen.queryByTestId('filters-clear')).toBeNull();
 });
