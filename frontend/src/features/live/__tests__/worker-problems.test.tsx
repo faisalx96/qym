@@ -397,6 +397,7 @@ it.each([
   ['gateway', 'Models', 'models'],
   ['database', 'Database', 'database'],
   ['langfuse', 'Langfuse', 'langfuse'],
+  ['evaluator_traces', 'Evaluator traces', 'evaluator_traces'],
   ['dataiku', 'Dataiku', 'dataiku'],
 ])('links failed %s checks to the settings section', (prefix, title, id) => {
   render(

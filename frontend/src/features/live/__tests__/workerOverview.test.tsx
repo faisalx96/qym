@@ -33,7 +33,7 @@ it('shows waiting state, key warning and waiting section tags', async () => {
   setup(liveWorkerWaiting);
   expect(await screen.findByText('Waiting')).toBeVisible();
   expect(screen.getByText('no settings version')).toBeVisible();
-  expect(screen.getAllByText('Waiting for version 1')).toHaveLength(5);
+  expect(screen.getAllByText('Waiting for version 1')).toHaveLength(6);
   expect(screen.getByText('Choose the worker key before saving settings')).toBeVisible();
 });
 it('shows the status strip values and matching job update from the fixture', async () => {
@@ -177,7 +177,10 @@ it('has no running difference prefix when the worker has no running settings', a
   ).not.toHaveTextContent('differs from running');
   expect(screen.getByRole('button', { name: 'Save as v1' })).toBeEnabled();
 });
-it('shows plain problem labels and opens the section targeted by a Fix link', async () => {
+it.each([
+  ['gateway.models', 'Models', 'models', 'Judge A'],
+  ['evaluator_traces.auth', 'Evaluator traces', 'evaluator_traces', 'Send evaluator traces'],
+])('opens the section targeted by a Fix link for %s', async (check, title, id, field) => {
   const route = '/projects/demo/live/worker?source=worker+%26+prod&view=all';
   const view = setup(liveWorkerRead, undefined, [route]);
   await screen.findByRole('button', { name: 'Save as v4' });
@@ -188,29 +191,37 @@ it('shows plain problem labels and opens the section targeted by a Fix link', as
           ...liveWorkerEvents[0]!,
           component: 'control',
           message: '[LIVE] Checks failed',
-          details: { checks: { 'gateway.models': { ok: false } } },
+          details: { checks: { [check]: { ok: false } } },
         },
       ],
     });
   });
   const problems = document.getElementById('problems')!;
   await userEvent.setup().click(within(problems).getByRole('button', { name: 'Component filter' }));
-  for (const label of ['Settings', 'Judges', 'Dataiku', 'Delivery to qym', 'Turns', 'Jobs'])
+  for (const label of [
+    'Settings',
+    'Judges',
+    'Dataiku',
+    'Delivery to qym',
+    'Turns',
+    'Jobs',
+    'Evaluator traces',
+  ])
     expect(screen.getByRole('checkbox', { name: label })).toBeVisible();
   await userEvent.setup().keyboard('{Escape}');
   expect(await within(problems).findByText('Checks failed')).toBeVisible();
-  expect(within(problems).getByText('gateway.models')).toBeVisible();
-  const link = within(problems).getByRole('link', { name: 'Fix in Models' });
-  expect(link).toHaveAttribute('href', `${route}#settings-models`);
+  expect(within(problems).getByText(check)).toBeVisible();
+  const link = within(problems).getByRole('link', { name: `Fix in ${title}` });
+  expect(link).toHaveAttribute('href', `${route}#settings-${id}`);
   await userEvent.setup().click(link);
   await waitFor(() =>
     expect(
-      within(screen.getByRole('region', { name: 'Models' })).getByRole('button', {
-        name: /^Models /,
+      within(screen.getByRole('region', { name: title })).getByRole('button', {
+        name: new RegExp(`^${title} `),
       }),
     ).toHaveAttribute('aria-expanded', 'true'),
   );
-  expect(screen.getByLabelText('Judge A')).toBeVisible();
+  expect(screen.getByLabelText(field)).toBeVisible();
   expect(screen.getByRole('link', { name: '19 problems in the last hour' })).toHaveAttribute(
     'href',
     `${route}#problems`,
@@ -230,4 +241,18 @@ it('uses the viewer clock for status and settings times with a Riyadh source', a
   expect(
     screen.getByText(`gateway listed 5 models at ${formatTableDate('2026-11-03T14:20:00Z')}`),
   ).toBeVisible();
+});
+
+it('shows an advisory evaluator trace failure on its section while evaluation stays running', async () => {
+  const read = structuredClone(liveWorkerRead);
+  read.running!.verification!.checks = {
+    'evaluator_traces.auth': { ok: false, latency_ms: null, error: 'Trace authentication failed' },
+  };
+  setup(read);
+  const section = within(await screen.findByRole('region', { name: 'Evaluator traces' }));
+  expect(section.getByText('Failed').closest('[data-kind="state"]')).toHaveAttribute('data-tone', 'danger');
+  expect(section.getByText('Trace authentication failed')).toBeVisible();
+  expect(section.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
+  expect(within(screen.getByRole('region', { name: 'Langfuse' })).getByText('Running')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Pause evaluation' })).toBeVisible();
 });

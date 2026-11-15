@@ -1,7 +1,12 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
-import { liveWorkerRead, liveWorkerPending, liveWorkerFailed } from '@/features/dev/liveFixtures';
+import {
+  liveWorkerRead,
+  liveWorkerPending,
+  liveWorkerFailed,
+  liveWorkerLegacy,
+} from '@/features/dev/liveFixtures';
 import { setup, writes, openField, refetchWorker, response } from './workerHarness';
 
 // Live worker page: saving settings, drafts, versions and worker actions.
@@ -178,4 +183,131 @@ it('PUTs the selected worker key', async () => {
   expect(writes(fetch)[0]![0]).toContain('/key?source=');
   expect(writes(fetch)[0]![1]?.method).toBe('PUT');
   expect(JSON.parse(String(writes(fetch)[0]![1]?.body))).toEqual({ api_key_id: 'key-next' });
+});
+
+it.each([false, true])('saves enabled evaluator traces with a typed secret: %s', async (typed) => {
+  const { fetch } = setup();
+  const user = userEvent.setup();
+  await user.click(await openField('Evaluator traces', 'Send evaluator traces'));
+  const section = within(screen.getByRole('region', { name: 'Evaluator traces' }));
+  fireEvent.change(section.getByLabelText('Langfuse host'), { target: { value: 'https://traces.test' } });
+  fireEvent.change(section.getByLabelText('Public key'), { target: { value: 'pk-traces' } });
+  if (typed) fireEvent.change(section.getByLabelText('Secret key'), { target: { value: 'sk-traces' } });
+  expect(section.getByRole('button')).toHaveTextContent(
+    `https://traces.test · secret ${typed ? 'set' : 'not set'}`,
+  );
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
+  await screen.findByText('Saved as version 4');
+  const payload = JSON.parse(String(writes(fetch)[0]![1]?.body));
+  expect(payload.values.evaluator_traces).toEqual({
+    enabled: true,
+    host: 'https://traces.test',
+    public_key: 'pk-traces',
+  });
+  expect(payload.secrets).toEqual(typed ? { evaluator_traces_secret_key: 'sk-traces' } : undefined);
+  expect(section.getByLabelText('Secret key')).toHaveValue('');
+});
+
+it('switches evaluator traces off and omits a newly typed secret', async () => {
+  const read = structuredClone(liveWorkerRead);
+  Object.assign(read.settings!.values, {
+    evaluator_traces: { enabled: true, host: 'https://traces.test', public_key: 'pk-traces' },
+  });
+  const { fetch } = setup(read);
+  const user = userEvent.setup();
+  fireEvent.change(await openField('Evaluator traces', 'Secret key'), { target: { value: 'discard-me' } });
+  await user.click(screen.getByRole('switch', { name: 'Send evaluator traces' }));
+  const section = within(screen.getByRole('region', { name: 'Evaluator traces' }));
+  for (const label of ['Langfuse host', 'Public key', 'Secret key'])
+    expect(section.getByLabelText(label)).toBeDisabled();
+  expect(section.getByRole('button')).toHaveTextContent('Off');
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
+  await screen.findByText('Saved as version 4');
+  const payload = JSON.parse(String(writes(fetch)[0]![1]?.body));
+  expect(payload.values.evaluator_traces.enabled).toBe(false);
+  expect(payload.secrets).toBeUndefined();
+});
+
+it('renders an old stored version without changes and saves it with disabled evaluator traces', async () => {
+  const { fetch } = setup(liveWorkerLegacy);
+  const user = userEvent.setup();
+  expect(await screen.findByRole('button', { name: 'Save as v4' })).toBeDisabled();
+  expect(await openField('Evaluator traces', 'Send evaluator traces')).not.toBeChecked();
+  expect(screen.queryByText('Unsaved changes')).toBeNull();
+  await user.click(await openField('Evaluation', 'Chart vision'));
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
+  await screen.findByText('Saved as version 4');
+  expect(JSON.parse(String(writes(fetch)[0]![1]?.body)).values.evaluator_traces).toEqual({
+    enabled: false,
+    host: '',
+    public_key: '',
+  });
+});
+
+it.each([false, true])('compares an old worker with evaluator traces enabled: %s', async (enabled) => {
+  const read = structuredClone(liveWorkerRead);
+  read.running!.running = { ...read.running!.running! };
+  Reflect.deleteProperty(read.running!.running, 'evaluator_traces');
+  Object.assign(read.settings!.values, {
+    evaluator_traces: { enabled, host: 'https://traces.test', public_key: 'pk-traces' },
+  });
+  setup(read);
+  const section = await screen.findByRole('region', { name: 'Evaluator traces' });
+  const trigger = within(section).getByRole('button');
+  expect(trigger).toHaveAttribute('aria-expanded', String(enabled));
+  if (enabled) expect(trigger).toHaveTextContent('differs from running v3');
+  else expect(trigger).not.toHaveTextContent('differs from running');
+  expect(screen.getByRole('button', { name: 'Save as v4' })).toBeDisabled();
+});
+
+it.each([
+  ['values', 'evaluator_traces', 'host', 'Langfuse host'],
+  ['values', 'evaluator_traces', 'public_key', 'Public key'],
+  ['secrets', 'evaluator_traces_secret_key', 'Secret key'],
+])('scopes evaluator traces validation errors: %s %s %s', async (...pathAndLabel) => {
+  const label = pathAndLabel.pop()!;
+  setup(liveWorkerRead, () =>
+    response({ detail: [{ loc: ['body', ...pathAndLabel], msg: 'Trace field is invalid' }] }, 422),
+  );
+  const user = userEvent.setup();
+  await user.click(await openField('Evaluator traces', 'Send evaluator traces'));
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
+  const section = within(screen.getByRole('region', { name: 'Evaluator traces' }));
+  await waitFor(() => expect(section.getByLabelText(label)).toHaveAttribute('aria-invalid', 'true'));
+  expect(section.getByLabelText(label)).toHaveAccessibleDescription(/Trace field is invalid/);
+  expect(await openField('Langfuse', 'Langfuse host')).not.toHaveAttribute('aria-invalid', 'true');
+  expect(
+    within(screen.getByRole('region', { name: 'Langfuse' })).getByLabelText('Public key'),
+  ).not.toHaveAttribute('aria-invalid', 'true');
+});
+
+it('loads a newer legacy version without treating the default section as a draft', async () => {
+  const view = setup(liveWorkerLegacy);
+  await screen.findByRole('button', { name: 'Save as v4' });
+  await refetchWorker(view, { ...liveWorkerLegacy, settings: { ...liveWorkerLegacy.settings!, version: 4 } });
+  expect(await screen.findByRole('button', { name: 'Save as v5' })).toBeDisabled();
+  expect(screen.queryByText(/while you were editing/)).toBeNull();
+  expect(await openField('Evaluator traces', 'Send evaluator traces')).not.toBeChecked();
+});
+
+it('keeps a stored evaluator trace secret write-only when switching off', async () => {
+  const read = structuredClone(liveWorkerRead);
+  read.settings!.values.evaluator_traces = {
+    enabled: true,
+    host: 'https://traces.test',
+    public_key: 'pk-traces',
+  };
+  read.settings!.secret_hints.evaluator_traces_secret_key = '1234';
+  const { fetch } = setup(read);
+  const user = userEvent.setup();
+  expect(await openField('Evaluator traces', 'Secret key')).toHaveValue('');
+  const section = within(screen.getByRole('region', { name: 'Evaluator traces' }));
+  expect(section.getByRole('button')).toHaveTextContent('https://traces.test · secret set');
+  expect(section.getByLabelText('Secret key')).toHaveAccessibleDescription('set, ends in …1234');
+  await user.click(section.getByRole('switch', { name: 'Send evaluator traces' }));
+  await user.click(screen.getByRole('button', { name: 'Save as v4' }));
+  await screen.findByText('Saved as version 4');
+  const payload = JSON.parse(String(writes(fetch)[0]![1]?.body));
+  expect(payload.values.evaluator_traces.enabled).toBe(false);
+  expect(payload.secrets).toBeUndefined();
 });

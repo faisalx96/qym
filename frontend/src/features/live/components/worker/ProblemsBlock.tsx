@@ -37,6 +37,7 @@ const componentLabels: Record<string, string> = {
   job: 'Jobs',
   poller: 'Polling',
   langfuse: 'Langfuse',
+  evaluator_traces: 'Evaluator traces',
   gateway: 'Gateway',
   renderer: 'Charts',
   config: 'Worker environment',
@@ -50,6 +51,7 @@ const checkSections: Record<string, { id: string; title: string }> = {
   gateway: { id: 'models', title: 'Models' },
   database: { id: 'database', title: 'Database' },
   langfuse: { id: 'langfuse', title: 'Langfuse' },
+  evaluator_traces: { id: 'evaluator_traces', title: 'Evaluator traces' },
   dataiku: { id: 'dataiku', title: 'Dataiku' },
 };
 

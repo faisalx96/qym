@@ -981,10 +981,17 @@ Production images come from CI (amd64, private bases); on macOS bash 3.2,
    settings version yet it stops at `settings: FAIL no settings version`.
    The source now exists, so the Worker page can be used.
 4. On **Live → Worker**, choose that key as the worker key and save version 1
-   with models, Langfuse, Dataiku and database settings for the source.
-5. Run the preflight Job again and require every line to report **OK**
+   with models, Langfuse, Dataiku and database settings for the source. Optionally
+   enable **Evaluator traces → Send evaluator traces** and enter the Langfuse host,
+   public key and secret key for a project separate from the one Insightor writes
+   to. The worker sends its own traces of each evaluated turn there; leaving it off
+   disables export and keeps any stored secret.
+5. Run the preflight Job again and require every blocking check to report **OK**
    (database DNS, TCP, TLS, login, recovery, grants, migration; Langfuse;
-   gateway per model; Dataiku) before applying the worker Deployment.
+   gateway per model; Dataiku) before applying the worker Deployment. When enabled,
+   `evaluator_traces.auth` checks the evaluator traces destination. It is advisory:
+   failure appears in the section and Problems but does not block the worker or
+   stop evaluation.
 6. Confirm the Worker page shows **running v1** after the Deployment starts.
 
 ### Pause, jobs and problems

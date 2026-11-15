@@ -612,6 +612,14 @@ export const liveWorkerRead: LiveWorkerRead = {
   ],
   model_ids: ['judge-a', 'judge-b', 'vision-judge', 'vision-extractor', 'vision-design'],
 };
+// A pre-feature version and an older worker report omit the new section entirely.
+const legacyWorkerValues = { ...workerValues };
+Reflect.deleteProperty(legacyWorkerValues, 'evaluator_traces');
+export const liveWorkerLegacy: LiveWorkerRead = {
+  ...liveWorkerRead,
+  settings: { ...liveWorkerRead.settings!, values: legacyWorkerValues },
+  running: { ...liveWorkerRead.running!, running: legacyWorkerValues },
+};
 export const liveWorkerWaiting: LiveWorkerRead = {
   ...liveWorkerRead,
   worker_key: null,

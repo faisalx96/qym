@@ -330,6 +330,7 @@ export async function seedWorkerControl(
         vision_design_judge: 'vision-design-judge',
       },
       langfuse: { host: 'http://127.0.0.1:3000', public_key: 'pk-e2e' },
+      evaluator_traces: { enabled: false, host: '', public_key: '' },
       dataiku: { url: 'http://127.0.0.1:11000', database: 'analytics' },
       database: {
         host: 'db.example.test',
