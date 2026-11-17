@@ -41,6 +41,7 @@ next poll records it as ``CANCELLED``.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -382,54 +383,68 @@ def _drop_from_snapshot(db: Session, environment_id: str, gone: Iterable[str]) -
         snapshot.items = items
 
 
-async def cancel_remote_orphans(
-    db: Session,
-    env: EvalEnvironment,
-    remote_job_ids: Sequence[str],
-    principal: "Principal",
-    client: EvalServiceClient,
-    *,
-    reason: Optional[str] = None,
-) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """Cancel orphan and stale remote jobs directly on the service (manager only).
+@dataclass
+class OrphanCancelPlan:
+    """What ``plan_remote_orphan_cancels`` read: the ids to send and what we know of them."""
 
-    Returns ``(outcomes, errors)``: per id ``cancelled``, ``already_terminal``,
-    ``not_found``, ``refused_local_job`` (matches a non-terminal local job, or a
-    local job but not the snapshot), ``not_in_snapshot`` or ``error`` (with a
-    redacted message in ``errors``). After a 401 the remaining ids are not sent.
-    A cancelled stale job gets ``remote_status = CANCELLED`` on its local row.
-    One ``AuditLog`` entry per id sent to the service. The caller checks the manager
-    role, closes the client and commits.
-    """
+    ids: List[str]
+    # remote_job_id -> status in the stored snapshot
+    snapshot_status: Dict[str, Any] = field(default_factory=dict)
+    # remote_job_id -> (local job id, local status) for ids that match one of our jobs
+    local: Dict[str, Tuple[str, EvalJobStatus]] = field(default_factory=dict)
+
+
+def plan_remote_orphan_cancels(
+    db: Session, environment_id: str, remote_job_ids: Sequence[str]
+) -> OrphanCancelPlan:
+    """The read phase of an orphan cancel (the snapshot and our matching jobs)."""
     ids = list(dict.fromkeys(rid for rid in remote_job_ids if rid))
-    snapshot = read_snapshot(db, env.id)
-    snapshot_status = {
-        item.get("remote_job_id"): item.get("status")
-        for item in (snapshot or {}).get("items") or []
-    }
-    local = local_jobs_by_remote_id(db, env.id, ids)
+    snapshot = read_snapshot(db, environment_id)
+    return OrphanCancelPlan(
+        ids=ids,
+        snapshot_status={
+            item.get("remote_job_id"): item.get("status")
+            for item in (snapshot or {}).get("items") or []
+        },
+        local={
+            rid: (job.id, job.status)
+            for rid, (job, _experiment) in local_jobs_by_remote_id(
+                db, environment_id, ids
+            ).items()
+        },
+    )
+
+
+async def cancel_planned_orphans(
+    plan: OrphanCancelPlan, client: EvalServiceClient, user_id: str
+) -> Tuple[Dict[str, str], Dict[str, str], List[str]]:
+    """The service calls of an orphan cancel; touches no database.
+
+    Returns ``(outcomes, errors, attempted)``: ``attempted`` lists the ids that
+    were sent to the service (the ones that get an audit entry).
+    """
     outcomes: Dict[str, str] = {}
     errors: Dict[str, str] = {}
+    attempted: List[str] = []
     auth_failed = False
-    for rid in ids:
-        if rid not in snapshot_status:
+    for rid in plan.ids:
+        if rid not in plan.snapshot_status:
             outcomes[rid] = (
-                ORPHAN_REFUSED_LOCAL if rid in local else ORPHAN_NOT_IN_SNAPSHOT
+                ORPHAN_REFUSED_LOCAL if rid in plan.local else ORPHAN_NOT_IN_SNAPSHOT
             )
             continue
-        stale_job: Optional[EvalExperimentJob] = None
-        if rid in local:
-            job = local[rid][0]
-            if not is_stale_remote(snapshot_status[rid], job.status):
-                outcomes[rid] = ORPHAN_REFUSED_LOCAL
-                continue
-            stale_job = job
+        if rid in plan.local and not is_stale_remote(
+            plan.snapshot_status[rid], plan.local[rid][1]
+        ):
+            outcomes[rid] = ORPHAN_REFUSED_LOCAL
+            continue
         if auth_failed:
             outcomes[rid] = ORPHAN_ERROR
             errors[rid] = "Evaluation service rejected the environment API key"
             continue
+        attempted.append(rid)
         try:
-            await client.cancel(rid, principal.user.id)
+            await client.cancel(rid, user_id)
         except NotCancellable:
             outcomes[rid] = ORPHAN_ALREADY_TERMINAL
         except RemoteNotFound:
@@ -450,20 +465,39 @@ async def cancel_remote_orphans(
             errors[rid] = f"Remote cancel failed: {type(exc).__name__}"
         else:
             outcomes[rid] = ORPHAN_CANCELLED
-            if stale_job is not None:
-                stale_job.remote_status = "CANCELLED"
+    return outcomes, errors, attempted
+
+
+def record_remote_orphan_cancels(
+    db: Session,
+    env: EvalEnvironment,
+    principal: "Principal",
+    plan: OrphanCancelPlan,
+    outcomes: Mapping[str, str],
+    attempted: Sequence[str],
+    *,
+    reason: Optional[str] = None,
+) -> None:
+    """The write phase of an orphan cancel: stale jobs, audit entries, the snapshot."""
+    for rid in attempted:
+        stale = plan.local.get(rid)
+        stale_job: Optional[EvalExperimentJob] = None
+        if stale is not None:
+            stale_job = db.get(EvalExperimentJob, stale[0])
+        if outcomes.get(rid) == ORPHAN_CANCELLED and stale_job is not None:
+            stale_job.remote_status = "CANCELLED"
         after: Dict[str, Any] = {
-            "outcome": outcomes[rid],
+            "outcome": outcomes.get(rid),
             "environment_id": env.id,
             "project_id": env.project_id,
             "reason": reason,
-            "orphan": stale_job is None,
+            "orphan": stale is None,
         }
-        if stale_job is not None:
+        if stale is not None:
             after.update(
                 stale=True,
-                job_id=stale_job.id,
-                job_status=stale_job.status.value,
+                job_id=stale[0],
+                job_status=(stale_job.status if stale_job is not None else stale[1]).value,
             )
         db.add(
             AuditLog(
@@ -484,19 +518,51 @@ async def cancel_remote_orphans(
             if outcome in (ORPHAN_CANCELLED, ORPHAN_ALREADY_TERMINAL, ORPHAN_NOT_FOUND)
         ],
     )
+
+
+async def cancel_remote_orphans(
+    db: Session,
+    env: EvalEnvironment,
+    remote_job_ids: Sequence[str],
+    principal: "Principal",
+    client: EvalServiceClient,
+    *,
+    reason: Optional[str] = None,
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Cancel orphan and stale remote jobs directly on the service (manager only).
+
+    Returns ``(outcomes, errors)``: per id ``cancelled``, ``already_terminal``,
+    ``not_found``, ``refused_local_job`` (matches a non-terminal local job, or a
+    local job but not the snapshot), ``not_in_snapshot`` or ``error`` (with a
+    redacted message in ``errors``). After a 401 the remaining ids are not sent.
+    A cancelled stale job gets ``remote_status = CANCELLED`` on its local row.
+    One ``AuditLog`` entry per id sent to the service. The caller checks the manager
+    role, closes the client and commits.
+
+    The three phases (``plan_remote_orphan_cancels``, ``cancel_planned_orphans``,
+    ``record_remote_orphan_cancels``) are also callable one by one, so a request
+    handler keeps no transaction open across the service calls.
+    """
+    plan = plan_remote_orphan_cancels(db, env.id, remote_job_ids)
+    outcomes, errors, attempted = await cancel_planned_orphans(plan, client, principal.user.id)
+    record_remote_orphan_cancels(db, env, principal, plan, outcomes, attempted, reason=reason)
     return outcomes, errors
 
 
 __all__ = (
     "QUEUE_STATUSES",
+    "OrphanCancelPlan",
+    "cancel_planned_orphans",
     "cancel_remote_orphans",
     "dispatch_order",
     "environment_summaries",
     "job_priority",
     "linked_runs",
     "local_jobs_by_remote_id",
+    "plan_remote_orphan_cancels",
     "queue_jobs",
     "queue_positions",
+    "record_remote_orphan_cancels",
     "remote_view",
     "run_progress",
 )

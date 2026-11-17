@@ -44,7 +44,7 @@ RUN mkdir -p /app/packages/sdk/qym /app/packages/platform/qym_platform
 RUN touch /app/packages/sdk/qym/__init__.py /app/packages/platform/qym_platform/__init__.py
 COPY packages/sdk/qym/_version.py /app/packages/sdk/qym/_version.py
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -e /app/packages/sdk -e /app/packages/platform
+    pip install -e /app/packages/sdk -e '/app/packages/platform[async]'
 
 COPY packages/sdk /app/packages/sdk
 COPY packages/platform /app/packages/platform
@@ -72,7 +72,7 @@ COPY examples /app/examples
 COPY tools /app/tools
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install /app/packages/sdk -e /app/packages/platform
+    pip install /app/packages/sdk -e '/app/packages/platform[async]'
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

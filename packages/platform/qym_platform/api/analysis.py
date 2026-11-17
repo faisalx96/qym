@@ -5,6 +5,7 @@ import asyncio
 import base64
 import copy
 import hashlib
+import inspect
 import json
 import math
 from functools import partial
@@ -49,7 +50,7 @@ from qym_platform.services.run_review import (
     audit_correction_review,
     correction_review_state,
 )
-from qym_platform.deps import get_db
+from qym_platform.deps import AsyncDb, get_async_db, get_db
 from qym_platform.llm_endpoint_security import (
     LlmEndpointValidationError,
     validate_llm_base_url,
@@ -163,6 +164,7 @@ from qym_platform.services.analysis_jobs import (
     rule_inference_job_manager,
 )
 from qym_platform.services.analysis_prompts import get_effective_analysis_prompts
+from qym_platform.services.loop_offload import run_blocking_coroutine
 from qym_platform.service_layout import job_execution_queued
 from qym_platform.settings import PlatformSettings
 from sqlalchemy import String, and_, cast, func, or_, tuple_
@@ -2938,6 +2940,19 @@ def _persist_aggregated_bindings(
     return len(changed)
 
 
+async def _close_client(client: Any) -> None:
+    """Close an ``AsyncOpenAI`` client built for one off-loop aggregation (a stub may have no ``close``)."""
+    close = getattr(client, "close", None)
+    if close is None:
+        return
+    try:
+        result = close()
+        if inspect.isawaitable(result):
+            await result
+    except Exception:  # noqa: BLE001 - best effort
+        logger.debug("could not close the analysis client", exc_info=True)
+
+
 def _release_transaction_for_llm(db: Session) -> None:
     """End the open DB transaction before awaiting a model call.
 
@@ -3184,6 +3199,57 @@ async def _aggregate_pass_analysis_results(
         changed += 1
 
     return categories, changed
+
+
+async def _aggregate_off_loop(
+    *,
+    db: Session,
+    run: Run,
+    all_items: list[Any],
+    analysis_targets: list[Any],
+    new_results: list[Any],
+    llm_config: dict[str, Any],
+    model: str,
+    analyzer_config: dict[str, Any] | None,
+    principal: Principal,
+    metric_scope: set[str] | None,
+) -> tuple[dict[str, int], int]:
+    """``_aggregate_run_analysis_results`` for ``run_blocking_coroutine``.
+
+    Runs on a worker thread's own event loop, so its synchronous database
+    calls never stall the request loop; the model client is built there too,
+    since an ``AsyncOpenAI`` client belongs to the loop that first uses it.
+    """
+    client = build_client(llm_config)
+    try:
+        return await _aggregate_run_analysis_results(
+            db=db,
+            run=run,
+            all_items=all_items,
+            analysis_targets=analysis_targets,
+            new_results=new_results,
+            client=client,
+            model=model,
+            analyzer_config=analyzer_config,
+            principal=principal,
+            metric_scope=metric_scope,
+        )
+    finally:
+        await _close_client(client)
+
+
+def _record_failed_aggregation(
+    db: Session, run: Run, metric_scope: set[str] | None, error: str
+) -> None:
+    """Roll back a failed aggregation and store its status on the run row (not committed)."""
+    db.rollback()
+    _lock_run_for_save(db, run)
+    _record_run_aggregation_status(
+        run,
+        status="failed",
+        metric_scope=metric_scope,
+        error=error,
+    )
 
 
 async def _aggregate_run_analysis_results(
@@ -4661,45 +4727,57 @@ async def aggregate_saved_analysis_results(
     # The reads are synchronous; run them off the event loop.
     run, all_items, llm_config, analyzer_config = await run_in_threadpool(prepare)
     metric_scope = {request.metric} if request.metric else None
+    model = llm_config.get("llm_model", "gpt-4o-mini")
 
-    try:
-        if request.pass_number is not None:
-            category_counts, aggregated = await _aggregate_pass_analysis_results(
-                db=db,
-                run=run,
-                pass_number=request.pass_number,
-                expected_pass_version=request.expected_pass_version,
-                client=build_client(llm_config),
-                model=llm_config.get("llm_model", "gpt-4o-mini"),
-                analyzer_config=analyzer_config,
-                metric_scope=metric_scope,
-            )
-        else:
-            category_counts, aggregated = await _aggregate_run_analysis_results(
+    async def aggregate() -> tuple[dict[str, int], int]:
+        # On a worker thread's own loop (run_blocking_coroutine): the
+        # aggregation mixes model calls with synchronous database work.
+        client = build_client(llm_config)
+        try:
+            if request.pass_number is not None:
+                return await _aggregate_pass_analysis_results(
+                    db=db,
+                    run=run,
+                    pass_number=request.pass_number,
+                    expected_pass_version=request.expected_pass_version,
+                    client=client,
+                    model=model,
+                    analyzer_config=analyzer_config,
+                    metric_scope=metric_scope,
+                )
+            return await _aggregate_run_analysis_results(
                 db=db,
                 run=run,
                 all_items=all_items,
                 analysis_targets=[],
                 new_results=[],
-                client=build_client(llm_config),
-                model=llm_config.get("llm_model", "gpt-4o-mini"),
+                client=client,
+                model=model,
                 analyzer_config=analyzer_config,
                 principal=principal,
                 metric_scope=metric_scope,
                 force=True,
             )
-        db.commit()
-    except AnalysisAggregationError as exc:
+        finally:
+            await _close_client(client)
+
+    def record_failure(exc: AnalysisAggregationError) -> None:
         db.rollback()
         if request.pass_number is None:
             _lock_run_for_save(db, run)
-            aggregation_status = _record_run_aggregation_status(
+            _record_run_aggregation_status(
                 run,
                 status="failed",
                 metric_scope=metric_scope,
                 error=str(exc),
             )
             db.commit()
+
+    try:
+        category_counts, aggregated = await run_blocking_coroutine(aggregate)
+        await run_in_threadpool(db.commit)
+    except AnalysisAggregationError as exc:
+        await run_in_threadpool(record_failure, exc)
         logger.warning(
             "Saved analysis aggregation failed for run %s%s: %s",
             run_id,
@@ -4898,21 +4976,23 @@ async def analyze_run_items(
                 **_persistence_totals([]),
             }
         try:
-            categories, aggregated = await _aggregate_run_analysis_results(
-                db=db,
-                run=run,
-                all_items=all_items,
-                analysis_targets=[],
-                new_results=[],
-                client=client,
-                model=model,
-                analyzer_config=analyzer_config,
-                principal=principal,
-                metric_scope=metric_scope,
+            categories, aggregated = await run_blocking_coroutine(
+                lambda: _aggregate_off_loop(
+                    db=db,
+                    run=run,
+                    all_items=all_items,
+                    analysis_targets=[],
+                    new_results=[],
+                    llm_config=llm_config,
+                    model=model,
+                    analyzer_config=analyzer_config,
+                    principal=principal,
+                    metric_scope=metric_scope,
+                )
             )
-            db.commit()
+            await run_in_threadpool(db.commit)
         except AnalysisAggregationError as exc:
-            db.rollback()
+            await run_in_threadpool(db.rollback)
             logger.warning("Analysis aggregation failed for run %s: %s", run_id, exc)
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {
@@ -4926,7 +5006,7 @@ async def analyze_run_items(
         }
 
     # Run async LLM analysis with no transaction open.
-    _release_transaction_for_llm(db)
+    await run_in_threadpool(_release_transaction_for_llm, db)
     results = await _analyze_targets_batch(
         client=client,
         model=model,
@@ -4945,26 +5025,23 @@ async def analyze_run_items(
         aggregated = 0
     else:
         try:
-            categories, aggregated = await _aggregate_run_analysis_results(
-                db=db,
-                run=run,
-                all_items=all_items,
-                analysis_targets=analysis_targets,
-                new_results=results,
-                client=client,
-                model=model,
-                analyzer_config=analyzer_config,
-                principal=principal,
-                metric_scope=metric_scope,
+            categories, aggregated = await run_blocking_coroutine(
+                lambda: _aggregate_off_loop(
+                    db=db,
+                    run=run,
+                    all_items=all_items,
+                    analysis_targets=analysis_targets,
+                    new_results=results,
+                    llm_config=llm_config,
+                    model=model,
+                    analyzer_config=analyzer_config,
+                    principal=principal,
+                    metric_scope=metric_scope,
+                )
             )
         except AnalysisAggregationError as exc:
-            db.rollback()
-            _lock_run_for_save(db, run)
-            _record_run_aggregation_status(
-                run,
-                status="failed",
-                metric_scope=metric_scope,
-                error=str(exc),
+            await run_in_threadpool(
+                _record_failed_aggregation, db, run, metric_scope, str(exc)
             )
             logger.warning("Analysis aggregation failed for run %s: %s", run_id, exc)
             categories = _raw_run_analysis_counts(
@@ -5110,21 +5187,23 @@ async def analyze_run_items_stream(
                 )
                 return
             try:
-                categories, aggregated = await _aggregate_run_analysis_results(
-                    db=db,
-                    run=run,
-                    all_items=all_items,
-                    analysis_targets=[],
-                    new_results=[],
-                    client=client,
-                    model=model,
-                    analyzer_config=analyzer_config,
-                    principal=principal,
-                    metric_scope=metric_scope,
+                categories, aggregated = await run_blocking_coroutine(
+                    lambda: _aggregate_off_loop(
+                        db=db,
+                        run=run,
+                        all_items=all_items,
+                        analysis_targets=[],
+                        new_results=[],
+                        llm_config=llm_config,
+                        model=model,
+                        analyzer_config=analyzer_config,
+                        principal=principal,
+                        metric_scope=metric_scope,
+                    )
                 )
-                db.commit()
+                await run_in_threadpool(db.commit)
             except AnalysisAggregationError as exc:
-                db.rollback()
+                await run_in_threadpool(db.rollback)
                 logger.warning("Analysis stream aggregation failed for run %s: %s", run_id, exc)
                 yield encode({"type": "error", "message": str(exc)})
                 return
@@ -5231,7 +5310,7 @@ async def analyze_run_items_stream(
                 logger_msg = f"Analysis stream failed for run {run_id}: {exc}"
                 await queue.put({"type": "error", "message": logger_msg})
 
-        _release_transaction_for_llm(db)
+        await run_in_threadpool(_release_transaction_for_llm, db)
         batch_task = asyncio.create_task(run_batch())
         try:
             while True:
@@ -5253,26 +5332,23 @@ async def analyze_run_items_stream(
                         aggregated = 0
                     else:
                         try:
-                            categories, aggregated = await _aggregate_run_analysis_results(
-                                db=db,
-                                run=run,
-                                all_items=all_items,
-                                analysis_targets=analysis_targets,
-                                new_results=results,
-                                client=client,
-                                model=model,
-                                analyzer_config=analyzer_config,
-                                principal=principal,
-                                metric_scope=metric_scope,
+                            categories, aggregated = await run_blocking_coroutine(
+                                lambda: _aggregate_off_loop(
+                                    db=db,
+                                    run=run,
+                                    all_items=all_items,
+                                    analysis_targets=analysis_targets,
+                                    new_results=results,
+                                    llm_config=llm_config,
+                                    model=model,
+                                    analyzer_config=analyzer_config,
+                                    principal=principal,
+                                    metric_scope=metric_scope,
+                                )
                             )
                         except AnalysisAggregationError as exc:
-                            db.rollback()
-                            _lock_run_for_save(db, run)
-                            _record_run_aggregation_status(
-                                run,
-                                status="failed",
-                                metric_scope=metric_scope,
-                                error=str(exc),
+                            await run_in_threadpool(
+                                _record_failed_aggregation, db, run, metric_scope, str(exc)
                             )
                             logger.warning(
                                 "Analysis aggregation failed for run %s: %s",
@@ -5427,12 +5503,19 @@ async def upload_analysis_document(
     run_id: str,
     file: UploadFile = File(...),
     large_document_action: Literal["ask", "truncate", "full"] = Form("ask"),
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     """Extract and save retained document text without analyzer shortening."""
-    run = _document_library_run(db, principal, run_id, modify=True)
-    require_project_writable(db, run.project_id)
+
+    def load(session: Session) -> str:
+        run = _document_library_run(session, principal, run_id, modify=True)
+        require_project_writable(session, run.project_id)
+        return run.project_id
+
+    project_id = await db.run_sync(load)
+    # No transaction stays open while the upload is read and extracted.
+    await db.rollback()
     action = large_document_action if isinstance(large_document_action, str) else "ask"
     if action == "truncate":
         raise HTTPException(
@@ -5490,25 +5573,28 @@ async def upload_analysis_document(
 
     document = probe
 
-    stored = AnalyzerDocument(
-        project_id=run.project_id,
-        uploaded_by_user_id=principal.user.id,
-        name=document.name,
-        content=document.content,
-        characters=document.characters,
-        truncated=document.truncated,
-    )
-    db.add(stored)
-    db.commit()
-    db.refresh(stored)
-    return {
-        "document": _analysis_document_payload(
-            stored,
-            source_characters=probe.source_characters,
-        ),
-        "content_decision": "full",
-        "warning": None,
-    }
+    def save(session: Session) -> Dict[str, Any]:
+        stored = AnalyzerDocument(
+            project_id=project_id,
+            uploaded_by_user_id=principal.user.id,
+            name=document.name,
+            content=document.content,
+            characters=document.characters,
+            truncated=document.truncated,
+        )
+        session.add(stored)
+        session.commit()
+        session.refresh(stored)
+        return {
+            "document": _analysis_document_payload(
+                stored,
+                source_characters=probe.source_characters,
+            ),
+            "content_decision": "full",
+            "warning": None,
+        }
+
+    return await db.run_sync(save)
 
 
 @router.patch("/api/runs/{run_id:path}/analysis-documents/{document_id}")
@@ -6499,11 +6585,15 @@ async def infer_project_analysis_rules(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     """Run the rule-writer agent synchronously for legacy API clients."""
-    return await _infer_project_analysis_rules_impl(
-        run_id=run_id,
-        request=request,
-        db=db,
-        principal=principal,
+    # The rule writer mixes model calls with synchronous database work: it
+    # runs on a worker thread's own loop (as it does inside a job).
+    return await run_blocking_coroutine(
+        lambda: _infer_project_analysis_rules_impl(
+            run_id=run_id,
+            request=request,
+            db=db,
+            principal=principal,
+        )
     )
 
 
@@ -8160,7 +8250,7 @@ async def upload_project_analysis_document(
     project_slug: str,
     file: UploadFile = File(...),
     large_document_action: Literal["ask", "truncate", "full"] = Form("ask"),
-    db: Session = Depends(get_db),
+    db: AsyncDb = Depends(get_async_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     return await upload_analysis_document(
