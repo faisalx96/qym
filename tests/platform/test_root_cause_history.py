@@ -14,6 +14,9 @@ import pytest
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import Text, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from qym_platform.deps import SyncSessionBridge
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 
@@ -112,7 +115,14 @@ from qym_platform.services.root_cause_changes import (
 
 @pytest.fixture
 def db_session() -> Session:
-    engine = create_engine("sqlite:///:memory:")
+    # One shared connection usable from any thread: the rule-inference
+    # handler runs its coroutine on a worker thread (services/loop_offload.py),
+    # as the test app helpers' engines already allow.
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
@@ -5762,7 +5772,7 @@ def test_analysis_document_upload_returns_prompt_ready_text(
         upload_analysis_document(
             run_id=run.id,
             file=upload,
-            db=db_session,
+            db=SyncSessionBridge(db_session),
             principal=Principal(user=actor, auth_type="none"),
         )
     )
@@ -5793,7 +5803,7 @@ def test_analysis_document_upload_keeps_full_content_without_a_context_ceiling(
             upload_analysis_document(
                 run_id=run.id,
                 file=UploadFile(filename="large.txt", file=BytesIO(raw)),
-                db=db_session,
+                db=SyncSessionBridge(db_session),
                 principal=Principal(user=actor, auth_type="none"),
                 large_document_action="ask",
             )
@@ -5809,7 +5819,7 @@ def test_analysis_document_upload_keeps_full_content_without_a_context_ceiling(
             upload_analysis_document(
                 run_id=run.id,
                 file=UploadFile(filename="large-shortened.txt", file=BytesIO(raw)),
-                db=db_session,
+                db=SyncSessionBridge(db_session),
                 principal=Principal(user=actor, auth_type="none"),
                 large_document_action="truncate",
             )
@@ -5821,7 +5831,7 @@ def test_analysis_document_upload_keeps_full_content_without_a_context_ceiling(
         upload_analysis_document(
             run_id=run.id,
             file=UploadFile(filename="large-full.txt", file=BytesIO(raw)),
-            db=db_session,
+            db=SyncSessionBridge(db_session),
             principal=Principal(user=actor, auth_type="none"),
             large_document_action="full",
         )
@@ -5841,7 +5851,7 @@ def test_analysis_document_upload_keeps_full_content_without_a_context_ceiling(
                 filename="above-old-context-ceiling.txt",
                 file=BytesIO(above_old_context_ceiling),
             ),
-            db=db_session,
+            db=SyncSessionBridge(db_session),
             principal=Principal(user=actor, auth_type="none"),
             large_document_action="full",
         )
