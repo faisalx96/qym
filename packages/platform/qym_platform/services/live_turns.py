@@ -24,6 +24,7 @@ from qym_platform.db.models import (
     LiveTurnScore,
 )
 from qym_platform.log import get_logger
+from qym_platform.services import live_jobs
 from qym_platform.services.live_overview import _spec_payload
 
 logger = get_logger(__name__)
@@ -577,6 +578,7 @@ def turn_detail(
             for row in siblings
         ],
         "specs": list(definitions.values()),
+        "reevaluation": live_jobs.reevaluation_state(db, source, turn.turn_id),
     }
 
 

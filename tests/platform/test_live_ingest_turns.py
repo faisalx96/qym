@@ -632,3 +632,28 @@ def test_default_batch_cap_rejects_101_turns(client, session_factory):
     assert response.json()["detail"] == "Turn batch exceeds the configured limit"
     with session_factory() as session:
         assert session.query(LiveTurn).count() == 0
+
+
+def test_redone_turn_keeps_its_previous_verdict_for_the_turn_page(
+    client, session_factory
+):
+    _create_source(client)
+    _push(client, [_turn(label="inconclusive")])
+    eval_meta = {
+        "reevaluated_from": "inconclusive at 2026-11-01T10:05:00Z",
+        "previous_verdict": {
+            "label": "inconclusive",
+            "evaluated_at": "2026-11-01T10:05:00Z",
+        },
+    }
+    _push(client, [_turn(label="agent_ok", summary={"eval_meta": eval_meta})])
+    response = client.get(
+        "/api/projects/live-project-1/live/turns/turn-1",
+        headers={"X-User-Email": "live-owner-1@example.test"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["turn"]["label"] == "agent_ok"
+    assert body["summary"]["eval_meta"] == eval_meta
+    assert body["summary"]["replaced_at"].endswith("Z")
+    assert body["reevaluation"] == {"active": None, "last": None}

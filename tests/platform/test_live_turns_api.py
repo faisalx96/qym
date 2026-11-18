@@ -14,7 +14,13 @@ from test_live_ingest_chart_images import OTHER_REF, REF, TURN_ID, _upload
 from test_live_ingest_sources import _seed_api_key
 
 from _live_support import _png, seed_week
-from qym_platform.db.models import LiveMetricSpec, LiveSource, LiveTurn, LiveTurnScore
+from qym_platform.db.models import (
+    LiveJob,
+    LiveMetricSpec,
+    LiveSource,
+    LiveTurn,
+    LiveTurnScore,
+)
 
 ADMIN = {"X-User-Email": "owner@example.test"}
 BASE = "/api/projects/test/live"
@@ -367,6 +373,7 @@ def test_turn_detail_has_conversation_siblings_in_time_order(client, session_fac
     assert scores["agent_success"]["spec"]["is_primary"] is True
     assert scores["unregistered"]["spec"] is None
     assert len(body["specs"]) == 6
+    assert body["reevaluation"] == {"active": None, "last": None}
 
 
 def test_turn_detail_404(client, session_factory):
@@ -853,3 +860,103 @@ def test_turn_id_with_slash_is_retrievable(client, session_factory):
     response = client.get(f"{BASE}/turns.csv", headers=ADMIN)
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "text/csv; charset=utf-8"
+
+
+def test_turn_detail_reports_its_reevaluation(client, session_factory):
+    requested = datetime(2026, 11, 2, 9)
+    with session_factory() as db:
+        source = db.query(LiveSource).filter_by(key="worker-1").one()
+        other = LiveSource(
+            project_id="p",
+            key="other",
+            name="Other",
+            environment="test",
+            is_active=False,
+        )
+        db.add(other)
+        db.flush()
+
+        def job(job_id, status, minutes, trace_ids=("midnight-turn",), **values):
+            db.add(
+                LiveJob(
+                    id=job_id,
+                    source_id=values.pop("source_id", source.id),
+                    kind=values.pop("kind", "reevaluate"),
+                    params={"trace_ids": list(trace_ids), "redo": ["all"], "limit": 1},
+                    status=status,
+                    requested_at=requested + timedelta(minutes=minutes),
+                    **values,
+                )
+            )
+
+        job("first", "done", 0, finished_at=requested + timedelta(minutes=1))
+        job(
+            "second",
+            "failed",
+            10,
+            finished_at=requested + timedelta(minutes=12),
+            error="trace not found",
+        )
+        job("elsewhere", "cancelled", 20, trace_ids=("turn-2026-11-01-0",))
+        job("backfill", "done", 30, kind="backfill")
+        job("other-source", "done", 40, source_id=other.id)
+        db.commit()
+
+    def reevaluation(turn_id="midnight-turn"):
+        response = client.get(f"{BASE}/turns/{turn_id}", headers=ADMIN)
+        assert response.status_code == 200, response.text
+        return response.json()["reevaluation"]
+
+    assert reevaluation() == {
+        "active": None,
+        "last": {
+            "id": "second",
+            "status": "failed",
+            "finished_at": "2026-11-02T09:12:00Z",
+            "error": "trace not found",
+        },
+    }
+    assert reevaluation("turn-2026-11-01-0") == {
+        "active": None,
+        "last": {
+            "id": "elsewhere",
+            "status": "cancelled",
+            "finished_at": None,
+            "error": None,
+        },
+    }
+    assert reevaluation("turn-2026-11-01-1") == {"active": None, "last": None}
+    with session_factory() as db:
+        source = db.query(LiveSource).filter_by(key="worker-1").one()
+        db.add(
+            LiveJob(
+                id="third",
+                source_id=source.id,
+                kind="reevaluate",
+                params={"trace_ids": ["midnight-turn"], "redo": ["all"], "limit": 1},
+                status="queued",
+                requested_by_user_id="u",
+                requested_at=requested + timedelta(minutes=50),
+            )
+        )
+        db.commit()
+    assert reevaluation() == {
+        "active": {
+            "id": "third",
+            "status": "queued",
+            "requested_at": "2026-11-02T09:50:00Z",
+            "requested_by": "Owner",
+        },
+        "last": {
+            "id": "second",
+            "status": "failed",
+            "finished_at": "2026-11-02T09:12:00Z",
+            "error": "trace not found",
+        },
+    }
+    # The active re-evaluation belongs to one turn only.
+    assert reevaluation("turn-2026-11-01-0")["active"] is None
+    with session_factory() as db:
+        db.get(LiveJob, "third").status = "running"
+        db.commit()
+    assert reevaluation()["active"]["status"] == "running"
