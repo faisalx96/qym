@@ -3,9 +3,10 @@ import type { LiveSourceInfo } from '@/api/live';
 import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { modelSeriesOf } from '@/features/runs-list/model';
+import { formatAgo } from '@/lib/dates';
 import { formatRelative } from '@/lib/format';
-import { Card, ModelTag, StateTag, Tag, Text } from '@/ui';
-import { staleText, statusTime } from '../lib/stale';
+import { Card, ModelTag, StateTag, StatusMark, Tag } from '@/ui';
+import { statusTime } from '../lib/stale';
 import { workerStateTag } from './worker/format';
 import styles from '../live.module.css';
 
@@ -37,32 +38,32 @@ export function StatusLine({
   const workerState = control ? workerStateTag(control.state, control.settings_version_applied) : null;
   return (
     <Card compact data-live-block="status" data-live-stale={stale ? 'true' : 'false'}>
-      <div className={styles.status} data-stale={stale ? '' : undefined}>
-        {/* cv5 Y17: a stale source says "Stale." once, in the notice above this card (it carries the detail); the card
-            shows no second Stale tag */}
-        {stale ? null : <StateTag tone="info">Running</StateTag>}
-        {stale ? null : <span>{staleText(status, now)}</span>}
-        <span title={formatRelative(status.last_turn_at, now)}>
-          Last turn <span className={styles.time}>{lastTurn}</span>
-        </span>
-        {workerState ? (
-          <span className={styles.inline}>
-            <Text as="span" tone="muted">
-              Worker
-            </Text>
-            <StateTag tone={workerState.tone}>{workerState.label}</StateTag>
-          </span>
-        ) : null}
-        {errors > 0 ? (
-          <Link to={`${workerUrl}#problems`}>
-            <Tag tone="danger">
-              {errors} {errors === 1 ? 'problem' : 'problems'} in the last hour
-            </Tag>
-          </Link>
-        ) : null}
-        {judges.length > 0 ? (
-          <span className={styles.inline}>
-            Judges{' '}
+      <dl className={styles.status} data-stale={stale ? '' : undefined}>
+        <div className={styles.statusItem}>
+          <dt>State</dt>
+          <dd>
+            <StatusMark
+              tone={stale ? 'danger' : 'info'}
+              shape={stale ? 'cross' : 'orbit'}
+              label={stale ? 'Stale' : 'Running'}
+            />
+          </dd>
+        </div>
+        <div className={styles.statusItem}>
+          <dt>Last poll</dt>
+          <dd className={styles.time} title={formatRelative(status.last_poll_at, now)}>
+            {status.last_poll_at ? formatAgo(status.last_poll_at, now) : '—'}
+          </dd>
+        </div>
+        <div className={styles.statusItem}>
+          <dt>Last turn</dt>
+          <dd className={styles.time} title={formatRelative(status.last_turn_at, now)}>
+            {lastTurn}
+          </dd>
+        </div>
+        <div className={styles.statusItem}>
+          <dt>Judges</dt>
+          <dd className={styles.inline}>
             {judges.map((judge, index) => (
               <ModelTag
                 key={`${index}-${judge}`}
@@ -70,16 +71,47 @@ export function StatusLine({
                 series={modelSeriesOf(modelIndex ?? null, judge, false)}
               />
             ))}
-          </span>
-        ) : null}
-        {['eval_code_version', 'manifest_hash'].map((key) =>
+            {judges.length === 0 ? '—' : null}
+          </dd>
+        </div>
+        {(
+          [
+            ['eval_code_version', 'Worker version'],
+            ['manifest_hash', 'Rules version'],
+          ] as const
+        ).map(([key, label]) =>
           typeof worker[key] === 'string' && worker[key] ? (
-            <Tag key={key} kind="version" dir="auto">
-              {worker[key]}
-            </Tag>
+            <div key={key} className={styles.statusItem}>
+              <dt>{label}</dt>
+              <dd>
+                <Tag kind="version" dir="auto">
+                  {worker[key]}
+                </Tag>
+              </dd>
+            </div>
           ) : null,
         )}
-      </div>
+        {workerState ? (
+          <div className={styles.statusItem}>
+            <dt>Worker</dt>
+            <dd>
+              <StateTag tone={workerState.tone}>{workerState.label}</StateTag>
+            </dd>
+          </div>
+        ) : null}
+        {errors > 0 ? (
+          <div className={styles.statusItem}>
+            <dt>Problems</dt>
+            <dd>
+              <Link to={`${workerUrl}#problems`}>
+                <Tag tone="danger">
+                  {errors} {errors === 1 ? 'problem' : 'problems'} in the last hour
+                </Tag>
+              </Link>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
     </Card>
   );
 }

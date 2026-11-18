@@ -2,13 +2,24 @@ import { useId, useRef, useState } from 'react';
 import type { LiveTurnDetail } from '@/api/live';
 import { isInternalMetaKey } from '@/lib/metrics';
 import { splitBilingual } from '@/lib/text';
-import { Button, DataTable, EmptyState, Subsection, Text, TextBlock, type Column } from '@/ui';
+import { Button, Card, DataTable, EmptyState, Text, TextBlock, type Column } from '@/ui';
 import { FieldList } from '@/features/run-detail/components/items/pane/values';
-import { Bilingual, MetricValue } from './Evidence';
+import { Bilingual, MetricValue, TurnCardTitle } from './Evidence';
+import { stringOf } from '../../lib/summary';
+import { sentenceLabel } from './presentation';
 import styles from './EvaluatorTab.module.css';
+import turnStyles from '../../turn.module.css';
 
 type Score = LiveTurnDetail['scores'][number];
 const hidden = new Set<string>();
+
+function categoricalLabel(score: Score): string {
+  const value = score.label ?? String(score.score_raw);
+  const label = score.spec?.values?.find(
+    (item) => item.value === score.score_raw || item.value === value,
+  )?.label;
+  return typeof label === 'string' ? label : value;
+}
 
 function result(score: Score, failed: boolean) {
   if (score.skipped) return `Skipped${score.skip_reason ? `: ${score.skip_reason}` : ''}`;
@@ -47,41 +58,53 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
     {
       id: 'metric',
       header: 'Metric',
+      width: 200,
       cell: (row) => (
-        <span className={styles.wrap} dir="auto">
-          {row.spec?.label ?? row.metric_name}
-        </span>
+        <TextBlock text={row.spec?.label ?? row.metric_name} code={false} className={styles.wrap} />
       ),
     },
     {
       id: 'value',
-      header: 'Value',
-      cell: (row) =>
-        !row.skipped && row.score_numeric === null && (row.label || typeof row.score_raw === 'string') ? (
-          <Text dir="auto">{row.label ?? String(row.score_raw)}</Text>
-        ) : (
-          <MetricValue value={row.skipped ? null : row.score_numeric} spec={row.spec} />
-        ),
+      header: 'Score',
+      align: 'end',
+      width: 150,
+      cell: (row) => (
+        <div className={styles.score}>
+          {!row.skipped && row.score_numeric === null && (row.label || typeof row.score_raw === 'string') ? (
+            <TextBlock text={categoricalLabel(row)} code={false} />
+          ) : (
+            <MetricValue value={row.skipped ? null : row.score_numeric} spec={row.spec} />
+          )}
+          {result(row, data.summary.evaluation_failed === true || data.turn.status === 'failed') !==
+          'Scored' ? (
+            <Text variant="sm">
+              {result(row, data.summary.evaluation_failed === true || data.turn.status === 'failed')}
+            </Text>
+          ) : null}
+        </div>
+      ),
     },
     {
-      id: 'result',
-      header: 'Result',
-      cell: (row) => (
-        <span className={styles.wrap} dir="auto">
-          {result(row, data.summary.evaluation_failed === true || data.turn.status === 'failed')}
-        </span>
-      ),
+      id: 'source',
+      header: 'Judge / source',
+      width: 140,
+      cell: (row) => {
+        const judge = /^compliance_([ab])$/.exec(row.metric_name)?.[1];
+        const source = judge
+          ? `Judge ${judge.toUpperCase()}`
+          : (stringOf(row.meta.judge) ?? stringOf(row.meta.source) ?? stringOf(row.meta.model));
+        return source ? <TextBlock text={source} code={false} className={styles.wrap} /> : null;
+      },
     },
     {
       id: 'explanation',
       header: 'Explanation',
       flex: true,
       minWidth: 200,
-      cell: (row) => (
-        <span className={styles.preview} dir="auto">
-          {row.explanation?.split('\n')[0] ?? '—'}
-        </span>
-      ),
+      cell: (row) => {
+        const text = splitBilingual(row.explanation ?? '');
+        return row.explanation ? <Bilingual en={text.en} ar={text.ar} /> : null;
+      },
     },
   ];
   const close = () => {
@@ -90,7 +113,7 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
   };
   const text = splitBilingual(score?.explanation ?? '');
   return (
-    <Subsection title="Scores">
+    <Card flush data-live-card="evaluator-scores" header={<TurnCardTitle title="Scores" />}>
       <div
         ref={root}
         className={styles.stack}
@@ -103,14 +126,18 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
         }}
       >
         <DataTable
+          className={turnStyles.proseTable}
           aria-label="Evaluation scores"
           rows={rows}
           columns={columns}
           rowKey={(row) => row.id}
-          density="compact"
+          fit="declared"
+          variant="embedded"
+          stickyHeader={false}
+          density="comfortable"
           densityLocked
           responsive="scroll"
-          groupBy={{ key: (row) => row.spec?.group ?? 'Other', label: (group) => group }}
+          groupBy={{ key: (row) => row.spec?.group ?? 'Other', label: sentenceLabel }}
           onRowOpen={(row) => setSelected(row.id)}
           rowProps={(row) => ({
             'data-score-id': String(row.id),
@@ -118,7 +145,7 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
             'aria-controls': row.id === selected ? panelId : undefined,
           })}
           rowClassName={(row) => (row.id === selected ? styles.selected : undefined)}
-          empty="No evaluation scores for this turn"
+          empty={<EmptyState compact title="No evaluation scores for this turn" />}
         />
         {score ? (
           <section
@@ -133,13 +160,7 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
                 Close
               </Button>
             </div>
-            {score.explanation ? (
-              text.en && text.ar ? (
-                <Bilingual en={text.en} ar={text.ar} />
-              ) : (
-                <TextBlock text={score.explanation} code={false} />
-              )
-            ) : null}
+            {score.explanation ? <Bilingual en={text.en} ar={text.ar} /> : null}
             {Object.keys(details).length ? (
               <FieldList data={details} label="Judge metadata" detail />
             ) : (
@@ -148,6 +169,6 @@ export function EvaluationScores({ data }: { data: LiveTurnDetail }) {
           </section>
         ) : null}
       </div>
-    </Subsection>
+    </Card>
   );
 }

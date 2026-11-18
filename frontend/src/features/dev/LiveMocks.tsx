@@ -1,20 +1,22 @@
 /** Task 10: composed, static Live pages. No API calls; fixtures are reusable by the feature tasks. */
 import { WorkerPageView } from '@/features/live/LiveWorkerPage';
 import { liveWorkerRead, liveWorkerWaiting, liveWorkerFailed, liveWorkerEvents } from './liveFixtures';
-import type { ReactNode } from 'react';
-import type { LiveOverview, LiveTurnRow } from '@/api/live';
+import { useState, type ReactNode } from 'react';
+import type { LiveWorkerRead, WorkerEventsFilters } from '@/api/liveWorker';
+import { PROBLEMS_PAGE_SIZE } from '@/features/live/components/worker/ProblemsBlock';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { dashboardKeys } from '@/api/dashboard';
+import { LiveTurnPage } from '@/features/live/LiveTurnPage';
+import type { LiveOverview, LiveTurnDetail, LiveTurnRow } from '@/api/live';
 import {
   Button,
   Card,
   Chip,
-  CopyButton,
   DataTable,
   DateTimeField,
-  Disclosure,
   EmptyState,
   Icon,
   IconButton,
-  KeyValueGrid,
   LinkButton,
   PageHeader,
   Popover,
@@ -26,8 +28,6 @@ import {
   Select,
   StatTiles,
   StatusMark,
-  TabPanel,
-  Tabs,
   Tag,
   Text,
   type CardTone,
@@ -38,22 +38,17 @@ import {
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { ChartCard } from '@/features/run-detail/components/charts/ChartCard';
 import { BarColumns, type BarSpec } from '@/features/run-detail/components/charts/Charts';
-import { ChartImage } from '@/features/live/components/turn/ChartImage';
-import { chartsOf } from '@/features/live/lib/summary';
 import {
   liveDay,
   liveDiagnosisSpec,
   liveOverview,
   liveSpecs,
-  liveTurnDetail,
-  liveTurnEvidence,
+  liveEvidenceTurns,
   liveTurnsPage,
 } from './liveFixtures';
 import styles from './LiveMocks.module.css';
 
 const noop = () => undefined;
-const turn = liveTurnDetail.turn;
-const evidence = liveTurnEvidence;
 const labels = liveDiagnosisSpec.values;
 const labelFor = (value: string | null) => labels.find((label) => label.value === value) ?? labels[5]!;
 const toneFor = (value: string): CardTone => {
@@ -155,12 +150,15 @@ function Shell({ page, children }: { page: 'overview' | 'turns' | 'turn' | 'work
             {page === 'turn' ? (
               <>
                 <Icon name="chevron-right" size={12} />
-                <span className={styles.number}>09:12</span>
+                <span className={styles.number}>{galleryTurn.turn.turn_id}</span>
               </>
             ) : null}
           </span>
         </div>
-        <main className={styles.content} data-live-block="content">
+        <main
+          className={[styles.content, page === 'turn' ? styles.turnContent : ''].filter(Boolean).join(' ')}
+          data-live-block="content"
+        >
           {children}
         </main>
       </div>
@@ -774,309 +772,109 @@ function Turns() {
   );
 }
 
-function Sql({ parts }: { parts: Record<string, unknown>[] }) {
-  return (
-    <div className={styles.sqlParts}>
-      {parts.map((part, i) => (
-        <div key={i}>
-          <div className={styles.sqlMeta}>
-            <StatusMark
-              tone={part.executed ? 'success' : 'warning'}
-              shape={part.executed ? 'check' : 'pause'}
-              label={part.executed ? 'Executed' : 'Not executed'}
-            />
-            <span className={styles.number}>{String(part.rows ?? '—')} rows</span>
-            <CopyButton text={String(part.text)} label="Copy SQL" />
-          </div>
-          <pre className={styles.sql} dir="ltr">
-            <code>{String(part.text)}</code>
-          </pre>
-          {part.error ? (
-            <Text variant="base" tone="danger">
-              {String(part.error)}
-            </Text>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  );
-}
+// Keep the gallery on the actual turn page, with fixture data in an isolated cache.
+const galleryTurn: LiveTurnDetail = {
+  ...liveEvidenceTurns['sql-mismatch'],
+  turn: {
+    ...liveEvidenceTurns['sql-mismatch'].turn,
+    answer: `${liveEvidenceTurns['sql-mismatch'].turn.answer}\n\n[[viz:gallery-chart]]`,
+  },
+  summary: {
+    ...liveEvidenceTurns['sql-mismatch'].summary,
+    verdict: {
+      label: 'agent_problem',
+      basis: 'judges',
+      confidence: 0.95,
+      reason_en: 'The agent grouped by region instead of city and omitted the requested year.',
+      reason_ar: 'جمع الوكيل النتائج حسب المنطقة بدلاً من المدينة ولم يحدد السنة المطلوبة.',
+      steps: [
+        {
+          kind: 'fact',
+          text_en: 'The agent ran a query grouped by region.',
+          text_ar: 'نفذ الوكيل استعلاماً مجمعاً حسب المنطقة.',
+          source: 'Tool: execute_sql_query',
+        },
+        {
+          kind: 'replay',
+          text_en: 'The re-run returned city groups for the requested year.',
+          text_ar: 'أعاد التشغيل مجموعات المدن للسنة المطلوبة.',
+          source: 'a',
+        },
+        {
+          kind: 'judge',
+          text_en: 'Both judges found that the query missed the requested scope.',
+          text_ar: 'وجد الحكمان أن الاستعلام لم يطابق النطاق المطلوب.',
+          source: 'b',
+        },
+      ],
+    },
+    rules_applied: [
+      {
+        id: 'B10',
+        role: 'told_to_judges',
+        title_en: 'Present the results clearly',
+        title_ar: 'اعرض النتائج بوضوح',
+        verdict_en: 'Explain the returned rows in the final answer.',
+        verdict_ar: 'اشرح الصفوف الناتجة في الإجابة النهائية.',
+      },
+      {
+        id: 'B2',
+        role: 'decided',
+        title_en: 'Use the requested grouping',
+        title_ar: 'استخدم التجميع المطلوب',
+        verdict_en: 'Group by city when the question asks for cities.',
+        verdict_ar: 'جمّع حسب المدينة عندما يطلب السؤال مدناً.',
+      },
+      {
+        id: 'G1',
+        role: 'told_to_judges',
+        title_en: 'Protect private data',
+        title_ar: 'احمِ البيانات الخاصة',
+        verdict_en: 'Do not expose restricted records.',
+        verdict_ar: 'لا تكشف السجلات المقيدة.',
+      },
+      {
+        id: 'B1',
+        role: 'decided',
+        title_en: 'Respect the requested scope',
+        title_ar: 'التزم بالنطاق المطلوب',
+        verdict_en: 'Apply the year and other filters stated in the question.',
+        verdict_ar: 'طبّق السنة والمرشحات الأخرى الواردة في السؤال.',
+      },
+    ],
+  },
+};
 
 function Turn() {
-  const label = labelFor(turn.label);
-  const score = (name: string) => liveTurnDetail.scores.find((s) => s.metric_name === name)?.score_numeric;
-  const tile = (key: string): StatTile => ({
-    key,
-    label: metricLabel(key),
-    value: <ScoreValue value={score(key)} direction="higher" variant="plain" />,
-    meaning: `This turn's ${metricLabel(key).toLowerCase()} score; skipped values show a dash.`,
+  const [client] = useState(() => {
+    const cache = new QueryClient({
+      defaultOptions: {
+        queries: {
+          enabled: false,
+          staleTime: Infinity,
+          refetchOnMount: false,
+          refetchOnWindowFocus: false,
+          retry: false,
+        },
+      },
+    });
+    cache.setQueryData(
+      ['project', 'demo', 'live', 'turn', liveOverview.status.key, galleryTurn.turn.turn_id],
+      galleryTurn,
+    );
+    cache.setQueryData(['project', 'demo', 'live', 'sources'], {
+      sources: [liveOverview.status],
+      default_source: liveOverview.status.key,
+    });
+    cache.setQueryData(dashboardKeys.overview('demo', {}), {
+      chart_data: { modelIndex: { 'judge-a': 0, 'judge-b': 1 } },
+    });
+    return cache;
   });
   return (
-    <>
-      <div data-live-block="header">
-        <PageHeader
-          title={
-            <span className={styles.turnTitle} dir="auto" data-live-question>
-              {turn.question}
-            </span>
-          }
-          meta={[
-            <span key="time" className={styles.number}>
-              1 Nov 2026 · 09:12 UTC
-            </span>,
-            userText(turn.user_ref),
-            <span key="conversation">
-              conversation 001 · turn{' '}
-              <span className={styles.number}>
-                {(turn.turn_index ?? 0) + 1} of {liveTurnDetail.conversation.length}
-              </span>
-            </span>,
-            <Tag key="mode" kind="data" dir="auto">
-              {turn.mode}
-            </Tag>,
-            <Tag key="env" kind="data" dir="auto">
-              {liveOverview.status.environment}
-            </Tag>,
-            <a key="trace" href={turn.trace_url!}>
-              Product trace ↗
-            </a>,
-            <a key="eval" href={turn.eval_trace_url!}>
-              Evaluation trace ↗
-            </a>,
-          ]}
-          actions={
-            <span className={styles.inline} data-live-block="turn-navigation">
-              <IconButton label="Previous turn" icon="prev" isDisabled />
-              <IconButton label="Next turn" icon="next" onPress={noop} />
-            </span>
-          }
-        />
-        <Card compact tone={toneFor(label.tone)} data-live-block="diagnosis-label">
-          <div className={styles.inline}>
-            <Diagnosis value={turn.label} />
-            <span dir="auto">{turn.label_reason}</span>
-          </div>
-        </Card>
-      </div>
-      <Tiles
-        label="Turn numbers"
-        items={[
-          tile('agent_success'),
-          tile('compliance_a'),
-          tile('compliance_b'),
-          {
-            key: 'latency',
-            label: 'Latency',
-            value: duration(turn.latency_ms),
-            meaning: 'Elapsed response time for this turn.',
-          },
-          {
-            key: 'rows',
-            label: 'Result rows',
-            value: turn.result_rows,
-            meaning: 'Rows returned by the agent SQL.',
-          },
-          {
-            key: 'charts',
-            label: 'Charts',
-            value: evidence.charts.length,
-            meaning: 'One chart produced; one failed validation.',
-          },
-        ]}
-      />
-      <div data-live-block="tabs">
-        <Tabs
-          label="Turn sections"
-          selected="diagnosis"
-          onSelect={noop}
-          items={[
-            { id: 'diagnosis', label: 'Diagnosis' },
-            { id: 'answer', label: 'Answer and SQL' },
-            { id: 'judges', label: 'Judges' },
-            { id: 'charts', label: 'Charts' },
-            { id: 'services', label: 'Services and tools' },
-            { id: 'conversation', label: 'Conversation' },
-            { id: 'evaluator', label: 'Evaluator' },
-          ]}
-        >
-          <TabPanel id="diagnosis" className={styles.diagnosis}>
-            <div className={styles.twoColumns}>
-              <Card
-                data-live-card="why"
-                header={
-                  <Text variant="md" weight={600}>
-                    Why {label.label}
-                  </Text>
-                }
-              >
-                <p className={styles.copy} dir="auto">
-                  {turn.label_reason}
-                </p>
-                <KeyValueGrid
-                  columns={1}
-                  dense
-                  items={[
-                    ...Object.entries(evidence.judges).map(([key, judge]) => ({
-                      key,
-                      label: `Judge ${key.toUpperCase()} vs agent`,
-                      value: `${judge.vs_agent.equivalent ? 'Equivalent' : 'Not equivalent'} · ${judge.vs_agent.result_set_match ? 'results match' : 'results differ'}`,
-                    })),
-                    { key: 'agreement', label: 'Judges agree', value: 'Yes' },
-                    {
-                      key: 'coverage',
-                      label: 'Sub-questions covered',
-                      value: `${evidence.coverage.covered} / ${evidence.coverage.total}`,
-                      mono: true,
-                    },
-                    { key: 'intent', label: 'Intent', value: userText(evidence.envelope.intent) },
-                    {
-                      key: 'envelope',
-                      label: 'Tool envelope',
-                      value: 'Matched · retrieval, sql_execution, visualization',
-                    },
-                    {
-                      key: 'tools',
-                      label: 'Tool calls / budget',
-                      value: `${evidence.tools.calls} / ${evidence.tools.budget}`,
-                      mono: true,
-                    },
-                  ]}
-                />
-              </Card>
-              <Card
-                data-live-card="deviations"
-                header={
-                  <Text variant="md" weight={600}>
-                    Deviations the judges found
-                  </Text>
-                }
-              >
-                {Object.keys(evidence.judges).map((judge) => (
-                  <div key={judge} className={styles.deviationGroup}>
-                    <Text variant="md" weight={600}>
-                      Judge {judge.toUpperCase()}
-                    </Text>
-                    {evidence.deviations
-                      .filter((deviation) => deviation.judge === judge)
-                      .map((deviation) => (
-                        <div key={deviation.axis} className={styles.deviation}>
-                          <Tag tone={deviation.axis === 'sql' ? 'danger' : 'warning'}>{deviation.axis}</Tag>
-                          <p className={styles.copy} dir="auto">
-                            {deviation.text}
-                          </p>
-                        </div>
-                      ))}
-                  </div>
-                ))}
-              </Card>
-            </div>
-            <div className={styles.twoColumns}>
-              <Card
-                data-live-card="agent-sql"
-                header={
-                  <Text variant="md" weight={600}>
-                    Agent SQL
-                  </Text>
-                }
-              >
-                <Sql parts={turn.sql} />
-                <div className={styles.notes}>
-                  <span>Not reused by judges</span>
-                  <StatusMark tone="success" shape="check" label="Dialect OK" />
-                  <StatusMark tone="danger" shape="cross" label="Validator failed" />
-                </div>
-              </Card>
-              <Card
-                data-live-card="judge-sql"
-                header={
-                  <Text variant="md" weight={600}>
-                    Judge A SQL
-                  </Text>
-                }
-              >
-                <Sql parts={evidence.judges.a.sql_parts} />
-                <div data-live-block="judge-b">
-                  <Disclosure title="Judge B SQL" summary="1 statement · 1 row">
-                    <Sql parts={evidence.judges.b.sql_parts} />
-                  </Disclosure>
-                </div>
-              </Card>
-            </div>
-            <div className={styles.threeColumns}>
-              <Card
-                data-live-card="answer"
-                header={
-                  <Text variant="md" weight={600}>
-                    Final answer
-                  </Text>
-                }
-              >
-                <p className={styles.answer} dir="auto" data-live-answer>
-                  {turn.answer}
-                </p>
-                <div className={styles.metricRow}>
-                  <span>Error detection</span>
-                  <ScoreValue value={score('error_detection')} direction="higher" variant="plain" />
-                </div>
-              </Card>
-              <Card
-                data-live-card="chart"
-                header={
-                  <Text variant="md" weight={600}>
-                    Chart
-                  </Text>
-                }
-              >
-                <ChartImage
-                  chart={chartsOf(liveTurnDetail.summary, liveTurnDetail.chart_images)[0]!}
-                  size="thumb"
-                />
-                {Object.entries(evidence.charts[0]!.scores).map(([key, value]) => (
-                  <div key={key} className={styles.metricRow}>
-                    <span>{metricLabel(key)}</span>
-                    <ScoreValue value={value} direction="higher" variant="plain" />
-                  </div>
-                ))}
-                <p className={styles.copy} dir="auto">
-                  {evidence.charts[0]!.issues.join(' · ')}
-                </p>
-              </Card>
-              <Card
-                data-live-card="turn-services"
-                header={
-                  <Text variant="md" weight={600}>
-                    Services on this turn
-                  </Text>
-                }
-              >
-                {Object.entries(evidence.services).map(([name, service]) => (
-                  <div key={name} className={styles.metricRow} data-live-turn-service={name}>
-                    <span dir="auto">{metricLabel(`service.${name}`)}</span>
-                    <span className={styles.inline}>
-                      <StatusMark
-                        tone={service.status === 'failed' ? 'danger' : 'success'}
-                        shape={service.status === 'failed' ? 'cross' : 'check'}
-                        label={service.status}
-                      />
-                      {service.fault ? <Tag tone="danger">{service.fault}</Tag> : null}
-                    </span>
-                  </div>
-                ))}
-                <div className={styles.evaluator} data-live-block="evaluator-line">
-                  <span>judge-a · judge-b</span>
-                  <Tag kind="version">{evidence.eval_meta.eval_code_version}</Tag>
-                  <Tag kind="version">{evidence.manifest_hash}</Tag>
-                  <span className={styles.number}>
-                    Attempt {evidence.eval_meta.attempt} · {evidence.eval_meta.durations.evaluation_ms / 1000}{' '}
-                    s
-                  </span>
-                </div>
-              </Card>
-            </div>
-          </TabPanel>
-        </Tabs>
-      </div>
-    </>
+    <QueryClientProvider client={client}>
+      <LiveTurnPage slug="demo" source={liveOverview.status.key} turnId={galleryTurn.turn.turn_id} />
+    </QueryClientProvider>
   );
 }
 
@@ -1101,26 +899,7 @@ export function LiveMocks() {
       ).map(([state, read]) => (
         <section key={state} data-live-state={`worker-${state}`}>
           <Shell page="worker">
-            <WorkerPageView
-              read={read}
-              source={liveOverview.status.key}
-              status={liveOverview.status}
-              sourceControl={
-                <Tag kind="data">
-                  {liveOverview.status.name} · {liveOverview.status.environment}
-                </Tag>
-              }
-              events={state === 'waiting' ? [] : liveWorkerEvents}
-              eventsFilters={{}}
-              onEventsFilters={noop}
-              busy={{}}
-              onState={async () => {}}
-              onKey={async () => {}}
-              onSave={async () => ({ version: 4 })}
-              onRestore={async () => ({ version: 4 })}
-              onCreateJob={async () => liveWorkerRead.jobs[0]!}
-              onCancelJob={async () => {}}
-            />
+            <WorkerMock read={read} notResponding={state === 'running'} />
           </Shell>
         </section>
       ))}
@@ -1139,5 +918,59 @@ export function LiveMocks() {
         </div>
       </section>
     </div>
+  );
+}
+
+function WorkerMock({ read, notResponding }: { read: LiveWorkerRead; notResponding: boolean }) {
+  const [filters, setFilters] = useState<WorkerEventsFilters>({ page: 1 });
+  const [galleryRead] = useState<LiveWorkerRead>(() => {
+    // Explicit sample states, not a client-side stale threshold. Match the API's two stale flags.
+    const now = Date.now();
+    const ageSeconds = notResponding ? 13 * 24 * 60 * 60 : 30;
+    const pollAt = new Date(now - ageSeconds * 1000).toISOString();
+    return {
+      ...read,
+      stale: notResponding,
+      status: {
+        ...read.status,
+        stale: notResponding,
+        seconds_since_heartbeat: ageSeconds,
+        last_heartbeat_at: pollAt,
+        last_poll_at: pollAt,
+        last_turn_at: new Date(now - (ageSeconds + 60) * 1000).toISOString(),
+      },
+      jobs: read.jobs.map((job) => (job.status === 'running' ? { ...job, updated_at: pollAt } : job)),
+    };
+  });
+  const events = (read === liveWorkerWaiting ? [] : liveWorkerEvents).filter(
+    (event) =>
+      (!filters.component?.length || filters.component.includes(event.component)) &&
+      (!filters.level?.length || filters.level.includes(event.level)),
+  );
+  return (
+    <WorkerPageView
+      read={galleryRead}
+      source={liveOverview.status.key}
+      status={galleryRead.status}
+      sourceControl={
+        <Tag kind="data">
+          {liveOverview.status.name} · {liveOverview.status.environment}
+        </Tag>
+      }
+      events={events.slice(
+        ((filters.page ?? 1) - 1) * PROBLEMS_PAGE_SIZE,
+        (filters.page ?? 1) * PROBLEMS_PAGE_SIZE,
+      )}
+      eventsTotal={events.length}
+      eventsFilters={filters}
+      onEventsFilters={setFilters}
+      busy={{}}
+      onState={async () => {}}
+      onKey={async () => {}}
+      onSave={async () => ({ version: 4 })}
+      onRestore={async () => ({ version: 4 })}
+      onCreateJob={async () => liveWorkerRead.jobs[0]!}
+      onCancelJob={async () => {}}
+    />
   );
 }

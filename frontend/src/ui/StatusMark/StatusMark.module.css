@@ -17,6 +17,11 @@
   color: var(--tone);
 }
 
+.mark[data-wrap] {
+  white-space: normal;
+  line-height: 1.5;
+}
+
 .figure rect {
   fill: currentcolor;
   opacity: 0.22;

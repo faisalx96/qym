@@ -1,48 +1,25 @@
-import type { LiveMetricSpec, LiveOverview } from '@/api/live';
-import { formatDuration } from '@/lib/format';
-import { humanizeKey } from '@/lib/humanizeKey';
-import { StateTag, Text } from '@/ui';
+import type { LiveOverview } from '@/api/live';
+import { StatusMark, Text } from '@/ui';
 import { statusWord } from './turn/presentation';
-import styles from '../live.module.css';
 
-/** A canary key as a name: 'judge_a' -> 'Judge A', any other key in plain words (B-08). */
-function canaryName(key: string): string {
-  const judge = /^judge_([a-z])$/i.exec(key);
-  return judge ? `Judge ${judge[1]!.toUpperCase()}` : humanizeKey(key);
-}
-
-export function Canaries({
-  canaries,
-  specs,
-}: {
-  canaries: LiveOverview['canaries'];
-  specs: LiveMetricSpec[];
-}) {
+/** The latest canary result for one service, beside its daily health. */
+export function CanaryStatus({ probe }: { probe?: LiveOverview['canaries'][number] }) {
   return (
-    <div className={styles.canaries} data-live-block="canaries">
-      <Text variant="sm" tone="muted">
-        Canaries
-      </Text>
-      {!canaries.length ? (
+    <span
+      data-live-canary={probe?.canary}
+      title={probe?.fault ?? (probe?.status === 'skipped' ? 'Canary skipped' : undefined)}
+    >
+      {!probe || probe.status === 'skipped' ? (
         <Text variant="sm" tone="muted">
-          No canary results for this day
+          No canary
         </Text>
-      ) : null}
-      {[...canaries]
-        .sort((a, b) => Number(b.status === 'failed') - Number(a.status === 'failed'))
-        .map((probe) => (
-          <span key={probe.canary} className={styles.inline} data-live-canary={probe.canary}>
-            <StateTag
-              tone={probe.status === 'failed' ? 'danger' : probe.status === 'ok' ? 'success' : 'neutral'}
-              title={probe.fault ?? undefined}
-            >
-              {`${specs.find((spec) => spec.metric_name === `service.${probe.canary}`)?.label ?? canaryName(probe.canary)} ${statusWord(probe.status)}`}
-            </StateTag>
-            <span className={styles.number}>
-              {probe.latency_ms === null ? '—' : formatDuration(probe.latency_ms)}
-            </span>
-          </span>
-        ))}
-    </div>
+      ) : (
+        <StatusMark
+          tone={probe.status === 'ok' ? 'success' : 'danger'}
+          shape={probe.status === 'ok' ? 'check' : 'cross'}
+          label={statusWord(probe.status)}
+        />
+      )}
+    </span>
   );
 }

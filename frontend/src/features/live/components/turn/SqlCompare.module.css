@@ -1,58 +1,80 @@
 .compare,
 .pair,
-.pane {
+.explanation,
+.statement,
+.results {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  min-width: 0;
+  min-inline-size: 0;
   overflow-wrap: anywhere;
 }
 
 .compare {
+  container-type: inline-size;
   gap: var(--space-md);
 }
 
 .line,
-.summary {
+.heading,
+.paneHeader,
+.options {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-sm) var(--space-md);
 }
 
-.summary,
-.pair {
-  padding-block: var(--space-sm);
+.heading {
+  justify-content: space-between;
+}
+
+.options {
+  justify-content: flex-end;
+}
+
+.pair + .pair {
+  padding-block-start: var(--space-md);
   border-block-start: 1px solid var(--border-subtle);
 }
 
-.panes {
+.panes,
+.pane {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-md);
-  min-width: 0;
+  min-inline-size: 0;
 }
 
-@media (width >= 1100px) {
+.paneHeader {
+  align-content: start;
+}
+
+.explanationPlaceholder {
+  display: none;
+}
+
+.statement > pre {
+  flex: 1;
+}
+
+@container (width >= 900px) {
   .panes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
 
-.sql {
-  margin: 0;
-  padding: var(--space-sm);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--control-radius);
-  font-family: var(--font-mono);
-  font-size: var(--font-base);
-  line-height: 1.6;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  unicode-bidi: plaintext;
-  text-align: start;
+  .panes > .pane {
+    grid-template-rows: subgrid;
+    grid-row: span 3;
+  }
+
+  .withExplanation > .pane {
+    grid-row: span 4;
+  }
+
+  .explanationPlaceholder {
+    display: block;
+  }
 }
 
 .agentMark,
@@ -62,23 +84,33 @@
   text-underline-offset: 0.2em;
 }
 
-.agentMark {
-  background: color-mix(in srgb, var(--warning) var(--tint-soft), transparent);
+.agentMark,
+.agentLegend {
+  background: color-mix(in srgb, var(--chart-3) var(--tint-soft), transparent);
+  text-decoration-color: var(--chart-3);
   text-decoration-style: dotted;
-  text-decoration-color: var(--warning);
 }
 
-.judgeMark {
-  background: color-mix(in srgb, var(--info) var(--tint-soft), transparent);
+.judgeMark,
+.judgeLegend {
+  background: color-mix(in srgb, var(--chart-5) var(--tint-soft), transparent);
+  text-decoration-color: var(--chart-5);
   text-decoration-style: solid;
-  text-decoration-color: var(--info);
 }
 
-.number {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+.agentLegend,
+.judgeLegend {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
 }
 
-.toggle {
-  align-items: center;
+.failure {
+  padding: var(--space-md);
+  border: 1px solid var(--error);
+  border-radius: var(--control-radius);
+}
+
+.failure [data-text-mode] {
+  color: var(--error-text);
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { Key } from 'react-aria-components';
 import { useLocation } from 'react-router-dom';
 import type { LiveSourceInfo } from '@/api/live';
@@ -9,8 +9,11 @@ import {
   type WorkerEventsFilters,
 } from '@/api/liveWorker';
 import { formatRelative } from '@/lib/format';
+import { textDirAttrs } from '@/lib/text';
+import { workerTime } from './format';
 import { humanizeKey } from '@/lib/humanizeKey';
 import {
+  Button,
   ClearFiltersButton,
   CopyButton,
   DataTable,
@@ -18,14 +21,13 @@ import {
   ErrorState,
   LinkButton,
   MultiSelect,
-  Pagination,
   Skeleton,
-  StateTag,
+  StatusMark,
   Tag,
   Text,
   type Column,
 } from '@/ui';
-import { WorkerBlock } from './WorkerBlock';
+import { WorkerBlock, WorkerPagination } from './WorkerBlock';
 import styles from '../../worker.module.css';
 
 const componentLabels: Record<string, string> = {
@@ -82,7 +84,7 @@ function FailedChecks({ event, path }: { event: LiveWorkerEvent; path: string })
   );
 }
 
-export const PROBLEMS_PAGE_SIZE = 10;
+export const PROBLEMS_PAGE_SIZE = 5;
 
 export interface ProblemsProps {
   source: string;
@@ -134,7 +136,7 @@ export function ProblemsBlock({
       ...[...componentKeys].map(String),
     ]),
   ];
-  const rows = [...events].sort((a, b) => b.last_at.localeCompare(a.last_at));
+  const rows = [...events].sort((a, b) => b.last_at.localeCompare(a.last_at)).slice(0, PROBLEMS_PAGE_SIZE);
   const sourceStatus = status ?? read.status;
   const worker = sourceStatus.worker;
   const workerVersion = typeof worker?.worker_version === 'string' ? worker.worker_version : undefined;
@@ -143,73 +145,104 @@ export function ProblemsBlock({
     {
       id: 'time',
       header: 'Time',
+      width: 140,
+      priority: 2,
       cell: (e) => (
-        <time dateTime={e.last_at} title={e.last_at}>
-          {formatRelative(e.last_at)}
-        </time>
+        <div className={styles.wrap}>
+          <time dateTime={e.last_at} title={e.last_at}>
+            {workerTime(e.last_at)}
+          </time>
+          <Text as="div" variant="sm" tone="muted">
+            {formatRelative(e.last_at)}
+          </Text>
+        </div>
       ),
     },
     {
       id: 'level',
       header: 'Level',
+      width: 100,
+      priority: 2,
       cell: (e) => (
-        <StateTag tone={e.level === 'error' ? 'danger' : 'warning'}>
-          {e.level === 'error' ? 'Error' : 'Warning'}
-        </StateTag>
+        <StatusMark
+          tone={e.level === 'error' ? 'danger' : 'warning'}
+          shape={e.level === 'error' ? 'cross' : 'full'}
+          label={e.level === 'error' ? 'Error' : 'Warning'}
+        />
       ),
     },
     {
       id: 'component',
-      header: 'Component',
+      header: 'Where',
+      width: 140,
+      priority: 2,
       cell: (e) => (
-        <Text as="span" tone="secondary" dir="auto">
+        <Text
+          as="div"
+          tone="secondary"
+          className={styles.wrap}
+          {...textDirAttrs(componentLabel(e.component))}
+        >
           {componentLabel(e.component)}
         </Text>
       ),
     },
     {
-      id: 'code',
-      header: 'Code',
-      cell: (e) => (
-        <span className={styles.number} dir="auto">
-          {e.code}
-        </span>
-      ),
-    },
-    {
       id: 'message',
-      header: 'Message',
+      header: 'What happened',
+      priority: 1,
       flex: true,
       minWidth: 320,
       cell: (e) => (
         <div className={styles.messageCell}>
-          <Text as="p" dir="auto" className={styles.wrap}>
+          <Text as="p" tone="primary" {...textDirAttrs(e.message)} className={styles.wrap}>
             {e.message.replace(/^\[LIVE\] /, '')}
           </Text>
-          {e.count > 1 ? (
-            <span className={styles.inline}>
-              <Tag kind="count">×{e.count}</Tag>
-              <Text as="span" tone="muted">
-                in {Math.max(0, Math.round((Date.parse(e.last_at) - Date.parse(e.first_at)) / 60000))} min
-              </Text>
-            </span>
-          ) : null}
+          <ProblemDetails code={e.code} details={e.details} />
           <FailedChecks event={e} path={`${location.pathname}${location.search}`} />
-          <CopyButton
-            label="Copy report"
-            className={styles.messageCopy}
-            text={() =>
-              problemReport({
-                source,
-                environment: sourceStatus.environment,
-                worker_version: workerVersion,
-                eval_code_version: evalVersion,
-                settings_version_applied: read.running?.settings_version_applied,
-                event: e,
-              })
-            }
-          />
         </div>
+      ),
+    },
+    {
+      id: 'frequency',
+      header: 'How often',
+      width: 120,
+      align: 'end',
+      priority: 2,
+      cell: (e) =>
+        e.count > 1 ? (
+          <div>
+            <Text tone="primary">{e.count} times</Text>
+            <Text as="div" variant="sm" tone="muted">
+              in {Math.max(0, Math.round((Date.parse(e.last_at) - Date.parse(e.first_at)) / 60000))} min
+            </Text>
+          </div>
+        ) : (
+          <Text variant="sm" tone="muted">
+            once
+          </Text>
+        ),
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      hideLabel: true,
+      width: 48,
+      priority: 2,
+      cell: (e) => (
+        <CopyButton
+          label="Copy report"
+          text={() =>
+            problemReport({
+              source,
+              environment: sourceStatus.environment,
+              worker_version: workerVersion,
+              eval_code_version: evalVersion,
+              settings_version_applied: read.running?.settings_version_applied,
+              event: e,
+            })
+          }
+        />
       ),
     },
   ];
@@ -218,6 +251,17 @@ export function ProblemsBlock({
       name="problems"
       title="Problems"
       table
+      footer={
+        !eventsError && !eventsPending && eventsTotal !== undefined ? (
+          <WorkerPagination
+            total={eventsTotal}
+            page={eventsFilters.page ?? 1}
+            pageSize={PROBLEMS_PAGE_SIZE}
+            noun="problems"
+            onPageChange={(page) => onEventsFilters({ ...eventsFilters, page })}
+          />
+        ) : undefined
+      }
       count={
         read.running?.errors_last_hour ? (
           <Tag kind="count" tone="danger">
@@ -263,12 +307,14 @@ export function ProblemsBlock({
           onRetry={onEventsRetry}
         />
       ) : eventsPending ? (
-        <Skeleton reserve kind="rows" rows={6} label="Loading worker problems" />
+        <Skeleton reserve kind="rows" rows={PROBLEMS_PAGE_SIZE} label="Loading worker problems" />
       ) : rows.length ? (
         <DataTable<LiveWorkerEvent>
           aria-label="Worker problems"
           variant="embedded"
           density="regular"
+          verticalAlign="top"
+          fit="declared"
           rows={rows}
           rowKey={(e) => e.id}
           rowProps={(e) => ({ 'data-worker-event': String(e.id) })}
@@ -278,15 +324,59 @@ export function ProblemsBlock({
       ) : (
         <EmptyState title="No problems reported by the worker" />
       )}
-      {eventsTotal !== undefined && eventsTotal > PROBLEMS_PAGE_SIZE ? (
-        <Pagination
-          total={eventsTotal}
-          page={eventsFilters.page ?? 1}
-          pageSize={PROBLEMS_PAGE_SIZE}
-          noun="problems"
-          onPageChange={(page) => onEventsFilters({ ...eventsFilters, page })}
-        />
-      ) : null}
     </WorkerBlock>
+  );
+}
+
+/** Short details share the code line; only long values need a disclosure. Every value retains its key. */
+function ProblemDetails({ code, details }: { code: string; details: LiveWorkerEvent['details'] }) {
+  const entries = Object.entries(details).map(([key, value]) => {
+    const text = typeof value === 'string' ? value : JSON.stringify(value);
+    return { key, text, long: text.length > 160 || text.split('\n').length > 2 };
+  });
+  const summary = [
+    code,
+    ...entries
+      .filter((entry) => !entry.long)
+      .map(({ key, text }) => `${key}: ${text.replace(/\s*\n\s*/g, ' ')}`),
+  ].join(' · ');
+  return (
+    <>
+      <Text as="div" variant="sm" tone="muted" mono {...textDirAttrs(summary)}>
+        {summary}
+      </Text>
+      {entries
+        .filter((entry) => entry.long)
+        .map(({ key, text }) => (
+          <RawDetail key={key} name={key} text={text} />
+        ))}
+    </>
+  );
+}
+
+/** Keep long raw text intact for copy and expansion, including unknown worker detail keys. */
+function RawDetail({ name, text }: { name: string; text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const id = useId();
+  const raw = `${name}: ${text}`;
+  return (
+    <div className={styles.rawDetailBlock}>
+      <div
+        id={id}
+        className={styles.rawDetail}
+        data-collapsed={!expanded ? '' : undefined}
+        {...textDirAttrs(text)}
+      >
+        {raw}
+      </div>
+      <Button
+        variant="text"
+        aria-expanded={expanded}
+        aria-controls={id}
+        onPress={() => setExpanded(!expanded)}
+      >
+        {expanded ? 'Show less' : 'Show full error'}
+      </Button>
+    </div>
   );
 }

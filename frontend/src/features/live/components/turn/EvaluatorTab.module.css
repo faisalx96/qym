@@ -1,7 +1,7 @@
 .stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-lg);
+  gap: var(--space-md);
   min-width: 0;
 }
 .inline {
@@ -10,47 +10,6 @@
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
-}
-.facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-  gap: var(--space-md);
-  margin: 0;
-}
-.facts > div {
-  min-width: 0;
-}
-.facts dt {
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  margin-bottom: var(--space-xs);
-}
-.facts dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--font-base);
-}
-.mono {
-  font-family: var(--font-mono);
-  overflow-wrap: anywhere;
-}
-.models {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md) var(--space-lg);
-}
-.timingBar {
-  display: flex;
-  height: var(--space-md);
-  width: 100%;
-  border: 1px solid var(--border-default);
-}
-.timingBar > span {
-  flex-basis: 0;
-  background: var(--text-muted);
-}
-.timingBar > span + span {
-  border-inline-start: 2px solid var(--bg-base);
 }
 .wrap {
   white-space: normal;
@@ -71,12 +30,80 @@
   direction: ltr;
 }
 
-.preview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+.metadata {
+  display: grid;
+  gap: var(--space-lg);
+  container-type: inline-size;
+  min-inline-size: 0;
+}
+.timings {
+  display: grid;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+}
+.timingBar {
+  display: flex;
+  block-size: var(--evaluation-timing-bar-height);
+  gap: 2px;
+  background: var(--card-bg);
+  border-radius: var(--control-radius);
   overflow: hidden;
+}
+.timingBar > span {
+  flex-basis: 0;
+  min-inline-size: 0;
+}
+.timingBar > span,
+.stageMark {
+  background: var(--chart-8);
+}
+.timings [data-stage='enrichment'] {
+  background: var(--chart-1);
+}
+.timings [data-stage='metrics'] {
+  background: var(--chart-2);
+}
+.timings [data-stage='judges'] {
+  background: var(--chart-3);
+}
+.timings [data-stage='replay'] {
+  background: var(--chart-4);
+}
+.timings [data-stage='manifest'] {
+  background: var(--chart-5);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  color: var(--text-primary);
+}
+.legend > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.stageMark {
+  inline-size: var(--evaluation-timing-bar-height);
+  block-size: var(--evaluation-timing-bar-height);
+  flex: none;
+  border-radius: var(--control-radius);
+}
+.score {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-xs);
   white-space: normal;
-  overflow-wrap: anywhere;
-  text-align: start;
+}
+.raw [slot='trigger'] {
+  font-size: var(--font-lg);
+}
+
+@container (width < 640px) {
+  .metadata > dl[data-columns='3'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

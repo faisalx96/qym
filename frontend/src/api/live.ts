@@ -180,6 +180,23 @@ export interface LiveTurnDetail {
     current: boolean;
   })[];
   specs: LiveMetricSpec[];
+  /** Re-evaluation jobs of this turn: the queued or running one, and the latest finished one. */
+  reevaluation?: LiveTurnReevaluation | null;
+}
+
+export interface LiveTurnReevaluation {
+  active: null | {
+    id: string;
+    status: 'queued' | 'running';
+    requested_at?: string | null;
+    requested_by?: string | null;
+  };
+  last: null | {
+    id: string;
+    status: 'done' | 'failed' | 'cancelled';
+    finished_at?: string | null;
+    error?: string | null;
+  };
 }
 
 export interface LiveFilters {

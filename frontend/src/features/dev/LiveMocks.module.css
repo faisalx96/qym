@@ -95,9 +95,11 @@
   font-size: var(--font-base);
 }
 
+.turnContent {
+  padding: 0;
+}
+
 .content > *,
-.twoColumns > *,
-.threeColumns > *,
 .mixRow > * {
   min-inline-size: 0;
 }
@@ -338,96 +340,6 @@
   white-space: normal;
 }
 
-.turnTitle {
-  display: block;
-  line-height: 1.6;
-}
-
-.diagnosis {
-  display: grid;
-  gap: var(--space-md);
-  padding-block-start: var(--space-md);
-}
-
-.twoColumns,
-.threeColumns {
-  display: grid;
-  gap: var(--space-md);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.threeColumns {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.copy,
-.answer {
-  margin-block: 0 var(--space-md);
-  font-size: var(--font-base);
-  line-height: 1.6;
-}
-
-.answer {
-  font-size: var(--font-md);
-}
-
-.deviationGroup + .deviationGroup {
-  border-block-start: 1px solid var(--border-subtle);
-  padding-block-start: var(--space-md);
-}
-
-.deviation {
-  display: flex;
-  align-items: start;
-  gap: var(--space-sm);
-  margin-block-start: var(--space-sm);
-}
-
-.sqlParts {
-  display: grid;
-  gap: var(--space-sm);
-}
-
-.sqlMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-block-end: var(--space-sm);
-}
-
-.sqlMeta > :last-child {
-  margin-inline-start: auto;
-}
-
-.sql {
-  margin: 0;
-  padding: var(--space-md);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
-  font-family: var(--font-mono);
-  font-size: var(--font-base);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.notes,
-.evaluator {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-block-start: var(--space-md);
-  font-size: var(--font-sm);
-}
-
-.evaluator {
-  padding-block-start: var(--space-md);
-  border-block-start: 1px solid var(--border-subtle);
-}
-
 .stateSheet {
   display: grid;
   gap: var(--space-md);
@@ -436,9 +348,7 @@
 }
 
 @container (max-width: 899px) {
-  .mixRow,
-  .twoColumns,
-  .threeColumns {
+  .mixRow {
     grid-template-columns: minmax(0, 1fr);
   }
 

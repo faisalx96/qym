@@ -36,6 +36,13 @@ function Harness(props: Partial<React.ComponentProps<typeof DataTable<Row>>>) {
 }
 
 describe('DataTable v2', () => {
+  it('opts into first-line alignment without changing the default alignment', () => {
+    const { rerender } = render(<Harness />);
+    expect(screen.getByRole('grid')).not.toHaveAttribute('data-cell-align');
+    rerender(<Harness cellAlign="first-line" />);
+    expect(screen.getByRole('grid')).toHaveAttribute('data-cell-align', 'first-line');
+  });
+
   it('has no axe violations (plain, selection, expansion)', async () => {
     const { container } = render(<Harness renderExpanded={(r) => <p>detail {r.name}</p>} />);
     expect(await axe(container)).toHaveNoViolations();

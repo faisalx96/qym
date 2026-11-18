@@ -3,7 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Canaries } from '../components/Canaries';
+import { CanaryStatus } from '../components/Canaries';
 import { DaysTable } from '../components/DaysTable';
 import { ServiceHealth } from '../components/ServiceHealth';
 import { TrendChart } from '../components/TrendChart';
@@ -93,37 +93,100 @@ describe('overview service and history blocks', () => {
         <Location />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByRole('button', { name: /Search/ }));
+    expect(screen.getByRole('heading', { name: /Services/, level: 2 })).toBeVisible();
+    const health = screen.getByRole('link', {
+      name: '80.0%: Search: view turns where the service was not OK',
+    });
+    expect(health).toHaveTextContent('80.0%');
+    fireEvent.click(health);
     expect(screen.getByLabelText('URL')).toHaveTextContent(
       '/live/turns?day=2026-11-01&source=worker&service=search&service_status=not_ok',
     );
     expect(container.querySelector('[data-live-service="search"] [data-band]')).not.toBeNull();
+    expect(screen.getByTestId('data-table')).toHaveAttribute('data-padding', 'card');
     expect(screen.getByRole('button', { name: 'Explain service health' })).toBeInTheDocument();
   });
 
-  it('puts failed canaries first without changing the input, and distinguishes skipped and missing latency', () => {
+  it('matches canaries to service rows, keeps acronym casing and shows missing or skipped checks plainly', () => {
     const canaries: LiveOverview['canaries'] = [
-      { canary: 'search', status: 'ok', latency_ms: 0, checked_at: '', fault: null },
-      { canary: 'other', status: 'skipped', latency_ms: null, checked_at: '', fault: null },
-      { canary: 'failed', status: 'failed', latency_ms: 120, checked_at: '', fault: 'timeout' },
+      { canary: 'sql_generation', status: 'ok', latency_ms: 0, checked_at: '', fault: null },
+      { canary: 'search', status: 'failed', latency_ms: 120, checked_at: '', fault: 'timeout' },
+      { canary: 'api', status: 'skipped', latency_ms: null, checked_at: '', fault: 'disabled' },
     ];
-    const { container } = render(<Canaries canaries={canaries} specs={specs} />);
-    const marks = [...container.querySelectorAll('[data-live-canary]')];
-    expect(marks.map((mark) => mark.getAttribute('data-live-canary'))).toEqual(['failed', 'search', 'other']);
-    expect(marks[0]).toHaveTextContent('Failed Failed120ms');
-    expect(marks[1]).toHaveTextContent('Search OK0ms');
-    expect(marks[2]).toHaveTextContent('Other Skipped—');
-    expect(marks[2]?.querySelector('[data-kind="state"]:not([data-tone])')).not.toBeNull();
-    expect(canaries[0]?.canary).toBe('search');
-    expect(screen.queryByText('No canary results for this day')).toBeNull();
+    const { container } = render(
+      <MemoryRouter>
+        <ServiceHealth
+          services={['search', 'sql_generation', 'api', 'other'].map((name) => ({
+            name: `service.${name}`,
+            ok_rate: 0.8,
+            n: 10,
+            fault_breakdown: {},
+          }))}
+          canaries={canaries}
+          specs={[
+            ...specs,
+            { ...primary, metric_name: 'service.sql_generation', label: 'Sql generation' },
+            { ...primary, metric_name: 'service.api', label: 'Api / id / url' },
+          ]}
+          linkTo={() => '/live/turns'}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
+      'Service',
+      'Health today',
+      'Health',
+      'Canary',
+      'Canary time',
+    ]);
+    const sql = container.querySelector('[data-live-service="sql_generation"]')!;
+    expect(sql).toHaveTextContent('SQL generation');
+    expect(sql).toHaveTextContent('OK0ms');
+    expect(sql.querySelector('[data-shape="check"]')).toHaveAttribute('data-tone', 'success');
+    const failed = container.querySelector('[data-live-canary="search"]')!;
+    expect(failed).toHaveAttribute('title', 'timeout');
+    expect(failed.querySelector('[data-shape="cross"]')).toHaveTextContent('Failed');
+    expect(container.querySelector('[data-live-service="api"]')).toHaveTextContent('API / ID / URL');
+    expect(screen.getAllByText('No canary')).toHaveLength(2);
+    expect(canaries[0]?.canary).toBe('sql_generation');
   });
 
-  it('explains an empty canary list after the Canaries label', () => {
-    const { container } = render(<Canaries canaries={[]} specs={specs} />);
-    const block = container.querySelector('[data-live-block="canaries"]')!;
-    expect(block).toHaveTextContent('CanariesNo canary results for this day');
-    expect(within(block as HTMLElement).getByText('No canary results for this day')).toBeVisible();
-    expect(container.querySelectorAll('[data-live-canary]')).toHaveLength(0);
+  it('keeps canaries without service scores or metric specs as rows with unknown health', () => {
+    const canaries: LiveOverview['canaries'] = [
+      { canary: 'search', status: 'ok', latency_ms: 0, checked_at: '', fault: null },
+      { canary: 'database', status: 'failed', latency_ms: 120, checked_at: '', fault: 'timeout' },
+    ];
+    const { container, rerender } = render(
+      <ServiceHealth services={[]} canaries={canaries} specs={specs} linkTo={() => '/live/turns'} />,
+      { wrapper: MemoryRouter },
+    );
+    const rows = () => [...container.querySelectorAll('[data-live-service]')];
+    expect(rows().map((row) => row.getAttribute('data-live-service'))).toEqual(['search', 'database']);
+    for (const row of rows()) {
+      expect(row.querySelector('[data-col="health"]')).toHaveTextContent('—');
+      expect(row.querySelector('[data-band]')).toBeNull();
+    }
+    expect(rows()[0]).toHaveTextContent('Search');
+    expect(rows()[0]).toHaveTextContent('OK0ms');
+    expect(rows()[1]).toHaveTextContent('Database');
+    expect(rows()[1]).toHaveTextContent('Failed120ms');
+    rerender(
+      <ServiceHealth
+        services={[{ name: 'service.search', ok_rate: 0.8, n: 10, fault_breakdown: {} }]}
+        canaries={canaries}
+        specs={specs}
+        linkTo={() => '/live/turns'}
+      />,
+    );
+    expect(rows()).toHaveLength(2);
+    expect(rows()[0]).toHaveTextContent('80.0%');
+    expect(rows()[1]).toHaveTextContent('Failed120ms');
+  });
+
+  it('shows no canary when no result is available', () => {
+    const { container } = render(<CanaryStatus />);
+    expect(screen.getByText('No canary')).toBeVisible();
+    expect(container.querySelector('[data-live-canary]')).toBeNull();
   });
 
   it('renders every trend day, hatches gaps, breaks missing rates and retains a measured zero', () => {
@@ -152,16 +215,19 @@ describe('overview service and history blocks', () => {
       'repeating-linear-gradient',
     );
     expect(gap.querySelector('[data-part="baseline"]')).toBeNull();
-    expect(gap.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '1');
-    expect(gap).toHaveStyle({ '--p': '0.25' });
-    expect(container.querySelector('[data-live-trend-day="2026-10-28"] [data-part="axis"]')).toHaveAttribute(
-      'data-text',
+    expect(gap.querySelector('[data-part="count"]')).toBeNull();
+    expect(container.querySelectorAll('[data-part="count"]')).toHaveLength(1);
+    expect(container.querySelector('[data-part="count"]')).toHaveTextContent('2');
+    expect([...container.querySelectorAll('[data-part="axis"]')].map((label) => label.textContent)).toContain(
       'Oct 28',
     );
-    expect(container.querySelector('[data-live-trend-day="2026-11-01"] [data-part="axis"]')).toHaveAttribute(
-      'data-text',
+    expect([...container.querySelectorAll('[data-part="axis"]')].map((label) => label.textContent)).toContain(
       'Nov 1',
     );
+    expect(container.querySelectorAll('[data-live-panel]')).toHaveLength(2);
+    for (const panel of container.querySelectorAll('[data-live-panel]'))
+      expect(panel.querySelectorAll('[data-live-axis]')).toHaveLength(1);
+    expect(container.querySelector('[data-live-axis="rate"]')).toHaveTextContent('0%50%100%');
     expect(gap).toHaveAccessibleName(/worker gap/);
     expect(container.querySelector('[data-live-trend-day="2026-10-31"]')).toHaveAttribute(
       'data-live-gap',
@@ -170,9 +236,9 @@ describe('overview service and history blocks', () => {
     expect(container.querySelectorAll('polyline')).toHaveLength(0);
     const points = [...container.querySelectorAll('[data-live-rate-point]')];
     expect(points).toHaveLength(3);
-    expect(points[2]).toHaveAttribute('cx', '90%');
-    expect(points[2]).toHaveAttribute('cy', '100%');
-    expect(points[0]?.closest('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(points[2]).toHaveAttribute('data-live-rate-point', '2026-11-01');
+    expect(points[2]?.parentElement).toHaveStyle({ bottom: '0%' });
+    expect(points[0]).toHaveAttribute('aria-hidden', 'true');
     fireEvent.click(screen.getByRole('radio', { name: '30d' }));
     expect(screen.getByLabelText('URL')).toHaveTextContent('source=worker&days_page=2&trend_days=30');
     fireEvent.click(screen.getByRole('button', { name: /Oct 28, 2026: 4 turns/ }));
@@ -199,7 +265,7 @@ describe('overview service and history blocks', () => {
       </MemoryRouter>,
     );
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
-      'var(--text-muted) 0% 75%',
+      'var(--text-muted) 0% calc(75% - 1px)',
     );
     const legendTones = values.map(({ label, tone }) => {
       const entry = screen.getByText(label, { exact: true }).closest('[data-tone]');
@@ -227,11 +293,11 @@ describe('overview service and history blocks', () => {
         />
       </MemoryRouter>,
     );
-    expect(container.querySelector('[data-part="count"]')).toHaveAttribute('data-text', '');
+    expect(container.querySelector('[data-part="count"]')).toBeNull();
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
       'repeating-linear-gradient',
     );
-    expect(container.querySelector('[data-live-trend-day]')).toHaveStyle({ '--p': '0' });
+    expect(container.querySelector('[data-part="bar"]')).toHaveStyle({ blockSize: '100%' });
   });
 
   it('fills half an eight-turn bar with the four diagnosed turns and labels the remainder', () => {
@@ -247,10 +313,10 @@ describe('overview service and history blocks', () => {
       </MemoryRouter>,
     );
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
-      'var(--success) 0% 50%',
+      'var(--success) 0% calc(50% - 1px)',
     );
     expect(container.querySelector('[data-part="bar"]')?.getAttribute('style')).toContain(
-      'var(--text-muted) 50% 100%',
+      'var(--text-muted) calc(50% + 1px) 100%',
     );
     expect(screen.getByText('Undiagnosed', { exact: true })).toBeVisible();
   });
@@ -263,7 +329,10 @@ describe('overview service and history blocks', () => {
       </MemoryRouter>,
     );
     expect(container.querySelectorAll('[data-live-rate-point]')).toHaveLength(1);
-    expect(container.querySelector('[data-live-rate-point]')).toHaveAttribute('r', '2.5');
+    expect(container.querySelector('[data-live-rate-point]')).toHaveAttribute(
+      'data-live-rate-point',
+      '2026-10-30',
+    );
     expect(container.querySelectorAll('polyline')).toHaveLength(0);
     rerender(
       <MemoryRouter>
@@ -276,8 +345,77 @@ describe('overview service and history blocks', () => {
         />
       </MemoryRouter>,
     );
-    expect(container.querySelectorAll('[data-live-rate-point]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-live-rate-point]')).toHaveLength(2);
     expect(container.querySelectorAll('polyline')).toHaveLength(1);
+  });
+
+  it('uses one complete tooltip from either panel and labels only the last and lowest rates', () => {
+    const values = [0.8, 0.3, 0.6];
+    const data = values.map((rate, index) => ({ ...trend[index]!, primary_rate: rate, worker_gap: false }));
+    const { container } = render(
+      <MemoryRouter>
+        <TrendChart trend={data} specs={specs} primaryMetric="quality" days={14} onDays={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(
+      [...container.querySelectorAll('[data-live-rate-label]')].map((point) =>
+        point.getAttribute('data-live-rate-label'),
+      ),
+    ).toEqual(['2026-10-29', '2026-10-30']);
+    expect(
+      [...container.querySelectorAll('[data-live-rate-label]')].map((point) => point.textContent),
+    ).toEqual(['30.0%', '60.0%']);
+    fireEvent.focus(container.querySelector('[data-live-trend-day]')!);
+    let tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent('OK3');
+    expect(tooltip).toHaveTextContent('Problem1');
+    expect(tooltip).toHaveTextContent('Total4');
+    expect(tooltip).toHaveTextContent('Quality80.0%');
+    fireEvent.pointerEnter(container.querySelector('[data-live-rate-day="2026-10-30"]')!);
+    expect(screen.getAllByRole('tooltip')).toHaveLength(1);
+    tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent('OK2');
+    expect(tooltip).toHaveTextContent('Problem0');
+    expect(tooltip).toHaveTextContent('Total2');
+    expect(tooltip).toHaveTextContent('Quality60.0%');
+  });
+
+  it('shows received-minus-evaluated waiting counts with a zero floor and no layout controls', () => {
+    const data = {
+      ...days,
+      rows: [
+        { ...days.rows[0]!, turns_seen: 20, in_qym: 10, evaluated: 7 },
+        { ...days.rows[1]!, in_qym: 2, evaluated: 4 },
+      ],
+    };
+    const { container } = render(
+      <MemoryRouter>
+        <DaysTable days={data} slug="demo" source="worker" specs={specs} primaryMetric="quality" />
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
+      'Day',
+      'Turns',
+      'Evaluated',
+      'Waiting',
+      'Quality',
+      'Diagnosis mix',
+      'Worker',
+    ]);
+    expect(
+      [...container.querySelectorAll('[data-col="waiting"][role="gridcell"]')].map(
+        (cell) => cell.textContent,
+      ),
+    ).toEqual(['3', '0']);
+    expect(screen.queryByRole('button', { name: /Columns|Density/ })).toBeNull();
+    expect(screen.getByText('Click a day to see its turns')).toBeVisible();
+    expect(screen.getByTestId('data-table')).toHaveAttribute('data-padding', 'card');
+    for (const id of ['turns_seen', 'evaluated', 'waiting', 'primary_rate', 'worker']) {
+      for (const cell of container.querySelectorAll(`th[data-col="${id}"], td[data-col="${id}"]`)) {
+        expect(cell).toHaveAttribute('data-align', 'end');
+      }
+    }
+    expect(container.querySelector('[data-dt-footer]')).toHaveAttribute('data-layout', 'spread');
   });
 
   it.each([
@@ -312,7 +450,8 @@ describe('overview service and history blocks', () => {
     expect(container.querySelectorAll('polyline, [data-live-rate-point]')).toHaveLength(0);
     expect(screen.queryByText(/0–100%/)).not.toBeInTheDocument();
     fireEvent.focus(container.querySelector('[data-live-trend-day]')!);
-    expect(screen.getByRole('tooltip')).toHaveTextContent(`Mean ${text}`);
+    expect(within(screen.getByRole('tooltip')).getByText('Mean')).toBeVisible();
+    expect(within(screen.getByRole('tooltip')).getByText(text)).toBeVisible();
     expect(screen.getByRole('tooltip')).not.toHaveTextContent('%');
   });
 

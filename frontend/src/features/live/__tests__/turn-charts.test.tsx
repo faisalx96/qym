@@ -43,7 +43,7 @@ describe('live chart screenshots', () => {
   it('opens the full image in the shell dialog and restores focus when closed', async () => {
     const user = userEvent.setup();
     render(<ChartsTab data={data} />);
-    const trigger = screen.getByRole('button', { name: 'bar chart — Monthly totals increased.' });
+    const trigger = screen.getByRole('button', { name: 'Enlarge bar chart — Monthly totals increased.' });
     await user.click(trigger);
     const dialog = screen.getByRole('dialog', { name: 'bar chart — Monthly totals increased.' });
     expect(within(dialog).getByRole('img')).toHaveAttribute('src', image.url);
@@ -54,9 +54,43 @@ describe('live chart screenshots', () => {
 
   it('shows the missing state when a chart ref has no uploaded image', () => {
     const { container } = render(<ChartsTab data={data} />);
-    expect(container.querySelector('[data-live-chart-missing]')).toHaveTextContent(
-      'No screenshot was captured for this chart',
+    const missing = container.querySelector('[data-live-chart-missing]')!;
+    expect(missing.querySelector('[data-empty-state]')).toBeInTheDocument();
+    expect(missing).toHaveTextContent('No screenshot was captured');
+    expect(missing).toHaveTextContent(
+      "The chart could not be checked by eye. The fidelity score compares the chart's data with the SQL result only.",
     );
+  });
+
+  it('keeps recorded chart scores and issues on labelled rows', () => {
+    const { container } = render(
+      <ChartsTab
+        data={{
+          ...data,
+          summary: {
+            charts: [
+              {
+                kind: 'bar',
+                scores: { chart_fidelity: 1, chart_vision: 0.5, chart_design: 0.7 },
+                issues: ['Labels overlap on the axis.'],
+              },
+              { kind: 'line', issues: [] },
+            ],
+          },
+        }}
+      />,
+    );
+    expect(screen.getByRole('group', { name: 'Chart fidelity' })).toHaveTextContent(
+      '100.0%data against SQL result',
+    );
+    expect(screen.getByRole('group', { name: 'Chart vision' })).toHaveTextContent('50.0%');
+    expect(screen.getByRole('group', { name: 'Chart design' })).toHaveTextContent('70.0%');
+    expect(screen.getByText('Labels overlap on the axis.').closest('[data-tone]')).toHaveAttribute(
+      'data-tone',
+      'warning',
+    );
+    expect(screen.getByText('None reported').closest('h2')).toBeNull();
+    expect(container.querySelectorAll('[data-live-card^="chart-"]')).toHaveLength(2);
   });
 
   it('accepts a legacy response without chart_images', () => {
@@ -71,25 +105,23 @@ describe('live chart screenshots', () => {
     expect(screen.getByRole('img', { name: 'line chart' })).toBeInTheDocument();
   });
 
-  it('shows only the first chart as a thumbnail on Diagnosis', () => {
+  it('keeps chart thumbnails in their own tab', () => {
     const { container } = render(
       <MemoryRouter>
         <DiagnosisTab data={{ ...data, chart_images: { first: image, second: image } }} />
       </MemoryRouter>,
     );
-    const card = container.querySelector('[data-live-block="chart"]')!;
-    expect(card.querySelectorAll('img')).toHaveLength(1);
-    expect(card.querySelector('figure')).toHaveClass(/chartThumb/);
-    expect(screen.getByRole('img', { name: 'bar chart — Monthly totals increased.' })).toBeInTheDocument();
+    expect(container.querySelector('[data-live-block="chart"]')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
-  it('keeps the no-charts message on Diagnosis', () => {
+  it('does not repeat the chart empty state in Diagnosis', () => {
     const { container } = render(
       <MemoryRouter>
         <DiagnosisTab data={{ ...data, summary: {} }} />
       </MemoryRouter>,
     );
-    expect(screen.getByText('No charts for this turn')).toBeInTheDocument();
+    expect(screen.queryByText('No charts for this turn')).not.toBeInTheDocument();
     expect(container.querySelector('[data-live-chart-image]')).not.toBeInTheDocument();
   });
 
@@ -128,7 +160,7 @@ describe('Charts loading frame', () => {
     await screen.findByRole('status', { name: 'Loading turn header' });
     expect(container.querySelector('[data-chart-slots]')).toHaveAttribute('data-chart-slots', slots);
     expect(screen.queryAllByRole('status', { name: /Loading chart screenshot/ })).toHaveLength(Number(slots));
-    expect(screen.queryByRole('status', { name: 'Loading diagnosis' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading how we got here' })).not.toBeInTheDocument();
   });
 
   it('ignores the same turn id in a different source', () => {
@@ -136,9 +168,32 @@ describe('Charts loading frame', () => {
     expect(container.querySelector('[data-chart-slots]')).toHaveAttribute('data-chart-slots', '1');
   });
 
-  it('keeps the existing loading frame for other tabs', async () => {
+  it('reserves only Diagnosis evidence blocks below the shared header', async () => {
     const { container } = renderPending('diagnosis', 2);
     expect(container.querySelector('[data-chart-slots]')).not.toBeInTheDocument();
-    expect(await screen.findByRole('status', { name: 'Loading diagnosis' })).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Loading how we got here' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual([
+      'How we got here',
+      'Insightor rules behind this verdict',
+      'What Insightor did',
+    ]);
+    expect(screen.queryByRole('status', { name: 'Loading judge deviations' })).not.toBeInTheDocument();
+  });
+  it.each([
+    ['conversation', ['Turns in this conversation']],
+    [
+      'evaluator',
+      ['How this turn was evaluated', 'Scores', 'Problems during evaluation', 'Raw evaluation detail'],
+    ],
+    ['services', ['Services', 'Tool calls']],
+    ['answer', ['Final answer', 'SQL comparison']],
+    ['judges', ['Judge A', 'Judge B']],
+  ])('reserves only the %s tab cards', async (tab, titles) => {
+    renderPending(tab as string);
+    await screen.findByRole('status', { name: 'Loading turn header' });
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(
+      titles,
+    );
+    expect(screen.queryByRole('status', { name: 'Loading how we got here' })).not.toBeInTheDocument();
   });
 });

@@ -1,9 +1,9 @@
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   liveTurnDetail as turnDetail,
   liveOverview,
@@ -14,6 +14,14 @@ import {
 import { parseLiveFilters, type LiveTurnDetail } from '@/api/live';
 import { ApiError } from '@/lib/http';
 import { LiveTurnPage } from '../LiveTurnPage';
+import { explanationLanguageKey } from '../ExplanationLanguage';
+
+beforeEach(() => localStorage.removeItem(explanationLanguageKey));
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  localStorage.removeItem(explanationLanguageKey);
+});
 import { DiagnosisTab } from '../components/turn/DiagnosisTab';
 import { TurnTiles } from '../components/turn/TurnTiles';
 import {
@@ -320,8 +328,95 @@ function renderTurn(data: LiveTurnDetail = turnDetail, search = '', error?: ApiE
   return { ...view, source };
 }
 
+function languageTurn(): LiveTurnDetail {
+  const data = liveEvidenceTurns['privacy-refusal'];
+  return {
+    ...data,
+    summary: {
+      ...data.summary,
+      verdict: {
+        ...(data.summary.verdict as Record<string, unknown>),
+        reason_en: 'The final diagnosis is based on the privacy rule.',
+        reason_ar: 'يعتمد التشخيص النهائي على قاعدة الخصوصية.',
+      },
+    },
+  };
+}
+
 describe('live turn evidence presentation', () => {
-  it('opens visible SQL previews from the compact Diagnosis and Judges links', async () => {
+  it('uses the question as the title, keeps full identifiers and shows one page-wide verdict', () => {
+    const data = languageTurn();
+    const { container } = renderTurn(data);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(data.turn.question);
+    expect(screen.getByRole('heading', { level: 1 }).querySelector('[dir="rtl"]')).not.toBeNull();
+    const header = container.querySelector('[data-live-block="turn-header"]')!;
+    expect(header).toHaveTextContent(data.turn.conversation_id!);
+    expect(header).toHaveTextContent('Turn 1 of 1');
+    expect(header).toHaveTextContent(liveOverview.status.name);
+    expect(
+      within(header as HTMLElement).queryByText(`Turn ${data.turn.turn_id}`, { exact: true }),
+    ).not.toBeInTheDocument();
+    expect(container.querySelectorAll('[data-live-block="why"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-live-block="diagnosis-label"]')).toHaveLength(1);
+    expect(screen.getAllByText(verdictOf(data.summary)!.reasonEn!)).toHaveLength(1);
+    expect(screen.queryByText(verdictOf(data.summary)!.reasonAr!)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Verdict' })).not.toBeInTheDocument();
+    const strip = screen.getByRole('group', { name: 'Turn numbers' });
+    expect(strip).toHaveAttribute('data-variant', 'compact');
+    expect(strip.querySelectorAll('[data-tile]')).toHaveLength(6);
+    expect(strip).toHaveTextContent('Agent success');
+  });
+
+  it('changes every bilingual explanation across all tabs and remembers the choice on reload', async () => {
+    const user = userEvent.setup();
+    const data = languageTurn();
+    const view = renderTurn(data);
+    expect(screen.getByRole('radio', { name: 'English' })).toBeChecked();
+    for (const language of ['ar', 'both', 'en'] as const) {
+      await user.click(
+        screen.getByRole('radio', { name: { en: 'English', ar: 'العربية', both: 'Both' }[language] }),
+      );
+      for (const tab of screen.getAllByRole('tab')) {
+        await user.click(tab);
+        const explanations = view.container.querySelectorAll('[data-language]');
+        expect(explanations.length).toBeGreaterThan(0);
+        for (const explanation of explanations) {
+          expect(explanation).toHaveAttribute('data-language', language);
+          if (language !== 'both')
+            expect(explanation.querySelector(`[dir="${language === 'en' ? 'rtl' : 'ltr'}"]`)).toBeNull();
+        }
+        const verdict = view.container.querySelector('[data-live-block="why"]')!;
+        expect(verdict.textContent!.includes(verdictOf(data.summary)!.reasonEn!)).toBe(language !== 'ar');
+        expect(verdict.textContent!.includes(verdictOf(data.summary)!.reasonAr!)).toBe(language !== 'en');
+      }
+    }
+    await user.click(screen.getByRole('radio', { name: 'Both' }));
+    expect(localStorage.getItem(explanationLanguageKey)).toBe('both');
+    view.unmount();
+    const reloaded = renderTurn(data);
+    expect(screen.getByRole('radio', { name: 'Both' })).toBeChecked();
+    expect(
+      reloaded.container.querySelector('[data-live-block="why"] [data-language="both"]')?.children,
+    ).toHaveLength(2);
+    expect(screen.getAllByText(verdictOf(data.summary)!.reasonEn!)).toHaveLength(1);
+    expect(screen.getAllByText(verdictOf(data.summary)!.reasonAr!)).toHaveLength(1);
+  });
+
+  it('keeps keyboard language selection working when persisting the choice fails', async () => {
+    const user = userEvent.setup();
+    const data = languageTurn();
+    renderTurn(data);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Storage blocked');
+    });
+    act(() => screen.getByRole('radio', { name: 'English' }).focus());
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('radio', { name: 'العربية' })).toBeChecked();
+    expect(screen.queryByText(verdictOf(data.summary)!.reasonEn!)).not.toBeInTheDocument();
+    expect(screen.getByText(verdictOf(data.summary)!.reasonAr!)).toBeInTheDocument();
+  });
+
+  it('shows SQL previews only in Answer and SQL', async () => {
     const user = userEvent.setup();
     renderTurn({
       ...turnDetail,
@@ -345,20 +440,17 @@ describe('live turn evidence presentation', () => {
         },
       },
     });
-    await user.click(screen.getByRole('link', { name: 'Open the full comparison' }));
-    expect(screen.getByText('First 2 of 124 rows')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Answer and SQL' }));
+    expect(screen.getByText('Showing 2 of 124 rows')).toBeInTheDocument();
     const table = screen.getByRole('grid');
     expect(within(table).getAllByRole('columnheader')).toHaveLength(2);
-    expect(within(table).getByText('الرياض')).toHaveAttribute('dir', 'auto');
+    expect(within(table).getByText('الرياض')).toHaveAttribute('dir', 'rtl');
     expect(within(table).getByText('NULL')).toHaveAttribute('data-tone', 'muted');
     expect(screen.getByText('Showing 2 of 3 columns')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Judges' }));
-    expect(screen.getByText('124 rows')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'First 2 of 124 rows' })).not.toBeInTheDocument();
-    const link = screen.getByRole('link', { name: "Compare with the agent's SQL" });
-    expect(link).toHaveAttribute('href', expect.stringContaining('tab=answer&vs=a#part-1'));
-    await user.click(link);
-    expect(screen.getByRole('tab', { name: 'Answer and SQL' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByText('124 rows')).not.toBeInTheDocument();
+    expect(screen.queryByText('Own SQL')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: "Compare with the agent's SQL" })).not.toBeInTheDocument();
   });
 
   it('shows agent replay counts separately and previews with an unknown total', async () => {
@@ -382,10 +474,10 @@ describe('live turn evidence presentation', () => {
         ],
       },
     });
+    await user.click(screen.getByRole('tab', { name: 'Answer and SQL' }));
     expect(screen.getByText('7 rows')).toBeInTheDocument();
-    expect(screen.getByText('Replayed for comparison: — rows')).toBeInTheDocument();
-    expect(screen.getByText('Replayed for comparison: 124 rows')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'First 1 rows' }));
+    expect(screen.getAllByText('Replayed for comparison')).toHaveLength(2);
+    expect(screen.getByLabelText('Agent statement 2 results')).toHaveTextContent('124 rows');
     expect(screen.getByRole('grid')).toHaveTextContent('الرياض');
     expect(screen.queryByText(/Showing .* columns/)).not.toBeInTheDocument();
   });
@@ -409,7 +501,7 @@ describe('live turn evidence presentation', () => {
     );
     expect(screen.getByText('SELECT old')).toBeInTheDocument();
     expect(screen.getAllByLabelText('Judge A results')[0]).toHaveTextContent('No result sample available');
-    expect(screen.getByText('0 rows')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Judge A results')[1]).toHaveTextContent('0 rows');
     expect(screen.queryByRole('button', { name: /^First / })).not.toBeInTheDocument();
     expect(screen.queryByText(/Replayed for comparison/)).not.toBeInTheDocument();
   });
@@ -426,26 +518,20 @@ describe('live turn evidence presentation', () => {
     expect(screen.queryByText('This turn is not in qym')).not.toBeInTheDocument();
   });
 
-  it('keeps the six comparison fallback and separates old reasoning into language blocks', () => {
-    const data = {
-      ...turnDetail,
-      summary: {
-        judges: {
-          a: {
-            reasoning:
-              'Deviations: missing year filter in the generated SQL query. / الانحرافات: شرط السنة مفقود في الاستعلام الذي أنشأه الوكيل.',
-          },
-          b: { reasoning: 'النتيجة غير مكتملة' },
-        },
-      },
-    };
-    const { container } = render(createElement(MemoryRouter, null, createElement(DiagnosisTab, { data })));
-    expect(container.querySelectorAll('[data-live-block="why"] dt')).toHaveLength(6);
-    expect(screen.getByText('What each judge said')).toBeInTheDocument();
-    expect(screen.getByText(/missing year filter/)).toHaveAttribute('dir', 'ltr');
-    expect(screen.getByText(/الانحرافات:/)).toHaveAttribute('dir', 'rtl');
-    expect(screen.getByText('النتيجة غير مكتملة')).toHaveAttribute('dir', 'rtl');
-    expect(screen.queryByText('Deviations the judges found')).not.toBeInTheDocument();
+  it('keeps sparse Diagnosis to three blocks and makes the empty rules header non-expandable', () => {
+    const { container } = render(createElement(DiagnosisTab, { data: { ...turnDetail, summary: {} } }));
+    expect(
+      [...container.querySelectorAll('[data-live-block]')].map((node) =>
+        node.getAttribute('data-live-block'),
+      ),
+    ).toEqual(['diagnosis-steps', 'rules', 'turn-facts']);
+    expect(screen.getByText('No diagnosis steps recorded for this turn')).toBeInTheDocument();
+    expect(screen.getByText('No turn facts recorded for this turn')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Insightor rules behind this verdict/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('No rules were recorded for this turn')).toBeVisible();
+    expect(container).not.toHaveTextContent('0 of 0');
   });
 
   it('prefers summary compliance and falls back to score columns while preserving zero', () => {
@@ -477,7 +563,7 @@ describe('live turn evidence presentation', () => {
       turnDetail.turn.trace_url,
     );
     expect(screen.queryByRole('button', { name: 'Next turn' })).not.toBeInTheDocument();
-    for (const block of ['why', 'deviations', 'agent-sql', 'judge-sql', 'answer', 'chart', 'turn-services']) {
+    for (const block of ['why', 'diagnosis-steps', 'rules', 'turn-facts']) {
       expect(container.querySelector(`[data-live-block="${block}"]`)).toBeInTheDocument();
     }
     await user.click(screen.getByRole('tab', { name: 'Answer and SQL' }));
@@ -485,15 +571,13 @@ describe('live turn evidence presentation', () => {
     expect(screen.getByRole('button', { name: 'Copy Agent SQL' })).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Judges' }));
     const judgeA = screen.getByLabelText('Judge A compliance');
-    expect(
-      within(judgeA).getByText('Overall compliance').closest('dt')?.nextElementSibling,
-    ).toHaveTextContent('42.0%');
+    expect(within(judgeA).getByText('Overall').closest('dt')?.nextElementSibling).toHaveTextContent('42.0%');
     await user.click(screen.getByRole('tab', { name: 'Charts' }));
     expect(screen.getByRole('img', { name: /bar chart/ })).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Services and tools' }));
     await user.click(screen.getByRole('tab', { name: 'Conversation' }));
-    const conversation = screen.getByRole('list', { name: 'Conversation turns' });
-    expect(within(conversation).getAllByRole('link')).toHaveLength(3);
+    const conversation = screen.getByRole('grid', { name: 'Conversation turns' });
+    expect(within(conversation).getAllByRole('link')).toHaveLength(2);
     expect(conversation.querySelector('[aria-current="page"]')).toHaveTextContent(turnDetail.turn.question);
     await user.click(screen.getByRole('tab', { name: 'Evaluator' }));
     const raw = screen.getByRole('button', { name: /Raw evaluation detail/ });
@@ -1001,22 +1085,27 @@ describe('root cause and judge facets', () => {
     return within(container.querySelector<HTMLElement>(`[data-live-block="${name}"]`)!);
   }
 
-  it('orders verdict, rules, turn facts and deviations and shows numbered bilingual steps', () => {
+  it('orders only steps, rules and turn facts and shows numbered bilingual checks', () => {
+    localStorage.setItem(explanationLanguageKey, 'both');
     const data = liveEvidenceTurns['privacy-refusal'];
     const { container } = renderTurn(data);
     const verdict = block(container, 'why');
-    expect(verdict.getByText('an Insightor rule')).toBeInTheDocument();
-    expect(verdict.getByText('0.96')).toBeInTheDocument();
-    const steps = verdict.getByRole('list');
-    expect(steps.tagName).toBe('OL');
+    expect(verdict.getByText('Decided by an Insightor rule')).toBeInTheDocument();
+    expect(verdict.getByText('96.0%')).toBeInTheDocument();
+    const steps = block(container, 'diagnosis-steps').getByRole('grid');
+    expect(
+      within(steps)
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['#', 'Check', 'What it found']);
     expect(within(steps).getByText('Rule')).toBeInTheDocument();
-    expect(within(steps).getByText('check-scope')).toBeInTheDocument();
+    expect(within(steps).getByText('Rule: check-scope')).toBeInTheDocument();
     expect(within(steps).getByText(verdictOf(data.summary)!.steps[0]!.textEn!)).toHaveAttribute('dir', 'ltr');
     expect(within(steps).getByText(verdictOf(data.summary)!.steps[0]!.textAr!)).toHaveAttribute('dir', 'rtl');
     const order = [...container.querySelectorAll('[role="tabpanel"] > [data-live-block]')].map((node) =>
       node.getAttribute('data-live-block'),
     );
-    expect(order.slice(0, 4)).toEqual(['why', 'rules', 'turn-facts', 'deviations']);
+    expect(order).toEqual(['diagnosis-steps', 'rules', 'turn-facts']);
   });
 
   it.each([
@@ -1026,11 +1115,12 @@ describe('root cause and judge facets', () => {
     ['skipped', 'not evaluated'],
   ])('explains the %s decision basis', (basis, words) => {
     const { container } = renderTurn({ ...turnDetail, summary: { verdict: { basis, confidence: 0 } } });
-    expect(block(container, 'why').getByText(words)).toBeInTheDocument();
-    expect(block(container, 'why').getByText('0')).toBeInTheDocument();
+    expect(block(container, 'why').getByText(`Decided by ${words}`)).toBeInTheDocument();
+    expect(block(container, 'why').getByText('0.0%')).toBeInTheDocument();
   });
 
   it('uses the manifest explanation and Arabic label reason for old verdicts', () => {
+    localStorage.setItem(explanationLanguageKey, 'both');
     const en = 'The answer omits the requested year.';
     const ar = 'لا تتضمن الإجابة السنة المطلوبة.';
     const { container } = renderTurn({
@@ -1048,10 +1138,15 @@ describe('root cause and judge facets', () => {
     const verdict = block(container, 'why');
     expect(verdict.getByText(en)).toHaveAttribute('dir', 'ltr');
     expect(verdict.getByText(ar)).toHaveAttribute('dir', 'rtl');
-    expect(verdict.getByText('0.8')).toBeInTheDocument();
-    expect(container.querySelectorAll('[data-live-block="why"] dt')).toHaveLength(7);
-    expect(container.querySelector('[data-live-block="rules"]')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-live-block="turn-facts"]')).not.toBeInTheDocument();
+    expect(verdict.getByText('80.0%')).toBeInTheDocument();
+    expect(
+      block(container, 'diagnosis-steps').getByText('No diagnosis steps recorded for this turn'),
+    ).toBeInTheDocument();
+    expect(block(container, 'rules').queryByRole('button')).not.toBeInTheDocument();
+    expect(block(container, 'rules').getByText('No rules were recorded for this turn')).toBeVisible();
+    expect(
+      block(container, 'turn-facts').getByText('No turn facts recorded for this turn'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('tabpanel')).not.toHaveTextContent('undefined');
   });
 
@@ -1064,32 +1159,122 @@ describe('root cause and judge facets', () => {
     expect(block(container, 'why').getByText(explanation)).toHaveAttribute('dir', 'ltr');
   });
 
-  it('places deciding rules first, with the version aside and judge instructions below', () => {
-    const decided = rulesAppliedOf(liveEvidenceTurns['privacy-refusal'].summary)[0]!;
-    const data = liveEvidenceTurns['chart-summary'];
-    const rules = data.summary.rules_applied as unknown[];
+  it('labels evidence and names step kinds without an empty result column', () => {
+    const { container } = renderTurn({
+      ...turnDetail,
+      summary: {
+        verdict: {
+          steps: [
+            { kind: 'fact', text_en: 'One tool ran.', source: 'Tool: execute_sql_query' },
+            { kind: 'judge', text_en: 'Both judges require city groups and year = 2025.', source: 'a' },
+            { kind: 'replay', text_en: 'The rows were compared.', source: 'b' },
+            { kind: 'future_check', text_en: 'A new kind of check.', source: 'prompt.md:12-15' },
+          ],
+        },
+      },
+    });
+    const steps = block(container, 'diagnosis-steps');
+    for (const text of [
+      'Trace fact',
+      'Judge score',
+      'Re-run',
+      'Future check',
+      'Tool: execute_sql_query',
+      'Judge: A',
+      'Judge: B',
+    ])
+      expect(steps.getByText(text)).toBeInTheDocument();
+    expect(steps.queryByText('a', { exact: true })).not.toBeInTheDocument();
+    expect(steps.queryByText('prompt.md:12-15')).not.toBeInTheDocument();
+    const rows = steps.getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(4);
+    for (const [index, row] of rows.entries()) {
+      expect(within(row).getByRole('rowheader')).toHaveTextContent(String(index + 1));
+      expect(within(row).getAllByRole('gridcell')).toHaveLength(2);
+      expect(row.querySelector('[data-col="result"]')).toBeNull();
+    }
+  });
+
+  it('collapses rules initially, sorts ids naturally and switches cited/all rules without exposing source locations', async () => {
+    const user = userEvent.setup();
+    const data = liveEvidenceTurns['privacy-refusal'];
+    const makeRule = (id: string, role: string) => ({
+      id,
+      role,
+      title_en: `Title ${id}`,
+      title_ar: `عنوان ${id}`,
+      verdict_en: `Explanation ${id}`,
+      verdict_ar: `تفسير ${id}`,
+      sources: [`insightor-be/prompts/${id}.md:10-20`],
+    });
     const { container } = renderTurn({
       ...data,
       summary: {
         ...data.summary,
-        rules_applied: [...rules, { id: decided.id, title_en: decided.titleEn, role: 'decided' }],
+        rules_applied: [
+          makeRule('G1', 'decided'),
+          makeRule('B10', 'decided'),
+          makeRule('B2', 'told_to_judges'),
+          makeRule('B1', 'decided'),
+        ],
       },
     });
-    const region = container.querySelector('[data-live-block="rules"]')!;
-    expect(region.querySelector('aside')).toHaveTextContent('3fa9c1d2e4b7');
-    expect(region.textContent!.indexOf('G5')).toBeLessThan(
-      region.textContent!.indexOf('Also given to the judges'),
-    );
-    expect(region.textContent!.indexOf('Also given to the judges')).toBeLessThan(
-      region.textContent!.indexOf('B1'),
-    );
+    const rules = block(container, 'rules');
+    const toggle = rules.getByRole('button', { name: /Insightor rules behind this verdict/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(rules.getByText('3 of 4 rules were cited:')).toBeInTheDocument();
+    expect(rules.queryByRole('grid')).not.toBeInTheDocument();
+    expect(
+      within(toggle)
+        .getAllByText(/^(B|G)\d+$/)
+        .map((tag) => tag.textContent),
+    ).toEqual(['B1', 'B10', 'G1']);
+    act(() => toggle.focus());
+    await user.keyboard('{Enter}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const ids = () =>
+      within(rules.getByRole('grid'))
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getByRole('rowheader').textContent);
+    expect(ids()).toEqual(['B1', 'B10', 'G1']);
+    expect(rules.queryByRole('columnheader', { name: 'Cited by' })).not.toBeInTheDocument();
+    const showAll = rules.getByRole('button', { name: 'Show all 4' });
+    expect(showAll.closest('[data-part="disclosure-header"]')).toContainElement(toggle);
+    await user.click(showAll);
+    expect(ids()).toEqual(['B1', 'B2', 'B10', 'G1']);
+    await user.click(screen.getByRole('radio', { name: 'العربية' }));
+    expect(rules.queryByText('Title B1')).not.toBeInTheDocument();
+    expect(rules.queryByText('Explanation B1')).not.toBeInTheDocument();
+    expect(rules.getByText('عنوان B1')).toHaveAttribute('dir', 'rtl');
+    await user.click(screen.getByRole('radio', { name: 'Both' }));
+    expect(rules.getByText('Title B1')).toBeInTheDocument();
+    expect(rules.getByText('تفسير B1')).toHaveAttribute('dir', 'rtl');
+    for (const column of container.querySelectorAll('[data-live-block="rules"] [data-language="both"]'))
+      expect(column.children).toHaveLength(2);
+    await user.click(rules.getByRole('button', { name: 'Show cited only' }));
+    expect(ids()).toEqual(['B1', 'B10', 'G1']);
+    const panel = screen.getByRole('tabpanel');
+    expect(panel.textContent).not.toMatch(/insightor-be|\.md:|3fa9c1d2e4b7/);
+    expect(rules.queryByRole('button', { name: 'Copy rule source' })).not.toBeInTheDocument();
+  });
+
+  it('offers all supplied rules when no rules were cited', async () => {
+    const user = userEvent.setup();
+    renderTurn(liveEvidenceTurns['chart-summary']);
+    const toggle = screen.getByRole('button', { name: /Insightor rules behind this verdict/ });
+    expect(toggle).toHaveTextContent('None of the 1 rules was cited');
+    await user.click(toggle);
+    expect(screen.getByText('No cited rules recorded for this turn')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Show all 1' }));
+    expect(screen.getByRole('grid', { name: 'Insightor rules behind this verdict' })).toHaveTextContent('B1');
   });
 
   it('shows privacy refusal, the fired guardrail and why replay was withheld', () => {
     const { container } = renderTurn(liveEvidenceTurns['privacy-refusal']);
     const facts = block(container, 'turn-facts');
     expect(facts.getByText('Refused for privacy, at the router')).toBeInTheDocument();
-    expect(facts.getByText('Privacy').closest('dt')?.nextElementSibling).toHaveTextContent('Active');
+    expect(facts.getByRole('group', { name: 'Privacy' })).toHaveTextContent('Active');
     expect(facts.getByText('Privacy fired')).toBeInTheDocument();
     expect(facts.getByText('G5')).toBeInTheDocument();
     expect(
@@ -1105,7 +1290,7 @@ describe('root cause and judge facets', () => {
       'Bar chart, 10 categories, built from 10 rows, shown in the answer',
     );
     for (const label of ['Methodology items beside the answer', 'Data notes beside the answer'])
-      expect(facts.getByText(label).closest('dt')?.nextElementSibling).toHaveTextContent('1');
+      expect(facts.getByRole('group', { name: label })).toHaveTextContent('1');
     expect(
       facts.getByText('Insightor trimmed the text because a chart shows the values.'),
     ).toBeInTheDocument();
@@ -1125,73 +1310,200 @@ describe('root cause and judge facets', () => {
     });
     const facts = block(container, 'turn-facts');
     expect(facts.getByText('future_route')).toBeInTheDocument();
-    expect(facts.getByText('Privacy').closest('dt')?.nextElementSibling).toHaveTextContent('Not active');
-    expect(facts.getByText('Internal details').closest('dt')?.nextElementSibling).toHaveTextContent(
-      'Unknown',
-    );
+    expect(facts.getByRole('group', { name: 'Privacy' })).toHaveTextContent('Not active');
+    expect(facts.getByRole('group', { name: 'Internal details' })).toHaveTextContent('Unknown');
     expect(facts.queryByText('Methodology items beside the answer')).not.toBeInTheDocument();
   });
 
-  it.each(['', 'tab=judges'])(
+  it.each(['tab=judges'])(
     'retains dropped deviations, both languages and quoted evidence on %s',
     (search) => {
+      localStorage.setItem(explanationLanguageKey, 'both');
       const data = structuredClone(liveEvidenceTurns['sql-mismatch']);
       const judges = data.summary.judges as Record<string, { deviations: Record<string, unknown>[] }>;
       judges.a!.deviations[0]!.quote = 'GROUP BY region';
       const { container } = renderTurn(data, search);
-      const region = block(container, search ? 'judge-a' : 'deviations');
+      const region = block(container, 'judge-a');
       expect(region.getByText('GROUP BY region')).toBeInTheDocument();
       expect(region.getAllByText('The answer omits the period.')[0]).toHaveAttribute('dir', 'ltr');
       expect(region.getAllByText('لا يذكر الجواب الفترة.')[0]).toHaveAttribute('dir', 'rtl');
       const dropped = region
         .getAllByText('Not counted: contradicts fact: the answer explicitly says 2025')[0]!
-        .closest('li');
+        .closest('tr');
       expect(dropped).toHaveAttribute('data-dropped', 'true');
-      expect(dropped).toHaveTextContent('missing_date');
+      expect(dropped).toHaveTextContent('missing date');
     },
   );
 
   it('uses old flat deviations including their Arabic text when there is no judge object', () => {
-    const { container } = renderTurn({
-      ...turnDetail,
-      summary: {
-        deviations: [{ judge: 'a', axis: 'sql', text: 'Missing filter.', text_ar: 'الشرط مفقود.' }],
+    localStorage.setItem(explanationLanguageKey, 'both');
+    const { container } = renderTurn(
+      {
+        ...turnDetail,
+        summary: {
+          deviations: [{ judge: 'a', axis: 'sql', text: 'Missing filter.', text_ar: 'الشرط مفقود.' }],
+        },
       },
-    });
-    const region = block(container, 'deviations');
+      'tab=judges',
+    );
+    const region = block(container, 'judge-a');
     expect(region.getByText('Missing filter.')).toHaveAttribute('dir', 'ltr');
     expect(region.getByText('الشرط مفقود.')).toHaveAttribute('dir', 'rtl');
-    expect(region.getByText('No reasoning available for this judge')).toBeInTheDocument();
+    expect(
+      block(container, 'judge-b').getByText('No reasoning available for this judge'),
+    ).toBeInTheDocument();
   });
 
-  it('renders new judge facets, band scores, common facts and SQL navigation without disclosures', () => {
+  it.each(['reasoning', 'review'])(
+    'equalizes matching judge %s blocks after resize and language changes without empty sections',
+    async (facet) => {
+      let width = 1040;
+      let heights = { a: 80, b: 160 };
+      let measure = () => {};
+      const bounds = HTMLElement.prototype.getBoundingClientRect;
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        if (this.querySelector(':scope > [data-live-block="judge-a"]'))
+          return { ...bounds.call(this), width };
+        if (this.parentElement?.dataset.judgeFacet === facet) {
+          const side =
+            this.closest('[data-live-block]')?.getAttribute('data-live-block') === 'judge-a' ? 'a' : 'b';
+          return { ...bounds.call(this), height: heights[side] };
+        }
+        return bounds.call(this);
+      });
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          constructor(private callback: () => void) {}
+          observe(element: HTMLElement) {
+            if (element.querySelector(':scope > [data-live-block="judge-a"]')) measure = this.callback;
+          }
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      const user = userEvent.setup();
+      const { container } = renderTurn(liveEvidenceTurns['chart-summary'], 'tab=judges');
+      const blocks = () => [...container.querySelectorAll<HTMLElement>(`[data-judge-facet="${facet}"]`)];
+      expect(blocks().map((block) => block.style.getPropertyValue('--judge-facet-height'))).toEqual([
+        '160px',
+        '160px',
+      ]);
+      heights = { a: 50, b: 40 };
+      await user.click(screen.getByRole('radio', { name: 'العربية' }));
+      expect(blocks().map((block) => block.style.getPropertyValue('--judge-facet-height'))).toEqual([
+        '50px',
+        '50px',
+      ]);
+      heights = { a: 210, b: 130 };
+      await user.click(screen.getByRole('radio', { name: 'Both' }));
+      expect(blocks().map((block) => block.style.getPropertyValue('--judge-facet-height'))).toEqual([
+        '210px',
+        '210px',
+      ]);
+      width = 600;
+      act(() => measure());
+      expect(blocks().map((block) => block.style.getPropertyValue('--judge-facet-height'))).toEqual([
+        '0px',
+        '0px',
+      ]);
+      expect(container.querySelector('[data-judge-facet][data-empty]')).toBeNull();
+      for (const side of ['a', 'b']) {
+        const card = container.querySelector(`[data-live-block="judge-${side}"]`)!;
+        expect(
+          [...card.querySelectorAll('[data-judge-facet]')]
+            .slice(0, 4)
+            .map((item) => item.getAttribute('data-judge-facet')),
+        ).toEqual(['identity', 'scores', 'reasoning', 'deviations']);
+        expect(card).toHaveTextContent('No deviations found.');
+      }
+    },
+  );
+
+  it('keeps judging facets and facts in Judges and query explanations in Answer and SQL', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(explanationLanguageKey, 'both');
     const data = liveEvidenceTurns['chart-summary'];
     const { container } = renderTurn(data, 'tab=judges&list=day%3D2026-11-01');
     expect(screen.getByLabelText('Judge comparison')).toHaveTextContent(
-      'Judges agreeYesDiagnosis confidence0.96',
+      'Judges agreeYesDiagnosis confidence96.0%',
     );
     expect(block(container, 'judge-facts').getByText('Tool: suggest_chart')).toBeInTheDocument();
     for (const side of ['a', 'b'] as const) {
       const judge = block(container, `judge-${side}`);
       const card = container.querySelector(`[data-live-block="judge-${side}"]`)!;
       expect(card.querySelectorAll('[data-band]')).toHaveLength(3);
-      expect(judge.getByText(`judge-${side}`).closest('[data-kind]')).toHaveAttribute('data-kind', 'model');
+      expect(judge.getByText(`judge-${side}`).closest('[data-kind]')).toHaveAttribute('data-kind', 'data');
       expect(judge.getByText('Followed manifest')).toBeInTheDocument();
       expect(judge.getByText('Results match')).toBeInTheDocument();
+      for (const facet of ['checks', 'against', 'review']) {
+        expect(card.querySelector(`[data-judge-facet="${facet}"] dl`)).toHaveAttribute('data-columns', '3');
+      }
       expect(judge.getByText('1/1')).toBeInTheDocument();
       expect(judge.getByText('Better SQL').closest('dt')?.nextElementSibling).toHaveTextContent('equivalent');
-      const link = judge.getByRole('link', { name: "Compare with the agent's SQL" });
-      expect(link).toHaveAttribute('href', expect.stringContaining(`vs=${side}#part-1`));
-      expect(link).toHaveAttribute('href', expect.stringContaining('source='));
-      expect(link).toHaveAttribute('href', expect.stringContaining('list='));
+      const review = card.querySelector<HTMLElement>('[data-judge-facet="review"]')!;
+      const facts = review.querySelector('dl')!;
+      expect([...facts.querySelectorAll('dt')].map((label) => label.textContent)).toEqual([
+        'Agreement',
+        'Better SQL',
+      ]);
+      const reasoning = within(review).getByRole('heading', { name: 'Reasoning', level: 4 });
+      expect(facts.nextElementSibling).toBe(reasoning.parentElement);
+      expect(reasoning.nextElementSibling).toBe(review.querySelector('[data-language="both"]'));
+      expect(card.querySelector('[data-judge-facet="sql"]')).not.toBeInTheDocument();
+      expect(judge.queryByText('Own SQL')).not.toBeInTheDocument();
       expect(card.querySelector('[aria-expanded]')).not.toBeInTheDocument();
-      expect(judge.getByText(judgeOf(data.summary, side)!.sqlReasoningAr!)).toHaveAttribute('dir', 'rtl');
+      expect(judge.queryByText(judgeOf(data.summary, side)!.sqlReasoningEn!)).not.toBeInTheDocument();
+      expect(judge.queryByText(judgeOf(data.summary, side)!.sqlReasoningAr!)).not.toBeInTheDocument();
     }
     expect(screen.queryByText('Cross-review score')).not.toBeInTheDocument();
+    for (const language of ['en', 'ar', 'both'] as const) {
+      await user.click(
+        screen.getByRole('radio', { name: { en: 'English', ar: 'العربية', both: 'Both' }[language] }),
+      );
+      for (const side of ['a', 'b'] as const) {
+        const review = within(
+          container.querySelector<HTMLElement>(
+            `[data-live-block="judge-${side}"] [data-judge-facet="review"]`,
+          )!,
+        );
+        const text = crossReviewOf(data.summary, side === 'a' ? 'a_on_b' : 'b_on_a')!;
+        const en = review.queryByText(text.textEn!);
+        const ar = review.queryByText(text.textAr!);
+        if (language === 'ar') expect(en).not.toBeInTheDocument();
+        else expect(en).toHaveAttribute('dir', 'ltr');
+        if (language === 'en') expect(ar).not.toBeInTheDocument();
+        else expect(ar).toHaveAttribute('dir', 'rtl');
+      }
+    }
+    await user.click(screen.getByRole('tab', { name: 'Answer and SQL' }));
+    for (const side of ['a', 'b'] as const) {
+      await user.click(screen.getByRole('radio', { name: `Judge ${side.toUpperCase()}` }));
+      const pane = within(container.querySelector<HTMLElement>('[data-sql-pane="judge"]')!);
+      for (const language of ['en', 'ar', 'both'] as const) {
+        await user.click(
+          screen.getByRole('radio', { name: { en: 'English', ar: 'العربية', both: 'Both' }[language] }),
+        );
+        expect(screen.getAllByText('Why the judge wrote it this way')).toHaveLength(1);
+        const en = pane.queryByText(judgeOf(data.summary, side)!.sqlReasoningEn!);
+        const ar = pane.queryByText(judgeOf(data.summary, side)!.sqlReasoningAr!);
+        if (language === 'ar') expect(en).not.toBeInTheDocument();
+        else expect(en).toHaveAttribute('dir', 'ltr');
+        if (language === 'en') expect(ar).not.toBeInTheDocument();
+        else expect(ar).toHaveAttribute('dir', 'rtl');
+      }
+    }
   });
 
-  it('falls back to old score checks and uses main score bands including zero', () => {
+  it('falls back to old score checks, uses main score bands including zero and omits missing review fields', () => {
     const data = structuredClone(turnDetail);
+    localStorage.setItem(explanationLanguageKey, 'both');
+    data.summary.cross_review = {
+      a_on_b: { agreement: false, better_sql: 'other' },
+      b_on_a: { text_ar: 'تؤيد النتائج هذا التقييم.' },
+    };
     data.specs = data.specs.map((spec) =>
       spec.metric_name === 'compliance_a' ? { ...spec, pass_threshold: 0.7 } : spec,
     );
@@ -1214,6 +1526,17 @@ describe('root cause and judge facets', () => {
     expect(judge.getByText('69.0%').closest('[data-band]')).toHaveAttribute('data-band', '3');
     expect(container.querySelector('[data-live-block="judge-facts"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-judge-facet="route"]')).not.toBeInTheDocument();
+    const reviewA = container.querySelector<HTMLElement>(
+      '[data-live-block="judge-a"] [data-judge-facet="review"]',
+    )!;
+    expect(within(reviewA).queryByText('Reasoning')).not.toBeInTheDocument();
+    expect(reviewA.querySelector('dl')!.parentElement!.children).toHaveLength(1);
+    const reviewB = container.querySelector<HTMLElement>(
+      '[data-live-block="judge-b"] [data-judge-facet="review"]',
+    )!;
+    expect(reviewB.querySelector('dl')).toBeNull();
+    expect(within(reviewB).getByRole('heading', { name: 'Reasoning', level: 4 })).toBeInTheDocument();
+    expect(within(reviewB).getByText('تؤيد النتائج هذا التقييم.')).toHaveAttribute('dir', 'rtl');
     expect(screen.getByRole('tabpanel')).not.toHaveTextContent('undefined');
   });
 
@@ -1222,6 +1545,7 @@ describe('root cause and judge facets', () => {
     ['wrong', 'Wrong route'],
     ['unsure', 'Unsure'],
   ])('renders %s route review and privacy findings', (verdict, label) => {
+    localStorage.setItem(explanationLanguageKey, 'both');
     const data = structuredClone(liveEvidenceTurns['privacy-refusal']);
     const judges = data.summary.judges as Record<string, Record<string, unknown>>;
     judges.a!.privacy_violation = true;
@@ -1240,18 +1564,9 @@ describe('root cause and judge facets', () => {
     ).toHaveAttribute('data-tone', 'danger');
   });
 
-  it('shows failed and degraded service reasons on Diagnosis', () => {
-    const { container } = renderTurn({
-      ...turnDetail,
-      summary: {
-        services: {
-          sql_execution: { status: 'failed', reason: 'Warehouse unavailable.' },
-          finalize_report: { status: 'degraded', reason: 'Answer was incomplete.' },
-        },
-      },
-    });
-    const services = block(container, 'turn-services');
-    expect(services.getByText('Warehouse unavailable.')).toBeInTheDocument();
-    expect(services.getByText('Answer was incomplete.')).toBeInTheDocument();
+  it("keeps other tabs' evidence out of Diagnosis", () => {
+    const { container } = renderTurn(liveEvidenceTurns['sql-mismatch']);
+    for (const name of ['deviations', 'sql-comparison', 'answer', 'chart', 'turn-services', 'evaluator-line'])
+      expect(container.querySelector(`[data-live-block="${name}"]`)).not.toBeInTheDocument();
   });
 });

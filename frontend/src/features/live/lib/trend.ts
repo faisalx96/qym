@@ -51,24 +51,38 @@ export function trendColumns(
   specs: LiveMetricSpec[],
 ): {
   day: string;
-  stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; n: number }[];
+  stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; color: string; n: number }[];
   rate: number | null;
   gap: boolean;
   total: number;
 }[] {
   const spec = diagnosisSpec(specs);
   return trend.map((entry) => {
-    const stacks: { value: string | null; label: string; tone: CardTone; dark: boolean; n: number }[] =
-      mixSegments(entry.counts_by_label, spec).map(({ value, label, tone, dark, n }) => ({
-        value,
-        label,
-        tone,
-        dark,
-        n,
-      }));
+    const stacks: {
+      value: string | null;
+      label: string;
+      tone: CardTone;
+      dark: boolean;
+      color: string;
+      n: number;
+    }[] = mixSegments(entry.counts_by_label, spec).map(({ value, label, tone, dark, color, n }) => ({
+      value,
+      label,
+      tone,
+      dark,
+      color,
+      n,
+    }));
     const undiagnosed = entry.turns - stacks.reduce((sum, stack) => sum + stack.n, 0);
     if (undiagnosed > 0)
-      stacks.push({ value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: undiagnosed });
+      stacks.push({
+        value: null,
+        label: 'Undiagnosed',
+        tone: 'neutral',
+        dark: false,
+        color: 'var(--text-muted)',
+        n: undiagnosed,
+      });
     return {
       day: entry.day,
       stacks,
@@ -77,4 +91,30 @@ export function trendColumns(
       total: entry.turns,
     };
   });
+}
+
+/** Three whole-number ticks, rounded up to a 1/2/5 step. */
+export function turnScale(max: number): { max: number; ticks: number[] } {
+  const target = Math.max(1, max / 2);
+  const magnitude = 10 ** Math.floor(Math.log10(target));
+  const step = [1, 2, 5, 10].find((factor) => factor * magnitude >= target)! * magnitude;
+  return { max: step * 2, ticks: [0, step, step * 2] };
+}
+
+/** Fit the shared date axis, giving month boundaries priority and keeping edge labels inside the plot. */
+export function trendAxisLabels(days: string[], width: number) {
+  const pitch = width / Math.max(1, days.length);
+  const labels = trendLabels(days, pitch).map((item, index) => {
+    const half = (item.label.length * CHAR_PX) / 2;
+    const x = Math.max(half, Math.min(width - half, (index + 0.5) * pitch));
+    return { ...item, index, x, left: x - half - 3, right: x + half + 3, visible: false };
+  });
+  const shown: typeof labels = [];
+  for (const item of [...labels].sort((a, b) => Number(b.labelPriority) - Number(a.labelPriority))) {
+    if (shown.every((other) => item.right <= other.left || item.left >= other.right)) {
+      item.visible = true;
+      shown.push(item);
+    }
+  }
+  return labels;
 }

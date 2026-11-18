@@ -2,7 +2,7 @@ import type { LiveMetricSpec, LiveOverview } from '@/api/live';
 import { formatDayKey } from '@/lib/dates';
 import { useSearchParamsState } from '@/lib/url-state';
 import { humanizeKey } from '@/lib/humanizeKey';
-import { DataTable, ScoreValue, StateTag, Text, type Column } from '@/ui';
+import { Card, DataTable, ScoreValue, SectionHeader, StateTag, Text, type Column } from '@/ui';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { diagnosisSpec, mixSegments } from '../lib/mix';
 import { formatPrimaryMean } from '../lib/trend';
@@ -31,14 +31,21 @@ export function DaysTable({
   const diagnosis = diagnosisSpec(specs);
   const columns: Column<LiveOverview['days']['rows'][number]>[] = [
     { id: 'day', header: 'Day', width: 130, cell: (row) => formatDayKey(row.day) },
-    { id: 'turns_seen', header: 'Turns', width: 75, type: 'number' },
-    { id: 'evaluated', header: 'Evaluated', width: 90, type: 'number' },
-    { id: 'failed', header: 'Failed', width: 75, type: 'number' },
+    { id: 'turns_seen', header: 'Turns', width: 75, type: 'number', align: 'end' },
+    { id: 'evaluated', header: 'Evaluated', width: 90, type: 'number', align: 'end' },
+    {
+      id: 'waiting',
+      header: 'Waiting',
+      width: 85,
+      type: 'number',
+      align: 'end',
+      cell: (row) => Math.max(0, row.in_qym - row.evaluated),
+    },
     {
       id: 'primary_rate',
       header: primary?.label ?? 'Primary rate',
       width: 120,
-      align: 'center',
+      align: 'end',
       cell: (row) => (
         <ScoreValue
           value={row.primary_rate}
@@ -58,14 +65,14 @@ export function DaysTable({
         const segments = mixSegments(row.label_mix, diagnosis).filter((segment) => segment.n > 0);
         if (!segments.length) return '—';
         return (
-          <ChartTooltipHost className={styles.mix}>
+          <ChartTooltipHost className={`${styles.mix} ${styles.compactMix}`}>
             {segments.map((segment) => (
               <Mark
                 key={segment.value}
                 className={styles.mixSegment}
                 tone={segment.tone}
                 data-dark={segment.dark ? '' : undefined}
-                style={{ flex: segment.share }}
+                style={{ flex: segment.share, background: segment.color }}
                 tip={`${segment.label}: ${segment.n} turns`}
                 aria-label={`${segment.label}: ${segment.n} turns`}
               />
@@ -78,6 +85,7 @@ export function DaysTable({
       id: 'worker',
       header: 'Worker',
       width: 110,
+      align: 'end',
       cell: (row) => {
         if (row.worker_gap) {
           return (
@@ -104,12 +112,27 @@ export function DaysTable({
     },
   ];
   return (
-    <div data-live-block="days">
-      <Text as="h3" variant="md" weight={600} className={styles.blockTitle}>
-        Days
-      </Text>
+    <Card
+      data-live-block="days"
+      flush
+      header={
+        <SectionHeader
+          title="Days"
+          level="lg"
+          as="h2"
+          aside={
+            <Text variant="sm" tone="muted">
+              Click a day to see its turns
+            </Text>
+          }
+        />
+      }
+    >
       <DataTable
         aria-label="Days"
+        variant="embedded"
+        edgePadding="card"
+        densityLocked
         columns={columns}
         rows={days.rows}
         rowKey={(row) => row.day}
@@ -118,10 +141,11 @@ export function DaysTable({
         }
         rowProps={(row) => ({ 'data-live-day': row.day })}
         responsive="scroll"
+        fit="declared"
         minWidth={850}
       >
-        <DataTable.Toolbar />
         <DataTable.Footer
+          layout="spread"
           pagination={{
             total: days.total,
             page: days.page,
@@ -131,6 +155,6 @@ export function DaysTable({
           }}
         />
       </DataTable>
-    </div>
+    </Card>
   );
 }

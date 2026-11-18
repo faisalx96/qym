@@ -262,6 +262,12 @@
   outline-offset: 2px;
 }
 
+/* The strip a page fills through <ShellSubbar>: under the topbar, outside the scroller; empty it takes no room. */
+.subbar {
+  flex: none;
+  min-width: 0;
+}
+
 .content {
   flex: 1;
   overflow: auto;

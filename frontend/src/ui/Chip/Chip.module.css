@@ -56,6 +56,21 @@
   background: color-mix(in srgb, var(--tone) var(--tint-strong), transparent);
 }
 
+/* A filter with a semantic mark keeps its pressed surface neutral. Other chips keep their tone selection. */
+.chip[data-selection='neutral'][data-selected] {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.mark {
+  flex: none;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--tone);
+}
+
 .chip[data-focus-visible] {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
@@ -74,6 +89,10 @@
 
 .chip[data-selected] .count {
   color: var(--tone-text);
+}
+
+.chip[data-selection='neutral'][data-selected] .count {
+  color: var(--text-secondary);
 }
 
 .remove {

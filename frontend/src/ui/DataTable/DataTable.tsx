@@ -97,6 +97,10 @@ export interface DataTableProps<R> {
   className?: string;
 
   density?: Density;
+  /** Align the first text baselines at the top of multi-line rows; default rows stay vertically centred. */
+  cellAlign?: 'middle' | 'first-line';
+  /** Top-align multiline rows with normal cell padding; other tables stay middle-aligned. */
+  verticalAlign?: 'middle' | 'top';
   /** The page fixes the density; hides the density menu. */
   densityLocked?: boolean;
   /** Stripes every second row; on by default ('auto' and true are the same); only false turns them off (D-01). */
@@ -106,6 +110,8 @@ export interface DataTableProps<R> {
   /** The row under the pointer lights its edge in the accent (round 10: the first qym's By pass table). */
   hoverEdge?: boolean;
   variant?: 'card' | 'embedded';
+  /** Match the first/last cells and footer to a standard Card header in a flush body. */
+  edgePadding?: 'cell' | 'card';
   stickyHeader?: boolean;
   /**
    * The page scroller the header should stick to (a table that is not height-capped). The header cells
@@ -439,11 +445,14 @@ function DataTableInner<R>({
   onHiddenChange,
   className,
   density: densityProp,
+  cellAlign,
+  verticalAlign = 'middle',
   densityLocked,
   zebra = 'auto',
   stripe = 'page',
   hoverEdge = false,
   variant = 'card',
+  edgePadding = 'cell',
   stickyHeader = true,
   stickyParent,
   stickyTop,
@@ -1971,6 +1980,8 @@ function DataTableInner<R>({
       data-shift={stickyHeader && !embedded && headParent ? '' : undefined}
       data-tall={tall ? '' : undefined}
       data-wrap-tall={wrapTall ? '' : undefined}
+      data-cell-align={cellAlign}
+      data-vertical-align={verticalAlign}
       data-fit={fitWidths ? '' : undefined}
       style={{ minWidth: fitWidths ? undefined : Math.max(minWidth ?? 0, minTotal) || undefined }}
     >
@@ -2045,6 +2056,7 @@ function DataTableInner<R>({
         ref={cardRef}
         className={[styles.card, className].filter(Boolean).join(' ')}
         data-variant={variant}
+        data-padding={edgePadding === 'card' ? 'card' : undefined}
         data-density={model.density}
         data-zebra={zebraOn ? '' : undefined}
         data-stripe={stripe === 'report' ? 'report' : undefined}

@@ -67,6 +67,24 @@ describe('form and feedback recipes are semantic', () => {
 });
 
 describe('MultiSelect (the dropdown with search and actions)', () => {
+  it('opts a selected bar trigger into neutral styling without changing its selection', () => {
+    const props = {
+      label: 'Day',
+      items: [{ key: '2026-11-16', label: 'Nov 16' }],
+      value: new Set(['2026-11-16']),
+      onChange: vi.fn(),
+    };
+    const { rerender } = render(<MultiSelect {...props} triggerVariant="bar" />);
+    const button = screen.getByRole('button', { name: 'Day filter, 1 selected' });
+    expect(button).toHaveAttribute('data-active');
+    expect(button).not.toHaveAttribute('data-selection');
+    rerender(<MultiSelect {...props} triggerVariant="bar" selectionStyle="neutral" />);
+    expect(button).toHaveAttribute('data-active');
+    expect(button).toHaveAttribute('data-selection', 'neutral');
+    expect(button).toHaveTextContent('Nov 16');
+    expect(props.onChange).not.toHaveBeenCalled();
+  });
+
   it('filters its options by the search text, keeps ticks, and Escape returns focus to the trigger', async () => {
     const user = userEvent.setup();
     function Harness() {

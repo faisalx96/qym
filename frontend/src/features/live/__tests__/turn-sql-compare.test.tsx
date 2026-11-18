@@ -6,7 +6,6 @@ import type { LiveTurnDetail } from '@/api/live';
 import { liveEvidenceTurns, liveTurnDetail } from '@/features/dev/liveFixtures';
 import { DIFF_CHAR_BUDGET } from '@/features/datasets/lib/wordDiff';
 import { AnswerSqlTab } from '../components/turn/AnswerSqlTab';
-import { DiagnosisTab } from '../components/turn/DiagnosisTab';
 import { clauseDiff } from '../lib/sqlDiff';
 
 function Location() {
@@ -19,10 +18,10 @@ function Location() {
     </output>
   );
 }
-function show(data = liveEvidenceTurns['sql-mismatch'], url = '/turn?tab=answer', compact = false) {
+function show(data = liveEvidenceTurns['sql-mismatch'], url = '/turn?tab=answer') {
   return render(
     <MemoryRouter initialEntries={[url]}>
-      {compact ? <DiagnosisTab data={data} /> : <AnswerSqlTab data={data} />}
+      <AnswerSqlTab data={data} />
       <Location />
     </MemoryRouter>,
   );
@@ -129,9 +128,7 @@ describe('SQL comparison', () => {
     const pane = container.querySelector('[data-sql-pane="agent"]')!;
     expect(pane).toHaveTextContent('Executed');
     expect(pane).toHaveTextContent('7 rows');
-    expect(container.querySelector('[data-sql-verdict]')).toHaveTextContent(
-      `Agent ${replayed ? '2' : '7'} rows · Judge 3 rows`,
-    );
+    expect(screen.getByLabelText('Judge A results')).toHaveTextContent('3 rows');
     expect(screen.getByLabelText('Agent results')).toHaveTextContent(replayed ? '2 rows' : '7 rows');
     if (replayed) expect(screen.getByLabelText('Agent results')).toHaveTextContent('Replayed for comparison');
   });
@@ -144,25 +141,27 @@ describe('SQL comparison', () => {
       ),
     );
     const pane = container.querySelector('[data-sql-pane="agent"]')!;
-    expect(pane).toHaveTextContent('Not executed');
+    expect(pane).toHaveTextContent('Failed');
     expect(pane).toHaveTextContent('0 rows');
-    expect(within(pane as HTMLElement).getByText('Original execution failed')).toBeVisible();
+    expect(screen.getByLabelText('Agent results')).toHaveTextContent('Original execution failed');
     expect(screen.queryByText(/The evaluator could not re-run/)).toBeNull();
   });
 
-  it('shows mismatch clauses, two kinds of marks, original SQL and default-visible previews', () => {
+  it('shows a difference legend, two kinds of marks, original SQL and aligned preview groups', () => {
     const { container } = show();
     const row = screen.getByRole('region', { name: 'Sub-question 1 of 1' });
-    expect(within(row).getByText('WHERE')).toBeVisible();
-    expect(within(row).getByText('GROUP BY')).toBeVisible();
+    expect(within(row).getByText("only in the agent's SQL")).toBeVisible();
+    expect(within(row).getByText("only in Judge A's SQL")).toBeVisible();
     expect(row.querySelector('[data-sql-mark="agent"]')).toBeVisible();
     expect(row.querySelector('[data-sql-mark="judge"]')).toBeVisible();
     expect(row.querySelector('del, s')).toBeNull();
     expect(row.querySelector('[data-sql-pane="agent"] pre')).toHaveTextContent('GROUP BY region');
     expect(row.querySelector('[data-sql-pane="judge"] pre')).toHaveTextContent('group by city');
-    expect(within(row).getByText('Not equivalent')).toBeVisible();
-    expect(within(row).getByText('Results differ')).toBeVisible();
-    expect(row).toHaveTextContent('Agent 2 rows · Judge 10 rows');
+    expect(screen.getByLabelText('Judge A SQL summary')).toHaveTextContent('Not equivalent');
+    expect(screen.getByText('Not equivalent')).toBeVisible();
+    expect(screen.getByText('Results differ')).toBeVisible();
+    expect(row.querySelector('[data-sql-pane="agent"]')).toHaveTextContent('2 rows');
+    expect(row.querySelector('[data-sql-pane="judge"]')).toHaveTextContent('10 rows');
     expect(within(row).getAllByRole('grid')).toHaveLength(2);
     expect(within(row).getByText('المنطقة الوسطى')).toBeVisible();
     expect(within(row).getByText('الرياض')).toBeVisible();
@@ -178,16 +177,20 @@ describe('SQL comparison', () => {
   it('distinguishes formatting and toggles literal differences without changing the selected judge', async () => {
     const user = userEvent.setup();
     const { container } = show(liveEvidenceTurns['chart-summary']);
-    expect(screen.getByText('Same apart from formatting')).toBeVisible();
+    expect(
+      screen.getByText("The agent's SQL and Judge A's SQL are identical apart from formatting."),
+    ).toBeVisible();
     expect(container.querySelector('[data-sql-mark]')).toBeNull();
-    const toggle = screen.getByRole('button', { name: 'Ignore formatting' });
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    const toggle = screen.getByRole('switch', { name: 'Ignore formatting' });
+    expect(toggle).toBeChecked();
     await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle).not.toBeChecked();
     expect(container.querySelector('[data-sql-mark="agent"]')).toBeVisible();
     expect(screen.getByRole('radio', { name: 'Judge A' })).toBeChecked();
     await user.click(toggle);
-    expect(screen.getByText('Same apart from formatting')).toBeVisible();
+    expect(
+      screen.getByText("The agent's SQL and Judge A's SQL are identical apart from formatting."),
+    ).toBeVisible();
   });
   it('keeps vs in the URL and preserves other parameters and the statement anchor', async () => {
     const user = userEvent.setup();
@@ -196,7 +199,7 @@ describe('SQL comparison', () => {
     await user.click(screen.getByRole('radio', { name: 'Judge A' }));
     expect(screen.getByLabelText('Current URL')).toHaveTextContent('/turn?tab=answer&vs=a&keep=1#part-1');
   });
-  it('defaults to the more-different judge and uses A for ties', () => {
+  it('defaults to Judge A even when Judge B has more differences', () => {
     show(
       custom(
         [{ text: 'SELECT a FROM t' }],
@@ -204,7 +207,7 @@ describe('SQL comparison', () => {
         [{ text: 'SELECT b FROM t WHERE n=1' }],
       ),
     );
-    expect(screen.getByRole('radio', { name: 'Judge B' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Judge A' })).toBeChecked();
   });
   it('shows blocked SQL, the privacy notice and no replay or empty-pane diff', () => {
     const { container } = show(liveEvidenceTurns['query-blocked']);
@@ -223,7 +226,7 @@ describe('SQL comparison', () => {
     );
     const row = container.querySelector('#part-1')!;
     expect(row.querySelector('[data-sql-pane="agent"] pre')).toHaveTextContent('SELECT a FROM t');
-    expect(row.querySelector('[data-sql-verdict]')).not.toHaveTextContent(
+    expect(screen.getByLabelText('Judge A SQL summary')).not.toHaveTextContent(
       /Equivalent|Results match|Not equivalent|Results differ/,
     );
     expect(screen.getByRole('region', { name: 'Agent-only statements' })).toHaveTextContent('SHOW TABLES');
@@ -264,30 +267,7 @@ describe('SQL comparison', () => {
     expect(screen.queryByText('Replayed for comparison')).toBeNull();
     expect(screen.getByLabelText('Agent results')).toHaveTextContent('Not run');
     expect(screen.getByLabelText('Judge A results')).toHaveTextContent('0 rows');
-    expect(screen.getByText('Identical')).toBeVisible();
-  });
-  it('shows the worst A pair in Diagnosis and the other judge without a disclosure', () => {
-    const data = custom(
-      [{ text: 'SELECT a FROM t' }],
-      [
-        { text: 'SELECT a FROM t', agent_index: 0 },
-        { text: 'SELECT b FROM t WHERE n=1', agent_index: 0 },
-      ],
-      [{ text: 'select A from t', agent_index: 0 }],
-    );
-    const { container } = show(data, '/turn?tab=diagnosis&keep=1', true);
-    expect(screen.getByRole('region', { name: 'Sub-question 2 of 2' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Open the full comparison' })).toHaveAttribute(
-      'href',
-      '/turn?tab=answer&keep=1&vs=a#part-2',
-    );
-    expect(screen.getByText('Judge B: same apart from formatting')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Compare with Judge B' })).toHaveAttribute(
-      'href',
-      '/turn?tab=answer&keep=1&vs=b#part-1',
-    );
-    expect(container.querySelector('[data-live-block="agent-sql"] [data-sql-mark]')).toBeVisible();
-    expect(container.querySelector('[data-live-block="judge-sql"] [data-sql-mark]')).toBeVisible();
+    expect(screen.getByText("The agent's SQL and Judge A's SQL are identical.")).toBeVisible();
   });
   it('scrolls a comparison deep link to its statement', () => {
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
@@ -319,15 +299,185 @@ describe('SQL comparison', () => {
     show({ ...custom([], []), summary });
     expect(screen.getByText(new RegExp(reason))).toBeVisible();
   });
-  it('uses B in Diagnosis when A has no statements', () => {
-    show(
-      custom([{ text: 'SELECT a FROM t' }], [], [{ text: 'SELECT b FROM t', agent_index: 0 }]),
-      '/turn',
-      true,
+  it('defaults to A with an empty pane when only B has statements, and lets the viewer switch', async () => {
+    const user = userEvent.setup();
+    const data = custom([{ text: 'SELECT a FROM t' }], [], [{ text: 'SELECT b FROM t', agent_index: 0 }]);
+    const judges = data.summary.judges as Record<string, Record<string, unknown>>;
+    judges.b!.sql_reasoning_en = 'Select the requested field b.';
+    const { container } = show(data);
+    expect(screen.getByRole('radio', { name: 'Judge A' })).toBeChecked();
+    expect(screen.getByText('No SQL available for Judge A')).toBeVisible();
+    expect(screen.queryByText('Why the judge wrote it this way')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-sql-pane="agent"]')?.children).toHaveLength(3);
+    expect(container.querySelector('[data-sql-pane="judge"]')?.children).toHaveLength(3);
+    await user.click(screen.getByRole('radio', { name: 'Judge B' }));
+    expect(screen.getByRole('radio', { name: 'Judge B' })).toBeChecked();
+    expect(screen.getByRole('region', { name: 'Sub-question 1 of 1' })).toBeVisible();
+    expect(
+      screen
+        .getByRole('region', { name: 'Sub-question 1 of 1' })
+        .querySelector('[data-sql-pane="judge"] code'),
+    ).toHaveTextContent('SELECT b FROM t');
+    expect(screen.getByText('Why the judge wrote it this way')).toBeVisible();
+    expect(screen.getByText('Select the requested field b.')).toBeVisible();
+    await user.click(screen.getByRole('radio', { name: 'Judge A' }));
+    expect(screen.queryByText('Why the judge wrote it this way')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-sql-pane="agent"]')?.children).toHaveLength(3);
+    expect(container.querySelector('[data-sql-pane="judge"]')?.children).toHaveLength(3);
+  });
+
+  it('switches every right pane without reordering or replacing agent SQL and results', async () => {
+    const user = userEvent.setup();
+    const sample = (value: string) => ({ rows: 1, columns: ['value'], sample: [[value]] });
+    const data = custom(
+      [
+        { text: 'SELECT city FROM cities', ...sample('الرياض') },
+        { text: 'SELECT region FROM regions', ...sample('الوسطى') },
+      ],
+      [
+        { text: 'SELECT city FROM cities', sub_question: 'A cities?', agent_index: 0, ...sample('A city') },
+        {
+          text: 'SELECT region FROM regions',
+          sub_question: 'A regions?',
+          agent_index: 1,
+          ...sample('A region'),
+        },
+      ],
+      [
+        {
+          text: 'SELECT region FROM regions WHERE active=1',
+          sub_question: 'B active regions?',
+          agent_index: 1,
+          ...sample('B region'),
+        },
+        {
+          text: 'SELECT city FROM cities WHERE active=1',
+          sub_question: 'B active cities?',
+          agent_index: 0,
+          ...sample('B city'),
+        },
+        {
+          text: 'SELECT count(*) FROM cities',
+          sub_question: 'B city count?',
+          agent_index: 0,
+          ...sample('B count'),
+        },
+      ],
     );
-    expect(screen.getByRole('link', { name: 'Open the full comparison' })).toHaveAttribute(
-      'href',
-      '/turn?tab=answer&vs=b#part-1',
+    const judges = data.summary.judges as Record<string, Record<string, unknown>>;
+    judges.a!.sql_reasoning_en = 'Read all cities and regions.';
+    judges.b!.sql_reasoning_en = 'Filter for active cities and regions, then count cities.';
+    const { container } = show(data);
+    const agentPanes = () => [...container.querySelectorAll('[data-sql-pane="agent"]')];
+    const explanation = () => {
+      const label = screen.getByText('Why the judge wrote it this way');
+      const pane = container.querySelector('[data-sql-pane="judge"]')!;
+      expect(pane.children).toHaveLength(4);
+      expect(pane.children[0]).toContainElement(
+        screen.getByRole('radiogroup', { name: "Compare the agent's SQL with" }),
+      );
+      expect(pane.children[1]).toContainElement(label);
+      expect(pane.children[2]).toContainElement(pane.querySelector('pre'));
+      expect(agentPanes()[0]!.children[1]).toBeEmptyDOMElement();
+      expect(container.querySelectorAll('[data-sql-pane="judge"]')[1]!.children).toHaveLength(3);
+      return label.parentElement;
+    };
+    expect(explanation()).toHaveTextContent('Read all cities and regions.');
+    const before = agentPanes().map((pane) => pane.textContent);
+    const headings = () => screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent);
+    expect(headings()).toEqual([
+      'Sub-question 1 of 3: A cities?',
+      'Sub-question 2 of 3: A regions?',
+      'Sub-question 3 of 3',
+    ]);
+    expect(screen.getAllByRole('radiogroup', { name: "Compare the agent's SQL with" })).toHaveLength(1);
+    await user.click(screen.getByRole('radio', { name: 'Judge B' }));
+    expect(explanation()).toHaveTextContent('Filter for active cities and regions, then count cities.');
+    expect(screen.queryByText('Read all cities and regions.')).not.toBeInTheDocument();
+    expect(agentPanes().map((pane) => pane.textContent)).toEqual(before);
+    expect(headings()).toEqual([
+      'Sub-question 1 of 3: B active cities?',
+      'Sub-question 2 of 3: B active regions?',
+      'Sub-question 3 of 3: B city count?',
+    ]);
+    expect(screen.queryByText('A city')).not.toBeInTheDocument();
+    expect(screen.queryByText('A region')).not.toBeInTheDocument();
+    expect(screen.getByText('B city')).toBeVisible();
+    expect(screen.getByText('B region')).toBeVisible();
+    expect(screen.getByText('B count')).toBeVisible();
+    await user.click(screen.getByRole('radio', { name: 'Judge A' }));
+    expect(explanation()).toHaveTextContent('Read all cities and regions.');
+    expect(
+      screen.queryByText('Filter for active cities and regions, then count cities.'),
+    ).not.toBeInTheDocument();
+    expect(agentPanes().map((pane) => pane.textContent)).toEqual(before);
+    expect(headings()).toEqual([
+      'Sub-question 1 of 3: A cities?',
+      'Sub-question 2 of 3: A regions?',
+      'Sub-question 3 of 3',
+    ]);
+  });
+
+  it('replaces failed judge samples with their error and suppresses the difference legend', () => {
+    const { container } = show(
+      custom(
+        [{ text: 'SELECT city FROM cities' }],
+        [
+          {
+            text: 'SELECT bad_column FROM cities',
+            agent_index: 0,
+            executed: false,
+            error: 'Unknown column bad_column',
+            rows: 1,
+            columns: ['city'],
+            sample: [['Stale sample']],
+          },
+        ],
+      ),
     );
+    expect(
+      screen.getByText("Judge A's SQL did not run, so there are no rows to compare with the agent's."),
+    ).toBeVisible();
+    expect(screen.getByLabelText('Judge A SQL summary')).toHaveTextContent('Judge A SQL failed');
+    const result = screen.getByLabelText('Judge A results');
+    expect(result.querySelector('[data-tone="danger"]')).toHaveTextContent('Unknown column bad_column');
+    expect(within(result).queryByRole('grid')).not.toBeInTheDocument();
+    expect(screen.queryByText('Stale sample')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-sql-mark]')).toBeNull();
+    expect(screen.queryByLabelText('SQL difference legend')).not.toBeInTheDocument();
+  });
+});
+
+describe('final answer', () => {
+  it('replaces chart tokens only in the answer, retaining unique tokens in the metadata grid', () => {
+    const data = custom([], []);
+    data.turn.answer =
+      '**الإجابة** هي عشرون طلباً.\n\n[[viz:chart-one]]\n\nتفصيل إضافي. [[viz:chart-two]] [[viz:chart-one]]';
+    const { container } = show(data);
+    const answer = container.querySelector('[data-live-answer]')!;
+    expect(answer).not.toHaveTextContent('[[viz:');
+    expect(answer).toHaveAttribute('dir', 'rtl');
+    expect(answer.querySelector('strong')).toHaveTextContent('الإجابة');
+    expect(within(answer as HTMLElement).getAllByText('Chart shown here')).toHaveLength(3);
+    const placeholders = screen.getByRole('group', { name: 'Chart placeholder' });
+    expect(within(placeholders).getAllByText('[[viz:chart-one]]')).toHaveLength(1);
+    expect(within(placeholders).getByText('[[viz:chart-two]]')).toBeVisible();
+    expect(screen.queryByText(/Result rows:/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [1, false, 'Pass'],
+    [0, false, 'Fail'],
+    [null, false, 'Not evaluated'],
+    [1, true, 'Not evaluated'],
+  ] as const)('uses the recorded error detection score %s, skipped %s', (score, skipped, label) => {
+    const data = custom([], []);
+    data.turn.answer = 'A complete answer without a chart.';
+    data.scores = [
+      { ...liveTurnDetail.scores[0]!, metric_name: 'error_detection', score_numeric: score, skipped },
+    ];
+    show(data);
+    expect(screen.getByRole('group', { name: 'Error detection' })).toHaveTextContent(label);
+    expect(screen.queryByRole('group', { name: 'Chart placeholder' })).not.toBeInTheDocument();
   });
 });

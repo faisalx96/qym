@@ -67,6 +67,40 @@ afterEach(() => {
 });
 
 describe('overview loading and error states', () => {
+  it.each([
+    ['UTC', undefined, 'today', false],
+    ['Asia/Riyadh', undefined, 'on Nov 1', false],
+    ['Asia/Riyadh', '2026-11-01', 'today', false],
+    ['Asia/Riyadh', undefined, 'on Nov 1', true],
+  ] as const)(
+    'labels the selected period using source-local today (%s, %s, %s, empty day %s)',
+    async (zone, today, period, empty) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-01T22:30:00Z'));
+      const data = {
+        ...liveOverview,
+        status: { ...liveOverview.status, day_key_timezone: zone, today },
+        day: { ...liveOverview.day, row: empty ? null : liveOverview.day.row },
+      };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string) => (input.includes('/overview') ? overviewResponse(data) : sources())),
+      );
+      mount();
+      expect(await screen.findByRole('button', { name: `Explain Turns ${period}` })).toBeVisible();
+      expect(screen.getByRole('heading', { name: `Average scores ${period}` })).toBeVisible();
+      expect(screen.getByRole('grid', { name: `Average scores ${period}` })).toBeVisible();
+      const total = Object.values(data.day.label_mix).reduce((sum, count) => sum + count, 0);
+      expect(screen.getByText(`${total} turns with a diagnosis ${period}`)).toBeVisible();
+      expect(screen.getByRole('columnheader', { name: `Health ${period}` })).toBeVisible();
+      expect(
+        screen.getByText(
+          `Health is the share of ${period === 'today' ? "today's" : "that day's"} turns where the service was OK`,
+        ),
+      ).toBeVisible();
+    },
+  );
+
   it('renders ErrorState with retry and recovers after a failed overview query', async () => {
     let failed = true;
     vi.stubGlobal(
@@ -102,9 +136,9 @@ describe('overview loading and error states', () => {
     const frames = container.querySelector<HTMLElement>('[data-live-loading]')!;
     expect(frames).toHaveAttribute('data-visible', 'false');
     for (const [size, services, days, trend] of [
-      ['wide', 192, 676, 330],
-      ['medium', 380, 688, 330],
-      ['narrow', 572, 716, 427],
+      ['wide', 380, 708, 500],
+      ['medium', 380, 708, 520],
+      ['narrow', 418, 740, 620],
     ] as const) {
       expect(frames.style.getPropertyValue(`--live-services-${size}`)).toBe(`${services}px`);
       expect(frames.style.getPropertyValue(`--live-days-${size}`)).toBe(`${days}px`);
@@ -137,10 +171,10 @@ describe('overview loading and error states', () => {
     };
     const { container } = mount(false, cached);
     const frames = container.querySelector<HTMLElement>('[data-live-loading]')!;
-    expect(frames.style.getPropertyValue('--live-services-wide')).toBe('192px');
-    expect(frames.style.getPropertyValue('--live-services-medium')).toBe('300px');
-    expect(frames.style.getPropertyValue('--live-services-narrow')).toBe('492px');
-    expect(frames.style.getPropertyValue('--live-days-wide')).toBe('396px');
+    expect(frames.style.getPropertyValue('--live-services-wide')).toBe('340px');
+    expect(frames.style.getPropertyValue('--live-services-medium')).toBe('340px');
+    expect(frames.style.getPropertyValue('--live-services-narrow')).toBe('378px');
+    expect(frames.style.getPropertyValue('--live-days-wide')).toBe('428px');
   });
 
   it('keeps the previous day visible without skeletons until the new day arrives', async () => {
@@ -202,14 +236,14 @@ it.each([false, true])('changes the source and reloads the %s page numbers', asy
     }),
   );
   const { container } = mount(turns);
-  if (turns) expect(await screen.findByText('47 of 47 turns on Nov 1, 2026')).toBeVisible();
+  if (turns) expect(await screen.findByText('47 turns on Nov 1, 2026')).toBeVisible();
   else
     await waitFor(() => expect(container.querySelector('[data-live-stat="turns"]')).toHaveTextContent('47'));
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: /Live source/ }));
   await user.click(screen.getByRole('option', { name: 'Development worker' }));
   expect(screen.getByLabelText('URL')).toHaveTextContent('source=worker-dev');
-  if (turns) expect(await screen.findByText('3 of 3 turns on Nov 1, 2026')).toBeVisible();
+  if (turns) expect(await screen.findByText('3 turns on Nov 1, 2026')).toBeVisible();
   else
     await waitFor(() => expect(container.querySelector('[data-live-stat="turns"]')).toHaveTextContent('3'));
 });

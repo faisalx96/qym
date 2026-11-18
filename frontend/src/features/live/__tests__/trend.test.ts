@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveMetricSpec, LiveOverview } from '@/api/live';
-import { columnPitch, trendColumns, trendDayLabel, trendLabels } from '../lib/trend';
+import {
+  columnPitch,
+  trendAxisLabels,
+  trendColumns,
+  trendDayLabel,
+  trendLabels,
+  turnScale,
+} from '../lib/trend';
 import { mixSegments } from '../lib/mix';
 
 const diagnosis: LiveMetricSpec = {
@@ -44,14 +51,15 @@ describe('trendColumns', () => {
     };
     const counts = { inconclusive: 3 };
     expect(trendColumns([{ ...trend[0]!, turns: 4, counts_by_label: counts }], [spec])[0]?.stacks).toEqual([
-      ...mixSegments(counts, spec).map(({ value, label, tone, dark, n }) => ({
+      ...mixSegments(counts, spec).map(({ value, label, tone, dark, color, n }) => ({
         value,
         label,
         tone,
         dark,
+        color,
         n,
       })),
-      { value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, n: 1 },
+      { value: null, label: 'Undiagnosed', tone: 'neutral', dark: false, color: 'var(--text-muted)', n: 1 },
     ]);
   });
   it('keeps every day, including zero days, with totals and missing rates intact', () => {
@@ -98,6 +106,7 @@ describe('trendColumns', () => {
       label: 'Undiagnosed',
       tone: 'neutral',
       dark: false,
+      color: 'var(--text-muted)',
       n: 4,
     });
     expect(column.stacks.find((stack) => stack.value === 'ok')!.n / column.total).toBe(0.5);
@@ -147,5 +156,34 @@ describe('columnPitch', () => {
     expect(columnPitch(629, 90).gap).toBe(1);
     expect(columnPitch(237, 90)).toEqual({ bar: 2, gap: 1 });
     expect(columnPitch(0, 0)).toEqual({ bar: 0, gap: 4 });
+  });
+});
+
+describe('history axes', () => {
+  it.each([
+    [0, [0, 1, 2]],
+    [1, [0, 1, 2]],
+    [8, [0, 5, 10]],
+    [37, [0, 20, 40]],
+    [1001, [0, 1000, 2000]],
+  ])('rounds %s turns up to clean whole-number ticks', (max, ticks) => {
+    expect(turnScale(max)).toEqual({ max: ticks.at(-1), ticks });
+  });
+
+  it.each([200, 350, 1200])('fits ninety date labels in %s pixels without collisions', (width) => {
+    const days = Array.from({ length: 90 }, (_, index) =>
+      new Date(Date.UTC(2026, 8, 1 + index)).toISOString().slice(0, 10),
+    );
+    const shown = trendAxisLabels(days, width).filter((label) => label.visible);
+    for (const [index, label] of shown.entries()) {
+      expect(label.left).toBeGreaterThanOrEqual(-3);
+      expect(label.right).toBeLessThanOrEqual(width + 3);
+      if (index) expect(label.left).toBeGreaterThanOrEqual(shown[index - 1]!.right);
+    }
+    expect(shown.filter((label) => label.labelPriority).map((label) => label.label)).toEqual([
+      'Sep 1',
+      'Oct 1',
+      'Nov 1',
+    ]);
   });
 });

@@ -458,7 +458,7 @@ export function verdictOf(summary: Record<string, unknown>) {
         reasonAr: stringOf(value.reason_ar),
         confidence: numberOf(value.confidence),
         steps: recordsOf(value.steps).map((step) => ({
-          kind: enumOf(step.kind, ['rule', 'fact', 'judge', 'replay', 'service']),
+          kind: stringOf(step.kind),
           textEn: stringOf(step.text_en),
           textAr: stringOf(step.text_ar),
           source: stringOf(step.source),

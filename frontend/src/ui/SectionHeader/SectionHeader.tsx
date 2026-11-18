@@ -8,15 +8,25 @@ export interface SectionHeaderProps {
   aside?: ReactNode;
   /** 'xl' (default) = section head, 18px: the one section scale of every page; 'lg' = a panel head, 15px. */
   level?: 'lg' | 'xl';
+  /** Semantic heading level, independent of the visual title scale. */
+  as?: 'h2' | 'h3';
   id?: string;
   /** A count Tag right after the title (B-27: '2 people', '1 in the last hour'). */
   count?: ReactNode;
 }
 
 /** Sentence-case section title + muted description (DESIGN_LANGUAGE §1). */
-export function SectionHeader({ title, description, aside, level = 'xl', id, count }: SectionHeaderProps) {
+export function SectionHeader({
+  title,
+  description,
+  aside,
+  level = 'xl',
+  as,
+  id,
+  count,
+}: SectionHeaderProps) {
   const heading = (
-    <Text variant={level} id={id} className={styles.title}>
+    <Text variant={level} as={as} id={id} className={styles.title}>
       {title}
     </Text>
   );

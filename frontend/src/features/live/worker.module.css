@@ -1,4 +1,8 @@
 /* Live worker: composed control blocks, wrapping data and reserved loading frames. */
+.page > [data-page-header] {
+  margin: 0;
+}
+
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -21,13 +25,13 @@
 }
 
 .settingsRow > [data-live-block='worker-settings'] {
-  flex: 3 1 36rem;
+  flex: 1 1 36rem;
   min-inline-size: 0;
 }
 
 .settingsRow > [data-live-block='worker-history'] {
-  flex: 1 1 18rem;
-  min-inline-size: 0;
+  flex: 0 1 32rem;
+  min-inline-size: min(100%, 32rem);
 }
 
 .workerKey {
@@ -49,10 +53,23 @@
 }
 
 .settingsSection {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   min-inline-size: 0;
+}
+
+.switchControl {
+  display: flex;
+  align-items: center;
+  padding-block: var(--space-xs);
+}
+
+.versionDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
 }
 
 .settingsSection + .settingsSection {
@@ -88,18 +105,73 @@
   padding: var(--card-padding-compact);
 }
 
-/* D-09: one line: the message, '× n in m min', the failed check and its fix link, then Copy report at the cell end. */
 .messageCell {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-sm);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
   white-space: normal;
   min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
-.messageCopy {
-  margin-inline-start: auto;
+.rawDetailBlock {
+  max-inline-size: 100%;
+}
+
+.rawDetail {
+  max-inline-size: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  text-align: start;
+}
+
+.rawDetail[data-collapsed] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.statValue {
+  display: block;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.jobStat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.jobError {
+  padding: var(--space-sm);
+}
+
+.statValue[data-tone='danger'],
+.jobStat [data-tone='danger'],
+.number[data-tone='danger'] {
+  color: var(--error-text);
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.loadingJobs {
+  padding: var(--space-sm) var(--space-lg);
 }
 
 /* D-29: the Problems count is a white band number that links to the block: accent on hover, no underline (E-52). */
@@ -118,13 +190,7 @@
   outline-offset: 2px;
 }
 
-@container (width < 900px) {
-  .fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container (width < 480px) {
+@container (width < 600px) {
   .fields {
     grid-template-columns: minmax(0, 1fr);
   }

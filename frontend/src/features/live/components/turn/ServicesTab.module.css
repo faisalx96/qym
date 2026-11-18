@@ -2,78 +2,33 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-lg);
-  min-width: 0;
+  min-inline-size: 0;
 }
 .inline {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
-  min-width: 0;
+  min-inline-size: 0;
 }
-.sentence {
+.tool {
   white-space: normal;
   overflow-wrap: anywhere;
-  text-align: start;
 }
-.mono {
-  font-family: var(--font-mono);
+.error {
+  color: var(--error);
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.fault {
-  font-family: var(--font-sans);
+.signals {
+  padding: var(--space-md) var(--space-sm) var(--space-lg);
+  /* Match the 32px expander column and the service cell's normal start padding. */
+  padding-inline-start: calc(var(--space-xl) + var(--space-sm));
+  min-inline-size: 0;
 }
-.glance {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.calls {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.calls > li {
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.failure {
+.unmatched {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--space-sm);
-  margin-top: var(--space-xs);
-}
-
-@media (width < 600px) {
-  .failure {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.strip {
-  display: grid;
-  grid-template-columns: repeat(var(--service-count), minmax(0, 1fr));
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-}
-.cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-sm);
-  min-width: 0;
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-.cell + .cell {
-  border-inline-start: 1px solid var(--border-subtle);
-}
-
-@container (width < 900px) {
-  .strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  gap: var(--space-md);
+  padding: var(--card-padding);
+  min-inline-size: 0;
 }
