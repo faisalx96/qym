@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { plural } from '@/features/shell/plural';
 import { Dialog, EmptyState } from '@/ui';
 import type { ChartEvidence } from '../../lib/summary';
 import styles from '../../turn.module.css';
@@ -6,6 +7,17 @@ import styles from '../../turn.module.css';
 export function ChartImage({ chart }: { chart: ChartEvidence }) {
   const [open, setOpen] = useState(false);
   const { image } = chart;
+  if (!image && chart.imageExpiredAfterDays !== null) {
+    return (
+      <div data-live-chart-expired>
+        <EmptyState
+          compact
+          title="The screenshot is no longer stored"
+          body={`Screenshots are removed ${plural(chart.imageExpiredAfterDays, 'day')} after upload. The scores and the text read from the chart are kept.`}
+        />
+      </div>
+    );
+  }
   if (!image) {
     return (
       <div data-live-chart-missing>

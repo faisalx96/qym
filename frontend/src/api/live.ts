@@ -147,6 +147,10 @@ export interface LiveChartImage {
 
 export interface LiveTurnDetail {
   chart_images: Record<string, LiveChartImage>;
+  /** Days a chart screenshot is kept after its upload. */
+  chart_image_retention_days?: number;
+  /** True when the turn was first received longer ago than that: a chart without an image may have lost it. */
+  chart_images_expired?: boolean;
   turn: LiveTurnColumns & {
     id: number;
     source_id: string;

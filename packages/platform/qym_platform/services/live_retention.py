@@ -66,16 +66,53 @@ def _purge_turns(db: Session, cutoff: date) -> tuple[int, int, int]:
             return turns, scores, chart_images
 
 
+def _purge_expired_chart_images(db: Session, cutoff: datetime) -> int:
+    """Delete screenshots uploaded before the cutoff; turns and scores stay."""
+    chart_images = 0
+    while True:
+        # Lock the parent turns, as ingest does, so a replacement upload waits
+        # for this batch instead of updating a row that is being deleted.
+        ids = [
+            row[0]
+            for row in db.execute(
+                select(LiveChartImage.id)
+                .join(LiveTurn, LiveTurn.id == LiveChartImage.turn_pk)
+                .where(LiveChartImage.received_at < cutoff)
+                .order_by(LiveChartImage.id)
+                .limit(BATCH_SIZE)
+                .with_for_update(of=LiveTurn, skip_locked=True)
+            ).all()
+        ]
+        # The DELETE rechecks the upload time: SQLite ignores FOR UPDATE, and on
+        # PostgreSQL a replacement can commit after the snapshot, before the lock.
+        deleted = (
+            db.query(LiveChartImage)
+            .filter(LiveChartImage.id.in_(ids), LiveChartImage.received_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        chart_images += deleted
+        if len(ids) < BATCH_SIZE:
+            return chart_images
+
+
 def purge_live(
-    session_factory: Callable[[], Session], *, retention_days: int, now: datetime
+    session_factory: Callable[[], Session],
+    *,
+    retention_days: int,
+    chart_image_retention_days: int,
+    now: datetime,
 ) -> dict[str, int]:
     """Purge expired live data, jobs and events in committed batches."""
     cutoff = now - timedelta(days=retention_days)
     settings = PlatformSettings()
+    # chart_images counts screenshots deleted with their turn;
+    # chart_images_expired counts those deleted alone, by upload age.
     counts = {
         "turns": 0,
         "scores": 0,
         "chart_images": 0,
+        "chart_images_expired": 0,
         "canaries": 0,
         "days": 0,
         "jobs": 0,
@@ -84,6 +121,9 @@ def purge_live(
     with session_factory() as db:
         counts["turns"], counts["scores"], counts["chart_images"] = _purge_turns(
             db, cutoff.date()
+        )
+        counts["chart_images_expired"] = _purge_expired_chart_images(
+            db, now - timedelta(days=chart_image_retention_days)
         )
         for name, model, condition in (
             ("canaries", LiveCanaryResult, LiveCanaryResult.checked_at < cutoff),

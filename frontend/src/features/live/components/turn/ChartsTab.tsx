@@ -58,7 +58,11 @@ export function ChartEvidenceBody({ chart, specs }: { chart: ChartEvidence; spec
 }
 
 export function ChartsTab({ data }: { data: LiveTurnDetail }) {
-  const charts = chartsOf(data.summary, data.chart_images);
+  const charts = chartsOf(
+    data.summary,
+    data.chart_images,
+    data.chart_images_expired ? (data.chart_image_retention_days ?? null) : null,
+  );
   if (!charts.length)
     return (
       <EvidenceCard title="Charts">

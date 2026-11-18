@@ -222,6 +222,9 @@ class PlatformSettings(BaseSettings):
 
     # Live evaluation (feature round 2026-11-live-evaluation)
     live_retention_days: int = Field(default=180, ge=1)
+    # Chart screenshots are deleted this many days after their upload; the turn
+    # and its scores stay until live_retention_days.
+    live_chart_image_retention_days: int = Field(default=30, ge=1)
     live_stale_after_seconds: int = Field(default=300, ge=30)
     live_turn_batch_max: int = Field(default=100, ge=1, le=1000)
     live_detail_max_bytes: int = Field(default=524288, ge=4096)

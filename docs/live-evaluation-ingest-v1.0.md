@@ -393,8 +393,10 @@ are checked. This limit is separate from the JSON ingest body cap. At most
 
 The authentication, source lookup and path validation errors in section 6 also
 apply. Re-pushing a turn keeps images whose refs remain in `summary.charts` and
-drops images whose refs disappeared. Images follow the turn's retention
-(180 days by default) and are removed when the project is deleted.
+drops images whose refs disappeared. By default the platform deletes an image
+30 days after its upload (`QYM_LIVE_CHART_IMAGE_RETENTION_DAYS`); uploading it
+again starts a new period. Images are also removed with their turn (180 days
+by default) and when the project is deleted.
 
 
 ### 3.9 `GET /sources/{key}/control` — Control document

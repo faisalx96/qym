@@ -559,6 +559,7 @@ class MaintenanceWorker:
             purge_live(
                 self.session_factory,
                 retention_days=settings.live_retention_days,
+                chart_image_retention_days=settings.live_chart_image_retention_days,
                 now=utc_now_naive(),
             )
         except Exception:  # noqa: BLE001

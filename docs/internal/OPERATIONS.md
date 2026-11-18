@@ -32,6 +32,7 @@ sure one process runs a given job.
 | `QYM_WEB_WORKERS` | `1` | HTTP processes per API pod. Above 1, see "Several web processes in one pod" |
 | `QYM_MAINTENANCE_MODE` | `false` | Reject ingest with 503 during a window |
 | `QYM_LIVE_RETENTION_DAYS` | `180` | Days of live turns, scores and canary checks to retain; day rows have a separate two-year retention |
+| `QYM_LIVE_CHART_IMAGE_RETENTION_DAYS` | `30` | Days a live chart screenshot is kept after its upload; the turn and its scores stay for `QYM_LIVE_RETENTION_DAYS` |
 | `QYM_LIVE_STALE_AFTER_SECONDS` | `300` | Seconds since the last received heartbeat before a live evaluation worker is shown as stale |
 | `QYM_LIVE_TURN_BATCH_MAX` | `100` | Maximum number of turns accepted in one live ingest batch |
 | `QYM_LIVE_DETAIL_MAX_BYTES` | `524288` | Maximum serialized bytes of a live turn's detail; larger detail is dropped and flagged in its summary |
@@ -1024,9 +1025,14 @@ database configuration.
 `QYM_LIVE_CHART_IMAGE_MAX_BYTES` (default 2097152, 2 MiB; minimum 65536) and
 `QYM_LIVE_CHART_IMAGES_PER_TURN` (default 10) cap each image and the number of
 distinct image refs per turn. Budget roughly 150–300 KB per chart: about
-15 MB/day at 100 turns/day with 40 % charted turns, or 2.7 GB at the default
-180-day retention. Images follow turn retention and project deletion; backups
-remain a single `pg_dump`.
+15 MB/day at 100 turns/day with 40 % charted turns, or 450 MB at the default
+30-day image retention. Retention deletes an image 30 days after its upload
+(`QYM_LIVE_CHART_IMAGE_RETENTION_DAYS`). The period counts from the upload, not
+from the turn's day, so a backfill's new screenshot of an old turn is kept for
+the full period. The turn, its scores and the chart reading stay for
+`QYM_LIVE_RETENTION_DAYS`; the turn page then says that the screenshot is no
+longer stored. Images are also deleted with their turn and on project deletion;
+backups remain a single `pg_dump`.
 
 Platform env settings for screenshots and worker control:
 
@@ -1034,6 +1040,7 @@ Platform env settings for screenshots and worker control:
 |---|---|---|
 | `QYM_LIVE_CHART_IMAGE_MAX_BYTES` | `2097152` | Maximum bytes per PNG (2 MiB; minimum 65536) |
 | `QYM_LIVE_CHART_IMAGES_PER_TURN` | `10` | Maximum distinct chart image refs per turn |
+| `QYM_LIVE_CHART_IMAGE_RETENTION_DAYS` | `30` | Days a screenshot is kept after its upload |
 | `QYM_LIVE_JOBS_RETENTION_DAYS` | `90` | Job history retention in days |
 | `QYM_LIVE_EVENTS_RETENTION_DAYS` | `30` | Worker event retention in days |
 | `QYM_LIVE_JOB_MAX_DAYS` | `31` | Maximum inclusive days per job |
@@ -1170,6 +1177,13 @@ the current status and the affected day's gaps when investigating missing turns.
 retention of live turns, scores and canary checks. Day rows have separate
 two-year retention. Configure it on the qym process that runs retention, and
 keep the background loops running in the single-server or split layout.
+
+`QYM_LIVE_CHART_IMAGE_RETENTION_DAYS` (default 30) is read by the same process.
+It deletes a chart screenshot that many days after its upload and leaves the
+turn and its scores in place. A value at or above `QYM_LIVE_RETENTION_DAYS`
+has no practical effect: the images then go with their turns. The
+`live_retention` audit entry counts these deletions as `chart_images_expired`,
+apart from `chart_images`, the screenshots deleted with their turns.
 
 ### Troubleshooting
 

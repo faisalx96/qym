@@ -250,6 +250,8 @@ def project_live_turn_detail(
         turn_id,
         _specs(db, selected),
         project_slug=project_slug,
+        chart_image_retention_days=PlatformSettings().live_chart_image_retention_days,
+        now=live_overview.utcnow(),
         root_path=request.scope.get("root_path", ""),
     )
     if payload is None:

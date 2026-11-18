@@ -546,6 +546,67 @@ def test_turn_detail_loads_chart_metadata_without_bytes(
         assert response.status_code == 200, response.text
 
 
+def test_turn_detail_reports_chart_image_retention(
+    client, session_factory, chart_turn, monkeypatch
+):
+    from qym_platform.api.live_ingest import TurnBody
+    from qym_platform.services.live_ingest import upsert_turns
+    from qym_platform.settings import PlatformSettings
+
+    received = datetime(2026, 11, 1, 11, 0, 1)
+    resent = datetime(2026, 12, 20, 9, 30)
+    clock = {"now": received + timedelta(days=30)}
+    monkeypatch.setattr(
+        "qym_platform.services.live_overview.utcnow", lambda: clock["now"]
+    )
+    monkeypatch.setattr("qym_platform.services.live_ingest.utcnow", lambda: resent)
+
+    def retention():
+        response = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        return body["chart_image_retention_days"], body["chart_images_expired"]
+
+    def chart_source(db):
+        return db.query(LiveSource).filter_by(project_id="live-project-1").one()
+
+    with session_factory() as db:
+        turn = db.query(LiveTurn).filter_by(
+            source_id=chart_source(db).id, turn_id=TURN_ID
+        )
+        assert turn.one().received_at == received
+    # Like retention, the limit is passed only after the full 30 days.
+    assert retention() == (30, False)
+    clock["now"] += timedelta(seconds=1)
+    assert retention() == (30, True)
+
+    # A re-send does not move the limit: it counts from the first receipt.
+    with session_factory() as db:
+        report = upsert_turns(
+            db,
+            chart_source(db),
+            [
+                TurnBody(
+                    turn_id=TURN_ID,
+                    turn_at=datetime(2026, 11, 1, 10),
+                    status="completed",
+                    question="Question 1",
+                    summary={"charts": [{"ref": REF}]},
+                )
+            ],
+            PlatformSettings(),
+        )
+        assert report["updated"] == 1
+        db.commit()
+        row = turn.with_session(db).one()
+        assert row.received_at == received
+        assert row.summary["replaced_at"] == "2026-12-20T09:30:00Z"
+    assert retention() == (30, True)
+
+    monkeypatch.setenv("QYM_LIVE_CHART_IMAGE_RETENTION_DAYS", "45")
+    assert retention() == (45, False)
+
+
 def test_chart_image_urls_quote_turn_ref_and_source(client, session_factory, chart_turn):
     ref = "chart:one"
     with session_factory() as db:

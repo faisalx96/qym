@@ -25,6 +25,15 @@ const data = {
   },
   chart_images: { first: image },
 };
+// The second chart has no image row, but its vision score shows that a screenshot was read.
+const expired = {
+  ...data,
+  summary: {
+    charts: [data.summary.charts[0]!, { ref: 'second', kind: 'line', scores: { chart_vision: 0.5 } }],
+  },
+  chart_images_expired: true,
+  chart_image_retention_days: 30,
+};
 const clients: QueryClient[] = [];
 afterEach(() => clients.splice(0).forEach((client) => client.clear()));
 
@@ -59,6 +68,45 @@ describe('live chart screenshots', () => {
     expect(missing).toHaveTextContent('No screenshot was captured');
     expect(missing).toHaveTextContent(
       "The chart could not be checked by eye. The fidelity score compares the chart's data with the SQL result only.",
+    );
+    expect(container.querySelector('[data-live-chart-expired]')).not.toBeInTheDocument();
+  });
+
+  it('says the screenshot is no longer stored once the turn is past the screenshot retention', () => {
+    const { container, rerender } = render(<ChartsTab data={expired} />);
+    // A chart that still has its image shows it; only the chart without one changes.
+    expect(screen.getByRole('img', { name: 'bar chart — Monthly totals increased.' })).toBeInTheDocument();
+    expect(container.querySelector('[data-live-chart-missing]')).not.toBeInTheDocument();
+    const removed = container.querySelectorAll('[data-live-chart-expired]');
+    expect(removed).toHaveLength(1);
+    expect(removed[0]!.querySelector('[data-empty-state]')).toBeInTheDocument();
+    expect(removed[0]).toHaveTextContent('The screenshot is no longer stored');
+    expect(removed[0]).toHaveTextContent(
+      'Screenshots are removed 30 days after upload. The scores and the text read from the chart are kept.',
+    );
+    expect(removed[0]).not.toHaveTextContent('No screenshot was captured');
+    rerender(<ChartsTab data={{ ...expired, chart_image_retention_days: 1 }} />);
+    expect(container.querySelector('[data-live-chart-expired]')).toHaveTextContent(
+      'Screenshots are removed 1 day after upload.',
+    );
+  });
+
+  it('keeps the missing state on an expired turn when nothing shows that a screenshot was read', () => {
+    // The second chart of `data` has no reading and no vision or design score.
+    const { container } = render(
+      <ChartsTab data={{ ...data, chart_images_expired: true, chart_image_retention_days: 30 }} />,
+    );
+    expect(container.querySelector('[data-live-chart-expired]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-live-chart-missing]')).toHaveTextContent(
+      'No screenshot was captured',
+    );
+  });
+
+  it('keeps the missing state while the turn is inside the screenshot retention', () => {
+    const { container } = render(<ChartsTab data={{ ...expired, chart_images_expired: false }} />);
+    expect(container.querySelector('[data-live-chart-expired]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-live-chart-missing]')).toHaveTextContent(
+      'No screenshot was captured',
     );
   });
 
@@ -128,6 +176,22 @@ describe('live chart screenshots', () => {
   it('matches images by ref and leaves missing refs and images null', () => {
     expect(chartsOf(data.summary, data.chart_images).map((chart) => chart.image)).toEqual([image, null]);
     expect(chartsOf({ charts: [{}, { ref: 'toString' }] }).map((chart) => chart.image)).toEqual([null, null]);
+  });
+
+  it('marks a screenshot as removed only for a chart without an image whose picture was read', () => {
+    const charts = [
+      { ref: 'first', reading: 'Still has its image.' },
+      { reading: 'Read from the picture.' },
+      { scores: { chart_vision: 0 } },
+      { scores: { chart_design: 0.7 } },
+      { scores: { chart_fidelity: 1 } },
+      { reading: '  ', scores: { chart_vision: 'n/a' } },
+      {},
+    ];
+    const expiry = (days?: number) =>
+      chartsOf({ charts }, data.chart_images, days).map((chart) => chart.imageExpiredAfterDays);
+    expect(expiry(30)).toEqual([null, 30, 30, 30, null, null, null]);
+    expect(expiry()).toEqual([null, null, null, null, null, null, null]);
   });
 });
 

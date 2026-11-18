@@ -359,6 +359,8 @@ export function toolsOf(summary: Record<string, unknown>): ToolsEvidence | null 
 
 export interface ChartEvidence {
   image: LiveChartImage | null;
+  /** The retention length in days when retention removed a screenshot that was read, else null. */
+  imageExpiredAfterDays: number | null;
   ref: string | null;
   kind: string | null;
   scores: Record<string, number>;
@@ -369,21 +371,33 @@ export interface ChartEvidence {
 export function chartsOf(
   summary: Record<string, unknown>,
   images: Record<string, LiveChartImage> = {},
+  imagesExpiredAfterDays: number | null = null,
 ): ChartEvidence[] {
-  return recordsOf(recordOf(summary)?.charts).map((chart) => ({
-    image:
-      typeof chart.ref === 'string' && Object.hasOwn(images, chart.ref) ? (images[chart.ref] ?? null) : null,
-    ref: stringOf(chart.ref),
-    kind: stringOf(chart.kind),
-    scores: Object.fromEntries(
+  return recordsOf(recordOf(summary)?.charts).map((chart) => {
+    const image =
+      typeof chart.ref === 'string' && Object.hasOwn(images, chart.ref) ? (images[chart.ref] ?? null) : null;
+    const scores: Record<string, number> = Object.fromEntries(
       Object.entries(recordOf(chart.scores) ?? {}).flatMap(([key, value]) => {
         const score = numberOf(value);
         return score === null ? [] : [[key, score]];
       }),
-    ),
-    issues: stringsOf(chart.issues),
-    reading: stringOf(chart.reading),
-  }));
+    );
+    const reading = stringOf(chart.reading);
+    // Only these come from the picture; without them no screenshot is known to have existed.
+    const wasRead =
+      Boolean(reading?.trim()) ||
+      Object.hasOwn(scores, 'chart_vision') ||
+      Object.hasOwn(scores, 'chart_design');
+    return {
+      image,
+      imageExpiredAfterDays: !image && wasRead ? imagesExpiredAfterDays : null,
+      ref: stringOf(chart.ref),
+      kind: stringOf(chart.kind),
+      scores,
+      issues: stringsOf(chart.issues),
+      reading,
+    };
+  });
 }
 
 export interface EvalMeta extends Record<string, unknown> {

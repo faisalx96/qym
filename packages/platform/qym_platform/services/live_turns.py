@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from itertools import islice
 from math import isfinite
 from typing import Any, Iterator, Mapping, Optional, Sequence
@@ -506,6 +506,8 @@ def turn_detail(
     specs: Sequence[LiveMetricSpec],
     *,
     project_slug: str,
+    chart_image_retention_days: int,
+    now: datetime,
     root_path: str = "",
 ) -> Optional[dict[str, Any]]:
     """Return a full turn with score definitions and ordered conversation siblings."""
@@ -561,6 +563,12 @@ def turn_detail(
             }
             for image in images
         },
+        # Deleted screenshots leave no row, so the page infers the removal: a
+        # chart without an image on a turn first received before the limit.
+        # A re-send does not move received_at; an image it brought has a row.
+        "chart_image_retention_days": chart_image_retention_days,
+        "chart_images_expired": turn.received_at
+        < now - timedelta(days=chart_image_retention_days),
         "scores": [
             {
                 **_columns(score, [col.key for col in LiveTurnScore.__table__.columns]),
