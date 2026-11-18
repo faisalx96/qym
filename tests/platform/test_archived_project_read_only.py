@@ -237,6 +237,9 @@ REFUSED = [
     ("POST", "/api/runs/delete", "/api/runs/delete", {"json": {"file_path": "r1"}}, MGR),
     ("POST", "/api/runs/restore", "/api/runs/restore", {"json": {"run_id": "r-trash"}}, ADMIN),
     ("POST", "/api/runs/{run_id}/force-stop", "/api/runs/r1/force-stop", None, ADMIN),
+    # Bookmarks are project content: an archived project takes none and gives none back.
+    ("PUT", "/api/runs/{run_id}/bookmark", "/api/runs/r1/bookmark", {"json": {"visibility": "public", "note": "keep"}}, MEMBER),
+    ("DELETE", "/api/runs/{run_id}/bookmark", "/api/runs/r1/bookmark", None, MEMBER),
     ("DELETE", "/api/runs/{run_id}/passes/{pass_number}", "/api/runs/r1/passes/1", None, MGR),
     ("DELETE", "/api/runs/{run_id}/passes", "/api/runs/r1/passes", {"json": {"pass_numbers": [1]}}, MGR),
     # Analysis and diagnosis writes addressed by run id.

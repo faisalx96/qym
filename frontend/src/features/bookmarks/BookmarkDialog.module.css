@@ -1,0 +1,26 @@
+/* Bookmark editor body: composes Textarea, SegmentedControl and Switch; one column with the app rhythm. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--error);
+}

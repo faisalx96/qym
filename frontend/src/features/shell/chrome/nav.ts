@@ -55,6 +55,7 @@ export function projectNav(slug: string): NavItem[] {
       hiddenWhenArchived: true,
     },
     { id: 'datasets', label: 'Datasets', icon: 'database', to: projectPath(slug, 'datasets') },
+    { id: 'bookmarks', label: 'Bookmarks', icon: 'bookmark', to: projectPath(slug, 'bookmarks') },
     { id: 'settings', label: 'Project settings', icon: 'settings', to: projectPath(slug, 'settings') },
   ];
 }
@@ -97,6 +98,7 @@ const PAGE_LABELS: Record<string, string> = {
   analysis: 'Auto-analysis',
   analyzer: 'Auto-analysis',
   settings: 'Project settings',
+  bookmarks: 'Bookmarks',
   'run-detail': 'Run',
   'not-found': 'Not found',
 };

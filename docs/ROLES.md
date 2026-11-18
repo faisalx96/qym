@@ -90,6 +90,8 @@ Roles:
 | POST | `/api/runs/{run_id:path}/analyze-preview` | reader |
 | POST | `/api/runs/{run_id:path}/analyze-stream` | owner_or_manager |
 | POST | `/api/runs/{run_id:path}/analyze-test` | member |
+| DELETE | `/api/runs/{run_id}/bookmark` | member |
+| PUT | `/api/runs/{run_id}/bookmark` | member |
 | POST | `/api/runs/{run_id}/force-stop` | admin |
 | POST | `/api/runs/{run_id}/items/details` | reader |
 | POST | `/api/runs/{run_id}/items/reasons` | reader |
