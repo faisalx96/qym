@@ -47,6 +47,7 @@ export const ROUTES = {
     analysis: 'analysis',
     compare: 'compare',
     reviews: 'reviews',
+    bookmarks: 'bookmarks',
     settings: 'settings',
     runs_detail: 'runs/*',
   },

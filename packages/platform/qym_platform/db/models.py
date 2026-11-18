@@ -1354,6 +1354,46 @@ class Run(Base):
         }
 
 
+class BookmarkVisibility(str, enum.Enum):
+    """Who sees a run bookmark: its author only, or every member of the project."""
+
+    PRIVATE = "private"
+    PUBLIC = "public"
+
+
+class RunBookmark(Base):
+    """A user's bookmark of a run, with a markdown note (api/bookmarks.py).
+
+    One per user and run. A ``public`` bookmark shows to every member of the
+    project, a ``private`` one to its author only; ``pinned`` bookmarks lead
+    the project's bookmark list, newest pin first. Rows go with the run
+    (ON DELETE CASCADE, so retention's purge needs no extra step) and with
+    the user. The unique key doubles as the run index.
+    """
+
+    __tablename__ = "run_bookmarks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    visibility: Mapped[BookmarkVisibility] = mapped_column(
+        _string_enum(BookmarkVisibility, 10),
+        default=BookmarkVisibility.PRIVATE,
+        server_default=BookmarkVisibility.PRIVATE.value,
+        nullable=False,
+    )
+    note: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    pinned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (UniqueConstraint("run_id", "user_id", name="uq_run_bookmarks_run_user"),)
+
+
 class RunDataset(Base):
     """One dataset version a union run evaluated (runs with two or more only)."""
 

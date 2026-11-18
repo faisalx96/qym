@@ -358,6 +358,15 @@ For authentication, payloads, limits and reconciliation, see the [Live evaluatio
 
 By default, retention removes turns, their scores and canary results after 180 days; daily counter rows remain for 730 days. Older counters can therefore outlive the detailed evidence and score aggregates computed from retained turns.
 
+## Bookmarks
+
+A bookmark saves a run you want to find again, with a note in markdown: why it matters, what to compare it with, what was wrong. Open a run and press **Bookmark** in its header; the dialog takes the note, the visibility and whether the bookmark is pinned. Press it again to change or remove the bookmark.
+
+- **Private or public.** A private bookmark is yours alone. A public one shows to every member of the project with your name, so a team can mark its baselines and the runs behind a decision. Each person has at most one bookmark per run, so your public note on a run sits beside the notes others left on it.
+- **Pinned.** A pinned bookmark leads the lists, the newest pin first; unpin it to let it fall back into date order.
+- **The Bookmarks page.** **Bookmarks** in the project sidebar lists the bookmarks you can see: pinned ones first, then the newest. Search matches the run name, the run id and the note; **Mine** keeps only your own. Each entry opens its run. The run page's bookmark section shows the public bookmarks other members left on that run.
+- **Who can bookmark.** Project members and managers. Viewers read the public bookmarks and save none; an archived project keeps its bookmarks but takes no change until it is unarchived. A bookmark of a deleted run leaves the lists and comes back with the run when it is restored.
+
 ## Feedback
 
 Feedback turns a need into a well-formed request. Open **Feedback** in the sidebar (every signed-in person sees it, in a project or not).

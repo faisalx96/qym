@@ -36,6 +36,7 @@ from qym_platform.api.dashboard import router as dashboard_router
 from qym_platform.api.dashboard_stats import router as dashboard_stats_router
 from qym_platform.api.admin import router as admin_router
 from qym_platform.api.feedback import router as feedback_router
+from qym_platform.api.bookmarks import router as bookmarks_router
 from qym_platform.api.spa import RESERVED_PREFIXES, SPA_ASSETS_PREFIX, include_spa_fallback, router as spa_router, spa_dir
 from qym_platform.services.analysis_jobs import (
     analysis_job_manager,
@@ -283,6 +284,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(step_latency_router)
     app.include_router(run_datasets_router)
     app.include_router(live_router)
+    app.include_router(bookmarks_router)  # before runs_router (its {run_id:path} is a catch-all)
     app.include_router(runs_router)
     serves_ingest = layout.service != "main" or layout.main_include_ingest
     if serves_ingest:
