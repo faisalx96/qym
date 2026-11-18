@@ -84,6 +84,65 @@ def test_guide_chart_image_request_matches_openapi():
     assert "content" not in operation["responses"][status]
 
 
+def test_guide_chart_snapshot_and_style_sections_match_the_routes():
+    from qym_platform.api.live_ingest import ChartSnapshotBody
+    from qym_platform.services.live_ingest import check_snapshot_html
+    from qym_platform.settings import PlatformSettings
+
+    guide = GUIDE.read_text(encoding="utf-8")
+    app = FastAPI()
+    app.include_router(live_ingest_router)
+    paths = app.openapi()["paths"]
+    sections = {}
+
+    def details(text):
+        return set(re.findall(r"^\| `\d+` \| `([^`]+)` \|", text, flags=re.MULTILINE))
+
+    for number in ("3.13", "3.14"):
+        section = guide.split(f"### {number} ", 1)[1].split("\n### ", 1)[0]
+        method, path = re.match(r"`(\w+) ([^`]+)`", section).groups()
+        operation = paths[live_ingest_router.prefix + path][method.lower()]
+        assert "Response: `204 No Content`" in section
+        assert "204" in operation["responses"]
+        (content_type,) = operation["requestBody"]["content"]
+        assert f'-H "Content-Type: {content_type}"' in section
+        sections[number] = section
+    assert {
+        "sha256 does not match the body",
+        "chart style is not UTF-8",
+        "unsupported content type",
+    } <= details(sections["3.13"])
+
+    section = sections["3.14"].split("\n---", 1)[0]
+    example = re.search(r"```json\n(.*?)\n```", section, flags=re.DOTALL)
+    assert example is not None
+    body = ChartSnapshotBody.model_validate_json(example.group(1))
+    check_snapshot_html(body.html, PlatformSettings().live_chart_snapshot_max_bytes)
+    for field in ChartSnapshotBody.model_fields:
+        assert f"| `{field}` |" in section
+    assert {
+        "turn not found",
+        "chart not found",
+        "chart snapshot limit reached",
+        "chart style not found",
+        "snapshot html must start with an <html> tag followed by <head></head>",
+        "snapshot html must contain <head></head> exactly once",
+        "snapshot html is not valid text",
+    } <= details(section)
+    for tag in (
+        "script",
+        "iframe",
+        "object",
+        "embed",
+        "link",
+        "meta",
+        "base",
+        "template",
+        "noscript",
+    ):
+        assert f"`<{tag}>`" in section
+
+
 def test_guide_python_example_runs_against_the_app(
     client, session_factory, monkeypatch, capsys
 ):

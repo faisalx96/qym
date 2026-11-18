@@ -1,4 +1,7 @@
-# Live Evaluation Ingest API — Integration Guide v1.2
+# Live Evaluation Ingest API — Integration Guide v1.3
+
+v1.3 — chart snapshots (the drawn chart as text) and their stylesheets. Additive;
+PNG uploads keep working.
 
 v1.2 — control document, job progress, worker events, heartbeat `control` block.
 
@@ -24,7 +27,8 @@ Content-Type: application/json
 ```
 
 Chart image uploads use `Content-Type: image/png` and a raw PNG body instead
-(section 3.8).
+(section 3.8). Stylesheet uploads use `Content-Type: text/css` and the raw
+stylesheet (section 3.13).
 
 The key must belong to the project in the path. Its owner must remain active and
 retain project access. An archived project refuses ingestion. UI authentication
@@ -65,8 +69,9 @@ DAY="2026-11-01"
    `current_day`, `last_poll_at`, and changed worker metadata.
 5. After each evaluation, push the turn and its complete score set. Batch buffered
    turns within the configured cap and inspect every result for rejection.
-   After a turn is accepted, upload any chart screenshots using its
-   `summary.charts[].ref` values.
+   After a turn is accepted, upload each chart's evidence using its
+   `summary.charts[].ref` values: a snapshot of the drawn chart (section 3.14),
+   or a PNG screenshot (section 3.8) when the chart cannot be captured as text.
 6. After each probe sweep, push the canary results with their original check times.
 7. On restart or during reconciliation, call `GET .../turns/ids?day=YYYY-MM-DD` and
    compare the returned list with local IDs. Push missing or re-evaluated turns.
@@ -398,6 +403,10 @@ drops images whose refs disappeared. By default the platform deletes an image
 again starts a new period. Images are also removed with their turn (180 days
 by default) and when the project is deleted.
 
+A chart keeps one kind of evidence, and the latest upload wins: storing a PNG
+removes a snapshot stored for the same turn and `ref` (section 3.14), and
+storing a snapshot removes the PNG.
+
 
 ### 3.9 `GET /sources/{key}/control` — Control document
 
@@ -618,6 +627,117 @@ when enabled, and use event component `evaluator_traces` for related problems.
 `running.values.evaluator_traces` is optional: older workers may omit it. A
 missing section, like `enabled: false`, means evaluator traces are off.
 
+### 3.13 `PUT /sources/{key}/chart-styles/{sha256}` — upload a snapshot stylesheet
+
+A chart snapshot (section 3.14) carries the chart's markup without the page
+stylesheet. Upload that stylesheet once per renderer build: send the raw bytes
+with `Content-Type: text/css` (a `charset` parameter is allowed) and the project
+API key. `sha256` is the lower-case hexadecimal SHA-256 of the exact body, and
+the body must be valid UTF-8.
+
+```bash
+SHA=$(shasum -a 256 chart.css | cut -d' ' -f1)
+curl -sS -X PUT "$SOURCE/chart-styles/$SHA" \
+  -H "Authorization: Bearer $API_KEY" -H "Content-Type: text/css" \
+  --data-binary @chart.css
+```
+
+Response: `204 No Content`, both when the stylesheet is stored and when it is
+already present. Stylesheets are stored per source: the same file under another
+source key is a separate upload. The platform limits the body to
+`QYM_LIVE_CHART_STYLE_MAX_BYTES` (default **2097152**, 2 MiB; minimum **65536**).
+
+| HTTP / scope | Exact detail or message | Meaning / action |
+|---|---|---|
+| `413` | `The event batch exceeds ...; send smaller batches.` | Body exceeds `QYM_LIVE_CHART_STYLE_MAX_BYTES` |
+| `415` | `unsupported content type` | Send `Content-Type: text/css` |
+| `422` | `sha256 does not match the body` | The path hash is not the SHA-256 of the bytes sent |
+| `422` | `chart style is not UTF-8` | Send the stylesheet as UTF-8 text |
+| `422` | Validation detail array | `sha256` is not 64 lower-case hexadecimal characters, or the source key is invalid |
+
+A stylesheet that no stored snapshot of its source names is deleted one day
+after its last upload. Uploading it again restarts that day.
+
+### 3.14 `PUT /sources/{key}/turns/{turn_id}/charts/{ref}/snapshot` — upload a chart snapshot
+
+A snapshot is the drawn chart as text: the serialized HTML and SVG of the chart
+card as the browser rendered it. qym stores it and redraws it for the reviewer
+in a locked frame without scripts, so the markup must be complete and static.
+Send it for every chart that can be captured this way; send a PNG (section 3.8)
+for the others, for example maps drawn on a canvas. On a turn where Insightor's
+privacy guard acted, the worker sends no snapshot and uploads the PNG as before.
+The turn must already exist, and `ref` must match one of its
+`summary.charts[].ref` values.
+
+```bash
+curl -sS -X PUT "$SOURCE/turns/turn-1/charts/chart-1/snapshot" \
+  -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  --data-binary @snapshot.json
+```
+
+```json
+{
+  "format": 1,
+  "html": "<html lang=\"ar\" dir=\"rtl\"><head></head><body><div class=\"card\">...</div></body></html>",
+  "style_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "viewport_width": 1248,
+  "viewport_height": 600,
+  "box": {"x": 0, "y": 0, "width": 1248, "height": 462}
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `format` | integer, must be `1` | Snapshot format version |
+| `html` | string | One document in the form a browser serializes it. It begins, after optional whitespace, with a lower-case `<html>` start tag whose attributes are plain names or `name="value"` pairs (no `<`, `>` or `"` inside a value), followed at once by `<head></head>`. That empty head appears exactly once in the whole text, and nothing may stand before it: no element, comment or text. UTF-8 size at most `QYM_LIVE_CHART_SNAPSHOT_MAX_BYTES` (default **2097152**, 2 MiB; minimum **65536**) |
+| `style_sha256` | 64 lower-case hexadecimal characters | Stylesheet of this source to draw the snapshot with (section 3.13) |
+| `viewport_width` | integer, 1–8192 | Width in CSS pixels of the page the chart was drawn in |
+| `viewport_height` | integer, 1–32768, optional | Height in CSS pixels that page was laid out at. Send it when the look depends on it, for example a page background that follows the height; without it the chart is redrawn in a page as tall as the bottom of `box` |
+| `box` | `{x, y, width, height}` | The chart's region in that page, in CSS pixels: finite numbers, `x` and `y` from 0 to 100000, `width` above 0, `height` above 0 and at most 32768. The box must lie within the page (`x + width` at most `viewport_width + 1`) and may be at most 20 times as tall as it is wide. Stored as integers rounded outward |
+
+Response: `204 No Content` on both creation and replacement; a re-evaluation
+replaces the stored snapshot. When the chart is redrawn, qym writes a head of
+its own with the stylesheet ahead of the markup, so `html` must keep its head
+empty.
+
+The platform refuses `html` that contains, in any letter case, one of the tags
+`<script>`, `<iframe>`, `<object>`, `<embed>`, `<link>`, `<meta>`, `<base>`,
+`<template>` or `<noscript>`. The whole tag name counts: `<metadata>` and
+`<foreignObject>` are accepted, and so are `<style>` elements and `style`
+attributes. Text inside the chart is escaped by serialization, so such a
+sequence can only be a real tag; remove these elements before serializing.
+
+The frame that redraws the chart loads nothing from the network. Fonts and
+images are shown only when the stylesheet or the markup carries them as `data:`
+URLs; anything referenced by address is left out, and text then falls back to
+the reviewer's own fonts.
+
+At most `QYM_LIVE_CHART_IMAGES_PER_TURN` distinct refs may have snapshots on one
+turn (default **10**). The request body as a whole is limited to six times
+`QYM_LIVE_CHART_SNAPSHOT_MAX_BYTES` plus 4096 bytes, and never more than
+`QYM_LIVE_INGEST_MAX_BODY_BYTES`.
+
+| HTTP / scope | Exact detail or message | Meaning / action |
+|---|---|---|
+| `404` | `turn not found` | Push the turn before its snapshots |
+| `404` | `chart not found` | Use a ref declared in this turn's `summary.charts` |
+| `409` | `chart snapshot limit reached` | The turn already has the configured number of distinct snapshot refs; replacing an existing ref is allowed |
+| `412` | `chart style not found` | This source has no stylesheet with that hash: upload it (section 3.13), then repeat this request |
+| `413` | `chart snapshot html exceeds the <limit> byte limit` | `html` is larger than `QYM_LIVE_CHART_SNAPSHOT_MAX_BYTES`; send a PNG instead |
+| `413` | `The event batch exceeds ...; send smaller batches.` | The request body exceeds the body limit above |
+| `422` | `snapshot html must start with an <html> tag followed by <head></head>` | Send the whole serialized document, with nothing ahead of its empty head and plain attributes on `<html>` |
+| `422` | `snapshot html must contain <head></head> exactly once` | Empty the document's head before serializing |
+| `422` | `snapshot html must not contain <tag` | Remove the named element; the message ends with its name, for example `<script` |
+| `422` | `snapshot html is not valid text` | `html` contains an unpaired surrogate |
+| `422` | Validation detail array | Missing or extra field, wrong `format`, `viewport_width`, `viewport_height` or `box` out of range (`box must lie within viewport_width`, `box height must be at most 20 times its width`), malformed `style_sha256` |
+
+The authentication, source lookup and path validation errors in section 6 also
+apply. Like images, snapshots follow a re-push of their turn: refs that remain
+in `summary.charts` keep their snapshot, refs that disappeared lose it.
+Snapshots are kept as long as their turn (180 days by default); the 30-day
+image rule does not apply to them. Storing a snapshot removes a PNG stored for
+the same turn and `ref`, and storing a PNG removes the snapshot.
+
 ---
 
 ## 4. Turn, summary, and Score schema
@@ -694,7 +814,7 @@ do not recognize them.
 | `tools.failures[]` | `{name: string, step: integer, error: string, fault: string}` | Failed call and fault classification |
 | `tools.list[]` | `{name: string, step: integer, ok: boolean}` | Observed calls in sequence |
 | `sql_notes` | `{reused_by_judges: boolean, dialect_ok: boolean, validator_ok: boolean}` | Query reuse and validation findings |
-| `charts` | `[{ref: string, kind: string, scores: {name: number}, issues: string[], reading: string}]` | Chart references, types, metric values, issues and interpretation; `charts[].ref` links each optional screenshot uploaded through section 3.8 |
+| `charts` | `[{ref: string, kind: string, scores: {name: number}, issues: string[], reading: string}]` | Chart references, types, metric values, issues and interpretation; `charts[].ref` links each optional snapshot (section 3.14) or screenshot (section 3.8) |
 | `services` | `{name: {status: string, score: number or null, fault: string or null, signals: object}}` | Per-service state and evidence; e.g. status `ok`, `failed`, `skipped`; service names are data |
 | `manifest_hash` | string | Reference/configuration manifest identifier |
 | `evaluation_failed` | boolean | Whether evaluation itself failed |
@@ -818,7 +938,8 @@ null numeric score.
 - All six JSON-body POST/PUT routes enforce `QYM_LIVE_INGEST_MAX_BODY_BYTES`
   (default **67108864**, 64 MiB; minimum **1048576**). Both `Content-Length`
   and streamed bytes are checked before parsing JSON; oversized bodies return
-  `413`. There is no API rate limit in v1.1.
+  `413`. The snapshot route has its own, smaller body limit (section 3.14).
+  There is no API rate limit in v1.1.
 - Non-finite numbers (`NaN`, `Infinity`, `-Infinity`) are rejected in numeric
   scores, turn/canary latency, and metric thresholds. A turn is also rejected
   with `non-finite number in JSON` if any nested value in its `summary`, `detail`,
@@ -961,8 +1082,8 @@ print(json.dumps(turn_ids))
 Paths below use the router's literal `{key:path}` and `{turn_id:path}` notation.
 `:path` is a route converter, not text to send; substitute the key or turn ID as
 in the examples. On the JSON routes it allows invalid slash-containing source
-keys to reach validation and receive `422`; the image route accepts turn IDs
-containing slashes.
+keys to reach validation and receive `422`; the image and snapshot routes
+accept turn IDs containing slashes.
 Prepend the deployed ingestion alias prefix when required. The `day` query
 parameter is mandatory on the turns/ids route.
 
@@ -974,10 +1095,12 @@ parameter is mandatory on the turns/ids route.
 | `PUT` | `/v1/projects/{project_id}/live/sources/{key:path}/days/{day}` | Replace daily counters | `200` |
 | `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/turns` | Create/replace turns with per-turn results | `200` |
 | `PUT` | `/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/image` | Create/replace chart screenshot (raw PNG) | `204` |
+| `PUT` | `/v1/projects/{project_id}/live/sources/{key}/turns/{turn_id:path}/charts/{ref}/snapshot` | Create/replace chart snapshot (JSON) | `204` |
+| `PUT` | `/v1/projects/{project_id}/live/sources/{key}/chart-styles/{sha256}` | Store a snapshot stylesheet (raw CSS) | `204` |
 | `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/canaries` | Insert checks once per name and time | `200` |
 | `GET` | `/v1/projects/{project_id}/live/sources/{key:path}/turns/ids` | Reconcile IDs (`?day=YYYY-MM-DD`) | `200` |
 | `GET` | `/v1/projects/{project_id}/live/sources/{key:path}/control` | Read worker control document | `200` / `304` |
 | `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/jobs/{job_id}/progress` | Report job progress | `200` |
 | `POST` | `/v1/projects/{project_id}/live/sources/{key:path}/events` | Report worker events | `200` |
 
-Changelog: v1.2 (2026-11): control document, job progress, worker events, heartbeat `control` block; v1.1 (2026-11): chart images; v1.0 (2026-11): first version.
+Changelog: v1.3 (2026-11): chart snapshots and their stylesheets; v1.2 (2026-11): control document, job progress, worker events, heartbeat `control` block; v1.1 (2026-11): chart images; v1.0 (2026-11): first version.

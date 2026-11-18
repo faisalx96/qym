@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
@@ -18,6 +19,8 @@ from sqlalchemy.sql.elements import ColumnElement
 from qym_platform.datetime_utils import to_api_timestamp
 from qym_platform.db.models import (
     LiveChartImage,
+    LiveChartSnapshot,
+    LiveChartStyle,
     LiveMetricSpec,
     LiveSource,
     LiveTurn,
@@ -499,6 +502,38 @@ def chart_image(
     )
 
 
+def chart_snapshot(
+    db: Session, source: LiveSource, turn_id: str, ref: str
+) -> Optional[LiveChartSnapshot]:
+    """Look up a chart snapshot within the selected source and turn."""
+    return (
+        db.query(LiveChartSnapshot)
+        .join(LiveTurn, LiveTurn.id == LiveChartSnapshot.turn_pk)
+        .filter(
+            LiveTurn.source_id == source.id,
+            LiveTurn.turn_id == turn_id,
+            LiveChartSnapshot.ref == ref,
+        )
+        .first()
+    )
+
+
+def chart_style(
+    db: Session, source: LiveSource, sha256: str
+) -> Optional[LiveChartStyle]:
+    """Look up a stylesheet of the selected source by its content hash."""
+    return (
+        db.query(LiveChartStyle)
+        .filter(LiveChartStyle.source_id == source.id, LiveChartStyle.sha256 == sha256)
+        .first()
+    )
+
+
+def snapshot_version(sha256: str, style_sha256: str) -> str:
+    """Name one stored snapshot together with the stylesheet it refers to."""
+    return hashlib.sha256(f"{sha256}:{style_sha256}".encode("ascii")).hexdigest()
+
+
 def turn_detail(
     db: Session,
     source: LiveSource,
@@ -541,6 +576,27 @@ def turn_detail(
         f"{root_path.rstrip('/')}/api/projects/{quote(project_slug, safe='')}/live/chart-image"
         f"?source={quote(source.key, safe='')}&turn_id={quote(turn_id, safe='')}"
     )
+    # Metadata only: the markup itself is fetched per chart, as JSON.
+    snapshots = (
+        db.query(
+            LiveChartSnapshot.ref,
+            LiveChartSnapshot.html_size,
+            LiveChartSnapshot.sha256,
+            LiveChartSnapshot.style_sha256,
+            LiveChartSnapshot.viewport_width,
+            LiveChartSnapshot.viewport_height,
+            LiveChartSnapshot.box_x,
+            LiveChartSnapshot.box_y,
+            LiveChartSnapshot.box_width,
+            LiveChartSnapshot.box_height,
+        )
+        .filter(LiveChartSnapshot.turn_pk == turn.id)
+        .all()
+    )
+    live_base = (
+        f"{root_path.rstrip('/')}/api/projects/{quote(project_slug, safe='')}/live"
+    )
+    source_query = f"?source={quote(source.key, safe='')}"
     siblings = db.query(LiveTurn).filter(LiveTurn.source_id == source.id)
     siblings = siblings.filter(
         LiveTurn.conversation_id == turn.conversation_id
@@ -562,6 +618,31 @@ def turn_detail(
                 "byte_size": image.byte_size,
             }
             for image in images
+        },
+        "chart_snapshots": {
+            snapshot.ref: {
+                "url": (
+                    f"{live_base}/chart-snapshot{source_query}"
+                    f"&turn_id={quote(turn_id, safe='')}"
+                    f"&ref={quote(snapshot.ref, safe='')}"
+                    f"&v={snapshot_version(snapshot.sha256, snapshot.style_sha256)[:16]}"
+                ),
+                "style_url": (
+                    f"{live_base}/chart-style{source_query}"
+                    f"&sha256={snapshot.style_sha256}"
+                ),
+                "viewport_width": snapshot.viewport_width,
+                # Null from a producer that did not report the layout height.
+                "viewport_height": snapshot.viewport_height,
+                "box": {
+                    "x": snapshot.box_x,
+                    "y": snapshot.box_y,
+                    "width": snapshot.box_width,
+                    "height": snapshot.box_height,
+                },
+                "byte_size": snapshot.html_size,
+            }
+            for snapshot in snapshots
         },
         # Deleted screenshots leave no row, so the page infers the removal: a
         # chart without an image on a turn first received before the limit.

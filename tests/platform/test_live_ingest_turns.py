@@ -18,6 +18,7 @@ from _live_support import _png
 from qym_platform.db.models import (
     LiveCanaryResult,
     LiveChartImage,
+    LiveChartSnapshot,
     LiveSource,
     LiveTurn,
     LiveTurnScore,
@@ -229,6 +230,56 @@ def test_repush_keeps_surviving_chart_images_only(client, session_factory):
         other_turn = session.query(LiveTurn).filter_by(turn_id="other-turn").one()
         other_image = session.query(LiveChartImage).filter_by(turn_pk=other_turn.id).one()
         assert other_image.ref == removed_ref
+
+
+def test_repush_keeps_surviving_chart_snapshots_only(client, session_factory):
+    from test_live_ingest_chart_snapshots import _put_snapshot, _put_style
+
+    _create_source(client)
+    removed_ref = "chart_20261101_abcd1234"
+    kept_ref = "chart_20261101_ffff0000"
+    _push(
+        client,
+        [
+            _turn(summary={"charts": [{"ref": removed_ref}, {"ref": kept_ref}]}),
+            _turn("other-turn", summary={"charts": [{"ref": removed_ref}]}),
+        ],
+    )
+    assert _put_style(client).status_code == 204
+    for turn_id, ref in (
+        ("turn-1", removed_ref),
+        ("turn-1", kept_ref),
+        ("other-turn", removed_ref),
+    ):
+        uploaded = _put_snapshot(client, turn_id=turn_id, ref=ref)
+        assert uploaded.status_code == 204, uploaded.text
+    with session_factory() as session:
+        turn_pk = session.query(LiveTurn).filter_by(turn_id="turn-1").one().id
+        kept = (
+            session.query(LiveChartSnapshot)
+            .filter_by(turn_pk=turn_pk, ref=kept_ref)
+            .one()
+        )
+        kept_snapshot = (kept.id, kept.html, kept.sha256, kept.received_at)
+
+    report = _push(
+        client,
+        [_turn(summary={"charts": [{"ref": kept_ref}, {"ref": "new-chart"}, {}]})],
+    )
+    assert report["updated"] == 1 and report["rejected"] == 0
+    with session_factory() as session:
+        kept = session.query(LiveChartSnapshot).filter_by(turn_pk=turn_pk).one()
+        assert kept.ref == kept_ref
+        assert (kept.id, kept.html, kept.sha256, kept.received_at) == kept_snapshot
+        other_turn = session.query(LiveTurn).filter_by(turn_id="other-turn").one()
+        other = session.query(LiveChartSnapshot).filter_by(turn_pk=other_turn.id).one()
+        assert other.ref == removed_ref
+
+    # A re-push without charts removes the last snapshot of that turn as well.
+    report = _push(client, [_turn()])
+    assert report["updated"] == 1 and report["rejected"] == 0
+    with session_factory() as session:
+        assert session.query(LiveChartSnapshot).one().turn_pk == other_turn.id
 
 
 def test_repush_removed_chart_frees_image_limit(client, session_factory, monkeypatch):

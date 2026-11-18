@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import csv
 import io
+import zlib
 from datetime import date
 from typing import Any, Callable, Iterator, Literal, NoReturn, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -231,6 +232,90 @@ def project_live_chart_image(
         return Response(status_code=304, headers=headers)
     headers["Content-Length"] = str(row.byte_size)
     return Response(content=row.image, media_type=row.content_type, headers=headers)
+
+
+# Stored chart markup and stylesheets are data for the page to place in its
+# sandboxed frame. Opened on their own they are inert: no script, no loading.
+_CHART_DATA_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox; default-src 'none'",
+}
+
+
+def _etag_matches(request: Request, etag: str) -> bool:
+    """Compare a strong ETag with every If-None-Match candidate."""
+    return any(
+        value.strip().removeprefix("W/") == etag
+        for value in request.headers.get("if-none-match", "").split(",")
+    )
+
+
+@live_router.get(
+    "/api/projects/{project_slug}/live/chart-snapshot",
+    response_class=JSONResponse,
+)
+def project_live_chart_snapshot(
+    project_slug: str,
+    request: Request,
+    turn_id: str = Query(..., min_length=1, max_length=200),
+    ref: str = Query(..., pattern=r"^[A-Za-z0-9_.:-]{1,100}$"),
+    source: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Response:
+    """Return a chart snapshot as JSON after checking the project's read permission."""
+    selected = _selected_source(db, principal, project_slug, source)
+    row = live_turns.chart_snapshot(db, selected, turn_id, ref)
+    if row is None:
+        raise HTTPException(status_code=404, detail="chart snapshot not found")
+    etag = f'"{live_turns.snapshot_version(row.sha256, row.style_sha256)}"'
+    headers = {
+        "ETag": etag,
+        "Cache-Control": "private, max-age=86400",
+        **_CHART_DATA_HEADERS,
+    }
+    if _etag_matches(request, etag):
+        return Response(status_code=304, headers=headers)
+    # The stored markup is untrusted: it leaves qym as a JSON string, never as
+    # text/html, and the page draws it only inside a sandboxed frame.
+    return JSONResponse(
+        {
+            "html": zlib.decompress(row.html).decode("utf-8"),
+            "style_sha256": row.style_sha256,
+        },
+        headers=headers,
+    )
+
+
+@live_router.get(
+    "/api/projects/{project_slug}/live/chart-style",
+    response_class=Response,
+)
+def project_live_chart_style(
+    project_slug: str,
+    request: Request,
+    sha256: str = Query(..., pattern=r"^[0-9a-f]{64}$"),
+    source: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Response:
+    """Return a snapshot stylesheet after checking the project's read permission."""
+    selected = _selected_source(db, principal, project_slug, source)
+    row = live_turns.chart_style(db, selected, sha256)
+    if row is None:
+        raise HTTPException(status_code=404, detail="chart style not found")
+    etag = f'"{row.sha256}"'
+    # The hash names the content, so a stored stylesheet never changes.
+    headers = {
+        "ETag": etag,
+        "Cache-Control": "private, max-age=31536000, immutable",
+        **_CHART_DATA_HEADERS,
+    }
+    if _etag_matches(request, etag):
+        return Response(status_code=304, headers=headers)
+    return Response(
+        content=zlib.decompress(row.css), media_type="text/css", headers=headers
+    )
 
 
 @live_router.get("/api/projects/{project_slug}/live/turns/{turn_id:path}")

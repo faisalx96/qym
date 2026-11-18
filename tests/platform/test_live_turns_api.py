@@ -5,12 +5,21 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import re
 from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker
 from test_live_ingest_chart_images import OTHER_REF, REF, TURN_ID, _upload
+from test_live_ingest_chart_snapshots import (
+    CSS,
+    HTML,
+    _put_snapshot,
+    _put_style,
+    _sha,
+    _snapshot,
+)
 from test_live_ingest_sources import _seed_api_key
 
 from _live_support import _png, seed_week
@@ -50,6 +59,20 @@ def chart_turn(session_factory):
         turn = db.query(LiveTurn).filter_by(source_id=source.id, turn_id=TURN_ID).one()
         turn.summary = {"charts": [{"ref": REF}, {"ref": OTHER_REF}]}
         db.commit()
+
+
+@pytest.fixture()
+def chart_snapshot(client, chart_turn):
+    assert _put_style(client).status_code == 204
+    uploaded = _put_snapshot(client)
+    assert uploaded.status_code == 204, uploaded.text
+
+
+CHART_DATA_POLICY = "sandbox; default-src 'none'"
+
+
+def _snapshot_version(html=HTML, css=CSS):
+    return _sha(f"{_sha(html.encode('utf-8'))}:{_sha(css)}".encode("ascii"))
 
 
 def _turns(client, **params):
@@ -605,6 +628,306 @@ def test_turn_detail_reports_chart_image_retention(
 
     monkeypatch.setenv("QYM_LIVE_CHART_IMAGE_RETENTION_DAYS", "45")
     assert retention() == (45, False)
+
+
+def test_turn_detail_lists_chart_snapshots_without_their_markup(
+    client, session_factory, chart_snapshot
+):
+    with session_factory() as db:
+        engine = db.get_bind()
+    snapshot_queries = []
+
+    def record_queries(connection, cursor, statement, parameters, context, executemany):
+        sql = " ".join(statement.split())
+        if sql.startswith("SELECT") and "FROM live_chart_snapshots" in sql:
+            snapshot_queries.append(sql)
+
+    event.listen(engine, "before_cursor_execute", record_queries)
+    try:
+        response = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+    finally:
+        event.remove(engine, "before_cursor_execute", record_queries)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["chart_images"] == {}
+    assert body["chart_snapshots"] == {
+        REF: {
+            "url": (
+                f"{CHART_BASE}/chart-snapshot?source=worker-1&turn_id={TURN_ID}"
+                f"&ref={REF}&v={_snapshot_version()[:16]}"
+            ),
+            "style_url": f"{CHART_BASE}/chart-style?source=worker-1&sha256={_sha(CSS)}",
+            "viewport_width": 1248,
+            "viewport_height": None,
+            "box": {"x": 0, "y": 0, "width": 1248, "height": 462},
+            "byte_size": len(HTML.encode("utf-8")),
+        }
+    }
+    assert len(snapshot_queries) == 1, snapshot_queries
+    selected = snapshot_queries[0].split(" FROM ")[0]
+    assert "live_chart_snapshots.html_size" in selected
+    assert not re.search(r"live_chart_snapshots\.html\b", selected)
+    # A turn without snapshots still carries the field.
+    response = client.get(f"{BASE}/turns/{TURN_ID}", headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.json()["chart_snapshots"] == {}
+    # A producer that reports the layout height gets it back beside the width.
+    assert _put_snapshot(client, _snapshot(viewport_height=600)).status_code == 204
+    response = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+    entry = response.json()["chart_snapshots"][REF]
+    assert (entry["viewport_width"], entry["viewport_height"]) == (1248, 600)
+
+
+def test_chart_snapshot_urls_quote_and_include_the_root_path(
+    client, session_factory, chart_turn, monkeypatch
+):
+    ref = "chart:one"
+    with session_factory() as db:
+        source = db.query(LiveSource).filter_by(project_id="live-project-1").one()
+        turn = db.query(LiveTurn).filter_by(source_id=source.id, turn_id=TURN_ID).one()
+        turn.turn_id = "trace/1"
+        turn.summary = {"charts": [{"ref": ref}]}
+        db.commit()
+    assert _put_style(client).status_code == 204
+    uploaded = _put_snapshot(client, turn_id="trace/1", ref=ref)
+    assert uploaded.status_code == 204, uploaded.text
+    with session_factory() as db:
+        source = db.query(LiveSource).filter_by(project_id="live-project-1").one()
+        source.key = "worker:blue"
+        db.commit()
+    monkeypatch.setattr(client.app, "root_path", "/qym")
+    response = client.get(
+        f"{CHART_BASE}/turns/trace/1", headers=ADMIN, params={"source": "worker:blue"}
+    )
+    assert response.status_code == 200, response.text
+    entry = response.json()["chart_snapshots"][ref]
+    assert entry["url"] == (
+        f"/qym{CHART_BASE}/chart-snapshot?source=worker%3Ablue"
+        f"&turn_id=trace%2F1&ref=chart%3Aone&v={_snapshot_version()[:16]}"
+    )
+    assert entry["style_url"] == (
+        f"/qym{CHART_BASE}/chart-style?source=worker%3Ablue&sha256={_sha(CSS)}"
+    )
+    response = client.get(entry["url"], headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.json()["html"] == HTML
+    response = client.get(entry["style_url"], headers=ADMIN)
+    assert response.status_code == 200, response.text
+    assert response.content == CSS
+
+
+@pytest.mark.parametrize("etag_form", ["plain", "weak", "list"])
+def test_chart_snapshot_and_style_bodies_and_headers(client, chart_snapshot, etag_form):
+    detail = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+    entry = detail.json()["chart_snapshots"][REF]
+    for url, etag, cache, content_type, check in (
+        (
+            entry["url"],
+            f'"{_snapshot_version()}"',
+            "private, max-age=86400",
+            "application/json",
+            lambda r: r.json() == {"html": HTML, "style_sha256": _sha(CSS)},
+        ),
+        (
+            entry["style_url"],
+            f'"{_sha(CSS)}"',
+            "private, max-age=31536000, immutable",
+            "text/css; charset=utf-8",
+            lambda r: r.content == CSS,
+        ),
+    ):
+        response = client.get(url, headers=ADMIN)
+        assert response.status_code == 200, response.text
+        assert check(response)
+        assert response.headers["content-type"] == content_type
+        assert response.headers["etag"] == etag
+        assert response.headers["cache-control"] == cache
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["content-security-policy"] == CHART_DATA_POLICY
+        candidate = {
+            "plain": etag,
+            "weak": f"W/{etag}",
+            "list": f'"other", W/{etag}',
+        }[etag_form]
+        cached = client.get(url, headers={**ADMIN, "If-None-Match": candidate})
+        assert cached.status_code == 304, cached.text
+        assert cached.content == b""
+        assert cached.headers["etag"] == etag
+        assert cached.headers["cache-control"] == cache
+        assert cached.headers["x-content-type-options"] == "nosniff"
+        assert cached.headers["content-security-policy"] == CHART_DATA_POLICY
+
+
+def test_stored_snapshot_content_is_never_served_as_html(client, chart_snapshot):
+    # The markup is model output: it may leave qym only as JSON or CSS text.
+    detail_url = f"{CHART_BASE}/turns/{TURN_ID}"
+    entry = client.get(detail_url, headers=ADMIN).json()["chart_snapshots"][REF]
+    wants_html = {**ADMIN, "Accept": "text/html,application/xhtml+xml"}
+    params = {"source": "worker-1", "turn_id": TURN_ID, "ref": REF}
+    responses = [
+        client.get(detail_url, headers=wants_html),
+        client.get(entry["url"], headers=ADMIN),
+        client.get(entry["url"], headers=wants_html),
+        client.get(entry["style_url"], headers=ADMIN),
+        client.get(entry["style_url"], headers=wants_html),
+        # No other read route knows the snapshot: the picture route has no row.
+        client.get(f"{CHART_BASE}/chart-image", headers=wants_html, params=params),
+        client.get(
+            f"{CHART_BASE}/chart-snapshot",
+            headers=wants_html,
+            params={**params, "ref": "unknown"},
+        ),
+    ]
+    assert [response.status_code for response in responses] == [
+        200,
+        200,
+        200,
+        200,
+        200,
+        404,
+        404,
+    ]
+    for response in responses:
+        assert response.headers["content-type"] in {
+            "application/json",
+            "text/css; charset=utf-8",
+        }, response.url
+    # The four answers that carry stored content are closed even when opened alone.
+    for response in responses[1:5]:
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["content-security-policy"] == CHART_DATA_POLICY
+    assert responses[2].json()["html"] == HTML
+
+
+def test_chart_snapshot_version_follows_markup_and_style(client, chart_snapshot):
+    def entry():
+        response = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=ADMIN)
+        assert response.status_code == 200, response.text
+        return response.json()["chart_snapshots"][REF]
+
+    first = entry()
+    etag = client.get(first["url"], headers=ADMIN).headers["etag"]
+    revised = HTML.replace("2026", "2027")
+    assert _put_snapshot(client, _snapshot(html=revised)).status_code == 204
+    second = entry()
+    assert second["url"] != first["url"]
+    assert second["url"].endswith(f"&v={_snapshot_version(revised)[:16]}")
+    # The old address with its old ETag gets the new markup, not a 304.
+    response = client.get(first["url"], headers={**ADMIN, "If-None-Match": etag})
+    assert response.status_code == 200, response.text
+    assert response.json()["html"] == revised
+    # The same markup under another stylesheet is another version too.
+    css = CSS + b".card{margin:0}"
+    assert _put_style(client, css).status_code == 204
+    body = _snapshot(html=revised, style_sha256=_sha(css))
+    assert _put_snapshot(client, body).status_code == 204
+    third = entry()
+    assert third["url"].endswith(f"&v={_snapshot_version(revised, css)[:16]}")
+    assert third["url"] != second["url"]
+    assert third["style_url"].endswith(f"&sha256={_sha(css)}")
+    assert client.get(third["url"], headers=ADMIN).json()["style_sha256"] == _sha(css)
+
+
+@pytest.mark.parametrize(
+    ("route", "params", "status", "detail"),
+    [
+        ("chart-snapshot", {"ref": "missing"}, 404, "chart snapshot not found"),
+        ("chart-snapshot", {"turn_id": "missing"}, 404, "chart snapshot not found"),
+        ("chart-snapshot", {"ref": OTHER_REF}, 404, "chart snapshot not found"),
+        ("chart-snapshot", {"ref": "bad ref"}, 422, None),
+        ("chart-snapshot", {"ref": None}, 422, None),
+        ("chart-snapshot", {"turn_id": None}, 422, None),
+        ("chart-style", {"sha256": "0" * 64}, 404, "chart style not found"),
+        ("chart-style", {"sha256": "abc"}, 422, None),
+        ("chart-style", {"sha256": "A" * 64}, 422, None),
+        ("chart-style", {"sha256": None}, 422, None),
+    ],
+)
+def test_chart_snapshot_and_style_not_found_or_invalid(
+    client, chart_snapshot, route, params, status, detail
+):
+    query = {"turn_id": TURN_ID, "ref": REF, "sha256": _sha(CSS), **params}
+    names = ("turn_id", "ref") if route == "chart-snapshot" else ("sha256",)
+    response = client.get(
+        f"{CHART_BASE}/{route}",
+        headers=ADMIN,
+        params={name: query[name] for name in names if query[name] is not None},
+    )
+    assert response.status_code == status, response.text
+    if detail is not None:
+        assert response.json()["detail"] == detail
+
+
+def test_chart_snapshot_and_style_are_scoped_to_the_selected_source(
+    client, session_factory, chart_snapshot
+):
+    snapshot = {"turn_id": TURN_ID, "ref": REF}
+    style = {"sha256": _sha(CSS)}
+    # The other project has the same source key and turn id, but nothing stored.
+    response = client.get(f"{BASE}/chart-snapshot", headers=ADMIN, params=snapshot)
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "chart snapshot not found"
+    response = client.get(f"{BASE}/chart-style", headers=ADMIN, params=style)
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "chart style not found"
+    with session_factory() as db:
+        source = LiveSource(
+            project_id="live-project-1",
+            key="other",
+            name="Other",
+            environment="test",
+            is_active=False,
+        )
+        db.add(source)
+        db.flush()
+        db.add(
+            LiveTurn(
+                source_id=source.id,
+                day=date(2026, 11, 1),
+                turn_id=TURN_ID,
+                turn_at=datetime(2026, 11, 1),
+                status="completed",
+                question="Other",
+            )
+        )
+        db.commit()
+    for route, params in (("chart-snapshot", snapshot), ("chart-style", style)):
+        response = client.get(
+            f"{CHART_BASE}/{route}", headers=ADMIN, params={"source": "other", **params}
+        )
+        assert response.status_code == 404, response.text
+        response = client.get(
+            f"{CHART_BASE}/{route}",
+            headers=ADMIN,
+            params={"source": "worker-1", **params},
+        )
+        assert response.status_code == 200, response.text
+
+
+def test_chart_snapshot_and_style_require_project_access(
+    client, session_factory, chart_snapshot
+):
+    with session_factory() as db:
+        _seed_api_key(db, token="other-project-token", suffix="2")
+    headers = {"X-User-Email": "live-owner-2@example.test"}
+    detail = client.get(f"{CHART_BASE}/turns/{TURN_ID}", headers=headers)
+    assert detail.status_code == 403, detail.text
+    for route, params, etag in (
+        ("chart-snapshot", {"turn_id": TURN_ID, "ref": REF}, _snapshot_version()),
+        ("chart-style", {"sha256": _sha(CSS)}, _sha(CSS)),
+    ):
+        # A matching ETag must not turn a refusal into "not modified".
+        response = client.get(
+            f"{CHART_BASE}/{route}",
+            params=params,
+            headers={**headers, "If-None-Match": f'"{etag}"'},
+        )
+        assert response.status_code == detail.status_code, response.text
+        assert response.json()["detail"] == detail.json()["detail"]
+        assert client.get(f"{CHART_BASE}/{route}", params=params).status_code in (
+            401,
+            403,
+        )
 
 
 def test_chart_image_urls_quote_turn_ref_and_source(client, session_factory, chart_turn):

@@ -245,6 +245,71 @@
   overflow-wrap: anywhere;
 }
 
+/* A chart redrawn from saved markup. The frame is placed from the physical top-left corner and scaled. */
+.snapshotBox {
+  position: relative;
+  overflow: hidden;
+  direction: ltr;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.snapshotFit {
+  inline-size: 100%;
+}
+
+.snapshotContain {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  direction: ltr;
+}
+
+.snapshotClip {
+  position: relative;
+  flex: none;
+  inline-size: 100%;
+  overflow: hidden;
+}
+
+.snapshotFrame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.snapshotButton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.snapshotButton:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+  border-radius: var(--control-radius);
+}
+
+.snapshotCaption {
+  display: block;
+  margin-block-start: var(--space-xs);
+}
+
 .chartFull img {
   display: block;
   inline-size: 100%;

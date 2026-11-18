@@ -62,6 +62,7 @@ export function ChartsTab({ data }: { data: LiveTurnDetail }) {
     data.summary,
     data.chart_images,
     data.chart_images_expired ? (data.chart_image_retention_days ?? null) : null,
+    data.chart_snapshots,
   );
   if (!charts.length)
     return (

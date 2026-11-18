@@ -3,10 +3,15 @@ import { plural } from '@/features/shell/plural';
 import { Dialog, EmptyState } from '@/ui';
 import type { ChartEvidence } from '../../lib/summary';
 import styles from '../../turn.module.css';
+import { ChartSnapshot } from './ChartSnapshot';
 
+/** One chart's evidence, in this order: its snapshot, else its screenshot, else why there is none. */
 export function ChartImage({ chart }: { chart: ChartEvidence }) {
   const [open, setOpen] = useState(false);
   const { image } = chart;
+  const sentence = chart.reading?.trim().split(/(?<=[.!?؟])\s+/u)[0];
+  const alt = `${chart.kind ?? 'chart'} chart${sentence ? ` — ${sentence}` : ''}`;
+  if (chart.snapshot) return <ChartSnapshot snapshot={chart.snapshot} alt={alt} />;
   if (!image && chart.imageExpiredAfterDays !== null) {
     return (
       <div data-live-chart-expired>
@@ -29,8 +34,6 @@ export function ChartImage({ chart }: { chart: ChartEvidence }) {
       </div>
     );
   }
-  const sentence = chart.reading?.trim().split(/(?<=[.!?؟])\s+/u)[0];
-  const alt = `${chart.kind ?? 'chart'} chart${sentence ? ` — ${sentence}` : ''}`;
   return (
     <>
       <figure className={styles.chartImage} data-live-chart-image>

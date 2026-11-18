@@ -1,6 +1,6 @@
 import { splitBilingual } from '@/lib/text';
 import type { LiveMetricSpec } from '@/api/live';
-import type { LiveChartImage } from '@/api/live';
+import type { LiveChartImage, LiveChartSnapshot } from '@/api/live';
 
 /** Optional producer evidence is unvalidated JSON; never coerce missing or malformed facts. */
 export function recordOf(value: unknown): Record<string, unknown> | null {
@@ -358,6 +358,8 @@ export function toolsOf(summary: Record<string, unknown>): ToolsEvidence | null 
 }
 
 export interface ChartEvidence {
+  /** The drawn chart as stored markup; shown before any image. */
+  snapshot: LiveChartSnapshot | null;
   image: LiveChartImage | null;
   /** The retention length in days when retention removed a screenshot that was read, else null. */
   imageExpiredAfterDays: number | null;
@@ -372,10 +374,15 @@ export function chartsOf(
   summary: Record<string, unknown>,
   images: Record<string, LiveChartImage> = {},
   imagesExpiredAfterDays: number | null = null,
+  snapshots: Record<string, LiveChartSnapshot> = {},
 ): ChartEvidence[] {
   return recordsOf(recordOf(summary)?.charts).map((chart) => {
     const image =
       typeof chart.ref === 'string' && Object.hasOwn(images, chart.ref) ? (images[chart.ref] ?? null) : null;
+    const snapshot =
+      typeof chart.ref === 'string' && Object.hasOwn(snapshots, chart.ref)
+        ? (snapshots[chart.ref] ?? null)
+        : null;
     const scores: Record<string, number> = Object.fromEntries(
       Object.entries(recordOf(chart.scores) ?? {}).flatMap(([key, value]) => {
         const score = numberOf(value);
@@ -389,8 +396,9 @@ export function chartsOf(
       Object.hasOwn(scores, 'chart_vision') ||
       Object.hasOwn(scores, 'chart_design');
     return {
+      snapshot,
       image,
-      imageExpiredAfterDays: !image && wasRead ? imagesExpiredAfterDays : null,
+      imageExpiredAfterDays: !snapshot && !image && wasRead ? imagesExpiredAfterDays : null,
       ref: stringOf(chart.ref),
       kind: stringOf(chart.kind),
       scores,
